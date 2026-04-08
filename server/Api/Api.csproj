@@ -7,9 +7,15 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <Content Remove="appsettings.Development.json" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="appsettings.Development.json" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="FluentValidation.AspNetCore" Version="11.3.1" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\DomainService\DomainService.csproj" />
+    <ProjectReference Include="..\Authentication.DomainService\Authentication.DomainService.csproj" />
   </ItemGroup>
 </Project>

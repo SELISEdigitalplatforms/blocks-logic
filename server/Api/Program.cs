@@ -1,6 +1,6 @@
 using BlocksTemplate.Api;
-using BlocksTemplate.DomainService;
 using Blocks.Genesis;
+using DomainService.Utilities;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
@@ -11,6 +11,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 
 ApplicationConfigurations.ConfigureApiEnv(builder, args);
+ApplicationConfigurations.ConfigureServices(builder.Services, IdpConstants.GetMessageConfiguration(secret.MessageConnectionString));
 
 builder.Services.Configure<FormOptions>(options =>
 {
@@ -21,9 +22,9 @@ var services = builder.Services;
 
 services.AddHealthChecks();
 
-builder.Services.AddDomainServices();
+//builder.Services.AddDomainServices();
 builder.Services.AddFluentValidationAutoValidation();
-ApplicationConfigurations.ConfigureServices(services, new MessageConfiguration { });
+//ApplicationConfigurations.ConfigureServices(services, new MessageConfiguration { });
 ApplicationConfigurations.ConfigureApi(services);
 
 builder.Services.Configure<MvcOptions>(options =>
@@ -33,6 +34,8 @@ builder.Services.Configure<MvcOptions>(options =>
 
 var wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
 Directory.CreateDirectory(wwwrootPath);
+
+services.RegisterAllServices();
 
 var app = builder.Build();
 

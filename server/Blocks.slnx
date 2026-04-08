@@ -1,5 +1,11 @@
 <Solution>
   <Project Path="Api/Api.csproj" />
-  <Project Path="DomainService/DomainService.csproj" />
+  <Project Path="Authentication.DomainService/Authentication.DomainService.csproj" />
+  <Project Path="Captcha.DomainService/Captcha.DomainService.csproj" />
+  <Project Path="Captcha.Driver/Captcha.Driver.csproj" />
+  <Project Path="Iam.DomainService/Iam.DomainService.csproj" />
+  <Project Path="Iam.Driver/Iam.Driver.csproj" />
+  <Project Path="Mfa.DomainService/Mfa.DomainService.csproj" />
+  <Project Path="Mfa.Driver/Mfa.Driver.csproj" />
   <Project Path="Worker/Worker.csproj" />
 </Solution>

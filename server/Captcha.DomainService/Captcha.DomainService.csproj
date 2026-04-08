@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="Resources\georgia.ttf" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\georgia.ttf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+	<PackageReference Include="FluentValidation" Version="11.11.0" />
+	<PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+	<PackageReference Include="SeliseBlocks.Genesis" Version="9.0.29" />
+	<PackageReference Include="SixLabors.Fonts" Version="2.1.2" />
+	<PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
+	<PackageReference Include="SixLabors.ImageSharp.Drawing" Version="2.1.5" />
+  <PackageReference Include="System.Drawing.Common" Version="8.0.13" />
+  <PackageReference Include="SeliseBlocks.Genesis" Version="9.0.41" />
+  </ItemGroup>
+
+</Project>
