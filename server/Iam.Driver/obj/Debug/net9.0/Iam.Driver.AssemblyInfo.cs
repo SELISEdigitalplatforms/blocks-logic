@@ -15,7 +15,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyDescriptionAttribute("Blocks Iam Driver")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("9.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("9.0.0-preview.25+ce576f742784ff3165e58b9a25fd12ebdeebca0a")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("9.0.0-preview.25+1ce0427e9f3a97365edcf2b581441ef153577083")]
 [assembly: System.Reflection.AssemblyProductAttribute("Iam.Driver")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Iam.Driver")]
 [assembly: System.Reflection.AssemblyVersionAttribute("9.0.0.0")]

@@ -8,4 +8,5 @@
   <Project Path="Mfa.DomainService/Mfa.DomainService.csproj" />
   <Project Path="Mfa.Driver/Mfa.Driver.csproj" />
   <Project Path="Worker/Worker.csproj" />
+  <Project Path="XUnitTest/XUnitTest.csproj" />
 </Solution>
