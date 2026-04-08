@@ -6,8 +6,11 @@ interface LogoProps {
   className?: string;
 }
 
+import { useTheme } from "@/hooks/use-theme";
+
 export function Logo({ src, alt, width, height, className }: LogoProps) {
-  const imgSrc = src || "/Logo.svg";
+  const { resolvedTheme } = useTheme();
+  const imgSrc = src || (resolvedTheme === "dark" ? "/Logo_White.svg" : "/Logo.svg");
   return (
     <img
       src={imgSrc}

@@ -4,6 +4,7 @@ import { AuthLayout } from "./layouts/auth-layout";
 import { PublicLayout } from "./layouts/public-layout";
 import { OidcLayout } from "./layouts/oidc-layout";
 import { AdminLayout } from "./layouts/admin-layout";
+import { ConsoleLayout } from "./layouts/console-layout";
 
 // Auth routes (public, with auth layout)
 import LoginPage from "./routes/auth/login";
@@ -105,8 +106,13 @@ export const router = createBrowserRouter([
       { path: "/services/mfa/logs", element: <MfaLogsPage /> },
       { path: "/services/captcha", element: <CaptchaConfigPage /> },
       { path: "/services/captcha/logs", element: <CaptchaLogsPage /> },
-      { path: "/profile", element: <ProfilePage /> },
     ],
+  },
+
+  // ── Console layout (profile without sidebar) ──
+  {
+    element: <ConsoleLayout />,
+    children: [{ path: "/profile", element: <ProfilePage /> }],
   },
 
   // ── Catch-all: redirect to login ──
