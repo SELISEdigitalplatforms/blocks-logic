@@ -5,6 +5,7 @@ import { PublicLayout } from "./layouts/public-layout";
 import { OidcLayout } from "./layouts/oidc-layout";
 import { AdminLayout } from "./layouts/admin-layout";
 import { ConsoleLayout } from "./layouts/console-layout";
+import { ProjectOverviewLayout } from "./layouts/project-overview-layout";
 
 // Auth routes (public, with auth layout)
 import LoginPage from "./routes/auth/login";
@@ -46,6 +47,14 @@ import MfaLogsPage from "./routes/admin/mfa-logs";
 import CaptchaConfigPage from "./routes/admin/captcha-config";
 import CaptchaLogsPage from "./routes/admin/captcha-logs";
 import ProfilePage from "./routes/admin/profile";
+
+// Console pages
+import { Console } from "./pages/console/console";
+import { DashboardOverview } from "./pages/dashboard/dashboard-overview";
+import { EnvironmentsPage } from "./pages/environments/environments";
+import { PeopleManagement } from "./pages/people/people-management";
+import { RepositoriesPage } from "./pages/repositories/repositories";
+import { SettingsPage } from "./pages/settings/settings";
 
 export const router = createBrowserRouter([
   // ── Auth layout (login, signup, sso-activate) ──
@@ -109,11 +118,37 @@ export const router = createBrowserRouter([
     ],
   },
 
-  // ── Console layout (profile without sidebar) ──
+  // ── Console layout (profile, console pages without sidebar) ──
   {
     element: <ConsoleLayout />,
-    children: [{ path: "/profile", element: <ProfilePage /> }],
+    children: [
+      { path: "/profile", element: <ProfilePage /> },
+      { path: "/console", element: <Console /> },
+    ],
   },
+
+  // ── Project overview layout (with project-overview sidebar) ──
+  {
+    element: <ProjectOverviewLayout />,
+    children: [
+      { path: "/project-overview", element: <Navigate to="/project-overview/environments" replace /> },
+      { path: "/project-overview/environments", element: <EnvironmentsPage /> },
+      { path: "/project-overview/people", element: <PeopleManagement /> },
+      { path: "/project-overview/repositories", element: <RepositoriesPage /> },
+      { path: "/project-overview/settings", element: <SettingsPage /> },
+    ],
+  },
+
+  // ── Dashboard (protected, with main sidebar) ──
+  {
+    element: <AdminLayout />,
+    children: [
+      { path: "/dashboard", element: <DashboardOverview /> },
+    ],
+  },
+
+  // ── Root redirect: authenticated users go to console ──
+  { path: "/", element: <Navigate to="/console" replace /> },
 
   // ── Catch-all: redirect to login ──
   { path: "*", element: <Navigate to="/login" replace /> },
