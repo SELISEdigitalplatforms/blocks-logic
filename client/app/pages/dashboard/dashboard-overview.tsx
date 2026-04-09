@@ -7,6 +7,7 @@ import { ProjectDetail } from "@/components/project-detail/project-detail";
 import { ProjectRepoList } from "@/components/project-repo-list/project-repo-list";
 import { ProjectCliSnippet } from "@/components/project-cli-snippet/project-cli-snippet";
 import { GitCommandSnippet } from "@/components/git-command-snippet/git-command-snippet";
+import { ActionsListProject } from "@/components/actions-list-project/actions-list-project";
 
 export const DashboardOverview = () => {
   const projectKey = useProjectStore().selectedProject?.tenantId || "";
@@ -41,6 +42,7 @@ export const DashboardOverview = () => {
     <main className="flex flex-col gap-6 p-6">
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-xl font-semibold md:text-2xl">Environment Overview</h1>
+        <ActionsListProject />
       </div>
       <ProjectDetail project={data?.data} isLoading={isLoading} />
       <ProjectRepoList project={data?.data} isLoading={isLoading} />

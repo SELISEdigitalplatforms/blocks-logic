@@ -1,5 +1,5 @@
-const GITHUB_CLIENT_ID = import.meta.env.VITE_GITHUB_CLIENT_ID || "";
-const GITHUB_REDIRECT_URI = import.meta.env.VITE_GITHUB_REDIRECT_URI || window.location.origin;
+const GITHUB_CLIENT_ID = import.meta.env.BLOCKS_GITHUB_CLIENT_ID || "";
+const GITHUB_REDIRECT_URI = import.meta.env.BLOCKS_GITHUB_REDIRECT_URI || window.location.origin;
 
 export const authenticateWithGithub = (extraState?: string) => {
   const state = extraState || Math.random().toString(36).substring(7);

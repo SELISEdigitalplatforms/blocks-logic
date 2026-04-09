@@ -1,8 +1,14 @@
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { projectService } from "@/services/project.service";
 import { projectService as crossProjectService } from "@blocks-identifier/services/project.service";
 import { useProjectStore } from "@/store/useProjectStore";
+import {
+  useCreateProjectFormState,
+  shortGuidGenerator,
+} from "@/components/create-project/utils";
+import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 
 export const useGetProjects = (tenantGroupId = "") => {
   const { setProjects, selectedProject, setSelectedProject } = useProjectStore();
@@ -149,4 +155,78 @@ export const useGetMigrationStatus = (tenantGroupId: string) => {
     queryKey: ["identifier", "migration-status", tenantGroupId],
     queryFn: () => crossProjectService.getMigrationStatus(tenantGroupId),
   });
+};
+
+export const useProjectForm = () => {
+  const navigate = useNavigate();
+  const { isPending, mutateAsync } = useCreateProject();
+  const { formData, resetFormData } = useCreateProjectFormState();
+  const { setTennantGroup, setSelectedProject } = useProjectStore();
+  const queryClient = useQueryClient();
+
+  const saveProject = async () => {
+    try {
+      const environments = formData[2]?.environments || [];
+      const shortGuid = shortGuidGenerator(5);
+      const baseDomain = import.meta.env.BLOCKS_BASE_DOMAIN || "seliseblocks.com";
+      const applicationContexts =
+        environments.map((env: { value: string }) => ({
+          environment: env.value,
+          domain: `https://${env.value === "main" ? "" : env.value}-${shortGuid}.${baseDomain}`,
+          cookieDomain: baseDomain,
+        })) || [];
+
+      const assets = formData[1]?.assets || [];
+
+      const response = await mutateAsync({
+        name: formData[0].name,
+        isAcceptBlocksTerms: formData[0].isAcceptBlocksTerms,
+        isUseBlocksExclusively: formData[0].isUseBlocksExclusively,
+        isProduction: false,
+        resources: assets.map((asset) => ({
+          name: asset.full_name,
+          link: asset.html_url,
+          resourceId: asset.id !== undefined ? String(asset.id) : "",
+        })),
+        applicationContexts,
+      });
+      if (response?.isSuccess) {
+        showSuccessToast({ description: "Your project has been created." });
+        setTennantGroup(response.tenantGroupId);
+
+        try {
+          const projectGroups = await queryClient.fetchQuery({
+            queryKey: ["identifier", "projects", response.tenantGroupId],
+            queryFn: () => projectService.getProjects(0, 100, response.tenantGroupId),
+            staleTime: 0,
+          });
+
+          if (
+            projectGroups &&
+            projectGroups.length > 0 &&
+            projectGroups[0].projects &&
+            projectGroups[0].projects.length > 0
+          ) {
+            setSelectedProject(projectGroups[0].projects[0]);
+          }
+        } catch {
+          showErrorToast({ errors: response.errors });
+        }
+
+        navigate("/project-overview");
+        resetFormData();
+      } else {
+        showErrorToast({ errors: response.errors });
+      }
+    } catch (error: unknown) {
+      if (error && typeof error === "object" && "errors" in error) {
+        showErrorToast({ errors: (error as { errors: unknown }).errors });
+      }
+    }
+  };
+
+  return {
+    isPending,
+    saveProject,
+  };
 };
