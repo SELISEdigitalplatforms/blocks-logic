@@ -32,7 +32,7 @@ export function SidebarMenuDesktop() {
           to="/services/authentication"
           className={cn(
             "relative inline-block cursor-pointer overflow-hidden transition-all",
-            isSidebarOpen ? "h-[36px] w-[72px]" : "h-0 w-0"
+            isSidebarOpen ? "h-[36px] w-[72px]" : "h-8 w-8"
           )}
         >
           <img src={getLogoSrc()} alt="Logo" className="h-full w-full object-contain" />
