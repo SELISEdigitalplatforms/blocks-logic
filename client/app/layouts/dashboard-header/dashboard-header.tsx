@@ -15,7 +15,7 @@ export function DashboardHeader() {
 
   return (
     <>
-      <header className="flex h-[60px] items-center justify-between gap-4 border-b bg-background mx-5 sm:ml-1 sm:mr-6">
+      <header className="flex h-[60px] items-center justify-between gap-4 border-b bg-background px-5 sm:px-6">
         <div className="md:hidden">
           <SidebarMobileView />
         </div>
@@ -44,7 +44,7 @@ export function DashboardHeader() {
         </div>
       </header>
       {/* Mobile project/environment selectors */}
-      <div className="border-b bg-background mx-5 sm:ml-1 sm:mr-6 py-3 md:hidden">
+      <div className="border-b bg-background px-5 sm:px-6 py-3 md:hidden">
         <div className="grid gap-3">
           <ProjectList />
           <EnvironmentList />

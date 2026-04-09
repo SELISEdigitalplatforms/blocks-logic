@@ -1,7 +1,8 @@
 import { useContext } from "react";
 import { userMfaContext } from "../../user-mfa";
 import { useGetUserById } from "@blocks-idp/iam/hooks/use-user";
-import imageUrl from "@/../public/assets/images/mail-sent.png";
+
+const imageUrl = "/assets/images/mail-sent.png";
 
 export const UserMfaVerifyGuideLineEmail = () => {
   const { userId, projectKey } = useContext(userMfaContext);

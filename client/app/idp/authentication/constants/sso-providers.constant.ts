@@ -1,14 +1,14 @@
-import Google from "@/../public/assets/images/social-media-google.png";
-import Microsoft from "@/../public/assets/images/social-media-ms.png";
-import GithubDark from "@/../public/assets/images/github-dark-mode.png";
-import Github from "@/../public/assets/images/social-media-github.png";
-import LinkedIn from "@/../public/assets/images/social-media-in.png";
-import AppleDark from "@/../public/assets/images/apple-dark-mode-logo.png";
-import Apple from "@/../public/assets/images/social-media-apple.png";
-import Facebook from "@/../public/assets/images/social-media-facebook.png";
-import Selise from "@/../public/assets/images/selise-globe-logo.png";
-import XDark from "@/../public/assets/images/twitter-x-dark-mode-logo.png";
-import X from "@/../public/assets/images/twitter-x-light-mode-logo.png";
+const Google = "/assets/images/social-media-google.png";
+const Microsoft = "/assets/images/social-media-ms.png";
+const GithubDark = "/assets/images/github-dark-mode.png";
+const Github = "/assets/images/social-media-github.png";
+const LinkedIn = "/assets/images/social-media-in.png";
+const AppleDark = "/assets/images/apple-dark-mode-logo.png";
+const Apple = "/assets/images/social-media-apple.png";
+const Facebook = "/assets/images/social-media-facebook.png";
+const Selise = "/assets/images/selise-globe-logo.png";
+const XDark = "/assets/images/twitter-x-dark-mode-logo.png";
+const X = "/assets/images/twitter-x-light-mode-logo.png";
 import {
   ISsoProviderConfigurationWithMeta,
   ISsoProviderFrontendMeta,

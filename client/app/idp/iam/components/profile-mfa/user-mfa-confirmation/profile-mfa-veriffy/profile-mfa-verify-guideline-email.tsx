@@ -1,7 +1,8 @@
 import { useContext } from "react";
 import { profileMfaContext } from "../../profile-mfa";
 import { useGetUserById } from "@blocks-idp/iam/hooks/use-user";
-import imageUrl from "@/../public/assets/images/mail-sent.png";
+
+const imageUrl = "/assets/images/mail-sent.png";
 import { Button } from "@/components/ui-kits/button/button";
 import { useResendOtp } from "@blocks-idp/mfa/hooks/use-resend-otp";
 

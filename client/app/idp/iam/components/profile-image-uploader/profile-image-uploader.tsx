@@ -7,7 +7,8 @@ import { storageService } from "@blocks-storage/services/storage.service";
 import { useGetUserById, useUpdateUser } from "@blocks-idp/iam/hooks/use-user";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { isErrorWithErrors } from "@/lib/error";
-import emptyProfilePhoto from "@/../public/assets/images/empty-profile-photo.png";
+
+const emptyProfilePhoto = "/assets/images/empty-profile-photo.png";
 import { ModuleName } from "@/constants/modules.constants";
 
 type ProfileImageUploaderProps = { projectKey: string; id: string };
