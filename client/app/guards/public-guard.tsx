@@ -2,29 +2,32 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuthStore } from "@/store/useAuthStore";
 
-export function PublicGuard({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuthStore();
+export const useAppState = () => {
   const [isMounted, setIsMounted] = useState(false);
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-
-  const isSSOCallback = !!(searchParams.get("code") && searchParams.get("state"));
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
+  return { isMounted };
+};
+
+export function PublicGuard({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated } = useAuthStore();
+  const { isMounted } = useAppState();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // When an SSO provider (e.g. Apple) posts back to /login with code+state,
+  // the middleware converts it to a GET redirect with these params in the URL.
+  // We must NOT redirect away while the token exchange is still in progress,
+  // otherwise the guard loop: /login → /console → /login → ...
+  const isSSOCallback = !!(searchParams.get("code") && searchParams.get("state"));
+
   useEffect(() => {
     if (!isMounted) return;
     if (isSSOCallback) return;
-    if (isAuthenticated) {
-      const cloudUrl = import.meta.env.BLOCKS_CLOUD_DASHBOARD_URL;
-      if (cloudUrl) {
-        window.location.href = cloudUrl;
-      } else {
-        navigate("/console", { replace: true });
-      }
-    }
+    if (isAuthenticated) return navigate("/console", { replace: true });
   }, [isAuthenticated, isMounted, isSSOCallback, navigate]);
 
   if (!isMounted || (isAuthenticated && !isSSOCallback)) return null;
