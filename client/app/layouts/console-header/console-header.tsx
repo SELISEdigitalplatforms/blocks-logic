@@ -1,6 +1,6 @@
 import { useContext, useEffect, useState } from "react";
 import { PanelLeft, Menu } from "lucide-react";
-import { useLocation } from "react-router-dom";
+import { useLocation, Link } from "react-router-dom";
 import { Button } from "@/components/ui-kits/button/button";
 import { ModeToggle } from "@/components/mode-toggle/mode-toggle";
 import { Notification } from "@/components/notification/notification";
@@ -21,7 +21,7 @@ export function ConsoleHeader() {
   const isMobile = useIsMobile();
   const [isScrolled, setIsScrolled] = useState(false);
 
-  const isConsoleButtonVisible = pathname === "/profile";
+  const isConsoleButtonVisible = pathname === "/profile" || pathname.startsWith("/project-overview");
 
   useEffect(() => {
     const handleScroll = () => {
@@ -40,7 +40,9 @@ export function ConsoleHeader() {
       >
         <div className={`flex h-full w-full flex-row items-center ${isMobile && "mx-0"}`}>
           <div className="ml-2 flex h-full w-[228px] items-center">
-            <Logo width={96} height={32} className="h-8 w-auto" />
+            <Link to="/console" className="cursor-pointer">
+              <Logo width={96} height={32} className="h-8 w-auto" />
+            </Link>
           </div>
         </div>
         <div className="block sm:hidden">
