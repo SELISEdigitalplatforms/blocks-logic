@@ -55,6 +55,7 @@ import { EnvironmentsPage } from "./pages/environments/environments";
 import { PeopleManagement } from "./pages/people/people-management";
 import { RepositoriesPage } from "./pages/repositories/repositories";
 import { SettingsPage } from "./pages/settings/settings";
+import { CreateProjectWrapper } from "./pages/create-project/create-project";
 
 export const router = createBrowserRouter([
   // ── Auth layout (login, signup, sso-activate) ──
@@ -124,26 +125,20 @@ export const router = createBrowserRouter([
     children: [
       { path: "/profile", element: <ProfilePage /> },
       { path: "/console", element: <Console /> },
+      { path: "/create-project", element: <CreateProjectWrapper /> },
     ],
   },
 
-  // ── Project overview layout (with project-overview sidebar) ──
+  // ── Dashboard and project overview in admin layout (consolidated sidebar) ──
   {
-    element: <ProjectOverviewLayout />,
+    element: <AdminLayout />,
     children: [
+      { path: "/dashboard", element: <DashboardOverview /> },
       { path: "/project-overview", element: <Navigate to="/project-overview/environments" replace /> },
       { path: "/project-overview/environments", element: <EnvironmentsPage /> },
       { path: "/project-overview/people", element: <PeopleManagement /> },
       { path: "/project-overview/repositories", element: <RepositoriesPage /> },
       { path: "/project-overview/settings", element: <SettingsPage /> },
-    ],
-  },
-
-  // ── Dashboard (protected, with main sidebar) ──
-  {
-    element: <AdminLayout />,
-    children: [
-      { path: "/dashboard", element: <DashboardOverview /> },
     ],
   },
 

@@ -8,11 +8,11 @@ export function AdminLayout() {
   return (
     <ProtectedGuard>
       <DashboardLayoutProvider isOpen={true} persist>
-        <div className="relative flex min-h-screen bg-[hsl(var(--surface-app))]">
+        <div className="relative flex h-screen overflow-hidden bg-[hsl(var(--surface-app))]">
           <SidebarMenuDesktop />
-          <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
             <DashboardHeader />
-            <main className="flex-1 p-6">
+            <main className="flex-1 overflow-auto">
               <Outlet />
             </main>
           </div>

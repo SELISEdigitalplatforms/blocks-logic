@@ -7,7 +7,7 @@ import { AddProjectCard } from "@/components/project-card/add-project-card";
 const SelfProjectLoading = () => {
   return (
     <>
-      <div className="mt-16 flex items-center justify-between">
+      <div className="mt-4 flex items-center justify-between">
         <h4 className="text-xl font-semibold">Blocks projects</h4>
       </div>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -30,7 +30,7 @@ export const SelfProject = () => {
 
   return (
     <>
-      <div className="mt-16 flex flex-col justify-between md:flex-row md:items-center">
+      <div className="mt-4 flex flex-col justify-between md:flex-row md:items-center">
         <h4 className="text-xl font-semibold">Your Blocks projects</h4>
         {projectGroups.length > 9 && (
           <div className="text-medium-emphasis">
