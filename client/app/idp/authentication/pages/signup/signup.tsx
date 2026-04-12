@@ -3,6 +3,7 @@ import { SignupForm } from "./signup-form";
 import { useGetLoginOptions } from "@blocks-idp/authentication/hooks/use-auth";
 import { useGetSignUpSetting } from "@blocks-idp/iam/hooks/use-user";
 import { Card, CardContent } from "@/components/ui-kits/card/card";
+import { Loader } from "lucide-react";
 
 export const Signup = () => {
   const projectKey = import.meta.env.BLOCKS_X_BLOCKS_KEY || "";
@@ -14,7 +15,7 @@ export const Signup = () => {
     return (
       <Card className="flex h-full flex-col rounded border-solid border-background shadow-none md:min-w-[448px] md:border-[#95ADC4] lg:max-w-md">
         <CardContent className="flex flex-1 items-center justify-center">
-          <p>Loading...</p>
+          <Loader className="h-8 w-8 animate-spin" />
         </CardContent>
       </Card>
     );

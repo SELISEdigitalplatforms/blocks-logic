@@ -12,6 +12,7 @@ import { useGetLoginOptions } from "@blocks-idp/authentication/hooks/use-auth";
 import { useGetSignUpSetting } from "@blocks-idp/iam/hooks/use-user";
 import { Link } from "react-router-dom";
 import { useEffect } from "react";
+import { Loader } from "lucide-react";
 import { SigninForm } from "./signin-form";
 import { SsoSignin } from "./sso-signin";
 
@@ -37,7 +38,7 @@ export const Signin = ({ ssoError }: SigninProps) => {
     return (
       <Card className="flex h-full flex-col rounded border-solid border-background shadow-none md:min-w-[448px] md:border-[#95ADC4] lg:max-w-md">
         <CardContent className="flex flex-1 items-center justify-center">
-          <p>Loading...</p>
+          <Loader className="h-8 w-8 animate-spin" />
         </CardContent>
       </Card>
     );
