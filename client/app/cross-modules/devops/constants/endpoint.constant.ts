@@ -6,7 +6,7 @@ export const CLOUD_BUILD_ENDPOINTS = {
   REMOVE_ACCESS_TOKEN: "/cloudbuild/v1/auth/removeAccessToken",
 
   // GitHub Repositories
-  GITHUB_REPOS: "/cloudbuild/v1/github/repositories",
+  GITHUB_REPOS: "/cloudbuild/v1/github/repos",
   GITHUB_USER: "/cloudbuild/v1/github/user",
   GITHUB_BRANCHES: "/cloudbuild/v1/github/branches",
   GITHUB_BRANCH_EXISTS: "/cloudbuild/v1/github/branchExists",

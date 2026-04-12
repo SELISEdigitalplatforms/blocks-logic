@@ -10,7 +10,7 @@ export default function CallbackPage() {
   const state = searchParams.get("state");
   const [projectKey] = useState(() => localStorage.getItem("github_auth_project_key") || "");
 
-  const { isLoading, isSuccess, isError } = useQuery({
+  const { isLoading, isSuccess } = useQuery({
     queryKey: ["github-verification", code, projectKey],
     queryFn: () => githubInfoService.verifyAuthorization(code || "", projectKey),
     enabled: !!code && !!projectKey,
@@ -19,7 +19,6 @@ export default function CallbackPage() {
 
   useEffect(() => {
     if (isSuccess) {
-      // Signal the parent window that OAuth completed successfully
       localStorage.setItem("isReload", "true");
       
       // Clean up stored auth data
@@ -27,76 +26,25 @@ export default function CallbackPage() {
       localStorage.removeItem("github_auth_project_key");
       localStorage.removeItem("github_auth_destination");
       
-      // Close the popup window
-      setTimeout(() => {
+      if (typeof window !== "undefined") {
         window.close();
-      }, 500);
+      }
     }
   }, [isSuccess]);
-
-  if (!code || !state) {
-    return (
-      <div className="fixed inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-        <div className="flex flex-col items-center space-y-4">
-          <p className="text-sm text-muted-foreground">Error: Invalid OAuth callback.</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!projectKey) {
-    return (
-      <div className="fixed inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-        <div className="flex flex-col items-center space-y-4">
-          <p className="text-sm text-destructive">Error: Project context missing.</p>
-          <p className="text-xs text-muted-foreground">Please try again from the repositories page.</p>
-          <button
-            onClick={() => window.close()}
-            className="text-sm text-muted-foreground hover:underline"
-          >
-            Close this window
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   if (isLoading) {
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm">
         <div className="flex flex-col items-center space-y-4">
           <Loader className="h-8 w-8 animate-spin" />
-          <p className="text-sm text-muted-foreground">Verifying GitHub authorization...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (isError) {
-    return (
-      <div className="fixed inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-        <div className="flex flex-col items-center space-y-4">
-          <p className="text-sm text-destructive">GitHub authorization failed.</p>
-          <button
-            onClick={() => window.close()}
-            className="text-sm text-muted-foreground hover:underline"
-          >
-            Close this window
-          </button>
+          <p className="text-sm text-muted-foreground">Loading...</p>
         </div>
       </div>
     );
   }
 
   if (isSuccess) {
-    return (
-      <div className="fixed inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-        <div className="flex flex-col items-center space-y-4">
-          <p className="text-sm text-green-600">✓ GitHub authorization successful!</p>
-          <p className="text-xs text-muted-foreground">This window will close automatically...</p>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   return null;
