@@ -1,29 +1,29 @@
 export const CLOUD_BUILD_ENDPOINTS = {
   // Authentication & Authorization
-  ACCESS_TOKEN: "/api/cloudbuild/github/access-token",
-  IS_AUTHORIZED: "/api/cloudbuild/github/is-authorized",
-  REMOVE_AUTHORIZATION: "/api/cloudbuild/github/remove-authorization",
-  REMOVE_ACCESS_TOKEN: "/api/cloudbuild/github/remove-access-token",
+  ACCESS_TOKEN: "/cloudbuild/v1/auth/accessToken",
+  IS_AUTHORIZED: "/cloudbuild/v1/auth/isAuthorized",
+  REMOVE_AUTHORIZATION: "/cloudbuild/v1/auth/removeAuthorization",
+  REMOVE_ACCESS_TOKEN: "/cloudbuild/v1/auth/removeAccessToken",
 
   // GitHub Repositories
-  GITHUB_REPOS: "/api/cloudbuild/github/repositories",
-  GITHUB_USER: "/api/cloudbuild/github/user",
-  GITHUB_BRANCHES: "/api/cloudbuild/github/branches",
-  GITHUB_BRANCH_EXISTS: "/api/cloudbuild/github/branch-exists",
+  GITHUB_REPOS: "/cloudbuild/v1/github/repositories",
+  GITHUB_USER: "/cloudbuild/v1/github/user",
+  GITHUB_BRANCHES: "/cloudbuild/v1/github/branches",
+  GITHUB_BRANCH_EXISTS: "/cloudbuild/v1/github/branchExists",
 
   // Build & Deployment
-  BUILD_BUILD: "/api/cloudbuild/build/clone",
-  RUN_BUILD: "/api/cloudbuild/build/run",
-  MANUAL: "/api/cloudbuild/build/manual",
-  BUILD: "/api/cloudbuild/build",
+  BUILD_BUILD: "/cloudbuild/v1/build/clone",
+  RUN_BUILD: "/cloudbuild/v1/build/run",
+  MANUAL: "/cloudbuild/v1/build/manual",
+  BUILD: "/cloudbuild/v1/build",
 
   // Repository Management
-  REPOS: "/api/cloudbuild/repos",
-  REPOS_LIST: "/api/cloudbuild/repos/list",
-  REPO_DETAILS: "/api/cloudbuild/repos/details",
+  REPOS: "/cloudbuild/v1/repos",
+  REPOS_LIST: "/cloudbuild/v1/repos/list",
+  REPO_DETAILS: "/cloudbuild/v1/repos/details",
 
   // Build Settings
-  SETTINGS: "/api/cloudbuild/settings",
+  SETTINGS: "/cloudbuild/v1/settings",
 };
 
 export const MIGRATION_ENDPOINTS = {
