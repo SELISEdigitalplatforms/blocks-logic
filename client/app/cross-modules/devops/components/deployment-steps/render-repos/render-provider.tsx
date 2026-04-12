@@ -12,6 +12,7 @@ import { Button } from "@/components/ui-kits/button/button";
 import { useNavigate } from "react-router-dom";
 import { useValidateAuthorization } from "@/cross-modules/devops/hooks/github-info";
 import { IProviderDestination } from "@/cross-modules/devops/models/utils";
+import { useProjectStore } from "@/store/useProjectStore";
 
 interface ProviderButtonsProps extends IProviderDestination {
   onClose?: (verifyAuth?: boolean) => void | Promise<void>;
@@ -26,6 +27,7 @@ const ProviderButtons = ({
   closeOnProviderSelect,
 }: ProviderButtonsProps) => {
   const navigate = useNavigate();
+  const projectKey = useProjectStore().selectedProject?.tenantId || "";
 
   const { data: verifyAuth } = useValidateAuthorization();
   const [, setSelectedProvider] = useState<string | null>(null);
@@ -57,7 +59,7 @@ const ProviderButtons = ({
           };
           window.addEventListener("storage", reloadListener);
 
-          authenticateWithGithub(extraState || "");
+          authenticateWithGithub(extraState || "", projectKey);
         }
         break;
       case "gitlab":
