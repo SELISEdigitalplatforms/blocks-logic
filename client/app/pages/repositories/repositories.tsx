@@ -181,7 +181,7 @@ export const RepositoriesPage = () => {
   );
 
   const table = useReactTable({
-    data: resourcesResponse?.resources ?? [],
+    data: resourcesResponse?.assets?.resources ?? [],
     columns,
     getCoreRowModel: getCoreRowModel(),
   });
@@ -242,7 +242,7 @@ export const RepositoriesPage = () => {
                         ))}
                       </TableRow>
                     ))
-                ) : !resourcesResponse?.resources?.length ? (
+                ) : !resourcesResponse?.assets?.resources?.length ? (
                   <TableRow>
                     <TableCell
                       colSpan={columns.length}
@@ -264,12 +264,12 @@ export const RepositoriesPage = () => {
                 )}
               </TableBody>
             </Table>
-            {!isLoadingAssets && (resourcesResponse?.resources?.length || 0) > pageSize && (
+            {!isLoadingAssets && (resourcesResponse?.totalCount || 0) > pageSize && (
               <div className="mt-5 flex flex-col items-center gap-4 md:flex-row md:justify-end">
                 <Pagination
                   page={pageNumber}
                   onChange={onPageChangeHandler}
-                  totalCount={resourcesResponse?.resources?.length || 0}
+                  totalCount={resourcesResponse?.totalCount || 0}
                   pageSize={pageSize}
                 />
               </div>

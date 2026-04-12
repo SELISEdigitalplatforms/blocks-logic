@@ -42,9 +42,13 @@ export class ProjectService {
   }
 
   getAssets(tenantGroupId: string): Promise<{
-    resources: IResource[];
-    tenantGroupId: string;
-    createdDate: string;
+    assets: {
+      resources: IResource[];
+      tenantGroupId: string;
+      createdDate: string;
+      itemId: string;
+    };
+    totalCount: number;
     errors: unknown | null;
     isSuccess: boolean;
   }> {
