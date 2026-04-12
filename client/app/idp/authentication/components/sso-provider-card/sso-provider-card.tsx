@@ -82,7 +82,7 @@ export const SSOProviderCard = ({ configuration }: SSOProviderCardProps) => {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <Link
-                    to={`./authentication/sso-configuration?provider=${configuration.provider}&id=${configuration.itemId || ""}`}
+                    to={`/services/authentication/sso-configuration?provider=${configuration.provider}&id=${configuration.itemId || ""}`}
                   >
                     <DropdownMenuItem>Configure</DropdownMenuItem>
                   </Link>

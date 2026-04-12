@@ -48,7 +48,6 @@ export const SsoProviderConfigForms = ({ provider, id }: SsoConfigFormsProps) =>
       if (!res.isSuccess) return showErrorToast({ errors: res.errors });
       if (!id) navigate(`/services/authentication/sso-configuration?provider=${provider}&id=${res.itemId}`);
       showSuccessToast({ description: `${provider} is configured successfully` });
-      close();
     } catch (error) {
       if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
       showErrorToast({ errors: "Something went wrong" });
