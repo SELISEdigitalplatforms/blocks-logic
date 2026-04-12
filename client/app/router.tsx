@@ -3,7 +3,7 @@ import { createBrowserRouter, Navigate } from "react-router-dom";
 import { AuthLayout } from "./layouts/auth-layout";
 import { PublicLayout } from "./layouts/public-layout";
 import { OidcLayout } from "./layouts/oidc-layout";
-import { AdminLayout } from "./layouts/admin-layout";
+import { DashboardLayout } from "./layouts/dashboard-layout";
 import { ConsoleLayout } from "./layouts/console-layout";
 import { ProjectOverviewLayout } from "./layouts/project-overview-layout";
 
@@ -30,25 +30,25 @@ import OidcErrorPage from "./routes/oidc/error";
 import OidcForgotPasswordPage from "./routes/oidc/forgot-password";
 import OidcEmailSentConfirmationPage from "./routes/oidc/email-sent-confirmation";
 
-// Admin routes (protected)
-import IamPage from "./routes/admin/iam";
-import IamUserDetailPage from "./routes/admin/iam-user-detail";
-import IamRoleDetailPage from "./routes/admin/iam-role-detail";
-import IamPermissionDetailPage from "./routes/admin/iam-permission-detail";
-import IamAddPermissionPage from "./routes/admin/iam-add-permission";
-import IamOrgDetailPage from "./routes/admin/iam-org-detail";
-import IamLogsPage from "./routes/admin/iam-logs";
-import IamConfigurePage from "./routes/admin/iam-configure";
-import AuthenticationConfigPage from "./routes/admin/authentication-config";
-import SsoConfigurationPage from "./routes/admin/sso-configuration";
-import AuthLogsPage from "./routes/admin/auth-logs";
-import MfaConfigPage from "./routes/admin/mfa-config";
-import MfaLogsPage from "./routes/admin/mfa-logs";
-import CaptchaConfigPage from "./routes/admin/captcha-config";
-import CaptchaLogsPage from "./routes/admin/captcha-logs";
-import ApiSettingsPage from "./routes/admin/api-settings";
-import SecretManagementPage from "./routes/admin/secret-management";
-import ProfilePage from "./routes/admin/profile";
+// Dashboard routes (protected)
+import IamPage from "./routes/dashboard/iam";
+import IamUserDetailPage from "./routes/dashboard/iam-user-detail";
+import IamRoleDetailPage from "./routes/dashboard/iam-role-detail";
+import IamPermissionDetailPage from "./routes/dashboard/iam-permission-detail";
+import IamAddPermissionPage from "./routes/dashboard/iam-add-permission";
+import IamOrgDetailPage from "./routes/dashboard/iam-org-detail";
+import IamLogsPage from "./routes/dashboard/iam-logs";
+import IamConfigurePage from "./routes/dashboard/iam-configure";
+import AuthenticationConfigPage from "./routes/dashboard/authentication-config";
+import SsoConfigurationPage from "./routes/dashboard/sso-configuration";
+import AuthLogsPage from "./routes/dashboard/auth-logs";
+import MfaConfigPage from "./routes/dashboard/mfa-config";
+import MfaLogsPage from "./routes/dashboard/mfa-logs";
+import CaptchaConfigPage from "./routes/dashboard/captcha-config";
+import CaptchaLogsPage from "./routes/dashboard/captcha-logs";
+import ApiSettingsPage from "./routes/dashboard/api-settings";
+import SecretManagementPage from "./routes/dashboard/secret-management";
+import ProfilePage from "./routes/dashboard/profile";
 
 // Console pages
 import { Console } from "./pages/console/console";
@@ -100,9 +100,9 @@ export const router = createBrowserRouter([
     ],
   },
 
-  // ── Admin layout (protected routes) ──
+  // ── Dashboard layout (protected routes) ──
   {
-    element: <AdminLayout />,
+    element: <DashboardLayout />,
     children: [
       { path: "/services/iam", element: <IamPage /> },
       { path: "/services/iam/user-detail/:id", element: <IamUserDetailPage /> },
@@ -135,9 +135,9 @@ export const router = createBrowserRouter([
     ],
   },
 
-  // ── Dashboard and project overview in admin layout (consolidated sidebar) ──
+  // ── Dashboard and project overview in dashboard layout (consolidated sidebar) ──
   {
-    element: <AdminLayout />,
+    element: <DashboardLayout />,
     children: [
       { path: "/dashboard", element: <DashboardOverview /> },
       { path: "/project-overview", element: <Navigate to="/project-overview/environments" replace /> },
