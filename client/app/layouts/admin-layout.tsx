@@ -4,7 +4,7 @@ import { ProtectedGuard } from "@/guards/protected-guard";
 import { SidebarMenuDesktop } from "@/layouts/sidebar-menu-desktop/sidebar-menu-desktop";
 import { DashboardHeader } from "@/layouts/dashboard-header/dashboard-header";
 
-export function AdminLayout() {
+export function DashboardLayout() {
   return (
     <ProtectedGuard>
       <DashboardLayoutProvider isOpen={true} persist>
