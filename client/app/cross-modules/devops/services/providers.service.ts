@@ -1,21 +1,37 @@
-const GITHUB_CLIENT_ID = import.meta.env.BLOCKS_GITHUB_CLIENT_ID || "";
-const GITHUB_REDIRECT_URI = import.meta.env.BLOCKS_GITHUB_REDIRECT_URI || window.location.origin;
+const generateRandomState = () => {
+  const array = new Uint8Array(32);
+  crypto.getRandomValues(array);
+  return Array.from(array, (byte) => byte.toString(16).padStart(2, "0")).join("");
+};
 
-export const authenticateWithGithub = (extraState?: string) => {
-  const state = extraState || Math.random().toString(36).substring(7);
-  const scope = "repo,user";
+export const authenticateWithGithub = (extraState?: string, projectKey?: string) => {
+  const randomState = generateRandomState();
   
-  const authUrl = `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(
-    GITHUB_REDIRECT_URI
-  )}&scope=${scope}&state=${state}`;
+  // Define scopes for personal repository access
+  const scopes = ["repo", "user:email", "read:user", "read:repo_hook"].join(" ");
 
-  // Store current destination before redirect
+  // Build the OAuth URL with all parameters
+  const authUrl = new URL("https://github.com/login/oauth/authorize");
+  authUrl.searchParams.set("client_id", import.meta.env.BLOCKS_GITHUB_CLIENT_ID || "");
+  authUrl.searchParams.set("scope", scopes);
+  authUrl.searchParams.set("state", randomState);
+
+  // Store auth state and project context
   const destination = localStorage.getItem("destination") || "/";
   localStorage.setItem("github_auth_destination", destination);
-  localStorage.setItem("github_auth_state", state);
+  localStorage.setItem("github_auth_state", randomState);
+  if (projectKey) {
+    localStorage.setItem("github_auth_project_key", projectKey);
+  }
   
-  // Open GitHub OAuth in same window
-  window.location.href = authUrl;
+  // Open GitHub OAuth in new tab
+  window.open(authUrl.toString(), "_blank", "noopener,noreferrer");
+};
+
+// Function to verify state parameter when handling the callback
+export const verifyOAuthState = (receivedState: string | null) => {
+  const storedState = localStorage.getItem("github_auth_state");
+  return storedState === receivedState;
 };
 
 export const authenticateWithGitlab = () => {
