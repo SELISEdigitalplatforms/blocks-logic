@@ -208,11 +208,13 @@ export const RepositoriesPage = () => {
       <div className="mt-4">
         <Card>
           <CardHeader>
-            <Input
-              placeholder="Search repositories..."
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-            />
+            <div className="w-1/3">
+              <Input
+                placeholder="Search repositories..."
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+              />
+            </div>
           </CardHeader>
           <CardContent>
             <Table>

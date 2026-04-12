@@ -89,8 +89,7 @@ export const CreateProjectResourcesForm = () => {
     setSelectRepositoryModalOpen(false);
   };
 
-  const githubIconSrc =
-    typeof iconMap["github"]?.src === "string" ? iconMap["github"].src : "/favicon.svg";
+  const githubIconSrc = iconMap["github"] || "/assets/github-icon.svg";
 
   return (
     <Form {...form}>
