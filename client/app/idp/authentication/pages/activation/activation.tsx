@@ -2,6 +2,7 @@
 
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui-kits/button/button";
+import { Link } from "react-router-dom";
 import {
   Card,
   CardContent,
@@ -123,9 +124,9 @@ export const Activation = ({ code }: ActivationProps) => {
 
   return (
     <div className="flex min-h-screen flex-col items-center bg-background">
-      <div className="mb-4 mt-[30px] p-4">
+      <Link to="/login" className="mb-4 mt-[30px] cursor-pointer p-4 hover:opacity-80 transition-opacity">
         <Logo src={"/Logo.svg"} width={128} height={54.931} />
-      </div>
+      </Link>
       {activationError === null ? (
         <>
           <Card className="mx-auto w-full rounded border-solid border-background shadow-none sm:max-w-md sm:border-[#95ADC4]">
