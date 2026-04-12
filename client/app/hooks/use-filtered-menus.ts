@@ -21,6 +21,8 @@ export function useFilteredMenus(menus: Menu[]): Menu[] {
       "service-identity__authorization",
       "service-identity__mfa",
       "service-identity__captcha",
+      "service-identity__api-settings",
+      "service-identity__secret-management",
     ]);
 
     try {

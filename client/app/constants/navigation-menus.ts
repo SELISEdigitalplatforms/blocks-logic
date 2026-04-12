@@ -1,5 +1,5 @@
 import { Menu } from "@/models/menu-models";
-import { Home, Package, Users, BookMinus, Settings, Shield, Key, ShieldCheck, ScanFace } from "lucide-react";
+import { Home, Package, Users, BookMinus, Settings, Shield, Key, ShieldCheck, ScanFace, Lock } from "lucide-react";
 
 export const navigationMenus: Menu[] = [
   {
@@ -72,5 +72,19 @@ export const navigationMenus: Menu[] = [
     name: "Captcha",
     path: "/services/captcha",
     icon: ScanFace,
+  },
+  {
+    id: "service-identity__api-settings",
+    type: "menu",
+    name: "API Settings",
+    path: "/services/api-settings",
+    icon: Settings,
+  },
+  {
+    id: "service-identity__secret-management",
+    type: "menu",
+    name: "Secret Management",
+    path: "/services/secret-management",
+    icon: Lock,
   },
 ];
