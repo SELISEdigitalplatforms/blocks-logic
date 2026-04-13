@@ -45,7 +45,7 @@ export class AuthService {
   }
 
   getLoginOptions(): Promise<any> {
-    return http.get("/idp/v1/Authentication/GetLoginOptions");
+    return http.get(AUTH_ENDPOINTS.GET_LOGIN_OPTIONS);
   }
 
   logout() {

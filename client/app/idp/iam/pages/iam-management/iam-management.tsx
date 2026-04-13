@@ -1,4 +1,5 @@
 
+import { getApiUrl } from "@/lib/get-api-path";
 import { ConfigureButton } from "@/components/action-buttons/configure-button";
 import { PrimaryButton } from "@/components/action-buttons/primary-button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui-kits/tabs/tabs";
@@ -77,7 +78,7 @@ export const IamManagement = () => {
             variant="outline"
             onClick={() =>
               window.open(
-                `${import.meta.env.BLOCKS_API_BASE_URL}/idp/v1/swagger/index.html`,
+                getApiUrl("idp/v1", "swagger/index.html"),
                 "_blank",
               )
             }

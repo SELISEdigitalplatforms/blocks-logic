@@ -1,6 +1,7 @@
 
 
 import { LogMenu } from "@blocks-lmt/components";
+import { getApiUrl } from "@/lib/get-api-path";
 import { ConfigureCaptchaModal } from "../../modals/configure-captcha-modal/";
 import { ConfigureCaptchaList } from "./configure-captcha-list";
 import { useProjectStore } from "@/store/useProjectStore";
@@ -48,7 +49,7 @@ export const ConfigureCaptcha = () => {
             variant="outline"
             onClick={() =>
               window.open(
-                `${import.meta.env.BLOCKS_API_BASE_URL}/idp/v1/swagger/index.html`,
+                getApiUrl("idp/v1", "swagger/index.html"),
                 "_blank",
               )
             }

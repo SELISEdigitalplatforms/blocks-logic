@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { getApiUrl } from "@/lib/get-api-path";
 import { showErrorToast } from "@/hooks/use-toast";
 import { useAuthStore } from "@/store/useAuthStore";
 import { isErrorWithErrors } from "@/lib/error";
@@ -75,7 +76,7 @@ export const SsoActivate = ({ oauthParams }: SsoActivateProps) => {
       body.append("grant_type", "sso_consent");
 
       const res = await fetch(
-        `${import.meta.env.BLOCKS_API_BASE_URL}/idp/v1/Authentication/Token`,
+        getApiUrl("idp/v1", "Authentication/Token"),
         {
           method: "POST",
           headers: {
