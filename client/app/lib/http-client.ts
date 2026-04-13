@@ -78,7 +78,9 @@ class HttpClient {
       const formData = new URLSearchParams();
       formData.append("grant_type", "refresh_token");
       formData.append("refresh_token", `""`);
-      const url = `${this.baseURL}/idp/v1/Authentication/Token`;
+      const isLocalhost = this.baseURL.includes("localhost");
+      const apiPath = isLocalhost ? "/Api" : "/idp/v1";
+      const url = `${this.baseURL}${apiPath}/Authentication/Token`;
       const response = await fetch(url, {
         method: "POST",
         body: formData,

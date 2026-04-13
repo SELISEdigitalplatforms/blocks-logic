@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui-kits/button/button";
 import { Card, CardContent } from "@/components/ui-kits/card/card";
+import { getApiUrl } from "@/lib/get-api-path";
 import { Pagination } from "@/components/ui-kits/pagination/pagination";
 import { ScrollArea, ScrollBar } from "@/components/ui-kits/scroll-area/scroll-area";
 import {
@@ -95,7 +96,7 @@ export function EmailServiceTable() {
               variant="outline"
               onClick={() =>
                 window.open(
-                  `${import.meta.env.BLOCKS_API_BASE_URL}/communication/v1/swagger/index.html`,
+                  getApiUrl("communication/v1", "swagger/index.html"),
                   "_blank",
                 )
               }

@@ -311,7 +311,7 @@ class LanguageManagerService {
       params.append("CreateDateRange.EndDate", payload.createDateRange.endDate);
     }
 
-    const url = `/uilm/v1/Key/GetLocalizationTimeline?${params.toString()}`;
+    const url = `${LANGUAGE_KEY_ENDPOINTS.GET_LOCALIZATION_TIMELINE}?${params.toString()}`;
     return http.get(url);
   };
 
@@ -328,7 +328,7 @@ class LanguageManagerService {
       ProjectKey: payload.projectKey,
     });
 
-    const url = `/uilm/v1/Key/GetTimelineByOperationId?${params.toString()}`;
+    const url = `${LANGUAGE_KEY_ENDPOINTS.GET_TIMELINE_BY_OPERATION_ID}?${params.toString()}`;
     return http.get(url);
   };
 }

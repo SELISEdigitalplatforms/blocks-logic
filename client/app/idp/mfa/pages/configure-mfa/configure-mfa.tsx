@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from "@tanstack/react-table";
+import { getApiUrl } from "@/lib/get-api-path";
 import { Button } from "@/components/ui-kits/button/button";
 import { EllipsisVertical } from "lucide-react";
 import { Card, CardContent } from "@/components/ui-kits/card/card";
@@ -179,7 +180,7 @@ export const ConfigureMFA = () => {
               variant="outline"
               onClick={() =>
                 window.open(
-                  `${import.meta.env.BLOCKS_API_BASE_URL}/idp/v1/swagger/index.html`,
+                  getApiUrl("idp/v1", "swagger/index.html"),
                   "_blank",
                 )
               }

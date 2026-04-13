@@ -19,6 +19,8 @@ export const LANGUAGE_KEY_ENDPOINTS = {
   GET_TIMELINE: `${API_BASES.UILM}${KEY_SUBPATH}/GetTimeline`,
   GET_EXPORT_HISTORY: `${API_BASES.UILM}${KEY_SUBPATH}/GetUilmExportedFiles`,
   ROLLBACK: `${API_BASES.UILM}${KEY_SUBPATH}/RollBack`,
+  GET_LOCALIZATION_TIMELINE: `${API_BASES.UILM}${KEY_SUBPATH}/GetLocalizationTimeline`,
+  GET_TIMELINE_BY_OPERATION_ID: `${API_BASES.UILM}${KEY_SUBPATH}/GetTimelineByOperationId`,
 } as const;
 
 // Language Module endpoints

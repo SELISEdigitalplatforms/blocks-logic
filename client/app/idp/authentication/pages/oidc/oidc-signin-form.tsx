@@ -14,12 +14,13 @@ import { useOIDCContext } from "@/layouts/oidc-layout";
 import { ISigninByEmailPayload, ISigninByEmailResponse } from "@blocks-idp/authentication/models/auth.model";
 import { buildOIDCNavigationUrl, getCurrentOIDCParams } from "@blocks-idp/authentication/utils/oidc-utils";
 import { PasswordInput } from "@/components/password-input";
+import { getApiUrl } from "@/lib/get-api-path";
 
 export const signinByEmail = async (
   payload: ISigninByEmailPayload & { projectKey: string }
 ): Promise<ISigninByEmailResponse> => {
   try {
-    const url = `${import.meta.env.BLOCKS_API_BASE_URL}/idp/v1/Authentication/Login`;
+    const url = getApiUrl("idp/v1", "Authentication/Login");
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",

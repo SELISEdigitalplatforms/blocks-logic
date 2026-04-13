@@ -3,6 +3,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui-kits/tabs/tabs";
 import { LogMenu } from "@blocks-lmt/components";
 import { TabsContent } from "@radix-ui/react-tabs";
 import { useQueryState } from "nuqs";
+import { getApiUrl } from "@/lib/get-api-path";
 import { GrantTypes } from "./general/grant-types";
 // import { SelfSignup } from "./general/self-signup";
 import { GeneralSettings } from "./general/settings";
@@ -26,7 +27,7 @@ export const AuthenticationConfig = () => {
           <Button
             size="sm"
             variant="outline"
-            onClick={() => window.open(`${import.meta.env.BLOCKS_API_BASE_URL}/idp/v1/swagger/index.html`, "_blank")}
+            onClick={() => window.open(getApiUrl("idp/v1", "swagger/index.html"), "_blank")}
           >
             API Docs
           </Button>
