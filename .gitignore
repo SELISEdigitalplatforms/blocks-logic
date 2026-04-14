@@ -157,18 +157,18 @@ server/Api/wwwroot/**
 
   server/Api/bin/
   server/Api/obj/
-  server/Api/Authentication.DomainService/bin/
-  server/Api/Authentication.DomainService/obj/
-  server/Api/Captcha.DomainService/bin/
-  server/Api/Captcha.DomainService/obj/
-  server/Api/Iam.DomainService/bin/
-  server/Api/Iam.DomainService/obj/
-  server/Api/Identifier.DomainService/bin/
-  server/Api/Identifier.DomainService/obj/
-  server/Api/Mfa.DomainService/bin/
-  server/Api/Mfa.DomainService/obj/
-  server/Api/Worker/bin/
-  server/Api/Worker/obj/
-  server/Api/XUnitTest/bin/
-  server/Api/XUnitTest/obj/
+  server/Authentication.DomainService/bin/
+  server/Authentication.DomainService/obj/
+  server/Captcha.DomainService/bin/
+  server/Captcha.DomainService/obj/
+  server/Iam.DomainService/bin/
+  server/Iam.DomainService/obj/
+  server/Identifier.DomainService/bin/
+  server/Identifier.DomainService/obj/
+  server/Mfa.DomainService/bin/
+  server/Mfa.DomainService/obj/
+  server/Worker/bin/
+  server/Worker/obj/
+  server/XUnitTest/bin/
+  server/XUnitTest/obj/
 
