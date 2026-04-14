@@ -457,7 +457,6 @@ namespace Iam.DomainService.Users
                     }
                 }
             );
-            _logger.LogInformation("User mutation event -- sent");
 
             _logger.LogInformation("User creation end -- Success");
             return new BaseMutationResponse
@@ -491,7 +490,7 @@ namespace Iam.DomainService.Users
                 Memberships = command.Memberships,
                 UserCreationType = command.UserCreationType,
                 UserPassType = UserPassType.None,
-                Tags = new List<string>(),
+                Tags = [],
                 VarifiedType = UserVarifiedType.None,
                 ProfileImageUrl = command.ProfileImageUrl,
                 ProfileImageId = command.ProfileImageId,
@@ -500,9 +499,8 @@ namespace Iam.DomainService.Users
                 Active = command.Active,
                 IsVarified = command.IsVarified,
                 ExternalUserId = command.ExternalUserId,
-                DepartMent = command.DepartMent,
+                Department = command.DepartMent,
                 EmployeeId = command.EmployeeId
-
             };
             await _userRepository.CreateUserAsync(user);
 
@@ -523,27 +521,7 @@ namespace Iam.DomainService.Users
 
         private async Task<bool> SendPostEventAsync(User user, string mailPurpose, string projectKey)
         {
-            var sendMailCommand = new SendMail
-            {
-                Cc = Array.Empty<string>(),
-                Bcc = Array.Empty<string>(),
-                BodyDataContext = new Dictionary<string, string>
-                {
-                    { "UserName" , user.UserName},
-                    { "DisplayName" , $"{user.FirstName} {user.LastName}"},
-
-                    { "CreatedUser.Salutation" , user.Salutation},
-                    { "CreatedUser.FirstName" , user.FirstName},
-                    { "CreatedUser.LastName" , user.LastName},
-                    { "CreatedUser.Email" , user.Email},
-                },
-                Language = user.Language ?? "en-US",
-                Purpose = string.IsNullOrWhiteSpace(mailPurpose) ? "AccountActivated" : mailPurpose,
-                To = new string[] { user.Email.ToLower() },
-                ProjectKey = projectKey
-            };
-
-            return await _identityAccessManagementService.SendEmailAsync(sendMailCommand);
+            return await _identityAccessManagementService.SendAccountActivationEmailAsync(user, mailPurpose, projectKey);
         }
 
     }

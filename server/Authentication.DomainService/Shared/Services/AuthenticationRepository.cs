@@ -97,6 +97,7 @@ namespace DomainService.Services
         {
             var collection = GetCollection<Session>();
             var update = Builders<Session>.Update.Set(x => x.IsActive, false)
+                .Set(x => x.ExpiresUtc, DateTime.UtcNow)
                 .Set(x => x.UpdateDate, DateTime.Now);
             var result = await collection.UpdateManyAsync(x => x.RefreshToken == refreshToken && x.UserId == userId, update);
             return result.IsAcknowledged;
@@ -106,6 +107,7 @@ namespace DomainService.Services
         {
             var collection = GetCollection<Session>();
             var update = Builders<Session>.Update.Set(x => x.IsActive, false)
+                .Set(x => x.ExpiresUtc, DateTime.UtcNow)
                 .Set(x => x.UpdateDate, DateTime.Now);
             var filter = Builders<Session>.Filter.In(x => x.RefreshToken, refreshTokens);
             var result = await collection.UpdateManyAsync(filter, update);

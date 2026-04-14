@@ -20,16 +20,16 @@ namespace Captcha.DomainService.Captcha
             _dbContextProvider = dbContextProvider;
         }
 
-        public ICaptchaGenerator GetCaptchaGenerator(string provider)
+        public ICaptchaGenerator GetCaptchaGenerator(string configurationName)
         {
-            string generatorName = GetGeneratorName(provider);
+            string generatorName = GetGeneratorName(configurationName);
             return CaptchaGenerators[generatorName];
         }
 
-        public virtual string GetGeneratorName(string provider)
+        public virtual string GetGeneratorName(string configurationName)
         {
             var collection = _dbContextProvider.GetCollection<CaptchaConfiguration>(_collectionName);
-            var filter = Builders<CaptchaConfiguration>.Filter.Eq(mc => mc.Provider, provider);
+            var filter = Builders<CaptchaConfiguration>.Filter.Eq(mc => mc.Provider, configurationName);
             var setting = collection.Find(filter).FirstOrDefault();
             var generatorName = setting == null ? nameof(HardCaptchaGenerator) : setting.CaptchaGenerator.ToString();
 
