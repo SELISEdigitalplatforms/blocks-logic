@@ -46,7 +46,8 @@ namespace DomainService.OAuth
                 { GrantTypes.AuthCode, serviceProvider.GetService<AuthorizeCodeService>() },
                 { GrantTypes.BiometricAuthorization, serviceProvider.GetService<BiometricAuthorizationService>() },
                 { GrantTypes.ClientCredential, serviceProvider.GetService<ClientCredentialAuthorizationService>() },
-                { GrantTypes.ClientUserCode, serviceProvider.GetService<ClientUserCodeAuthorizationService>() }
+                { GrantTypes.ClientUserCode, serviceProvider.GetService<ClientUserCodeAuthorizationService>() },
+                { GrantTypes.SsoConsentCode, serviceProvider.GetService<SSOConsentAuthenticationService>() }
             };
 
             _logger = logger;
@@ -60,8 +61,6 @@ namespace DomainService.OAuth
         public async Task<IActionResult> AuthenticateAsync(TokenRequest request)
         {
             var bc = BlocksContext.GetContext();
-            var tenant = _tenants.GetTenantByID(bc?.TenantId);
-
             var config = await _oAuthRepository.GetAuthenticationConfigurationAsync();
 
             if (config == null)
@@ -70,7 +69,7 @@ namespace DomainService.OAuth
                 return OAuthError.InvalidRequest("Authentication configuration not found");
             }
 
-            if (!config.AllowedGrantTypes.Any(x => x == request.GrantType))
+            if (request.GrantType != "sso_consent" && !config.AllowedGrantTypes.Any(x => x == request.GrantType))
             {
                 _logger.LogWarning("Grant type not allowed for tenant {TenantId}", bc?.TenantId);
                 return OAuthError.InvalidRequest("Grant type not allowed for this tenant");
@@ -97,6 +96,11 @@ namespace DomainService.OAuth
             var bc = BlocksContext.GetContext();
             if (string.IsNullOrWhiteSpace(response.Error))
             {
+                if (!string.IsNullOrWhiteSpace(response.SsoUserRedirectUrl))
+                {
+                    return OAuthResponse.SSOUserNotExistResponse(response);
+                }
+
                 if (!string.IsNullOrWhiteSpace(response.CookieDomain))
                 {
                     var accessTokenkey = $"{IdpConstants.AccessTokenCookieName}_{bc.TenantId}";
@@ -182,6 +186,8 @@ namespace DomainService.OAuth
                   GrantTypes.SwitchOrganization => !string.IsNullOrWhiteSpace(request.OrganizationId) && 
                                                    !string.IsNullOrWhiteSpace(request.RefreshToken),
 
+                  GrantTypes.SsoConsentCode => !string.IsNullOrWhiteSpace(request.Code),
+
                   _ => false
               };
 
@@ -199,6 +205,9 @@ namespace DomainService.OAuth
                     Error = OAuthError.RefreshTokenCookieNotFound
                 };
             }
+
+            // Ensure request.RefreshToken always reflects the resolved token (cookie/header/body)
+            request.RefreshToken = cookieToken;
 
             var refreshTokenCache = await _cacheClient.GetStringValueAsync(cookieToken);
 

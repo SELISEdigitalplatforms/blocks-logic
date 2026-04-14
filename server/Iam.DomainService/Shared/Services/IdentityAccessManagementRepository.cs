@@ -1,31 +1,14 @@
 ﻿using Blocks.Genesis;
 using Iam.DomainService.Entities;
+using Iam.DomainService.Shared.Entities;
 using MongoDB.Driver;
 
 namespace Iam.DomainService.Services
 {
-    public class IdentityAccessManagementRepository : IIdentityAccessManagementRepository
+    public class IdentityAccessManagementRepository : BaseRepository, IIdentityAccessManagementRepository
     {
-        private readonly IDbContextProvider _dbContextProvider;
-
-        public IdentityAccessManagementRepository(IDbContextProvider dbContextProvider)
+        public IdentityAccessManagementRepository(IDbContextProvider dbContextProvider) : base(dbContextProvider)
         {
-            _dbContextProvider = dbContextProvider;
-        }
-
-        public IMongoCollection<T> GetCollection<T>()
-        {
-            return _dbContextProvider.GetCollection<T>($"{typeof(T).Name}s");
-        }
-
-        public IMongoCollection<T> GetCollection<T>(string tenantId)
-        {
-            return _dbContextProvider.GetCollection<T>(tenantId, $"{typeof(T).Name}s");
-        }
-
-        public IMongoCollection<T> GetCollectionByName<T>(string collectionName)
-        {
-            return _dbContextProvider.GetCollection<T>(collectionName);
         }
 
         public async Task<IamConfiguration> GetIamConfigurationAsync()
@@ -132,6 +115,33 @@ namespace Iam.DomainService.Services
             bool isActive = user?.Active ?? false;
 
             return !isActive ? user.ItemId : "";
+        }
+
+        public async Task<SignUpSetting> GetSingUpSettingByIdAsync(string itemId)
+        {
+            var collection = GetCollection<SignUpSetting>();
+            return await collection.Find(x => x.ItemId == itemId).FirstOrDefaultAsync();
+        }
+
+        public async Task SaveSingUpSettingAsync(SignUpSetting signUpSetting)
+        {
+            var collection = GetCollection<SignUpSetting>();
+            await collection.ReplaceOneAsync( x => x.ItemId == signUpSetting.ItemId, signUpSetting, new ReplaceOptions { IsUpsert = true });
+        }
+
+        public async Task<SignUpSetting> GetSignUpSettingAsync(string? itemId = null)
+        {
+            var collection = GetCollection<SignUpSetting>();
+            return !string.IsNullOrWhiteSpace(itemId) 
+                ? await GetSingUpSettingByIdAsync(itemId)
+                : await collection.Find(_ => true).FirstOrDefaultAsync();
+        }
+
+        public async Task<bool> SingnUpSettingAlreadyExist()
+        {
+            var collection = GetCollection<SignUpSetting>();
+            var count = await collection.CountDocumentsAsync(_ => true);
+            return count > 0;
         }
     }
 }

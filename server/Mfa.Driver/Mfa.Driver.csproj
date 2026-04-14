@@ -26,10 +26,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-    	<None Include="README.md" Pack="true" PackagePath="." />
-	</ItemGroup>
-
-	<ItemGroup>
 	  <PackageReference Include="SeliseBlocks.MailDriver" Version="9.0.0-preview.15" />
     <PackageReference Include="Otp.NET" Version="1.4.0" />
 	</ItemGroup>

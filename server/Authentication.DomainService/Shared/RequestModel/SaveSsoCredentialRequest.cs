@@ -16,5 +16,8 @@ namespace DomainService.Shared
         public bool IsDisabled { get; set; }
         public string? ItemId { get; set; }
         public SSOType SSOType { get; set; }
+        public string? TeamId { get; set; }
+        public string? KeyId { get; set; }
+        public string? PrivateKey { get; set; }
     }
 }

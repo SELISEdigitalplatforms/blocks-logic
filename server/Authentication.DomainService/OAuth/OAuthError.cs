@@ -84,6 +84,14 @@ namespace DomainService.OAuth
                     ErrorDescription = "Code, auth code required",
                     StatusCode = 400
                 },
+
+                GrantTypes.SsoConsentCode => new TokenResponse
+                {
+                    Error = "invalid_request_body",
+                    ErrorDescription = "Code, sso consent code required",
+                    StatusCode = 400
+                },
+
                 _ => new TokenResponse
                 {
                     Error = "invalid_grant_type",
