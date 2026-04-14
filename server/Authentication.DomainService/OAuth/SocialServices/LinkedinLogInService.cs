@@ -26,23 +26,23 @@ namespace DomainService.OAuth.SocialServices
             _httpService = httpService;
         }
 
-        public async Task<(string, bool)> GetProviderLogInUriAsync(GetSocialLogInEndPointRequest request)
+        public async Task<(string, bool)> GetProviderLogInUriAsync(GetSocialLogInEndPointRequest loginData)
         {
             var credential = await _authenticationRepository
-                .GetSocialLoginCredentialByProvideAndAudienceAsync(request.Provider, request.Audience);
+                .GetSocialLoginCredentialByProvideAndAudienceAsync(loginData.Provider, loginData.Audience);
 
             if (credential == null)
             {
-                _logger.LogError($"Credential not found for provider {request.Provider} and audience {request.Audience}");
+                _logger.LogError("Credential not found for provider {Provider} and audience {Audience}", loginData.Provider, loginData.Audience);
                 return (string.Empty, true);
             }
 
             var stateKey = Guid.NewGuid().ToString("n");
             var stateInfo = new StateInfo
             {
-                Audience = request.Audience,
-                Provider = request.Provider,
-                NextUrl = request.NextUrl,
+                Audience = loginData.Audience,
+                Provider = loginData.Provider,
+                NextUrl = loginData.NextUrl,
             };
 
             await _cacheClient.AddStringValueAsync(stateKey, JsonSerializer.Serialize(stateInfo), 300);
@@ -55,9 +55,9 @@ namespace DomainService.OAuth.SocialServices
                 $"&redirect_uri={WebUtility.UrlEncode(credential.RedirectUrl)}" +
                 $"&scope={WebUtility.UrlEncode(credential.Scope).Replace("+", "%20").Replace(" ", "%20")}" +
                 $"&state={stateKey}";
-            _logger.LogError($"loginUri for provider {request.Provider} and loginUri {loginUri}");
+            _logger.LogError("loginUri for provider {Provider} and loginUri {LoginUri}", loginData.Provider, loginUri);
 
-            return (loginUri, request.SendAsResponse || credential.SendAsResponse);
+            return (loginUri, loginData.SendAsResponse || credential.SendAsResponse);
         }
 
         public async Task<IExternalUserData> HandleSocialLogin(StateInfo stateInfo)
@@ -81,15 +81,9 @@ namespace DomainService.OAuth.SocialServices
 
             if (!string.IsNullOrWhiteSpace(error))
             {
-                _logger.LogError($"Error while getting LinkedIn access token: {error}");
+                _logger.LogError("Error while getting LinkedIn access token: {Error}", error);
                 return new LinkedinUserData();
             }
-
-            var headers = new Dictionary<string, string>
-            {
-                { "Authorization", $"Bearer {tokenResponse.AccessToken}" },
-                { "User-Agent", $"{credential.Audience}" } // LinkedIn requires this
-            };
 
             var profileUrl = credential.GetProfileUrl + $"oauth2_access_token={tokenResponse.AccessToken}";
 
@@ -108,7 +102,7 @@ namespace DomainService.OAuth.SocialServices
 
             if (!string.IsNullOrWhiteSpace(profileError))
             {
-                _logger.LogError($"Error while getting LinkedIn user profile: {profileError}");
+                _logger.LogError("Error while getting LinkedIn user profile: {ProfileError}", profileError);
                 return new LinkedinUserData();
             }
 

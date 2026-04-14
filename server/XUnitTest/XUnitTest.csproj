@@ -16,15 +16,18 @@
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
   </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\Api\Api.csproj" />
-    <ProjectReference Include="..\Authentication.DomainService\Authentication.DomainService.csproj" />
-  </ItemGroup>
-
   <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup>
+	<ProjectReference Include="..\Api\Api.csproj" />
+	<ProjectReference Include="..\Captcha.Driver\Captcha.Driver.csproj" />
+	<ProjectReference Include="..\Iam.Driver\Iam.Driver.csproj" />
+	<ProjectReference Include="..\Authentication.DomainService\Authentication.DomainService.csproj" />
+	<ProjectReference Include="..\Mfa.DomainService\Mfa.DomainService.csproj" />
+	<ProjectReference Include="..\Mfa.Driver\Mfa.Driver.csproj" />
+	<ProjectReference Include="..\Worker\Worker.csproj" />
+  </ItemGroup>
 
 </Project>

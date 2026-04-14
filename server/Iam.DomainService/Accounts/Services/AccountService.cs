@@ -6,6 +6,10 @@ using Iam.DomainService.Services;
 using Iam.DomainService.Utilities;
 using FluentValidation;
 using Microsoft.Extensions.Logging;
+using Iam.DomainService.Users.RequestModel;
+using System.Security.Cryptography.Xml;
+using Iam.DomainService.Users.ResponseModel;
+using Iam.DomainService.Shared.Entities;
 
 namespace Iam.DomainService.Accounts
 {
@@ -70,6 +74,9 @@ namespace Iam.DomainService.Accounts
 
             user.Active = true;
             user.IsVarified = true;
+            user.FirstName = activateUserRequest.FirstName;
+            user.LastName = activateUserRequest.LastName;
+
             if (!string.IsNullOrWhiteSpace(activateUserRequest.Password))
             {
                 user.Password = _identityAccessManagementService.HashPassword(activateUserRequest.Password);
@@ -346,9 +353,9 @@ namespace Iam.DomainService.Accounts
 
             var isCodeExists = await _cacheClient.KeyExistsAsync(validateActivationCodeRequest.ActivationCode);
 
-            if(isCodeExists) 
+            if (isCodeExists)
                 return new ActivationCodeValidationResponse { IsSuccess = true };
- 
+
             var userId = await _repository.GetUserIdFromKeyMapByKeyAsync(validateActivationCodeRequest.ActivationCode);
 
             return new ActivationCodeValidationResponse
@@ -360,6 +367,36 @@ namespace Iam.DomainService.Accounts
                     { "ActivationCode", "Invalid_ActivationCode" }
                 }
             };
+        }
+
+        public async Task<SaveSignUpSettingResponse> SaveSingUpSettingAsync(SaveSignUpSettingRequest request)
+        {
+            if(string.IsNullOrWhiteSpace(request.ItemId) && await _repository.SingnUpSettingAlreadyExist())
+            {
+                return new SaveSignUpSettingResponse
+                {
+                    IsSuccess = false,
+                    Errors = new Dictionary<string, string>{ { "sing_up_setting_exist", "SignUpSetting already exist" }}
+                };
+            }
+
+            var settings = !string.IsNullOrWhiteSpace(request.ItemId) ?
+                          await _repository.GetSingUpSettingByIdAsync(request.ItemId) :
+                          new SignUpSetting { CreatedDate = DateTime.UtcNow, CreatedBy = BlocksContext.GetContext()?.UserId, ItemId = Guid.NewGuid().ToString() };
+
+            settings.IsEmailPasswordSignUpEnabled = request.IsEmailPasswordSignUpEnabled;
+            settings.IsSSoSignUpEnabled = request.IsSSoSignUpEnabled;
+            settings.LastUpdatedBy = BlocksContext.GetContext()?.UserId;
+            settings.LastUpdatedDate = DateTime.UtcNow;
+
+            await _repository.SaveSingUpSettingAsync(settings);
+
+            return new SaveSignUpSettingResponse { IsSuccess = true, ItemId = settings.ItemId };
+        }
+
+        public async Task<SignUpSetting> GetSignUpSettingAsync(GetSignUpSettingRequest request)
+        {
+            return  await _repository.GetSignUpSettingAsync(request.ItemId);
         }
     }
 }

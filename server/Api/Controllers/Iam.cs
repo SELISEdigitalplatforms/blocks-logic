@@ -5,7 +5,10 @@ using Iam.DomainService.Entities;
 using Iam.DomainService.Resources;
 using Iam.DomainService.Resources.RequestModel;
 using Iam.DomainService.Resources.ResponseModel;
+using Iam.DomainService.Shared.Entities;
 using Iam.DomainService.Users;
+using Iam.DomainService.Users.RequestModel;
+using Iam.DomainService.Users.ResponseModel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -378,6 +381,21 @@ namespace Api.Controllers
         {
             _changeControllerContext.ChangeContext(request);
             return await _resourceMutationService.GetOrganizationConfigAsync(request);
+        }
+
+        [HttpPost]
+        [ProtectedEndPoint]
+        public async Task<SaveSignUpSettingResponse> SaveSignUpSetting([FromBody] SaveSignUpSettingRequest request)
+        {
+            _changeControllerContext.ChangeContext(request);
+            return await _accountService.SaveSingUpSettingAsync(request);
+        }
+
+        [HttpGet]
+        public async Task<SignUpSetting> GetSignUpSetting([FromQuery] GetSignUpSettingRequest request)
+        {
+            _changeControllerContext.ChangeContext(request);
+            return await _accountService.GetSignUpSettingAsync(request);
         }
 
         #endregion

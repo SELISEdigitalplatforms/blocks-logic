@@ -18,13 +18,13 @@ namespace DomainService.OAuth
                 .When(x => x.SSOType == SSOType.BYOSSO);
         }
 
-        private bool BeAValidUrl(string url)
+        private static bool BeAValidUrl(string url)
         {
             return Uri.TryCreate(url, UriKind.Absolute, out var uriResult) &&
                    (uriResult.Scheme == Uri.UriSchemeHttp || uriResult.Scheme == Uri.UriSchemeHttps);
         }
 
-        private async Task<bool> HaveValidOidcMetadataAsync(string wellKnownUrl, CancellationToken cancellationToken)
+        private static async Task<bool> HaveValidOidcMetadataAsync(string wellKnownUrl, CancellationToken cancellationToken)
         {
             try
             {
