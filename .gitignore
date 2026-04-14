@@ -153,3 +153,22 @@ obj/
 # SPA production output (see client/vite.config.ts)
 server/Api/wwwroot/**
 !server/Api/wwwroot/.gitkeep
+
+
+  serverApi/bin/
+  serverApi/obj/
+  serverApi/Authentication.DomainService/bin/
+  serverApi/Authentication.DomainService/obj/
+  serverApi/Captcha.DomainService/bin/
+  serverApi/Captcha.DomainService/obj/
+  serverApi/Iam.DomainService/bin/
+  serverApi/Iam.DomainService/obj/
+  serverApi/Identifier.DomainService/bin/
+  serverApi/Identifier.DomainService/obj/
+  serverApi/Mfa.DomainService/bin/
+  serverApi/Mfa.DomainService/obj/
+  serverApi/Worker/bin/
+  serverApi/Worker/obj/
+  serverApi/XUnitTest/bin/
+  serverApi/XUnitTest/obj/
+
