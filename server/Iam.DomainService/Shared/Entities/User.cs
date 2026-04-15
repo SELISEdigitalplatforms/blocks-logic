@@ -35,7 +35,7 @@ namespace Iam.DomainService.Entities
         public string? MailPurpose { get; set; }
         public bool IsMfaVerified { get; set; }
         public string? ExternalUserId { get; set; }
-        public string? DepartMent { get; set; }
+        public string? Department { get; set; }
         public string? EmployeeId { get; set; }
     }
 

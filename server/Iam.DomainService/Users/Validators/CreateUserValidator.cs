@@ -87,7 +87,7 @@ namespace Iam.DomainService.Users
             return !isExist;
         }
 
-        private bool BeAValidEmail(string email)
+        private static bool BeAValidEmail(string email)
         {
             string emailValidatorExpression =
                 @"\A(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)\Z";
@@ -103,7 +103,7 @@ namespace Iam.DomainService.Users
             return user == null;
         }
 
-        private bool BeStartedWithPlusCharacter(string phoneNumber)
+        private static bool BeStartedWithPlusCharacter(string phoneNumber)
         {
             var startedWithPlusCharacter = phoneNumber.StartsWith("+", StringComparison.InvariantCultureIgnoreCase);
 

@@ -1,4 +1,5 @@
-﻿using Azure.Core;
+﻿using Authentication.DomainService.OAuth.SocialServices;
+using Azure.Core;
 using DomainService.OAuth.RequestModel;
 using DomainService.OAuth.SocialServices;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,7 +20,9 @@ namespace DomainService.OAuth
                 { SocialLogInTypes.Microsoft, serviceProvider.GetService<MicrosoftLogInService>() },
                 { SocialLogInTypes.Github, serviceProvider.GetService<GithubLogInService>() },
                 { SocialLogInTypes.LinkedIn, serviceProvider.GetService<LinkedinLogInService>() },
-                { SocialLogInTypes.Twitter, serviceProvider.GetService<TwitterLogInService>() }
+                { SocialLogInTypes.Twitter, serviceProvider.GetService<TwitterLogInService>() },
+                { SocialLogInTypes.Apple, serviceProvider.GetService<AppleLogInService>() },
+                { SocialLogInTypes.FaceBook, serviceProvider.GetService<FaceBookLogInService>() }
             };
         }
         public async Task<GetSocialLogInEndPointResponse> GetSocialLogInEndPointAsync(GetSocialLogInEndPointRequest request)
@@ -34,10 +37,10 @@ namespace DomainService.OAuth
             };
         }
 
-        public async Task<IExternalUserData> HandleSocialLogin(StateInfo stateinfo)
+        public async Task<IExternalUserData> HandleSocialLogin(StateInfo stateInfo)
         {
-            var service = _socialLogIns.ContainsKey(stateinfo.Provider) ? _socialLogIns[stateinfo.Provider.ToLower()] : _defaultService;
-            return await service.HandleSocialLogin(stateinfo);
+            var service = _socialLogIns.ContainsKey(stateInfo.Provider) ? _socialLogIns[stateInfo.Provider.ToLower()] : _defaultService;
+            return await service.HandleSocialLogin(stateInfo);
         }
     }
 

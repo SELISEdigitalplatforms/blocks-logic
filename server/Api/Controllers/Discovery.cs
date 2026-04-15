@@ -9,7 +9,7 @@ namespace Api.Controllers
     [ApiController]
     [Route(".well-known")]
 
-    public class DiscoveryController : Controller
+    public class DiscoveryController : ControllerBase
     {
         private readonly ICacheClient _cacheClient;
         private readonly ITenants _tenants;

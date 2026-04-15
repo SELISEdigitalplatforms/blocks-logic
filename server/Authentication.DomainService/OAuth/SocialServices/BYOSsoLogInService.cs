@@ -1,51 +1,40 @@
-﻿using Azure;
-using Blocks.Genesis;
+﻿using Blocks.Genesis;
 using DomainService.OAuth.RequestModel;
 using DomainService.Services;
 using Microsoft.Extensions.Logging;
-using MongoDB.Bson.IO;
 using System.Net;
 using System.Security.Claims;
 using System.Text.Json;
 
 namespace DomainService.OAuth
 {
-    public class BYOSsoLogInService : ISocialLogInService
+    public class BYOSsoLogInService : SocialLogInServiceBase
     {
-        private readonly ILogger<BYOSsoLogInService> _logger;
-        private readonly IAuthenticationRepository _authenticationRepository;
-        private readonly ICacheClient _cacheClient;
-        private readonly IHttpService _httpService;
-
         public BYOSsoLogInService(
             ILogger<BYOSsoLogInService> logger,
             IAuthenticationRepository authenticationRepository,
             ICacheClient cacheClient,
             IHttpService httpService
-        )
+        ) : base(logger, authenticationRepository, cacheClient, httpService)
         {
-            _logger = logger;
-            _authenticationRepository = authenticationRepository;
-            _cacheClient = cacheClient;
-            _httpService = httpService;
         }
 
-        public async Task<(string, bool)> GetProviderLogInUriAsync(GetSocialLogInEndPointRequest request)
+        public override async Task<(string, bool)> GetProviderLogInUriAsync(GetSocialLogInEndPointRequest loginData)
         {
-            var credential = await _authenticationRepository.GetSocialLoginCredentialByProvideAndAudienceAsync(request.Provider, request.Audience);
+            var credential = await _authenticationRepository.GetSocialLoginCredentialByProvideAndAudienceAsync(loginData.Provider, loginData.Audience);
 
             if (credential == null)
             {
-                _logger.LogError($"Credential not found for provider {request.Provider} and audience {request.Audience}");
+                _logger.LogError("Credential not found for provider {Provider} and audience {Audience}", loginData.Provider, loginData.Audience);
                 return (string.Empty, true);
             }
 
             var socialLogInStateKey = Guid.NewGuid().ToString("n");
             var socialLogInStateInfo = new StateInfo
             {
-                Audience = request.Audience,
-                Provider = request.Provider,
-                NextUrl = request.NextUrl,
+                Audience = loginData.Audience,
+                Provider = loginData.Provider,
+                NextUrl = loginData.NextUrl,
             };
 
             await _cacheClient.AddStringValueAsync(socialLogInStateKey, JsonSerializer.Serialize(socialLogInStateInfo), 3000);
@@ -55,7 +44,7 @@ namespace DomainService.OAuth
             return (redirectUri, credential.SendAsResponse);
         }
 
-        public async Task<IExternalUserData> HandleSocialLogin(StateInfo stateInfo)
+        public override async Task<IExternalUserData> HandleSocialLogin(StateInfo stateInfo)
         {
             var credential = await _authenticationRepository.GetSocialLoginCredentialByProvideAndAudienceAsync(stateInfo.Provider, stateInfo.Audience);
             var postData = new Dictionary<string, string>
@@ -68,10 +57,10 @@ namespace DomainService.OAuth
                 };
 
             var (response, error) = await _httpService.SendFormUrlEncoded<SocialOauthAccessToken>(HttpMethod.Post, postData, credential.TokenUrl);
-            _logger.LogInformation($"access token: {response}");
+            _logger.LogInformation("access token: {Response}", response);
             if (!string.IsNullOrWhiteSpace(error))
             {
-                _logger.LogError($"Error while getting access token: {error}");
+                _logger.LogError("Error while getting access token: {Error}", error);
                 return new BYOSsoUserData();
             }
 
@@ -80,7 +69,7 @@ namespace DomainService.OAuth
 
             if (!string.IsNullOrWhiteSpace(result.Item2))
             {
-                _logger.LogError($"Error while getting user data: {error}");
+                _logger.LogError("Error while getting user data: {Error}", result.Item2);
                 return new BYOSsoUserData();
             }
 
@@ -95,17 +84,30 @@ namespace DomainService.OAuth
         private static BYOSsoUserData MapExternalUser(string provider, dynamic result)
         {
             var user = new BYOSsoUserData { };
-
-            var doc = JsonSerializer.Serialize(result);
-            var principal = JsonSerializer.Deserialize<ClaimsPrincipal>(result);
             
             switch (provider.ToLower())
             {
                 case SocialLogInTypes.AzureAd:
                 case SocialLogInTypes.WindowsLive:
                 case SocialLogInTypes.Microsoft:
-                    user.ExternalProviderUserId = result.TryGetProperty("oid", out JsonElement oid) ? oid.ToString() : result.TryGetProperty("sub", out JsonElement sub1) ? sub1.ToString() : "";
-                    user.Email = result.TryGetProperty("preferred_username", out JsonElement preferredUsername) ? preferredUsername.ToString() : result.TryGetProperty("email", out JsonElement email1) ? email1.ToString() : "";
+                    if (result.TryGetProperty("oid", out JsonElement oid))
+                    {
+                        user.ExternalProviderUserId = oid.ToString();
+                    }
+                    else
+                    {
+                        user.ExternalProviderUserId = result.TryGetProperty("sub", out JsonElement sub1) ? sub1.ToString() : "";
+                    }
+
+                    if (result.TryGetProperty("preferred_username", out JsonElement preferredUsername))
+                    {
+                        user.Email = preferredUsername.ToString();
+                    }
+                    else
+                    {
+                        user.Email = result.TryGetProperty("email", out JsonElement email1) ? email1.ToString() : "";
+                    }
+
                     user.DisplayName = result.TryGetProperty("name", out JsonElement name1) ? name1.ToString() : "";
                     user.FirstName = result.TryGetProperty("given_name", out JsonElement givenName1) ? givenName1.ToString() : "";
                     user.LastName = result.TryGetProperty("family_name", out JsonElement familyName1) ? familyName1.ToString() : "";
@@ -164,8 +166,24 @@ namespace DomainService.OAuth
                     break;
 
                 case SocialLogInTypes.Adfs:
-                    user.ExternalProviderUserId = result.TryGetProperty("nameid", out JsonElement nameId1) ? nameId1.ToString() : result.TryGetProperty("sub", out JsonElement sub6) ? sub6.ToString() : "";
-                    user.Email = result.TryGetProperty("upn", out JsonElement upn1) ? upn1.ToString() : result.TryGetProperty("email", out JsonElement email9) ? email9.ToString() : "";
+                    if (result.TryGetProperty("nameid", out JsonElement nameId1))
+                    {
+                        user.ExternalProviderUserId = nameId1.ToString();
+                    }
+                    else
+                    {
+                        user.ExternalProviderUserId = result.TryGetProperty("sub", out JsonElement sub6) ? sub6.ToString() : "";
+                    }
+
+                    if (result.TryGetProperty("upn", out JsonElement upn1))
+                    {
+                        user.Email = upn1.ToString();
+                    }
+                    else
+                    {
+                        user.Email = result.TryGetProperty("email", out JsonElement email9) ? email9.ToString() : "";
+                    }
+
                     user.DisplayName = result.TryGetProperty("displayname", out JsonElement display1) ? display1.ToString() : "";
                     break;
 
@@ -181,6 +199,11 @@ namespace DomainService.OAuth
             }
 
             return user;
+        }
+
+        protected override IExternalUserData CreateEmptyUserData()
+        {
+            return new BYOSsoUserData();
         }
     }
 
