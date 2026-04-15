@@ -26,7 +26,7 @@ namespace DomainService.Services
         Task<bool> UpdateSessionStatusForAllRefreshTokenAsync(IEnumerable<string> refreshTokens);
         Task<bool> UpdateSessionStatusAsync(string refreshToken, string userId);
         Task<IEnumerable<SocialLoginCredential>> GetSocialLoginCredentials();
-        Task<SocialLoginCredential> GetSocialLoginCredentialByProvideAndAudienceAsync(string provider, string audiance);
+        Task<SocialLoginCredential> GetSocialLoginCredentialByProvideAndAudienceAsync(string provider, string audience);
         Task<bool> SaveSocialLoginCredentialAsync(SocialLoginCredential socialLoginCredential);
         Task<bool> DeleteSocialLoginCredentialAsync(string itemId);
         Task<SocialLoginCredential> GetSocialLoginCredentialByIdAsync(string itemId);

@@ -1,11 +1,12 @@
 using BlocksTemplate.Api;
 using Blocks.Genesis;
 using DomainService.Utilities;
+using DomainService.Shared;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 
-var serviceName = "blocks-template-api";
+var serviceName = "blocks-idp-api";
 var secret = await ApplicationConfigurations.ConfigureLogAndSecretsAsync(serviceName, VaultType.Azure);
 var builder = WebApplication.CreateBuilder(args);
 
@@ -36,6 +37,7 @@ var wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
 Directory.CreateDirectory(wwwrootPath);
 
 services.RegisterAllServices();
+services.AddApplicationServices();
 
 var app = builder.Build();
 

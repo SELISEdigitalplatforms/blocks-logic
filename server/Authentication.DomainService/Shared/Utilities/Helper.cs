@@ -1,4 +1,5 @@
 ﻿using DomainService.Entities;
+using DomainService.OAuth.RequestModel;
 using HandlebarsDotNet;
 
 namespace DomainService.Utilities

@@ -1,22 +1,19 @@
-﻿using Blocks.Extension.DependencyInjection;
+﻿using Authentication.DomainService.OAuth.SocialServices;
+using Blocks.Extension.DependencyInjection;
 using Blocks.Genesis;
 using Captcha.DomainService.Captcha;
 using Captcha.DomainService.Configuration;
 using Captcha.DomainService.Utilities;
-using DeviceDetectorNET.Parser.Device;
 using DomainService.Authentication;
-using DomainService.Dtos;
 using DomainService.OAuth;
 using DomainService.OAuth.Services;
 using DomainService.OAuth.SocialServices;
 using DomainService.Services;
 using DomainService.Shared;
-using DomainService.Worker;
 using FluentValidation;
 using Iam.DomainService.Accounts;
 using Iam.DomainService.Activities;
 using Iam.DomainService.Configurations;
-using Iam.DomainService.Dtos;
 using Iam.DomainService.Resources;
 using Iam.DomainService.Services;
 using Iam.DomainService.Users;
@@ -53,6 +50,7 @@ namespace DomainService.Utilities
             serviceCollection.AddSingleton<BiometricAuthorizationService>();
             serviceCollection.AddSingleton<ClientCredentialAuthorizationService>();
             serviceCollection.AddSingleton<ClientUserCodeAuthorizationService>();
+            serviceCollection.AddSingleton<SSOConsentAuthenticationService>();
 
             serviceCollection.AddSingleton<ICertificateProviderFactory, CertificateProviderFactory>();
             serviceCollection.AddSingleton<ISocialLogInServiceProvider, SocialLogInServiceProvider>();
@@ -63,6 +61,8 @@ namespace DomainService.Utilities
             serviceCollection.AddSingleton<GithubLogInService>();
             serviceCollection.AddSingleton<LinkedinLogInService>();
             serviceCollection.AddSingleton<TwitterLogInService>();
+            serviceCollection.AddSingleton<AppleLogInService>();
+            serviceCollection.AddSingleton<FaceBookLogInService>();
 
             serviceCollection.AddSingleton<IIamConfigurationRepository, IamConfigurationRepository>();
             serviceCollection.AddTransient<IValidator<SaveSsoCredentialRequest>, SaveSsoCredentialRequestValidator>();

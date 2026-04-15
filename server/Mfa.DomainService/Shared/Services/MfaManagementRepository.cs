@@ -1,16 +1,14 @@
 ﻿using Blocks.Genesis;
+using Iam.DomainService.Services;
 using MongoDB.Driver;
 using System.Linq.Expressions;
 
 namespace Mfa.DomainService.Services
 {
-    public class MfaManagementRepository : IMfaManagementRepository
+    public class MfaManagementRepository : BaseRepository, IMfaManagementRepository
     {
-        private readonly IDbContextProvider _dbContextProvider;
-
-        public MfaManagementRepository(IDbContextProvider dbContextProvider)
+        public MfaManagementRepository(IDbContextProvider dbContextProvider) : base(dbContextProvider)
         {
-            _dbContextProvider = dbContextProvider;
         }
 
         public async Task DeleteItemsAsync<T>(Expression<Func<T, bool>> dataFilters)
@@ -55,22 +53,6 @@ namespace Mfa.DomainService.Services
 
             var options = new ReplaceOptions { IsUpsert = true };
             await collection.ReplaceOneAsync(filterExpression, data, options);
-        }
-
-        public async Task UpdatePartialAsync<T>(string id, Dictionary<string, object> updates, string collectionName = "")
-        {
-            IMongoCollection<T> collection = _dbContextProvider.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? (typeof(T).Name + "s") : collectionName);
-
-            var filter = Builders<T>.Filter.Eq("_id", id);
-            var updateDefinition = new List<UpdateDefinition<T>>();
-
-            foreach (var update in updates)
-            {
-                updateDefinition.Add(Builders<T>.Update.Set(update.Key, update.Value));
-            }
-
-            var combinedUpdate = Builders<T>.Update.Combine(updateDefinition);
-            await collection.UpdateOneAsync(filter, combinedUpdate);
         }
     }
 }

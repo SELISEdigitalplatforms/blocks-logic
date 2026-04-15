@@ -1,4 +1,5 @@
-﻿using SixLabors.ImageSharp;
+﻿using Newtonsoft.Json;
+using SixLabors.ImageSharp;
 using System.Text.Json.Serialization;
 
 namespace DomainService.OAuth
@@ -73,15 +74,19 @@ namespace DomainService.OAuth
 
         [JsonPropertyName("userPrincipalName")]
         public new string UserPrincipalName { get; set; }
+
+        [JsonPropertyName("department")]
+        public new string Department { get; set; }
+
+        [JsonPropertyName("employeeId")]
+        public new string EmployeeId { get; set; }
+
         public string Platform { get; set; }
         public string ProfileImageUrl { get; set; }
+
         [JsonPropertyName("roles")]
         public List<string> Roles { get; set; } = [];
         public List<string> Permissions { get; set; } = [];
-        [JsonPropertyName("department")]
-        public new string Department { get; set; }
-        [JsonPropertyName("employeeId")]
-        public new string EmployeeId { get; set; }
     }
 
     public class BYOSsoUserData : IExternalUserData
@@ -199,7 +204,7 @@ namespace DomainService.OAuth
         public string Locale { get; set; }
     }
 
-    public class TwitterUserData : IExternalUserData
+    public abstract class StandardSocialUserDataBase : IExternalUserData
     {
         [JsonPropertyName("id")]
         public string ExternalProviderUserId { get; set; }
@@ -228,10 +233,30 @@ namespace DomainService.OAuth
         public string Platform { get; set; }
         public List<string> Roles { get; set; } = [];
         public List<string> Permissions { get; set; } = [];
-       
+
         [JsonPropertyName("userPrincipalName")]
-        public string UserPrincipalName { get ; set ; }
+        public string UserPrincipalName { get; set; }
         public new string Department { get; set; }
         public new string EmployeeId { get; set; }
     }
+
+    public class TwitterUserData : StandardSocialUserDataBase
+    {
+    }
+
+    public class AppleUserData : StandardSocialUserDataBase
+    {
+    }
+    public class AppleIdToken
+    {
+
+        [JsonProperty("email")]
+        public string Email { get; set; }
+        [JsonProperty("sub")]
+        public string ExternalProviderUserId { get; set; }
+    }
+    public class FaceBookUserData : StandardSocialUserDataBase
+    {
+    }
+
 }
