@@ -1,5 +1,5 @@
 import { Checkbox } from "@/components/ui-kits/checkbox/checkbox";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
 import { cn } from "@/lib/utils";
 import { PERMISSION_SEVERITY_OPTIONS, ResourceType } from "@blocks-idp/iam/models/permission";
 import { BadgeAlert, BadgeCheck } from "lucide-react";
@@ -50,7 +50,8 @@ export const PermissionToggleCard = ({
           <div className="flex items-center gap-1">
             <h5>{permission.name}</h5>
             {hasDependentPermissions && (
-              <Tooltip>
+              <TooltipProvider>
+            <Tooltip>
                 <TooltipTrigger>
                   {isAllDependentPermissionsChecked ? (
                     <BadgeCheck className="text-green-600 h-3.5 w-3.5" />
@@ -64,6 +65,7 @@ export const PermissionToggleCard = ({
                     : "One or more dependent permissions are missing"}
                 </TooltipContent>
               </Tooltip>
+            </TooltipProvider>
             )}
           </div>
           <p className="mt-0.5 text-xs text-muted-foreground">
