@@ -8,7 +8,7 @@ import { useProjectStore } from "@/store/useProjectStore";
 export function LogOutButton() {
   const queryClient = getQueryClient();
   const { reset } = useProjectStore();
-  const { setUnAuthenticated } = useAuthStore();
+  const { setUnAuthenticated, clearTokens } = useAuthStore();
   const { resetSelectedLanguages } = useLanguageViewStore();
   const { isPending, mutateAsync } = useLogout();
 
@@ -17,6 +17,7 @@ export function LogOutButton() {
       await mutateAsync();
       reset();
       setUnAuthenticated();
+      clearTokens(); // Clear tokens for localhost
       resetSelectedLanguages();
       queryClient.clear();
       window.location.replace(`${window.location.origin}/login`);
