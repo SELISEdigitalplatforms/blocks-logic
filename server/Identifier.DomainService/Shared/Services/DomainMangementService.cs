@@ -83,7 +83,12 @@ namespace DomainService.Shared
             {
                 project.IsDomainVerified = status;
                 await _projectRepository.UpdateProjectAsync(project);
-                await _tenants.UpdateTenantVersionAsync();
+                await _tenants.UpdateTenantVersionAsync(new TenantCacheUpdateMessage
+                {
+                    Action = "upsert",
+                    TenantId = project.TenantId,
+                    Tenant = project
+                });
             }
         }
 
