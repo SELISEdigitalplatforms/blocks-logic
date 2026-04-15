@@ -48,7 +48,7 @@ export const User = ({ id }: { id: string }) => {
   BREADCRUMB_CUSTOM_TITLES[`/services/iam/user-detail/${data?.data?.itemId}`] =
     data?.data.lastName ?? null;
   return (
-    <>
+    <div className="px-4 pt-4 md:px-6 md:pt-6">
       <div>
         <div className="hidden md:flex">
           <PageBreadcrumb breadcrumbIndex={3} />
@@ -119,6 +119,6 @@ export const User = ({ id }: { id: string }) => {
           </>
         </div>
       </div>
-    </>
+    </div>
   );
 };
