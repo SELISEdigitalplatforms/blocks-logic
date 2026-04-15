@@ -448,7 +448,12 @@ namespace DomainService.Projects
             await Task.WhenAll(_projectRepository.UpdateProjectAsync(project),
                                 _projectRepository.UpdateIamConfiguration(project));
 
-            await _tenants.UpdateTenantVersionAsync();
+            await _tenants.UpdateTenantVersionAsync(new TenantCacheUpdateMessage
+            {
+                Action = "upsert",
+                TenantId = project.TenantId,
+                Tenant = project
+            });
 
             //var domian = IdentifierConstants.CookieDomainPrefix + project.CookieDomain;
 
@@ -481,7 +486,12 @@ namespace DomainService.Projects
 
             project.IsDisabled = true;
             await _projectRepository.UpdateProjectAsync(project);
-            await _tenants.UpdateTenantVersionAsync();
+            await _tenants.UpdateTenantVersionAsync(new TenantCacheUpdateMessage
+            {
+                Action = "upsert",
+                TenantId = project.TenantId,
+                Tenant = project
+            });
 
             var domain = IdentifierConstants.CookieDomainPrefix + project.CookieDomain;
             await _messageClient.SendToConsumerAsync(new ConsumerMessage<DisableDomainBindingRequest> { ConsumerName = IdentifierConstants.IdentifierQueueName, Payload = new DisableDomainBindingRequest { ProjectId = project.ItemId, Domain = domain } });
@@ -547,7 +557,12 @@ namespace DomainService.Projects
             project.LastUpdatedDate = DateTime.UtcNow;
             await _projectRepository.UpdateProjectAsync(project);
 
-            await Task.WhenAll(_tenants.UpdateTenantVersionAsync(), _cacheClient.RemoveKeyAsync($"{_tenantTokenPublicCertificateCachePrefix}{request.ProjectKey}"));
+            await Task.WhenAll( _tenants.UpdateTenantVersionAsync(new TenantCacheUpdateMessage
+            {
+                Action = "upsert",
+                TenantId = project.TenantId,
+                Tenant = project
+            }), _cacheClient.RemoveKeyAsync($"{_tenantTokenPublicCertificateCachePrefix}{request.ProjectKey}"));
 
             return new BaseResponse { IsSuccess = true };
         }

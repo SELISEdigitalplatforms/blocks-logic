@@ -919,12 +919,18 @@ namespace DomainService.People
                 {
                     projectPeopleIds.Add(projectPeople.ItemId);
                 }
+
+                await Task.Run(() => _tenants.UpdateTenantVersionAsync(new TenantCacheUpdateMessage
+                {
+                    Action = "upsert",
+                    TenantId = tenantdId,
+                    Tenant = _tenants.GetTenantByID(tenantdId)
+
+                }));
             }
 
             if(projectPeopleIds.Count > 0)
             await _peopleRepository.UpdateProjectPeopleOwnerShipAsync(projectPeopleIds, true);
-
-            await _tenants.UpdateTenantVersionAsync();
 
             return new BaseResponse { IsSuccess = true };
         }
