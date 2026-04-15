@@ -22,7 +22,7 @@ type SsoActivateProps = {
 };
 
 export const SsoActivate = ({ oauthParams }: SsoActivateProps) => {
-  const { setAuthenticated } = useAuthStore();
+  const { setAuthenticated, setTokens } = useAuthStore();
   const [isChecked, setIsChecked] = useState(false);
   const [isPending, setIsPending] = useState(false);
   const [providerKey, setProviderKey] = useState<string | null>(null);
@@ -70,6 +70,7 @@ export const SsoActivate = ({ oauthParams }: SsoActivateProps) => {
     try {
       const key = import.meta.env.BLOCKS_X_BLOCKS_KEY;
       const appUrl = import.meta.env.BLOCKS_APP_URL;
+      const isLocalhost = import.meta.env.BLOCKS_API_BASE_URL?.includes("localhost");
 
       const body = new URLSearchParams();
       body.append("code", oauthParams.code);
@@ -85,7 +86,7 @@ export const SsoActivate = ({ oauthParams }: SsoActivateProps) => {
             origin: appUrl!,
           },
           body: body,
-          credentials: "include",
+          credentials: isLocalhost ? "same-origin" : "include",
         },
       );
 
@@ -94,6 +95,12 @@ export const SsoActivate = ({ oauthParams }: SsoActivateProps) => {
       if (res.ok) {
         sessionStorage.removeItem("clicked_sso_provider");
         sessionStorage.removeItem("clicked_sso_audience");
+        
+        // For localhost, save tokens for Authorization Bearer
+        if (isLocalhost && data.access_token && data.refresh_token) {
+          setTokens(data.access_token, data.refresh_token);
+        }
+        
         setAuthenticated();
         navigate("/console");
       } else {

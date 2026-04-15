@@ -19,7 +19,7 @@ import { isErrorWithErrors } from "@/lib/error";
 export const SigninForm = () => {
   const { theme } = useTheme();
   const navigate = useNavigate();
-  const { setAuthenticated } = useAuthStore();
+  const { setAuthenticated, setTokens } = useAuthStore();
   const [token, setToken] = useState("");
   const form = useForm({
     defaultValues: signinFormDefaultValue,
@@ -30,6 +30,12 @@ export const SigninForm = () => {
     try {
       const res = await mutateAsync(values);
       if (res.enable_mfa) return navigate(`/mfa-check?mfa_id=${res.mfaId}&mfa_type=${res.mfaType}`);
+
+      // For localhost, save tokens in store for Authorization Bearer
+      const isLocalhost = import.meta.env.BLOCKS_API_BASE_URL?.includes("localhost");
+      if (isLocalhost && res.access_token && res.refresh_token) {
+        setTokens(res.access_token, res.refresh_token);
+      }
 
       setAuthenticated();
       navigate("/console");
