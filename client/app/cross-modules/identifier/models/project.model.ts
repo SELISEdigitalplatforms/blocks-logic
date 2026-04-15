@@ -118,6 +118,10 @@ export interface IUpdateProjectPayload {
   customDomain: string;
   projectKey: string;
 }
+export interface IUpdateTenantGroupPayload {
+  name: string;
+  tenantGroupId: string;
+}
 export interface IUpdateProjectResponse {
   errors: unknown | null;
   isSuccess: boolean;
