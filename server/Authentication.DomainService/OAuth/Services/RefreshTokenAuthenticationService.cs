@@ -13,15 +13,19 @@ namespace DomainService.OAuth
         private readonly ILogger<RefreshTokenAuthenticationService> _logger;
         private readonly IJwtAccessTokenProvider _jwtAccessTokenProvider;
         private readonly ITenants _tenants;
+        private readonly IOAuthJwtAccessTokenManager _oAuthJwtAccessTokenManager;
+        
         public RefreshTokenAuthenticationService(
             ILogger<RefreshTokenAuthenticationService> logger,
             IJwtAccessTokenProvider jwtAccessTokenProvider,
-            ITenants tenants
+            ITenants tenants,
+            IOAuthJwtAccessTokenManager oAuthJwtAccessTokenManager
         )
         {
             _logger = logger;
             _jwtAccessTokenProvider = jwtAccessTokenProvider;
             _tenants = tenants;
+            _oAuthJwtAccessTokenManager = oAuthJwtAccessTokenManager;
         }
         public async Task<TokenResponse> AuthenticateAsync(TokenRequest request, AuthenticationConfiguration authenticationConfiguration, User user)
         {
@@ -39,11 +43,29 @@ namespace DomainService.OAuth
 
             var accessToken = new JwtSecurityTokenHandler().WriteToken(jwtToken);
 
+            // Generate new refresh token every time refresh token is called
+            var refreshTokenResult = await _oAuthJwtAccessTokenManager.ManageRefreshTokenAsync(request, jwtAccessToken, authenticationConfiguration, tenant, user);
+            var newRefreshToken = refreshTokenResult.Item1;
+            var refreshTokenExpiry = refreshTokenResult.Item2;
+
+            // Check if refresh token generation failed (returns empty string for error cases)
+            if (string.IsNullOrEmpty(newRefreshToken))
+            {
+                return new TokenResponse
+                {
+                    Error = OAuthError.InvalidRefreshToken,
+                    ErrorDescription = "Refresh token is invalid or expired",
+                    StatusCode = 400
+                };
+            }
+
             return new TokenResponse
             {
                 AccessToken = accessToken,
                 ExpiresIn = authenticationConfiguration.AccessTokenValidForNumberMinutes,
                 ExpiresUtc = jwtAccessToken.Expires,
+                RefreshToken = newRefreshToken,
+                RefreshExpiresUtc = refreshTokenExpiry,
                 CookieDomain = tenant.CookieDomain,
             };
         }

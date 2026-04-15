@@ -133,6 +133,7 @@ namespace DomainService.Authentication
                 Domain = cookieDomain, 
                 Path = "/",              
                 Secure = true,
+                HttpOnly = true,
                 SameSite = SameSiteMode.None
             };
 

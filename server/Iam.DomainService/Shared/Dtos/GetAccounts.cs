@@ -26,7 +26,7 @@ namespace Iam.DomainService.Dtos
         public bool IsMfaVerified { get; set; }
         public UserMfaType UserMfaType { get; set; }
         public UserCreationType UserCreationType { get; set; }
-        public string? DepartMent { get; set; }
+        public string? Department { get; set; }
         public string? EmployeeId { get; set; }
     }
 }

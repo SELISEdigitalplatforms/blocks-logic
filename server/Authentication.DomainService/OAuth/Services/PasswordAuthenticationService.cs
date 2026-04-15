@@ -50,10 +50,10 @@ namespace DomainService.OAuth
 
         }
 
-        private bool IsValidUser(User user) =>
+        private static bool IsValidUser(User user) =>
             user != null;
 
-        private bool IsUserActiveAndVerified(User user) =>
+        private static bool IsUserActiveAndVerified(User user) =>
             user.Active && user.IsVarified;
 
         public string HashPassword(string password)

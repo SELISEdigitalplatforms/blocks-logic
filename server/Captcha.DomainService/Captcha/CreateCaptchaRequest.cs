@@ -12,6 +12,7 @@ namespace Captcha.DomainService.Captcha
     {
         public CreateCaptchaRequestResponse(ValidationResult result) : base()
         {
+            Errors = result?.Errors.ToDictionary(x => x.PropertyName, x => x.ErrorMessage) ?? new Dictionary<string, string>();
         }
 
         /// <summary>

@@ -104,6 +104,31 @@ namespace Iam.DomainService.Services
         }
 
 
+        public async Task<bool> SendAccountActivationEmailAsync(User user, string mailPurpose, string projectKey)
+        {
+            var sendMailCommand = new SendMail
+            {
+                Cc = Array.Empty<string>(),
+                Bcc = Array.Empty<string>(),
+                BodyDataContext = new Dictionary<string, string>
+                {
+                    { "UserName" , user.UserName},
+                    { "DisplayName" , $"{user.FirstName} {user.LastName}"},
+
+                    { "CreatedUser.Salutation" , user.Salutation},
+                    { "CreatedUser.FirstName" , user.FirstName},
+                    { "CreatedUser.LastName" , user.LastName},
+                    { "CreatedUser.Email" , user.Email},
+                },
+                Language = user.Language ?? "en-US",
+                Purpose = string.IsNullOrWhiteSpace(mailPurpose) ? "AccountActivated" : mailPurpose,
+                To = new string[] { user.Email.ToLower() },
+                ProjectKey = projectKey
+            };
+
+            return await SendEmailAsync(sendMailCommand);
+        }
+
         public bool IsRoot()
         {
             var bc = BlocksContext.GetContext();

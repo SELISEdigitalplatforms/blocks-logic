@@ -14,7 +14,6 @@ public static class CaptchaDriverServiceExtension
         // Register validator
         services.AddTransient<IValidator<CreateCaptchaRequest>, CreateCaptchaCommandValidator>();
         services.AddTransient<IValidator<SubmitCaptchaRequest>, SubmitCaptchaCommandValidator>();
-       // services.AddTransient<IValidator<Configuration>, ConfigurationValidator>();
 
         // Register services
         services.AddSingleton<ICaptchaService, CaptchaService>();
@@ -28,6 +27,5 @@ public static class CaptchaDriverServiceExtension
         services.AddSingleton<IRecaptchaConfigFactory, RecaptchaConfigFactory>();
         services.AddSingleton<IHttpClientService, HttpClientService>();
         services.AddSingleton<ReCaptchaVerificationService>();
-
     }
 }

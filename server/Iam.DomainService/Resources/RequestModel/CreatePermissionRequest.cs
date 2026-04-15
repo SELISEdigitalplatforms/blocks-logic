@@ -6,6 +6,4 @@ namespace Iam.DomainService.Resources
     {
         public string? ProjectKey { get; set; }
     }
-
-
 }
