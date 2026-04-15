@@ -10,7 +10,7 @@ namespace Api.Controllers
     [ApiController]
     [Route("[controller]/[action]")]
 
-    public class MfaController : Controller
+    public class MfaController : ControllerBase
     {
         private readonly IMfaManagementService _mfaManagementService;
         private readonly TotpService _totpService;

@@ -28,14 +28,14 @@ namespace DomainService.OAuth.SocialServices
             _httpService = httpService;
         }
 
-        public async Task<(string, bool)> GetProviderLogInUriAsync(GetSocialLogInEndPointRequest request)
+        public async Task<(string, bool)> GetProviderLogInUriAsync(GetSocialLogInEndPointRequest loginData)
         {
             var credential = await _authenticationRepository
-                .GetSocialLoginCredentialByProvideAndAudienceAsync(request.Provider, request.Audience);
+                .GetSocialLoginCredentialByProvideAndAudienceAsync(loginData.Provider, loginData.Audience);
 
             if (credential == null)
             {
-                _logger.LogError($"Credential not found for provider {request.Provider} and audience {request.Audience}");
+                _logger.LogError("Credential not found for provider {Provider} and audience {Audience}", loginData.Provider, loginData.Audience);
                 return (string.Empty, true);
             }
 
@@ -57,9 +57,9 @@ namespace DomainService.OAuth.SocialServices
 
             var stateInfo = new StateInfo
             {
-                Audience = request.Audience,
-                Provider = request.Provider,
-                NextUrl = request.NextUrl,
+                Audience = loginData.Audience,
+                Provider = loginData.Provider,
+                NextUrl = loginData.NextUrl,
                 Extra = new Dictionary<string, string> { { "code_verifier", codeVerifier } }
             };
 
@@ -74,7 +74,7 @@ namespace DomainService.OAuth.SocialServices
                 $"&code_challenge={codeChallenge}" +
                 $"&code_challenge_method=S256";
 
-            return (loginUri, request.SendAsResponse || credential.SendAsResponse);
+            return (loginUri, loginData.SendAsResponse || credential.SendAsResponse);
         }
 
         public async Task<IExternalUserData> HandleSocialLogin(StateInfo stateInfo)
@@ -127,7 +127,7 @@ namespace DomainService.OAuth.SocialServices
 
             if (!string.IsNullOrWhiteSpace(error))
             {
-                _logger.LogError($"Error getting Twitter access token: {error}");
+                _logger.LogError("Error getting Twitter access token: {Error}", error);
                 return new TwitterUserData();
             }
 
@@ -143,7 +143,7 @@ namespace DomainService.OAuth.SocialServices
 
             if (!string.IsNullOrWhiteSpace(profileError))
             {
-                _logger.LogError($"Error fetching Twitter user profile: {profileError}");
+                _logger.LogError("Error fetching Twitter user profile: {ProfileError}", profileError);
                 return new TwitterUserData();
             }
 

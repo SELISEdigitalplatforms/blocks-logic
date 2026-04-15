@@ -9,5 +9,8 @@
         public string UserId { get; set; }
         public string IpAddresses { get; set; }
         public DeviceInformation? DeviceInformation { get; set; }
+        public bool IsLogin { get; set; }
+        public bool IsRevoke { get; set; }
+        public string? GrantType { get; set; }
     }
 }

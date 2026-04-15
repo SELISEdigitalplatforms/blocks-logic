@@ -142,7 +142,7 @@ namespace DomainService.Services
             return new SaveSsoCredentialResponse { IsSuccess = true, ItemId = repoCredential.ItemId };
         }
 
-        public async Task<OpenIdConnectConfiguration?> GetMetadataAsync(string wellKnownUrl)
+        public static async Task<OpenIdConnectConfiguration?> GetMetadataAsync(string wellKnownUrl)
         {
             var response = await _httpClient.GetAsync(wellKnownUrl);
             string json = await response.Content.ReadAsStringAsync();
@@ -195,9 +195,9 @@ namespace DomainService.Services
             return new SaveOIDCClientResponse { IsSuccess = true, ItemId = credential.ItemId };
         }
 
-        public async Task<GetOIDCClientResponse> GetOIDCClientAsyncAsync(string itemid)
+        public async Task<GetOIDCClientResponse> GetOIDCClientAsyncAsync(string tenantId)
         {
-            var client = await _authenticationRepository.GetOIDCCredentialByIdAsync(itemid);
+            var client = await _authenticationRepository.GetOIDCCredentialByIdAsync(tenantId);
 
             return new GetOIDCClientResponse
             {
@@ -284,6 +284,10 @@ namespace DomainService.Services
             credential.InitialPermissions = saveSocialLoginCredentialRequest.InitialPermissions;
             credential.IsDisabled = saveSocialLoginCredentialRequest.IsDisabled;
             credential.SSOType = saveSocialLoginCredentialRequest.SSOType;
+            credential.TeamId = saveSocialLoginCredentialRequest.TeamId;
+            credential.KeyId = saveSocialLoginCredentialRequest.KeyId;
+            credential.PrivateKey = saveSocialLoginCredentialRequest.PrivateKey;
+            credential.AppleAudience = _configuration[$"{saveSocialLoginCredentialRequest.Provider}:AppleAudience"] ?? "";
 
             return credential;
         }

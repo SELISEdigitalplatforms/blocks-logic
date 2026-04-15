@@ -17,6 +17,14 @@ namespace DomainService.OAuth.ResponseModel
             });
         }
 
+        public static IActionResult SSOUserNotExistResponse(TokenResponse response)
+        {
+            return new OkObjectResult(new
+            {
+                sso_user_redirect_url = response.SsoUserRedirectUrl
+            });
+        }
+
         public static IActionResult MfaResponse(TokenResponse response)
         {
             return new OkObjectResult(new

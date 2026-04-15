@@ -26,34 +26,31 @@ namespace DomainService.OAuth
             _httpService = httpService;
         }
 
-        public async Task<(string, bool)> GetProviderLogInUriAsync(GetSocialLogInEndPointRequest request)
+        public async Task<(string, bool)> GetProviderLogInUriAsync(GetSocialLogInEndPointRequest loginData)
         {
             var credential = await _authenticationRepository
-                .GetSocialLoginCredentialByProvideAndAudienceAsync(request.Provider, request.Audience);
+                .GetSocialLoginCredentialByProvideAndAudienceAsync(loginData.Provider, loginData.Audience);
 
             if (credential == null)
             {
-                _logger.LogError($"Credential not found for provider {request.Provider} and audience {request.Audience}");
+                _logger.LogError("Credential not found for provider {Provider} and audience {Audience}", loginData.Provider, loginData.Audience);
                 return (string.Empty, true);
             }
 
             var stateKey = Guid.NewGuid().ToString("n");
             var stateInfo = new StateInfo
             {
-                Audience = request.Audience,
-                Provider = request.Provider,
-                NextUrl = request.NextUrl,
+                Audience = loginData.Audience,
+                Provider = loginData.Provider,
+                NextUrl = loginData.NextUrl,
             };
 
-            await _cacheClient.AddStringValueAsync(
-                stateKey,
-                JsonSerializer.Serialize(stateInfo),
-                300);
+            await _cacheClient.AddStringValueAsync(stateKey, JsonSerializer.Serialize(stateInfo), 300);
 
             // GitHub auth URL 
             var loginUri = $"{credential.AuthorizationUrl.Split("?")[0]}?scope={credential.Scope}&state={stateKey}&redirect_uri={WebUtility.UrlEncode(credential.RedirectUrl)}&client_id={credential.ClientId}&response_type=code";
 
-            return (loginUri, request.SendAsResponse || credential.SendAsResponse);
+            return (loginUri, loginData.SendAsResponse || credential.SendAsResponse);
         }
 
         public async Task<IExternalUserData> HandleSocialLogin(StateInfo stateInfo)
@@ -78,7 +75,7 @@ namespace DomainService.OAuth
 
             if (!string.IsNullOrWhiteSpace(error) || tokenResponse?.AccessToken == null)
             {
-                _logger.LogError($"Error while getting GitHub access token: {error}");
+                _logger.LogError("Error while getting GitHub access token: {Error}", error);
                 return new GithubUserData();
             }
 
@@ -89,7 +86,7 @@ namespace DomainService.OAuth
 
             if (!string.IsNullOrWhiteSpace(userError))
             {
-                _logger.LogError($"Error while getting GitHub user data: {userError}");
+                _logger.LogError("Error while getting GitHub user data: {UserError}", userError);
                 return new GithubUserData();
             }
 
@@ -102,7 +99,7 @@ namespace DomainService.OAuth
 
                 if (!string.IsNullOrWhiteSpace(emailError) || emailResponse == null)
                 {
-                    _logger.LogError($"Error while getting GitHub user data: {userError}");
+                    _logger.LogError("Error while getting GitHub user email: {EmailError}", emailError);
                     return userResponse;
                 }
                 userResponse.Email = emailResponse.FirstOrDefault(e => e.Primary && e.Verified)?.Email

@@ -1,6 +1,4 @@
-﻿using Blocks.Genesis;
-using Mfa.DomainService.Services;
-using Mfa.DomainService.Utilities;
+﻿using Mfa.DomainService.Services;
 
 namespace Mfa.DomainService.Configuration
 {

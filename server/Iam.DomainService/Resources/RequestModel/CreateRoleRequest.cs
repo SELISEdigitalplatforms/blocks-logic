@@ -9,6 +9,4 @@ namespace Iam.DomainService.Resources
         public string Slug { get; set; }
         public string? ProjectKey { get; set; }
     }
-
-
 }
