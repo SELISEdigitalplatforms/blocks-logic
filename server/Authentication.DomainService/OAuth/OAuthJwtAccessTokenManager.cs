@@ -4,7 +4,6 @@ using DomainService.Entities;
 using DomainService.OAuth.RequestModel;
 using DomainService.OAuth.ResponseModel;
 using DomainService.Services;
-using HandlebarsDotNet.Runtime;
 using Iam.DomainService.Dtos;
 using Iam.DomainService.Entities;
 using Mfa.DomainService.Configuration;
@@ -129,23 +128,153 @@ namespace DomainService.OAuth
 
         public async Task<(string, DateTime)> ManageRefreshTokenAsync(TokenRequest tokenRequest, JwtAccessToken jwtAccessToken, AuthenticationConfiguration authenticationConfiguration, Tenant tenant, User user)
         {
-            var visitorsIpAddresses = _authenticationDomainService.GetVisitorsIpAddresses(tokenRequest.Request.HttpContext);
+            var visitorsIpAddresses = _authenticationDomainService.GetVisitorsIpAddresses(tokenRequest.Request.HttpContext) ?? new List<string>();
+
+            // Check if this is a refresh token grant type
+            if (tokenRequest.GrantType == GrantTypes.RefreshToken || tokenRequest.GrantType == GrantTypes.SwitchOrganization)
+            {
+                return await HandleRefreshTokenGrant(tokenRequest, tenant, user, visitorsIpAddresses);
+            }
+            else
+            {
+                // Initial auth flow - create new refresh token with full configured lifetime
+                return await CreateNewRefreshToken(tokenRequest, tenant, user, authenticationConfiguration, visitorsIpAddresses);
+            }
+        }
+
+        private async Task<(string, DateTime)> HandleRefreshTokenGrant(TokenRequest tokenRequest, Tenant tenant, User user, IEnumerable<string> visitorsIpAddresses)
+        {
+            // Validate refresh token exists
+            if (string.IsNullOrWhiteSpace(tokenRequest.RefreshToken))
+            {
+                return (string.Empty, DateTime.MinValue);
+            }
+
+            // Case 1: Check if refresh token exists in Redis
+            var oldRefreshTokenCache = await _cacheClient.GetStringValueAsync(tokenRequest.RefreshToken);
+            
+            if (string.IsNullOrEmpty(oldRefreshTokenCache))
+            {
+                // Case 2: Token doesn't exist - return empty to signal error
+                return (string.Empty, DateTime.MinValue);
+            }
+
+            var oldRefreshToken = JsonSerializer.Deserialize<RefreshTokenCache>(oldRefreshTokenCache);
+            if (oldRefreshToken == null)
+            {
+                // Case 2: Invalid token data
+                return (string.Empty, DateTime.MinValue);
+            }
+
+            // Calculate remaining TTL
+            var remainingMinutes = (int)(oldRefreshToken.ExpiresUtc - DateTime.UtcNow).TotalMinutes;
+
+            // Case 3: Token exists but TTL is too low (less than 1 minute)
+            if (remainingMinutes < 1)
+            {
+                // Delete expired token and send revocation event
+                await _cacheClient.RemoveKeyAsync(tokenRequest.RefreshToken);
+                
+                var revokeEvent = new RefreshTokenEvent
+                {
+                    RefreshToken = tokenRequest.RefreshToken ?? string.Empty,
+                    TenantId = oldRefreshToken.TenantId,
+                    IssuedUtc = oldRefreshToken.IssuedUtc,
+                    ExpiresUtc = oldRefreshToken.ExpiresUtc,
+                    IpAddresses = oldRefreshToken.IpAddresses ?? string.Empty,
+                    UserId = oldRefreshToken.UserId ?? string.Empty,
+                    DeviceInformation = _authenticationDomainService.GetDeviceInfo(tokenRequest.Request?.Headers?.UserAgent),
+                    IsRevoke = true,
+                    IsLogin = false,
+                    GrantType = tokenRequest.GrantType
+                };
+                await _authenticationDomainService.SendToQueueAsync(Utilities.IdpConstants.AuthenticationQueue, revokeEvent);
+                
+                return (string.Empty, DateTime.MinValue);
+            }
+
+            // Case 1: Token exists and has sufficient TTL - rotate token
+            var newRefreshTokenId = Guid.NewGuid().ToString("N");
+            var newRefreshTokenExpireOn = DateTime.UtcNow.AddMinutes(remainingMinutes);
+
+            var newRefreshTokenCache = new RefreshTokenCache
+            {
+                RefreshToken = newRefreshTokenId,
+                TenantId = oldRefreshToken.TenantId,
+                IssuedUtc = DateTime.UtcNow,
+                ExpiresUtc = newRefreshTokenExpireOn,
+                IpAddresses = string.Join(",", visitorsIpAddresses),
+                UserId = oldRefreshToken.UserId ?? string.Empty
+            };
+
+            // Save new token to Redis with remaining TTL
+            await _cacheClient.AddStringValueAsync(newRefreshTokenId, JsonSerializer.Serialize(newRefreshTokenCache), remainingMinutes * 60);
+
+            // Delete old token from Redis
+            await _cacheClient.RemoveKeyAsync(tokenRequest.RefreshToken);
+
+            // Send revocation event for old token
+            var revokeOldTokenEvent = new RefreshTokenEvent
+            {
+                RefreshToken = tokenRequest.RefreshToken ?? string.Empty,
+                TenantId = oldRefreshToken.TenantId,
+                IssuedUtc = oldRefreshToken.IssuedUtc,
+                ExpiresUtc = oldRefreshToken.ExpiresUtc,
+                IpAddresses = oldRefreshToken.IpAddresses ?? string.Empty,
+                UserId = oldRefreshToken.UserId ?? string.Empty,
+                DeviceInformation = _authenticationDomainService.GetDeviceInfo(tokenRequest.Request?.Headers?.UserAgent),
+                IsRevoke = true,
+                IsLogin = false,
+                GrantType = tokenRequest.GrantType
+            };
+            await _authenticationDomainService.SendToQueueAsync(Utilities.IdpConstants.AuthenticationQueue, revokeOldTokenEvent);
+
+            // Send creation event for new token (renewal, not login)
+            var addNewTokenEvent = new RefreshTokenEvent
+            {
+                RefreshToken = newRefreshTokenCache.RefreshToken,
+                TenantId = newRefreshTokenCache.TenantId,
+                IssuedUtc = newRefreshTokenCache.IssuedUtc,
+                ExpiresUtc = newRefreshTokenCache.ExpiresUtc,
+                IpAddresses = newRefreshTokenCache.IpAddresses,
+                UserId = newRefreshTokenCache.UserId,
+                DeviceInformation = _authenticationDomainService.GetDeviceInfo(tokenRequest.Request?.Headers?.UserAgent),
+                IsRevoke = false,
+                IsLogin = false,
+                GrantType = tokenRequest.GrantType
+            };
+            await _authenticationDomainService.SendToQueueAsync(Utilities.IdpConstants.AuthenticationQueue, addNewTokenEvent);
+
+            return (newRefreshTokenId, newRefreshTokenExpireOn);
+        }
+
+        private async Task<(string, DateTime)> CreateNewRefreshToken(TokenRequest tokenRequest, Tenant tenant, User user, AuthenticationConfiguration authenticationConfiguration, IEnumerable<string> visitorsIpAddresses)
+        {
             var refreshTokenId = Guid.NewGuid().ToString("N");
 
-            var refreshTokenLifetime = tokenRequest.RememberMe && authenticationConfiguration.RememberMeRefreshTokenValidForNumberMinutes > authenticationConfiguration.RefreshTokenValidForNumberMinutes
-                ? authenticationConfiguration.RememberMeRefreshTokenValidForNumberMinutes
-                : Math.Max(authenticationConfiguration.RefreshTokenValidForNumberMinutes, 30);
+            // Initial auth flow - use full configured lifetime
+            var configuredRefreshTokenLifetime = authenticationConfiguration.RefreshTokenValidForNumberMinutes > 0
+                ? authenticationConfiguration.RefreshTokenValidForNumberMinutes
+                : 15;
 
-            var refreshTokenExpireOn = jwtAccessToken.NotBefore.AddMinutes(refreshTokenLifetime);
+            var configuredRememberMeLifetime = authenticationConfiguration.RememberMeRefreshTokenValidForNumberMinutes > 0
+                ? authenticationConfiguration.RememberMeRefreshTokenValidForNumberMinutes
+                : configuredRefreshTokenLifetime;
+
+            var refreshTokenLifetime = tokenRequest.RememberMe
+                ? configuredRememberMeLifetime
+                : configuredRefreshTokenLifetime;
+
+            var refreshTokenExpireOn = DateTime.UtcNow.AddMinutes(refreshTokenLifetime);
 
             var refreshTokenCache = new RefreshTokenCache
             {
                 RefreshToken = refreshTokenId,
                 TenantId = tenant.TenantId,
-                IssuedUtc = jwtAccessToken.NotBefore,
+                IssuedUtc = DateTime.UtcNow,
                 ExpiresUtc = refreshTokenExpireOn,
                 IpAddresses = string.Join(",", visitorsIpAddresses),
-                UserId = user.ItemId
+                UserId = user.ItemId ?? string.Empty
             };
 
             await _cacheClient.AddStringValueAsync(refreshTokenCache.RefreshToken, JsonSerializer.Serialize(refreshTokenCache), refreshTokenLifetime * 60);
@@ -158,11 +287,13 @@ namespace DomainService.OAuth
                 ExpiresUtc = refreshTokenCache.ExpiresUtc,
                 IpAddresses = refreshTokenCache.IpAddresses,
                 UserId = refreshTokenCache.UserId,
-                DeviceInformation = _authenticationDomainService.GetDeviceInfo(tokenRequest.Request?.Headers?.UserAgent)
+                DeviceInformation = _authenticationDomainService.GetDeviceInfo(tokenRequest.Request?.Headers?.UserAgent),
+                IsRevoke = false,
+                IsLogin = true,
+                GrantType = tokenRequest.GrantType
             };
-            //_authenticationDomainService.SendToQueueAsync(Utilities.IdpConstants.AuthenticationQueue, addRefreshTokenCommand),
-            await _authenticationDomainService.SendToQueueAsync(Utilities.IdpConstants.IamQueue, addRefreshTokenCommand);
             
+            await _authenticationDomainService.SendToQueueAsync(Utilities.IdpConstants.AuthenticationQueue, addRefreshTokenCommand);
 
             return (refreshTokenId, refreshTokenExpireOn);
         }

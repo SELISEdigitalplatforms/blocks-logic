@@ -87,12 +87,12 @@ namespace Iam.DomainService.Users
             return await _identityAccessManagementRepository.GetUserByIdAsync<T>(itemId);
         }
 
-        public async Task<User> GetUserByUserNameOrgIdAsync(string userName, string organizatinId = "")
+        public async Task<User> GetUserByUserNameOrgIdAsync(string userName, string organizatoinId = "")
         {
             var collection = _identityAccessManagementRepository.GetCollection<User>();
 
-            var user = !string.IsNullOrWhiteSpace(organizatinId)
-                ? await collection.Find(x => x.UserName == userName && x.Memberships.Any(m => m.OrganizationId == organizatinId)).FirstOrDefaultAsync()
+            var user = !string.IsNullOrWhiteSpace(organizatoinId)
+                ? await collection.Find(x => x.UserName == userName && x.Memberships.Any(m => m.OrganizationId == organizatoinId)).FirstOrDefaultAsync()
                 : await collection.Find(x => x.UserName == userName).FirstOrDefaultAsync();
 
             return user;
@@ -122,7 +122,7 @@ namespace Iam.DomainService.Users
             return (data.AsQueryable(), totalCount);
         }
 
-        private FilterDefinition<User> BuildUserFilter(GetUsersFilter? filter)
+        private static FilterDefinition<User> BuildUserFilter(GetUsersFilter? filter)
         {
             var builder = Builders<User>.Filter;
             var filters = new List<FilterDefinition<User>>();
@@ -174,7 +174,7 @@ namespace Iam.DomainService.Users
             return filters.Any() ? builder.And(filters) : builder.Empty;
         }
 
-        private SortDefinition<User> BuildSortDefinition(BaseSortRequest? sortRequest)
+        private static SortDefinition<User> BuildSortDefinition(BaseSortRequest? sortRequest)
         {
             var builder = Builders<User>.Sort;
 

@@ -24,7 +24,36 @@ namespace DomainService.Worker
         {
             _logger.LogInformation("RefreshTokenWorkerService start");
 
-            await Task.WhenAll(ProcessSession(context), ProcessUserTimelineEvent(context), UpdateUserByLoginInfoAsync(context));
+            if (context.IsRevoke)
+            {
+                // Mark old session as inactive - no login count update, no new session
+                await Task.WhenAll(
+                    RevokeSessionAsync(context),
+                    ProcessUserTimelineEvent(context)
+                );
+            }
+            else if (context.IsLogin)
+            {
+                // Fresh login - insert new session, update login info, record timeline
+                await Task.WhenAll(
+                    ProcessSession(context),
+                    ProcessUserTimelineEvent(context),
+                    UpdateUserByLoginInfoAsync(context)
+                );
+            }
+            else
+            {
+                // Token renewal - insert new session, record timeline (no login count update)
+                await Task.WhenAll(
+                    ProcessSession(context),
+                    ProcessUserTimelineEvent(context)
+                );
+            }
+        }
+
+        public async Task<bool> RevokeSessionAsync(RefreshTokenEvent context)
+        {
+            return await _oAuthRepository.UpdateSessionStatusAsync(context.RefreshToken, context.UserId);
         }
 
         public async Task UpdateUserByLoginInfoAsync(RefreshTokenEvent refreshTokenEvent)
@@ -64,6 +93,8 @@ namespace DomainService.Worker
                 IpAddresses = context.IpAddresses,
                 UserId = context.UserId,
                 DeviceInformation = context.DeviceInformation,
+                GrantType = context.GrantType,
+                IsLogin = context.IsLogin,
                 CreateDate = DateTime.Now,
                 UpdateDate = DateTime.Now,
                 IsActive = true
@@ -74,6 +105,12 @@ namespace DomainService.Worker
 
         public async Task<bool> ProcessUserTimelineEvent(RefreshTokenEvent context)
         {
+            var eventName = context.IsRevoke
+                ? "revoke_refresh_token"
+                : context.IsLogin
+                    ? $"login_via_{context.GrantType ?? "unknown"}"
+                    : "renew_refresh_token";
+
             var userAuthenticationTimeline = new UserAuthenticationTimeline
             {
                 ItemId = Guid.NewGuid().ToString(),
@@ -83,7 +120,7 @@ namespace DomainService.Worker
                 LastUpdatedBy = context?.UserId,
                 DeviceInformation = context?.DeviceInformation,
                 IpAddresses = context?.IpAddresses ?? string.Empty,
-                Event = "issued_refresh_token",
+                Event = eventName,
                 ActionBy = "RefreshTokenWorkerService"
             };
 

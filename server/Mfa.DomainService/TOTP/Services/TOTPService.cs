@@ -27,7 +27,6 @@ namespace Mfa.DomainService.TOTP
         private readonly ITenants _tenant;
 
         private HttpClient _httpClient;
-
         const long _defaultTotpLoginSession = 15 * 60;
 
         public TotpService(IMfaManagementRepository repository,
@@ -188,7 +187,7 @@ namespace Mfa.DomainService.TOTP
             return _httpContextAccessor.HttpContext?.Request.Headers["x-blocks-key"].ToString() ?? "";
         }
 
-        private byte[] GenerateQrCodeImageData(string issuer, string email, string secret)
+        private static byte[] GenerateQrCodeImageData(string issuer, string email, string secret)
         {
             string tOTPUri = $"otpauth://totp/{issuer}:{email}?secret={secret}";
             var qrGenerator = new QRCodeGenerator();
