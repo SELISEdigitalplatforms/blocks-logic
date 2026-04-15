@@ -20,7 +20,7 @@ namespace Captcha.DomainService.Captcha
 
             RuleFor(c => c.Value)
                 .Cascade(CascadeMode.Stop)
-                .NotNull().NotEmpty().WithMessage("Value can not be null or empty")
+                .NotEmpty().WithMessage("Value can not be null or empty")
                 .MustAsync(BeMatchedWithExistingAsync)
                 .When(command => !string.IsNullOrWhiteSpace(command.Id))
                 .WithMessage("Value did not match.");

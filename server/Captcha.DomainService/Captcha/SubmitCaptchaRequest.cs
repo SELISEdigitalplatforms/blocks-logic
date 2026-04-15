@@ -20,7 +20,7 @@ namespace Captcha.DomainService.Captcha
     {
         public SubmitCaptchaRequestResponse(ValidationResult result) : base()
         {
-            Errors = result.Errors.ToDictionary(x => x.PropertyName, x => x.ErrorMessage);
+            Errors = result?.Errors.ToDictionary(x => x.PropertyName, x => x.ErrorMessage) ?? new Dictionary<string, string>();
         }
 
         /// <summary>

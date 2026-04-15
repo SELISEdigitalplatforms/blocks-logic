@@ -35,12 +35,12 @@ namespace DomainService.OAuth
 
         }
 
-        public async Task<JwtAccessToken> GetJwtAccessToken(AuthenticationConfiguration authenticationConfiguration, Tenant tenant, User user, StateInfo? stateInfo = null, string? organizationId = null)
+        public async Task<JwtAccessToken> GetJwtAccessToken(AuthenticationConfiguration authenticationConfiguration, Tenant tenant, User user, StateInfo? state = null, string? organizationId = null)
         {
             _key = _cryptoService.Hash(Encoding.UTF8.GetBytes($"{tenant.TenantId}::{tenant.ItemId}"));
             var certificate = await GetOrRetrieveCertAsync(tenant);
             if (certificate == null) return new JwtAccessToken();
-            return MapJwtAccessToken(authenticationConfiguration, tenant, user, certificate, stateInfo: stateInfo, organizationId: organizationId);
+            return MapJwtAccessToken(authenticationConfiguration, tenant, user, certificate, stateInfo: state, organizationId: organizationId);
         }
 
         public JwtAccessToken MapJwtAccessToken(AuthenticationConfiguration authenticationConfiguration, Tenant tenant, User user, byte[] certificate, StateInfo? stateInfo = null, string? organizationId = null)
@@ -76,8 +76,10 @@ namespace DomainService.OAuth
             claimsIdentity.AddClaim(new Claim(BlocksContext.DISPLAY_NAME_CLAIM, $"{user.FirstName ?? string.Empty} {user.LastName ?? string.Empty}".Trim()));
             claimsIdentity.AddClaim(new Claim(BlocksContext.PHONE_NUMBER_CLAIM, user.PhoneNumber ?? string.Empty));
 
-            if(!string.IsNullOrWhiteSpace(stateInfo?.Nonce))
-            claimsIdentity.AddClaim(new Claim("nonce", stateInfo?.Nonce ?? ""));
+            if (!string.IsNullOrWhiteSpace(stateInfo?.Nonce)) 
+            {
+                claimsIdentity.AddClaim(new Claim("nonce", stateInfo?.Nonce ?? ""));
+            }
 
             foreach (var role in user.Memberships.Where(m => m.OrganizationId == (!string.IsNullOrWhiteSpace(organizationId)? organizationId: "default")).FirstOrDefault()?.Roles ?? [])
             {
@@ -89,7 +91,7 @@ namespace DomainService.OAuth
                 claimsIdentity.AddClaim(new Claim(BlocksContext.PERMISSION_CLAIM, permission));
             }
         }
-
+        
         public async Task<byte[]?> GetOrRetrieveCertAsync(Tenant tenant)
         {
             _logger.LogInformation("Getting Certificate");
@@ -101,7 +103,7 @@ namespace DomainService.OAuth
                 var provider = _certificateProviderFactory.GetProvider(tenant.JwtTokenParameters?.CertificateStorageType ?? CertificateStorageType.Azure);
                 var certificate = await provider.GetCertificateAsync(_key);
 
-                if (certificate.Length > 0)
+                if (certificate != null && certificate.Length > 0)
                 {
                     var expirationDays = tenant.JwtTokenParameters?.CertificateValidForNumberOfDays - (DateTime.UtcNow - tenant.JwtTokenParameters?.IssueDate)?.Days - 1;
                     _cacheDb.StringSet(_key, certificate, TimeSpan.FromDays(expirationDays ?? 0));
@@ -112,7 +114,7 @@ namespace DomainService.OAuth
 
             return cachedCert;
         }
-
+        
         public static SigningCredentials MakeSigningCredentials(byte[] certificateData, string password)
         {
             X509Certificate2 certificate;

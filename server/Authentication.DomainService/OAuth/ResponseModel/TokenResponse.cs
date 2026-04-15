@@ -15,5 +15,7 @@ namespace DomainService.OAuth.ResponseModel
         public string MfaId { get; set; }
         public UserMfaType UserMfa { get; set; }
         public int StatusCode { get; set; }
+
+        public string SsoUserRedirectUrl { get; set; }
     }
 }

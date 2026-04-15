@@ -15,7 +15,7 @@ namespace DomainService.OAuth
             _logger = logger;
             SetupKeyVault();
 
-            if (_secretClient == null) throw new Exception("One or more required Azure config values are missing. Please check your environment configuration.");
+            if (_secretClient == null) throw new InvalidOperationException("One or more required Azure config values are missing. Please check your environment configuration.");
         }
 
         public async Task<byte[]> GetCertificateAsync(string key)
@@ -47,7 +47,7 @@ namespace DomainService.OAuth
                 !cloudConfig.TryGetValue("ClientSecret", out var clientSecret))
             {
                 _logger.LogError("One or more required Azure config values are missing. Please check your environment configuration.");
-                throw new Exception("One or more required Azure config values are missing. Please check your environment configuration.");
+                throw new InvalidOperationException("One or more required Azure config values are missing. Please check your environment configuration.");
             }
 
             var credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
