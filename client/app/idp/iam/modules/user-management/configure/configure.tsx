@@ -54,7 +54,7 @@ export function Configure() {
   };
 
   return (
-    <main>
+    <main className="px-4 pt-4 md:px-6 md:pt-6">
       <PageBreadcrumb breadcrumbIndex={2} />
 
       <div className="mb-6 mt-2 flex h-8 items-center justify-between">
