@@ -23,9 +23,6 @@ var services = builder.Services;
 
 services.AddHealthChecks();
 
-//builder.Services.AddDomainServices();
-builder.Services.AddFluentValidationAutoValidation();
-//ApplicationConfigurations.ConfigureServices(services, new MessageConfiguration { });
 ApplicationConfigurations.ConfigureApi(services);
 
 builder.Services.Configure<MvcOptions>(options =>
