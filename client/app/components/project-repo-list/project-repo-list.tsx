@@ -58,10 +58,7 @@ export const ProjectRepoList = ({
       if (!project?.itemId || !projectKey || !applicationDomain || applicationDomain === "") return;
       const res = await mutateAsync({
         name: project.name,
-        applicationDomain: applicationDomain,
-        projectKey: projectKey || "",
-        useCustomDomain: false,
-        customDomain,
+        tenantGroupId: projectKey || "",
       });
       if (res.isSuccess) {
         showSuccessToast({ description: "Application Domain is updated successfully" });
