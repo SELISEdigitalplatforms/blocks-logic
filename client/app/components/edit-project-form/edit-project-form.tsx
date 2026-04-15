@@ -60,10 +60,8 @@ export const EditProjectForm = ({ onAfterSubmit }: EditProjectFormProps) => {
     try {
       if (!itemId || !projectKey) return;
       const res = await mutateAsync({
-        ...values,
-        applicationDomain: values.customDomain ? values.customDomain : values.applicationDomain,
-        cookieDomain: values.customDomain.split("//")[1],
-        projectKey,
+        name: values.name,
+        tenantGroupId: projectKey,
       });
       if (res.isSuccess) {
         showSuccessToast({ description: "Project is updated successfully" });

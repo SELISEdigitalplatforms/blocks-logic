@@ -85,7 +85,8 @@ export const useUpdateProject = (_: { projectKey: string }) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationKey: ["identifier", "project-update"],
-    mutationFn: crossProjectService.updateProject,
+    mutationFn: (payload: { name: string; tenantGroupId: string }) =>
+      crossProjectService.updateTenantGroup(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["identifier", "project"] });
       queryClient.invalidateQueries({ queryKey: ["identifier", "projects"] });
@@ -98,13 +99,7 @@ export const useUpdateTenantGroup = (_: { tenantGroupId: string }) => {
   return useMutation({
     mutationKey: ["identifier", "project-update-tenant-group"],
     mutationFn: (payload: { name: string; tenantGroupId: string }) =>
-      crossProjectService.updateProject({
-        name: payload.name,
-        applicationDomain: "",
-        useCustomDomain: false,
-        customDomain: "",
-        projectKey: payload.tenantGroupId,
-      }),
+      crossProjectService.updateTenantGroup(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["identifier", "projects"] });
       queryClient.invalidateQueries({ queryKey: ["identifier", "project"] });
