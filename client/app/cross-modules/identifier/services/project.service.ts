@@ -17,6 +17,7 @@ import {
   IResource,
   ISavePublicCertificatePayload,
   IUpdateProjectPayload,
+  IUpdateTenantGroupPayload,
   IUpdateProjectResponse,
   IValidateCNameProjectPayload,
   IValidateCNameProjectResponse,
@@ -108,6 +109,10 @@ export class ProjectService {
 
   updateProject(payload: IUpdateProjectPayload): Promise<IUpdateProjectResponse> {
     return http.post(PROJECT_ENDPOINTS.UPDATE, payload);
+  }
+
+  updateTenantGroup(payload: IUpdateTenantGroupPayload): Promise<IUpdateProjectResponse> {
+    return http.post(PROJECT_ENDPOINTS.UPDATE_TENANT_GROUP, payload);
   }
   disableProject(payload: IDisableProjectPayload): Promise<IDisableProjectResponse> {
     return http.post(PROJECT_ENDPOINTS.DISABLE, payload);
