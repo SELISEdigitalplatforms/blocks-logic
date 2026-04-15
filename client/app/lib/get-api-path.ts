@@ -1,11 +1,11 @@
 /**
  * Gets the appropriate API path based on whether we're using localhost or a remote server
  * @param servicePath - The service path (e.g., 'idp/v1', 'communication/v1')
- * @returns '/Api' for localhost, otherwise returns the service path
+ * @returns '/api' for localhost, otherwise returns the service path
  */
 export const getApiPath = (servicePath: string): string => {
   const isLocalhost = import.meta.env.BLOCKS_API_BASE_URL?.includes("localhost");
-  return isLocalhost ? "/Api" : `/${servicePath}`;
+  return isLocalhost ? "/api" : `/${servicePath}`;
 };
 
 /**
