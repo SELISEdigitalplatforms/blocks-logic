@@ -90,7 +90,7 @@ export function RoleDetailsContainer() {
   }, [permissionMap]);
 
   return (
-    <div>
+    <div className="px-4 pt-4 md:px-6 md:pt-6">
       <div className="hidden md:flex">
         <PageBreadcrumb breadcrumbIndex={3} />
       </div>
