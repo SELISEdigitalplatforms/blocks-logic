@@ -23,6 +23,9 @@ export function useFilteredMenus(menus: Menu[]): Menu[] {
       "service-identity__captcha",
       "service-identity__api-settings",
       "service-identity__secret-management",
+      "service-identity__lmt",
+            "service-identity__apps",
+
     ]);
 
     try {

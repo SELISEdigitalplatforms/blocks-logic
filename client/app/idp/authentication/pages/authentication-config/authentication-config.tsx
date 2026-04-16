@@ -12,6 +12,10 @@ import { AuthenticationTabs } from "@blocks-idp/authentication/constants/authent
 // import { ClientCredentials } from "@blocks-idp/authentication/components/client-credentials";
 // import { CreateClientCredential } from "@blocks-idp/authentication/components/create-client-credential";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui-kits/select/select";
+import { Permissions } from "@blocks-idp/iam/modules/permission-management";
+import { AddRole, Roles } from "@blocks-idp/iam/modules/role-management";
+import { PrimaryButton } from "@/components/action-buttons/primary-button";
+import { Link } from "react-router-dom";
 
 export const AuthenticationConfig = () => {
   const [selectedTab, setSelectedTab] = useQueryState("tab", { defaultValue: "general" });
@@ -58,12 +62,36 @@ export const AuthenticationConfig = () => {
 
           <>
             {/* {selectedTab === GRANT_TYPES.clientCredential && <CreateClientCredential />} */}
+            {selectedTab === "roles" && <AddRole />}
+            {selectedTab === "permissions" && (
+              <Link to="/services/iam/permission-detail/new">
+                <PrimaryButton label="Add Permission" />
+              </Link>
+            )}
           </>
         </div>
         <TabsContent value="general" className="grid grid-cols-1 gap-6">
           <GeneralSettings />
           <GrantTypes />
           {/* <SelfSignup /> */}
+        </TabsContent>
+        <TabsContent value="signin-flow">
+          <div className="rounded-lg border border-border bg-card p-6">
+            <h3 className="text-lg font-semibold">Signin flow</h3>
+            <p className="text-muted-foreground mt-2">Configure your signin flow settings</p>
+          </div>
+        </TabsContent>
+        <TabsContent value="signup-flow">
+          <div className="rounded-lg border border-border bg-card p-6">
+            <h3 className="text-lg font-semibold">Signup flow</h3>
+            <p className="text-muted-foreground mt-2">Configure your signup flow settings</p>
+          </div>
+        </TabsContent>
+        <TabsContent value="roles">
+          <Roles />
+        </TabsContent>
+        <TabsContent value="permissions">
+          <Permissions />
         </TabsContent>
         {/* <TabsContent value={GRANT_TYPES.clientCredential}>
           <ClientCredentials />

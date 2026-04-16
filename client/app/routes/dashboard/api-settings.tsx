@@ -10,8 +10,8 @@ export default function ApiSettingsPage() {
 
 			<Card>
 				<CardHeader>
-					<CardTitle>API Settings</CardTitle>
-					<CardDescription>Configure your API settings and preferences</CardDescription>
+					{/* <CardTitle>API Settings</CardTitle>
+					<CardDescription>Configure your API settings and preferences</CardDescription> */}
 				</CardHeader>
 				<CardContent className="flex h-40 items-center justify-center text-muted-foreground">
 					API Settings content coming soon...
