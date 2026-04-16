@@ -5,6 +5,7 @@ export const useGetAuthOidcCredentials = (options: { projectKey: string }) => {
   return useQuery({
     queryKey: ["authentication", "auth-oidc-list", options],
     queryFn: () => authOidc.clients.getOidcCredentials(options),
+    enabled: !!options.projectKey,
   });
 };
 

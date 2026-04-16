@@ -5,6 +5,7 @@ export const useGetAuthConfig = (options: { projectKey: string }) => {
   return useQuery({
     queryKey: ["authentication", "auth-config", options],
     queryFn: () => authenticationService.configuration.getConfig(options),
+    enabled: !!options.projectKey,
   });
 };
 
