@@ -48,7 +48,7 @@ export const navigationMenus: Menu[] = [
   {
     id: "service-identity__authentication",
     type: "menu",
-    name: "Authentication",
+    name: "IDP",
     path: "/services/authentication",
     icon: Key,
   },
@@ -59,20 +59,20 @@ export const navigationMenus: Menu[] = [
     path: "/services/iam",
     icon: Shield,
   },
-  {
-    id: "service-identity__mfa",
-    type: "menu",
-    name: "MFA",
-    path: "/services/mfa",
-    icon: ShieldCheck,
-  },
-  {
-    id: "service-identity__captcha",
-    type: "menu",
-    name: "Captcha",
-    path: "/services/captcha",
-    icon: ScanFace,
-  },
+  // {
+  //   id: "service-identity__mfa",
+  //   type: "menu",
+  //   name: "MFA",
+  //   path: "/services/mfa",
+  //   icon: ShieldCheck,
+  // },
+  // {
+  //   id: "service-identity__captcha",
+  //   type: "menu",
+  //   name: "Captcha",
+  //   path: "/services/captcha",
+  //   icon: ScanFace,
+  // },
   {
     id: "service-identity__api-settings",
     type: "menu",
