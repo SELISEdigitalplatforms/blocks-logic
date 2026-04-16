@@ -83,7 +83,7 @@ export const navigationMenus: Menu[] = [
   {
     id: "service-identity__secret-management",
     type: "menu",
-    name: "Secret Management",
+    name: "Secrets & Configs",
     path: "/services/secret-management",
     icon: Lock,
   },

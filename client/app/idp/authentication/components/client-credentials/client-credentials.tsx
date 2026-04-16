@@ -8,7 +8,7 @@ export const ClientCredentials = () => {
   const { tenantId } = useProjectStore().selectedProject || { tenantId: "" };
   const { data: authConfig, isLoading } = useGetAuthConfig({ projectKey: tenantId });
 
-  const isClientCredentialAllowed = authConfig?.allowedGrantTypes.includes(GRANT_TYPES.clientCredential);
+  const isClientCredentialAllowed = authConfig?.allowedGrantTypes?.includes(GRANT_TYPES.clientCredential);
 
   return (
     <div>
