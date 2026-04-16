@@ -1,5 +1,5 @@
 import { Menu } from "@/models/menu-models";
-import { Home, Package, Users, BookMinus, Settings, Shield, Key, ShieldCheck, ScanFace, Lock } from "lucide-react";
+import { Home, Package, Users, BookMinus, Settings, Shield, Key, ShieldCheck, ScanFace, Lock, LayoutDashboard, Zap } from "lucide-react";
 
 export const navigationMenus: Menu[] = [
   {
@@ -52,13 +52,13 @@ export const navigationMenus: Menu[] = [
     path: "/services/authentication",
     icon: Key,
   },
-  {
-    id: "service-identity__authorization",
-    type: "menu",
-    name: "Access Manager",
-    path: "/services/iam",
-    icon: Shield,
-  },
+  // {
+  //   id: "service-identity__authorization",
+  //   type: "menu",
+  //   name: "Access Manager",
+  //   path: "/services/iam",
+  //   icon: Shield,
+  // },
   // {
   //   id: "service-identity__mfa",
   //   type: "menu",
@@ -80,11 +80,26 @@ export const navigationMenus: Menu[] = [
     path: "/services/api-settings",
     icon: Settings,
   },
+  
   {
     id: "service-identity__secret-management",
     type: "menu",
     name: "Secrets & Configs",
     path: "/services/secret-management",
     icon: Lock,
+  },
+  {
+    id: "service-identity__lmt",
+    type: "menu",
+    name: "LMT",
+    path: "/services/lmt",
+    icon: Zap,
+  },
+  {
+    id: "service-identity__apps",
+    type: "menu",
+    name: "Apps",
+    path: "/services/apps",
+    icon: LayoutDashboard,
   },
 ];
