@@ -4,6 +4,8 @@ export const LOG_LEVEL = {
   Error: "Error",
 };
 
+export * from "./usage.util";
+
 export const getLogFormatTimestamp = (timestamp: string) => {
   const date = new Date(timestamp);
   if (isNaN(date.getTime())) {
