@@ -17,6 +17,7 @@ const GRID_COLS_MAP: Record<number, string> = {
   3: "grid-cols-3",
   4: "grid-cols-4",
   5: "grid-cols-5",
+  6: "grid-cols-3",
 };
 
 export const SsoSignin = ({ loginOption }: SsoSigninProps) => {
@@ -37,7 +38,7 @@ export const SsoSignin = ({ loginOption }: SsoSigninProps) => {
     })
     .filter((item) => !!item);
 
-  const gridColsClass = GRID_COLS_MAP[Math.min(providers.length, 5)];
+  const gridColsClass = GRID_COLS_MAP[Math.min(providers.length, 6)];
 
   return (
     <>

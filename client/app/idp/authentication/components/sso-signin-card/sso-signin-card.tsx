@@ -44,7 +44,7 @@ export const SSOSigninCard = ({ providerConfig, withLabel = false }: SSOSigninCa
 
   return (
     <Button variant="outline" className="w-full gap-2" onClick={onClickHandler}>
-      <img src={imageSrc} width={16} height={20} alt={providerConfig.provider} />
+      <img src={imageSrc} className="size-5 object-contain" alt={providerConfig.provider} />
       {withLabel && <>Sign in with {providerConfig.label}</>}
     </Button>
   );
