@@ -197,6 +197,9 @@ class HttpClient {
 
       const contentType = response.headers.get("content-type")?.toLowerCase();
       if (!contentType) return { success: true, status: response.status } as T;
+      if (contentType.includes("text/html")) {
+        throw new HttpError(response.status, { errors: { general: "Unexpected HTML response from server" } });
+      }
       if (contentType.includes("text/")) return (await response.text()) as unknown as T;
       if (
         contentType.includes("image/") ||

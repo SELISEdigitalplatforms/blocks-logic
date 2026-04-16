@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 export const OIDC = () => {
   const { tenantId } = useProjectStore().selectedProject || { tenantId: "" };
   const { data: authConfig, isLoading } = useGetAuthConfig({ projectKey: tenantId });
-  const isBlocksOidcAllowed = authConfig?.allowedGrantTypes.includes(GRANT_TYPES.authorizationCode);
+  const isBlocksOidcAllowed = authConfig?.allowedGrantTypes?.includes(GRANT_TYPES.authorizationCode);
 
   return (
     <div>

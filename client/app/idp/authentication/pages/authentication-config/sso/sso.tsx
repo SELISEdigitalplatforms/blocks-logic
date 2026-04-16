@@ -7,7 +7,7 @@ export const SSO = () => {
   const { tenantId } = useProjectStore().selectedProject || { tenantId: "" };
   const { data, isLoading } = useGetAuthConfig({ projectKey: tenantId });
 
-  const isSocialSelected = data?.allowedGrantTypes.includes(GRANT_TYPES.social);
+  const isSocialSelected = data?.allowedGrantTypes?.includes(GRANT_TYPES.social);
   return (
     <div>
       {!isLoading && !isSocialSelected && (

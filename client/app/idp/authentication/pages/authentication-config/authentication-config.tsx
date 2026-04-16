@@ -7,15 +7,11 @@ import { getApiUrl } from "@/lib/get-api-path";
 import { GrantTypes } from "./general/grant-types";
 // import { SelfSignup } from "./general/self-signup";
 import { GeneralSettings } from "./general/settings";
-import { SSO } from "./sso";
 import { Button } from "@/components/ui-kits/button/button";
-import { Certificates } from "./general/certificates/certificates";
-import { AuthenticationTabs, GRANT_TYPES } from "@blocks-idp/authentication/constants/authentication.constant";
-import { OIDC } from "@blocks-idp/authentication/components/oidc";
-import { ClientCredentials } from "@blocks-idp/authentication/components/client-credentials";
-import { CreateClientCredential } from "@blocks-idp/authentication/components/create-client-credential";
+import { AuthenticationTabs } from "@blocks-idp/authentication/constants/authentication.constant";
+// import { ClientCredentials } from "@blocks-idp/authentication/components/client-credentials";
+// import { CreateClientCredential } from "@blocks-idp/authentication/components/create-client-credential";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui-kits/select/select";
-import { CreateOIDC } from "@blocks-idp/authentication/components/create-oidc";
 
 export const AuthenticationConfig = () => {
   const [selectedTab, setSelectedTab] = useQueryState("tab", { defaultValue: "general" });
@@ -61,8 +57,7 @@ export const AuthenticationConfig = () => {
           </>
 
           <>
-            {selectedTab === GRANT_TYPES.clientCredential && <CreateClientCredential />}
-            {selectedTab === GRANT_TYPES.authorizationCode && <CreateOIDC />}
+            {/* {selectedTab === GRANT_TYPES.clientCredential && <CreateClientCredential />} */}
           </>
         </div>
         <TabsContent value="general" className="grid grid-cols-1 gap-6">
@@ -70,18 +65,9 @@ export const AuthenticationConfig = () => {
           <GrantTypes />
           {/* <SelfSignup /> */}
         </TabsContent>
-        <TabsContent value={GRANT_TYPES.social}>
-          <SSO />
-        </TabsContent>
-        <TabsContent value="external-idp">
-          <Certificates />
-        </TabsContent>
-        <TabsContent value={GRANT_TYPES.clientCredential}>
+        {/* <TabsContent value={GRANT_TYPES.clientCredential}>
           <ClientCredentials />
-        </TabsContent>
-        <TabsContent value={GRANT_TYPES.authorizationCode}>
-          <OIDC />
-        </TabsContent>
+        </TabsContent> */}
       </Tabs>
     </div>
   );

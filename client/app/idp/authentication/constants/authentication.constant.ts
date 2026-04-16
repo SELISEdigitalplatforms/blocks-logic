@@ -30,11 +30,14 @@ export const GRANT_TYPES_OPTIONS: { id: GRANT_TYPES; label: string; value: strin
 
 export const AuthenticationTabs: { id: string; label: string; value: string }[] = [
   { id: "general", label: "General", value: "general" },
-  {
-    id: GRANT_TYPES.clientCredential,
-    label: "Client Credential",
-    value: GRANT_TYPES.clientCredential,
-  },
+  // {
+  //   id: GRANT_TYPES.clientCredential,
+  //   label: "Client Credential",
+  //   value: GRANT_TYPES.clientCredential,
+  // },
+];
+
+export const SecretManagementTabs: { id: string; label: string; value: string }[] = [
   {
     id: GRANT_TYPES.authorizationCode,
     label: "OIDC",
