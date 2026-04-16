@@ -28,9 +28,10 @@ export function MultiSelect({ label, options, onChange, value: selectedValues }:
   const [buttonRef, popoverWidth] = usePopoverWidth();
 
   const onSelectHandler = (value: string) => {
-    if (selectedValues.includes(value)) selectedValues.splice(selectedValues.indexOf(value), 1);
-    else selectedValues.push(value);
-    onChange(selectedValues);
+    const nextValues = selectedValues.includes(value)
+      ? selectedValues.filter((item) => item !== value)
+      : [...selectedValues, value];
+    onChange(nextValues);
   };
   const onResetHandler = () => {
     onChange([]);
