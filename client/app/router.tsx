@@ -47,6 +47,7 @@ import MfaLogsPage from "./routes/dashboard/mfa-logs";
 import CaptchaConfigPage from "./routes/dashboard/captcha-config";
 import CaptchaLogsPage from "./routes/dashboard/captcha-logs";
 import ApiSettingsPage from "./routes/dashboard/api-settings";
+import LmtPage from "./routes/dashboard/lmt";
 import SecretManagementPage from "./routes/dashboard/secret-management";
 import ProfilePage from "./routes/dashboard/profile";
 
@@ -118,6 +119,7 @@ export const router = createBrowserRouter([
       { path: "/services/mfa", element: <MfaConfigPage /> },
       { path: "/services/mfa/logs", element: <MfaLogsPage /> },
       { path: "/services/api-settings", element: <ApiSettingsPage /> },
+      { path: "/services/lmt", element: <LmtPage /> },
       { path: "/services/secret-management", element: <SecretManagementPage /> },
       { path: "/services/captcha", element: <CaptchaConfigPage /> },
       { path: "/services/captcha/logs", element: <CaptchaLogsPage /> },

@@ -14,7 +14,7 @@ export default function SecretManagementPage() {
   return (
     <div className="p-6">
       <div className="mb-[18px] flex items-center justify-between md:mb-[24px]">
-        <h1 className="text-lg font-semibold md:text-2xl">Secret Management</h1>
+        <h1 className="text-lg font-semibold md:text-2xl">Secrets & Configs</h1>
       </div>
       <Tabs value={selectedTab} onValueChange={(value) => setSelectedTab(value)}>
         <div className="mb-4 flex items-start justify-between gap-4">

@@ -30,6 +30,10 @@ export const GRANT_TYPES_OPTIONS: { id: GRANT_TYPES; label: string; value: strin
 
 export const AuthenticationTabs: { id: string; label: string; value: string }[] = [
   { id: "general", label: "General", value: "general" },
+  { id: "signin-flow", label: "Signin flow", value: "signin-flow" },
+  { id: "signup-flow", label: "Signup flow", value: "signup-flow" },
+  { id: "roles", label: "Roles", value: "roles" },
+  { id: "permissions", label: "Permissions", value: "permissions" },
   // {
   //   id: GRANT_TYPES.clientCredential,
   //   label: "Client Credential",
