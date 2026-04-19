@@ -1,6 +1,6 @@
 using Blocks.Genesis;
-using BlocksCloudDomain.Requests;
-using BlocksCloudDomain.Services;
+using Cloud.DomainService.Requests;
+using Cloud.DomainService.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Controllers
@@ -16,7 +16,7 @@ namespace Api.Controllers
             _service = service;
         }
 
-        [ProtectedEndPoint]
+   
         [HttpPost]
         public async Task<IActionResult> GetList([FromBody] GetApiEndpointConfigsRequest request)
         {
@@ -31,7 +31,6 @@ namespace Api.Controllers
             return Ok(response);
         }
 
-        [ProtectedEndPoint]
         [HttpPost]
         public async Task<IActionResult> Update([FromBody] UpdateApiEndpointConfigRequest request)
         {

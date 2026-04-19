@@ -1,10 +1,10 @@
 using Blocks.Genesis;
-using BlocksCloudDomain.Models;
-using BlocksCloudDomain.Requests;
+using Cloud.DomainService.Models;
+using Cloud.DomainService.Requests;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
-namespace BlocksCloudDomain.Repositories
+namespace Cloud.DomainService.Repositories
 {
     public class ApiEndpointConfigRepository : IApiEndpointConfigRepository
     {

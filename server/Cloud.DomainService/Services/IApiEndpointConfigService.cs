@@ -1,8 +1,8 @@
 using Blocks.Genesis;
-using BlocksCloudDomain.Requests;
-using BlocksCloudDomain.Responses;
+using Cloud.DomainService.Requests;
+using Cloud.DomainService.Responses;
 
-namespace BlocksCloudDomain.Services
+namespace Cloud.DomainService.Services
 {
     public interface IApiEndpointConfigService
     {
