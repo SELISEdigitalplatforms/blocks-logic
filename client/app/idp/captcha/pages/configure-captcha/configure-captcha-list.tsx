@@ -24,7 +24,7 @@ const LoadingSkelton = () => {
 };
 const EmptyCaptchaConfig = () => {
   return (
-    <div className="text-muted- flex h-32 flex-wrap items-center justify-center rounded-sm border bg-background p-4 text-center">
+    <div className="text-muted- flex h-32 flex-wrap items-center justify-center rounded-sm border bg-background p-4 text-center text-muted-foreground">
       No configurations found. Please create a new configuration.
     </div>
   );

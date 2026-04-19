@@ -48,6 +48,7 @@ import ApiSettingsPage from "./routes/dashboard/api-settings";
 import LmtPage from "./routes/dashboard/lmt";
 import LmtServiceLogsPage from "./routes/dashboard/lmt-service-logs";
 import SecretManagementPage from "./routes/dashboard/secret-management";
+import ManagedServicesPage from "./routes/dashboard/managed-services";
 import ProfilePage from "./routes/dashboard/profile";
 
 // Console pages
@@ -121,6 +122,7 @@ export const router = createBrowserRouter([
       { path: "/services/lmt", element: <LmtPage /> },
       { path: "/services/lmt/logs/:serviceName", element: <LmtServiceLogsPage /> },
       { path: "/services/secret-management", element: <SecretManagementPage /> },
+      { path: "/managed-services", element: <ManagedServicesPage /> },
       { path: "/services/captcha", element: <Navigate to="/services/secret-management?tab=captcha" replace /> },
       { path: "/services/captcha/logs", element: <CaptchaLogsPage /> },
     ],
