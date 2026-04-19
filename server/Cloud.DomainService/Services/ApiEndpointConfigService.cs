@@ -1,10 +1,10 @@
 using Blocks.Genesis;
-using BlocksCloudDomain.Models;
-using BlocksCloudDomain.Repositories;
-using BlocksCloudDomain.Requests;
-using BlocksCloudDomain.Responses;
+using Cloud.DomainService.Models;
+using Cloud.DomainService.Repositories;
+using Cloud.DomainService.Requests;
+using Cloud.DomainService.Responses;
 
-namespace BlocksCloudDomain.Services
+namespace Cloud.DomainService.Services
 {
     public class ApiEndpointConfigService : IApiEndpointConfigService
     {
@@ -22,7 +22,9 @@ namespace BlocksCloudDomain.Services
             return new GetApiEndpointConfigsResponse
             {
                 Data = data.AsQueryable(),
-                TotalCount = count
+                TotalCount = count,
+                Page = request.Page,
+                PageSize = request.PageSize
             };
         }
 
@@ -36,8 +38,11 @@ namespace BlocksCloudDomain.Services
                 Service = request.Service,
                 Method = request.Method,
                 Endpoint = request.Endpoint,
-                IsEnabled = request.IsEnabled,
                 Description = request.Description,
+                IsCaptchaRequired = request.IsCaptchaRequired,
+                CaptchaProvider = request.CaptchaProvider,
+                IsMfaRequired = request.IsMfaRequired,
+                MfaType = request.MfaType,
                 LastUpdatedBy = userId,
                 LastUpdatedDate = DateTime.UtcNow
             };

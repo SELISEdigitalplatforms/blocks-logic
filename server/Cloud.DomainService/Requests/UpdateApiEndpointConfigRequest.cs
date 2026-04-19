@@ -1,6 +1,6 @@
 using Blocks.Genesis;
 
-namespace BlocksCloudDomain.Requests
+namespace Cloud.DomainService.Requests
 {
     public class UpdateApiEndpointConfigRequest : IProjectKey
     {
@@ -9,7 +9,10 @@ namespace BlocksCloudDomain.Requests
         public string Service { get; set; } = string.Empty;
         public string Method { get; set; } = string.Empty;
         public string Endpoint { get; set; } = string.Empty;
-        public bool IsEnabled { get; set; }
         public string? Description { get; set; }
+        public bool IsCaptchaRequired { get; set; }
+        public string? CaptchaProvider { get; set; }
+        public bool IsMfaRequired { get; set; }
+        public string? MfaType { get; set; }
     }
 }

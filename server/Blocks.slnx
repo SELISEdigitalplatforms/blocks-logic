@@ -1,7 +1,7 @@
 <Solution>
   <Project Path="Api/Api.csproj" />
   <Project Path="Authentication.DomainService/Authentication.DomainService.csproj" />
-  <Project Path="BlocksCloudDomain/BlocksCloudDomain.csproj" Id="27fdd39a-ed6e-41f3-a08c-4569c01563d4" />
+  <Project Path="Cloud.DomainService/Cloud.DomainService.csproj" Id="27fdd39a-ed6e-41f3-a08c-4569c01563d4" />
   <Project Path="Captcha.DomainService/Captcha.DomainService.csproj" />
   <Project Path="Iam.DomainService/Iam.DomainService.csproj" />
   <Project Path="Identifier.DomainService/Identifier.DomainService.csproj" />
