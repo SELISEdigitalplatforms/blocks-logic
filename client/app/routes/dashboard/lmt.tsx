@@ -19,7 +19,9 @@ import {
 	Network,
 	RefreshCcw,
 } from "lucide-react";
+import { useQueryState, parseAsString } from "nuqs";
 import { useState } from "react";
+import { LMTQueryAgentSheet } from "@blocks-ai/components/lmt-query-agent/lmt-query-agent-sheet";
 import { UsageServiceCard, UsageSummaryCard } from "@blocks-lmt/components";
 import { USAGES_SERVICE_MAP, type UsageServiceMap } from "@blocks-lmt/constants/usage.constant";
 import { useUsagesMetrics } from "@blocks-lmt/hooks/use-usage";
@@ -32,7 +34,7 @@ import { TracesOverview } from "@blocks-lmt/components/traces-overview/traces-ov
 
 export default function LmtPage() {
 	const tenantId = useProjectStore().selectedProject?.tenantId || "";
-	const [activeTab, setActiveTab] = useState("usage");
+	const [activeTab, setActiveTab] = useQueryState("tab", parseAsString.withDefault("usage"));
 	const [timeRange, setTimeRange] = useState("1h");
 	const { data, isLoading, isFetching, refetch } = useUsagesMetrics({
 		timeRange,
@@ -88,7 +90,16 @@ export default function LmtPage() {
 							</Button>
 						</div>
 					) : (
-						<div />
+						<div className="flex items-center gap-2">
+							<LMTQueryAgentSheet
+								description="Hello! I can help you search and analyze your logs, metrics, and tracing data."
+								questions={[
+									"Show me traces for the last 1 hour",
+									"Which services are generating the most traces",
+									"Which traces had high latency today",
+								]}
+							/>
+						</div>
 					)}
 				</div>
 

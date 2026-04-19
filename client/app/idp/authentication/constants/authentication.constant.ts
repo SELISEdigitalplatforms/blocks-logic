@@ -67,6 +67,26 @@ export const SecretManagementTabs: { id: string; label: string; value: string }[
     label: "MFA",
     value: "mfa",
   },
+  {
+    id: "magic-url",
+    label: "Magic URL",
+    value: "magic-url",
+  },
+  {
+    id: "storage",
+    label: "Storage",
+    value: "storage",
+  },
+  {
+    id: "managed-services",
+    label: "Managed Services",
+    value: "managed-services",
+  },
+  {
+    id: "email",
+    label: "Email",
+    value: "email",
+  },
 ];
 
 export const providers = [

@@ -18,6 +18,8 @@ export default defineConfig(({ mode }) => {
         "@blocks-communication": path.resolve(__dirname, "./app/cross-modules/communication"),
         "@blocks-identifier": path.resolve(__dirname, "./app/cross-modules/identifier"),
         "@blocks-localization": path.resolve(__dirname, "./app/cross-modules/localization"),
+        "@blocks-utilities": path.resolve(__dirname, "./app/cross-modules/utilities"),
+        "@blocks-ai": path.resolve(__dirname, "./app/cross-modules/ai"),
       },
     },
     build: {
