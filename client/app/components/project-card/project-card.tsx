@@ -18,10 +18,10 @@ import { useProjectStore } from "@/store/useProjectStore";
 
 type ProjectCardProps = {
   project: IProject;
-  envList: string[];
+  projects: IProject[];
 };
 
-export const ProjectCard = ({ project, envList }: ProjectCardProps) => {
+export const ProjectCard = ({ project, projects }: ProjectCardProps) => {
   const navigate = useNavigate();
   const { setTennantGroup, setSelectedProject } = useProjectStore();
 
@@ -30,6 +30,26 @@ export const ProjectCard = ({ project, envList }: ProjectCardProps) => {
     setSelectedProject(project);
     navigate("/project-overview");
   };
+
+  const onEnvBadgeClick = (e: React.MouseEvent, envProject: IProject) => {
+    e.stopPropagation();
+    setTennantGroup(envProject.tenantGroupId);
+    setSelectedProject(envProject);
+    navigate("/dashboard");
+  };
+
+  const envList = projects.map((p) => p.environment);
+
+  const renderBadge = (env: string, envProject: IProject) => (
+    <Badge
+      key={env}
+      variant="secondary"
+      className="mr-2 mb-2 inline-flex cursor-pointer items-center hover:bg-primary hover:text-primary-foreground"
+      onClick={(e) => onEnvBadgeClick(e, envProject)}
+    >
+      {environmentOptions.find((option) => option.value === env)?.label}
+    </Badge>
+  );
 
   return (
     <Card
@@ -49,15 +69,7 @@ export const ProjectCard = ({ project, envList }: ProjectCardProps) => {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div className="inline">
-                      {envList.slice(0, 3).map((env) => (
-                        <Badge
-                          key={env}
-                          variant="secondary"
-                          className="mr-2 mb-2 inline-flex items-center"
-                        >
-                          {environmentOptions.find((option) => option.value === env)?.label}
-                        </Badge>
-                      ))}
+                      {projects.slice(0, 3).map((p) => renderBadge(p.environment, p))}
                       <Badge
                         variant="secondary"
                         className="inline-flex items-center cursor-pointer"
@@ -68,25 +80,13 @@ export const ProjectCard = ({ project, envList }: ProjectCardProps) => {
                   </TooltipTrigger>
                   <TooltipContent>
                     <div className="flex flex-col flex-wrap gap-2">
-                      {envList.map((env) => (
-                        <Badge key={env} variant="secondary" className="inline-flex items-center">
-                          {environmentOptions.find((option) => option.value === env)?.label}
-                        </Badge>
-                      ))}
+                      {projects.map((p) => renderBadge(p.environment, p))}
                     </div>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             ) : (
-              envList.map((env) => (
-                <Badge
-                  key={env}
-                  variant="secondary"
-                  className="mr-2 mb-2 inline-flex items-center"
-                >
-                  {environmentOptions.find((option) => option.value === env)?.label}
-                </Badge>
-              ))
+              projects.map((p) => renderBadge(p.environment, p))
             )
           ) : (
             <Badge variant="secondary" className="inline-flex items-center">

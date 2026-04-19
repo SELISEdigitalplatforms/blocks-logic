@@ -44,7 +44,7 @@ export const SelfProject = () => {
           <ProjectCard
             key={project.tenantGroupId}
             project={project.projects[0]}
-            envList={project.projects.map((p) => p.environment)}
+            projects={project.projects}
           />
         ))}
       </div>
