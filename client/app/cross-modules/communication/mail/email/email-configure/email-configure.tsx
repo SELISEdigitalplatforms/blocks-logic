@@ -1,8 +1,7 @@
 
 
 import React, { useState } from "react";
-import { ArrowLeft, Pencil, PlusCircle, Trash } from "lucide-react";
-import PageBreadcrumb from "@/components/breadcrumb/breadcrumb";
+import { Pencil, Trash } from "lucide-react";
 import DeleteEmailConfig from "@blocks-communication/mail/components/email-service/modals/delete-email-config/delete-email-config";
 import NewConfiguration from "@blocks-communication/mail/components/email-service/modals/new-configuration/new-configuration";
 import {
@@ -18,11 +17,16 @@ import { cn } from "@/lib/utils";
 import { IEmailConfig, MailServiceProvider } from "@blocks-communication/mail/models/email";
 import { useGetEmailConfigs } from "@blocks-communication/mail/hooks/use-email-config";
 import { Skeleton } from "@/components/ui-kits/skeleton/skeleton";
-import { useNavigate } from "react-router-dom";
 
-export function EmailConfiguration() {
-  const navigate = useNavigate();
-  const [open, setOpen] = useState<boolean>(false);
+interface EmailConfigurationProps {
+  addConfigOpen?: boolean;
+  onAddConfigOpenChange?: (open: boolean) => void;
+}
+
+export function EmailConfiguration({ addConfigOpen, onAddConfigOpenChange }: EmailConfigurationProps = {}) {
+  const [internalOpen, setInternalOpen] = useState<boolean>(false);
+  const open = addConfigOpen !== undefined ? addConfigOpen : internalOpen;
+  const setOpen = onAddConfigOpenChange || setInternalOpen;
   const [isEditOpen, setIsEditOpen] = useState<boolean>(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState<boolean>(false);
 
@@ -88,32 +92,10 @@ export function EmailConfiguration() {
 
   return (
     <div>
-      <div className="hidden md:flex">
-        <PageBreadcrumb breadcrumbIndex={2} />
-      </div>
-      <div className="mt-5 flex items-center justify-between">
-        <div className="item-center flex gap-2">
-          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigate(-1)}>
-            <ArrowLeft className="h-6 w-6" />
-          </Button>
-          <h1 className="text-2xl font-semibold">Configure Email</h1>
-        </div>
-
-        <div>
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" className="h-10 gap-2 px-4 py-1" onClick={() => setOpen(true)}>
-                <PlusCircle className="h-5 w-5" />
-                <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                  Add Configuration
-                </span>
-              </Button>
-            </DialogTrigger>
-            <NewConfiguration dialogTitle="Add Configuration" onClose={() => setOpen(false)} isEdit={false} />
-          </Dialog>
-        </div>
-      </div>
-      {data && data.length > 0 && (
+      <Dialog open={open} onOpenChange={setOpen}>
+        <NewConfiguration dialogTitle="Add Configuration" onClose={() => setOpen(false)} isEdit={false} />
+      </Dialog>
+      {data && data.length > 0 ? (
         <Accordion type="single" collapsible className="mt-6" defaultValue={data[0].itemId}>
           {data.map((config: IEmailConfig, index: number) => (
             <AccordionItem
@@ -242,6 +224,10 @@ export function EmailConfiguration() {
             </AccordionItem>
           ))}
         </Accordion>
+      ) : (
+        <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground bg-background">
+          <p>No email configurations found. Use the Add Configuration button above to create one.</p>
+        </div>
       )}
     </div>
   );

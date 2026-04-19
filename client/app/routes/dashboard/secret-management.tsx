@@ -10,10 +10,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ConfigureCaptcha } from "@blocks-idp/captcha/pages/configure-captcha";
 import { ConfigureCaptchaModal } from "@blocks-idp/captcha/modals/configure-captcha-modal";
 import { ConfigureMFA } from "@blocks-idp/mfa/pages/configure-mfa/configure-mfa";
+import { MagicUrlConfigDialog } from "@blocks-utilities/components/magic-url-config-dialog/magic-url-config-dialog";
+import { useSaveMagicUrlConfig } from "@blocks-utilities/hooks/use-magic-url";
+import { StorageContents } from "@blocks-storage/pages/storage/storage-contents";
+import { ManagedServices } from "@blocks-identifier/pages/services/managed-services";
+import { AddService } from "@blocks-identifier/components/add-service/add-service";
+import { EmailConfiguration } from "@blocks-communication/mail/email/email-configure/email-configure";
 import { Button } from "@/components/ui-kits/button/button";
 import { getApiUrl } from "@/lib/get-api-path";
-import { CirclePlus } from "lucide-react";
-import { MouseEvent, useMemo } from "react";
+import { CirclePlus, Settings, Notebook } from "lucide-react";
+import { MouseEvent, useMemo, useState } from "react";
 import { CAPTCHA_PROVIDERS, CAPTCHA_PROVIDERS_KEY } from "@blocks-idp/captcha/models/captcha";
 import { useGetCaptchaConfigs } from "@blocks-idp/captcha/hooks/use-captcha-config";
 import { useProjectStore } from "@/store/useProjectStore";
@@ -24,6 +30,10 @@ export default function SecretManagementPage() {
   const [selectedTab, setSelectedTab] = useQueryState("tab", { defaultValue: GRANT_TYPES.authorizationCode });
   const tenantId = useProjectStore().selectedProject?.tenantId || "";
   const { data: captchaData } = useGetCaptchaConfigs({ projectKey: tenantId });
+  const { mutateAsync: saveMagicUrlConfig } = useSaveMagicUrlConfig();
+  const [isMagicUrlConfigDialogOpen, setIsMagicUrlConfigDialogOpen] = useState(false);
+  const [isManagedServicesGuideOpen, setIsManagedServicesGuideOpen] = useState(false);
+  const [isEmailConfigOpen, setIsEmailConfigOpen] = useState(false);
 
   const areAllProvidersConfigured = useMemo(() => {
     if (!captchaData?.configurations) return false;
@@ -115,6 +125,37 @@ export default function SecretManagementPage() {
                 API Docs
               </Button>
             )}
+            {selectedTab === "magic-url" && (
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => setIsMagicUrlConfigDialogOpen(true)}>
+                  <Settings className="h-5 w-5" />
+                  <span className="sr-only sm:not-sr-only sm:ml-2.5">Configure</span>
+                </Button>
+                <MagicUrlConfigDialog
+                  open={isMagicUrlConfigDialogOpen}
+                  onOpenChange={setIsMagicUrlConfigDialogOpen}
+                  projectKey={tenantId}
+                  onSave={async (config) => { await saveMagicUrlConfig(config); }}
+                />
+              </div>
+            )}
+            {selectedTab === "managed-services" && (
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => setIsManagedServicesGuideOpen(true)}>
+                  <Notebook className="aspect-square w-4" />
+                  <span className="sr-only sm:not-sr-only sm:ml-2">Setup Guide</span>
+                </Button>
+                <AddService />
+              </div>
+            )}
+            {selectedTab === "email" && (
+              <div className="flex items-center gap-2">
+                <Button size="sm" onClick={() => setIsEmailConfigOpen(true)}>
+                  <CirclePlus className="h-5 w-5" />
+                  <span className="sr-only sm:not-sr-only sm:ml-2.5">Add Configuration</span>
+                </Button>
+              </div>
+            )}
           </>
         </div>
         <TabsContent value={GRANT_TYPES.authorizationCode}>
@@ -131,6 +172,26 @@ export default function SecretManagementPage() {
         </TabsContent>
         <TabsContent value="mfa">
           <ConfigureMFA />
+        </TabsContent>
+        <TabsContent value="magic-url">
+          <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground bg-background">
+            <p>Use the Configure button above to manage Magic URL settings.</p>
+          </div>
+        </TabsContent>
+        <TabsContent value="storage">
+          <StorageContents />
+        </TabsContent>
+        <TabsContent value="managed-services">
+          <ManagedServices
+            guideOpen={isManagedServicesGuideOpen}
+            onGuideOpenChange={setIsManagedServicesGuideOpen}
+          />
+        </TabsContent>
+        <TabsContent value="email">
+          <EmailConfiguration
+            addConfigOpen={isEmailConfigOpen}
+            onAddConfigOpenChange={setIsEmailConfigOpen}
+          />
         </TabsContent>
       </Tabs>
     </div>
