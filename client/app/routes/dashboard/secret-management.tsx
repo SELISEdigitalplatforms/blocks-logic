@@ -7,9 +7,43 @@ import { OIDC } from "@blocks-idp/authentication/components/oidc";
 import { Certificates } from "@blocks-idp/authentication/pages/authentication-config/general/certificates/certificates";
 import { CreateOIDC } from "@blocks-idp/authentication/components/create-oidc";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui-kits/select/select";
+import { ConfigureCaptcha } from "@blocks-idp/captcha/pages/configure-captcha";
+import { ConfigureCaptchaModal } from "@blocks-idp/captcha/modals/configure-captcha-modal";
+import { ConfigureMFA } from "@blocks-idp/mfa/pages/configure-mfa/configure-mfa";
+import { Button } from "@/components/ui-kits/button/button";
+import { getApiUrl } from "@/lib/get-api-path";
+import { CirclePlus } from "lucide-react";
+import { MouseEvent, useMemo } from "react";
+import { CAPTCHA_PROVIDERS, CAPTCHA_PROVIDERS_KEY } from "@blocks-idp/captcha/models/captcha";
+import { useGetCaptchaConfigs } from "@blocks-idp/captcha/hooks/use-captcha-config";
+import { useProjectStore } from "@/store/useProjectStore";
+import { DialogTrigger } from "@radix-ui/react-dialog";
+import { toast } from "@/hooks/use-toast";
 
 export default function SecretManagementPage() {
   const [selectedTab, setSelectedTab] = useQueryState("tab", { defaultValue: GRANT_TYPES.authorizationCode });
+  const tenantId = useProjectStore().selectedProject?.tenantId || "";
+  const { data: captchaData } = useGetCaptchaConfigs({ projectKey: tenantId });
+
+  const areAllProvidersConfigured = useMemo(() => {
+    if (!captchaData?.configurations) return false;
+    const allProviderKeys = Object.keys(CAPTCHA_PROVIDERS) as CAPTCHA_PROVIDERS_KEY[];
+    const configuredProviders = new Set(
+      captchaData.configurations.map((config: { provider: string }) => config.provider),
+    );
+    return allProviderKeys.every((key) => configuredProviders.has(key));
+  }, [captchaData]);
+
+  const addConfigurationHandler = (e: MouseEvent) => {
+    if (areAllProvidersConfigured) {
+      toast({
+        variant: "info",
+        title: "Info",
+        description: "No additional captcha configurations can be added.",
+      });
+      return e.preventDefault();
+    }
+  };
 
   return (
     <div className="p-6">
@@ -43,6 +77,44 @@ export default function SecretManagementPage() {
           </>
           <>
             {selectedTab === GRANT_TYPES.authorizationCode && <CreateOIDC />}
+            {selectedTab === "captcha" && (
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    window.open(
+                      getApiUrl("idp/v1", "swagger/index.html"),
+                      "_blank",
+                    )
+                  }
+                >
+                  API Docs
+                </Button>
+                <ConfigureCaptchaModal>
+                  <DialogTrigger asChild>
+                    <Button size="sm" onClick={addConfigurationHandler}>
+                      <CirclePlus className="h-5 w-5" />
+                      <span className="sr-only sm:not-sr-only sm:ml-2.5">Add Configuration</span>
+                    </Button>
+                  </DialogTrigger>
+                </ConfigureCaptchaModal>
+              </div>
+            )}
+            {selectedTab === "mfa" && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  window.open(
+                    getApiUrl("idp/v1", "swagger/index.html"),
+                    "_blank",
+                  )
+                }
+              >
+                API Docs
+              </Button>
+            )}
           </>
         </div>
         <TabsContent value={GRANT_TYPES.authorizationCode}>
@@ -53,6 +125,12 @@ export default function SecretManagementPage() {
         </TabsContent>
         <TabsContent value="external-idp">
           <Certificates />
+        </TabsContent>
+        <TabsContent value="captcha">
+          <ConfigureCaptcha />
+        </TabsContent>
+        <TabsContent value="mfa">
+          <ConfigureMFA />
         </TabsContent>
       </Tabs>
     </div>

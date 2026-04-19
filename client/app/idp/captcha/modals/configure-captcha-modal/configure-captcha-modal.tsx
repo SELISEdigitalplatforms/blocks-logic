@@ -57,7 +57,7 @@ export const ConfigureCaptchaModal = ({ configuration, children }: ConfigureCapt
 
   const unConfiguredProviders = useMemo(() => {
     if (configuration) return [CAPTCHA_PROVIDERS[configuration.provider]];
-    if (!data) return [];
+    if (!data?.configurations) return Object.values(CAPTCHA_PROVIDERS);
 
     return Object.keys(CAPTCHA_PROVIDERS)
       .filter(

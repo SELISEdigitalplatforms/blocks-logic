@@ -42,9 +42,7 @@ import IamConfigurePage from "./routes/dashboard/iam-configure";
 import AuthenticationConfigPage from "./routes/dashboard/authentication-config";
 import SsoConfigurationPage from "./routes/dashboard/sso-configuration";
 import AuthLogsPage from "./routes/dashboard/auth-logs";
-import MfaConfigPage from "./routes/dashboard/mfa-config";
 import MfaLogsPage from "./routes/dashboard/mfa-logs";
-import CaptchaConfigPage from "./routes/dashboard/captcha-config";
 import CaptchaLogsPage from "./routes/dashboard/captcha-logs";
 import ApiSettingsPage from "./routes/dashboard/api-settings";
 import LmtPage from "./routes/dashboard/lmt";
@@ -117,13 +115,13 @@ export const router = createBrowserRouter([
       { path: "/services/authentication", element: <AuthenticationConfigPage /> },
       { path: "/services/authentication/sso-configuration", element: <SsoConfigurationPage /> },
       { path: "/services/authentication/logs", element: <AuthLogsPage /> },
-      { path: "/services/mfa", element: <MfaConfigPage /> },
+      { path: "/services/mfa", element: <Navigate to="/services/secret-management?tab=mfa" replace /> },
       { path: "/services/mfa/logs", element: <MfaLogsPage /> },
       { path: "/services/api-settings", element: <ApiSettingsPage /> },
       { path: "/services/lmt", element: <LmtPage /> },
       { path: "/services/lmt/logs/:serviceName", element: <LmtServiceLogsPage /> },
       { path: "/services/secret-management", element: <SecretManagementPage /> },
-      { path: "/services/captcha", element: <CaptchaConfigPage /> },
+      { path: "/services/captcha", element: <Navigate to="/services/secret-management?tab=captcha" replace /> },
       { path: "/services/captcha/logs", element: <CaptchaLogsPage /> },
     ],
   },
