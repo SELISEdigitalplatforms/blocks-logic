@@ -1,7 +1,7 @@
-using BlocksCloudDomain.Models;
-using BlocksCloudDomain.Requests;
+using Cloud.DomainService.Models;
+using Cloud.DomainService.Requests;
 
-namespace BlocksCloudDomain.Repositories
+namespace Cloud.DomainService.Repositories
 {
     public interface IApiEndpointConfigRepository
     {

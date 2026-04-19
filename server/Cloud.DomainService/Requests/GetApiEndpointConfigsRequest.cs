@@ -1,6 +1,6 @@
 using Blocks.Genesis;
 
-namespace BlocksCloudDomain.Requests
+namespace Cloud.DomainService.Requests
 {
     public class GetApiEndpointConfigsRequest : BaseGetsRequest<ApiEndpointConfigFilter>, IProjectKey
     {
