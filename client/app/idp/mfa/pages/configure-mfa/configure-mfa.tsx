@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from "@tanstack/react-table";
-import { getApiUrl } from "@/lib/get-api-path";
 import { Button } from "@/components/ui-kits/button/button";
 import { EllipsisVertical } from "lucide-react";
 import { Card, CardContent } from "@/components/ui-kits/card/card";
@@ -25,7 +24,6 @@ import { useGetMFAConfig, useSaveMFAConfig } from "../../hooks/use-mfa-config";
 import { useProjectStore } from "@/store/useProjectStore";
 import { Skeleton } from "@/components/ui-kits/skeleton/skeleton";
 import { MFA_Provider_Data } from "../../utils/mfa-config";
-import { LogMenu } from "@blocks-lmt/components";
 import { Dialog } from "@/components/ui-kits/dialog/dialog";
 import ConfirmationModal from "@/components/confirmation-modal/confirmation-modal";
 import { Link } from "react-router-dom";
@@ -170,32 +168,14 @@ export const ConfigureMFA = () => {
   return (
     <>
       <div>
-        <div className="mb-[18px] flex items-center justify-between md:mb-[24px]">
-          <div className="item-center flex gap-2">
-            <h1 className="text-lg font-semibold md:text-2xl">Multi-factor Authentication</h1>
-          </div>
-          <div className="flex items-center gap-2 md:gap-4">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() =>
-                window.open(
-                  getApiUrl("idp/v1", "swagger/index.html"),
-                  "_blank",
-                )
-              }
-            >
-              API Docs
-            </Button>
-            <LogMenu link="/services/mfa/logs" />
-          </div>
-        </div>
-
-        <div className="flex w-full flex-col">
-          <Card>
+          <Card className="border-none shadow-none">
             <CardContent>
               {loading ? (
                 <LoadingSkelton />
+              ) : mfaConfigData.length === 0 ? (
+                <div className="flex h-32 flex-wrap items-center justify-center rounded-sm border-none bg-background p-4 text-center">
+                  <p className="text-muted-foreground">No configurations found. MFA is not yet configured for this project.</p>
+                </div>
               ) : (
                 <Table className="text-sm md:table-fixed">
                   <TableHeader>
@@ -225,7 +205,6 @@ export const ConfigureMFA = () => {
             </CardContent>
           </Card>
         </div>
-      </div>
       <Dialog open={openEnableDisableModal} onOpenChange={setOpenEnableDisableModal}>
         <ConfirmationModal
           onCancel={() => {}}

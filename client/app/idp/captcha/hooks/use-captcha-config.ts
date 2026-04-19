@@ -4,7 +4,7 @@ import { IGetCaptchaConfigsPayload } from "../models/captcha";
 
 export const useGetCaptchaConfigs = (options: IGetCaptchaConfigsPayload) => {
   return useQuery({
-    queryKey: ["captcha-configs", options],
+    queryKey: ["captcha-configs", options.projectKey],
     queryFn: () => captchaService.getCaptchaConfigs(options),
   });
 };

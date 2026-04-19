@@ -4,7 +4,7 @@ import { IGetUserByIdPayload } from "@blocks-idp/iam/models/user";
 
 export const useGetMFAConfig = (option: { projectKey: string }) => {
   return useQuery({
-    queryKey: ["mfa-config", "get", option],
+    queryKey: ["mfa-config", "get", option.projectKey],
     queryFn: () => mfaService.getConfigurations({ projectKey: option.projectKey }),
   });
 };
