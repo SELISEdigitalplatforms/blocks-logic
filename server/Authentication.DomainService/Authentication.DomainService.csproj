@@ -13,6 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\BlocksCloudDomain\BlocksCloudDomain.csproj" />
     <ProjectReference Include="..\Iam.DomainService\Iam.DomainService.csproj" />
     <ProjectReference Include="..\Mfa.DomainService\Mfa.DomainService.csproj" />
   </ItemGroup>
