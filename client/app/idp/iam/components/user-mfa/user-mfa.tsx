@@ -48,7 +48,7 @@ export const ProjectMFA = () => {
         <div className="flex items-center justify-between">
           <CardTitle>Multi-factor Authentication</CardTitle>
           <Button asChild variant="outline" size="sm">
-            <Link to="/services/mfa">Go to MFA Settings</Link>
+            <Link to="/services/secret-management?tab=mfa">Go to MFA Settings</Link>
           </Button>
         </div>
       </CardHeader>

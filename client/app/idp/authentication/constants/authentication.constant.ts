@@ -57,6 +57,16 @@ export const SecretManagementTabs: { id: string; label: string; value: string }[
     label: "External IdP",
     value: "external-idp",
   },
+  {
+    id: "captcha",
+    label: "Captcha",
+    value: "captcha",
+  },
+  {
+    id: "mfa",
+    label: "MFA",
+    value: "mfa",
+  },
 ];
 
 export const providers = [
