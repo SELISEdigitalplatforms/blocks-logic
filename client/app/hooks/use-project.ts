@@ -16,7 +16,7 @@ export const useGetProjects = (tenantGroupId = "") => {
   const query = useQuery({
     queryKey: ["identifier", "projects", tenantGroupId],
     queryFn: () => projectService.getProjects(0, 100, tenantGroupId),
-    staleTime: 0,
+    staleTime: 5 * 60 * 1000, // 5 minutes - prevent unnecessary refetches during navigation
   });
 
   useEffect(() => {
