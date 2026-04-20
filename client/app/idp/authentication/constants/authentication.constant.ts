@@ -43,6 +43,21 @@ export const AuthenticationTabs: { id: string; label: string; value: string }[] 
 
 export const SecretManagementTabs: { id: string; label: string; value: string }[] = [
   {
+    id: "infra-config",
+    label: "Infra Config",
+    value: "infra-config",
+  },
+  {
+    id: "my-secret",
+    label: "My Secret",
+    value: "my-secret",
+  },
+  {
+    id: "managed-services",
+    label: "My Service",
+    value: "managed-services",
+  },
+  {
     id: GRANT_TYPES.authorizationCode,
     label: "OIDC",
     value: GRANT_TYPES.authorizationCode,
@@ -78,14 +93,14 @@ export const SecretManagementTabs: { id: string; label: string; value: string }[
     value: "storage",
   },
   {
-    id: "managed-services",
-    label: "Managed Services",
-    value: "managed-services",
-  },
-  {
     id: "email",
     label: "Email",
     value: "email",
+  },
+  {
+    id: "notification",
+    label: "Notification",
+    value: "notification",
   },
 ];
 
