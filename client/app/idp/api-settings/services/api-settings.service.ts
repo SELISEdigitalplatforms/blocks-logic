@@ -13,7 +13,12 @@ import {
 
 class ApiSettingsService {
   getEndpoints(payload: IGetApiEndpointsPayload): Promise<IGetApiEndpointsResponse> {
-    return http.get(`${API_SETTINGS_ENDPOINTS.GETS}?ProjectKey=${payload.projectKey}`);
+    return http.post(API_SETTINGS_ENDPOINTS.GET_LIST, {
+      projectKey: payload.projectKey,
+      page: payload.page ?? 0,
+      pageSize: payload.pageSize ?? 100,
+      filter: payload.filter ?? {},
+    });
   }
 
   updateEndpoint(payload: IUpdateApiEndpointPayload): Promise<IUpdateApiEndpointResponse> {
