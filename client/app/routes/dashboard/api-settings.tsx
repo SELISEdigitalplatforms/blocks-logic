@@ -8,11 +8,8 @@ import {
   useGetApiEndpoints,
   useUpdateApiEndpoint,
   useBulkUpdateApiEndpoints,
-  useRemoveApiEndpoints,
 } from "@blocks-idp/api-settings/hooks/use-api-settings";
 import { IApiEndpoint } from "@blocks-idp/api-settings/models/api-endpoint.model";
-import ConfirmationModal from "@/components/confirmation-modal/confirmation-modal";
-import { Dialog } from "@/components/ui-kits/dialog/dialog";
 
 /** ─── Loading skeleton ──────────────────────────────────────────────────────── */
 const ServiceGroupSkeleton = () => (
@@ -36,10 +33,8 @@ export default function ApiSettingsPage() {
   const { data, isLoading } = useGetApiEndpoints({ projectKey: tenantId, page: 0, pageSize: 100 });
   const { mutateAsync: updateEndpoint } = useUpdateApiEndpoint();
   const { mutateAsync: bulkUpdate } = useBulkUpdateApiEndpoints();
-  const { mutateAsync: removeEndpoints } = useRemoveApiEndpoints();
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
 
   const endpoints = data?.data ?? [];
 
@@ -122,22 +117,68 @@ export default function ApiSettingsPage() {
   const handleBulkGroupMfa = useCallback(
     async (ids: string[], value: boolean) => {
       try {
-        await bulkUpdate({ projectKey: tenantId, itemIds: ids, isMfaRequired: value });
+        // Preserve current Captcha state when toggling MFA
+        const groupEndpoints = endpoints.filter((ep) => ids.includes(ep.itemId));
+        const captchaState =
+          groupEndpoints.length > 0
+            ? groupEndpoints.every((ep) => ep.isCaptchaRequired)
+              ? true
+              : groupEndpoints.some((ep) => ep.isCaptchaRequired)
+                ? false // default to false if mixed states
+                : false
+            : false;
+
+        await bulkUpdate({
+          projectKey: tenantId,
+          itemIds: ids,
+          isMfaRequired: value,
+          isCaptchaRequired: captchaState,
+          disableAll: false,
+        });
         showSuccessToast({ description: `MFA ${value ? "enabled" : "disabled"} for ${ids.length} endpoints` });
       } catch {
         showErrorToast({ errors: "Failed to bulk update MFA" });
       }
     },
-    [tenantId, bulkUpdate],
+    [tenantId, endpoints, bulkUpdate],
   );
 
   const handleBulkGroupCaptcha = useCallback(
     async (ids: string[], value: boolean) => {
       try {
-        await bulkUpdate({ projectKey: tenantId, itemIds: ids, isCaptchaRequired: value });
+        // Preserve current MFA state when toggling Captcha
+        const groupEndpoints = endpoints.filter((ep) => ids.includes(ep.itemId));
+        const mfaState =
+          groupEndpoints.length > 0
+            ? groupEndpoints.every((ep) => ep.isMfaRequired)
+              ? true
+              : groupEndpoints.some((ep) => ep.isMfaRequired)
+                ? false // default to false if mixed states
+                : false
+            : false;
+
+        await bulkUpdate({
+          projectKey: tenantId,
+          itemIds: ids,
+          isCaptchaRequired: value,
+          isMfaRequired: mfaState,
+          disableAll: false,
+        });
         showSuccessToast({ description: `Captcha ${value ? "enabled" : "disabled"} for ${ids.length} endpoints` });
       } catch {
         showErrorToast({ errors: "Failed to bulk update Captcha" });
+      }
+    },
+    [tenantId, endpoints, bulkUpdate],
+  );
+
+  const handleBulkGroupDisableAll = useCallback(
+    async (ids: string[]) => {
+      try {
+        await bulkUpdate({ projectKey: tenantId, itemIds: ids, isMfaRequired: false, isCaptchaRequired: false, disableAll: true });
+        showSuccessToast({ description: `All security features disabled for ${ids.length} endpoints` });
+      } catch {
+        showErrorToast({ errors: "Failed to disable security features" });
       }
     },
     [tenantId, bulkUpdate],
@@ -148,34 +189,57 @@ export default function ApiSettingsPage() {
 
   const handleBulkMfa = useCallback(async () => {
     try {
-      await bulkUpdate({ projectKey: tenantId, itemIds: selectedArray, isMfaRequired: true });
+      // Preserve current Captcha state when enabling MFA
+      const selectedEndpoints = endpoints.filter((ep) => selectedArray.includes(ep.itemId));
+      const captchaState =
+        selectedEndpoints.length > 0
+          ? selectedEndpoints.every((ep) => ep.isCaptchaRequired)
+            ? true
+            : selectedEndpoints.some((ep) => ep.isCaptchaRequired)
+              ? false // default to false if mixed states
+              : false
+          : false;
+
+      await bulkUpdate({
+        projectKey: tenantId,
+        itemIds: selectedArray,
+        isMfaRequired: true,
+        isCaptchaRequired: captchaState,
+        disableAll: false,
+      });
       showSuccessToast({ description: `MFA enabled for ${selectedArray.length} endpoints` });
       clearSelection();
     } catch {
       showErrorToast({ errors: "Failed to enable MFA" });
     }
-  }, [tenantId, selectedArray, bulkUpdate, clearSelection]);
+  }, [tenantId, endpoints, selectedArray, bulkUpdate, clearSelection]);
 
   const handleBulkCaptcha = useCallback(async () => {
     try {
-      await bulkUpdate({ projectKey: tenantId, itemIds: selectedArray, isCaptchaRequired: true });
+      // Preserve current MFA state when enabling Captcha
+      const selectedEndpoints = endpoints.filter((ep) => selectedArray.includes(ep.itemId));
+      const mfaState =
+        selectedEndpoints.length > 0
+          ? selectedEndpoints.every((ep) => ep.isMfaRequired)
+            ? true
+            : selectedEndpoints.some((ep) => ep.isMfaRequired)
+              ? false // default to false if mixed states
+              : false
+          : false;
+
+      await bulkUpdate({
+        projectKey: tenantId,
+        itemIds: selectedArray,
+        isCaptchaRequired: true,
+        isMfaRequired: mfaState,
+        disableAll: false,
+      });
       showSuccessToast({ description: `Captcha enabled for ${selectedArray.length} endpoints` });
       clearSelection();
     } catch {
       showErrorToast({ errors: "Failed to enable Captcha" });
     }
-  }, [tenantId, selectedArray, bulkUpdate, clearSelection]);
-
-  const handleBulkRemove = useCallback(async () => {
-    try {
-      await removeEndpoints({ projectKey: tenantId, itemIds: selectedArray });
-      showSuccessToast({ description: `${selectedArray.length} endpoints removed` });
-      clearSelection();
-      setRemoveConfirmOpen(false);
-    } catch {
-      showErrorToast({ errors: "Failed to remove endpoints" });
-    }
-  }, [tenantId, selectedArray, removeEndpoints, clearSelection]);
+  }, [tenantId, endpoints, selectedArray, bulkUpdate, clearSelection]);
 
   return (
     <main className="flex flex-col gap-6 p-6 pb-24">
@@ -222,25 +286,8 @@ export default function ApiSettingsPage() {
         selectedCount={selectedIds.size}
         onEnableMfa={handleBulkMfa}
         onEnableCaptcha={handleBulkCaptcha}
-        onRemove={() => setRemoveConfirmOpen(true)}
         onClear={clearSelection}
       />
-
-      {/* Remove confirmation */}
-      <Dialog open={removeConfirmOpen} onOpenChange={setRemoveConfirmOpen}>
-        <ConfirmationModal
-          data={{
-            dialogTitle: "Remove Endpoints",
-            dialogSubtitle: `Are you sure you want to remove ${selectedIds.size} endpoint${selectedIds.size !== 1 ? "s" : ""}? This action cannot be undone.`,
-            confirmButton: "Remove",
-            cancelButton: "Cancel",
-          }}
-          onConfirm={handleBulkRemove}
-          onCancel={() => setRemoveConfirmOpen(false)}
-        />
-      </Dialog>
-
-
     </main>
   );
 }

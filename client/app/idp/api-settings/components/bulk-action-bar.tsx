@@ -1,12 +1,11 @@
 import { Button } from "@/components/ui-kits/button/button";
-import { Shield, ShieldCheck, Trash2, X } from "lucide-react";
+import { Shield, ShieldCheck, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type BulkActionBarProps = {
   selectedCount: number;
   onEnableMfa: () => void;
   onEnableCaptcha: () => void;
-  onRemove: () => void;
   onClear: () => void;
 };
 
@@ -14,7 +13,6 @@ export const BulkActionBar = ({
   selectedCount,
   onEnableMfa,
   onEnableCaptcha,
-  onRemove,
   onClear,
 }: BulkActionBarProps) => {
   return (
@@ -46,16 +44,6 @@ export const BulkActionBar = ({
         <Button variant="ghost" size="sm" className="gap-1.5" onClick={onEnableCaptcha}>
           <Shield className="h-4 w-4" />
           Enable Captcha
-        </Button>
-
-        <Button
-          variant="ghost"
-          size="sm"
-          className="gap-1.5 text-destructive hover:text-destructive"
-          onClick={onRemove}
-        >
-          <Trash2 className="h-4 w-4" />
-          Remove
         </Button>
 
         <div className="mx-1 h-6 w-px bg-border" />
