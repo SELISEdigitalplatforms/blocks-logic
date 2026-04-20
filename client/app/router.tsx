@@ -45,6 +45,7 @@ import AuthLogsPage from "./routes/dashboard/auth-logs";
 import MfaLogsPage from "./routes/dashboard/mfa-logs";
 import CaptchaLogsPage from "./routes/dashboard/captcha-logs";
 import ApiSettingsPage from "./routes/dashboard/api-settings";
+import RateLimiterPage from "./routes/dashboard/rate-limiter";
 import LmtPage from "./routes/dashboard/lmt";
 import LmtServiceLogsPage from "./routes/dashboard/lmt-service-logs";
 import SecretManagementPage from "./routes/dashboard/secret-management";
@@ -119,6 +120,7 @@ export const router = createBrowserRouter([
       { path: "/services/mfa", element: <Navigate to="/services/secret-management?tab=mfa" replace /> },
       { path: "/services/mfa/logs", element: <MfaLogsPage /> },
       { path: "/services/api-settings", element: <ApiSettingsPage /> },
+      { path: "/services/rate-limiter", element: <RateLimiterPage /> },
       { path: "/services/lmt", element: <LmtPage /> },
       { path: "/services/lmt/logs/:serviceName", element: <LmtServiceLogsPage /> },
       { path: "/services/secret-management", element: <SecretManagementPage /> },

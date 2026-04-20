@@ -1,5 +1,5 @@
 import { Menu } from "@/models/menu-models";
-import { Home, Package, Users, BookMinus, Settings, Shield, Key, ShieldCheck, ScanFace, Lock, LayoutDashboard, Zap } from "lucide-react";
+import { Home, Package, Users, BookMinus, Settings, Shield, Key, ShieldCheck, ScanFace, Lock, LayoutDashboard, Zap, Gauge } from "lucide-react";
 
 export const navigationMenus: Menu[] = [
   {
@@ -79,6 +79,13 @@ export const navigationMenus: Menu[] = [
     name: "API Settings",
     path: "/services/api-settings",
     icon: Settings,
+  },
+  {
+    id: "service-identity__rate-limiter",
+    type: "menu",
+    name: "Rate Limiter",
+    path: "/services/rate-limiter",
+    icon: Gauge,
   },
   
   {
