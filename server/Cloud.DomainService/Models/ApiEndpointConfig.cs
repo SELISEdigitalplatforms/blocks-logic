@@ -29,5 +29,11 @@ namespace Cloud.DomainService.Models
 
         [BsonElement("MfaType")]
         public string? MfaType { get; set; }
+        [BsonElement("Controller")]
+        public string Controller { get; set; }
+        [BsonElement("BaseUrl")]
+        public string BaseUrl { get; set; }
+        [BsonElement("Version")]
+        public string Version { get; set; }
     }
 }
