@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, BookOpen } from "lucide-react";
 import { Checkbox } from "@/components/ui-kits/checkbox/checkbox";
 import { Badge } from "@/components/ui-kits/badge/badge";
+import { Button } from "@/components/ui-kits/button/button";
 import {
   Collapsible,
   CollapsibleContent,
@@ -48,11 +49,28 @@ export const ServiceGroupCard = ({
     onSelectGroup(groupIds, checked);
   };
 
+  const getSwaggerUrl = () => {
+    const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+    const protocol = window.location.protocol;
+    const host = window.location.host;
+    const baseUrl = `${protocol}//${host}`;
+    
+    if (isLocalhost) {
+      return `${baseUrl}/api/${service}/v1/swagger/index.html`;
+    } else {
+      return `${baseUrl}/${service}/v1/swagger/index.html`;
+    }
+  };
+
+  const handleOpenApiDocs = () => {
+    window.open(getSwaggerUrl(), "_blank");
+  };
+
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <div className="rounded-lg border border-border bg-card">
         {/* Header */}
-        <div className="flex items-center gap-3 px-4 py-3">
+        <div className="flex items-center gap-2 px-3 py-3 sm:gap-3 sm:px-4">
           <Checkbox
             checked={allSelected}
             // @ts-expect-error indeterminate is supported by radix but not typed
@@ -72,16 +90,26 @@ export const ServiceGroupCard = ({
             </button>
           </CollapsibleTrigger>
 
-          <div className="flex shrink-0 items-center gap-2">
-            <Badge variant="outline" className="rounded-full font-mono text-xs">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+            <Badge className="hidden sm:flex rounded-full font-mono text-xs bg-primary/10 text-primary">
               {endpoints.length} Endpoint{endpoints.length !== 1 ? "s" : ""}
             </Badge>
             <SecurityPresetsPopover
               onEnableAllMfa={() => onBulkGroupMfa(groupIds, true)}
               onEnableAllCaptcha={() => onBulkGroupCaptcha(groupIds, true)}
             />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleOpenApiDocs}
+              title="Open API Documentation"
+              className="gap-1.5 px-2 sm:px-3"
+            >
+              <BookOpen className="h-3.5 w-3.5 shrink-0" />
+              <span className="hidden lg:inline">API Docs</span>
+            </Button>
             <CollapsibleTrigger asChild>
-              <button className="rounded-md p-1 hover:bg-accent">
+              <button className="rounded-md p-1.5 transition-colors hover:bg-accent">
                 <ChevronDown
                   className={cn(
                     "h-4 w-4 text-muted-foreground transition-transform duration-200",
@@ -95,7 +123,7 @@ export const ServiceGroupCard = ({
 
         {/* Expanded endpoint list */}
         <CollapsibleContent>
-          <div className="flex flex-col gap-2 border-t border-border px-4 py-3">
+          <div className="flex flex-col gap-1.5 border-t border-border px-3 py-3 sm:px-4">
             {endpoints.map((ep) => (
               <EndpointRow
                 key={ep.itemId}
