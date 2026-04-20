@@ -55,5 +55,21 @@ namespace Cloud.DomainService.Repositories
 
             return result.ModifiedCount > 0;
         }
+
+        public async Task<long> BulkUpdateAsync(string projectKey, List<string> itemIds, bool isCaptchaRequired, bool isMfaRequired, string updatedBy)
+        {
+            var db = _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, projectKey);
+            var collection = db.GetCollection<ApiEndpointConfig>(CollectionName);
+
+            var filter = Builders<ApiEndpointConfig>.Filter.In(x => x.ItemId, itemIds);
+            var update = Builders<ApiEndpointConfig>.Update
+                .Set(x => x.IsCaptchaRequired, isCaptchaRequired)
+                .Set(x => x.IsMfaRequired, isMfaRequired)
+                .Set(x => x.LastUpdatedBy, updatedBy)
+                .Set(x => x.LastUpdatedDate, DateTime.UtcNow);
+
+            var result = await collection.UpdateManyAsync(filter, update);
+            return result.ModifiedCount;
+        }
     }
 }
