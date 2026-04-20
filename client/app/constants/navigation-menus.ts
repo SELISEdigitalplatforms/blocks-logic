@@ -81,14 +81,6 @@ export const navigationMenus: Menu[] = [
     icon: Settings,
   },
   {
-    id: "service-identity__rate-limiter",
-    type: "menu",
-    name: "Rate Limiter",
-    path: "/services/rate-limiter",
-    icon: Gauge,
-  },
-  
-  {
     id: "service-identity__secret-management",
     type: "menu",
     name: "Secrets & Configs",
