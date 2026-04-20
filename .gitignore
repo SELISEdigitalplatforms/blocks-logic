@@ -172,3 +172,4 @@ server/Api/wwwroot/**
   server/XUnitTest/bin/
   server/XUnitTest/obj/
 
+/server/.claude
