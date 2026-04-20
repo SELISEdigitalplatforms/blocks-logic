@@ -6,6 +6,7 @@ using DomainService.Shared;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
+using Cloud.LmtService.Utilities;
 
 var serviceName = "blocks-idp-api";
 var secret = await ApplicationConfigurations.ConfigureLogAndSecretsAsync(serviceName, VaultType.Azure);
@@ -37,6 +38,7 @@ Directory.CreateDirectory(wwwrootPath);
 services.RegisterAllServices();
 services.AddApplicationServices();
 services.AddCloudDomainServices();
+services.AddCloudLmtServices();
 
 var app = builder.Build();
 

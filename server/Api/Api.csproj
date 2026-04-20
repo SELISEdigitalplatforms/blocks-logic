@@ -18,6 +18,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Authentication.DomainService\Authentication.DomainService.csproj" />
     <ProjectReference Include="..\Cloud.DomainService\Cloud.DomainService.csproj" />
+    <ProjectReference Include="..\Cloud.LmtService\Cloud.LmtService.csproj" />
 
     <ProjectReference Include="..\Identifier.DomainService\Identifier.DomainService.csproj" />
   </ItemGroup>
