@@ -8,5 +8,6 @@ namespace Cloud.DomainService.Services
     {
         Task<GetApiEndpointConfigsResponse> GetListAsync(GetApiEndpointConfigsRequest request);
         Task<BaseResponse> UpdateAsync(UpdateApiEndpointConfigRequest request);
+        Task<BaseResponse> BulkUpdateAsync(BulkUpdateApiEndpointConfigRequest request);
     }
 }
