@@ -1,13 +1,18 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useProjectStore } from "@/store/useProjectStore";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui-kits/skeleton/skeleton";
 import { ServiceGroupCard } from "@blocks-idp/api-settings/components/service-group-card";
+import { BulkActionBar } from "@blocks-idp/api-settings/components/bulk-action-bar";
 import {
   useGetApiEndpoints,
   useUpdateApiEndpoint,
+  useBulkUpdateApiEndpoints,
+  useRemoveApiEndpoints,
 } from "@blocks-idp/api-settings/hooks/use-api-settings";
 import { IApiEndpoint } from "@blocks-idp/api-settings/models/api-endpoint.model";
+import ConfirmationModal from "@/components/confirmation-modal/confirmation-modal";
+import { Dialog } from "@/components/ui-kits/dialog/dialog";
 
 /** ─── Loading skeleton ──────────────────────────────────────────────────────── */
 const ServiceGroupSkeleton = () => (
@@ -30,6 +35,11 @@ export default function ApiSettingsPage() {
   const tenantId = useProjectStore().selectedProject?.tenantId || "";
   const { data, isLoading } = useGetApiEndpoints({ projectKey: tenantId, page: 0, pageSize: 100 });
   const { mutateAsync: updateEndpoint } = useUpdateApiEndpoint();
+  const { mutateAsync: bulkUpdate } = useBulkUpdateApiEndpoints();
+  const { mutateAsync: removeEndpoints } = useRemoveApiEndpoints();
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
 
   const endpoints = data?.data ?? [];
 
@@ -42,7 +52,26 @@ export default function ApiSettingsPage() {
     return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
   }, [endpoints]);
 
-  // ── Toggle handlers ───────────────────────────────────────────────────────
+  // ── Selection handlers ──────────────────────────────────────────────────────
+  const handleSelectEndpoint = useCallback((id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      checked ? next.add(id) : next.delete(id);
+      return next;
+    });
+  }, []);
+
+  const handleSelectGroup = useCallback((ids: string[], checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => (checked ? next.add(id) : next.delete(id)));
+      return next;
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  // ── Toggle handlers ────────────────────────────────────────────────────────
   const handleToggleMfa = useCallback(
     async (ep: IApiEndpoint, value: boolean) => {
       try {
@@ -89,6 +118,65 @@ export default function ApiSettingsPage() {
     [tenantId, updateEndpoint],
   );
 
+  // ── Bulk handlers (group presets) ─────────────────────────────────────────
+  const handleBulkGroupMfa = useCallback(
+    async (ids: string[], value: boolean) => {
+      try {
+        await bulkUpdate({ projectKey: tenantId, itemIds: ids, isMfaRequired: value });
+        showSuccessToast({ description: `MFA ${value ? "enabled" : "disabled"} for ${ids.length} endpoints` });
+      } catch {
+        showErrorToast({ errors: "Failed to bulk update MFA" });
+      }
+    },
+    [tenantId, bulkUpdate],
+  );
+
+  const handleBulkGroupCaptcha = useCallback(
+    async (ids: string[], value: boolean) => {
+      try {
+        await bulkUpdate({ projectKey: tenantId, itemIds: ids, isCaptchaRequired: value });
+        showSuccessToast({ description: `Captcha ${value ? "enabled" : "disabled"} for ${ids.length} endpoints` });
+      } catch {
+        showErrorToast({ errors: "Failed to bulk update Captcha" });
+      }
+    },
+    [tenantId, bulkUpdate],
+  );
+
+  // ── Bulk bar actions ───────────────────────────────────────────────────────
+  const selectedArray = useMemo(() => Array.from(selectedIds), [selectedIds]);
+
+  const handleBulkMfa = useCallback(async () => {
+    try {
+      await bulkUpdate({ projectKey: tenantId, itemIds: selectedArray, isMfaRequired: true });
+      showSuccessToast({ description: `MFA enabled for ${selectedArray.length} endpoints` });
+      clearSelection();
+    } catch {
+      showErrorToast({ errors: "Failed to enable MFA" });
+    }
+  }, [tenantId, selectedArray, bulkUpdate, clearSelection]);
+
+  const handleBulkCaptcha = useCallback(async () => {
+    try {
+      await bulkUpdate({ projectKey: tenantId, itemIds: selectedArray, isCaptchaRequired: true });
+      showSuccessToast({ description: `Captcha enabled for ${selectedArray.length} endpoints` });
+      clearSelection();
+    } catch {
+      showErrorToast({ errors: "Failed to enable Captcha" });
+    }
+  }, [tenantId, selectedArray, bulkUpdate, clearSelection]);
+
+  const handleBulkRemove = useCallback(async () => {
+    try {
+      await removeEndpoints({ projectKey: tenantId, itemIds: selectedArray });
+      showSuccessToast({ description: `${selectedArray.length} endpoints removed` });
+      clearSelection();
+      setRemoveConfirmOpen(false);
+    } catch {
+      showErrorToast({ errors: "Failed to remove endpoints" });
+    }
+  }, [tenantId, selectedArray, removeEndpoints, clearSelection]);
+
   return (
     <main className="flex flex-col gap-6 p-6 pb-24">
       {/* Header */}
@@ -117,12 +205,40 @@ export default function ApiSettingsPage() {
               key={service}
               service={service}
               endpoints={eps}
+              selectedIds={selectedIds}
+              onSelectEndpoint={handleSelectEndpoint}
+              onSelectGroup={handleSelectGroup}
               onToggleMfa={handleToggleMfa}
               onToggleCaptcha={handleToggleCaptcha}
+              onBulkGroupMfa={handleBulkGroupMfa}
+              onBulkGroupCaptcha={handleBulkGroupCaptcha}
             />
           ))}
         </div>
       )}
+
+      {/* Bulk action bar */}
+      <BulkActionBar
+        selectedCount={selectedIds.size}
+        onEnableMfa={handleBulkMfa}
+        onEnableCaptcha={handleBulkCaptcha}
+        onRemove={() => setRemoveConfirmOpen(true)}
+        onClear={clearSelection}
+      />
+
+      {/* Remove confirmation */}
+      <Dialog open={removeConfirmOpen} onOpenChange={setRemoveConfirmOpen}>
+        <ConfirmationModal
+          data={{
+            dialogTitle: "Remove Endpoints",
+            dialogSubtitle: `Are you sure you want to remove ${selectedIds.size} endpoint${selectedIds.size !== 1 ? "s" : ""}? This action cannot be undone.`,
+            confirmButton: "Remove",
+            cancelButton: "Cancel",
+          }}
+          onConfirm={handleBulkRemove}
+          onCancel={() => setRemoveConfirmOpen(false)}
+        />
+      </Dialog>
 
 
     </main>

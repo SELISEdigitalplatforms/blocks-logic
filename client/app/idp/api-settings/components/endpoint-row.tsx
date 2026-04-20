@@ -1,3 +1,4 @@
+import { Checkbox } from "@/components/ui-kits/checkbox/checkbox";
 import { Switch } from "@/components/ui-kits/switch/switch";
 import { Badge } from "@/components/ui-kits/badge/badge";
 import { Lock } from "lucide-react";
@@ -6,12 +7,16 @@ import { IApiEndpoint } from "../models/api-endpoint.model";
 
 type EndpointRowProps = {
   endpoint: IApiEndpoint;
+  isSelected: boolean;
+  onSelect: (id: string, checked: boolean) => void;
   onToggleMfa: (endpoint: IApiEndpoint, value: boolean) => void;
   onToggleCaptcha: (endpoint: IApiEndpoint, value: boolean) => void;
 };
 
 export const EndpointRow = ({
   endpoint,
+  isSelected,
+  onSelect,
   onToggleMfa,
   onToggleCaptcha,
 }: EndpointRowProps) => {
@@ -19,8 +24,12 @@ export const EndpointRow = ({
 
   return (
     <div className="flex flex-col gap-3 rounded-md border border-border bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-      {/* Left: method + path + description */}
+      {/* Left: checkbox + method + path + description */}
       <div className="flex items-center gap-3 min-w-0 flex-1">
+        <Checkbox
+          checked={isSelected}
+          onCheckedChange={(checked) => onSelect(endpoint.itemId, !!checked)}
+        />
         <MethodBadge method={endpoint.method} />
         <code className="truncate rounded bg-muted px-2 py-0.5 text-sm font-medium">
           {endpoint.endpoint}
