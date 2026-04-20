@@ -9,8 +9,5 @@
 		<PackageReference Include="MongoDB.Driver" Version="3.5.0" />
 		<PackageReference Include="SeliseBlocks.Genesis" Version="9.0.44" />
 	</ItemGroup>
-  <ItemGroup>
-    <Folder Include="Models\Trace\" />
-  </ItemGroup>
 
 </Project>

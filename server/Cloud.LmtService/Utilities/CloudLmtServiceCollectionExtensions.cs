@@ -1,5 +1,7 @@
 ﻿using Cloud.LmtService.Repositories.Logs;
+using Cloud.LmtService.Repositories.Trace;
 using Cloud.LmtService.Services.Logs;
+using Cloud.LmtService.Services.Trace;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
@@ -13,6 +15,8 @@ namespace Cloud.LmtService.Utilities
         {
             services.AddSingleton<ILogService, LogService>();
             services.AddSingleton<ILogRepository, LogRepository>();
+            services.AddSingleton<ITraceRepository, TraceRepository>();
+            services.AddSingleton<ITraceService, TraceService>();
         }
     }
 }
