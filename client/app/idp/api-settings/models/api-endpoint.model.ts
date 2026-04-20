@@ -17,21 +17,39 @@ export interface IApiEndpoint {
   mfaType: string;
 }
 
+export interface IApiEndpointFilter {
+  service?: string;
+  method?: string;
+  endpoint?: string;
+}
+
 export interface IGetApiEndpointsPayload {
   projectKey: string;
+  page?: number;
+  pageSize?: number;
+  filter?: IApiEndpointFilter;
 }
 
 export interface IGetApiEndpointsResponse {
-  endpoints: IApiEndpoint[];
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  totalCount: number;
+  data: IApiEndpoint[];
+  errors: string[] | null;
 }
 
 export interface IUpdateApiEndpointPayload {
   projectKey: string;
   itemId: string;
-  isCaptchaRequired?: boolean;
-  captchaProvider?: string;
-  isMfaRequired?: boolean;
-  mfaType?: string;
+  service: string;
+  method: string;
+  endpoint: string;
+  description: string;
+  isCaptchaRequired: boolean;
+  captchaProvider: string;
+  isMfaRequired: boolean;
+  mfaType: string;
 }
 
 export interface IUpdateApiEndpointResponse {
