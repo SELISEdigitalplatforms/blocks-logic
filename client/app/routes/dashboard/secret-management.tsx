@@ -19,7 +19,7 @@ import { EmailConfiguration } from "@blocks-communication/mail/email/email-confi
 import NotificationConfigurationList from "@blocks-communication/notification/components/notification-configuration-list";
 import { Button } from "@/components/ui-kits/button/button";
 import { getApiUrl } from "@/lib/get-api-path";
-import { CirclePlus, Settings, Notebook } from "lucide-react";
+import { CirclePlus, Settings, Notebook, AlertCircle } from "lucide-react";
 import { MouseEvent, useMemo, useState } from "react";
 import { CAPTCHA_PROVIDERS, CAPTCHA_PROVIDERS_KEY } from "@blocks-idp/captcha/models/captcha";
 import { useGetCaptchaConfigs } from "@blocks-idp/captcha/hooks/use-captcha-config";
@@ -61,17 +61,49 @@ export default function SecretManagementPage() {
     <div className="p-6">
       <div className="mb-[18px] flex items-center justify-between md:mb-[24px]">
         <h1 className="text-lg font-semibold md:text-2xl">Secrets & Configs</h1>
+        <div className="flex items-center gap-2">
+          {selectedTab === "captcha" && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                window.open(
+                  getApiUrl("idp/v1", "swagger/index.html"),
+                  "_blank",
+                )
+              }
+            >
+              API Docs
+            </Button>
+          )}
+          {selectedTab === "mfa" && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                window.open(
+                  getApiUrl("idp/v1", "swagger/index.html"),
+                  "_blank",
+                )
+              }
+            >
+              API Docs
+            </Button>
+          )}
+        </div>
       </div>
       <Tabs value={selectedTab} onValueChange={(value) => setSelectedTab(value)}>
         <div className="mb-4 flex items-start justify-between gap-4">
           <>
-            <TabsList className="hidden w-auto sm:inline-flex">
-              {SecretManagementTabs.map((item) => (
-                <TabsTrigger key={item.id} value={item.value}>
-                  {item.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+            <div className="hidden w-full overflow-x-auto sm:block [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <TabsList className="w-max">
+                {SecretManagementTabs.map((item) => (
+                  <TabsTrigger key={item.id} value={item.value}>
+                    {item.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
             <div className="sm:hidden">
               <Select value={selectedTab} onValueChange={(value) => setSelectedTab(value)}>
                 <SelectTrigger className="w-32 gap-2">
@@ -91,47 +123,21 @@ export default function SecretManagementPage() {
             {selectedTab === GRANT_TYPES.authorizationCode && <CreateOIDC />}
             {selectedTab === "captcha" && (
               <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    window.open(
-                      getApiUrl("idp/v1", "swagger/index.html"),
-                      "_blank",
-                    )
-                  }
-                >
-                  API Docs
-                </Button>
                 <ConfigureCaptchaModal>
                   <DialogTrigger asChild>
                     <Button size="sm" onClick={addConfigurationHandler}>
                       <CirclePlus className="h-5 w-5" />
-                      <span className="sr-only sm:not-sr-only sm:ml-2.5">Add Configuration</span>
+                      <span className="sr-only sm:not-sr-only sm:ml-2.5 sm:text-sm sm:whitespace-nowrap">Add Configuration</span>
                     </Button>
                   </DialogTrigger>
                 </ConfigureCaptchaModal>
               </div>
             )}
-            {selectedTab === "mfa" && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  window.open(
-                    getApiUrl("idp/v1", "swagger/index.html"),
-                    "_blank",
-                  )
-                }
-              >
-                API Docs
-              </Button>
-            )}
             {selectedTab === "magic-url" && (
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" onClick={() => setIsMagicUrlConfigDialogOpen(true)}>
                   <Settings className="h-5 w-5" />
-                  <span className="sr-only sm:not-sr-only sm:ml-2.5">Configure</span>
+                  <span className="sr-only sm:not-sr-only sm:ml-2.5 sm:text-sm sm:whitespace-nowrap">Configure</span>
                 </Button>
                 <MagicUrlConfigDialog
                   open={isMagicUrlConfigDialogOpen}
@@ -145,7 +151,7 @@ export default function SecretManagementPage() {
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" onClick={() => setIsManagedServicesGuideOpen(true)}>
                   <Notebook className="aspect-square w-4" />
-                  <span className="sr-only sm:not-sr-only sm:ml-2">Setup Guide</span>
+                  <span className="sr-only sm:not-sr-only sm:ml-2 sm:text-sm sm:whitespace-nowrap">Setup Guide</span>
                 </Button>
                 <AddService />
               </div>
@@ -154,7 +160,7 @@ export default function SecretManagementPage() {
               <div className="flex items-center gap-2">
                 <Button size="sm" onClick={() => setIsEmailConfigOpen(true)}>
                   <CirclePlus className="h-5 w-5" />
-                  <span className="sr-only sm:not-sr-only sm:ml-2.5">Add Configuration</span>
+                  <span className="sr-only sm:not-sr-only sm:ml-2.5 sm:text-sm sm:whitespace-nowrap">Add Configuration</span>
                 </Button>
               </div>
             )}
@@ -162,12 +168,25 @@ export default function SecretManagementPage() {
               <div className="flex items-center gap-2">
                 <Button size="sm" onClick={() => setIsNotificationConfigOpen(true)}>
                   <CirclePlus className="h-5 w-5" />
-                  <span className="sr-only sm:not-sr-only sm:ml-2.5">Add Configuration</span>
+                <span className="sr-only sm:not-sr-only sm:ml-2.5 sm:text-sm sm:whitespace-nowrap">Add Configuration</span>
                 </Button>
               </div>
             )}
           </>
         </div>
+
+        {!["my-secret", "managed-services"].includes(selectedTab) && (
+          <div className="mb-4 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/30 dark:bg-amber-950/20">
+            <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600 dark:text-amber-500" />
+            <div className="flex-1">
+              <h4 className="font-semibold text-amber-900 dark:text-amber-100">Secret values are hidden for security</h4>
+              <p className="mt-1 text-sm text-amber-800 dark:text-amber-200">
+                Once you enter secret values, they won't be displayed again for security reasons. You can only view and manage configurations.
+              </p>
+            </div>
+          </div>
+        )}
+
         <TabsContent value="infra-config">
           <div className="rounded-lg border border-border bg-card p-6">
             <h3 className="text-lg font-semibold">Infra Config</h3>
