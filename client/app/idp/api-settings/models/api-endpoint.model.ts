@@ -62,6 +62,7 @@ export interface IBulkUpdateApiEndpointsPayload {
   itemIds: string[];
   isCaptchaRequired?: boolean;
   isMfaRequired?: boolean;
+  disableAll?: boolean;
 }
 
 export interface IBulkUpdateApiEndpointsResponse {

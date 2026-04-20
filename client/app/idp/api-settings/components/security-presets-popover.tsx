@@ -9,13 +9,11 @@ import { Shield } from "lucide-react";
 type SecurityPresetsPopoverProps = {
   onEnableAllMfa: () => void;
   onEnableAllCaptcha: () => void;
-  onDisableAll: () => void;
 };
 
 export const SecurityPresetsPopover = ({
   onEnableAllMfa,
   onEnableAllCaptcha,
-  onDisableAll,
 }: SecurityPresetsPopoverProps) => {
   return (
     <Popover>
@@ -37,13 +35,6 @@ export const SecurityPresetsPopover = ({
           onClick={onEnableAllCaptcha}
         >
           Enable all Captcha
-        </button>
-        <div className="my-1 h-px bg-border" />
-        <button
-          className="w-full rounded-sm px-3 py-2 text-left text-sm text-destructive hover:bg-destructive/10"
-          onClick={onDisableAll}
-        >
-          Disable all
         </button>
       </PopoverContent>
     </Popover>
