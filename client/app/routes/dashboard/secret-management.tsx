@@ -16,6 +16,7 @@ import { StorageContents } from "@blocks-storage/pages/storage/storage-contents"
 import { ManagedServices } from "@blocks-identifier/pages/services/managed-services";
 import { AddService } from "@blocks-identifier/components/add-service/add-service";
 import { EmailConfiguration } from "@blocks-communication/mail/email/email-configure/email-configure";
+import NotificationConfigurationList from "@blocks-communication/notification/components/notification-configuration-list";
 import { Button } from "@/components/ui-kits/button/button";
 import { getApiUrl } from "@/lib/get-api-path";
 import { CirclePlus, Settings, Notebook } from "lucide-react";
@@ -27,13 +28,14 @@ import { DialogTrigger } from "@radix-ui/react-dialog";
 import { toast } from "@/hooks/use-toast";
 
 export default function SecretManagementPage() {
-  const [selectedTab, setSelectedTab] = useQueryState("tab", { defaultValue: GRANT_TYPES.authorizationCode });
+  const [selectedTab, setSelectedTab] = useQueryState("tab", { defaultValue: "infra-config" });
   const tenantId = useProjectStore().selectedProject?.tenantId || "";
   const { data: captchaData } = useGetCaptchaConfigs({ projectKey: tenantId });
   const { mutateAsync: saveMagicUrlConfig } = useSaveMagicUrlConfig();
   const [isMagicUrlConfigDialogOpen, setIsMagicUrlConfigDialogOpen] = useState(false);
   const [isManagedServicesGuideOpen, setIsManagedServicesGuideOpen] = useState(false);
   const [isEmailConfigOpen, setIsEmailConfigOpen] = useState(false);
+  const [isNotificationConfigOpen, setIsNotificationConfigOpen] = useState(false);
 
   const areAllProvidersConfigured = useMemo(() => {
     if (!captchaData?.configurations) return false;
@@ -156,10 +158,36 @@ export default function SecretManagementPage() {
                 </Button>
               </div>
             )}
+            {selectedTab === "notification" && (
+              <div className="flex items-center gap-2">
+                <Button size="sm" onClick={() => setIsNotificationConfigOpen(true)}>
+                  <CirclePlus className="h-5 w-5" />
+                  <span className="sr-only sm:not-sr-only sm:ml-2.5">Add Configuration</span>
+                </Button>
+              </div>
+            )}
           </>
         </div>
+        <TabsContent value="infra-config">
+          <div className="rounded-lg border border-border bg-card p-6">
+            <h3 className="text-lg font-semibold">Infra Config</h3>
+            <p className="mt-2 text-muted-foreground">Manage your infrastructure configurations</p>
+          </div>
+        </TabsContent>
         <TabsContent value={GRANT_TYPES.authorizationCode}>
           <OIDC />
+        </TabsContent>
+        <TabsContent value="managed-services">
+          <ManagedServices
+            guideOpen={isManagedServicesGuideOpen}
+            onGuideOpenChange={setIsManagedServicesGuideOpen}
+          />
+        </TabsContent>
+        <TabsContent value="my-secret">
+          <div className="rounded-lg border border-border bg-card p-6">
+            <h3 className="text-lg font-semibold">My Secret</h3>
+            <p className="mt-2 text-muted-foreground">Manage your secrets and credentials</p>
+          </div>
         </TabsContent>
         <TabsContent value={GRANT_TYPES.social}>
           <SSO />
@@ -181,16 +209,16 @@ export default function SecretManagementPage() {
         <TabsContent value="storage">
           <StorageContents />
         </TabsContent>
-        <TabsContent value="managed-services">
-          <ManagedServices
-            guideOpen={isManagedServicesGuideOpen}
-            onGuideOpenChange={setIsManagedServicesGuideOpen}
-          />
-        </TabsContent>
         <TabsContent value="email">
           <EmailConfiguration
             addConfigOpen={isEmailConfigOpen}
             onAddConfigOpenChange={setIsEmailConfigOpen}
+          />
+        </TabsContent>
+        <TabsContent value="notification">
+          <NotificationConfigurationList
+            addConfigOpen={isNotificationConfigOpen}
+            onAddConfigOpenChange={setIsNotificationConfigOpen}
           />
         </TabsContent>
       </Tabs>
