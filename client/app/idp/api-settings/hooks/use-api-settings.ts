@@ -11,7 +11,7 @@ const QUERY_KEY = "api-settings-endpoints";
 
 export const useGetApiEndpoints = (options: IGetApiEndpointsPayload) => {
   return useQuery({
-    queryKey: [QUERY_KEY, options.projectKey],
+    queryKey: [QUERY_KEY, options.projectKey, options.page, options.pageSize, options.filter],
     queryFn: () => apiSettingsService.getEndpoints(options),
     enabled: !!options.projectKey,
   });
