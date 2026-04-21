@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import {
   Popover,
   PopoverContent,
@@ -214,6 +215,10 @@ export function BlocksAppLauncher() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [favouriteKeys, setFavouriteKeys] = useState<Set<string>>(new Set());
   const [isHydrated, setIsHydrated] = useState(false);
+  const location = useLocation();
+
+  // Only show launcher on dashboard and services routes
+  const isAllowedRoute = location.pathname.includes("/dashboard") || location.pathname.includes("/services");
 
   // Load favourites from localStorage on mount
   useEffect(() => {
@@ -240,7 +245,7 @@ export function BlocksAppLauncher() {
     saveFavourites(newFavourites);
   };
 
-  if (!isHydrated) return null;
+  if (!isHydrated || !isAllowedRoute) return null;
 
   const favourites = SELISE_APPS.filter((a) => favouriteKeys.has(a.key));
   const moreApps = SELISE_APPS.filter((a) => !favouriteKeys.has(a.key));
@@ -309,20 +314,22 @@ export function BlocksAppLauncher() {
           <DialogHeader>
             <DialogTitle>Manage Favourites</DialogTitle>
           </DialogHeader>
-          <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-4 py-2">
             {SELISE_APPS.map((app) => (
               <button
                 key={app.key}
                 onClick={() => toggleFavourite(app.key)}
-                className="flex items-center gap-3 w-full p-3 rounded-lg hover:bg-accent transition-colors text-left"
+                className={cn(
+                  "group flex flex-col items-center gap-2 rounded-xl border border-transparent bg-muted/40 p-4 shadow-sm transition-all hover:bg-accent hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                  favouriteKeys.has(app.key) && "border-primary bg-primary/10"
+                )}
+                aria-pressed={favouriteKeys.has(app.key)}
               >
-                <div className="text-primary flex-shrink-0">
-                  <StarIcon filled={favouriteKeys.has(app.key)} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm">{app.label}</div>
-                  <div className="text-xs text-muted-foreground">{app.description}</div>
-                </div>
+                <span className="flex items-center justify-center h-12 w-12 mb-1">
+                  {app.icon}
+                </span>
+                <span className="font-semibold text-sm text-foreground mb-0.5 line-clamp-1">{app.label}</span>
+                <span className="text-xs text-muted-foreground text-center line-clamp-2">{app.description}</span>
               </button>
             ))}
           </div>
