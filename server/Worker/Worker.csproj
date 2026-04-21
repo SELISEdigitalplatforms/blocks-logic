@@ -1,9 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk.Worker">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>dotnet-Worker-d76f990a-b305-46d4-9d8a-6be392ee733f</UserSecretsId>
   </PropertyGroup>
 
@@ -13,5 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Authentication.DomainService\Authentication.DomainService.csproj" />
+    <ProjectReference Include="..\Iam.DomainService\Iam.DomainService.csproj" />
+    <ProjectReference Include="..\Mfa.DomainService\Mfa.DomainService.csproj" />
   </ItemGroup>
 </Project>
