@@ -31,23 +31,7 @@ namespace Cloud.DomainService.Services
         public async Task<BaseResponse> UpdateAsync(UpdateApiEndpointConfigRequest request)
         {
             var userId = BlocksContext.GetContext()?.UserId ?? string.Empty;
-
-            var config = new ApiEndpointConfig
-            {
-                ItemId = request.ItemId,
-                Service = request.Service,
-                Method = request.Method,
-                Endpoint = request.Endpoint,
-                Description = request.Description,
-                IsCaptchaRequired = request.IsCaptchaRequired,
-                CaptchaProvider = request.CaptchaProvider,
-                IsMfaRequired = request.IsMfaRequired,
-                MfaType = request.MfaType,
-                LastUpdatedBy = userId,
-                LastUpdatedDate = DateTime.UtcNow
-            };
-
-            var success = await _repository.UpdateAsync(request.ProjectKey, config);
+            var success = await _repository.UpdateAsync(request.ProjectKey, request.ItemId,request.IsCaptchaRequired,request.IsMfaRequired,userId);
 
             return new BaseResponse
             {
@@ -55,6 +39,31 @@ namespace Cloud.DomainService.Services
                 Errors = success
                     ? []
                     : new Dictionary<string, string> { { "update_failed", "No matching record found to update" } }
+            };
+        }
+
+        public async Task<BaseResponse> BulkUpdateAsync(BulkUpdateApiEndpointConfigRequest request)
+        {
+            var userId = BlocksContext.GetContext()?.UserId ?? string.Empty;
+
+            var isCaptchaRequired = request.DisableAll ? false : request.IsCaptchaRequired;
+            var isMfaRequired = request.DisableAll ? false : request.IsMfaRequired;
+
+            var modifiedCount = await _repository.BulkUpdateAsync(
+                request.ProjectKey,
+                request.ItemIds,
+                isCaptchaRequired,
+                isMfaRequired,
+                userId);
+
+            var success = modifiedCount > 0;
+
+            return new BaseResponse
+            {
+                IsSuccess = success,
+                Errors = success
+                    ? []
+                    : new Dictionary<string, string> { { "update_failed", "No matching records found to update" } }
             };
         }
     }
