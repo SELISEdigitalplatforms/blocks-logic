@@ -37,7 +37,7 @@ namespace Api.Controllers
                               IConfiguration configuration,
                               IAuthenticationDomainService authenticationDomainService,
                               IAuthenticationRepository authenticationRepository,
-                              ChangeControllerContext changeControllerContext, ConfigurationService confirurationService)
+                              ChangeControllerContext changeControllerContext, IConfigurationService confirurationService)
         {
             _oAuthTokenProvider = oAuthTokenProvider;
             _authenticationService = authenticationService;
