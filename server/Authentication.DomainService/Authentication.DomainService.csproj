@@ -7,9 +7,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="DeviceDetector.NET" Version="6.4.2" />
-    <PackageReference Include="Handlebars.Net" Version="2.1.6" />
-    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.9.0" />
+    <PackageReference Include="DeviceDetector.NET" />
+    <PackageReference Include="Handlebars.Net" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" />
   </ItemGroup>
 
   <ItemGroup>
