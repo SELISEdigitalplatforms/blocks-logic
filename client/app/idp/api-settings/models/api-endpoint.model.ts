@@ -15,6 +15,9 @@ export interface IApiEndpoint {
   captchaProvider: string;
   isMfaRequired: boolean;
   mfaType: string;
+  controller: string;
+  baseUrl: string;
+  version: string;
 }
 
 export interface IApiEndpointFilter {

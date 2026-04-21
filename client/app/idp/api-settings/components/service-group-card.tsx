@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { ChevronDown, BookOpen } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { Checkbox } from "@/components/ui-kits/checkbox/checkbox";
 import { Badge } from "@/components/ui-kits/badge/badge";
-import { Button } from "@/components/ui-kits/button/button";
 import {
   Collapsible,
   CollapsibleContent,
@@ -13,9 +12,8 @@ import { EndpointRow } from "./endpoint-row";
 import { SecurityPresetsPopover } from "./security-presets-popover";
 import { IApiEndpoint } from "../models/api-endpoint.model";
 import { SERVICE_META, DEFAULT_SERVICE_META } from "../constants/endpoint.constant";
-
 type ServiceGroupCardProps = {
-  service: string;
+  controller: string;
   endpoints: IApiEndpoint[];
   selectedIds: Set<string>;
   onSelectEndpoint: (id: string, checked: boolean) => void;
@@ -27,7 +25,7 @@ type ServiceGroupCardProps = {
 };
 
 export const ServiceGroupCard = ({
-  service,
+  controller,
   endpoints,
   selectedIds,
   onSelectEndpoint,
@@ -38,7 +36,7 @@ export const ServiceGroupCard = ({
   onBulkGroupCaptcha,
 }: ServiceGroupCardProps) => {
   const [open, setOpen] = useState(false);
-  const meta = SERVICE_META[service] || DEFAULT_SERVICE_META;
+  const meta = SERVICE_META[controller] || DEFAULT_SERVICE_META;
 
   const groupIds = endpoints.map((e) => e.itemId);
   const selectedCount = groupIds.filter((id) => selectedIds.has(id)).length;
@@ -47,23 +45,6 @@ export const ServiceGroupCard = ({
 
   const handleGroupCheckbox = (checked: boolean) => {
     onSelectGroup(groupIds, checked);
-  };
-
-  const getSwaggerUrl = () => {
-    const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-    const protocol = window.location.protocol;
-    const host = window.location.host;
-    const baseUrl = `${protocol}//${host}`;
-    
-    if (isLocalhost) {
-      return `${baseUrl}/api/${service}/v1/swagger/index.html`;
-    } else {
-      return `${baseUrl}/${service}/v1/swagger/index.html`;
-    }
-  };
-
-  const handleOpenApiDocs = () => {
-    window.open(getSwaggerUrl(), "_blank");
   };
 
   return (
@@ -82,10 +63,8 @@ export const ServiceGroupCard = ({
           <CollapsibleTrigger asChild>
             <button className="flex flex-1 items-center gap-3 text-left">
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-semibold">{service} API</h3>
-                </div>
-                <p className="truncate text-sm text-muted-foreground">{meta.description}</p>
+                <h3 className="text-base font-semibold leading-snug">{controller}</h3>
+                <p className="truncate text-[11px] text-muted-foreground">{meta.description}</p>
               </div>
             </button>
           </CollapsibleTrigger>
@@ -98,16 +77,6 @@ export const ServiceGroupCard = ({
               onEnableAllMfa={() => onBulkGroupMfa(groupIds, true)}
               onEnableAllCaptcha={() => onBulkGroupCaptcha(groupIds, true)}
             />
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleOpenApiDocs}
-              title="Open API Documentation"
-              className="gap-1.5 px-2 sm:px-3"
-            >
-              <BookOpen className="h-3.5 w-3.5 shrink-0" />
-              <span className="hidden lg:inline">API Docs</span>
-            </Button>
             <CollapsibleTrigger asChild>
               <button className="rounded-md p-1.5 transition-colors hover:bg-accent">
                 <ChevronDown

@@ -138,8 +138,8 @@ export const AddService = () => {
                     <FormControl>
                       <ChipsInput
                         {...field}
-                        disallowDuplicates
-                        duplicateErrorMessage="Duplicate tags are not allowed"
+                        customValidator={(val) => !field.value?.includes(val)}
+                        validatorRegexErrorMessage="Duplicate tags are not allowed"
                       >
                         <ChipsInputList />
                         <ChipsInputField />
