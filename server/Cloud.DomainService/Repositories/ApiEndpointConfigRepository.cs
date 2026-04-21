@@ -45,13 +45,18 @@ namespace Cloud.DomainService.Repositories
             return (data, count);
         }
 
-        public async Task<bool> UpdateAsync(string projectKey, ApiEndpointConfig config)
+        public async Task<bool> UpdateAsync(string projectKey, string itemId, bool isCaptchaRequired, bool isMfaRequired, string updatedBy)
         {
             var db = _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, projectKey);
             var collection = db.GetCollection<ApiEndpointConfig>(CollectionName);
 
-            var filter = Builders<ApiEndpointConfig>.Filter.Eq(x => x.ItemId, config.ItemId);
-            var result = await collection.ReplaceOneAsync(filter, config, new ReplaceOptions { IsUpsert = false });
+            var filter = Builders<ApiEndpointConfig>.Filter.Eq(x => x.ItemId, itemId);
+            var update = Builders<ApiEndpointConfig>.Update
+                .Set(x => x.IsCaptchaRequired, isCaptchaRequired)
+                .Set(x => x.IsMfaRequired, isMfaRequired)
+                .Set(x => x.LastUpdatedBy, updatedBy)
+                .Set(x => x.LastUpdatedDate, DateTime.UtcNow);
+            var result = await collection.UpdateOneAsync(filter, update);
 
             return result.ModifiedCount > 0;
         }
