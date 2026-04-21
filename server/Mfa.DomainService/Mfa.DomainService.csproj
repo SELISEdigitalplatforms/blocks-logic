@@ -7,10 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-	  <PackageReference Include="FluentValidation" Version="11.11.0" />
-	  <PackageReference Include="Otp.NET" Version="1.4.0" />
-	  <PackageReference Include="QRCoder" Version="1.6.0" />
-	  <PackageReference Include="SeliseBlocks.MailDriver" Version="9.0.0-preview.15" />
+	  <PackageReference Include="FluentValidation" />
+	  <PackageReference Include="Otp.NET"  />
+	  <PackageReference Include="QRCoder" />
+	  <PackageReference Include="SeliseBlocks.MailDriver" />
   </ItemGroup>
 
   <ItemGroup>
