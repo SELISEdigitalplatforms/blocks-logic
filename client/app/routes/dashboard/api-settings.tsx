@@ -60,7 +60,19 @@ export default function ApiSettingsPage() {
           version,
           swaggerJsonUrl: `${baseUrl}/${svc}/${version}/swagger/${version}/swagger.json`,
           swaggerUiUrl: `${baseUrl}/${svc}/${version}/swagger/index.html`,
-          controllers: Object.entries(controllers).sort(([a], [b]) => a.localeCompare(b)),
+          controllers: Object.entries(controllers)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([ctrl, eps]) => [
+              ctrl,
+              eps.sort((a, b) => {
+                // Sort by method first (GET, POST, PUT, etc.), then by endpoint path
+                const methodOrder: Record<string, number> = { GET: 0, POST: 1, PUT: 2, PATCH: 3, DELETE: 4 };
+                const aMethod = methodOrder[a.method.toUpperCase()] ?? 999;
+                const bMethod = methodOrder[b.method.toUpperCase()] ?? 999;
+                if (aMethod !== bMethod) return aMethod - bMethod;
+                return a.endpoint.localeCompare(b.endpoint);
+              }),
+            ]) as [string, IApiEndpoint[]][],
         };
       });
   }, [endpoints]);
@@ -88,7 +100,7 @@ export default function ApiSettingsPage() {
   const handleToggleMfa = useCallback(
     async (ep: IApiEndpoint, value: boolean) => {
       try {
-        await updateEndpoint({
+        const result = await updateEndpoint({
           projectKey: tenantId,
           itemId: ep.itemId,
           service: ep.service,
@@ -100,9 +112,12 @@ export default function ApiSettingsPage() {
           isCaptchaRequired: ep.isCaptchaRequired,
           captchaProvider: ep.captchaProvider,
         });
+        if (!result.isSuccess) {
+          throw new Error(result.errors?.join(", ") || "Failed to update MFA setting");
+        }
         showSuccessToast({ description: `MFA ${value ? "enabled" : "disabled"} for ${ep.endpoint}` });
-      } catch {
-        showErrorToast({ errors: "Failed to update MFA setting" });
+      } catch (error) {
+        showErrorToast({ errors: error instanceof Error ? error.message : "Failed to update MFA setting" });
       }
     },
     [tenantId, updateEndpoint],
@@ -111,7 +126,7 @@ export default function ApiSettingsPage() {
   const handleToggleCaptcha = useCallback(
     async (ep: IApiEndpoint, value: boolean) => {
       try {
-        await updateEndpoint({
+        const result = await updateEndpoint({
           projectKey: tenantId,
           itemId: ep.itemId,
           service: ep.service,
@@ -123,9 +138,12 @@ export default function ApiSettingsPage() {
           isMfaRequired: ep.isMfaRequired,
           mfaType: ep.mfaType,
         });
+        if (!result.isSuccess) {
+          throw new Error(result.errors?.join(", ") || "Failed to update Captcha setting");
+        }
         showSuccessToast({ description: `Captcha ${value ? "enabled" : "disabled"} for ${ep.endpoint}` });
-      } catch {
-        showErrorToast({ errors: "Failed to update Captcha setting" });
+      } catch (error) {
+        showErrorToast({ errors: error instanceof Error ? error.message : "Failed to update Captcha setting" });
       }
     },
     [tenantId, updateEndpoint],
@@ -146,16 +164,19 @@ export default function ApiSettingsPage() {
                 : false
             : false;
 
-        await bulkUpdate({
+        const result = await bulkUpdate({
           projectKey: tenantId,
           itemIds: ids,
           isMfaRequired: value,
           isCaptchaRequired: captchaState,
           disableAll: false,
         });
+        if (!result.isSuccess) {
+          throw new Error(result.errors?.join(", ") || "Failed to bulk update MFA");
+        }
         showSuccessToast({ description: `MFA ${value ? "enabled" : "disabled"} for ${ids.length} endpoints` });
-      } catch {
-        showErrorToast({ errors: "Failed to bulk update MFA" });
+      } catch (error) {
+        showErrorToast({ errors: error instanceof Error ? error.message : "Failed to bulk update MFA" });
       }
     },
     [tenantId, endpoints, bulkUpdate],
@@ -175,16 +196,19 @@ export default function ApiSettingsPage() {
                 : false
             : false;
 
-        await bulkUpdate({
+        const result = await bulkUpdate({
           projectKey: tenantId,
           itemIds: ids,
           isCaptchaRequired: value,
           isMfaRequired: mfaState,
           disableAll: false,
         });
+        if (!result.isSuccess) {
+          throw new Error(result.errors?.join(", ") || "Failed to bulk update Captcha");
+        }
         showSuccessToast({ description: `Captcha ${value ? "enabled" : "disabled"} for ${ids.length} endpoints` });
-      } catch {
-        showErrorToast({ errors: "Failed to bulk update Captcha" });
+      } catch (error) {
+        showErrorToast({ errors: error instanceof Error ? error.message : "Failed to bulk update Captcha" });
       }
     },
     [tenantId, endpoints, bulkUpdate],
@@ -193,10 +217,13 @@ export default function ApiSettingsPage() {
   const handleBulkGroupDisableAll = useCallback(
     async (ids: string[]) => {
       try {
-        await bulkUpdate({ projectKey: tenantId, itemIds: ids, isMfaRequired: false, isCaptchaRequired: false, disableAll: true });
+        const result = await bulkUpdate({ projectKey: tenantId, itemIds: ids, isMfaRequired: false, isCaptchaRequired: false, disableAll: true });
+        if (!result.isSuccess) {
+          throw new Error(result.errors?.join(", ") || "Failed to disable security features");
+        }
         showSuccessToast({ description: `All security features disabled for ${ids.length} endpoints` });
-      } catch {
-        showErrorToast({ errors: "Failed to disable security features" });
+      } catch (error) {
+        showErrorToast({ errors: error instanceof Error ? error.message : "Failed to disable security features" });
       }
     },
     [tenantId, bulkUpdate],
@@ -218,17 +245,20 @@ export default function ApiSettingsPage() {
               : false
           : false;
 
-      await bulkUpdate({
+      const result = await bulkUpdate({
         projectKey: tenantId,
         itemIds: selectedArray,
         isMfaRequired: true,
         isCaptchaRequired: captchaState,
         disableAll: false,
       });
+      if (!result.isSuccess) {
+        throw new Error(result.errors?.join(", ") || "Failed to enable MFA");
+      }
       showSuccessToast({ description: `MFA enabled for ${selectedArray.length} endpoints` });
       clearSelection();
-    } catch {
-      showErrorToast({ errors: "Failed to enable MFA" });
+    } catch (error) {
+      showErrorToast({ errors: error instanceof Error ? error.message : "Failed to enable MFA" });
     }
   }, [tenantId, endpoints, selectedArray, bulkUpdate, clearSelection]);
 
@@ -245,17 +275,20 @@ export default function ApiSettingsPage() {
               : false
           : false;
 
-      await bulkUpdate({
+      const result = await bulkUpdate({
         projectKey: tenantId,
         itemIds: selectedArray,
         isCaptchaRequired: true,
         isMfaRequired: mfaState,
         disableAll: false,
       });
+      if (!result.isSuccess) {
+        throw new Error(result.errors?.join(", ") || "Failed to enable Captcha");
+      }
       showSuccessToast({ description: `Captcha enabled for ${selectedArray.length} endpoints` });
       clearSelection();
-    } catch {
-      showErrorToast({ errors: "Failed to enable Captcha" });
+    } catch (error) {
+      showErrorToast({ errors: error instanceof Error ? error.message : "Failed to enable Captcha" });
     }
   }, [tenantId, endpoints, selectedArray, bulkUpdate, clearSelection]);
 
