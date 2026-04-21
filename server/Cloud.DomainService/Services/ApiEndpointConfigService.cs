@@ -31,17 +31,7 @@ namespace Cloud.DomainService.Services
         public async Task<BaseResponse> UpdateAsync(UpdateApiEndpointConfigRequest request)
         {
             var userId = BlocksContext.GetContext()?.UserId ?? string.Empty;
-
-            var config = new ApiEndpointConfig
-            {
-                ItemId = request.ItemId,
-                IsCaptchaRequired = request.IsCaptchaRequired,
-                IsMfaRequired = request.IsMfaRequired,
-                LastUpdatedBy = userId,
-                LastUpdatedDate = DateTime.UtcNow
-            };
-
-            var success = await _repository.UpdateAsync(request.ProjectKey, config);
+            var success = await _repository.UpdateAsync(request.ProjectKey, request.ItemId,request.IsCaptchaRequired,request.IsMfaRequired,userId);
 
             return new BaseResponse
             {
