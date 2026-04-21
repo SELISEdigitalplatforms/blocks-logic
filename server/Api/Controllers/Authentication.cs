@@ -340,6 +340,9 @@ namespace Api.Controllers
         {
             return await _authenticationService.GetLoginOptionsAsync();
         }
+
+        #endregion
+        #region Cloud Configuration
         [ProtectedEndPoint]
         [HttpGet]
         public async Task<IActionResult> Get([FromQuery] GetAuthenticationConfigurationRequest request)

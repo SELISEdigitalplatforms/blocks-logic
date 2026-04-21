@@ -1,7 +1,7 @@
 ﻿
 namespace CloudConfiguration.DomainService.MFA.Enums
 {
-    public enum UserMfaType
+    public enum CloudConfigurationUserMfaType
     {
         None,
         TOTP,

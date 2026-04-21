@@ -7,7 +7,7 @@ namespace CloudConfiguration.DomainService.MFA.Entities
     {
         public string Name { get; set; } = "Default";
         public bool EnableMfa { get; set; }
-        public List<UserMfaType> UserMfaTypes { get; set; }
+        public List<CloudConfigurationUserMfaType> UserMfaTypes { get; set; }
         public MfaTemplate MfaTemplate { get; set; }
     }
 }

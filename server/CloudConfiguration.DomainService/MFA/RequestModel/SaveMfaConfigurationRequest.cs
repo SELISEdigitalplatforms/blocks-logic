@@ -12,7 +12,7 @@ namespace CloudConfiguration.DomainService.MFA.RequestModel
     public class SaveMfaConfigurationRequest : IProjectKey
     {
         public bool EnableMfa { get; set; }
-        public List<UserMfaType> UserMfaType { get; set; }
+        public List<CloudConfigurationUserMfaType> UserMfaType { get; set; }
         public MfaTemplate? MfaTemplate { get; set; }
         public string ProjectKey { get; set; }
     }
