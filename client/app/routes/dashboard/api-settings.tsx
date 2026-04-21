@@ -1,4 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
+import { ExternalLink, BookOpen } from "lucide-react";
+import { Button } from "@/components/ui-kits/button/button";
 import { useProjectStore } from "@/store/useProjectStore";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui-kits/skeleton/skeleton";
@@ -38,13 +40,29 @@ export default function ApiSettingsPage() {
 
   const endpoints = data?.data ?? [];
 
-  // Group endpoints by service
+  // Group endpoints: service → controller (nested)
   const serviceGroups = useMemo(() => {
-    const groups: Record<string, IApiEndpoint[]> = {};
+    const byService: Record<string, Record<string, IApiEndpoint[]>> = {};
     for (const ep of endpoints) {
-      (groups[ep.service] ??= []).push(ep);
+      const svc = ep.service || "unknown";
+      const ctrl = ep.controller || svc;
+      ((byService[svc] ??= {})[ctrl] ??= []).push(ep);
     }
-    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
+    return Object.entries(byService)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([svc, controllers]) => {
+        const firstEp = Object.values(controllers)[0]?.[0];
+        const baseUrl = firstEp?.baseUrl || "";
+        const version = firstEp?.version || "v1";
+        return {
+          service: svc,
+          baseUrl,
+          version,
+          swaggerJsonUrl: `${baseUrl}/${svc}/${version}/swagger/${version}/swagger.json`,
+          swaggerUiUrl: `${baseUrl}/${svc}/${version}/swagger/index.html`,
+          controllers: Object.entries(controllers).sort(([a], [b]) => a.localeCompare(b)),
+        };
+      });
   }, [endpoints]);
 
   // ── Selection handlers ──────────────────────────────────────────────────────
@@ -263,20 +281,52 @@ export default function ApiSettingsPage() {
           No API endpoints configured.
         </div>
       ) : (
-        <div className="flex flex-col gap-4">
-          {serviceGroups.map(([service, eps]) => (
-            <ServiceGroupCard
-              key={service}
-              service={service}
-              endpoints={eps}
-              selectedIds={selectedIds}
-              onSelectEndpoint={handleSelectEndpoint}
-              onSelectGroup={handleSelectGroup}
-              onToggleMfa={handleToggleMfa}
-              onToggleCaptcha={handleToggleCaptcha}
-              onBulkGroupMfa={handleBulkGroupMfa}
-              onBulkGroupCaptcha={handleBulkGroupCaptcha}
-            />
+        <div className="flex flex-col gap-8">
+          {serviceGroups.map(({ service, swaggerJsonUrl, swaggerUiUrl, controllers }) => (
+            <div key={service} className="flex flex-col gap-3">
+              {/* Service section header */}
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <h2 className="text-lg font-bold capitalize">{service}</h2>
+                  <a
+                    href={swaggerJsonUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[11px] text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
+                    title={swaggerJsonUrl}
+                  >
+                    <span className="truncate">{swaggerJsonUrl}</span>
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                  </a>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => window.open(swaggerUiUrl, "_blank")}
+                  className="shrink-0 gap-1.5"
+                >
+                  <BookOpen className="h-3.5 w-3.5" />
+                  <span>API Docs</span>
+                </Button>
+              </div>
+              {/* Controller cards */}
+              <div className="flex flex-col gap-3">
+                {controllers.map(([controller, eps]) => (
+                  <ServiceGroupCard
+                    key={controller}
+                    controller={controller}
+                    endpoints={eps}
+                    selectedIds={selectedIds}
+                    onSelectEndpoint={handleSelectEndpoint}
+                    onSelectGroup={handleSelectGroup}
+                    onToggleMfa={handleToggleMfa}
+                    onToggleCaptcha={handleToggleCaptcha}
+                    onBulkGroupMfa={handleBulkGroupMfa}
+                    onBulkGroupCaptcha={handleBulkGroupCaptcha}
+                  />
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       )}
