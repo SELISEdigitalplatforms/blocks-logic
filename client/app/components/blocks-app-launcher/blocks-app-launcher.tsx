@@ -1,9 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui-kits/popover/popover";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui-kits/dialog/dialog";
 import { cn } from "@/lib/utils";
 
 interface BlocksApp {
@@ -12,7 +18,6 @@ interface BlocksApp {
   description: string;
   url: string;
   icon: React.ReactNode;
-  isFavourite: boolean;
 }
 
 // IDP icon – shield with lock
@@ -105,7 +110,6 @@ const SELISE_APPS: BlocksApp[] = [
     description: "Identity & Access",
     url: "https://idp.seliseblocks.io",
     icon: <IdpIcon />,
-    isFavourite: true,
   },
   {
     key: "uilm",
@@ -113,7 +117,6 @@ const SELISE_APPS: BlocksApp[] = [
     description: "Localization",
     url: "https://uilm.seliseblocks.io",
     icon: <UilmIcon />,
-    isFavourite: true,
   },
   {
     key: "ai",
@@ -121,7 +124,6 @@ const SELISE_APPS: BlocksApp[] = [
     description: "AI Platform",
     url: "https://ai.seliseblocks.io",
     icon: <AiIcon />,
-    isFavourite: false,
   },
   {
     key: "data-gateway",
@@ -129,7 +131,6 @@ const SELISE_APPS: BlocksApp[] = [
     description: "Data Integration",
     url: "https://data-gateway.seliseblocks.io",
     icon: <DataGatewayIcon />,
-    isFavourite: false,
   },
 ];
 
@@ -178,56 +179,155 @@ function LauncherTriggerIcon() {
   );
 }
 
+// Edit icon – pencil
+function EditIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+      className="h-4 w-4"
+    >
+      <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+    </svg>
+  );
+}
+
+// Star icon
+function StarIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      xmlns="http://www.w3.org/2000/svg"
+      className="h-5 w-5"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth={filled ? 0 : 1.5}
+    >
+      <path d="M10 1.5l2.38 6.29h6.63l-5.36 4.12 2.04 6.29-5.69-4.14-5.69 4.14 2.04-6.29-5.36-4.12h6.63z" />
+    </svg>
+  );
+}
+
 export function BlocksAppLauncher() {
   const [open, setOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [favouriteKeys, setFavouriteKeys] = useState<Set<string>>(new Set());
+  const [isHydrated, setIsHydrated] = useState(false);
 
-  const favourites = SELISE_APPS.filter((a) => a.isFavourite);
-  const moreApps = SELISE_APPS.filter((a) => !a.isFavourite);
+  // Load favourites from localStorage on mount
+  useEffect(() => {
+    const stored = localStorage.getItem("blocks-app-favourites");
+    const keys = stored
+      ? new Set<string>(JSON.parse(stored) as string[])
+      : new Set<string>(["idp", "uilm"]);
+    setFavouriteKeys(keys);
+    setIsHydrated(true);
+  }, []);
+
+  const saveFavourites = (keys: Set<string>) => {
+    setFavouriteKeys(keys);
+    localStorage.setItem("blocks-app-favourites", JSON.stringify(Array.from(keys)));
+  };
+
+  const toggleFavourite = (key: string) => {
+    const newFavourites = new Set(favouriteKeys);
+    if (newFavourites.has(key)) {
+      newFavourites.delete(key);
+    } else {
+      newFavourites.add(key);
+    }
+    saveFavourites(newFavourites);
+  };
+
+  if (!isHydrated) return null;
+
+  const favourites = SELISE_APPS.filter((a) => favouriteKeys.has(a.key));
+  const moreApps = SELISE_APPS.filter((a) => !favouriteKeys.has(a.key));
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          aria-label="SELISE Blocks apps"
-          className={cn(
-            "flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors",
-            "hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            open && "bg-accent text-foreground"
-          )}
+    <>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            aria-label="SELISE Blocks apps"
+            className={cn(
+              "flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors",
+              "hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              open && "bg-accent text-foreground"
+            )}
+          >
+            <LauncherTriggerIcon />
+          </button>
+        </PopoverTrigger>
+
+        <PopoverContent
+          align="end"
+          sideOffset={8}
+          className="w-[260px] overflow-hidden rounded-2xl p-0 shadow-xl"
         >
-          <LauncherTriggerIcon />
-        </button>
-      </PopoverTrigger>
-
-      <PopoverContent
-        align="end"
-        sideOffset={8}
-        className="w-[260px] overflow-hidden rounded-2xl p-0 shadow-xl"
-      >
-        {/* Favourites section */}
-        <div className="bg-background px-3 pb-2 pt-4">
-          <p className="mb-1 px-1 text-[13px] font-semibold text-foreground">Your favourites</p>
-          <div className="grid grid-cols-3">
-            {favourites.map((app) => (
-              <AppTile key={app.key} app={app} />
-            ))}
+          {/* Header with edit button */}
+          <div className="flex items-center justify-between bg-background px-3 py-3 border-b">
+            <p className="text-[13px] font-semibold text-foreground">Your favourites</p>
+            <button
+              onClick={() => setEditDialogOpen(true)}
+              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              aria-label="Edit favourites"
+            >
+              <EditIcon />
+            </button>
           </div>
-        </div>
 
-        {/* More from SELISE Blocks section */}
-        {moreApps.length > 0 && (
-          <div className="bg-muted/50 px-3 pb-4 pt-2">
-            <p className="mb-1 px-1 text-[13px] font-semibold text-muted-foreground">
-              More from SELISE Blocks
-            </p>
+          {/* Favourites section */}
+          <div className="px-3 pb-2 pt-3">
             <div className="grid grid-cols-3">
-              {moreApps.map((app) => (
+              {favourites.map((app) => (
                 <AppTile key={app.key} app={app} />
               ))}
             </div>
           </div>
-        )}
-      </PopoverContent>
-    </Popover>
+
+          {/* More from SELISE Blocks section */}
+          {moreApps.length > 0 && (
+            <div className="bg-muted/50 px-3 pb-4 pt-3 border-t">
+              <p className="mb-2 px-1 text-[13px] font-semibold text-muted-foreground">
+                More from SELISE Blocks
+              </p>
+              <div className="grid grid-cols-3">
+                {moreApps.map((app) => (
+                  <AppTile key={app.key} app={app} />
+                ))}
+              </div>
+            </div>
+          )}
+        </PopoverContent>
+      </Popover>
+
+      {/* Edit Favourites Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Manage Favourites</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            {SELISE_APPS.map((app) => (
+              <button
+                key={app.key}
+                onClick={() => toggleFavourite(app.key)}
+                className="flex items-center gap-3 w-full p-3 rounded-lg hover:bg-accent transition-colors text-left"
+              >
+                <div className="text-primary flex-shrink-0">
+                  <StarIcon filled={favouriteKeys.has(app.key)} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-sm">{app.label}</div>
+                  <div className="text-xs text-muted-foreground">{app.description}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
