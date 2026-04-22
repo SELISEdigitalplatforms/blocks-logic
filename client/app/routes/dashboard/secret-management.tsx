@@ -61,36 +61,7 @@ export default function SecretManagementPage() {
     <div className="p-6">
       <div className="mb-[18px] flex items-center justify-between md:mb-[24px]">
         <h1 className="text-lg font-semibold md:text-2xl">Secrets & Configs</h1>
-        <div className="flex items-center gap-2">
-          {selectedTab === "captcha" && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() =>
-                window.open(
-                  getApiUrl("idp/v1", "swagger/index.html"),
-                  "_blank",
-                )
-              }
-            >
-              API Docs
-            </Button>
-          )}
-          {selectedTab === "mfa" && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() =>
-                window.open(
-                  getApiUrl("idp/v1", "swagger/index.html"),
-                  "_blank",
-                )
-              }
-            >
-              API Docs
-            </Button>
-          )}
-        </div>
+       
       </div>
       <Tabs value={selectedTab} onValueChange={(value) => setSelectedTab(value)}>
         <div className="mb-4 flex items-start justify-between gap-4">
