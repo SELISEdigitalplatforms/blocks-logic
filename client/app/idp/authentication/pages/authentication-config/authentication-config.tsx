@@ -23,16 +23,7 @@ export const AuthenticationConfig = () => {
     <div>
       <div className="mb-[18px] flex items-center justify-between md:mb-[24px]">
         <h1 className="text-lg font-semibold md:text-2xl">IDP</h1>
-        <div className="flex items-center gap-4">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => window.open(getApiUrl("idp/v1", "swagger/index.html"), "_blank")}
-          >
-            API Docs
-          </Button>
-          <LogMenu link="/services/authentication/logs" />
-        </div>
+    
       </div>
       <Tabs value={selectedTab} onValueChange={(value) => setSelectedTab(value)}>
         <div className="mb-4 flex items-start justify-between gap-4">
