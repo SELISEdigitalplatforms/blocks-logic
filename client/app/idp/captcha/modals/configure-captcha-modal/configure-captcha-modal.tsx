@@ -10,6 +10,7 @@ import {
 import { CAPTCHA_PROVIDERS, CAPTCHA_PROVIDERS_KEY, ICaptchaConfig } from "../../models/captcha";
 
 import { ConfigureGeneralCaptchaFormField } from "./configure-general-captcha-from-field";
+import { ConfigureBlockCaptchaFormField } from "./configure-block-captcha-form-field";
 import { useGetCaptchaConfigs, useSaveCaptcha } from "../../hooks/use-captcha-config";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { isErrorWithErrors } from "@/lib/error";
@@ -150,6 +151,7 @@ export const ConfigureCaptchaModal = ({ configuration, children }: ConfigureCapt
                 )}
               />
               <ConfigureFormField key={selectedProvider} form={form} />
+              <ConfigureBlockCaptchaFormField form={form} />
               <DialogFooter className="mt-4">
                 <DialogTrigger asChild>
                   <Button variant="outline" size="sm">
