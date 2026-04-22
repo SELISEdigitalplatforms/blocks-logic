@@ -1,6 +1,6 @@
 ﻿namespace DomainService.Dtos
 {
-    public class CreateUserByEmailEvent
+    public class CreateUserByEmailEvent_Identifier
     {
         public string Email { get; set; }
         public string EventQueue { get; set; }

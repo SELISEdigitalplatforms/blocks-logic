@@ -1,5 +1,10 @@
 using Blocks.Genesis;
 using DomainService.Dtos;
+using DomainService.Migration;
+using DomainService.Projects;
+using DomainService.Shared;
+using DomainService.Shared.Dtos;
+using DomainService.Shared.Entities;
 using DomainService.Utilities;
 using DomainService.Worker;
 using Iam.DomainService.Accounts;
@@ -10,6 +15,7 @@ using Mfa.DomainService.Configuration;
 using Worker;
 using Worker.Configuration;
 using Worker.Consumers;
+using Worker.Consumers.Identifier;
 using Worker.Consumers.Users;
 
 const string _serviceName = "blocks-idp-worker";
@@ -48,4 +54,19 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             services.RegisterAllServices();
 
             ApplicationConfigurations.ConfigureWorker(services, IdpConstants.GetMessageConfiguration(secret.MessageConnectionString));
+
+            #region Identifier Service Consumers
+            services.AddApplicationServices();
+            services.AddSingleton<IConsumer<Tenant>, ConfigureProjectConsumer>();
+            services.AddSingleton<IConsumer<DisableDomainBindingRequest>, DisableDomainBindingConsumer>();
+            services.AddSingleton<IConsumer<RestoreProjectRequest>, RestoreProjectConsumer>();
+            services.AddSingleton<IConsumer<CreateUserByEmailPostEvent_Identifier>, CreateUserByEmailPostConsumer>();
+            services.AddSingleton<IConsumer<ConfigureDomainRequest>, DomainConfigureConsumer>();
+            services.AddSingleton<IConsumer<MigrationCompletionEvent>, MigrationCompletionConsumer>();
+            services.AddSingleton<IConsumer<EnvironmentDataMigrationEvent>, EnvironmentDataMigrationEventConsumer>();
+            services.AddSingleton<IConsumer<PublishScheduleCommand>, DataCleanupConsumer>();
+            services.AddSingleton<IConsumer<UpdateResourceUsageCommand_Identifier>, UpdateResourceUsageConsumer>();
+
+            ApplicationConfigurations.ConfigureWorker(services, IdentifierConstants.GetMessageConfiguration(secret.MessageConnectionString));
+            #endregion
         });
