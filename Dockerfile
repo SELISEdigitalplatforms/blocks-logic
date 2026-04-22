@@ -4,6 +4,8 @@
 # Build: docker build -t blocks-idp-api .
 # =============================================================================
 
+ARG DOTNET_PUBLISH_PLATFORM=linux/amd64
+
 # -----------------------------------------------------------------------------
 # Stage: frontend — Vite build → server/Api/wwwroot (see client/vite.config.ts)
 # -----------------------------------------------------------------------------
@@ -23,7 +25,6 @@ RUN mkdir -p server/Api/wwwroot \
 # protoc crashes on some arm64 build hosts; override if your CI publishes safely
 # on arm64: docker build --build-arg DOTNET_PUBLISH_PLATFORM=linux/arm64 .
 # -----------------------------------------------------------------------------
-ARG DOTNET_PUBLISH_PLATFORM=linux/amd64
 FROM --platform=$DOTNET_PUBLISH_PLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS publish
 WORKDIR /src
 
