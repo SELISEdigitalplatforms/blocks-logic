@@ -155,3 +155,6 @@ server/Api/wwwroot/**
 !server/Api/wwwroot/.gitkeep
 
 /server/.claude
+
+# .NET app settings (secrets/environment-specific)
+**/appsettings*.json
