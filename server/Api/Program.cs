@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 using Cloud.LmtService.Utilities;
 using CloudConfiguration.DomainService.Shared.Utilities;
 
-var serviceName = "blocks-os-api";
+var serviceName = "blocks-idp-api";
 var secret = await ApplicationConfigurations.ConfigureLogAndSecretsAsync(serviceName, VaultType.Azure);
 var builder = WebApplication.CreateBuilder(args);
 
