@@ -156,5 +156,5 @@ server/Api/wwwroot/**
 
 /server/.claude
 
-# .NET app settings (secrets/environment-specific)
-**/appsettings*.json
+# Ignore environment-specific app settings, keep base appsettings.json
+**/appsettings.*.json
