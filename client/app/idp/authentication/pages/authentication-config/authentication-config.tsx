@@ -78,6 +78,18 @@ export const AuthenticationConfig = () => {
             <p className="text-muted-foreground mt-2">Configure your signup flow settings</p>
           </div>
         </TabsContent>
+        <TabsContent value="email-template">
+          <div className="rounded-lg border border-border bg-card p-6">
+            <h3 className="text-lg font-semibold">Email template</h3>
+            <p className="text-muted-foreground mt-2">Configure your email template settings</p>
+          </div>
+        </TabsContent>
+        <TabsContent value="oidc-template">
+          <div className="rounded-lg border border-border bg-card p-6">
+            <h3 className="text-lg font-semibold">OIDC template</h3>
+            <p className="text-muted-foreground mt-2">Configure your OIDC template settings</p>
+          </div>
+        </TabsContent>
         <TabsContent value="roles">
           <Roles />
         </TabsContent>
