@@ -290,7 +290,7 @@ jobs:
     with:
       SERVICE_NAME: ${{ needs.initialization.outputs.service_name }}-worker
       # SERVICE_TYPE: ${{ needs.initialization.outputs.service_type }}
-      SERVICE_TYPE: "winservice" # e.g., webclient, webservice, winservice
+      SERVICE_TYPE: "webservice" # e.g., webclient, webservice, winservice
       ENVIRONMENT: ${{ needs.initialization.outputs.environment }}
       TAG_STRATEGY: ${{ needs.initialization.outputs.tag_strategy }} # Options: "both" (default), "semantic", "commit"
       DOCKERFILE_PATH: ${{ needs.initialization.outputs.worker_dockerfile_path }}
@@ -314,7 +314,7 @@ jobs:
     uses: SELISEdigitalplatforms/blocks-inventory/.github/workflows/update-gitops-central.yml@main
     with:
       SERVICE_NAME: ${{ needs.initialization.outputs.service_name }}-worker
-      SERVICE_TYPE: "winservice" # Match the service type from build job
+      SERVICE_TYPE: "webservice" # Match the service type from build job
       ENVIRONMENT: ${{ needs.initialization.outputs.environment }}
       # VERSION: ${{ needs.initialization.outputs.version }} # Pass version for proper file naming
       IMAGE_TAG: ${{ needs.build-worker.outputs.image_tag }}
