@@ -139,9 +139,9 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
-# .NET build artifacts 
-bin/
-obj/
+# .NET build artifacts
+**/bin/
+**/obj/
 .DS_Store
 # Visual Studio files
 .vs/
@@ -154,22 +154,7 @@ obj/
 server/Api/wwwroot/**
 !server/Api/wwwroot/.gitkeep
 
-
-  server/Api/bin/
-  server/Api/obj/
-  server/Authentication.DomainService/bin/
-  server/Authentication.DomainService/obj/
-  server/Captcha.DomainService/bin/
-  server/Captcha.DomainService/obj/
-  server/Iam.DomainService/bin/
-  server/Iam.DomainService/obj/
-  server/Identifier.DomainService/bin/
-  server/Identifier.DomainService/obj/
-  server/Mfa.DomainService/bin/
-  server/Mfa.DomainService/obj/
-  server/Worker/bin/
-  server/Worker/obj/
-  server/XUnitTest/bin/
-  server/XUnitTest/obj/
-
 /server/.claude
+
+# Ignore environment-specific app settings, keep base appsettings.json
+**/appsettings.*.json
