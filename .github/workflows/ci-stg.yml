@@ -303,7 +303,7 @@ jobs:
     uses: SELISEdigitalplatforms/blocks-inventory/.github/workflows/build-push.yml@main
     with:
       SERVICE_NAME: ${{ needs.initialization.outputs.service_name }}-worker
-      SERVICE_TYPE: "winservice"
+      SERVICE_TYPE: "webservice"
       ENVIRONMENT: ${{ needs.initialization.outputs.environment }}
       TAG_STRATEGY: ${{ needs.initialization.outputs.tag_strategy }}
       DOCKERFILE_PATH: ${{ needs.initialization.outputs.worker_dockerfile_path }}
@@ -327,7 +327,7 @@ jobs:
     uses: SELISEdigitalplatforms/blocks-inventory/.github/workflows/update-gitops-central.yml@main
     with:
       SERVICE_NAME: ${{ needs.initialization.outputs.service_name }}-worker
-      SERVICE_TYPE: "winservice"
+      SERVICE_TYPE: "webservice"
       ENVIRONMENT: ${{ needs.initialization.outputs.environment }}
       # VERSION: ${{ needs.initialization.outputs.version }}
       IMAGE_TAG: ${{ needs.build-worker.outputs.image_tag }}
