@@ -5,7 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLIENT_DIR="$SCRIPT_DIR/client"
 API_WWWROOT_DIR="$SCRIPT_DIR/server/Api/wwwroot"
 API_PROJECT_PATH="$SCRIPT_DIR/server/Api/Api.csproj"
+WORKER_PROJECT_PATH="$SCRIPT_DIR/server/Worker/Worker.csproj"
 API_PORT=5000
+WORKER_PID=""
 
 free_api_port() {
   local pids
@@ -43,6 +45,14 @@ free_api_port() {
   fi
 }
 
+cleanup() {
+  if [ -n "$WORKER_PID" ] && kill -0 "$WORKER_PID" >/dev/null 2>&1; then
+    echo "Stopping Worker (PID $WORKER_PID)..."
+    kill "$WORKER_PID" 2>/dev/null || true
+    wait "$WORKER_PID" 2>/dev/null || true
+  fi
+}
+
 echo "SCRIPT_DIR: $SCRIPT_DIR"
 cd "$SCRIPT_DIR"
 
@@ -61,6 +71,12 @@ if [ -d "$CLIENT_DIR/dist" ]; then
 fi
 
 free_api_port
+
+trap cleanup EXIT INT TERM
+
+echo "Starting Worker..."
+dotnet run --project "$WORKER_PROJECT_PATH" &
+WORKER_PID=$!
 
 echo "Running .NET server..."
 dotnet run --project "$API_PROJECT_PATH"
