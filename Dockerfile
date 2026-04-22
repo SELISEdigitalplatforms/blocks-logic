@@ -25,7 +25,7 @@ RUN mkdir -p server/Api/wwwroot \
 # protoc crashes on some arm64 build hosts; override if your CI publishes safely
 # on arm64: docker build --build-arg DOTNET_PUBLISH_PLATFORM=linux/arm64 .
 # -----------------------------------------------------------------------------
-FROM --platform=$DOTNET_PUBLISH_PLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS publish
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS publish
 WORKDIR /src
 
 COPY server ./server
@@ -44,8 +44,8 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS final
 
 ARG BUILD_VERSION=0.0.0
 LABEL org.opencontainers.image.title="blocks-idp-api" \
-      org.opencontainers.image.description="ASP.NET Core IDP API; React SPA served from wwwroot." \
-      org.opencontainers.image.version="${BUILD_VERSION}"
+    org.opencontainers.image.description="ASP.NET Core IDP API; React SPA served from wwwroot." \
+    org.opencontainers.image.version="${BUILD_VERSION}"
 
 WORKDIR /app
 
