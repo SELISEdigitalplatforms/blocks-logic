@@ -104,6 +104,11 @@ export const SecretManagementTabs: { id: string; label: string; value: string }[
     label: "Notification",
     value: "notification",
   },
+  {
+    id: "ai-models",
+    label: "AI Models",
+    value: "ai-models",
+  },
 ];
 
 export const providers = [
