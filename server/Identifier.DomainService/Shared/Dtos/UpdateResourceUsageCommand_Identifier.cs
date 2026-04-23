@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace DomainService.Shared.Dtos
 {
-    public class UpdateResourceUsageCommand
+    public class UpdateResourceUsageCommand_Identifier
     {
         public string TenantId { get; set; }
         public string Resource { get; set; }

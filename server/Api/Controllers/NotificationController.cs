@@ -8,6 +8,8 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BlocksTemplate.Api.Controllers
 {
+    [ApiController]
+    [Route("[controller]/[action]")]
     public class NotificationController : ControllerBase
     {
         private readonly IConfigurationService _configurationService;
