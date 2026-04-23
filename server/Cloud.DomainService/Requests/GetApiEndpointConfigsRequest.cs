@@ -9,8 +9,8 @@ namespace Cloud.DomainService.Requests
 
     public class ApiEndpointConfigFilter
     {
-        public string? Service { get; set; }
+        public string? ResourceGroup { get; set; }
         public string? Method { get; set; }
-        public string? Endpoint { get; set; }
+        public string? Controller { get; set; }
     }
 }
