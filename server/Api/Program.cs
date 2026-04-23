@@ -53,6 +53,8 @@ var indexHtml = Path.Combine(app.Environment.WebRootPath ?? "", "index.html");
 if (File.Exists(indexHtml))
 {
     app.MapFallbackToFile("/index.html");
+   // x-blocks-key cookie
+    
 }
 
 ApplicationConfigurations.ConfigureMiddleware(app);
