@@ -56,12 +56,21 @@ export const ModelAddKeyModal = ({
 
   const { schema, defaultValues, fields } = resolveModelConfig(provider, servicePlatform, modelOptions);
 
-  const form = useForm({
+  type AllFormValues = {
+    url: string;
+    model: string;
+    apiKey: string;
+    organizationId?: string;
+    projectId?: string;
+    deploymentName?: string;
+  };
+
+  const form = useForm<AllFormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       ...defaultValues,
       url: baseUrl || defaultValues.url,
-    } as z.infer<typeof schema>,
+    } as AllFormValues,
     mode: "onChange",
   });
 
