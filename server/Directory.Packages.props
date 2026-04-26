@@ -27,6 +27,7 @@
 	<PackageVersion Include="coverlet.collector" Version="6.0.4" />
 	<PackageVersion Include="FluentAssertions" Version="8.8.0" />
 	<PackageVersion Include="Microsoft.Graph" Version="5.68.0" />
+    <PackageVersion Include="MailKit" Version="4.15.1" />
     <PackageVersion Include="MimeKit" Version="4.15.1" />
 	<PackageVersion Include="JUnitLogger" Version="1.0.1" />
 	<PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />

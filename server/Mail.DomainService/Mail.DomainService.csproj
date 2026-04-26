@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <PackageReference Include="FluentValidation" />
+    <PackageReference Include="MailKit" />
     <PackageReference Include="Microsoft.Graph" />
     <PackageReference Include="MimeKit" />
     <PackageReference Include="SeliseBlocks.Genesis" />
