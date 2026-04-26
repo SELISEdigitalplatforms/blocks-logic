@@ -54,6 +54,10 @@ if (File.Exists(indexHtml))
 {
     app.MapFallbackToFile("/index.html");
    // x-blocks-key cookie
+   // check if domain match 
+   // get google captch key BLOCKS_GOOGLE_SITE_KEY
+   // Base Url 
+   // Construct URL 
     
 }
 
