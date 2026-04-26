@@ -1,5 +1,4 @@
 ﻿using Authentication.DomainService.OAuth.SocialServices;
-using Blocks.Extension.DependencyInjection;
 using Blocks.Genesis;
 using Captcha.DomainService.Captcha;
 using Captcha.DomainService.Configuration;
@@ -112,7 +111,7 @@ namespace DomainService.Utilities
             serviceCollection.AddTransient<IValidator<VerifyOtpRequest>, VerifyOtpRequestValidator>();
 
 
-            serviceCollection.RegisterBlocksMailService();
+            // serviceCollection.RegisterBlocksMailService();
 
             #endregion
 
