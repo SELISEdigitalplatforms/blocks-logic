@@ -1,0 +1,10 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="Microsoft.Graph" />
+    <PackageReference Include="MimeKit" />
+    <PackageReference Include="SeliseBlocks.Genesis" />
+  </ItemGroup>
+
+</Project>
