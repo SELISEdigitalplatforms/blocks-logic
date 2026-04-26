@@ -1,4 +1,4 @@
-﻿using Blocks.Extension.DependencyInjection;
+﻿
 using Blocks.Genesis;
 using FluentValidation;
 using Mfa.DomainService.Configuration;
@@ -30,7 +30,7 @@ namespace Mfa.DomainService.Utilities
             serviceCollection.AddTransient<IValidator<VerifyOtpRequest>, VerifyOtpRequestValidator>();
             #endregion
 
-            serviceCollection.RegisterBlocksMailService();
+            // serviceCollection.RegisterBlocksMailService();
         }
     }
 }

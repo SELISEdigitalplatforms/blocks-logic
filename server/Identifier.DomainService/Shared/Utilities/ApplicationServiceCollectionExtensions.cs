@@ -12,6 +12,7 @@ using DomainService.Shared.Utilities;
 using DomainService.Storage;
 using DomainService.Subscription.Services;
 using FluentValidation;
+using Mail.DomainService.Shared.Utilities;
 using Microsoft.Extensions.DependencyInjection;
 using Storage.DomainService.Shared.Services;
 using Storage.DomainService.Storage;
@@ -53,13 +54,12 @@ namespace DomainService.Shared
 
             // Drivers
             services.AddSingleton<DmsArtifactBuilderFactory>();
-            services.AddTransient<IValidator<UpdateFileRequest>, UpdateFileRequestValidator>(); 
+            services.AddTransient<IValidator<UpdateFileRequest>, UpdateFileRequestValidator>();
             services.AddTransient<AwsS3CompatibleStorageService>();
             services.AddSingleton<FileArtifactBuilder>();
             services.AddSingleton<FolderArtifactBuilder>();
 
             services.RegisterBlocksStorageServices();
-            services.RegisterBlocksMailService();
         }
     }
 }

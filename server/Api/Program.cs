@@ -3,7 +3,7 @@ using Blocks.Genesis;
 using Cloud.DomainService.Utilities;
 using DomainService.Utilities;
 using DomainService.Shared;
-using FluentValidation.AspNetCore;
+using Mail.DomainService.Shared.Utilities;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Cloud.LmtService.Utilities;
@@ -43,6 +43,7 @@ services.AddApplicationServices();
 services.AddCloudDomainServices();
 services.AddCloudLmtServices();
 services.AddCloudConfigurationServices();
+services.RegisterAllMailApplicationServices();
 
 var app = builder.Build();
 
@@ -53,12 +54,12 @@ var indexHtml = Path.Combine(app.Environment.WebRootPath ?? "", "index.html");
 if (File.Exists(indexHtml))
 {
     app.MapFallbackToFile("/index.html");
-   // x-blocks-key cookie
-   // check if domain match 
-   // get google captch key BLOCKS_GOOGLE_SITE_KEY
-   // Base Url 
-   // Construct URL 
-    
+    // x-blocks-key cookie
+    // check if domain match 
+    // get google captch key BLOCKS_GOOGLE_SITE_KEY
+    // Base Url 
+    // Construct URL 
+
 }
 
 ApplicationConfigurations.ConfigureMiddleware(app);
@@ -84,7 +85,7 @@ static VaultType ResolveVaultType()
 
 static void ApplyFrontendRuntimeSettings(IConfiguration configuration, string webRootPath)
 {
-  //  var envFilePath = Path.Combine(Directory.GetCurrentDirectory(), ".env");
+    //  var envFilePath = Path.Combine(Directory.GetCurrentDirectory(), ".env");
     //var section = configuration.GetSection("FrontendRuntime");
     //var replacements = new Dictionary<string, string?>
     //{
