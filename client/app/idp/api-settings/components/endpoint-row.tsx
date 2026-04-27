@@ -20,7 +20,7 @@ export const EndpointRow = ({
   onToggleMfa,
   onToggleCaptcha,
 }: EndpointRowProps) => {
-  const isCritical = endpoint.method.toUpperCase() === "DELETE";
+  const isCritical = (endpoint.method ?? "").toUpperCase() === "DELETE";
 
   return (
     <div className="group flex flex-col gap-2.5 rounded-lg border border-border bg-background px-3 py-3 transition-colors hover:bg-accent/20 sm:flex-row sm:items-center sm:justify-between sm:px-4">

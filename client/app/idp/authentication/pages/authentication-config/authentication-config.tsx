@@ -112,12 +112,14 @@ function NewCommunicationContent({ onClose, onCreated }: NewCommunicationContent
         </div>
 
         {currentStep === 1 ? (
-          <BasicInformation
-            ref={ref}
-            onSubmit={formSubmitHandler}
-            templateData={templateData}
-            onValidityChange={setIsFormValid}
-          />
+          <div className="[&>main]:mt-0 [&>main]:sm:mt-0">
+            <BasicInformation
+              ref={ref}
+              onSubmit={formSubmitHandler}
+              templateData={templateData}
+              onValidityChange={setIsFormValid}
+            />
+          </div>
         ) : (
           <div>
             <div className="mb-5 flex items-center justify-between">
@@ -284,7 +286,7 @@ export const AuthenticationConfig = () => {
 
       {/* New template sheet */}
       <Sheet open={addTemplateOpen} onOpenChange={setAddTemplateOpen}>
-        <SheetContent side="right" className="w-full max-w-full p-0 sm:max-w-full">
+        <SheetContent side="right" className="flex h-full w-full max-w-full flex-col overflow-hidden p-0 sm:max-w-full" hideClose>
           <StepperProvider steps={NEW_COMMUNICATION_STEPS}>
             <NewCommunicationContent
               onClose={() => setAddTemplateOpen(false)}
