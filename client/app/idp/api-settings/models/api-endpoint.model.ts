@@ -12,7 +12,7 @@ export interface IApiEndpoint {
   description: string;
   isCaptchaRequired: boolean;
   captchaProvider: string;
-  isMfaRequired: boolean;
+  isMFARequired: boolean;
   mfaType: string;
   controller: string;
   baseUrl: string;
@@ -50,7 +50,7 @@ export interface IUpdateApiEndpointPayload {
   description: string;
   isCaptchaRequired: boolean;
   captchaProvider: string;
-  isMfaRequired: boolean;
+  isMFARequired: boolean;
   mfaType: string;
 }
 
@@ -63,7 +63,7 @@ export interface IBulkUpdateApiEndpointsPayload {
   projectKey: string;
   itemIds: string[];
   isCaptchaRequired?: boolean;
-  isMfaRequired?: boolean;
+  isMFARequired?: boolean;
   disableAll?: boolean;
 }
 
