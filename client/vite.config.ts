@@ -34,8 +34,14 @@ export default defineConfig(({ mode }) => {
         "localhost",
         ".seliseblocks.com",
       ],
-      proxy: proxyTarget
-        ? {
+      proxy: {
+          "/dev-idp-proxy": {
+            target: "https://dev-idp.blocksdevelopers.com",
+            changeOrigin: true,
+            secure: true,
+            rewrite: (path) => path.replace(/^\/dev-idp-proxy/, ""),
+          },
+          ...(proxyTarget ? {
             "/api": { 
               target: proxyTarget, 
               changeOrigin: true, 
@@ -74,8 +80,8 @@ export default defineConfig(({ mode }) => {
             "/blocksai-api": { target: proxyTarget, changeOrigin: true, secure: false },
             "/studio": { target: proxyTarget, changeOrigin: true, secure: false },
             "/uds": { target: proxyTarget, changeOrigin: true, secure: false },
-          }
-        : undefined,
+          } : {}),
+        },
     },
   };
 });
