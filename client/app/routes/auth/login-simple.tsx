@@ -148,54 +148,22 @@ export default function LoginSimplePage() {
     return () => clearTimeout(timeoutId);
   }, [titleNumber, titles]);
 
-  const handleLogin = async () => {
+  const handleLogin = () => {
     setIsLoading(true);
-    try {
-      const blocksKey = getRuntimeEnv("BLOCKS_X_BLOCKS_KEY");
-      const apiBaseUrl = getRuntimeEnv("BLOCKS_API_BASE_URL");
-      const isLocalhost = apiBaseUrl?.includes("localhost");
-      const idpBaseUrl = isLocalhost ? "/dev-idp-proxy" : "https://dev-idp.blocksdevelopers.com";
+    const blocksKey = getRuntimeEnv("BLOCKS_X_BLOCKS_KEY");
 
-      const params = new URLSearchParams({
-        response_type: "code",
-        client_id: "44ce2f9b-0ca4-4ad8-b8d4-bb775b61d68e",
-        redirect_uri: "https://dev-os.blocksdevelopers.com/oidc",
-        scope: "openId",
-        audience: "https://dev-os.blocksdevelopers.com",
-        state: "039849038",
-        nonce: "35443",
-      });
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id: "44ce2f9b-0ca4-4ad8-b8d4-bb775b61d68e",
+      redirect_uri: "https://dev-os.blocksdevelopers.com/oidc",
+      scope: "openId",
+      audience: "https://dev-os.blocksdevelopers.com",
+      state: "039849038",
+      nonce: "35443",
+      ...(blocksKey ? { "x-blocks-key": blocksKey } : {}),
+    });
 
-      const response = await fetch(
-        `${idpBaseUrl}/api/Authentication/Authorize?${params.toString()}`,
-        {
-          method: "GET",
-          redirect: "follow",
-          headers: {
-            accept: "*/*",
-            "x-blocks-key": blocksKey,
-            Authorization: "Basic c2VsaXNlYmxvY2tzOkJsMDNrc0B1JFU3VjEwUw==",
-          },
-        },
-      );
-
-      if (response.url && response.url.includes("/oidc")) {
-        window.location.href = response.url;
-        return;
-      }
-
-      if (!response.ok) return;
-
-      const contentType = response.headers.get("content-type") ?? "";
-      if (contentType.includes("application/json")) {
-        const data = await response.json();
-        const redirectTo: string | undefined =
-          data.redirectUrl ?? data.providerUrl ?? data.url ?? data.redirect_uri;
-        if (redirectTo) window.location.href = redirectTo;
-      }
-    } finally {
-      setIsLoading(false);
-    }
+    window.location.href = `https://dev-idp.blocksdevelopers.com/api/Authentication/Authorize?${params.toString()}`;
   };
 
   return (
