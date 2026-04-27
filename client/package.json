@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port 4000 --host abc.com",
+    "local": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "type-check": "tsc --noEmit"
