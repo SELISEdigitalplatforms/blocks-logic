@@ -35,7 +35,7 @@ export const EndpointRow = ({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
             <code className="break-all rounded-md bg-muted px-2 py-0.5 text-xs font-mono font-medium leading-relaxed">
-              {endpoint.endpoint}
+              /{endpoint.controller}/{endpoint.method.charAt(0).toUpperCase() + endpoint.method.slice(1)}
             </code>
             {isCritical && (
               <Badge
