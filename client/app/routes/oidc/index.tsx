@@ -28,7 +28,8 @@ export default function OidcIndexPage() {
           setTokens(res.access_token, res.refresh_token);
         }
         setAuthenticated();
-        navigate("https://dev-os.blocksdevelopers.com/console");
+
+        window.location.href = `${window.location.origin}/console`;
       })
       .catch(() => {
         navigate("/oidc/error");
