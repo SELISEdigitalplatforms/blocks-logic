@@ -32,9 +32,8 @@ class EmailService {
     language: string,
     mailConfigurationId: string,
   ): Promise<{ templates: IEmailTemplate[]; totalCount: number }> => {
-    return http.get(
-      `${EMAIL_TEMPLATE_ENDPOINTS.GET_TEMPLATES}?pageNumber=${pageNumber}&pageSize=${pageSize}&projectKey=${projectKey}&searchKey=${searchKey}&sortProperty=${sortProperty}&isDescending=${isDescending}&language=${language}&mailConfigurationId=${mailConfigurationId}`,
-    );
+    const url = `https://dev-logic.blocksdevelopers.com/api/template/gets?pageNumber=0&pageSize=10`;
+    return http.get(url, undefined, { absoluteUrl: true });
   };
 
   fetchEmailTemplate = (projectKey: string, itemId: string): Promise<IEmailTemplate> => {
