@@ -142,9 +142,9 @@ export default function LoginSimplePage() {
       const params = new URLSearchParams({
         response_type: "code",
         client_id: "44ce2f9b-0ca4-4ad8-b8d4-bb775b61d68e",
-        redirect_uri: "http://localhost:4000/oidc",
+        redirect_uri: "https://dev-os.blocksdevelopers.com/oidc",
         scope: "openId",
-        audience: "http://localhost:4000",
+        audience: "https://dev-os.blocksdevelopers.com",
         state: "039849038",
         nonce: "35443",
       });
