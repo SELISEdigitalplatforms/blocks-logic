@@ -153,6 +153,7 @@ export default function LoginSimplePage() {
         `/dev-idp-proxy/api/Authentication/Authorize?${params.toString()}`,
         {
           method: "GET",
+          redirect: "follow",
           headers: {
             accept: "*/*",
             "x-blocks-key": blocksKey,
@@ -161,9 +162,9 @@ export default function LoginSimplePage() {
         },
       );
 
-      if (response.status === 302) {
-        console.log(response);
-        console.log(response.url);
+      if (response.url && response.url.includes("/oidc")) {
+        window.location.href = response.url;
+        return;
       }
 
       if (!response.ok) return;
