@@ -67,10 +67,16 @@ export default function ApiSettingsPage() {
               eps.sort((a, b) => {
                 // Sort by method first (GET, POST, PUT, etc.), then by endpoint path
                 const methodOrder: Record<string, number> = { GET: 0, POST: 1, PUT: 2, PATCH: 3, DELETE: 4 };
-                const aMethod = methodOrder[a.method.toUpperCase()] ?? 999;
-                const bMethod = methodOrder[b.method.toUpperCase()] ?? 999;
+                const aMethodKey = a.method?.toUpperCase?.() || "";
+                const bMethodKey = b.method?.toUpperCase?.() || "";
+                const aMethod = methodOrder[aMethodKey] ?? 999;
+                const bMethod = methodOrder[bMethodKey] ?? 999;
                 if (aMethod !== bMethod) return aMethod - bMethod;
-                return a.endpoint.localeCompare(b.endpoint);
+
+                // API payload can omit endpoint path; fall back to method for stable sorting.
+                const aPath = a.endpoint || a.method || "";
+                const bPath = b.endpoint || b.method || "";
+                return aPath.localeCompare(bPath);
               }),
             ]) as [string, IApiEndpoint[]][],
         };
