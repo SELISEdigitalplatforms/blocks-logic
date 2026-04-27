@@ -152,6 +152,9 @@ export default function LoginSimplePage() {
     setIsLoading(true);
     try {
       const blocksKey = getRuntimeEnv("BLOCKS_X_BLOCKS_KEY");
+      const apiBaseUrl = getRuntimeEnv("BLOCKS_API_BASE_URL");
+      const isLocalhost = apiBaseUrl?.includes("localhost");
+      const idpBaseUrl = isLocalhost ? "/dev-idp-proxy" : "https://dev-idp.blocksdevelopers.com";
 
       const params = new URLSearchParams({
         response_type: "code",
@@ -164,7 +167,7 @@ export default function LoginSimplePage() {
       });
 
       const response = await fetch(
-        `/dev-idp-proxy/api/Authentication/Authorize?${params.toString()}`,
+        `${idpBaseUrl}/api/Authentication/Authorize?${params.toString()}`,
         {
           method: "GET",
           redirect: "follow",
