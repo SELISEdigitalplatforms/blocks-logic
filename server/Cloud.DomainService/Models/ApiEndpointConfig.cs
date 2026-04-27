@@ -6,34 +6,58 @@ namespace Cloud.DomainService.Models
     [BsonIgnoreExtraElements]
     public class ApiEndpointConfig : BaseEntity
     {
-        [BsonElement("Service")]
-        public string Service { get; set; } = string.Empty;
+        [BsonElement("Name")]
+        public string Name { get; set; } = string.Empty;
 
-        [BsonElement("Method")]
-        public string Method { get; set; } = string.Empty;
-
-        [BsonElement("Endpoint")]
-        public string Endpoint { get; set; } = string.Empty;
+        [BsonElement("Type")]
+        public int Type { get; set; }
 
         [BsonElement("Description")]
         public string? Description { get; set; }
 
+        [BsonElement("Resource")]
+        public string Resource { get; set; } = string.Empty;
+
+        [BsonElement("ResourceGroup")]
+        public string ResourceGroup { get; set; } = string.Empty;
+
+        [BsonElement("IsBuiltIn")]
+        public bool IsBuiltIn { get; set; }
+
+        [BsonElement("IsArchived")]
+        public bool IsArchived { get; set; }
+
+        [BsonElement("DependentPermissions")]
+        public List<string> DependentPermissions { get; set; } = new();
+
+        [BsonElement("Roles")]
+        public List<string> Roles { get; set; } = new();
+
+        [BsonElement("UserId")]
+        public List<string> UserId { get; set; } = new();
+
         [BsonElement("IsCaptchaRequired")]
         public bool IsCaptchaRequired { get; set; }
 
-        [BsonElement("CaptchaProvider")]
-        public string? CaptchaProvider { get; set; }
+        [BsonElement("IsMFARequired")]
+        public bool IsMFARequired { get; set; }
 
-        [BsonElement("IsMfaRequired")]
-        public bool IsMfaRequired { get; set; }
+        [BsonElement("MfaMediaType")]
+        public int MfaMediaType { get; set; }
 
-        [BsonElement("MfaType")]
-        public string? MfaType { get; set; }
-        [BsonElement("Controller")]
-        public string Controller { get; set; }
+        [BsonElement("IsAllowed")]
+        public bool IsAllowed { get; set; }
+
+        [BsonElement("Limit")]
+        public int Limit { get; set; }
+
+        [BsonElement("Usage")]
+        public int Usage { get; set; }
+
         [BsonElement("BaseUrl")]
-        public string BaseUrl { get; set; }
+        public string BaseUrl { get; set; } = string.Empty;
+
         [BsonElement("Version")]
-        public string Version { get; set; }
-    }
+        public string Version { get; set; } = string.Empty;
+    } 
 }
