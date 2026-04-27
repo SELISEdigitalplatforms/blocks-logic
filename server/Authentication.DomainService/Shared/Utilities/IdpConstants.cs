@@ -6,10 +6,10 @@ namespace DomainService.Utilities
     public static class IdpConstants
     {
         public const string TenantTokenPublicCertificateCachePrefix = "tetocertpublic::";
-        public const string AuthenticationQueue = "blocks_authentication_listener";
-        public const string IamQueue = "blocks_iam_listener";
-        public const string MailQueue = "blocks_mail_listener";
-        public const string MfaQueueName = "blocks_mfa_listener";
+        public const string AuthenticationQueue = "blocks_os_authentication_listener";
+        public const string IamQueue = "blocks_os_iam_listener";
+        public const string MailQueue = "blocks_os_mail_listener";
+        public const string MfaQueueName = "blocks_os_mfa_listener";
 
         public const string AccessTokenCookieName = "access_token";
         public const string RefreshTokenCookieName = "refresh_token";

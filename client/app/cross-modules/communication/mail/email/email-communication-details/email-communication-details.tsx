@@ -23,7 +23,7 @@ import {
 } from "@blocks-communication/mail/hooks/use-email-template";
 import { EmailTemplateDetailsSkeleton } from "./email-template-details-skeleton";
 
-export function EmailCommunicationDetails({ params }: { params: { id: string } }) {
+export function EmailCommunicationDetails({ params, onBack }: { params: { id: string }; onBack?: () => void }) {
   const { id } = params;
   const { isLoading, isFetching, data } = useGetEmailTemplate(id);
   const { data: loggedInUser } = useGetUser();
@@ -128,7 +128,7 @@ export function EmailCommunicationDetails({ params }: { params: { id: string } }
       </div>
       <div className="mt-5 flex items-center justify-between">
         <div className="item-center flex gap-2">
-          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigate(-1)}>
+          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => onBack ? onBack() : navigate(-1)}>
             <ArrowLeft className="h-6 w-6" />
           </Button>
           <h1 className="text-lg font-semibold md:text-2xl">{emailDetails.name}</h1>
