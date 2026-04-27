@@ -65,12 +65,18 @@ export default function ApiSettingsPage() {
             .map(([ctrl, eps]) => [
               ctrl,
               eps.sort((a, b) => {
-                // Sort by method first (GET, POST, PUT, etc.), then by endpoint path
+                // Sort by method first (GET, POST, PUT, etc.), then by controller
                 const methodOrder: Record<string, number> = { GET: 0, POST: 1, PUT: 2, PATCH: 3, DELETE: 4 };
-                const aMethod = methodOrder[a.method.toUpperCase()] ?? 999;
-                const bMethod = methodOrder[b.method.toUpperCase()] ?? 999;
+                const aMethodKey = a.method?.toUpperCase?.() || "";
+                const bMethodKey = b.method?.toUpperCase?.() || "";
+                const aMethod = methodOrder[aMethodKey] ?? 999;
+                const bMethod = methodOrder[bMethodKey] ?? 999;
                 if (aMethod !== bMethod) return aMethod - bMethod;
-                return a.endpoint.localeCompare(b.endpoint);
+
+                // Sort by controller for stable sorting
+                const aPath = a.controller || a.method || "";
+                const bPath = b.controller || b.method || "";
+                return aPath.localeCompare(bPath);
               }),
             ]) as [string, IApiEndpoint[]][],
         };
@@ -105,9 +111,9 @@ export default function ApiSettingsPage() {
           itemId: ep.itemId,
           service: ep.service,
           method: ep.method,
-          endpoint: ep.endpoint,
+          controller: ep.controller,
           description: ep.description,
-          isMfaRequired: value,
+          isMFARequired: value,
           mfaType: ep.mfaType,
           isCaptchaRequired: ep.isCaptchaRequired,
           captchaProvider: ep.captchaProvider,
@@ -115,7 +121,7 @@ export default function ApiSettingsPage() {
         if (!result.isSuccess) {
           throw new Error(result.errors?.join(", ") || "Failed to update MFA setting");
         }
-        showSuccessToast({ description: `MFA ${value ? "enabled" : "disabled"} for ${ep.endpoint}` });
+        showSuccessToast({ description: `MFA ${value ? "enabled" : "disabled"} for /${ep.controller}/${ep.method.charAt(0).toUpperCase() + ep.method.slice(1)}` });
       } catch (error) {
         showErrorToast({ errors: error instanceof Error ? error.message : "Failed to update MFA setting" });
       }
@@ -131,17 +137,17 @@ export default function ApiSettingsPage() {
           itemId: ep.itemId,
           service: ep.service,
           method: ep.method,
-          endpoint: ep.endpoint,
+          controller: ep.controller,
           description: ep.description,
           isCaptchaRequired: value,
           captchaProvider: ep.captchaProvider,
-          isMfaRequired: ep.isMfaRequired,
+          isMFARequired: ep.isMFARequired,
           mfaType: ep.mfaType,
         });
         if (!result.isSuccess) {
           throw new Error(result.errors?.join(", ") || "Failed to update Captcha setting");
         }
-        showSuccessToast({ description: `Captcha ${value ? "enabled" : "disabled"} for ${ep.endpoint}` });
+        showSuccessToast({ description: `Captcha ${value ? "enabled" : "disabled"} for /${ep.controller}/${ep.method.charAt(0).toUpperCase() + ep.method.slice(1)}` });
       } catch (error) {
         showErrorToast({ errors: error instanceof Error ? error.message : "Failed to update Captcha setting" });
       }
@@ -167,7 +173,7 @@ export default function ApiSettingsPage() {
         const result = await bulkUpdate({
           projectKey: tenantId,
           itemIds: ids,
-          isMfaRequired: value,
+          isMFARequired: value,
           isCaptchaRequired: captchaState,
           disableAll: false,
         });
@@ -189,9 +195,9 @@ export default function ApiSettingsPage() {
         const groupEndpoints = endpoints.filter((ep) => ids.includes(ep.itemId));
         const mfaState =
           groupEndpoints.length > 0
-            ? groupEndpoints.every((ep) => ep.isMfaRequired)
+            ? groupEndpoints.every((ep) => ep.isMFARequired)
               ? true
-              : groupEndpoints.some((ep) => ep.isMfaRequired)
+              : groupEndpoints.some((ep) => ep.isMFARequired)
                 ? false // default to false if mixed states
                 : false
             : false;
@@ -200,7 +206,7 @@ export default function ApiSettingsPage() {
           projectKey: tenantId,
           itemIds: ids,
           isCaptchaRequired: value,
-          isMfaRequired: mfaState,
+          isMFARequired: mfaState,
           disableAll: false,
         });
         if (!result.isSuccess) {
@@ -217,7 +223,7 @@ export default function ApiSettingsPage() {
   const handleBulkGroupDisableAll = useCallback(
     async (ids: string[]) => {
       try {
-        const result = await bulkUpdate({ projectKey: tenantId, itemIds: ids, isMfaRequired: false, isCaptchaRequired: false, disableAll: true });
+        const result = await bulkUpdate({ projectKey: tenantId, itemIds: ids, isMFARequired: false, isCaptchaRequired: false, disableAll: true });
         if (!result.isSuccess) {
           throw new Error(result.errors?.join(", ") || "Failed to disable security features");
         }
@@ -248,7 +254,7 @@ export default function ApiSettingsPage() {
       const result = await bulkUpdate({
         projectKey: tenantId,
         itemIds: selectedArray,
-        isMfaRequired: true,
+        isMFARequired: true,
         isCaptchaRequired: captchaState,
         disableAll: false,
       });
@@ -268,9 +274,9 @@ export default function ApiSettingsPage() {
       const selectedEndpoints = endpoints.filter((ep) => selectedArray.includes(ep.itemId));
       const mfaState =
         selectedEndpoints.length > 0
-          ? selectedEndpoints.every((ep) => ep.isMfaRequired)
+          ? selectedEndpoints.every((ep) => ep.isMFARequired)
             ? true
-            : selectedEndpoints.some((ep) => ep.isMfaRequired)
+            : selectedEndpoints.some((ep) => ep.isMFARequired)
               ? false // default to false if mixed states
               : false
           : false;
@@ -279,7 +285,7 @@ export default function ApiSettingsPage() {
         projectKey: tenantId,
         itemIds: selectedArray,
         isCaptchaRequired: true,
-        isMfaRequired: mfaState,
+        isMFARequired: mfaState,
         disableAll: false,
       });
       if (!result.isSuccess) {
