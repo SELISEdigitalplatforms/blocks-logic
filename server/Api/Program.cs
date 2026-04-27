@@ -8,6 +8,8 @@ using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Cloud.LmtService.Utilities;
 using CloudConfiguration.DomainService.Shared.Utilities;
+using Microsoft.IdentityModel.Tokens;
+using Cloud.LmtService.Models.Trace;
 
 var serviceName = "blocks-os-api";
 var vaultType = ResolveVaultType();
@@ -54,6 +56,11 @@ if (File.Exists(indexHtml))
 {
     app.MapFallbackToFile("/index.html");
    // x-blocks-key cookie
+   // check if domain match 
+   // get google captch key BLOCKS_GOOGLE_SITE_KEY
+   // Base Url 
+   // Construct URL 
+ 
     
 }
 
