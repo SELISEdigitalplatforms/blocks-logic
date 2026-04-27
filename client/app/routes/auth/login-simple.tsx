@@ -1,7 +1,8 @@
-import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { Button } from "@/components/ui-kits/button/button";
 import { Logo } from "@/components/logo";
 import { BlockInfo } from "@blocks-idp/authentication/components/auth-layout/blocks-info";
+import { getRuntimeEnv } from "@/lib/runtime-env";
 import { ShieldCheck, Users, KeyRound, Puzzle } from "lucide-react";
 
 const features = [
@@ -12,7 +13,53 @@ const features = [
 ];
 
 export default function LoginSimplePage() {
-  const navigate = useNavigate();
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleLogin = async () => {
+    setIsLoading(true);
+    try {
+      const blocksKey = getRuntimeEnv("BLOCKS_X_BLOCKS_KEY");
+
+      const params = new URLSearchParams({
+        response_type: "code",
+        client_id: "44ce2f9b-0ca4-4ad8-b8d4-bb775b61d68e",
+        redirect_uri: "http://localhost:4000/oidc",
+        scope: "openId",
+        audience: "http://localhost:4000",
+        state: "039849038",
+        nonce: "35443",
+      });
+
+      const response = await fetch(
+        `https://dev-api.blocksdevelopers.com/idp/v1/Authentication/Authorize?${params.toString()}`,
+        {
+          method: "GET",
+          headers: {
+            accept: "*/*",
+            "x-blocks-key": blocksKey,
+          },
+        },
+      );
+
+      if(response.status === 302) {
+        console.log(response);
+        console.log(response.url);
+      }
+
+
+      if (!response.ok) return;
+
+      const contentType = response.headers.get("content-type") ?? "";
+      if (contentType.includes("application/json")) {
+        const data = await response.json();
+        const redirectTo: string | undefined =
+          data.redirectUrl ?? data.providerUrl ?? data.url ?? data.redirect_uri;
+        if (redirectTo) window.location.href = redirectTo;
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="flex min-h-screen flex-col items-center py-[24px] lg:py-[64px] xl:px-[154px]">
@@ -50,7 +97,7 @@ export default function LoginSimplePage() {
           </div>
 
           <div className="flex flex-col gap-2">
-            <Button size="lg" className="w-fit px-10" onClick={() => navigate("/login-classic")}>
+            <Button size="lg" className="w-fit px-10" disabled={isLoading} onClick={handleLogin}>
               Log in to your account
             </Button>
             {/* <p className="text-xs text-[hsl(var(--low-emphasis))]">
