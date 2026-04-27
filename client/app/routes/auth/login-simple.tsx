@@ -56,7 +56,7 @@ const ResourcesPanel = () => {
   return (
     <aside className="mt-8 w-full shrink-0 lg:mt-0 lg:w-[380px] xl:w-[420px]">
       <div className="overflow-hidden rounded-2xl border border-[hsl(var(--border-default))] bg-white shadow-md">
-        {/* Card header */}
+        
         <div className="relative overflow-hidden bg-primary px-6 py-6">
           <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-white/5" />
           <div className="absolute -bottom-6 -right-2 h-20 w-20 rounded-full bg-white/5" />
@@ -80,7 +80,7 @@ const ResourcesPanel = () => {
           </Link>
         </div>
 
-        {/* SDK list */}
+        
         <div className="divide-y divide-[hsl(var(--border-default))]">
           {sdks.map((sdk) => (
             <div key={sdk.name} className="flex items-center justify-between px-6 py-3.5">
@@ -116,7 +116,7 @@ const ResourcesPanel = () => {
           ))}
         </div>
 
-        {/* Footer */}
+        
         <div className="flex items-center justify-between bg-[hsl(var(--surface-app))] px-6 py-3.5">
           <span className="text-xs text-[hsl(var(--medium-emphasis))]">Fully open source</span>
           <Link
@@ -144,7 +144,7 @@ export default function LoginSimplePage() {
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       setTitleNumber((prev) => (prev === titles.length - 1 ? 0 : prev + 1));
-    }, 2000);
+    }, 2400);
     return () => clearTimeout(timeoutId);
   }, [titleNumber, titles]);
 
@@ -200,22 +200,18 @@ export default function LoginSimplePage() {
 
   return (
     <div className="relative flex min-h-screen flex-col bg-white">
-      {/* Top nav */}
+      
       <header className="relative z-10 flex items-center justify-between px-6 py-5 xl:px-[154px]">
         <Logo width={120} height={52} />
       </header>
 
-      {/* Main */}
+      
       <main className="relative z-10 flex flex-1 flex-col items-start justify-center gap-16 px-6 py-12 lg:flex-row lg:items-center lg:gap-16 lg:py-0 xl:px-[154px]">
-        {/* Hero */}
+        
         <div className="flex flex-1 flex-col items-start gap-6">
-          {/* Pill badge */}
-          <Button variant="secondary" size="sm" className="gap-2 rounded-full">
-            Now with AI Agents <MoveRight className="h-4 w-4" />
-          </Button>
-
-          {/* Animated headline */}
+          
           <div className="flex flex-col gap-2">
+            <p className="text-sm font-semibold uppercase tracking-[0.1em] text-primary">Blocks OS Platform</p>
             <h1 className="max-w-xl text-5xl font-semibold tracking-tight text-[hsl(var(--high-emphasis))] lg:text-6xl">
               Backends that are
             </h1>
@@ -224,12 +220,12 @@ export default function LoginSimplePage() {
                 <motion.span
                   key={index}
                   className="absolute text-5xl font-semibold tracking-tight text-primary lg:text-6xl"
-                  initial={{ opacity: 0, y: 80 }}
-                  transition={{ type: "spring", stiffness: 50 }}
+                  initial={{ opacity: 0, y: 28, filter: "blur(6px)" }}
+                  transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
                   animate={
                     titleNumber === index
-                      ? { y: 0, opacity: 1 }
-                      : { y: titleNumber > index ? -80 : 80, opacity: 0 }
+                      ? { y: 0, opacity: 1, filter: "blur(0px)" }
+                      : { y: titleNumber > index ? -28 : 28, opacity: 0, filter: "blur(6px)" }
                   }
                 >
                   {title}.
@@ -239,12 +235,12 @@ export default function LoginSimplePage() {
           </div>
 
           <p className="max-w-lg text-lg leading-relaxed tracking-tight text-muted-foreground">
-            Build and deploy secure, scalable applications with built-in observability, AI
+            Blocks OS is a modern platform for building and deploying secure, scalable applications with built-in observability, AI
             capabilities, and comprehensive identity management. Focus on your application logic
-            while we handle the infrastructure.
+            while Blocks OS handles the infrastructure.
           </p>
 
-          {/* Pillar chips */}
+          
           <div className="flex flex-wrap gap-2">
             {pillars.map(({ icon: Icon, label }) => (
               <div
@@ -257,7 +253,7 @@ export default function LoginSimplePage() {
             ))}
           </div>
 
-          {/* CTA */}
+          
           <div className="flex flex-col gap-2 pt-2">
             <div className="flex flex-row gap-3">
               <Button
