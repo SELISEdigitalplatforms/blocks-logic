@@ -9,11 +9,10 @@ export interface IApiEndpoint {
   tags: string[];
   service: string;
   method: string;
-  endpoint: string;
   description: string;
   isCaptchaRequired: boolean;
   captchaProvider: string;
-  isMfaRequired: boolean;
+  isMFARequired: boolean;
   mfaType: string;
   controller: string;
   baseUrl: string;
@@ -23,7 +22,7 @@ export interface IApiEndpoint {
 export interface IApiEndpointFilter {
   service?: string;
   method?: string;
-  endpoint?: string;
+  controller?: string;
 }
 
 export interface IGetApiEndpointsPayload {
@@ -47,11 +46,11 @@ export interface IUpdateApiEndpointPayload {
   itemId: string;
   service: string;
   method: string;
-  endpoint: string;
+  controller: string;
   description: string;
   isCaptchaRequired: boolean;
   captchaProvider: string;
-  isMfaRequired: boolean;
+  isMFARequired: boolean;
   mfaType: string;
 }
 
@@ -64,7 +63,7 @@ export interface IBulkUpdateApiEndpointsPayload {
   projectKey: string;
   itemIds: string[];
   isCaptchaRequired?: boolean;
-  isMfaRequired?: boolean;
+  isMFARequired?: boolean;
   disableAll?: boolean;
 }
 
