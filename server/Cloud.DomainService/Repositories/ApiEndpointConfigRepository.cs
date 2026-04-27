@@ -78,6 +78,7 @@ namespace Cloud.DomainService.Repositories
                     Usage = x.Usage,
                     BaseUrl = x.BaseUrl,
                     Version = x.Version,
+                    ItemId = x.ItemId
                 };
             }).ToList();
             return (mapped, count);
