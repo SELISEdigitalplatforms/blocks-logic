@@ -1,6 +1,7 @@
 using Blocks.Genesis;
 using Cloud.DomainService.Models;
 using Cloud.DomainService.Requests;
+using Cloud.DomainService.Responses;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using System.Text.RegularExpressions;
@@ -20,7 +21,7 @@ namespace Cloud.DomainService.Repositories
             _blocksSecret = blocksSecret;
         }
 
-        public async Task<(List<ApiEndpointConfig>, long)> GetListAsync(GetApiEndpointConfigsRequest request)
+        public async Task<(List<ApiEndpointConfigResponse>, long)> GetListAsync(GetApiEndpointConfigsRequest request)
         {
             var db = _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, _blocksSecret.RootDatabaseName);
             var collection = db.GetCollection<ApiEndpointConfig>(CollectionName);
@@ -51,8 +52,35 @@ namespace Cloud.DomainService.Repositories
                 .ToListAsync();
 
             var count = await collection.CountDocumentsAsync(filter);
-
-            return (data, count);
+            var mapped = data.Select(x =>
+            {
+                var parts = x.Resource?.Split("::") ?? [];
+                return new ApiEndpointConfigResponse
+                {
+                    Controller = parts.Length > 1 ? parts[1] : string.Empty,
+                    Method = parts.Length > 2 ? parts[2] : string.Empty,
+                    Service = x.ResourceGroup,
+                    Name = x.Name,
+                    Type = x.Type,
+                    Description = x.Description,
+                    Resource = x.Resource,
+                    ResourceGroup = x.ResourceGroup,
+                    IsBuiltIn = x.IsBuiltIn,
+                    IsArchived = x.IsArchived,
+                    DependentPermissions = x.DependentPermissions,
+                    Roles = x.Roles,
+                    UserId = x.UserId,
+                    IsCaptchaRequired = x.IsCaptchaRequired,
+                    IsMFARequired = x.IsMFARequired,
+                    MfaMediaType = x.MfaMediaType,
+                    IsAllowed = x.IsAllowed,
+                    Limit = x.Limit,
+                    Usage = x.Usage,
+                    BaseUrl = x.BaseUrl,
+                    Version = x.Version,
+                };
+            }).ToList();
+            return (mapped, count);
         }
 
         public async Task<bool> UpdateAsync(string projectKey, string itemId, bool isCaptchaRequired, bool isMfaRequired, string updatedBy)
