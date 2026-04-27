@@ -13,8 +13,10 @@ import {
   Activity,
   ArrowRight,
   MoveRight,
+  Github,
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { ModeToggle } from "@/components/mode-toggle/mode-toggle";
 
 const pillars = [
   { icon: ShieldCheck, label: "Identity & MFA", desc: "Passkeys, OAuth 2.0, OIDC" },
@@ -55,7 +57,7 @@ const ResourcesPanel = () => {
 
   return (
     <aside className="mt-8 w-full shrink-0 lg:mt-0 lg:w-[380px] xl:w-[420px]">
-      <div className="overflow-hidden rounded-2xl border border-[hsl(var(--border-default))] bg-white shadow-md">
+      <div className="overflow-hidden rounded-2xl border border-[hsl(var(--border-default))] bg-[hsl(var(--card))] shadow-md">
         
         <div className="relative overflow-hidden bg-primary px-6 py-6">
           <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-white/5" />
@@ -86,7 +88,7 @@ const ResourcesPanel = () => {
             <div key={sdk.name} className="flex items-center justify-between px-6 py-3.5">
               <div className="flex items-center gap-3">
                 <div
-                  className={`flex h-8 w-8 items-center justify-center rounded-lg border border-[hsl(var(--border-default))] bg-white shadow-sm ${!sdk.available ? "opacity-35" : ""}`}
+                  className={`flex h-8 w-8 items-center justify-center rounded-lg border border-[hsl(var(--border-default))] bg-[hsl(var(--card))] shadow-sm ${!sdk.available ? "opacity-35" : ""}`}
                 >
                   <img src={sdk.icon} width={18} height={18} alt={sdk.name} />
                 </div>
@@ -122,9 +124,9 @@ const ResourcesPanel = () => {
           <Link
             to="https://github.com/SELISEdigitalplatforms"
             target="_blank"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[hsl(var(--border-default))] bg-white px-3 py-1.5 text-xs font-medium text-[hsl(var(--high-emphasis))] shadow-sm transition-colors hover:bg-[hsl(var(--neutral-50))]"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[hsl(var(--border-default))] bg-[hsl(var(--card))] px-3 py-1.5 text-xs font-medium text-[hsl(var(--high-emphasis))] shadow-sm transition-all hover:border-primary/40 hover:shadow-md"
           >
-            <img src="/assets/images/social-media-github.png" width={13} height={13} alt="GitHub" />
+            <Github className="h-4 w-4" />
             View on GitHub
           </Link>
         </div>
@@ -167,10 +169,13 @@ export default function LoginSimplePage() {
   };
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-white">
+    <div className="relative flex min-h-screen flex-col bg-[hsl(var(--surface-app))]">
       
-      <header className="relative z-10 flex items-center justify-between px-6 py-5 xl:px-[154px]">
+      <header className="relative z-10 flex items-center px-6 py-5 xl:px-[154px]">
         <Logo width={120} height={52} />
+        <div className="absolute right-6 top-5 xl:right-[154px]">
+          <ModeToggle />
+        </div>
       </header>
 
       
@@ -213,7 +218,7 @@ export default function LoginSimplePage() {
             {pillars.map(({ icon: Icon, label }) => (
               <div
                 key={label}
-                className="inline-flex items-center gap-1.5 rounded-full border border-[hsl(var(--border-default))] bg-white px-3 py-1.5 text-xs font-medium text-[hsl(var(--high-emphasis))] shadow-sm"
+                className="inline-flex items-center gap-1.5 rounded-full border border-[hsl(var(--border-default))] bg-[hsl(var(--card))] px-3 py-1.5 text-xs font-medium text-[hsl(var(--high-emphasis))] shadow-sm"
               >
                 <Icon className="h-3.5 w-3.5 text-primary" />
                 {label}
