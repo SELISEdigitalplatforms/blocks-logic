@@ -38,7 +38,7 @@ function mapApiResponseToEndpoint(data: Record<string, unknown>): IApiEndpoint {
     description: getProperty<string>("description", "Description", ""),
     isCaptchaRequired: getProperty<boolean>("isCaptchaRequired", "IsCaptchaRequired", false),
     captchaProvider: getProperty<string>("captchaProvider", "CaptchaProvider", ""),
-    isMfaRequired: getProperty<boolean>("isMfaRequired", "IsMFARequired", false),
+    isMFARequired: getProperty<boolean>("isMFARequired", "IsMFARequired", false),
     mfaType: getProperty<string>("mfaType", "MfaType", ""),
     controller: (() => {
       const ctrl = getProperty<string>("controller", "Controller", "");
