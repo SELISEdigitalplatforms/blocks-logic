@@ -54,9 +54,11 @@ export class AuthService {
       body,
       {
         "Content-Type": "application/x-www-form-urlencoded",
+        "Authorization": "Basic c2VsaXNlYmxvY2tzOkJsMDNrc0B1JFU3VjEwUw=="
       },
       {
         absoluteUrl: true,
+
       },
     );
   }
