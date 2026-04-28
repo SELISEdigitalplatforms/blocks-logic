@@ -23,7 +23,9 @@ export default function OidcIndexPage() {
     setIsExchanging(true);
     authService.verifyOidc({ code, state })
       .then((res) => {
-        const isLocalhost = getRuntimeEnv("BLOCKS_API_BASE_URL")?.includes("localhost");
+        // const isLocalhost = getRuntimeEnv("BLOCKS_API_BASE_URL")?.includes("localhost");
+        const isLocalhost = getRuntimeEnv("https://dev-idp.blocksdevelopers.com")?.includes("localhost");
+        
         if (isLocalhost && res.access_token && res.refresh_token) {
           setTokens(res.access_token, res.refresh_token);
         }
