@@ -9,6 +9,7 @@ import { ProjectOverviewLayout } from "./layouts/project-overview-layout";
 
 // Auth routes (public, with auth layout)
 import LoginPage from "./routes/auth/login";
+import LoginSimplePage from "./routes/auth/login-simple";
 import SignupPage from "./routes/auth/signup";
 import SsoActivatePage from "./routes/auth/sso-activate";
 
@@ -68,11 +69,14 @@ export const router = createBrowserRouter([
   {
     element: <AuthLayout />,
     children: [
-      { path: "/login", element: <LoginPage /> },
+      { path: "/login-classic", element: <LoginPage /> },
       { path: "/signup", element: <SignupPage /> },
       { path: "/sso-activate", element: <SsoActivatePage /> },
     ],
   },
+
+  // ── Simple login (no guards, no API calls) ──
+  { path: "/login", element: <LoginSimplePage /> },
 
   // ── Public layout (other public pages with PublicGuard) ──
   {
