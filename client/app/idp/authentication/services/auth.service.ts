@@ -49,9 +49,16 @@ export class AuthService {
     body.append("state", payload.state);
     body.append("client_secret", "e048ec1b63d548dd85d053f364d5d54c");
 
-    return http.post(AUTH_ENDPOINTS.TOKEN, body, {
-      "Content-Type": "application/x-www-form-urlencoded",
-    });
+    return http.post(
+      `https://dev-idp.blocksdevelopers.com${AUTH_ENDPOINTS.TOKEN}`,
+      body,
+      {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      {
+        absoluteUrl: true,
+      },
+    );
   }
 
   signupByEmail(payload: ISignupByEmailPayload): Promise<ISignupByEmailResponse> {
