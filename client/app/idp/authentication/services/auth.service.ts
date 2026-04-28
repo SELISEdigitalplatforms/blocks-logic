@@ -42,6 +42,16 @@ export class AuthService {
     });
   }
 
+  verifyOidc(payload: { code: string; state: string }): Promise<any> {
+    const body = new URLSearchParams();
+    body.append("grant_type", "authorization_code");
+    body.append("code", payload.code);
+    body.append("state", payload.state);
+    return http.post(AUTH_ENDPOINTS.TOKEN, body, {
+      "Content-Type": "application/x-www-form-urlencoded",
+    });
+  }
+
   signupByEmail(payload: ISignupByEmailPayload): Promise<ISignupByEmailResponse> {
     return http.post(PEOPLE_ENDPOINTS.SIGNUP, payload);
   }
