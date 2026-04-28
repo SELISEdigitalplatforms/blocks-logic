@@ -1,7 +1,6 @@
 const PLACEHOLDER_PREFIX = "__BLOCKS_";
 
 type RuntimeKey =
-  |  string 
   | "BLOCKS_API_BASE_URL"
   | "BLOCKS_X_BLOCKS_KEY"
   | "BLOCKS_GOOGLE_SITE_KEY"
