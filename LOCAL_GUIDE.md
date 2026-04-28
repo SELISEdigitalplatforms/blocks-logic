@@ -221,6 +221,35 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 
 ---
 
+## run.sh Permission (macOS / Linux)
+
+After cloning the repo, if you see `permission denied: ./run.sh`, the execute bit is missing. Fix it with:
+
+```bash
+chmod +x run.sh
+```
+
+To make this permanent so everyone who clones the repo gets it pre-set:
+
+```bash
+git add --chmod=+x run.sh
+git commit -m "Make run.sh executable"
+```
+
+### Permission reference
+
+| Scenario | Command |
+|---|---|
+| Make executable for everyone | `chmod +x run.sh` |
+| Make executable for owner only | `chmod u+x run.sh` |
+| Set full permissions numerically | `chmod 755 run.sh` |
+| Check current permissions | `ls -la run.sh` |
+| Fix via git (permanent) | `git add --chmod=+x run.sh && git commit` |
+
+> This applies to **macOS, Linux, and WSL** — they all follow POSIX permission semantics.
+
+---
+
 ## Notes
 
 * Always use `dotnet restore` (or `./run.sh -d restore`) to install backend dependencies
