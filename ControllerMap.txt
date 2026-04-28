@@ -1,1 +1,15 @@
-Hello
+IDP
+   /GeneralSetting 
+   /SignUpFlow 
+   /EmailTemplate
+   /Roles
+   /Permissioin
+
+APISettings
+   
+
+SecretManage
+    /MySecret
+    /OIDC
+    /SSO
+    /Captcha
