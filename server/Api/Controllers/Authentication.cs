@@ -16,7 +16,6 @@ using DomainService.Utilities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
-using System.Text;
 
 namespace Api.Controllers
 {
@@ -186,7 +185,7 @@ namespace Api.Controllers
                     redirectUri = $"{redirectUri}&brandColor={client.ClientBrandColor}&logoUrl={client.ClientLogoUrl}";
                 }
 
-                if(!string.IsNullOrWhiteSpace(request.State))
+                if (!string.IsNullOrWhiteSpace(request.State))
                 {
                     redirectUri = $"{redirectUri}&state={request.State}&redirect_uri={client.RedirectUri}&scope={client.Scope}";
                 }
@@ -260,7 +259,7 @@ namespace Api.Controllers
         [HttpGet]
         public async Task<IActionResult> GetUserInfo()
         {
-            var claimsPrincipal = await _authenticationService.GetPrincipalFromTokenAsync(Request, BlocksContext.GetContext()?.TenantId ?? "" , IsUserInfoGetRequest: false);
+            var claimsPrincipal = await _authenticationService.GetPrincipalFromTokenAsync(Request, BlocksContext.GetContext()?.TenantId ?? "", IsUserInfoGetRequest: false);
 
             if (claimsPrincipal == null)
                 return Unauthorized(new { error = "invalid_token", error_description = "The access token is invalid or has expired" });
@@ -282,7 +281,7 @@ namespace Api.Controllers
             if (!request.IsAcknowledged)
                 return Ok(new { redirectUrl = request.RedirectUri });
 
-            if(BlocksContext.GetContext()?.UserName != request.Username)
+            if (BlocksContext.GetContext()?.UserName != request.Username)
                 return BadRequest(new { error = "invalid_user", error_description = "The user is not authenticated" });
 
             var uri = await _authenticationService.ConstructRedirectUriAsync(request.ClientId, request);
@@ -342,6 +341,7 @@ namespace Api.Controllers
         }
 
         #endregion
+
         #region Cloud Configuration
         [ProtectedEndPoint]
         [HttpGet]
@@ -358,6 +358,29 @@ namespace Api.Controllers
             _changeControllerContext.ChangeContext(configuration);
             return await _confirurationService.UpdateAuthenticationConfigAsync(configuration);
         }
+        #endregion
+
+        #region OIDC Dynamic Support
+
+        [HttpGet]
+        public async Task<IActionResult> GetOIDCRedirectUri([FromQuery] GetOIDCRedirectUriRequest request)
+        {
+            var redirectUri = await _authenticationDomainService.GetOIDCRedirectUriAsync(request);
+
+            if (string.IsNullOrWhiteSpace(redirectUri))
+            {
+                return NotFound();
+            }
+           
+           return Redirect(redirectUri);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetOIDCToken([FromQuery] GetOIDCTokenRequest request)
+        {
+            return await _authenticationDomainService.GetOIDCToenAsync(request); 
+        }
+
         #endregion
     }
 }
