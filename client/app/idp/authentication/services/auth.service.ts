@@ -11,6 +11,7 @@ import {
 } from "@blocks-idp/authentication/models/auth.model";
 import { AUTH_ENDPOINTS } from "../constants/endpoint.constant";
 import { PEOPLE_ENDPOINTS } from "@blocks-identifier/constants/endpoint.constant";
+import { IDP_BASE_URL } from "@/constants/endpoint.constant";
 
 export class AuthService {
   signinByEmail(payload: ISigninByEmailPayload): Promise<ISigninByEmailResponse> {
@@ -50,7 +51,7 @@ export class AuthService {
     body.append("client_secret", "e048ec1b63d548dd85d053f364d5d54c");
 
     return http.post(
-      `https://dev-idp.blocksdevelopers.com${AUTH_ENDPOINTS.TOKEN}`,
+      `${IDP_BASE_URL}${AUTH_ENDPOINTS.TOKEN}`,
       body,
       {
         "Content-Type": "application/x-www-form-urlencoded",
