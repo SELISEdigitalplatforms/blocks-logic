@@ -1,7 +1,6 @@
 import { Link } from "react-router-dom";
-import { Button } from "@/components/ui-kits/button/button";
 import { motion } from "framer-motion";
-import { Layers, MoveRight } from "lucide-react";
+import { Layers, BookOpenText } from "lucide-react";
 
 export default function ConsoleCreateProject() {
   return (
@@ -9,47 +8,53 @@ export default function ConsoleCreateProject() {
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-      className="relative flex flex-col items-center gap-7 overflow-hidden rounded-2xl border border-[hsl(var(--border-default))] bg-[hsl(var(--card))] py-28 text-center shadow-sm"
+      className="relative overflow-hidden rounded-2xl bg-primary shadow-lg"
     >
-      {/* Top edge glow bar */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/70 to-transparent" />
+      {/* Decorative orbs — same as ResourcesPanel */}
+      <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-white/5" />
+      <div className="pointer-events-none absolute -bottom-10 -right-4 h-40 w-40 rounded-full bg-white/5" />
+      <div className="pointer-events-none absolute -left-10 bottom-0 h-32 w-32 rounded-full bg-white/[0.03]" />
 
-      {/* Primary radial gradient — deep, multi-stop */}
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_85%_55%_at_50%_-10%,hsl(var(--primary)/0.20),hsl(var(--primary)/0.06)_55%,transparent_80%)]" />
+      {/* Dot grid */}
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(hsl(210_100%_100%/0.07)_1px,transparent_1px)] [background-size:22px_22px]" />
 
-      {/* Aurora orbs for depth */}
-      <div className="pointer-events-none absolute -top-10 left-1/3 h-72 w-72 -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
-      <div className="pointer-events-none absolute -top-10 right-1/3 h-72 w-72 translate-x-1/2 rounded-full bg-violet-500/8 blur-3xl" />
+      <div className="relative flex flex-col items-center gap-5 px-8 py-14 text-center sm:px-12 sm:py-20">
+        {/* Category label — same pattern as ResourcesPanel */}
+        <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-primary-foreground/60">
+          Blocks OS Platform
+        </p>
 
-      {/* Dot grid — masked to fade toward edges */}
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(hsl(var(--border-default))_1px,transparent_1px)] [background-size:22px_22px] [mask-image:radial-gradient(ellipse_75%_75%_at_50%_40%,black_30%,transparent_100%)] opacity-50" />
+        {/* Icon */}
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/15 bg-white/10">
+          <Layers className="h-6 w-6 text-primary-foreground" />
+        </div>
 
-      {/* Icon */}
-      <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/20 bg-gradient-to-b from-[hsl(var(--card))] to-[hsl(var(--card)/0.85)] ">
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px rounded-t-2xl " />
-        <Layers className="h-8 w-8 text-primary" />
-      </div>
-
-      <div className="relative flex flex-col gap-2">
-        <h3 className="text-3xl font-semibold tracking-tight text-[hsl(var(--high-emphasis))]">
+        <h3 className="text-3xl font-bold tracking-tight text-primary-foreground sm:text-4xl">
           Welcome to SELISE Blocks
         </h3>
-        <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
+
+        <p className="max-w-md text-sm leading-relaxed text-primary-foreground/70">
           Explore and manage all your projects in one place. With SELISE Blocks, building and
           scaling applications has never been easier. Start by creating a project.
         </p>
-      </div>
 
-      <div className="relative flex items-center gap-3">
-        <Link to="/create-project">
-          <Button className="group gap-2 shadow-md shadow-primary/20">
+        {/* Actions */}
+        <div className="flex flex-wrap justify-center gap-3 pt-1">
+          <Link
+            to="/create-project"
+            className="inline-flex items-center rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-primary shadow-sm transition-colors hover:bg-white/90"
+          >
             Create a project
-            <MoveRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-          </Button>
-        </Link>
-        <Button variant="ghost" disabled>
-          View documentation
-        </Button>
+          </Link>
+          <Link
+            to="https://docs.seliseblocks.com/"
+            target="_blank"
+            className="inline-flex items-center gap-2 rounded-lg bg-white/15 px-4 py-2.5 text-sm font-semibold text-white backdrop-blur-sm transition-colors hover:bg-white/25"
+          >
+            <BookOpenText className="h-4 w-4" />
+            View documentation
+          </Link>
+        </div>
       </div>
     </motion.div>
   );

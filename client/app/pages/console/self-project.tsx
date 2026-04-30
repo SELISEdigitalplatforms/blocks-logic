@@ -11,27 +11,19 @@ const cardVariants = {
     opacity: 1,
     y: 0,
     scale: 1,
-    transition: { delay: i * 0.06, duration: 0.4, ease: [0.22, 1, 0.36, 1] },
+    transition: { delay: i * 0.06, duration: 0.4, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] },
   }),
 };
 
 const SelfProjectLoading = () => {
   return (
-    <section className="flex flex-col gap-4">
-      <div className="flex items-center gap-3">
-        <h2 className="shrink-0 text-base font-semibold text-[hsl(var(--high-emphasis))]">
-          Blocks projects
-        </h2>
-        <div className="h-px flex-1 bg-[hsl(var(--border-default))]" />
-      </div>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {Array(8)
-          .fill(1, 0, 8)
-          .map((_item, index) => (
-            <ProjectCardLoading key={index} />
-          ))}
-      </div>
-    </section>
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {Array(8)
+        .fill(null)
+        .map((_item, index) => (
+          <ProjectCardLoading key={index} />
+        ))}
+    </div>
   );
 };
 
@@ -47,12 +39,11 @@ export const SelfProject = () => {
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <h2 className="shrink-0 text-base font-semibold text-[hsl(var(--high-emphasis))]">
-            Your Blocks projects
+            Your Blocks Projects
           </h2>
           <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
             {projectGroups.length}
           </span>
-          <div className="h-px flex-1 bg-[hsl(var(--border-default))]" />
         </div>
         {projectGroups.length > 9 && (
           <span className="shrink-0 text-sm text-[hsl(var(--medium-emphasis))]">
@@ -60,7 +51,6 @@ export const SelfProject = () => {
           </span>
         )}
       </div>
-
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {projectGroups.length < 10 && (
           <motion.div variants={cardVariants} custom={0} initial="hidden" animate="visible">
