@@ -1,19 +1,21 @@
-﻿using Blocks.Genesis;
+﻿using Authentication.OAuth;
+using Blocks.Genesis;
 using DeviceDetectorNET;
-using DomainService.Dtos;
 using DomainService.Entities;
+using DomainService.OAuth.RequestModel;
 using DomainService.RequestModel;
 using DomainService.ResponseModel;
 using DomainService.Shared;
+using DomainService.Shared.RequestModel;
+using DomainService.Shared.ResponseModel;
+using FluentValidation;
+using Iam.DomainService.Dtos;
 using Iam.DomainService.Users;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using System.Text.Json;
-using DomainService.Shared.ResponseModel;
-using FluentValidation;
-using DomainService.Shared.RequestModel;
-using Iam.DomainService.Dtos;
 
 
 namespace DomainService.Services
@@ -26,6 +28,7 @@ namespace DomainService.Services
         private readonly IUserRepository _userRepository;
         private readonly IValidator<SaveSsoCredentialRequest> _validator;
         private readonly ITenants _tenants;
+        private readonly ICacheClient _cacheClient;
 
 
         private readonly static HttpClient _httpClient = new();
@@ -33,18 +36,21 @@ namespace DomainService.Services
         private const string Origin_Header_Name = "Origin";
         private const string Referer_Header_Name = "Referer";
         private const string X_Forwarded_For_Header_Name = "X-Forwarded-For";
+        private const string Authorization_End_Point = "https://dev-idp.blocksdevelopers.com/api/Authentication/Authorize";
 
         public AuthenticationDomainService(IMessageClient messageClient,
                                            IAuthenticationRepository authenticationRepository,
                                            IConfiguration configuration,
                                            IUserRepository userRepository,
                                            IValidator<SaveSsoCredentialRequest> validator,
-                                           ITenants tenants)
+                                           ITenants tenants,
+                                           ICacheClient cacheClient)
         {
             _messageClient = messageClient;
             _authenticationRepository = authenticationRepository;
             _configuration = configuration;
             _userRepository = userRepository;
+            _cacheClient = cacheClient;
             _validator = validator;
             _tenants = tenants;
         }
@@ -370,6 +376,101 @@ namespace DomainService.Services
         public async Task<List<ClientCredential>> GetClientCredentialsAsync(GetAllClientCredentialsRequest request)
         {
             return await _authenticationRepository.GetClientCredentialsAsync();
+        }
+
+        public async Task<string> GetOIDCRedirectUriAsync(GetOIDCRedirectUriRequest request)
+        {
+            var credential = await _authenticationRepository.GetOIDCClientCredentialAsync(request.ClientId);
+
+            if (credential == null)
+            {
+                return "";
+            }
+
+            var stateKey = Guid.NewGuid().ToString("n");
+            var oidcState = new OIDCState
+            {
+                Audience = credential.Audience,
+                ClientId = credential.ItemId,
+                ClientSecret = credential.ClientSecret,
+            };
+
+            await _cacheClient.AddStringValueAsync(stateKey, JsonSerializer.Serialize(oidcState), 3000);
+
+            var redirectUri = $"{Authorization_End_Point}?x-blocks-key={BlocksContext.GetContext()?.TenantId}&response_type=code&client_id={credential.ItemId}&state={stateKey}&redirect_uri={credential.RedirectUri}&scope=openId";
+
+            return redirectUri;
+        }
+
+        public async Task<IActionResult> GetOIDCToenAsync(GetOIDCTokenRequest request)
+        {
+            var stateValue = await _cacheClient.GetStringValueAsync(request.State);
+
+            if (string.IsNullOrWhiteSpace(stateValue))
+            {
+                return new BadRequestObjectResult(new { error = "invalid_state", error_description = "The provided state is invalid or has expired." });
+            }
+
+            var oidcState = JsonSerializer.Deserialize<OIDCState>(stateValue);
+
+            if (oidcState == null)
+            {
+                return new BadRequestObjectResult(new { error = "invalid_state", error_description = "The provided state is invalid." });
+            }
+
+            var tokenEndpoint = Authorization_End_Point.Replace("Authorize", "Token");
+
+            var postData = new Dictionary<string, string>
+                         {
+                           { "grant_type", "authorization_code" },
+                           { "code", request.Code },
+                           { "state", request.State },
+                           { "client_secret", oidcState.ClientSecret }
+                         };
+
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, tokenEndpoint);
+            httpRequest.Content = new FormUrlEncodedContent(postData);
+
+            // Set headers matching the cURL request
+            httpRequest.Headers.Add("x-blocks-key", BlocksContext.GetContext()?.TenantId ?? "");
+
+            try
+            {
+                var response = await _httpClient.SendAsync(httpRequest);
+                var responseContent = await response.Content.ReadAsStringAsync();
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    return new BadRequestObjectResult(new
+                    {
+                        error = "token_exchange_failed",
+                        error_description = "Failed to exchange authorization code for token.",
+                        details = responseContent
+                    });
+                }
+
+                var tokenResponse = JsonSerializer.Deserialize<JsonElement>(responseContent);
+
+                if (!tokenResponse.TryGetProperty("access_token", out var accessToken) ||
+                    string.IsNullOrWhiteSpace(accessToken.GetString()))
+                {
+                    return new BadRequestObjectResult(new
+                    {
+                        error = "token_exchange_failed",
+                        error_description = "Access token not found in response."
+                    });
+                }
+
+                return new OkObjectResult(tokenResponse);
+            }
+            catch (Exception ex)
+            {
+                return new BadRequestObjectResult(new
+                {
+                    error = "token_exchange_failed",
+                    error_description = $"Exception occurred: {ex.Message}"
+                });
+            }
         }
     }
 }
