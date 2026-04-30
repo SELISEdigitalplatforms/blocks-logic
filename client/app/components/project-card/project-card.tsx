@@ -41,10 +41,10 @@ export const ProjectCard = ({ project, projects }: ProjectCardProps) => {
       <button
         key={env}
         onClick={(e) => onEnvBadgeClick(e, envProject)}
-        className="group/chip inline-flex cursor-pointer items-center gap-1 rounded-full border border-[hsl(var(--blocks-primary-50))] bg-[hsl(var(--blocks-primary-25))] px-2.5 py-0.5 text-xs font-medium text-primary transition-all duration-150 hover:border-primary hover:bg-primary hover:text-primary-foreground active:scale-95"
+        className="group/chip inline-flex cursor-pointer items-center gap-1 rounded-full border border-primary bg-primary px-2.5 py-0.5 text-xs font-medium text-primary-foreground transition-all duration-150 hover:border-[hsl(var(--blocks-primary-50))] hover:bg-[hsl(var(--blocks-primary-25))] hover:text-primary active:scale-95"
       >
         {label}
-        <ChevronRight className="h-3 w-3 opacity-0 transition-all duration-150 group-hover/chip:translate-x-0.5 group-hover/chip:opacity-100" />
+        <ChevronRight className="h-3 w-3 transition-all duration-150 group-hover/chip:translate-x-0.5" />
       </button>
     );
   };
@@ -64,7 +64,7 @@ export const ProjectCard = ({ project, projects }: ProjectCardProps) => {
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="h-8 w-8 flex-shrink-0 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+                  className="h-8 w-8 flex-shrink-0 text-primary transition-colors hover:bg-primary/10"
                   onClick={onConfigureClick}
                 >
                   <Settings2 size={16} />
