@@ -1,5 +1,6 @@
 import { http } from "@/lib/http-client";
 import { parseMongoDBString } from "@/lib/utils";
+import { IDP_BASE_URL } from "@/constants/endpoint.constant";
 import {
   IAccountResendActivationPayload,
   IAccountResendActivationResponse,
@@ -40,11 +41,19 @@ export class UserService {
   }
 
   getUser(): Promise<{ data: User }> {
-    return http.get(USER_ENDPOINTS.GET_USER);
+    return http.get(
+      `${IDP_BASE_URL}${USER_ENDPOINTS.GET_USER}`,
+      undefined,
+      { absoluteUrl: true },
+    );
   }
 
   getUserById(payload: IGetUserByIdPayload): Promise<IGetUserByIdResponse> {
-    return http.get(`${USER_ENDPOINTS.GET_USER}?id=${payload.id}&ProjectKey=${payload.projectKey}`);
+    return http.get(
+      `${IDP_BASE_URL}${USER_ENDPOINTS.GET_USER}?id=${payload.id}&ProjectKey=${payload.projectKey}`,
+      undefined,
+      { absoluteUrl: true },
+    );
   }
 
   addUser(createPayload: ICreateUserPayload): Promise<ICreateUserResponse> {
