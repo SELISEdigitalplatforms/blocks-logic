@@ -6,7 +6,8 @@ IDP
    /Permissioin
 
 APISettings
-   
+   /Get
+   /Save
 
 SecretManage
     /MySecret
