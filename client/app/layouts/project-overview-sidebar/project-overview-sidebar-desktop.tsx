@@ -37,7 +37,7 @@ const projectOverviewMenuItems: Menu[] = [
 export const ProjectOverviewSidebarDesktop = () => {
   return (
     <aside className="sticky top-0 hidden h-full w-60 shrink-0 border-r bg-background md:block">
-      <nav className="grid w-full items-start gap-1 text-sm">
+      <nav className="grid w-full items-start gap-1 p-2 text-sm">
         {projectOverviewMenuItems.map((item) => (
           <Fragment key={item.id}>
             {item.type === "menu" && (

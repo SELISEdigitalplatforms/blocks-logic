@@ -44,13 +44,15 @@ export function SidebarMenuDesktop() {
         )}
       </div>
       <div className="flex-1 overflow-auto">
-        <nav className={cn("grid w-full items-start gap-1 p-2 text-sm")}>
+        <nav className={cn("grid w-full items-start gap-0 py-2 text-sm")}>
           {allowedMenu.map((menu) => (
             <Fragment key={menu.id}>
               {menu.type === "menu" ? (
                 <DesktopMenuItem menu={menu} isSidebarOpen={isSidebarOpen} />
               ) : (
-                <Separator />
+                <div className="mx-0">
+                  <Separator />
+                </div>
               )}
             </Fragment>
           ))}
