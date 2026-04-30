@@ -146,6 +146,7 @@ export const EnvironmentsPage = () => {
           </>
         )}
       </div>
+
       <Dialog open={addEnvModalOpen} onOpenChange={setAddEnvModalOpen}>
         <DialogContent className="max-h-[90vh] w-[calc(100%-2rem)] overflow-y-auto rounded-lg border p-6 shadow-lg md:max-h-[85vh] md:w-[500px]">
           <DialogHeader className="mb-4">
