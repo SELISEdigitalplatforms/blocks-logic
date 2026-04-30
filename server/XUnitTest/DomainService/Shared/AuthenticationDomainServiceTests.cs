@@ -23,6 +23,7 @@ namespace XUnitTest.DomainService.Shared
         private readonly Mock<IUserRepository> _userRepository;
         private readonly Mock<IValidator<SaveSsoCredentialRequest>> _validator;
         private readonly Mock<ITenants> _tenants;
+        private readonly Mock<ICacheClient> _cacheClient;
         private readonly AuthenticationDomainService _service;
         private readonly BlocksContext _context;
 
@@ -34,6 +35,7 @@ namespace XUnitTest.DomainService.Shared
             _userRepository = new Mock<IUserRepository>();
             _validator = new Mock<IValidator<SaveSsoCredentialRequest>>();
             _tenants = new Mock<ITenants>();
+            _cacheClient = new Mock<ICacheClient>();
 
             _service = new AuthenticationDomainService(
                 _messageClient.Object,
@@ -41,7 +43,8 @@ namespace XUnitTest.DomainService.Shared
                 _configuration.Object,
                 _userRepository.Object,
                 _validator.Object,
-                _tenants.Object
+                _tenants.Object,
+                _cacheClient.Object
             );
 
             _context = BlocksContext.Create(
