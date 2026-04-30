@@ -18,7 +18,7 @@ export function ProjectOverviewLayout() {
                 <ProjectOverviewSidebarMobile />
                 <span className="text-sm font-medium">Project Overview</span>
               </div>
-              <div className="flex-1 overflow-auto bg-[hsl(var(--surface-app))]">
+              <div className="flex-1 overflow-y-auto overflow-x-hidden bg-[hsl(var(--surface-app))]">
                 <Outlet />
               </div>
             </div>
