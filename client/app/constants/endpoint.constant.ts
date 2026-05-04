@@ -1,4 +1,5 @@
 export const IDP_BASE_URL = "https://dev-idp.blocksdevelopers.com";
+export const DEPLOYMENT_BASE_URL = "https://dev-deployment.blocksdevelopers.com";
 
 export const API_BASES = {
   COMMUNICATION: "/api",

@@ -96,7 +96,7 @@ export const ProjectRepoList = ({
       <div className="mt-2 flex items-center justify-between">
         <CardTitle>Repositories</CardTitle>
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger>
+          <DialogTrigger asChild>
             <Button
               disabled={
                 !envRepositoriesResponse?.data?.length ||

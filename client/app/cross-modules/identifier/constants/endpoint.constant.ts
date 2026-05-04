@@ -1,4 +1,4 @@
-import { API_BASES } from "@/constants/endpoint.constant";
+import { API_BASES, DEPLOYMENT_BASE_URL } from "@/constants/endpoint.constant";
 
 // ─── People endpoints ─────────────────────────────────────────────────────────
 
@@ -76,6 +76,6 @@ export const SERVICE_REGISTRY_ENDPOINTS = {
 const BUILD_SUBPATH = "/build";
 
 export const CLOUD_BUILD_ENDPOINTS = {
-  REPOS_LIST: `${API_BASES.CLOUD_BUILD}${BUILD_SUBPATH}/repos-list`,
+  REPOS_LIST: `${DEPLOYMENT_BASE_URL}/api/build/repos-list`,
   REPO_UPDATE: `${API_BASES.CLOUD_BUILD}${BUILD_SUBPATH}/repo-update`,
 } as const;
