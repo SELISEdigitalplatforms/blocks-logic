@@ -1,14 +1,8 @@
 import { CopyToClipboardButton } from "@/components/copy-to-clipboard-button";
-import { useNavigate } from "react-router-dom";
 import { getLogFormatTimestamp, getLogLevelClassName } from "@blocks-lmt/utils";
 import { ILog } from "../../models/log.model";
 
 export const LogItem = ({ log }: { log: ILog }) => {
-  const navigate = useNavigate();
-
-  const onItemClickHandler = (traceId: string) => {
-    navigate(`/tracing/timeline/${traceId}`);
-  };
   return (
     <div className="flex flex-col">
       <div className="flex flex-col md:flex-row md:items-center">
@@ -18,9 +12,9 @@ export const LogItem = ({ log }: { log: ILog }) => {
             {log.level}
           </span>
         </div>
-        <div onClick={() => onItemClickHandler(log.traceId)} className="flex h-6 items-center">
+        <div className="flex h-6 items-center">
           <CopyToClipboardButton textToCopy={log.traceId} isHoverable>
-            <span className="cursor-pointer text-warning-700">[{log.traceId}]</span>
+            <span className="text-warning-700">[{log.traceId}]</span>
           </CopyToClipboardButton>
         </div>
       </div>
