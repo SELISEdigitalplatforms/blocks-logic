@@ -76,8 +76,8 @@ export const EnvironmentCard = ({
           <ChevronRight className="mt-1 h-4 w-4 opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
         </CardHeader>
         <div className="mt-2">
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-muted/40 px-2 py-1 text-xs">
-            <span className="font-semibold text-muted-foreground">Key:</span>
+          <div className="flex flex-wrap items-center gap-1.5 py-0.5 text-xs sm:py-1 md:py-1.5">
+            <span className="font-semibold text-muted-foreground">X-Blocks-Key:</span>
             <span className="truncate font-mono text-muted-foreground">{project?.tenantId}</span>
           </div>
         </div>
