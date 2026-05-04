@@ -73,7 +73,7 @@ export const EnvironmentCard = ({
               )}
             </div>
           </CardTitle>
-          <ChevronRight className="mt-1 h-4 w-4 opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
+          <ChevronRight className="h-4 w-4 opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
         </CardHeader>
         <div className="mt-2">
           <div className="flex flex-wrap items-center gap-1.5 py-0.5 text-xs sm:py-1 md:py-1.5">
