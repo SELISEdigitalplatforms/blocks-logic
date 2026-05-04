@@ -8,10 +8,10 @@ export const CLOUD_BUILD_ENDPOINTS = {
   REMOVE_ACCESS_TOKEN: "/api/auth/removeAccessToken",
 
   // GitHub Repositories
-  GITHUB_REPOS: "/api/github/repos",
-  GITHUB_USER: "/api/github/user",
-  GITHUB_BRANCHES: "/api/github/branches",
-  GITHUB_BRANCH_EXISTS: "/api/github/branchExists",
+  GITHUB_REPOS: `${DEPLOYMENT_BASE_URL}/api/github/repos`,
+  GITHUB_USER: `${DEPLOYMENT_BASE_URL}/api/github/user`,
+  GITHUB_BRANCHES: `${DEPLOYMENT_BASE_URL}/api/github/branches`,
+  GITHUB_BRANCH_EXISTS: `${DEPLOYMENT_BASE_URL}/api/github/branchExists`,
 
   // Build & Deployment
   BUILD_BUILD: "/api/build/clone",

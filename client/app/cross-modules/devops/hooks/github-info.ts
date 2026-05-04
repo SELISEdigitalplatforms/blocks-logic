@@ -45,7 +45,7 @@ export const useGetGithubRepos = (
   return useQuery({
     queryKey: ["github-repos", isVerificationSuccessful, search, page, perPage],
     queryFn: () => githubInfoService.getGithubRepos(projectKey, search, page, perPage),
-    enabled: isVerificationSuccessful && !!projectKey,
+    enabled: isVerificationSuccessful,
     retry: false,
     staleTime: 0, // Always fetch fresh data
     refetchOnMount: true,
