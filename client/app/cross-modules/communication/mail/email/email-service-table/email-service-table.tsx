@@ -74,8 +74,8 @@ export function EmailServiceTable({ onRowClick }: EmailServiceTableProps = {}) {
             <Skeleton className="h-12 w-full rounded" />
           ) : (
             <TemplateFilterToolbar
-              emailConfigsData={emailConfigsData || []}
-              languageListData={languageListData || []}
+              emailConfigsData={Array.isArray(emailConfigsData) ? emailConfigsData : []}
+              languageListData={Array.isArray(languageListData) ? languageListData : []}
             />
           )}
         </CardContent>
@@ -87,7 +87,7 @@ export function EmailServiceTable({ onRowClick }: EmailServiceTableProps = {}) {
               <EmailTemplateList
                 templates={tableData}
                 isLoading={isLoading}
-                emailConfigsData={emailConfigsData || []}
+                emailConfigsData={Array.isArray(emailConfigsData) ? emailConfigsData : []}
                 onRowClick={handleRowClick}
               />
             )}

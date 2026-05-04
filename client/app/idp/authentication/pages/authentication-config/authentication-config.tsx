@@ -11,7 +11,6 @@ import { Permissions } from "@blocks-idp/iam/modules/permission-management";
 import { AddRole, Roles } from "@blocks-idp/iam/modules/role-management";
 import { PrimaryButton } from "@/components/action-buttons/primary-button";
 import { Link } from "react-router-dom";
-import { useNavigate } from "react-router-dom";
 import { CirclePlus, Settings, X } from "lucide-react";
 import { EmailServiceTable, EmailConfiguration, EmailCommunicationDetails } from "@blocks-communication/mail";
 import { useState, useRef } from "react";
@@ -152,10 +151,10 @@ function NewCommunicationContent({ onClose, onCreated }: NewCommunicationContent
 
 export const AuthenticationConfig = () => {
   const [selectedTab, setSelectedTab] = useQueryState("tab", { defaultValue: "general" });
-  const navigate = useNavigate();
   const [configureOpen, setConfigureOpen] = useState(false);
   const [addTemplateOpen, setAddTemplateOpen] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const tenantId = useProjectStore().selectedProject?.tenantId || "";
 
   const handleTemplateCreated = (id: string) => {
     setAddTemplateOpen(false);
