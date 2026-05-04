@@ -1,5 +1,3 @@
-"use client";
-
 import { Button } from "@/components/ui-kits/button/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui-kits/card/card";
 import {
@@ -9,7 +7,6 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui-kits/select/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui-kits/tabs/tabs";
 import { cn } from "@/lib/utils";
 import { useProjectStore } from "@/store/useProjectStore";
 import {
@@ -31,6 +28,8 @@ import {
 	defaultUsagesMetrics,
 } from "@blocks-lmt/utils";
 import { TracesOverview } from "@blocks-lmt/components/traces-overview/traces-overview";
+import { PageSidebarLayout } from "@/components/page-sidebar-layout/page-sidebar-layout";
+import { LMT_NAV_GROUPS } from "@/constants/lmt-nav";
 
 export default function LmtPage() {
 	const tenantId = useProjectStore().selectedProject?.tenantId || "";
@@ -46,64 +45,57 @@ export default function LmtPage() {
 		worker: defaultUsagesMetrics,
 	};
 
+	const headerActions = (
+		<>
+			{activeTab === "usage" && (
+				<div className="flex items-center gap-2">
+					<Select value={timeRange} onValueChange={setTimeRange}>
+						<SelectTrigger className="w-40">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="1h">Last Hour</SelectItem>
+							<SelectItem value="24h">Last 24 Hours</SelectItem>
+							<SelectItem value="7d">Last 7 Days</SelectItem>
+							<SelectItem value="30d">Last 30 Days</SelectItem>
+						</SelectContent>
+					</Select>
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						onClick={() => refetch()}
+						disabled={isLoading || isFetching || !tenantId}
+					>
+						<RefreshCcw
+							className={cn("aspect-square w-4", (isLoading || isFetching) && "animate-spin")}
+						/>
+						<span className="sr-only sm:not-sr-only sm:ml-2">Refresh</span>
+					</Button>
+				</div>
+			)}
+			{activeTab === "tracing" && (
+				<LMTQueryAgentSheet
+					description="Hello! I can help you search and analyze your logs, metrics, and tracing data."
+					questions={[
+						"Show me traces for the last 1 hour",
+						"Which services are generating the most traces",
+						"Which traces had high latency today",
+					]}
+				/>
+			)}
+		</>
+	);
+
 	return (
-		<main className="flex flex-col gap-6 p-6">
-			<div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-				<div>
-					<h1 className="text-xl font-semibold md:text-2xl">LMT</h1>
-					<p className="text-muted-foreground">
-						Monitor usage, logs access, and tracing for the selected project.
-					</p>
-				</div>
-			</div>
-
-			<Tabs value={activeTab} onValueChange={setActiveTab}>
-				<div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-					<TabsList>
-						<TabsTrigger value="usage">Usage</TabsTrigger>
-						<TabsTrigger value="tracing">Tracing</TabsTrigger>
-					</TabsList>
-					{activeTab === "usage" ? (
-						<div className="flex items-center gap-2">
-							<Select value={timeRange} onValueChange={setTimeRange}>
-								<SelectTrigger className="w-40">
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="1h">Last Hour</SelectItem>
-									<SelectItem value="24h">Last 24 Hours</SelectItem>
-									<SelectItem value="7d">Last 7 Days</SelectItem>
-									<SelectItem value="30d">Last 30 Days</SelectItem>
-								</SelectContent>
-							</Select>
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								onClick={() => refetch()}
-								disabled={isLoading || isFetching || !tenantId}
-							>
-								<RefreshCcw
-									className={cn("aspect-square w-4", (isLoading || isFetching) && "animate-spin")}
-								/>
-								<span className="sr-only sm:not-sr-only sm:ml-2">Refresh</span>
-							</Button>
-						</div>
-					) : (
-						<div className="flex items-center gap-2">
-							<LMTQueryAgentSheet
-								description="Hello! I can help you search and analyze your logs, metrics, and tracing data."
-								questions={[
-									"Show me traces for the last 1 hour",
-									"Which services are generating the most traces",
-									"Which traces had high latency today",
-								]}
-							/>
-						</div>
-					)}
-				</div>
-
-				<TabsContent value="usage" className="mt-6 space-y-6">
+		<PageSidebarLayout
+			navGroups={LMT_NAV_GROUPS}
+			selectedTab={activeTab ?? "usage"}
+			onTabChange={setActiveTab}
+			headerContent={headerActions}
+		>
+			{activeTab === "usage" && (
+				<div className="space-y-6">
 					<Card>
 						<CardHeader>
 							<CardTitle>Global overview</CardTitle>
@@ -115,7 +107,6 @@ export default function LmtPage() {
 								isLoading={isLoading || isFetching}
 								Icon={Network}
 							/>
-
 							<UsageSummaryCard
 								description="Average response time"
 								title={data ? abbreviateDurationMs(data.accumulatedAverageDuration) : ""}
@@ -123,7 +114,6 @@ export default function LmtPage() {
 								Icon={Clock}
 								className="bg-blocks-secondary-50 text-blocks-secondary-600"
 							/>
-
 							<UsageSummaryCard
 								description="Successful calls"
 								title={data ? abbreviateNumber(data.accumulatedSuccess) : ""}
@@ -131,7 +121,6 @@ export default function LmtPage() {
 								className="bg-green-50 text-green-600"
 								Icon={CircleCheck}
 							/>
-
 							<UsageSummaryCard
 								description="Total errors"
 								title={data ? abbreviateNumber(data.accumulatedError) : ""}
@@ -170,20 +159,20 @@ export default function LmtPage() {
 							</CardContent>
 						</Card>
 					)}
-				</TabsContent>
+				</div>
+			)}
 
-				<TabsContent value="tracing" className="mt-6">
-					{tenantId ? (
-						<TracesOverview projectKey={tenantId} />
-					) : (
-						<Card>
-							<CardContent className="flex h-32 items-center justify-center text-sm text-muted-foreground">
-								Select a project to load tracing data.
-							</CardContent>
-						</Card>
-					)}
-				</TabsContent>
-			</Tabs>
-		</main>
+			{activeTab === "tracing" && (
+				tenantId ? (
+					<TracesOverview projectKey={tenantId} />
+				) : (
+					<Card>
+						<CardContent className="flex h-32 items-center justify-center text-sm text-muted-foreground">
+							Select a project to load tracing data.
+						</CardContent>
+					</Card>
+				)
+			)}
+		</PageSidebarLayout>
 	);
 }

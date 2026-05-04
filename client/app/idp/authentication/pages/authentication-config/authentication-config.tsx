@@ -1,17 +1,12 @@
 
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui-kits/tabs/tabs";
 import { LogMenu } from "@blocks-lmt/components";
-import { TabsContent } from "@radix-ui/react-tabs";
 import { useQueryState } from "nuqs";
-import { getApiUrl } from "@/lib/get-api-path";
 import { GrantTypes } from "./general/grant-types";
 // import { SelfSignup } from "./general/self-signup";
 import { GeneralSettings } from "./general/settings";
 import { Button } from "@/components/ui-kits/button/button";
-import { AuthenticationTabs } from "@blocks-idp/authentication/constants/authentication.constant";
 // import { ClientCredentials } from "@blocks-idp/authentication/components/client-credentials";
 // import { CreateClientCredential } from "@blocks-idp/authentication/components/create-client-credential";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui-kits/select/select";
 import { Permissions } from "@blocks-idp/iam/modules/permission-management";
 import { AddRole, Roles } from "@blocks-idp/iam/modules/role-management";
 import { PrimaryButton } from "@/components/action-buttons/primary-button";
@@ -31,6 +26,8 @@ import { useSaveMailTemplate } from "@blocks-communication/mail/hooks/use-email-
 import { useProjectStore } from "@/store/useProjectStore";
 import { IEmailTemplate } from "@blocks-communication/mail/models/email";
 import { blankTemplate } from "@blocks-communication/mail/constants/email-template";
+import { PageSidebarLayout } from "@/components/page-sidebar-layout/page-sidebar-layout";
+import { AUTHENTICATION_NAV_GROUPS } from "@/constants/authentication-nav";
 
 const NEW_COMMUNICATION_STEPS = [
   { id: 1, title: "Basic Information" },
@@ -164,117 +161,86 @@ export const AuthenticationConfig = () => {
     setAddTemplateOpen(false);
     setSelectedTemplateId(id);
   };
-  return (
-    <div>
-      <div className="mb-[18px] flex items-center justify-between md:mb-[24px]">
-        <h1 className="text-lg font-semibold md:text-2xl">IDP</h1>
-    
-      </div>
-      <Tabs value={selectedTab} onValueChange={(value) => setSelectedTab(value)}>
-        <div className="mb-4 flex items-start justify-between gap-4">
-          <>
-            <div className="hidden w-full overflow-x-auto sm:block [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <TabsList className="w-max">
-                {AuthenticationTabs.map((item) => (
-                  <TabsTrigger key={item.id} value={item.value}>
-                    {item.label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </div>
-            <div className="sm:hidden">
-              <Select value={selectedTab} onValueChange={(value) => setSelectedTab(value)}>
-                <SelectTrigger className="w-32 gap-2">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {AuthenticationTabs.map((item) => (
-                    <SelectItem key={item.id} value={item.value}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </>
 
-          <>
-            {/* {selectedTab === GRANT_TYPES.clientCredential && <CreateClientCredential />} */}
-            {selectedTab === "roles" && <AddRole />}
-            {selectedTab === "permissions" && (
-              <Link to="/services/iam/permission-detail/new">
-                <PrimaryButton label="Add Permission" />
-              </Link>
-            )}
-            {selectedTab === "email-template" && (
-              <div className="flex shrink-0 items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="default"
-                  className="gap-1 text-sm font-medium"
-                  onClick={() => setConfigureOpen(true)}
-                >
-                  <Settings className="h-5 w-5" />
-                  <span className="sr-only sm:not-sr-only">Configure</span>
-                </Button>
-                <Button
-                  size="default"
-                  variant="default"
-                  className="bg-primary text-primary-foreground shadow-none"
-                  onClick={() => setAddTemplateOpen(true)}
-                >
-                  <CirclePlus className="h-5 w-5 lg:mr-2" />
-                  <span className="sr-only lg:not-sr-only">Add Template</span>
-                </Button>
-              </div>
-            )}
-          </>
+  const headerActions = (
+    <>
+      {selectedTab === "roles" && <AddRole />}
+      {selectedTab === "permissions" && (
+        <Link to="/services/iam/permission-detail/new">
+          <PrimaryButton label="Add Permission" />
+        </Link>
+      )}
+      {selectedTab === "email-template" && (
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            variant="outline"
+            size="default"
+            className="gap-1 text-sm font-medium"
+            onClick={() => setConfigureOpen(true)}
+          >
+            <Settings className="h-5 w-5" />
+            <span className="sr-only sm:not-sr-only">Configure</span>
+          </Button>
+          <Button
+            size="default"
+            variant="default"
+            className="bg-primary text-primary-foreground shadow-none"
+            onClick={() => setAddTemplateOpen(true)}
+          >
+            <CirclePlus className="h-5 w-5 lg:mr-2" />
+            <span className="sr-only lg:not-sr-only">Add Template</span>
+          </Button>
         </div>
-        <TabsContent value="general" className="grid grid-cols-1 gap-6">
-          <GeneralSettings />
-          <GrantTypes />
-          {/* <SelfSignup /> */}
-        </TabsContent>
-        <TabsContent value="signin-flow">
+      )}
+    </>
+  );
+
+  return (
+    <>
+      <PageSidebarLayout
+        navGroups={AUTHENTICATION_NAV_GROUPS}
+        selectedTab={selectedTab ?? "general"}
+        onTabChange={setSelectedTab}
+        headerContent={headerActions}
+      >
+        {selectedTab === "general" && (
+          <div className="grid grid-cols-1 gap-6">
+            <GeneralSettings />
+            <GrantTypes />
+          </div>
+        )}
+        {selectedTab === "signin-flow" && (
           <div className="rounded-lg border border-border bg-card p-6">
             <h3 className="text-lg font-semibold">Signin flow</h3>
-            <p className="text-muted-foreground mt-2">Configure your signin flow settings</p>
+            <p className="mt-2 text-muted-foreground">Configure your signin flow settings</p>
           </div>
-        </TabsContent>
-        <TabsContent value="signup-flow">
+        )}
+        {selectedTab === "signup-flow" && (
           <div className="rounded-lg border border-border bg-card p-6">
             <h3 className="text-lg font-semibold">Signup flow</h3>
-            <p className="text-muted-foreground mt-2">Configure your signup flow settings</p>
+            <p className="mt-2 text-muted-foreground">Configure your signup flow settings</p>
           </div>
-        </TabsContent>
-        <TabsContent value="email-template">
-          {selectedTemplateId ? (
+        )}
+        {selectedTab === "email-template" && (
+          selectedTemplateId ? (
             <EmailCommunicationDetails
               params={{ id: selectedTemplateId }}
               onBack={() => setSelectedTemplateId(null)}
             />
           ) : (
             <EmailServiceTable onRowClick={(id) => setSelectedTemplateId(String(id))} />
-          )}
-        </TabsContent>
-        <TabsContent value="oidc-template">
+          )
+        )}
+        {selectedTab === "oidc-template" && (
           <div className="rounded-lg border border-border bg-card p-6">
             <h3 className="text-lg font-semibold">OIDC template</h3>
-            <p className="text-muted-foreground mt-2">Configure your OIDC template settings</p>
+            <p className="mt-2 text-muted-foreground">Configure your OIDC template settings</p>
           </div>
-        </TabsContent>
-        <TabsContent value="roles">
-          <Roles />
-        </TabsContent>
-        <TabsContent value="permissions">
-          <Permissions />
-        </TabsContent>
-        {/* <TabsContent value={GRANT_TYPES.clientCredential}>
-          <ClientCredentials />
-        </TabsContent> */}
-      </Tabs>
+        )}
+        {selectedTab === "roles" && <Roles />}
+        {selectedTab === "permissions" && <Permissions />}
+      </PageSidebarLayout>
 
-      {/* Configure dialog */}
       <Dialog open={configureOpen} onOpenChange={setConfigureOpen}>
         <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
@@ -284,7 +250,6 @@ export const AuthenticationConfig = () => {
         </DialogContent>
       </Dialog>
 
-      {/* New template sheet */}
       <Sheet open={addTemplateOpen} onOpenChange={setAddTemplateOpen}>
         <SheetContent side="right" className="flex h-full w-full max-w-full flex-col overflow-hidden p-0 sm:max-w-full" hideClose>
           <StepperProvider steps={NEW_COMMUNICATION_STEPS}>
@@ -295,6 +260,6 @@ export const AuthenticationConfig = () => {
           </StepperProvider>
         </SheetContent>
       </Sheet>
-    </div>
+    </>
   );
 };
