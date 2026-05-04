@@ -1,7 +1,9 @@
+import { DEPLOYMENT_BASE_URL } from "@/constants/endpoint.constant";
+
 export const CLOUD_BUILD_ENDPOINTS = {
   // Authentication & Authorization
   ACCESS_TOKEN: "/api/auth/accessToken",
-  IS_AUTHORIZED: "/api/auth/isAuthorized",
+  IS_AUTHORIZED: `${DEPLOYMENT_BASE_URL}/api/auth/isAuthorized`,
   REMOVE_AUTHORIZATION: "/api/auth/removeAuthorization",
   REMOVE_ACCESS_TOKEN: "/api/auth/removeAccessToken",
 
