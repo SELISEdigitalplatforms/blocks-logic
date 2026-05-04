@@ -1,6 +1,7 @@
 import { FilterControls, FilterToolbar, useSortQueryParams } from "@/components/filter-toolbar";
 import { Button } from "@/components/ui-kits/button/button";
 import { Card, CardContent, CardHeader } from "@/components/ui-kits/card/card";
+import { useNavigate } from "react-router-dom";
 import { Pagination } from "@/components/ui-kits/pagination/pagination";
 import {
   Select,
@@ -92,6 +93,7 @@ function TracesList({
   services: { label: string; value: string }[];
 }) {
   const { sortQueryParams, setSortQueryParams } = useTraceSortQueryParams();
+  const navigate = useNavigate();
 
   const columns = useMemo<ColumnDef<TraceTree>[]>(
     () => [
@@ -190,7 +192,11 @@ function TracesList({
         <TableBody>
           {table.getRowModel().rows?.length ? (
             table.getRowModel().rows.map((row) => (
-              <TableRow key={row.id} className="text-medium-emphasis">
+              <TableRow
+                key={row.id}
+                className="cursor-pointer text-medium-emphasis hover:bg-accent/50"
+                onClick={() => navigate(`/tracing/timeline/${row.original.traceId}`)}
+              >
                 {row.getVisibleCells().map((cell) => (
                   <TableCell key={cell.id}>
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}

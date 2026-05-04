@@ -49,6 +49,7 @@ import ApiSettingsPage from "./routes/dashboard/api-settings";
 import RateLimiterPage from "./routes/dashboard/rate-limiter";
 import LmtPage from "./routes/dashboard/lmt";
 import LmtServiceLogsPage from "./routes/dashboard/lmt-service-logs";
+import LmtTraceDetailsPage from "./routes/dashboard/lmt-trace-details";
 import SecretManagementPage from "./routes/dashboard/secret-management";
 import AiModelSelectedRoute from "./routes/dashboard/ai-model-selected";
 import ManagedServicesPage from "./routes/dashboard/managed-services";
@@ -128,6 +129,7 @@ export const router = createBrowserRouter([
       { path: "/services/rate-limiter", element: <RateLimiterPage /> },
       { path: "/services/lmt", element: <LmtPage /> },
       { path: "/services/lmt/logs/:serviceName", element: <LmtServiceLogsPage /> },
+      { path: "/tracing/timeline/:traceId", element: <LmtTraceDetailsPage /> },
       { path: "/services/secret-management", element: <SecretManagementPage /> },
       { path: "/services/secret-management/ai-models/:provider", element: <AiModelSelectedRoute /> },
       { path: "/managed-services", element: <ManagedServicesPage /> },
