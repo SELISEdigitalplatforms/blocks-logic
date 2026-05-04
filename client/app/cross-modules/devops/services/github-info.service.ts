@@ -25,7 +25,7 @@ export class GithubInfoService {
     isSuccess: boolean;
   }> {
     const url = CLOUD_BUILD_ENDPOINTS.IS_AUTHORIZED;
-    return http.get(url);
+    return http.get(url, undefined, { absoluteUrl: true });
   }
 
   async revokeAccess(): Promise<{
@@ -113,12 +113,12 @@ export class GithubInfoService {
 
   async getAllProjects(projectKey: string): Promise<any> {
     const url = `${CLOUD_BUILD_ENDPOINTS.REPOS_LIST}?ProjectKey=${encodeURIComponent(projectKey)}`;
-    return http.get(url);
+    return http.get(url, undefined, { absoluteUrl: true });
   }
 
   async getRepoDetails(projectKey: string, repoId: string): Promise<any> {
     const url = `${CLOUD_BUILD_ENDPOINTS.REPO_DETAILS}?ProjectKey=${encodeURIComponent(projectKey)}&RepoId=${encodeURIComponent(repoId)}`;
-    return http.get(url);
+    return http.get(url, undefined, { absoluteUrl: true });
   }
 
   async getCardRepoAndBranches(buildId: string, projectKey: string): Promise<IBuildApiResponse> {

@@ -230,7 +230,7 @@ export function BlocksAppLauncher() {
   const [isHydrated, setIsHydrated] = useState(false);
   const location = useLocation();
 
-  const isAllowedRoute = !location.pathname.includes("/console") && !location.pathname.includes("/project-overview") && !location.pathname.includes("/services/lmt/logs");
+  // const isAllowedRoute = !location.pathname.includes("/console") && !location.pathname.includes("/project-overview") && !location.pathname.includes("/services/lmt/logs");
 
   useEffect(() => {
     const stored = localStorage.getItem("blocks-app-favourites");
@@ -256,7 +256,9 @@ export function BlocksAppLauncher() {
     saveFavourites(newFavourites);
   };
 
-  if (!isHydrated || !isAllowedRoute) return null;
+  // if (!isHydrated || !isAllowedRoute) return null;
+    if (!isHydrated) return null;
+
 
   const favourites = SELISE_APPS.filter((a) => favouriteKeys.has(a.key));
   const moreApps = SELISE_APPS.filter((a) => !favouriteKeys.has(a.key));

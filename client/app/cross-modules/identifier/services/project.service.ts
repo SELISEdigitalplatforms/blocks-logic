@@ -70,7 +70,7 @@ export class ProjectService {
     isSuccess: boolean;
   }> {
     const url = `${CLOUD_BUILD_ENDPOINTS.REPOS_LIST}?projectkey=${projectkey}`;
-    return http.get(url);
+    return http.get(url, undefined, { absoluteUrl: true });
   }
 
   repoUpdate(payload: {
