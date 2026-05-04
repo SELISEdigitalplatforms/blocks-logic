@@ -41,7 +41,7 @@ const ProviderGridSkeleton = () => {
 export const AIModels = () => {
   const { data: providers = [], isLoading } = useSeedProviders();
 
-  const allProviders = [...providers, createCustomProvider()];
+  const allProviders = [...(providers || []), createCustomProvider()];
 
   const officialApiModels = allProviders.filter((p) => {
     if (!p || !p.Provider) return false;
