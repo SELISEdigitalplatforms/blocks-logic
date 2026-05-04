@@ -1,107 +1,135 @@
-# BlocksTemplate
+# Blocks OS
 
-ASP.NET Core 10 + React (Vite, TypeScript) starter. The **API and the built SPA share one origin**: `npm run build` writes static files to `server/Api/wwwroot`; Kestrel serves those assets and `/api/*`. Use **`./run.sh`** from the repo root to build the client then start the API, or run `npm run build` in `client/` before **`dotnet run`**—Node/npm are used at **build** time only, not a Vite dev proxy in production.
+ASP.NET Core + React (Vite, TypeScript) application: **Genesis-backed API**, **background worker**, and a **SPA** built into `server/Api/wwwroot` so Kestrel can serve the UI and backend from one host. Node/npm are used for the client toolchain (install, dev server, production build).
 
 ## Project structure
 
 ```
-blocks-template/
-├── client/                      # React + Vite + TypeScript (source only at runtime)
-│   ├── app/                     # Application code (main.tsx, router, pages, components, api)
-│   ├── public/                  # Static assets copied as-is by Vite
+blocks-os/
+├── client/                         # React + Vite + TypeScript
+│   ├── app/                        # Application source
+│   │   ├── idp/                    # Identity provider UI (auth, IAM, captcha, API settings, …)
+│   │   ├── cross-modules/          # Shared feature areas (ai, communication, identifier, lmt, …)
+│   │   ├── routes/                 # Route modules (dashboard, auth, oidc, …)
+│   │   ├── layouts/, components/   # Shell UI, shared components
+│   │   ├── main.tsx, router.tsx
+│   │   └── …
+│   ├── public/                     # Static assets
 │   ├── index.html
-│   ├── vite.config.ts           # build.outDir → ../server/Api/wwwroot
+│   ├── vite.config.ts              # build.outDir → ../server/Api/wwwroot; `BLOCKS_*` env prefix
 │   ├── package.json
-│   └── .env.example             # Copy to .env for BLOCKS_X_BLOCKS_KEY (see below)
+│   └── .env.example                # Copy to .env (see below)
 ├── server/
-│   ├── Api/                     # Web host (Kestrel, Genesis, controllers)
-│   │   ├── Controllers/         # API controllers ([Route] uses /api prefix via convention)
-│   │   ├── wwwroot/             # Client app output from Vite (generated; do not edit by hand)
+│   ├── Api/                        # Web host (Kestrel, Genesis, controllers, static SPA)
+│   │   ├── Controllers/            # HTTP API (attribute routes; `api` prefix via convention)
+│   │   ├── wwwroot/                # Vite output (generated; do not edit by hand)
 │   │   ├── Program.cs
-│   │   ├── Api.csproj           # Web host project (no MSBuild npm hook; build client separately)
+│   │   ├── Api.csproj
 │   │   └── GlobalApiRoutePrefixConvention.cs
-│   ├── DomainService/           # Domain logic, models, validators, entities
-│   ├── Worker/                  # worker project to run background tasks
-│   └── Blocks.slnx              # Solution (Api, DomainService, Worker)
-├── run.sh                       # Build client then run Api (see script)
+│   ├── Worker/                     # Background worker (message consumers, …)
+│   ├── Authentication.DomainService/
+│   ├── Captcha.DomainService/
+│   ├── Cloud.DomainService/
+│   ├── Cloud.LmtService/
+│   ├── CloudConfiguration.DomainService/
+│   ├── Iam.DomainService/
+│   ├── Identifier.DomainService/
+│   ├── Mfa.DomainService/
+│   ├── XUnitTest/                  # Unit tests
+│   ├── Captcha.Driver/, Iam.Driver/, Mfa.Driver/   # Driver-style projects (not in Blocks.slnx)
+│   └── Blocks.slnx                 # Solution: Api, domain libraries, Worker, XUnitTest
+├── run.sh                          # Build/run helpers (Unix/macOS; see below)
+├── run.ps1                         # Same role on Windows (PowerShell; see below)
 ├── LICENSE
 └── README.md
 ```
 
 ## Prerequisites
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- [Node.js LTS](https://nodejs.org/) (for `npm install` / `npm run build` only)
+- [.NET 10 SDK](https://dotnet.microsoft.com/download) (`TargetFramework` is `net10.0` in `server/Directory.Build.props`)
+- [Node.js LTS](https://nodejs.org/) (for `npm install`, `npm run dev`, `npm run build`)
+- [Docker](https://docs.docker.com/get-docker/) with [Docker Compose](https://docs.docker.com/compose/) (for local backing services; see below)
 
-## How to run (development)
+### Local infrastructure
 
-From the repository root (builds the client, then starts the API):
+To run Blocks OS **locally**, clone **[blocks-infra](https://github.com/SELISEdigitalplatforms/blocks-infra)** and bring up its **Docker Compose** stack (for example **`docker compose up -d`**, using the compose file and options described in that repository). Start that stack **before** or **alongside** the API and Worker from this repo so local dependencies (databases, queues, and so on) are available.
+
+## How to run
+
+Both **`run.sh`** (Bash) and **`run.ps1`** (PowerShell) live at the repo root. They **require an option**; calling them with no recognized flags prints usage and exits.
+
+**Ports:** both scripts assume API port **5000**. `run.sh` also uses **4000** for `npm run dev` when you pass **`-f`** (see `run.sh`). `server/Api/Properties/launchSettings.json` may differ for IDE launches—use the URL your process prints.
+
+### Options (same flags, different invocation)
+
+| Option | Role |
+|--------|------|
+| **`-a`**, **`--all`** | Install/build client, sync **`client/dist`** → **`server/Api/wwwroot`**, then start **API** and **Worker** |
+| **`-b`**, **`--backend`** | Run **API** only (`dotnet run` on `server/Api/Api.csproj`) |
+| **`-w`**, **`--worker`** | Run **Worker** only (`server/Worker/Worker.csproj`) |
+| **`-f`**, **`--frontend`** | Vite dev server: **`npm run dev`** in **`client/`** (`run.sh` installs dependencies only if **`node_modules`** is missing; **`run.ps1`** runs **`npm install`** every time) |
+| **`-k`**, **`--kill-port`** | Stop whatever is listening on the API port (**5000**) |
+| **`-n`**, **`--npm`** *args…* | Run **`npm`** in **`client/`** (e.g. `run test`, `run build`) |
+| **`-h`**, **`--help`** | Show usage |
+
+**Windows only (`run.ps1`):** **`-d`** / **`--dotnet`** *args…* runs **`dotnet`** from the repo root (for example restore, build, or test commands).
+
+### Unix / macOS — `run.sh`
 
 ```bash
-./run.sh
+./run.sh -a              # full stack (build + API + Worker in this shell)
+./run.sh -b              # API only (frees port 5000 first)
+./run.sh -f              # Vite dev server
+./run.sh -n run test     # npm in client/
 ```
 
-If you already built the client (`npm run build` in `client/`), you can run only the host:
+`run.sh` syncs the built SPA with **`rsync`** (`dist/` → `wwwroot/`). For **`-a`**, the API and Worker run as background jobs in the same terminal; **Ctrl+C** runs the script’s cleanup trap.
+
+### Windows — `run.ps1`
+
+```powershell
+.\run.ps1 -a             # build + start API and Worker in separate windows
+.\run.ps1 -b             # API only (restore + free port 5000 first)
+.\run.ps1 -f             # Vite dev server
+.\run.ps1 -n run test    # npm in client/
+.\run.ps1 -d test server/XUnitTest/XUnitTest.csproj
+```
+
+`run.ps1` syncs **`dist`** → **`wwwroot`** with **`robocopy`**. It runs **`dotnet restore`** on the Api and Worker projects before **`-b`**, **`-w`**, and **`-a`**. With **`-a`**, two extra PowerShell windows open (one for the API, one for the Worker); press **Enter** in the original window to stop those processes.
+
+### Without the scripts
+
+If the client is already built into **`wwwroot`**:
 
 ```bash
 dotnet run --project server/Api/Api.csproj
 ```
 
-Or from the Api folder:
+### Client environment (`BLOCKS_*`)
 
-```bash
-cd server/Api
-dotnet run
-```
+Vite exposes env vars prefixed with **`BLOCKS_`** (see **`client/vite.config.ts`**). Copy **`client/.env.example`** → **`client/.env`** and set values as needed:
 
-Open the URL from **`launchSettings.json`** (default: **`http://localhost:5000`**). The same host serves the React app from **`wwwroot`** and **`/api/*`**.
+- **`BLOCKS_API_BASE_URL`** — Base URL the client uses for API/OIDC calls (see `client/app/lib/get-api-path.ts` and related usage).
+- **`BLOCKS_X_BLOCKS_KEY`** — Genesis / Blocks key when your environment requires it.
+- **`BLOCKS_GOOGLE_SITE_KEY`**, **`BLOCKS_CONSTRUCT_URL`** — Used where the app expects them (for example captcha or construct flows).
 
-### Client environment (Genesis)
-
-API calls expect an **`x-blocks-key`** header when your Blocks/Genesis setup requires it. At **build** time, Vite inlines values from `client/.env`:
-
-1. Copy **`client/.env.example`** → **`client/.env`**.
-2. Set **`BLOCKS_X_BLOCKS_KEY`** to match your environment.
-3. Run **`npm run build`** in **`client/`** (or **`./run.sh`**) so the client bundle is rebuilt.
-
-### Optional: Vite dev server (UI only)
-
-If you want hot reload for React without rebuilding the full Api project:
-
-```bash
-cd client && npm run dev
-```
-
-That serves the UI on Vite’s port only; the API stays on Kestrel (different origin), so you would configure CORS or another gateway if you need both during UI work. For an integrated app, build the client into **`wwwroot`** then use **`dotnet run`** (or **`./run.sh`**).
+Rebuild the client (`npm run build` in **`client/`** or **`./run.sh -a`** / **`.\run.ps1 -a`**) after changing env for **production** bundles.
 
 ## Production / publish
 
-Build the client, then publish the API ( **`wwwroot`** must exist before publish if you want the SPA in the output):
+Build the client, then publish the API (ensure **`wwwroot`** contains the built SPA if you want the UI in the output):
 
 ```bash
-(cd client && npm run build)
+(cd client && npm install && npm run build)
 dotnet publish server/Api/Api.csproj -c Release -o ./publish
 ```
 
-You do not need a separate Node process on the server at runtime.
+No Node process is required on the server at runtime.
 
-For local development with the same two steps in one command:
+## API and routing
 
-```bash
-./run.sh
-```
-
-(`run.sh` runs a **Debug** `dotnet run`; use the commands above for **Release** publish.)
-
-## API
-
-- **`/api/events`** — Events CRUD, pagination, `search` (name/location/organizer, ≥3 characters), date range overlap, sorting (FluentValidation on create/update).
-
-Controller route templates omit the **`api`** segment in code; **`GlobalApiRoutePrefixConvention`** in **`Program.cs`** prefixes **`api`** for all attribute-routed controllers.
-
-## Frontend routing
-
-**`/api` is reserved for the HTTP API.** The React router redirects mistaken navigations to `/api` back home and, in development, **`assertFePathNotApi`** helps catch invalid route paths at startup.
+- Controllers live under **`server/Api/Controllers/`** (e.g. authentication, IAM, MFA, mail, storage, traces, projects). Route templates omit the **`api`** segment in code; **`GlobalApiRoutePrefixConvention`** in **`Program.cs`** adds the **`api`** prefix for attribute-routed controllers.
+- **`/api` is reserved for the HTTP API** in the integrated setup; keep client-side routes from colliding with API paths.
 
 ## License
 
