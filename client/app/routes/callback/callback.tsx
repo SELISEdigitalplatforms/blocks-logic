@@ -13,7 +13,7 @@ export default function CallbackPage() {
   const { isLoading, isSuccess } = useQuery({
     queryKey: ["github-verification", code, projectKey],
     queryFn: () => githubInfoService.verifyAuthorization(code || "", projectKey),
-    enabled: !!code && !!projectKey,
+    enabled: !!code,
     retry: false,
   });
 
