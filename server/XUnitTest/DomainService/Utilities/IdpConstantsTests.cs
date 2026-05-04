@@ -20,28 +20,28 @@ namespace XUnitTest.DomainService.Utilities
         public void AuthenticationQueue_ShouldHaveCorrectValue()
         {
             // Assert
-            IdpConstants.AuthenticationQueue.Should().Be("blocks_authentication_listener");
+            IdpConstants.AuthenticationQueue.Should().Be("blocks_os_authentication_listener");
         }
 
         [Fact]
         public void IamQueue_ShouldHaveCorrectValue()
         {
             // Assert
-            IdpConstants.IamQueue.Should().Be("blocks_iam_listener");
+            IdpConstants.IamQueue.Should().Be("blocks_os_iam_listener");
         }
 
         [Fact]
         public void MailQueue_ShouldHaveCorrectValue()
         {
             // Assert
-            IdpConstants.MailQueue.Should().Be("blocks_mail_listener");
+            IdpConstants.MailQueue.Should().Be("blocks_os_mail_listener");
         }
 
         [Fact]
         public void MfaQueueName_ShouldHaveCorrectValue()
         {
             // Assert
-            IdpConstants.MfaQueueName.Should().Be("blocks_mfa_listener");
+            IdpConstants.MfaQueueName.Should().Be("blocks_os_mfa_listener");
         }
 
         [Fact]
@@ -102,13 +102,21 @@ namespace XUnitTest.DomainService.Utilities
             var result = IdpConstants.GetMessageConfiguration(connectionString);
 
             // Assert
-            result.RabbitMqConfiguration.ConsumerSubscriptions.Should().HaveCount(3);
+            result.RabbitMqConfiguration.ConsumerSubscriptions.Should().HaveCount(7);
             result.RabbitMqConfiguration.ConsumerSubscriptions.Should().Contain(s => 
                 s.QueueName == IdpConstants.AuthenticationQueue);
             result.RabbitMqConfiguration.ConsumerSubscriptions.Should().Contain(s => 
                 s.QueueName == IdpConstants.IamQueue);
             result.RabbitMqConfiguration.ConsumerSubscriptions.Should().Contain(s => 
                 s.QueueName == IdpConstants.MfaQueueName);
+            result.RabbitMqConfiguration.ConsumerSubscriptions.Should().Contain(s =>
+                s.QueueName == IdpConstants.IdentifierQueueName);
+            result.RabbitMqConfiguration.ConsumerSubscriptions.Should().Contain(s =>
+                s.QueueName == IdpConstants.DataCleanupQueue);
+            result.RabbitMqConfiguration.ConsumerSubscriptions.Should().Contain(s =>
+                s.QueueName == IdpConstants.LanguageDataMigrationQueue);
+            result.RabbitMqConfiguration.ConsumerSubscriptions.Should().Contain(s =>
+                s.QueueName == IdpConstants.GenericMigrationQueue);
         }
 
         [Fact]
@@ -271,10 +279,14 @@ namespace XUnitTest.DomainService.Utilities
             var result = IdpConstants.GetMessageConfiguration(connectionString);
 
             // Assert
-            result.AzureServiceBusConfiguration.Queues.Should().HaveCount(3);
+            result.AzureServiceBusConfiguration.Queues.Should().HaveCount(7);
             result.AzureServiceBusConfiguration.Queues.Should().Contain(IdpConstants.AuthenticationQueue);
             result.AzureServiceBusConfiguration.Queues.Should().Contain(IdpConstants.IamQueue);
             result.AzureServiceBusConfiguration.Queues.Should().Contain(IdpConstants.MfaQueueName);
+            result.AzureServiceBusConfiguration.Queues.Should().Contain(IdpConstants.IdentifierQueueName);
+            result.AzureServiceBusConfiguration.Queues.Should().Contain(IdpConstants.DataCleanupQueue);
+            result.AzureServiceBusConfiguration.Queues.Should().Contain(IdpConstants.LanguageDataMigrationQueue);
+            result.AzureServiceBusConfiguration.Queues.Should().Contain(IdpConstants.GenericMigrationQueue);
         }
 
         [Fact]
@@ -288,7 +300,7 @@ namespace XUnitTest.DomainService.Utilities
 
             // Assert
             result.AzureServiceBusConfiguration.Topics.Should().NotBeNull();
-            result.AzureServiceBusConfiguration.Topics.Should().BeEmpty();
+            result.AzureServiceBusConfiguration.Topics.Should().ContainSingle(IdpConstants.MigrationCompletionTopic);
         }
 
         [Fact]

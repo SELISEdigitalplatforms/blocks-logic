@@ -30,6 +30,8 @@ namespace XUnitTest.DomainService.Worker
         {
             // Arrange
             var refreshTokenEvent = CreateRefreshTokenEvent();
+            refreshTokenEvent.IsLogin = true;
+            refreshTokenEvent.GrantType = "password";
             var user = CreateUser(logInCount: 5);
 
             SetupRepositoryMocks(user);
@@ -159,7 +161,7 @@ namespace XUnitTest.DomainService.Worker
                         t.LastUpdatedBy == refreshTokenEvent.UserId &&
                         t.DeviceInformation == refreshTokenEvent.DeviceInformation &&
                         t.IpAddresses == refreshTokenEvent.IpAddresses &&
-                        t.Event == "issued_refresh_token" &&
+                        t.Event == "renew_refresh_token" &&
                         t.ActionBy == "RefreshTokenWorkerService")),
                 Times.Once);
         }
