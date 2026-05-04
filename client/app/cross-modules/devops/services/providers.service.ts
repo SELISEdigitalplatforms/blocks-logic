@@ -12,7 +12,7 @@ export const authenticateWithGithub = (extraState?: string, projectKey?: string)
 
   // Build the OAuth URL with all parameters
   const authUrl = new URL("https://github.com/login/oauth/authorize");
-  authUrl.searchParams.set("client_id", import.meta.env.BLOCKS_GITHUB_CLIENT_ID || "");
+  authUrl.searchParams.set("client_id", import.meta.env.BLOCKS_GITHUB_SSO_CLIENT_ID || "");
   authUrl.searchParams.set("scope", scopes);
   authUrl.searchParams.set("state", randomState);
 
