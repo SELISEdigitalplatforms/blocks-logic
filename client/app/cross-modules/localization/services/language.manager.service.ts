@@ -69,12 +69,20 @@ class LanguageManagerService {
     );
   };
 
-  fetchBlocksLanguageModules = (projectKey: string): Promise<ILanguageModule[]> => {
-    return http.get(`${LANGUAGE_MODULE_ENDPOINTS.GETS}?projectKey=${projectKey}`);
+  fetchBlocksLanguageModules = (
+    projectKey: string,
+  ): Promise<ILanguageModule[]> => {
+    return http.get(
+      `${LANGUAGE_MODULE_ENDPOINTS.GETS}?projectKey=${projectKey}`,
+    );
   };
 
   fetchBlocksLanguages = (projectKey: string): Promise<ILanguageConfig[]> => {
-    return http.get(`${LANGUAGE_ENDPOINTS.GETS}?projectKey=${projectKey}`);
+    return http.get(
+      `${LANGUAGE_ENDPOINTS.GETS}?projectKey=${projectKey}`,
+      undefined,
+      { absoluteUrl: true },
+    );
   };
 
   saveBlocksLanguageKey = (payload: {
@@ -142,7 +150,10 @@ class LanguageManagerService {
       .then((response) => response);
   }
 
-  deleteLanguage(payload: { languageName: string; projectKey: string }): Promise<{
+  deleteLanguage(payload: {
+    languageName: string;
+    projectKey: string;
+  }): Promise<{
     errors: null | unknown;
     isSuccess: boolean;
   }> {
@@ -151,7 +162,9 @@ class LanguageManagerService {
       .delete<{
         errors: unknown;
         isSuccess: boolean;
-      }>(`${url}?languageName=${payload.languageName}&projectKey=${payload.projectKey}`)
+      }>(
+        `${url}?languageName=${payload.languageName}&projectKey=${payload.projectKey}`,
+      )
       .then((response) => response);
   }
 
@@ -302,10 +315,15 @@ class LanguageManagerService {
       payload.logFromValues.forEach((v) => params.append("LogFromValues", v));
     }
     if (payload.excludeLogFromValues) {
-      payload.excludeLogFromValues.forEach((v) => params.append("ExcludeLogFromValues", v));
+      payload.excludeLogFromValues.forEach((v) =>
+        params.append("ExcludeLogFromValues", v),
+      );
     }
     if (payload.createDateRange?.startDate) {
-      params.append("CreateDateRange.StartDate", payload.createDateRange.startDate);
+      params.append(
+        "CreateDateRange.StartDate",
+        payload.createDateRange.startDate,
+      );
     }
     if (payload.createDateRange?.endDate) {
       params.append("CreateDateRange.EndDate", payload.createDateRange.endDate);

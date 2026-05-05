@@ -1,10 +1,11 @@
+@import "@xyflow/react/dist/base.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --font-sans: 'DM Sans', system-ui, -apple-system, sans-serif;
+    --font-sans: "DM Sans", system-ui, -apple-system, sans-serif;
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
@@ -221,4 +222,9 @@
   ::-webkit-scrollbar-corner {
     background: transparent;
   }
+}
+
+code {
+  font-family: var(--font-dm-mono, monospace) !important;
+  font-size: 14px !important;
 }
