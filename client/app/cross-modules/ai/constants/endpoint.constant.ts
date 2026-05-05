@@ -5,4 +5,6 @@ export const AI_ENDPOINTS = {
   MODEL_VALIDATE: "/model/:id/validate",
   MODEL_SEED_PROVIDERS: "/model/seed/providers",
   MODEL_SEED_BY_PROVIDER: "/model/seed/providers/:provider",
+  AGENT_CREATE: "/agents/create",
+  AGENT_QUERIES: "/agents/queries",
 } as const;

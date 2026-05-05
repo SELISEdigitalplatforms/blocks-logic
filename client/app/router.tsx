@@ -64,6 +64,8 @@ import { RepositoriesPage } from "./pages/repositories/repositories";
 import { SettingsPage } from "./pages/settings/settings";
 import { CreateProjectWrapper } from "./pages/create-project/create-project";
 import CallbackPage from "./routes/callback/callback";
+import { Workflows } from "./cross-modules/workflow/pages/workflows";
+import { WorkflowDetails } from "./cross-modules/workflow/pages/workflow-details";
 
 export const router = createBrowserRouter([
   // ── Auth layout (login, signup, sso-activate) ──
@@ -90,7 +92,10 @@ export const router = createBrowserRouter([
       { path: "/forgot-email-sent", element: <ForgotEmailSentPage /> },
       { path: "/signup-email-sent", element: <SignupEmailSentPage /> },
       { path: "/mfa-check", element: <MfaCheckPage /> },
-      { path: "/reset-password-success", element: <ResetPasswordSuccessPage /> },
+      {
+        path: "/reset-password-success",
+        element: <ResetPasswordSuccessPage />,
+      },
     ],
   },
 
@@ -104,7 +109,10 @@ export const router = createBrowserRouter([
       { path: "permission", element: <OidcPermissionPage /> },
       { path: "error", element: <OidcErrorPage /> },
       { path: "forgot-password", element: <OidcForgotPasswordPage /> },
-      { path: "email-sent-confirmation", element: <OidcEmailSentConfirmationPage /> },
+      {
+        path: "email-sent-confirmation",
+        element: <OidcEmailSentConfirmationPage />,
+      },
     ],
   },
 
@@ -115,26 +123,60 @@ export const router = createBrowserRouter([
       { path: "/services/iam", element: <IamPage /> },
       { path: "/services/iam/user-detail/:id", element: <IamUserDetailPage /> },
       { path: "/services/iam/role-detail/:id", element: <IamRoleDetailPage /> },
-      { path: "/services/iam/permission-detail/new", element: <IamAddPermissionPage /> },
-      { path: "/services/iam/permission-detail/:id", element: <IamPermissionDetailPage /> },
-      { path: "/services/iam/organization-detail/:itemId", element: <IamOrgDetailPage /> },
+      {
+        path: "/services/iam/permission-detail/new",
+        element: <IamAddPermissionPage />,
+      },
+      {
+        path: "/services/iam/permission-detail/:id",
+        element: <IamPermissionDetailPage />,
+      },
+      {
+        path: "/services/iam/organization-detail/:itemId",
+        element: <IamOrgDetailPage />,
+      },
       { path: "/services/iam/logs", element: <IamLogsPage /> },
       { path: "/services/iam/configure", element: <IamConfigurePage /> },
-      { path: "/services/authentication", element: <AuthenticationConfigPage /> },
-      { path: "/services/authentication/sso-configuration", element: <SsoConfigurationPage /> },
+      {
+        path: "/services/authentication",
+        element: <AuthenticationConfigPage />,
+      },
+      {
+        path: "/services/authentication/sso-configuration",
+        element: <SsoConfigurationPage />,
+      },
       { path: "/services/authentication/logs", element: <AuthLogsPage /> },
-      { path: "/services/mfa", element: <Navigate to="/services/secret-management?tab=mfa" replace /> },
+      {
+        path: "/services/mfa",
+        element: <Navigate to="/services/secret-management?tab=mfa" replace />,
+      },
       { path: "/services/mfa/logs", element: <MfaLogsPage /> },
       { path: "/services/api-settings", element: <ApiSettingsPage /> },
       { path: "/services/rate-limiter", element: <RateLimiterPage /> },
       { path: "/services/lmt", element: <LmtPage /> },
-      { path: "/services/lmt/logs/:serviceName", element: <LmtServiceLogsPage /> },
+      {
+        path: "/services/lmt/logs/:serviceName",
+        element: <LmtServiceLogsPage />,
+      },
       { path: "/tracing/timeline/:traceId", element: <LmtTraceDetailsPage /> },
-      { path: "/services/secret-management", element: <SecretManagementPage /> },
-      { path: "/services/secret-management/ai-models/:provider", element: <AiModelSelectedRoute /> },
+      {
+        path: "/services/secret-management",
+        element: <SecretManagementPage />,
+      },
+      {
+        path: "/services/secret-management/ai-models/:provider",
+        element: <AiModelSelectedRoute />,
+      },
       { path: "/managed-services", element: <ManagedServicesPage /> },
-      { path: "/services/captcha", element: <Navigate to="/services/secret-management?tab=captcha" replace /> },
+      {
+        path: "/services/captcha",
+        element: (
+          <Navigate to="/services/secret-management?tab=captcha" replace />
+        ),
+      },
       { path: "/services/captcha/logs", element: <CaptchaLogsPage /> },
+      { path: "/workflow/:id", element: <WorkflowDetails /> },
+      { path: "/workflow", element: <Workflows /> },
     ],
   },
 
@@ -154,7 +196,10 @@ export const router = createBrowserRouter([
     element: <DashboardLayout />,
     children: [
       { path: "/dashboard", element: <DashboardOverview /> },
-      { path: "/project-overview", element: <Navigate to="/project-overview/environments" replace /> },
+      {
+        path: "/project-overview",
+        element: <Navigate to="/project-overview/environments" replace />,
+      },
       { path: "/project-overview/environments", element: <EnvironmentsPage /> },
       { path: "/project-overview/people", element: <PeopleManagement /> },
       { path: "/project-overview/repositories", element: <RepositoriesPage /> },
