@@ -1,3 +1,4 @@
+import { API_BASES } from "@/constants/endpoint.constant";
 import { NodeSchemaDefinition } from "./node-schema.type";
 
 export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
@@ -13,7 +14,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         info: "Copy this URL to trigger the workflow",
         key: "webhookUrl",
         displayValue: (_data: Record<string, unknown>, config) => {
-          return `${import.meta.env.BLOCKS_API_BASE_URL}/api/Workflow/webhook/${config.projectKey}/${config.workflowId}/${config.nodeId}`;
+          return `${API_BASES.LOGIC}/Workflow/webhook/${config.projectKey}/${config.workflowId}/${config.nodeId}`;
         },
         disabled: true,
         copyable: true,

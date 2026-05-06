@@ -305,7 +305,7 @@ namespace DomainService.Workflow.Nodes.ActionDataV1
             ActionDataV1Parameters parameters, string graphqlQuery)
         {
             var httpClient = _httpClientFactory.CreateClient();
-            var requestUrl = $"{parameters.ApiBaseUrl}/uds/v1/{parameters.ProjectShortKey}/gateway";
+            var requestUrl = $"{parameters.ApiBaseUrl}/{parameters.ProjectShortKey}/gateway";
             var request = new HttpRequestMessage(HttpMethod.Post, requestUrl);
             // Authenticate based on selected authentication type
             if (parameters.AuthenticationType == "triggerNodeCookie")

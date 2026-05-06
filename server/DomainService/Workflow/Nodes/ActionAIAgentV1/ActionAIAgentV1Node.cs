@@ -75,7 +75,7 @@ namespace DomainService.Workflow.Nodes.ActionAIAgentV1
             try
             {
                 // 1. Initiate
-                var initiateUrl = $"{apiBaseUrl}/blocksai-api/v1/conversation/initiate?widget_id={widgetId}";
+                var initiateUrl = $"{apiBaseUrl}/conversation/initiate?widget_id={widgetId}";
                 var request = new HttpRequestMessage(HttpMethod.Get, initiateUrl);
                 request.Headers.Add("X-Blocks-Key", projectKey);
 
@@ -94,7 +94,7 @@ namespace DomainService.Workflow.Nodes.ActionAIAgentV1
 
                 // 2. WebSocket connect
                 var wsUrl =
-                    $"{apiBaseUrl}/blocksai-api/v1{websocketPath}" +
+                    $"{apiBaseUrl}{websocketPath}" +
                     $"?token={token}&x_blocks_key={projectKey}&pg=true&send_event=true";
 
                 wsUrl = wsUrl.Replace("https://", "wss://").Replace("http://", "ws://");
