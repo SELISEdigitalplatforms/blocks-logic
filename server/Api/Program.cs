@@ -30,7 +30,6 @@ var services = builder.Services;
 services.AddHealthChecks();
 
 ApplicationConfigurations.ConfigureApi(services);
-ApplicationConfigurations.ConfigureApiEnv(builder, args);
 
 builder.Services.Configure<MvcOptions>(options =>
 {
@@ -130,15 +129,26 @@ static void ApplyFrontendRuntimeSettings(IConfiguration configuration, string we
 
     var replacements = new Dictionary<string, string?>
     {
-        // ["__BLOCKS_API_BASE_URL__"] = Environment.GetEnvironmentVariable("BLOCKS_API_BASE_URL"),
+        ["__BLOCKS_API_BASE_URL__"] = "https://dev-logic.blocksdevelopers.com",
         ["__BLOCKS_X_BLOCKS_KEY__"] = blocksKey,
         ["__BLOCKS_GOOGLE_SITE_KEY__"] = googleSiteKey,
-        ["__BLOCKS_CONSTRUCT_URL__"] = Environment.GetEnvironmentVariable("BLOCKS_CONSTRUCT_URL"),
-        ["__BLOCKS_UDS_API_BASE_URL__"] = configuration.GetValue<string>("FrontendRuntime:BLOCKS_UDS_API_BASE_URL"),
-        ["__BLOCKS_IDP_API_BASE_URL__"] = configuration.GetValue<string>("FrontendRuntime:BLOCKS_IDP_API_BASE_URL"),
-        ["__BLOCKS_AGENT_API_BASE_URL__"] = configuration.GetValue<string>("FrontendRuntime:BLOCKS_AGENT_API_BASE_URL"),
-        ["__BLOCKS_EUROLM_API_BASE_URL__"] = configuration.GetValue<string>("FrontendRuntime:BLOCKS_EUROLM_API_BASE_URL"),
-        ["__BLOCKS_UTILITY_API_BASE_URL__"] = configuration.GetValue<string>("FrontendRuntime:BLOCKS_UTILITY_API_BASE_URL")
+        ["__BLOCKS_CONSTRUCT_URL__"] = "https://dev-construct.seliseblocks.com",
+        ["__BLOCKS_UDS_API_BASE_URL__"] = "https://dev-uds.blocksdevelopers.com",
+        ["__BLOCKS_IDP_API_BASE_URL__"] = "https://dev-idp.blocksdevelopers.com",
+        ["__BLOCKS_AGENT_API_BASE_URL__"] = "https://dev-agent.blocksdevelopers.com",
+        ["__BLOCKS_EUROLM_API_BASE_URL__"] = "https://dev-eurolm.blocksdevelopers.com",
+        ["__BLOCKS_UTILITY_API_BASE_URL__"] = "https://dev-utility.blocksdevelopers.com"
+
+
+        // "BLOCKS_API_BASE_URL": "https://dev-logic.blocksdevelopers.com",
+        // "BLOCKS_X_BLOCKS_KEY": "***REMOVED***",
+        // "BLOCKS_GOOGLE_SITE_KEY": "***REMOVED***",
+        // "BLOCKS_CONSTRUCT_URL": "https://dev-construct.seliseblocks.com",
+        // "BLOCKS_UDS_API_BASE_URL": "https://dev-uds.blocksdevelopers.com",
+        // "BLOCKS_IDP_API_BASE_URL": "https://dev-idp.blocksdevelopers.com",
+        // "BLOCKS_AGENT_API_BASE_URL": "https://dev-agent.blocksdevelopers.com",
+        // "BLOCKS_EUROLM_API_BASE_URL": "https://dev-eurolm.blocksdevelopers.com",
+        // "BLOCKS_UTILITY_API_BASE_URL": "https://dev-utility.blocksdevelopers.com"
     };
 
     var files = Directory.EnumerateFiles(webRootPath, "*", SearchOption.AllDirectories)
