@@ -1,3 +1,4 @@
+import { API_BASES } from "@/constants/endpoint.constant";
 import { aiService } from "../../services/ai.service";
 import { NodeSchemaDefinition } from "./node-schema.type";
 
@@ -69,7 +70,7 @@ export const NodeSchemaActionAiAgentV1: NodeSchemaDefinition = {
     ...node,
     parameters: {
       ...node.parameters,
-      ApiBaseUrl: import.meta.env.BLOCKS_API_BASE_URL,
+      ApiBaseUrl: API_BASES.AI,
     },
   }),
 };
