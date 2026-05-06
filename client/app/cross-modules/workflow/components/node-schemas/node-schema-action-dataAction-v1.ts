@@ -8,6 +8,7 @@ import {
   buildEmptyFieldMapping,
 } from "@blocks-workflow/utils/resolve-schema-fields";
 import { configurationService } from "../../services/configuration.service";
+import { API_BASES } from "@/constants/endpoint.constant";
 
 export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
   schema: {
@@ -220,7 +221,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
       ...node,
       parameters: {
         ...node.parameters,
-        apiBaseUrl: import.meta.env.BLOCKS_API_BASE_URL || "",
+        apiBaseUrl: API_BASES.UDS || "",
         projectKey: selectedProject?.tenantId ?? "",
         projectShortKey: selectedProject?.tenantSlug ?? "",
       },
