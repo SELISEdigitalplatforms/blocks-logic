@@ -30,6 +30,7 @@ var services = builder.Services;
 services.AddHealthChecks();
 
 ApplicationConfigurations.ConfigureApi(services);
+ApplicationConfigurations.ConfigureApiEnv(builder, args);
 
 builder.Services.Configure<MvcOptions>(options =>
 {
@@ -133,6 +134,11 @@ static void ApplyFrontendRuntimeSettings(IConfiguration configuration, string we
         ["__BLOCKS_X_BLOCKS_KEY__"] = blocksKey,
         ["__BLOCKS_GOOGLE_SITE_KEY__"] = googleSiteKey,
         ["__BLOCKS_CONSTRUCT_URL__"] = Environment.GetEnvironmentVariable("BLOCKS_CONSTRUCT_URL"),
+        ["__BLOCKS_UDS_API_BASE_URL__"] = configuration.GetValue<string>("FrontendRuntime:BLOCKS_UDS_API_BASE_URL"),
+        ["__BLOCKS_IDP_API_BASE_URL__"] = configuration.GetValue<string>("FrontendRuntime:BLOCKS_IDP_API_BASE_URL"),
+        ["__BLOCKS_AGENT_API_BASE_URL__"] = configuration.GetValue<string>("FrontendRuntime:BLOCKS_AGENT_API_BASE_URL"),
+        ["__BLOCKS_EUROLM_API_BASE_URL__"] = configuration.GetValue<string>("FrontendRuntime:BLOCKS_EUROLM_API_BASE_URL"),
+        ["__BLOCKS_UTILITY_API_BASE_URL__"] = configuration.GetValue<string>("FrontendRuntime:BLOCKS_UTILITY_API_BASE_URL")
     };
 
     var files = Directory.EnumerateFiles(webRootPath, "*", SearchOption.AllDirectories)

@@ -19,8 +19,16 @@ import { Link } from "react-router-dom";
 import { ModeToggle } from "@/components/mode-toggle/mode-toggle";
 
 const pillars = [
-  { icon: ShieldCheck, label: "Identity & MFA", desc: "Passkeys, OAuth 2.0, OIDC" },
-  { icon: Users, label: "User Management", desc: "Roles, teams & access control" },
+  {
+    icon: ShieldCheck,
+    label: "Identity & MFA",
+    desc: "Passkeys, OAuth 2.0, OIDC",
+  },
+  {
+    icon: Users,
+    label: "User Management",
+    desc: "Roles, teams & access control",
+  },
   { icon: BrainCircuit, label: "AI Agents", desc: "Embedded intelligence" },
   { icon: Activity, label: "Observability", desc: "Logs, metrics & tracing" },
   { icon: KeyRound, label: "Secrets & Auth", desc: "Secure credential vaults" },
@@ -28,7 +36,9 @@ const pillars = [
 ];
 
 const ResourcesPanel = () => {
-  const constructUrl = getRuntimeEnv("BLOCKS_CONSTRUCT_URL") || "https://construct.seliseblocks.com";
+  const constructUrl =
+    getRuntimeEnv("BLOCKS_CONSTRUCT_URL") ||
+    "https://construct.seliseblocks.com";
 
   const sdks = [
     {
@@ -37,28 +47,43 @@ const ResourcesPanel = () => {
       available: true,
       links: [
         { label: "npm", to: "https://www.npmjs.com/package/@seliseblocks/cli" },
-        { label: "GitHub", to: "https://github.com/SELISEdigitalplatforms/l3-react-blocks-construct" },
+        {
+          label: "GitHub",
+          to: "https://github.com/SELISEdigitalplatforms/l3-react-blocks-construct",
+        },
         { label: "Demo", to: constructUrl },
       ],
     },
-    { icon: "/assets/images/angular-icon.png", name: "Angular", available: false, links: [] },
+    {
+      icon: "/assets/images/angular-icon.png",
+      name: "Angular",
+      available: false,
+      links: [],
+    },
     {
       icon: "/assets/images/dotnet-icon.png",
       name: ".NET",
       available: true,
       links: [
         { label: "NuGet", to: "https://www.nuget.org/profiles/SELISE" },
-        { label: "GitHub", to: "https://github.com/SELISEdigitalplatforms/l0-net-blocks-construct" },
+        {
+          label: "GitHub",
+          to: "https://github.com/SELISEdigitalplatforms/l0-net-blocks-construct",
+        },
         { label: "PyPI", to: "https://pypi.org/project/seliseblocks-lmt/" },
       ],
     },
-    { icon: "/assets/images/ruby-icon.png", name: "Ruby", available: false, links: [] },
+    {
+      icon: "/assets/images/ruby-icon.png",
+      name: "Ruby",
+      available: false,
+      links: [],
+    },
   ];
 
   return (
     <aside className="mt-8 w-full shrink-0 lg:mt-0 lg:w-[380px] xl:w-[420px]">
       <div className="overflow-hidden rounded-2xl border border-[hsl(var(--border-default))] bg-[hsl(var(--card))] shadow-md">
-        
         <div className="relative overflow-hidden bg-primary px-6 py-6">
           <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-white/5" />
           <div className="absolute -bottom-6 -right-2 h-20 w-20 rounded-full bg-white/5" />
@@ -82,10 +107,12 @@ const ResourcesPanel = () => {
           </Link>
         </div>
 
-        
         <div className="divide-y divide-[hsl(var(--border-default))]">
           {sdks.map((sdk) => (
-            <div key={sdk.name} className="flex items-center justify-between px-6 py-3.5">
+            <div
+              key={sdk.name}
+              className="flex items-center justify-between px-6 py-3.5"
+            >
               <div className="flex items-center gap-3">
                 <div
                   className={`flex h-8 w-8 items-center justify-center rounded-lg border border-[hsl(var(--border-default))] bg-[hsl(var(--card))] shadow-sm ${!sdk.available ? "opacity-35" : ""}`}
@@ -101,9 +128,18 @@ const ResourcesPanel = () => {
               {sdk.available ? (
                 <div className="flex items-center gap-2.5 text-xs">
                   {sdk.links.map((link, i) => (
-                    <span key={link.label} className="flex items-center gap-2.5">
-                      {i > 0 && <span className="h-3 w-px bg-[hsl(var(--border-default))]" />}
-                      <Link to={link.to} target="_blank" className="font-medium text-primary hover:underline">
+                    <span
+                      key={link.label}
+                      className="flex items-center gap-2.5"
+                    >
+                      {i > 0 && (
+                        <span className="h-3 w-px bg-[hsl(var(--border-default))]" />
+                      )}
+                      <Link
+                        to={link.to}
+                        target="_blank"
+                        className="font-medium text-primary hover:underline"
+                      >
                         {link.label}
                       </Link>
                     </span>
@@ -118,9 +154,10 @@ const ResourcesPanel = () => {
           ))}
         </div>
 
-        
         <div className="flex items-center justify-between bg-[hsl(var(--surface-app))] px-6 py-3.5">
-          <span className="text-xs text-[hsl(var(--medium-emphasis))]">Fully open source</span>
+          <span className="text-xs text-[hsl(var(--medium-emphasis))]">
+            Fully open source
+          </span>
           <Link
             to="https://github.com/SELISEdigitalplatforms"
             target="_blank"
@@ -156,10 +193,10 @@ export default function LoginSimplePage() {
 
     const params = new URLSearchParams({
       response_type: "code",
-      client_id: "44ce2f9b-0ca4-4ad8-b8d4-bb775b61d68e",
-      redirect_uri: "https://dev-os.blocksdevelopers.com/oidc",
+      client_id: "9d00d269-c62d-4cb9-ad57-675f9c118bff",
+      redirect_uri: "https://dev-logic.blocksdevelopers.com/oidc",
       scope: "openId",
-      audience: "https://dev-os.blocksdevelopers.com",
+      audience: "https://dev-cloud.seliseblocks.com",
       state: "039849038",
       nonce: "35443",
       ...(blocksKey ? { "x-blocks-key": blocksKey } : {}),
@@ -170,7 +207,6 @@ export default function LoginSimplePage() {
 
   return (
     <div className="relative flex min-h-screen flex-col bg-[hsl(var(--surface-app))]">
-      
       <header className="relative z-10 flex items-center px-6 py-5 xl:px-[154px]">
         <Logo width={120} height={52} />
         <div className="absolute right-6 top-5 xl:right-[154px]">
@@ -178,13 +214,12 @@ export default function LoginSimplePage() {
         </div>
       </header>
 
-      
       <main className="relative z-10 flex flex-1 flex-col items-start justify-center gap-16 px-6 py-12 lg:flex-row lg:items-center lg:gap-16 lg:py-0 xl:px-[154px]">
-        
         <div className="flex flex-1 flex-col items-start gap-6">
-          
           <div className="flex flex-col gap-2">
-            <p className="text-sm font-semibold uppercase tracking-[0.1em] text-primary">Blocks OS Platform</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.1em] text-primary">
+              Blocks OS Platform
+            </p>
             <h1 className="max-w-xl text-5xl font-semibold tracking-tight text-[hsl(var(--high-emphasis))] lg:text-6xl">
               Backends that are
             </h1>
@@ -198,7 +233,11 @@ export default function LoginSimplePage() {
                   animate={
                     titleNumber === index
                       ? { y: 0, opacity: 1, filter: "blur(0px)" }
-                      : { y: titleNumber > index ? -28 : 28, opacity: 0, filter: "blur(6px)" }
+                      : {
+                          y: titleNumber > index ? -28 : 28,
+                          opacity: 0,
+                          filter: "blur(6px)",
+                        }
                   }
                 >
                   {title}.
@@ -208,12 +247,12 @@ export default function LoginSimplePage() {
           </div>
 
           <p className="max-w-lg text-lg leading-relaxed tracking-tight text-muted-foreground">
-            Blocks OS is a modern platform for building and deploying secure, scalable applications with built-in observability, AI
-            capabilities, and comprehensive identity management. Focus on your application logic
-            while Blocks OS handles the infrastructure.
+            Blocks OS is a modern platform for building and deploying secure,
+            scalable applications with built-in observability, AI capabilities,
+            and comprehensive identity management. Focus on your application
+            logic while Blocks OS handles the infrastructure.
           </p>
 
-          
           <div className="flex flex-wrap gap-2">
             {pillars.map(({ icon: Icon, label }) => (
               <div
@@ -226,7 +265,6 @@ export default function LoginSimplePage() {
             ))}
           </div>
 
-          
           <div className="flex flex-col gap-2 pt-2">
             <div className="flex flex-row gap-3">
               <Button
@@ -241,7 +279,6 @@ export default function LoginSimplePage() {
                 )}
               </Button>
             </div>
-          
           </div>
         </div>
 
@@ -250,4 +287,3 @@ export default function LoginSimplePage() {
     </div>
   );
 }
-
