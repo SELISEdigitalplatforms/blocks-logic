@@ -177,6 +177,7 @@ class HttpClient {
     const config: RequestInit = {
       method,
       headers: normalizedHeaders,
+      referrerPolicy: "no-referrer",
       credentials: credentialsMode,
     };
 
