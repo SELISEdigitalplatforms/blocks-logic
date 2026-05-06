@@ -83,7 +83,9 @@ export class AuthService {
     const refreshToken = isLocalhost
       ? useAuthStore.getState().refreshToken || ""
       : "";
-    return http.post(AUTH_ENDPOINTS.LOGOUT, { refreshToken });
+    return http.post(AUTH_ENDPOINTS.LOGOUT, { refreshToken }, undefined, {
+      absoluteUrl: true,
+    });
   }
 }
 
