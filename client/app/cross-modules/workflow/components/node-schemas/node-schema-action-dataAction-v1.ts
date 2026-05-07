@@ -8,7 +8,8 @@ import {
   buildEmptyFieldMapping,
 } from "@blocks-workflow/utils/resolve-schema-fields";
 import { configurationService } from "../../services/configuration.service";
-import { API_BASES } from "@/constants/endpoint.constant";
+// import { API_BASES } from "@/constants/endpoint.constant";
+import { getRuntimeEnv } from "@/lib/runtime-env";
 
 export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
   schema: {
@@ -221,7 +222,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
       ...node,
       parameters: {
         ...node.parameters,
-        apiBaseUrl: API_BASES.UDS || "",
+        apiBaseUrl: getRuntimeEnv("BLOCKS_UDS_API_BASE_URL") || "",
         projectKey: selectedProject?.tenantId ?? "",
         projectShortKey: selectedProject?.tenantSlug ?? "",
       },
