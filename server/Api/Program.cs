@@ -1,16 +1,17 @@
-using BlocksTemplate.Api;
 using Blocks.Genesis;
+using BlocksTemplate.Api;
+using Captcha.DomainService.Configuration;
 using Cloud.DomainService.Utilities;
-using DomainService.Utilities;
-using DomainService.Shared;
-using Microsoft.AspNetCore.Http.Features;
-using Microsoft.AspNetCore.Mvc;
 using Cloud.LmtService.Utilities;
 using CloudConfiguration.DomainService.Shared.Utilities;
-using Captcha.DomainService.Configuration;
-using MongoDB.Driver;
+using DomainService.Notification;
+using DomainService.Shared;
+using DomainService.Utilities;
 using DomainService.Workflow;
 using DomainService.Workflow.Utils;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Mvc;
+using MongoDB.Driver;
 
 var serviceName = "blocks-os-api";
 //var vaultType = ResolveVaultType();
@@ -47,6 +48,7 @@ services.AddCloudDomainServices();
 services.AddCloudLmtServices();
 services.AddCloudConfigurationServices();
 services.AddWorkflowExecutionEngine();
+services.RegisterAllNotificationApplicationServices();
 
 var app = builder.Build();
 
@@ -90,7 +92,7 @@ if (File.Exists(indexHtml))
 }
 
 ApplicationConfigurations.ConfigureMiddleware(app);
-
+app.MapHub<NotificationHub>("/notificationHub");
 await app.RunAsync();
 
 //static VaultType ResolveVaultType()
