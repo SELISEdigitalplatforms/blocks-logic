@@ -5,7 +5,10 @@ import { ScrollArea } from "@/components/ui-kits/scroll-area/scroll-area";
 import { formatDate, cn } from "@/lib/utils";
 import { differenceInSeconds } from "date-fns";
 import { Skeleton } from "@/components/ui-kits/skeleton/skeleton";
-import { getStatusConfig, WorkflowExecutionStatus } from "../../utils/workflow-execution-list.util";
+import {
+  getStatusConfig,
+  WorkflowExecutionStatus,
+} from "../../utils/workflow-execution-list.util";
 
 interface WorkflowExecutionListProps {
   executions: WorkflowExecution[];
@@ -45,7 +48,10 @@ export const WorkflowExecutionList = ({
       {executions?.map((execution) => {
         const statusConfig = getStatusConfig(execution.status);
         const duration = execution.finishedAt
-          ? differenceInSeconds(new Date(execution.finishedAt), new Date(execution.startedAt))
+          ? differenceInSeconds(
+              new Date(execution.finishedAt),
+              new Date(execution.startedAt),
+            )
           : null;
 
         return (
@@ -58,14 +64,20 @@ export const WorkflowExecutionList = ({
             <div className="flex w-full flex-col gap-1 p-4">
               <div className="flex items-center justify-between">
                 <p className="text-base font-medium">
-                  {formatDate(new Date(execution.finishedAt || execution.startedAt))}
+                  {formatDate(
+                    new Date(execution.finishedAt || execution.startedAt),
+                  )}
                 </p>
-                <span className={cn("text-xs font-medium", statusConfig.textClass)}>
+                <span
+                  className={cn("text-xs font-medium", statusConfig.textClass)}
+                >
                   {statusConfig.label}
                 </span>
               </div>
 
-              <span className="text-xs text-muted-foreground">Completed in {duration} seconds</span>
+              <span className="text-xs text-muted-foreground">
+                Completed in {duration} seconds
+              </span>
 
               {(execution.status === WorkflowExecutionStatus.Running ||
                 execution.status === WorkflowExecutionStatus.Pending ||

@@ -74,85 +74,62 @@ namespace DomainService.Workflow.Nodes.ActionAIAgentV1
         {
             try
             {
-                // 1. Initiate
+                // 1. Initiate Chat Session
                 var initiateUrl = $"{apiBaseUrl}/conversation/initiate?widget_id={widgetId}";
-                var request = new HttpRequestMessage(HttpMethod.Get, initiateUrl);
-                request.Headers.Add("X-Blocks-Key", projectKey);
 
-                var response = await _httpClient.SendAsync(request);
-                response.EnsureSuccessStatusCode();
+                var initiateRequest = new HttpRequestMessage(HttpMethod.Get, initiateUrl);
+                initiateRequest.Headers.Add("X-Blocks-Key", projectKey);
 
-                var initiateJson = await response.Content.ReadAsStringAsync();
-                var initiateData = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(initiateJson)
+                var initiateResponse = await _httpClient.SendAsync(initiateRequest);
+                initiateResponse.EnsureSuccessStatusCode();
+
+                var initiateJson = await initiateResponse.Content.ReadAsStringAsync();
+                var initiateData = JsonSerializer.Deserialize<AgentChatInitiateResponse>(initiateJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                     ?? throw new Exception("Invalid initiate response");
 
-                var websocketPath = initiateData["websocket_url"].GetString();
-                var token = initiateData["token"].GetString();
+                var chatRequestUrl = $"{apiBaseUrl}/chat/{initiateData.SessionId}?project_key={projectKey}&pg=false";
+                var chatRequest = new HttpRequestMessage(HttpMethod.Post, chatRequestUrl);
+                chatRequest.Headers.Add("X-Blocks-Key", projectKey);
+                chatRequest.Headers.Add("X-Blocks-Token", initiateData.Token);
+                chatRequest.Content = new StringContent(JsonSerializer.Serialize(new { message }), Encoding.UTF8, "application/json");
+                var chatResponse = await _httpClient.SendAsync(chatRequest, HttpCompletionOption.ResponseHeadersRead);
+                chatResponse.EnsureSuccessStatusCode();
+                await using var stream = await chatResponse.Content.ReadAsStreamAsync();
+                using var reader = new StreamReader(stream);
 
-                if (string.IsNullOrEmpty(websocketPath) || string.IsNullOrEmpty(token))
-                    throw new Exception("Missing websocket_url or token");
+                string? line;
 
-                // 2. WebSocket connect
-                var wsUrl =
-                    $"{apiBaseUrl}{websocketPath}" +
-                    $"?token={token}&x_blocks_key={projectKey}&pg=true&send_event=true";
 
-                wsUrl = wsUrl.Replace("https://", "wss://").Replace("http://", "ws://");
-
-                using var ws = new ClientWebSocket();
-                await ws.ConnectAsync(new Uri(wsUrl), CancellationToken.None);
-
-                // 3. Send user message
-                var payload = JsonSerializer.Serialize(new { message });
-                var bytes = Encoding.UTF8.GetBytes(payload);
-
-                await ws.SendAsync(
-                    new ArraySegment<byte>(bytes),
-                    WebSocketMessageType.Text,
-                    true,
-                    CancellationToken.None
-                );
-
-                // 4. Receive events
-                var buffer = new byte[16 * 1024];
-
-                while (ws.State == WebSocketState.Open)
+                while (!reader.EndOfStream)
                 {
-                    var result = await ws.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+                    line = await reader.ReadLineAsync();
 
-                    if (result.MessageType == WebSocketMessageType.Close)
-                        break;
-
-                    var json = Encoding.UTF8.GetString(buffer, 0, result.Count);
-
-                    Dictionary<string, JsonElement>? evt;
-                    try
-                    {
-                        evt = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json);
-                    }
-                    catch
-                    {
-                        continue;
-                    }
-
-                    if (evt == null || !evt.TryGetValue("type", out var typeEl))
+                    if (string.IsNullOrWhiteSpace(line))
                         continue;
 
-                    var type = typeEl.GetString();
+                    if (!line.StartsWith("event:"))
+                        continue;
 
-                    // 5. Final response event - Return only the message content
-                    if (type == "chat_response" && evt.TryGetValue("message", out var msgEl))
+                    var eventType = line["event:".Length..].Trim();
+
+                    // move to next line for data
+                    var dataLine = await reader.ReadLineAsync();
+                    if (dataLine == null || !dataLine.StartsWith("data:"))
+                        continue;
+
+                    var json = dataLine["data:".Length..].Trim();
+
+                    if (eventType == "chat_response")
                     {
-                        await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None);
+                        using var doc = JsonDocument.Parse(json);
 
-                        // Parse the message content - it can be any structure
-                        return msgEl;
+                        if (doc.RootElement.TryGetProperty("message", out var msg))
+                        {
+                            return msg.Clone();
+                        }
                     }
-
-                    // other events: typing, tool_call, status, etc → ignore
                 }
-
-                throw new Exception("chat_response event not received");
+                return JsonSerializer.Deserialize<JsonElement>("");
             }
             catch (Exception ex)
             {

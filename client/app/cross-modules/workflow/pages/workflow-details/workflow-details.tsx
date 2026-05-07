@@ -65,14 +65,14 @@ export const WorkflowDetailsContent = ({
         <div className="px-4 mt-4">
           <PageBreadcrumb />
         </div>
-        {isLoading || isFetching ? (
+        {isLoading || !isFetchedAfterMount ? (
           <div className="flex h-full items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : (
           <Tabs
             defaultValue="editor"
-            className="flex w-full flex-1 flex-col"
+            className="flex w-full flex-1 flex-col overflow-hidden"
             onValueChange={(v) => {
               if (v === "editor" && data) {
                 const workflowData = data.data;
@@ -144,7 +144,7 @@ export const WorkflowDetailsContent = ({
               <WorkflowEditor />
             </TabsContent>
 
-            <TabsContent value="executions" className="flex-1">
+            <TabsContent value="executions" className="flex-1 overflow-hidden">
               <WorkflowExecutions />
             </TabsContent>
           </Tabs>
