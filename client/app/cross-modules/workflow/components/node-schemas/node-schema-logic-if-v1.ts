@@ -16,7 +16,7 @@ export const NodeSchemaLogicIfV1: NodeSchemaDefinition = {
           { value: "all", label: "All conditions (AND)" },
           { value: "any", label: "Any condition (OR)" },
         ],
-        defaultValue: "and",
+        defaultValue: "all",
       },
       {
         id: "conditions",
@@ -30,7 +30,7 @@ export const NodeSchemaLogicIfV1: NodeSchemaDefinition = {
   },
   defaults: {
     parameters: {
-      conditionType: "and",
+      conditionType: "all",
       conditions: [],
     },
     settings: {},
