@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Input } from "@/components/ui-kits/input/input";
+import { Label } from "@/components/ui-kits/label/label";
 import { Button } from "@/components/ui-kits/button/button";
 import { Trash2, Plus } from "lucide-react";
 import { FieldProps } from "../form-field.types";
@@ -140,9 +141,11 @@ export const ConditionsField = ({
           </Button>
 
           <div className="flex-1">
-            <div className="flex flex-col gap-1">
-              <Input value={cond.left} onChange={(e) => handleLeftChange(idx, e.target.value)} />
-
+                        <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1">
+                <Label className="text-[12px] text-muted-foreground">Left Operand</Label>
+                <Input value={cond.left} onChange={(e) => handleLeftChange(idx, e.target.value)} />
+              </div>
               <div className="flex gap-2">
                 <SelectField
                   field={{ ...field, options: TYPE_OPTIONS }}
@@ -177,10 +180,15 @@ export const ConditionsField = ({
                 />
               </div>
 
-              <Input
-                value={cond.right || ""}
-                onChange={(e) => handleRightChange(idx, e.target.value)}
-              />
+              {cond.operator !== "is_true" && cond.operator !== "is_false" && (
+                <div className="flex flex-col gap-1">
+                  <Label className="text-[12px] text-muted-foreground">Right Operand</Label>
+                  <Input
+                    value={cond.right || ""}
+                    onChange={(e) => handleRightChange(idx, e.target.value)}
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>
