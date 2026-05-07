@@ -4,7 +4,7 @@ namespace DomainService.Workflow.Utils
 {
     public static class LogicConstants
     {
-        public const string NodeExecutionQueue = "blocks_workflow_node_execute_listener_local";
+        public const string NodeExecutionQueue = "blocks_workflow_node_execute_listener";
         public const string EmailTriggerQueue = "blocks_workflow_email_trigger_listener";
         public const string DataTriggerQueue = "blocks_workflow_data_trigger_listener";
 

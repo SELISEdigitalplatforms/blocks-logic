@@ -25,7 +25,7 @@ export const WorkflowExecutions = () => {
   };
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full ">
       <WorkflowExecutionList
         executions={data?.data || []}
         isLoading={isLoading}
