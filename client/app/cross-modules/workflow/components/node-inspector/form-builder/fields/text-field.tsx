@@ -5,6 +5,7 @@ import { Input } from "@/components/ui-kits/input/input";
 import { Button } from "@/components/ui-kits/button/button";
 import { Copy, Check } from "lucide-react";
 import { FieldProps } from "../form-field.types";
+import { withExpressionHighlight } from "../utils/expression-highlight";
 
 export const TextField = ({ field, value, onChange, readOnly }: FieldProps<string>) => {
   const [copied, setCopied] = useState(false);
@@ -17,19 +18,23 @@ export const TextField = ({ field, value, onChange, readOnly }: FieldProps<strin
 
   return (
     <div className="relative">
-      <Input
-        id={field.id}
-        type="text"
-        value={value || ""}
-        onChange={readOnly ? undefined : (e) => onChange(e.target.value)}
-        placeholder={field.placeholder}
-        disabled={field.disabled as boolean}
-        readOnly={readOnly}
-        required={field.required as boolean}
-        maxLength={field.maxLength}
-        minLength={field.minLength}
-        className={field.copyable ? "pr-10" : ""}
-      />
+      {withExpressionHighlight(
+        value || "",
+        <Input
+          id={field.id}
+          type="text"
+          value={value || ""}
+          onChange={readOnly ? undefined : (e) => onChange(e.target.value)}
+          placeholder={field.placeholder}
+          disabled={field.disabled as boolean}
+          readOnly={readOnly}
+          required={field.required as boolean}
+          maxLength={field.maxLength}
+          minLength={field.minLength}
+          className={field.copyable ? "pr-10" : ""}
+        />,
+        false
+      )}
       {field.copyable && (
         <Button
           type="button"
