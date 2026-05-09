@@ -2,9 +2,11 @@
 
 import { Textarea } from "@/components/ui-kits/textarea/textarea";
 import { FieldProps } from "../form-field.types";
+import { withExpressionHighlight } from "../utils/expression-highlight";
 
 export const TextareaField = ({ field, value, onChange, readOnly, }: FieldProps<string>) => {
-  return (
+  return withExpressionHighlight(
+    value || "",
     <Textarea
       id={field.id}
       value={value || ""}

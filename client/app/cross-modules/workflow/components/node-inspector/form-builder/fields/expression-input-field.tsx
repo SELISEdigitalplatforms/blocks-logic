@@ -6,6 +6,7 @@ import { useWorkflowStore } from "@blocks-workflow/store/workflow-store";
 import { Edge } from "@xyflow/react";
 import { EditorNode } from "@blocks-workflow/models/node.model";
 import { cn } from "@/lib/utils";
+import { withExpressionHighlight } from "../utils/expression-highlight";
 
 interface AncestorNode {
   id: string;
@@ -263,17 +264,21 @@ export const ExpressionInputField = ({
 
   return (
     <div className="relative flex-1">
-      <Input
-        ref={inputRef}
-        id={field.id}
-        type="text"
-        value={(value as string) || ""}
-        onChange={handleInputChange}
-        onKeyDown={handleKeyDown}
-        placeholder={field.placeholder}
-        disabled={isDisabled}
-        className={cn("", className)}
-      />
+      {withExpressionHighlight(
+        (value as string) || "",
+        <Input
+          ref={inputRef}
+          id={field.id}
+          type="text"
+          value={(value as string) || ""}
+          onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
+          placeholder={field.placeholder}
+          disabled={isDisabled}
+          className={cn("", className)}
+        />,
+        false
+      )}
 
       {showSuggestions && filteredSuggestions.length > 0 && (
         <div
