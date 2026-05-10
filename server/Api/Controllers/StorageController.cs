@@ -2,8 +2,10 @@
 using CloudConfiguration.DomainService.Shared.Services;
 using CloudConfiguration.DomainService.Storage.Entities;
 using CloudConfiguration.DomainService.Storage.RequestModel;
-using Microsoft.AspNetCore.Http;
+using DomainService.Storage;
 using Microsoft.AspNetCore.Mvc;
+using Storage.DomainService.Services;
+using Storage.DomainService.Storage;
 
 namespace BlocksTemplate.Api.Controllers
 {
@@ -14,12 +16,15 @@ namespace BlocksTemplate.Api.Controllers
     {
         private readonly IConfigurationService _configurationService;
         private readonly ChangeControllerContext _changeControllerContext;
+        private readonly IFileManagementService _fileManagementService;
 
         public StorageController(IConfigurationService configurationService,
-                                 ChangeControllerContext changeControllerContext)
+                                 ChangeControllerContext changeControllerContext,
+                                 IFileManagementService fileManagementService)
         {
             _configurationService = configurationService;
             _changeControllerContext = changeControllerContext;
+            _fileManagementService = fileManagementService;
         }
 
         [HttpPost]
@@ -52,6 +57,30 @@ namespace BlocksTemplate.Api.Controllers
         {
             _changeControllerContext.ChangeContext(request);
             return await _configurationService.DeleteStorageConfigurationAsync(request?.ConfigurationName ?? string.Empty);
+        }
+
+        [HttpPost]
+        [ProtectedEndPoint]
+        public async Task<GetPreSignedUrlForUploadResponse> GetPreSignedUrl([FromBody] GetPreSignedUrlForUploadRequest request)
+        {
+            _changeControllerContext.ChangeContext(request);
+            return await _fileManagementService.GetPerSignedUrlForUploadAsync(request);
+        }
+
+        [HttpGet]
+        [ProtectedEndPoint]
+        public async Task<FileResponse?> GetFile([FromQuery] GetFileRequest request)
+        {
+            _changeControllerContext.ChangeContext(request);
+            return await _fileManagementService.GetUrlForDownloadFileAsync(request);
+        }
+
+        [HttpPost]
+        [ProtectedEndPoint]
+        public async Task<List<FileResponse>?> GetFiles([FromBody] GetFilesRequest request)
+        {
+            _changeControllerContext.ChangeContext(request);
+            return await _fileManagementService.GetMultipleUrlsForDownloadFilesAsync(request);
         }
 
     }
