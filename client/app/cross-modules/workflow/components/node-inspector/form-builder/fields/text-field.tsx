@@ -5,7 +5,7 @@ import { Input } from "@/components/ui-kits/input/input";
 import { Button } from "@/components/ui-kits/button/button";
 import { Copy, Check } from "lucide-react";
 import { FieldProps } from "../form-field.types";
-import { withExpressionHighlight } from "../utils/expression-highlight";
+import { ExpressionHighlighter } from "../utils/expression-highlighter";
 
 export const TextField = ({ field, value, onChange, readOnly }: FieldProps<string>) => {
   const [copied, setCopied] = useState(false);
@@ -18,8 +18,7 @@ export const TextField = ({ field, value, onChange, readOnly }: FieldProps<strin
 
   return (
     <div className="relative">
-      {withExpressionHighlight(
-        value || "",
+      <ExpressionHighlighter value={value || ""} isMultiline={false}>
         <Input
           id={field.id}
           type="text"
@@ -32,9 +31,8 @@ export const TextField = ({ field, value, onChange, readOnly }: FieldProps<strin
           maxLength={field.maxLength}
           minLength={field.minLength}
           className={field.copyable ? "pr-10" : ""}
-        />,
-        false
-      )}
+        />
+      </ExpressionHighlighter>
       {field.copyable && (
         <Button
           type="button"

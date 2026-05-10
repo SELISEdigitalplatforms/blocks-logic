@@ -62,7 +62,7 @@ const renderHighlightedText = (
   });
 };
 
-export const ExpressionHighlightWrapper = ({
+export const ExpressionHighlighter = ({
   children,
   value,
   isMultiline = true,
@@ -106,13 +106,5 @@ export const ExpressionHighlightWrapper = ({
       </div>
       {enhancedChild}
     </div>
-  );
-};
-
-export const withExpressionHighlight = (value: string, element: React.ReactElement, isMultiline = true, fontClassName = "") => {
-  return (
-    <ExpressionHighlightWrapper value={value} isMultiline={isMultiline} fontClassName={fontClassName}>
-      {element}
-    </ExpressionHighlightWrapper>
   );
 };
