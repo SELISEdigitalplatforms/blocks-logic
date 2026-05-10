@@ -80,6 +80,7 @@ export const ExpressionInputField = ({
   readOnly,
   config,
   className,
+  placeholder="",
 }: FieldProps<string>) => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [cursorPosition, setCursorPosition] = useState(0);
@@ -273,7 +274,7 @@ export const ExpressionInputField = ({
           value={(value as string) || ""}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
-          placeholder={field.placeholder}
+          placeholder={placeholder || field.placeholder}
           disabled={isDisabled}
           className={cn("", className)}
         />,
