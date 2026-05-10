@@ -61,7 +61,7 @@ namespace BlocksTemplate.Api.Controllers
 
         [HttpPost]
         [ProtectedEndPoint]
-        public async Task<GetPreSignedUrlForUploadResponse> GetPreSignedUrl([FromBody] GetPreSignedUrlForUploadRequest request)
+        public async Task<GetPreSignedUrlForUploadResponse> GetPreSignedUrlForUpload([FromBody] GetPreSignedUrlForUploadRequest request)
         {
             _changeControllerContext.ChangeContext(request);
             return await _fileManagementService.GetPerSignedUrlForUploadAsync(request);
