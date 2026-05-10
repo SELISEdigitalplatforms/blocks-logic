@@ -8,7 +8,7 @@ import { Trash2, Plus } from "lucide-react";
 import { FieldProps } from "../form-field.types";
 import { SelectField } from "./select-field";
 import { cn } from "@/lib/utils";
-import { withExpressionHighlight } from "../utils/expression-highlight";
+import { ExpressionHighlighter } from "../utils/expression-highlighter";
 
 export type Condition = {
   left: string;
@@ -145,11 +145,9 @@ export const ConditionsField = ({
                         <div className="flex flex-col gap-2">
               <div className="flex flex-col gap-1">
                 <Label className="text-[12px] text-muted-foreground">Left Operand</Label>
-                {withExpressionHighlight(
-                  cond.left || "",
-                  <Input value={cond.left} onChange={(e) => handleLeftChange(idx, e.target.value)} />,
-                  false
-                )}
+                <ExpressionHighlighter value={cond.left || ""} isMultiline={false}>
+                  <Input value={cond.left} onChange={(e) => handleLeftChange(idx, e.target.value)} />
+                </ExpressionHighlighter>
               </div>
               <div className="flex gap-2">
                 <SelectField
@@ -188,14 +186,12 @@ export const ConditionsField = ({
               {cond.operator !== "is_true" && cond.operator !== "is_false" && (
                 <div className="flex flex-col gap-1">
                   <Label className="text-[12px] text-muted-foreground">Right Operand</Label>
-                  {withExpressionHighlight(
-                    cond.right || "",
+                  <ExpressionHighlighter value={cond.right || ""} isMultiline={false}>
                     <Input
                       value={cond.right || ""}
                       onChange={(e) => handleRightChange(idx, e.target.value)}
-                    />,
-                    false
-                  )}
+                    />
+                  </ExpressionHighlighter>
                 </div>
               )}
             </div>

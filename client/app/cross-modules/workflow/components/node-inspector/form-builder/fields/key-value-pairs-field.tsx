@@ -7,7 +7,7 @@ import { Trash2 } from "lucide-react";
 import { FieldProps } from "../form-field.types";
 import { ExpressionInputField } from "./expression-input-field";
 import { cn } from "@/lib/utils";
-import { withExpressionHighlight } from "../utils/expression-highlight";
+import { ExpressionHighlighter } from "../utils/expression-highlighter";
 
 interface KeyValuePair {
   key: string;
@@ -88,8 +88,7 @@ export const KeyValuePairsField = ({
             <Trash2 className="h-4 w-4" />
           </Button>
           <div className="flex-1">
-            {withExpressionHighlight(
-              pair.key || "",
+            <ExpressionHighlighter value={pair.key || ""} isMultiline={false}>
               <Input
                 placeholder={field.keyLabel || "Key"}
                 value={pair.key}
@@ -97,9 +96,8 @@ export const KeyValuePairsField = ({
                 readOnly={readOnly}
                 className="rounded-b-none focus-visible:ring-0 focus-visible:ring-offset-0"
                 disabled={field.disabled as boolean}
-              />,
-              false
-            )}
+              />
+            </ExpressionHighlighter>
 
             <ExpressionInputField
               placeholder={field.keyLabel || "Value"}
