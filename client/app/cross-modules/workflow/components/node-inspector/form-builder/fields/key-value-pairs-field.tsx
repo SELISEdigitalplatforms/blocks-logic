@@ -102,6 +102,7 @@ export const KeyValuePairsField = ({
             )}
 
             <ExpressionInputField
+              placeholder={field.keyLabel || "Value"}
               value={pair.value}
               onChange={(value) => handleValueChange(index, value)}
               readOnly={readOnly}
