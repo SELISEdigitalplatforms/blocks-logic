@@ -53,6 +53,12 @@ export const OIDC_FLOW_ENDPOINTS = {
   USER_ACKNOWLEDGEMENT: `${API_BASES.IDP}${AUTH_SUBPATH}/UserAcknowledgement`,
 } as const;
 
+// ─── People endpoints ─────────────────────────────────────────────────────────
+
+export const PEOPLE_ENDPOINTS = {
+  SIGNUP: `${API_BASES.IDENTIFIER}/People/Signup`,
+} as const;
+
 // ─── Legacy re-export (backward compat for oauth.service) ───────────────────
 
 export const IDP_ENDPOINTS = {
