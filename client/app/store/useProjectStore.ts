@@ -1,4 +1,4 @@
-import { IProject } from "@blocks-identifier/models/project.model";
+import { IProject } from "@/models/project.model";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
