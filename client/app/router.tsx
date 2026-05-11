@@ -5,7 +5,6 @@ import { PublicLayout } from "./layouts/public-layout";
 import { OidcLayout } from "./layouts/oidc-layout";
 import { DashboardLayout } from "./layouts/dashboard-layout";
 import { ConsoleLayout } from "./layouts/console-layout";
-// import { ProjectOverviewLayout } from "./layouts/project-overview-layout";
 
 // Auth routes (public, with auth layout)
 import LoginPage from "./routes/public/auth/login";
@@ -51,6 +50,9 @@ import ProfilePage from "./routes/public/dashboard/profile";
 
 // Console pages
 import { Console } from "./pages/console/console";
+import { DashboardOverview } from "./pages/dashboard/dashboard-overview";
+// import { EnvironmentsPage } from "./pages/environments/environments";
+
 import WorkflowsPage from "./routes/private/workflows/workflows-page";
 import WorkflowDetailsPage from "./routes/private/workflow-details/workflow-details-page";
 
@@ -167,12 +169,12 @@ export const router = createBrowserRouter([
   {
     element: <DashboardLayout />,
     children: [
-      // { path: "/dashboard", element: <DashboardOverview /> },
-      {
-        path: "/project-overview",
-        element: <Navigate to="/project-overview/environments" replace />,
-      },
-    //   { path: "/project-overview/environments", element: <EnvironmentsPage /> },
+      { path: "/dashboard", element: <DashboardOverview /> },
+      // {
+      //   path: "/project-overview",
+      //   element: <Navigate to="/project-overview/environments" replace />,
+      // },
+      // { path: "/project-overview/environments", element: <EnvironmentsPage /> },
     //   { path: "/project-overview/people", element: <PeopleManagement /> },
     //   { path: "/project-overview/repositories", element: <RepositoriesPage /> },
     //   { path: "/project-overview/settings", element: <SettingsPage /> },

@@ -96,6 +96,13 @@ export interface IUpdateProjectResponse {
   errors: unknown | null;
   isSuccess: boolean;
 }
+export interface IDisableProjectPayload {
+  projectKey: string;
+}
+export interface IDisableProjectResponse {
+  errors: unknown | null;
+  isSuccess: boolean;
+}
 
 export interface IUpdateTenantGroupPayload {
   tenantGroupId: string;

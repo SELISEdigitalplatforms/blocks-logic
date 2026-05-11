@@ -1,13 +1,24 @@
 import { API_BASES } from "@/constants/endpoint.constant";
 import { http } from "@/lib/http-client";
-import { IGetProjectPayload, IGetProjectResponse, IProjectGroup, ICreateProjectPayload, IGetProjectLoginOptionResponse, IValidateCNameProjectPayload, IValidateCNameProjectResponse, IUpdateProjectPayload, IUpdateProjectResponse, IUpdateTenantGroupPayload, IUpdateTenantGroupResponse, IEnvRepository } from "@/models/project.model";
+import { 
+  IGetProjectPayload, 
+  IGetProjectResponse, 
+  IProjectGroup, 
+  ICreateProjectPayload, 
+  IGetProjectLoginOptionResponse, 
+  IValidateCNameProjectPayload, 
+  IValidateCNameProjectResponse, 
+  IUpdateProjectPayload, 
+  IUpdateProjectResponse, 
+  IUpdateTenantGroupPayload, 
+  IUpdateTenantGroupResponse, 
+  IDisableProjectPayload,
+  IDisableProjectResponse,
+  IEnvRepository 
+} from "@/models/project.model";
 import { APIResponse } from "@/models/api-response";
+import { PROJECT_ENDPOINTS } from "@/constants/projects";
 
-const PROJECT_SUBPATH = "/Project";
-export const PROJECT_ENDPOINTS = {
-  GETS: `${API_BASES.IDENTIFIER}${PROJECT_SUBPATH}/Gets`,
-  GET: `${API_BASES.IDENTIFIER}${PROJECT_SUBPATH}/Get`,
-}
 export class ProjectService {
   getProjects(page = 0, pageSize = 100, tenantGroupId = ""): Promise<IProjectGroup[]> {
     const url = `${PROJECT_ENDPOINTS.GETS}?page=${page}&pageSize=${pageSize}&tenantGroupId=${tenantGroupId}`;
@@ -68,6 +79,9 @@ getEnvRepositories(projectKey: string): Promise<APIResponse<IEnvRepository[]>> {
   getProjectLoginOption(): Promise<IGetProjectLoginOptionResponse> {
     const url = `/identifier/v1/Project/GetLoginOptions`;
     return http.get(url);
+  }
+  disableProject(payload: IDisableProjectPayload): Promise<IDisableProjectResponse> {
+    return http.post(PROJECT_ENDPOINTS.DISABLE, payload);
   }
 
 }
