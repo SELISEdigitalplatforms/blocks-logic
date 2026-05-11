@@ -2,7 +2,7 @@ import { Button } from "@/components/ui-kits/button/button";
 import { Separator } from "@/components/ui-kits/separator/separator";
 import { useWorkflow } from "@blocks-workflow/hooks";
 import { Controls } from "@xyflow/react";
-import { Eraser, CirclePlus, Maximize, ZoomIn, ZoomOut } from "lucide-react";
+import { Eraser, Plus, Maximize, ZoomIn, ZoomOut } from "lucide-react";
 import { Fragment } from "react";
 
 export const EditorFitConfig = {
@@ -32,7 +32,7 @@ export const WorkflowEditorControls = () => {
       action: () => {},
     },
     {
-      icon: CirclePlus,
+      icon: Plus,
       action: () => {
         openNodeLibraryPanel();
       },
@@ -61,7 +61,7 @@ export const WorkflowEditorControls = () => {
             <Icon className="aspect-square h-5" />
           </Button>
           {index === 3 && (
-            <Separator orientation="vertical" className="h-auto" />
+            <Separator orientation="vertical" className="h-auto mx-1" />
           )}
         </Fragment>
       ))}

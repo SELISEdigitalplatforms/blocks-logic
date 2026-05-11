@@ -76,6 +76,7 @@ export interface FieldProps<T = unknown> {
   config: { projectKey: string; workflowId: string; nodeId: string };
   readOnly?: boolean;
   className?: string;
+  placeholder?:string
 }
 
 export type FormField = FieldSchema;
