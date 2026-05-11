@@ -13,6 +13,7 @@ using DomainService.Workflow.Utils;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using MongoDB.Driver;
+using Path = System.IO.Path;
 
 var serviceName = "blocks-os-api";
 //var vaultType = ResolveVaultType();
