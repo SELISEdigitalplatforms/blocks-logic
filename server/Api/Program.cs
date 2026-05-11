@@ -52,6 +52,7 @@ services.AddCloudConfigurationServices();
 services.AddWorkflowExecutionEngine();
 services.RegisterAllNotificationApplicationServices();
 services.RegisterBlocksEurolmServices();
+await services.RegisterBlocksDeploymentServicesAsync(VaultType.Azure);
 
 var app = builder.Build();
 
@@ -65,6 +66,13 @@ if (File.Exists(indexHtml))
 
     app.MapFallback(async context =>
     {
+        if (context.Request.Path.StartsWithSegments("/api"))
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            await context.Response.WriteAsJsonAsync(new { message = "Not Found" });
+            return;
+        }
+
         var tenantService = context.RequestServices.GetRequiredService<ITenants>();
         var dbContext = context.RequestServices.GetRequiredService<IDbContextProvider>();
         var host = context.Request.Host.Value;
