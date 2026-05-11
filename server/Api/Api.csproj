@@ -18,6 +18,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="FluentValidation.AspNetCore" />
+    <PackageReference Include="SeliseBlocks.DataGateway.Driver" />
     <PackageReference Include="SeliseBlocks.EurolmDriver" />
     <PackageReference Include="SeliseBlocks.MailDriver" />
     <PackageReference Include="SeliseBlocks.StorageDriver" />
