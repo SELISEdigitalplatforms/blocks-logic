@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
 import { projectService } from "@/services/project.service";
 import { useProjectStore } from "@/store/useProjectStore";
 
@@ -60,6 +59,18 @@ export const useUpdateProject = (_: { projectKey: string }) => {
       crossProjectService.updateTenantGroup(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["identifier", "project"] });
+      queryClient.invalidateQueries({ queryKey: ["identifier", "projects"] });
+    },
+  });
+};
+
+export const useDisableProject = (options: { projectKey: string }) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: ["identifier", "projects", "disable"],
+    mutationFn: crossProjectService.disableProject,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["identifier", "project", options] });
       queryClient.invalidateQueries({ queryKey: ["identifier", "projects"] });
     },
   });
