@@ -6,6 +6,7 @@
     <PackageVersion Include="DeviceDetector.NET" Version="6.4.2" />
     <PackageVersion Include="Handlebars.Net" Version="2.1.6" />
     <PackageVersion Include="SeliseBlocks.DataGateway.Driver" Version="10.0.0-preview.3" />
+    <PackageVersion Include="HotChocolate.AspNetCore" Version="15.0.3" />
     <PackageVersion Include="SeliseBlocks.EurolmDriver" Version="10.0.0-preview.2" />
     <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.9.0" />
     <PackageVersion Include="FluentValidation" Version="12.0.0" />
@@ -46,5 +47,6 @@
     <!-- <PackageVersion Include="SeliseBlocks.StorageDriver" Version="9.0.0-preview.15" /> -->
     <PackageVersion Include="Shark.PdfConvert" Version="1.0.5" />
     <!-- <PackageVersion Include="SeliseBlocks.MailDriver" Version="9.0.0-preview.15" /> -->
+    <PackageVersion Include="SeliseBlocks.DeploymentDriver" Version="10.0.0-preview.1" />
   </ItemGroup>
 </Project>
