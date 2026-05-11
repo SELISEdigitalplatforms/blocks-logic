@@ -1,3 +1,4 @@
+using Blocks.Extensions.DependencyInjection;
 using Blocks.Genesis;
 using BlocksTemplate.Api;
 using Captcha.DomainService.Configuration;
@@ -49,6 +50,7 @@ services.AddCloudLmtServices();
 services.AddCloudConfigurationServices();
 services.AddWorkflowExecutionEngine();
 services.RegisterAllNotificationApplicationServices();
+services.RegisterBlocksEurolmServices();
 
 var app = builder.Build();
 
