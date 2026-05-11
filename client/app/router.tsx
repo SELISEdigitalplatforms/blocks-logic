@@ -5,7 +5,7 @@ import { PublicLayout } from "./layouts/public-layout";
 import { OidcLayout } from "./layouts/oidc-layout";
 import { DashboardLayout } from "./layouts/dashboard-layout";
 import { ConsoleLayout } from "./layouts/console-layout";
-import { ProjectOverviewLayout } from "./layouts/project-overview-layout";
+// import { ProjectOverviewLayout } from "./layouts/project-overview-layout";
 
 // Auth routes (public, with auth layout)
 import LoginPage from "./routes/public/auth/login";
@@ -32,21 +32,21 @@ import OidcForgotPasswordPage from "./routes/public/oidc/forgot-password";
 import OidcEmailSentConfirmationPage from "./routes/public/oidc/email-sent-confirmation";
 
 // Dashboard routes (protected)
-import IamPage from "./routes/public/dashboard/iam";
-import IamUserDetailPage from "./routes/public/dashboard/iam-user-detail";
-import IamRoleDetailPage from "./routes/public/dashboard/iam-role-detail";
-import IamPermissionDetailPage from "./routes/public/dashboard/iam-permission-detail";
-import IamAddPermissionPage from "./routes/public/dashboard/iam-add-permission";
-import IamOrgDetailPage from "./routes/public/dashboard/iam-org-detail";
-import IamLogsPage from "./routes/public/dashboard/iam-logs";
-import IamConfigurePage from "./routes/public/dashboard/iam-configure";
-import AuthenticationConfigPage from "./routes/public/dashboard/authentication-config";
-import SsoConfigurationPage from "./routes/public/dashboard/sso-configuration";
-import AuthLogsPage from "./routes/public/dashboard/auth-logs";
-import MfaLogsPage from "./routes/public/dashboard/mfa-logs";
-import CaptchaLogsPage from "./routes/public/dashboard/captcha-logs";
-import ApiSettingsPage from "./routes/public/dashboard/api-settings";
-import RateLimiterPage from "./routes/public/dashboard/rate-limiter";
+// import IamPage from "./routes/public/dashboard/iam";
+// import IamUserDetailPage from "./routes/public/dashboard/iam-user-detail";
+// import IamRoleDetailPage from "./routes/public/dashboard/iam-role-detail";
+// import IamPermissionDetailPage from "./routes/public/dashboard/iam-permission-detail";
+// import IamAddPermissionPage from "./routes/public/dashboard/iam-add-permission";
+// import IamOrgDetailPage from "./routes/public/dashboard/iam-org-detail";
+// import IamLogsPage from "./routes/public/dashboard/iam-logs";
+// import IamConfigurePage from "./routes/public/dashboard/iam-configure";
+// import AuthenticationConfigPage from "./routes/public/dashboard/authentication-config";
+// import SsoConfigurationPage from "./routes/public/dashboard/sso-configuration";
+// import AuthLogsPage from "./routes/public/dashboard/auth-logs";
+// import MfaLogsPage from "./routes/public/dashboard/mfa-logs";
+// import CaptchaLogsPage from "./routes/public/dashboard/captcha-logs";
+// import ApiSettingsPage from "./routes/public/dashboard/api-settings";
+// import RateLimiterPage from "./routes/public/dashboard/rate-limiter";
 import ProfilePage from "./routes/public/dashboard/profile";
 
 // Console pages
@@ -107,46 +107,46 @@ export const router = createBrowserRouter([
   {
     element: <DashboardLayout />,
     children: [
-      { path: "/services/iam", element: <IamPage /> },
-      { path: "/services/iam/user-detail/:id", element: <IamUserDetailPage /> },
-      { path: "/services/iam/role-detail/:id", element: <IamRoleDetailPage /> },
-      {
-        path: "/services/iam/permission-detail/new",
-        element: <IamAddPermissionPage />,
-      },
-      {
-        path: "/services/iam/permission-detail/:id",
-        element: <IamPermissionDetailPage />,
-      },
-      {
-        path: "/services/iam/organization-detail/:itemId",
-        element: <IamOrgDetailPage />,
-      },
-      { path: "/services/iam/logs", element: <IamLogsPage /> },
-      { path: "/services/iam/configure", element: <IamConfigurePage /> },
-      {
-        path: "/services/authentication",
-        element: <AuthenticationConfigPage />,
-      },
-      {
-        path: "/services/authentication/sso-configuration",
-        element: <SsoConfigurationPage />,
-      },
-      { path: "/services/authentication/logs", element: <AuthLogsPage /> },
-      {
-        path: "/services/mfa",
-        element: <Navigate to="/services/secret-management?tab=mfa" replace />,
-      },
-      { path: "/services/mfa/logs", element: <MfaLogsPage /> },
-      { path: "/services/api-settings", element: <ApiSettingsPage /> },
-      { path: "/services/rate-limiter", element: <RateLimiterPage /> },
-      {
-        path: "/services/captcha",
-        element: (
-          <Navigate to="/services/secret-management?tab=captcha" replace />
-        ),
-      },
-      { path: "/services/captcha/logs", element: <CaptchaLogsPage /> },
+    //   { path: "/services/iam", element: <IamPage /> },
+    //   { path: "/services/iam/user-detail/:id", element: <IamUserDetailPage /> },
+    //   { path: "/services/iam/role-detail/:id", element: <IamRoleDetailPage /> },
+    //   {
+    //     path: "/services/iam/permission-detail/new",
+    //     element: <IamAddPermissionPage />,
+    //   },
+    //   {
+    //     path: "/services/iam/permission-detail/:id",
+    //     element: <IamPermissionDetailPage />,
+    //   },
+    //   {
+    //     path: "/services/iam/organization-detail/:itemId",
+    //     element: <IamOrgDetailPage />,
+    //   },
+    //   { path: "/services/iam/logs", element: <IamLogsPage /> },
+    //   { path: "/services/iam/configure", element: <IamConfigurePage /> },
+      // {
+      //   path: "/services/authentication",
+      //   element: <AuthenticationConfigPage />,
+      // },
+      // {
+      //   path: "/services/authentication/sso-configuration",
+      //   element: <SsoConfigurationPage />,
+      // },
+      // { path: "/services/authentication/logs", element: <AuthLogsPage /> },
+      // {
+      //   path: "/services/mfa",
+      //   element: <Navigate to="/services/secret-management?tab=mfa" replace />,
+      // },
+      // { path: "/services/mfa/logs", element: <MfaLogsPage /> },
+      // { path: "/services/api-settings", element: <ApiSettingsPage /> },
+      // { path: "/services/rate-limiter", element: <RateLimiterPage /> },
+      // {
+      //   path: "/services/captcha",
+      //   element: (
+      //     <Navigate to="/services/secret-management?tab=captcha" replace />
+      //   ),
+      // },
+      // { path: "/services/captcha/logs", element: <CaptchaLogsPage /> },
       { path: "/workflow/:id", element: <WorkflowDetailsPage /> },
       { path: "/workflow", element: <WorkflowsPage /> },
     ],

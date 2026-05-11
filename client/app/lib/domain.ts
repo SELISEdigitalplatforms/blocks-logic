@@ -1,4 +1,4 @@
-import { IProject } from "@blocks-identifier/models/project.model";
+import { IProject } from "@/models/project.model";
 
 export const domainRegex =
   /^(https?:\/\/)((?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.[A-Za-z0-9-]{1,63})*\.[A-Za-z]{2,})$/;
