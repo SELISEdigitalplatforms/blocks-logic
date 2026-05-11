@@ -8,64 +8,51 @@ import { ConsoleLayout } from "./layouts/console-layout";
 import { ProjectOverviewLayout } from "./layouts/project-overview-layout";
 
 // Auth routes (public, with auth layout)
-import LoginPage from "./routes/auth/login";
-import LoginSimplePage from "./routes/auth/login-simple";
-import SignupPage from "./routes/auth/signup";
-import SsoActivatePage from "./routes/auth/sso-activate";
+import LoginPage from "./routes/public/auth/login";
+import Homepage from "./routes/public/auth/login-simple";
+import SignupPage from "./routes/public/auth/signup";
+import SsoActivatePage from "./routes/public/auth/sso-activate";
 
 // Public routes (with public guard only)
-import ActivatePage from "./routes/auth/activate";
-import ForgotPasswordPage from "./routes/auth/forgot-password";
-import ResetPasswordPage from "./routes/auth/resetpassword";
-import ActivateSuccessPage from "./routes/auth/activate-success";
-import ForgotEmailSentPage from "./routes/auth/forgot-email-sent";
-import SignupEmailSentPage from "./routes/auth/signup-email-sent";
-import MfaCheckPage from "./routes/auth/mfa-check";
-import ResetPasswordSuccessPage from "./routes/auth/reset-password-success";
+import ActivatePage from "./routes/public/auth/activate";
+import ForgotPasswordPage from "./routes/public/auth/forgot-password";
+import ResetPasswordPage from "./routes/public/auth/resetpassword";
+import ActivateSuccessPage from "./routes/public/auth/activate-success";
+import ForgotEmailSentPage from "./routes/public/auth/forgot-email-sent";
+import SignupEmailSentPage from "./routes/public/auth/signup-email-sent";
+import MfaCheckPage from "./routes/public/auth/mfa-check";
+import ResetPasswordSuccessPage from "./routes/public/auth/reset-password-success";
 
 // OIDC routes (un-guarded)
-import OidcIndexPage from "./routes/oidc/index";
-import OidcLoginPage from "./routes/oidc/login";
-import OidcPermissionPage from "./routes/oidc/permission";
-import OidcErrorPage from "./routes/oidc/error";
-import OidcForgotPasswordPage from "./routes/oidc/forgot-password";
-import OidcEmailSentConfirmationPage from "./routes/oidc/email-sent-confirmation";
+import OidcIndexPage from "./routes/public/oidc/index";
+import OidcLoginPage from "./routes/public/oidc/login";
+import OidcPermissionPage from "./routes/public/oidc/permission";
+import OidcErrorPage from "./routes/public/oidc/error";
+import OidcForgotPasswordPage from "./routes/public/oidc/forgot-password";
+import OidcEmailSentConfirmationPage from "./routes/public/oidc/email-sent-confirmation";
 
 // Dashboard routes (protected)
-import IamPage from "./routes/dashboard/iam";
-import IamUserDetailPage from "./routes/dashboard/iam-user-detail";
-import IamRoleDetailPage from "./routes/dashboard/iam-role-detail";
-import IamPermissionDetailPage from "./routes/dashboard/iam-permission-detail";
-import IamAddPermissionPage from "./routes/dashboard/iam-add-permission";
-import IamOrgDetailPage from "./routes/dashboard/iam-org-detail";
-import IamLogsPage from "./routes/dashboard/iam-logs";
-import IamConfigurePage from "./routes/dashboard/iam-configure";
-import AuthenticationConfigPage from "./routes/dashboard/authentication-config";
-import SsoConfigurationPage from "./routes/dashboard/sso-configuration";
-import AuthLogsPage from "./routes/dashboard/auth-logs";
-import MfaLogsPage from "./routes/dashboard/mfa-logs";
-import CaptchaLogsPage from "./routes/dashboard/captcha-logs";
-import ApiSettingsPage from "./routes/dashboard/api-settings";
-import RateLimiterPage from "./routes/dashboard/rate-limiter";
-import LmtPage from "./routes/dashboard/lmt";
-import LmtServiceLogsPage from "./routes/dashboard/lmt-service-logs";
-import LmtTraceDetailsPage from "./routes/dashboard/lmt-trace-details";
-import SecretManagementPage from "./routes/dashboard/secret-management";
-import AiModelSelectedRoute from "./routes/dashboard/ai-model-selected";
-import ManagedServicesPage from "./routes/dashboard/managed-services";
-import ProfilePage from "./routes/dashboard/profile";
+import IamPage from "./routes/public/dashboard/iam";
+import IamUserDetailPage from "./routes/public/dashboard/iam-user-detail";
+import IamRoleDetailPage from "./routes/public/dashboard/iam-role-detail";
+import IamPermissionDetailPage from "./routes/public/dashboard/iam-permission-detail";
+import IamAddPermissionPage from "./routes/public/dashboard/iam-add-permission";
+import IamOrgDetailPage from "./routes/public/dashboard/iam-org-detail";
+import IamLogsPage from "./routes/public/dashboard/iam-logs";
+import IamConfigurePage from "./routes/public/dashboard/iam-configure";
+import AuthenticationConfigPage from "./routes/public/dashboard/authentication-config";
+import SsoConfigurationPage from "./routes/public/dashboard/sso-configuration";
+import AuthLogsPage from "./routes/public/dashboard/auth-logs";
+import MfaLogsPage from "./routes/public/dashboard/mfa-logs";
+import CaptchaLogsPage from "./routes/public/dashboard/captcha-logs";
+import ApiSettingsPage from "./routes/public/dashboard/api-settings";
+import RateLimiterPage from "./routes/public/dashboard/rate-limiter";
+import ProfilePage from "./routes/public/dashboard/profile";
 
 // Console pages
 import { Console } from "./pages/console/console";
-import { DashboardOverview } from "./pages/dashboard/dashboard-overview";
-import { EnvironmentsPage } from "./pages/environments/environments";
-import { PeopleManagement } from "./pages/people/people-management";
-import { RepositoriesPage } from "./pages/repositories/repositories";
-import { SettingsPage } from "./pages/settings/settings";
-import { CreateProjectWrapper } from "./pages/create-project/create-project";
-import CallbackPage from "./routes/callback/callback";
-import { Workflows } from "./cross-modules/workflow/pages/workflows";
-import { WorkflowDetails } from "./cross-modules/workflow/pages/workflow-details";
+import WorkflowsPage from "./routes/private/workflows/workflows-page";
+import WorkflowDetailsPage from "./routes/private/workflow-details/workflow-details-page";
 
 export const router = createBrowserRouter([
   // ── Auth layout (login, signup, sso-activate) ──
@@ -79,7 +66,7 @@ export const router = createBrowserRouter([
   },
 
   // ── Simple login (no guards, no API calls) ──
-  { path: "/login", element: <LoginSimplePage /> },
+  { path: "/login", element: <Homepage /> },
 
   // ── Public layout (other public pages with PublicGuard) ──
   {
@@ -153,21 +140,6 @@ export const router = createBrowserRouter([
       { path: "/services/mfa/logs", element: <MfaLogsPage /> },
       { path: "/services/api-settings", element: <ApiSettingsPage /> },
       { path: "/services/rate-limiter", element: <RateLimiterPage /> },
-      { path: "/services/lmt", element: <LmtPage /> },
-      {
-        path: "/services/lmt/logs/:serviceName",
-        element: <LmtServiceLogsPage />,
-      },
-      { path: "/tracing/timeline/:traceId", element: <LmtTraceDetailsPage /> },
-      {
-        path: "/services/secret-management",
-        element: <SecretManagementPage />,
-      },
-      {
-        path: "/services/secret-management/ai-models/:provider",
-        element: <AiModelSelectedRoute />,
-      },
-      { path: "/managed-services", element: <ManagedServicesPage /> },
       {
         path: "/services/captcha",
         element: (
@@ -175,8 +147,8 @@ export const router = createBrowserRouter([
         ),
       },
       { path: "/services/captcha/logs", element: <CaptchaLogsPage /> },
-      { path: "/workflow/:id", element: <WorkflowDetails /> },
-      { path: "/workflow", element: <Workflows /> },
+      { path: "/workflow/:id", element: <WorkflowDetailsPage /> },
+      { path: "/workflow", element: <WorkflowsPage /> },
     ],
   },
 
@@ -186,8 +158,8 @@ export const router = createBrowserRouter([
     children: [
       { path: "/profile", element: <ProfilePage /> },
       { path: "/console", element: <Console /> },
-      { path: "/create-project", element: <CreateProjectWrapper /> },
-      { path: "/callback", element: <CallbackPage /> },
+      // { path: "/create-project", element: <CreateProjectWrapper /> },
+      // { path: "/callback", element: <CallbackPage /> },
     ],
   },
 
@@ -195,15 +167,15 @@ export const router = createBrowserRouter([
   {
     element: <DashboardLayout />,
     children: [
-      { path: "/dashboard", element: <DashboardOverview /> },
+      // { path: "/dashboard", element: <DashboardOverview /> },
       {
         path: "/project-overview",
         element: <Navigate to="/project-overview/environments" replace />,
       },
-      { path: "/project-overview/environments", element: <EnvironmentsPage /> },
-      { path: "/project-overview/people", element: <PeopleManagement /> },
-      { path: "/project-overview/repositories", element: <RepositoriesPage /> },
-      { path: "/project-overview/settings", element: <SettingsPage /> },
+    //   { path: "/project-overview/environments", element: <EnvironmentsPage /> },
+    //   { path: "/project-overview/people", element: <PeopleManagement /> },
+    //   { path: "/project-overview/repositories", element: <RepositoriesPage /> },
+    //   { path: "/project-overview/settings", element: <SettingsPage /> },
     ],
   },
 
