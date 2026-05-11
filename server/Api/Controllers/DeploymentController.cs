@@ -40,24 +40,9 @@ namespace BlocksTemplate.Api.Controllers
 
         [HttpGet]
         [Authorize]
-        public async Task<IActionResult> GetReposList([FromQuery] string ProjectKey)
+        public async Task<BaseApiResponse> GetReposList([FromQuery] string ProjectKey)
         {
-            var repoList = await deploymentDriverService.GetReposListAsync(ProjectKey);
-            if (repoList != null)
-            {
-                return Ok(new BaseApiResponse()
-                {
-                    Data = repoList,
-                    IsSuccess = true,
-                    StatusCode = HttpStatusCode.OK
-                });
-            }
-
-            return BadRequest(new BaseApiResponse()
-            {
-                IsSuccess = false,
-                Message = "Failed to get repos.",
-            });
+            return await deploymentDriverService.GetReposListAsync(ProjectKey);
         }
     }
 }
