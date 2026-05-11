@@ -5,7 +5,7 @@
   <ItemGroup>
     <PackageVersion Include="DeviceDetector.NET" Version="6.4.2" />
     <PackageVersion Include="Handlebars.Net" Version="2.1.6" />
-    <PackageVersion Include="SeliseBlocks.EurolmDriver" Version="10.0.0-preview.1" />
+    <PackageVersion Include="SeliseBlocks.EurolmDriver" Version="10.0.0-preview.2" />
     <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.9.0" />
     <PackageVersion Include="FluentValidation" Version="12.0.0" />
     <PackageVersion Include="FluentValidation.AspNetCore" Version="11.3.0" />
