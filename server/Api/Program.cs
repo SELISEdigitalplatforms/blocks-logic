@@ -1,3 +1,4 @@
+using Blocks.Extensions.DependencyInjection;
 using Blocks.Genesis;
 using BlocksTemplate.Api;
 using Captcha.DomainService.Configuration;
@@ -12,6 +13,7 @@ using DomainService.Workflow.Utils;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using MongoDB.Driver;
+using Path = System.IO.Path;
 
 var serviceName = "blocks-os-api";
 //var vaultType = ResolveVaultType();
@@ -49,6 +51,9 @@ services.AddCloudLmtServices();
 services.AddCloudConfigurationServices();
 services.AddWorkflowExecutionEngine();
 services.RegisterAllNotificationApplicationServices();
+services.RegisterBlocksEurolmServices();
+await services.RegisterBlocksDeploymentServicesAsync(VaultType.Azure);
+services.RegisterBlocksObservabilityServices();
 
 var app = builder.Build();
 
@@ -62,6 +67,13 @@ if (File.Exists(indexHtml))
 
     app.MapFallback(async context =>
     {
+        if (context.Request.Path.StartsWithSegments("/api"))
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            await context.Response.WriteAsJsonAsync(new { message = "Not Found" });
+            return;
+        }
+
         var tenantService = context.RequestServices.GetRequiredService<ITenants>();
         var dbContext = context.RequestServices.GetRequiredService<IDbContextProvider>();
         var host = context.Request.Host.Value;
