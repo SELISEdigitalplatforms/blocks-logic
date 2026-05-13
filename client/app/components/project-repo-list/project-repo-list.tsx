@@ -4,7 +4,7 @@ import { Check, Pencil } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui-kits/skeleton/skeleton";
 import { Card, CardTitle } from "@/components/ui-kits/card/card";
-import { IProject } from "@blocks-identifier/models/project.model";
+import { IProject } from "@/models/project.model";
 import { useGetEnvRepositories, useUpdateProject } from "@/hooks/use-project";
 import { Button } from "@/components/ui-kits/button/button";
 import {
