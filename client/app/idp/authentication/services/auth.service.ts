@@ -9,9 +9,7 @@ import {
   IVerifyMfaPayload,
   IVerifyMfaResponse,
 } from "@blocks-idp/authentication/models/auth.model";
-import { AUTH_ENDPOINTS } from "../constants/endpoint.constant";
-import { PEOPLE_ENDPOINTS } from "@blocks-identifier/constants/endpoint.constant";
-import { IDP_BASE_URL } from "@/constants/endpoint.constant";
+import { AUTH_ENDPOINTS, PEOPLE_ENDPOINTS } from "../constants/endpoint.constant";
 
 export class AuthService {
   signinByEmail(
