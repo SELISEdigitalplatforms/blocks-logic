@@ -55,6 +55,8 @@ import { DashboardOverview } from "./pages/dashboard/dashboard-overview";
 
 import WorkflowsPage from "./routes/private/workflows/workflows-page";
 import WorkflowDetailsPage from "./routes/private/workflow-details/workflow-details-page";
+import LoginCallbackPage from "./routes/public/auth/callback";
+import SsoConfigurationPage from "./routes/public/auth/sso-configuration";
 
 export const router = createBrowserRouter([
   // ── Auth layout (login, signup, sso-activate) ──
@@ -69,6 +71,7 @@ export const router = createBrowserRouter([
 
   // ── Simple login (no guards, no API calls) ──
   { path: "/login", element: <Homepage /> },
+  { path: "/login/callback", element: <LoginCallbackPage /> },
 
   // ── Public layout (other public pages with PublicGuard) ──
   {
@@ -170,6 +173,10 @@ export const router = createBrowserRouter([
     element: <DashboardLayout />,
     children: [
       { path: "/dashboard", element: <DashboardOverview /> },
+      {
+        path: "/services/authentication/sso-configuration",
+        element: <SsoConfigurationPage />,
+      },
       // {
       //   path: "/project-overview",
       //   element: <Navigate to="/project-overview/environments" replace />,
