@@ -13,7 +13,7 @@ import {
 } from "@/components/ui-kits/form/form";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui-kits/input/input";
-import { IEnvRepository } from "@blocks-identifier/models/project.model";
+import { IEnvRepository } from "@/models/project.model";
 import { getDomain, getSubdomain } from "@/lib/domain";
 import { DialogClose, DialogFooter } from "@/components/ui-kits/dialog/dialog";
 import { Button } from "@/components/ui-kits/button/button";
