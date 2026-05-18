@@ -4,64 +4,6 @@
         <name>Api</name>
     </assembly>
     <members>
-        <member name="M:Api.Controllers.DataGatewayController.CreateSchemaAsync(DataGateway.DomainService.Models.CreateSchemaRequest)">
-            <summary>
-            Creates a new schema.
-            </summary>
-            <param name="request">The schema creation request.</param>
-            <returns>Returns the result of the schema creation.</returns>
-        </member>
-        <member name="M:Api.Controllers.DataGatewayController.UpdateSchemaAsync(DataGateway.DomainService.Models.UpdateSchemaRequest)">
-            <summary>
-            Updates an existing schema.
-            </summary>
-            <param name="request">The schema update request.</param>
-            <returns>Returns the result of the schema update.</returns>
-        </member>
-        <member name="M:Api.Controllers.DataGatewayController.DeleteSchemaAsync(System.String,System.String)">
-            <summary>
-            Deletes a schema by its unique ID.
-            </summary>
-            <param name="id">The unique identifier of the schema to delete.</param>
-            <param name="projectKey">The unique identifier of the project.</param>
-            <returns>Returns the result of the schema deletion.</returns>
-        </member>
-        <member name="M:Api.Controllers.DataGatewayController.CreateSchemaDefinitionAsync(DataGateway.DomainService.Models.CreateSchemaDefinitionRequest)">
-            <summary>
-            Creates a new schema definition with field specifications.
-            </summary>
-            <param name="request">The schema definition creation request.</param>
-            <returns>Returns the result of the schema definition creation.</returns>
-        </member>
-        <member name="M:Api.Controllers.DataGatewayController.UpdateSchemaDefinitionAsync(DataGateway.DomainService.Models.UpdateSchemaDefinitionRequest)">
-            <summary>
-            Updates an existing schema definition.
-            </summary>
-            <param name="request">The schema definition update request.</param>
-            <returns>Returns the result of the schema definition update.</returns>
-        </member>
-        <member name="M:Api.Controllers.DataGatewayController.SaveFieldDefinitionAsync(DataGateway.DomainService.Models.SaveFieldDefinitionRequest)">
-            <summary>
-            Saves or updates field definitions for an existing schema, with support for field deletion.
-            </summary>
-            <param name="request">The save field definition request.</param>
-            <returns>Returns the result of the field definition save operation.</returns>
-        </member>
-        <member name="M:Api.Controllers.DataGatewayController.GetSchemaDefinitionByIdAsync(System.String,System.String)">
-            <summary>
-            Retrieves the details of a specific schema definition by its unique ID. Use this endpoint to get the schema definition details, including its fields and type.
-            </summary>
-            <param name="id">The unique identifier of the schema definition to retrieve.</param>
-            <param name="projectKey">The unique identifier of the project to retrieve.</param>
-            <returns>Returns the schema definition details if found, or an error message if not found.</returns>
-        </member>
-        <member name="M:Api.Controllers.DataGatewayController.GetAllSchemaDefinitionsAsync(DataGateway.DomainService.Models.GetSchemaDefinitionListRequest)">
-            <summary>
-            Retrieves a paginated list of all schema definitions with optional filtering and sorting.
-            </summary>
-            <param name="request">The pagination and filter parameters.</param>
-            <returns>Returns a paginated list of schema definitions.</returns>
-        </member>
         <member name="T:Api.Controllers.MigrationController">
             <summary>
             Controller for handling migration operations between projects.
