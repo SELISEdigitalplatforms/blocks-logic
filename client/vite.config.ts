@@ -31,9 +31,10 @@ export default defineConfig(({ mode }) => {
       host: true, // Listen on all addresses (0.0.0.0)
       port: 4000,
       allowedHosts: [
-        "dev-cloud.seliseblocks.com",
+        "dev-cloud.blocksdevelopers.com",
         "localhost",
         ".seliseblocks.com",
+        ".blocksdevelopers.com",
       ],
       proxy: {
           "/dev-idp-proxy": {
