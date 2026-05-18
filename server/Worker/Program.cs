@@ -23,7 +23,7 @@ using DomainService.Workflow.Events;
 using DomainService.Workflow.Nodes.TriggerDataV1;
 using Worker.Consumers.Workflow;
 
-const string _serviceName = "blocks-os-worker";
+const string _serviceName = "blocks-logic-worker";
 
 var vaultType = ResolveVaultType();
 Console.WriteLine($"Using Genesis vault type: {vaultType}");
