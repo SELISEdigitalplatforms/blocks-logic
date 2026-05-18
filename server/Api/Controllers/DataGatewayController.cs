@@ -12,14 +12,11 @@ namespace Api.Controllers
     public class DataGatewayController : ControllerBase
     {
         private readonly IDataGatewayDriverService _dataGatewayDriver;
-        private readonly ChangeControllerContext _changeControllerContext;
 
         public DataGatewayController(
-            IDataGatewayDriverService dataGatewayDriver,
-            ChangeControllerContext changeControllerContext)
+            IDataGatewayDriverService dataGatewayDriver)
         {
             _dataGatewayDriver = dataGatewayDriver;
-            _changeControllerContext = changeControllerContext;
         }
 
         #region Schema Management
@@ -38,7 +35,6 @@ namespace Api.Controllers
             if (string.IsNullOrWhiteSpace(request.ProjectKey))
                 return StatusCode((int)HttpStatusCode.BadRequest, new { Message = "INVALID_PROJECT_KEY" });
 
-            _changeControllerContext.ChangeContext(new ProjectKeyModel { ProjectKey = request.ProjectKey });
             var response = await _dataGatewayDriver.CreateSchemaAsync(request);
             return StatusCode(response.HttpStatusCode, response);
         }
@@ -57,7 +53,6 @@ namespace Api.Controllers
             if (string.IsNullOrWhiteSpace(request.ProjectKey))
                 return StatusCode((int)HttpStatusCode.BadRequest, new { Message = "INVALID_PROJECT_KEY" });
 
-            _changeControllerContext.ChangeContext(new ProjectKeyModel { ProjectKey = request.ProjectKey });
             var response = await _dataGatewayDriver.UpdateSchemaAsync(request);
             return StatusCode(response.HttpStatusCode, response);
         }
@@ -77,7 +72,6 @@ namespace Api.Controllers
             if (string.IsNullOrWhiteSpace(id))
                 return StatusCode((int)HttpStatusCode.BadRequest, new { Message = "INVALID_SCHEMA_ID" });
 
-            _changeControllerContext.ChangeContext(new ProjectKeyModel { ProjectKey = projectKey });
             var response = await _dataGatewayDriver.DeleteSchemaAsync(id);
             return StatusCode(response.HttpStatusCode, response);
         }
@@ -100,7 +94,6 @@ namespace Api.Controllers
             if (string.IsNullOrWhiteSpace(request.ProjectKey))
                 return StatusCode((int)HttpStatusCode.BadRequest, new { Message = "INVALID_PROJECT_KEY" });
 
-            _changeControllerContext.ChangeContext(new ProjectKeyModel { ProjectKey = request.ProjectKey });
             var response = await _dataGatewayDriver.CreateSchemaDefinitionAsync(request);
             return StatusCode(response.HttpStatusCode, response);
         }
@@ -119,7 +112,6 @@ namespace Api.Controllers
             if (string.IsNullOrWhiteSpace(request.ProjectKey))
                 return StatusCode((int)HttpStatusCode.BadRequest, new { Message = "INVALID_PROJECT_KEY" });
 
-            _changeControllerContext.ChangeContext(new ProjectKeyModel { ProjectKey = request.ProjectKey });
             var response = await _dataGatewayDriver.UpdateSchemaDefinitionAsync(request);
             return StatusCode(response.HttpStatusCode, response);
         }
@@ -138,7 +130,6 @@ namespace Api.Controllers
             if (string.IsNullOrWhiteSpace(request.SchemaDefinitionItemId))
                 return StatusCode((int)HttpStatusCode.BadRequest, new { Message = "INVALID_SCHEMA_DEFINITION_ID" });
 
-            _changeControllerContext.ChangeContext(new ProjectKeyModel { ProjectKey = request.ProjectShortKey });
             var response = await _dataGatewayDriver.SaveFieldDefinitionAsync(request);
             return StatusCode(response.HttpStatusCode, response);
         }
@@ -162,10 +153,6 @@ namespace Api.Controllers
             if (string.IsNullOrWhiteSpace(id))
                 return StatusCode((int)HttpStatusCode.BadRequest, new { Message = "INVALID_SCHEMA_ID" });
 
-            _changeControllerContext.ChangeContext(new ProjectKeyModel
-            {
-                ProjectKey = projectKey
-            });
             var response = await _dataGatewayDriver.GetSchemaByIdAsync(id);
             return StatusCode(response.HttpStatusCode, response);
         }
@@ -180,7 +167,6 @@ namespace Api.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAllSchemaDefinitionsAsync([FromQuery] GetSchemaDefinitionListRequest request)
         {
-            _changeControllerContext.ChangeContext(new ProjectKeyModel { ProjectKey = request.ProjectKey ?? string.Empty });
             var response = await _dataGatewayDriver.GetAllSchemasAsync(request);
             return Ok(response);
         }

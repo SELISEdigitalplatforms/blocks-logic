@@ -11,16 +11,16 @@ namespace Utilities.Api.Controllers
     [Route("[controller]/[action]")]
     public class WorkflowController : ControllerBase
     {
-        private readonly ChangeControllerContext _changeControllerContext;
+        
         private readonly IWorkflowService _workflowService;
         private readonly IWorkflowExecutionService _workflowExecutionService;
 
         public WorkflowController(
-            ChangeControllerContext changeControllerContext,
+          
             IWorkflowService workflowService,
             IWorkflowExecutionService workflowExecutionService)
         {
-            _changeControllerContext = changeControllerContext;
+           
             _workflowService = workflowService;
             _workflowExecutionService = workflowExecutionService;
         }
@@ -119,7 +119,7 @@ namespace Utilities.Api.Controllers
 
         private void ApplyContext(IProjectKey request)
         {
-            _changeControllerContext.ChangeContext(request);
+            
         }
     }
 }
