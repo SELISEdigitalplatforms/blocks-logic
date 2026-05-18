@@ -27,7 +27,7 @@ const string _serviceName = "blocks-os-worker";
 
 var vaultType = ResolveVaultType();
 Console.WriteLine($"Using Genesis vault type: {vaultType}");
-var secret = await ApplicationConfigurations.ConfigureLogAndSecretsAsync(_serviceName, vaultType);
+var secret = await ApplicationConfigurations.ConfigureLogAndSecretsAsync(_serviceName, VaultType.Azure);
 
 await CreateHostBuilder(args).Build().RunAsync();
 
