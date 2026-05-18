@@ -32,7 +32,7 @@ var services = builder.Services;
 
 services.AddHealthChecks();
 
-ApplicationConfigurations.ConfigureApi(services);
+ApplicationConfigurations.ConfigureApi(services, serviceName);
 
 builder.Services.Configure<MvcOptions>(options =>
 {
@@ -84,7 +84,7 @@ if (File.Exists(indexHtml))
 
         context.Response.Cookies.Append("x-blocks-key", tenant.TenantId, new CookieOptions
         {
-            Domain = tenant.CookieDomain,
+            Domain = tenant.Applications.FirstOrDefault()?.CookieDomain,
             HttpOnly = true,
             Secure = true,
             SameSite = SameSiteMode.None,
