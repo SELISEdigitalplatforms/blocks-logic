@@ -18,6 +18,19 @@ export const useGetUser = (options?: { enabled?: boolean }) => {
   });
 };
 
+export const useGetMe = (options?: { enabled?: boolean }) => {
+  const authStore = useAuthStore();
+  return useQuery({
+    queryKey: ["user"],
+    queryFn: async () => {
+      const user = await userService.me();
+      authStore.setUser(user.data);
+      return user;
+    },
+    ...options,
+  });
+};
+
 export const useGetSignUpSetting = (
   option: IGetSignUpSettingPayload,
   options?: { enabled?: boolean },

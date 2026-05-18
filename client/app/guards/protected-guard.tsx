@@ -6,7 +6,7 @@ import {
   useStopImpersonation,
 } from "@/hooks/use-impersonation";
 import { useAppState } from "./public-guard";
-import { useGetUser } from "@/idp/iam/hooks/use-user";
+import { useGetMe } from "@/idp/iam/hooks/use-user";
 import { useImpersonateStore } from "@/store/impersonate-store";
 import { useProjectStore } from "@/store/useProjectStore";
 import { ImpersonationRequest } from "@/services/impersonation.service";
@@ -14,7 +14,7 @@ import { getRuntimeEnv } from "@/lib/runtime-env";
 
 export function ProtectedGuard({ children }: { children: React.ReactNode }) {
   const { isMounted } = useAppState();
-  const { data } = useGetUser();
+  const { data } = useGetMe();
   const { setUser } = useAuthStore();
   const navigate = useNavigate();
 
