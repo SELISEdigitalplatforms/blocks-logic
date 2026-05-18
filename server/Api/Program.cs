@@ -15,7 +15,7 @@ using Microsoft.AspNetCore.Mvc;
 using MongoDB.Driver;
 using Path = System.IO.Path;
 
-var serviceName = "blocks-os-api";
+var serviceName = "blocks-logic";
 //var vaultType = ResolveVaultType();
 //Console.WriteLine($"Using Genesis vault type: {vaultType}");
 var secret = await ApplicationConfigurations.ConfigureLogAndSecretsAsync(serviceName, VaultType.Azure);
@@ -52,8 +52,8 @@ services.AddCloudConfigurationServices();
 services.AddWorkflowExecutionEngine();
 services.RegisterAllNotificationApplicationServices();
 services.RegisterBlocksEurolmServices();
-await services.RegisterBlocksDeploymentServicesAsync(VaultType.Azure);
-services.RegisterBlocksObservabilityServices();
+//await services.RegisterBlocksDeploymentServicesAsync(VaultType.Azure);
+//services.RegisterBlocksObservabilityServices();
 
 var app = builder.Build();
 
