@@ -12,12 +12,12 @@ namespace BlocksTemplate.Api.Controllers
     public class TraceController : ControllerBase
     {
         private readonly ITraceService _traceService;
-        private readonly ChangeControllerContext _changeControllerContext;
+      
 
-        public TraceController(ITraceService traceService, ChangeControllerContext changeControllerContext)
+        public TraceController(ITraceService traceService)
         {
             _traceService = traceService;
-            _changeControllerContext = changeControllerContext;
+            
         }
 
 
@@ -25,7 +25,7 @@ namespace BlocksTemplate.Api.Controllers
 
         public async Task<object> GetTraces([FromBody] GetTracesRequest request)
         {
-            _changeControllerContext.ChangeContext(request);
+            
             return await _traceService.GetTracesAsync(request);
         }
 
@@ -33,7 +33,7 @@ namespace BlocksTemplate.Api.Controllers
     
         public async Task<object> GetTrace([FromQuery] GetTraceRequest request)
         {
-            _changeControllerContext.ChangeContext(request);
+           
             return await _traceService.GetTraceAsync(request);
         }
 
@@ -41,7 +41,7 @@ namespace BlocksTemplate.Api.Controllers
  
         public async Task<object> GetOperationalAnalytics([FromBody] GetApiAnalyticsRequest request)
         {
-            _changeControllerContext.ChangeContext(request);
+            
             return await _traceService.GetOperationalAnalytics(request);
         }
 
@@ -49,7 +49,6 @@ namespace BlocksTemplate.Api.Controllers
   
         public async Task<object> GetServiceAnalytics([FromBody] GetHttpStatusAnalyticsRequest request)
         {
-            _changeControllerContext.ChangeContext(request);
             return await _traceService.GetServiceAnalytics(request);
         }
 

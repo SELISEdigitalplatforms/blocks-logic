@@ -62,7 +62,7 @@ namespace XUnitTest.DomainService.Shared
                 displayName: null,
                 oauthToken: null,
                 refreshToken: null,
-                actualTentId: null
+                actualTenantId: null
             );
             BlocksContext.SetContext(_context);
         }
@@ -428,7 +428,7 @@ namespace XUnitTest.DomainService.Shared
             var request = new SaveClientCredentialRequest { Name = "Test Client", Roles = new List<string> { "role1" } };
             var tenant = new Tenant
             {
-                ApplicationDomain = "test-domain.com",
+                //ApplicationDomain = "test-domain.com",
                 DbConnectionString = "test-connection-string",
                 JwtTokenParameters = new JwtTokenParameters
                 {

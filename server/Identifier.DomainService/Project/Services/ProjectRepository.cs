@@ -47,9 +47,13 @@ namespace DomainService.Projects
 
         public async Task<Tenant> GetByDomainAsync(string name)
         {
-            var collection = _dbContextProvider.GetCollection<Tenant>(IdentifierConstants.TenantCollectionName);
+            //var collection = _dbContextProvider.GetCollection<Tenant>(IdentifierConstants.TenantCollectionName);
 
-            var filter = Builders<Tenant>.Filter.Eq(mc => mc.ApplicationDomain, name);
+            //var filter = Builders<Tenant>.Filter.Eq(mc => mc.Applications.FirstOrDefault().Domain, name);
+            //return await collection.Find(filter).FirstOrDefaultAsync();
+            var collection = _dbContextProvider.GetCollection<Tenant>(IdentifierConstants.TenantCollectionName);
+            var listDomain = new List<string> { name };
+            var filter = Builders<Tenant>.Filter.ElemMatch(x => x.Applications, app => listDomain.Contains(app.Domain));
             return await collection.Find(filter).FirstOrDefaultAsync();
         }
 
@@ -312,9 +316,9 @@ namespace DomainService.Projects
 
             if (iamConfiguration != null)
             {
-                iamConfiguration["AccountActivationUrl"] = $"{project.ApplicationDomain}/activate";
-                iamConfiguration["AccountVerificationUrl"] = $"{project.ApplicationDomain}/verify";
-                iamConfiguration["RecoverAccountUrl"] = $"{project.ApplicationDomain}/resetpassword";
+                iamConfiguration["AccountActivationUrl"] = $"{project.Applications.FirstOrDefault()?.Domain}/activate";
+                iamConfiguration["AccountVerificationUrl"] = $"{project.Applications.FirstOrDefault()?.Domain}/verify";
+                iamConfiguration["RecoverAccountUrl"] = $"{project.Applications.FirstOrDefault()?.Domain}/resetpassword";
                 iamConfiguration["CreatedBy"] = userId;
                 iamConfiguration["LastUpdatedBy"] = userId;
 
@@ -357,9 +361,9 @@ namespace DomainService.Projects
                 var filter = Builders<BsonDocument>.Filter.Eq("_id", iamConfiguration["_id"]);
 
                 var update = Builders<BsonDocument>.Update
-                    .Set("AccountActivationUrl", $"{project.ApplicationDomain}/activate")
-                    .Set("AccountVerificationUrl", $"{project.ApplicationDomain}/verify")
-                    .Set("RecoverAccountUrl", $"{project.ApplicationDomain}/resetpassword")
+                    .Set("AccountActivationUrl", $"{project.Applications.FirstOrDefault()?.Domain}/activate")
+                    .Set("AccountVerificationUrl", $"{project.Applications.FirstOrDefault()?.Domain}/verify")
+                    .Set("RecoverAccountUrl", $"{project.Applications.FirstOrDefault()?.Domain}/resetpassword")
                     .Set("CreatedBy", project.TenantId)
                     .Set("LastUpdatedBy", project.TenantId);
 
@@ -382,7 +386,7 @@ namespace DomainService.Projects
 
             if (documents.Count > 0)
             {
-                documents[0]["DefaultDeploymentUrl"] = project.ApplicationDomain;
+                documents[0]["DefaultDeploymentUrl"] = project.Applications.FirstOrDefault()?.Domain;
                 var targetCollection = targetDb.GetCollection<BsonDocument>("Repos");
                 await targetCollection.InsertManyAsync(documents);
             }

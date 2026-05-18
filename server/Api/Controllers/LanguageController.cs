@@ -10,14 +10,11 @@ namespace BlocksTemplate.Api.Controllers
     public class LanguageController : ControllerBase
     {
         private readonly IEurolmDriverService _eurolmDriverService;
-        private readonly ChangeControllerContext _changeControllerContext;
 
         public LanguageController(
-            IEurolmDriverService eurolmDriverService,
-            ChangeControllerContext changeControllerContext)
+            IEurolmDriverService eurolmDriverService)
         {
             _eurolmDriverService = eurolmDriverService;
-            _changeControllerContext = changeControllerContext;
         }
 
         /// <summary>
@@ -28,7 +25,6 @@ namespace BlocksTemplate.Api.Controllers
         public async Task<List<Language>> Gets([FromQuery] GetLanguagesRequest request)
         {
             if (request == null) BadRequest();
-            _changeControllerContext.ChangeContext(request);
             return await _eurolmDriverService.GetLanguagesAsync();
         }
     }
