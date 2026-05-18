@@ -3,10 +3,8 @@ import { getRuntimeEnv } from "@/lib/runtime-env";
 import { getQueryClient } from "@/providers/query-provider";
 import { useAuthStore } from "@/store/useAuthStore";
 import {
-  AUTH_ENDPOINTS,
   AUTH_OIDC_ENDPOINTS,
 } from "@/idp/authentication/constants/endpoint.constant";
-import { API_BASES } from "@/constants/endpoint.constant";
 
 class HttpError extends Error {
   status: number;
