@@ -17,6 +17,7 @@ namespace DomainService.Projects
         private readonly IBlocksSecret _blocksSecret;
         private readonly IConfiguration _configuration;
         private readonly IEncodingService _urlEncodingService;
+        private readonly IMongoDatabase _clientDb;
 
         public ProjectRepository(IDbContextProvider dbContextProvider,
                                  IConfiguration configuration,
@@ -27,11 +28,22 @@ namespace DomainService.Projects
             _blocksSecret = blocksSecret;
             _configuration = configuration;
             _urlEncodingService = urlEncodingService;
+            _clientDb = ResolvedClientDb();
         }
+        private IMongoDatabase ResolvedClientDb()
+        {
+            var blocksContext = BlocksContext.GetContext();
 
+            if (blocksContext.Impersonated)
+            {
+                return _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, "BlocksRootDb");
+            }
+
+            return _dbContextProvider.GetDatabase(blocksContext.TenantId);
+        }
         public async Task<Tenant> GetByIdAsync(string itemId)
         {
-            var collection = _dbContextProvider.GetCollection<Tenant>(IdentifierConstants.TenantCollectionName);
+            var collection = _clientDb.GetCollection<Tenant>(IdentifierConstants.TenantCollectionName);
 
             var filter = Builders<Tenant>.Filter.Eq(mc => mc.ItemId, itemId);
             return await collection.Find(filter).FirstOrDefaultAsync();
@@ -485,7 +497,7 @@ namespace DomainService.Projects
 
         public async Task<BlocksGuid> GetBlocksGuidAsync(string tenantGroupId)
         {
-            var collection = _dbContextProvider.GetCollection<BlocksGuid>($"{nameof(BlocksGuid)}s");
+            var collection = _clientDb.GetCollection<BlocksGuid>($"{nameof(BlocksGuid)}s");
             var filter = Builders<BlocksGuid>.Filter.Eq(mc => mc.TenantGroupId, tenantGroupId);
             return await collection.Find(filter).FirstOrDefaultAsync();
         }
