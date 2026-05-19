@@ -1,6 +1,5 @@
+import { IMPERSONATE_ENDPOINTS } from "@/idp/authentication/constants";
 import { http } from "@/lib/http-client";
-
-const IMPERSONATION_BASE = "/api/Authentication";
 
 export interface ImpersonationRequest {
   targetTenantId: string;
@@ -16,12 +15,24 @@ export interface ImpersonationState {
 }
 
 class ImpersonationService {
-  startImpersonation(request: ImpersonationRequest): Promise<ImpersonationState> {
-    return http.post(`${IMPERSONATION_BASE}/impersonate`, request);
+  startImpersonation(
+    request: ImpersonationRequest,
+  ): Promise<ImpersonationState> {
+    return http.post(
+      `${IMPERSONATE_ENDPOINTS.IMPERSONATE}`,
+      request,
+      undefined,
+      { absoluteUrl: true },
+    );
   }
 
   stopImpersonation(): Promise<void> {
-    return http.post(`${IMPERSONATION_BASE}/impersonation/stop`, null);
+    return http.post(
+      `${IMPERSONATE_ENDPOINTS.STOP_IMPERSONATION}`,
+      null,
+      undefined,
+      { absoluteUrl: true },
+    );
   }
 }
 
