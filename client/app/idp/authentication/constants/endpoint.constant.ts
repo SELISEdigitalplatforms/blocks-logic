@@ -1,3 +1,4 @@
+import { API_BASES } from "@/constants/endpoint.constant";
 import { getRuntimeEnv } from "@/lib/runtime-env";
 
 // ─── Subpaths ─────────────────────────────────────────────────────────────────
@@ -9,9 +10,11 @@ const AUTH_OIDC_SUBPATH = "/oidc";
 // ─── Auth endpoints (auth.service) ───────────────────────────────────────────
 
 export const AUTH_ENDPOINTS = {
-  TOKEN: `/api${AUTH_SUBPATH}/Token`,
-  USER_INFO: `/api/idp/UserInfo`,
-  LOGOUT: `${BLOCKS_IDP_BASE_URL}/api${AUTH_SUBPATH}/Logout`,
+  TOKEN: `${BLOCKS_IDP_BASE_URL}${AUTH_SUBPATH}/Token`,
+  GET_SOCIAL_LOGIN_ENDPOINT: `${BLOCKS_IDP_BASE_URL}${AUTH_SUBPATH}/GetSocialLogInEndPoint`,
+  GET_LOGIN_OPTIONS: `${BLOCKS_IDP_BASE_URL}${AUTH_SUBPATH}/GetLoginOptions`,
+  USER_INFO: `${BLOCKS_IDP_BASE_URL}/idp/UserInfo`,
+  LOGOUT: `${BLOCKS_IDP_BASE_URL}${AUTH_SUBPATH}/Logout`,
 } as const;
 
 // ─── Client credential endpoints (auth-clients.service) ─────────────────────
@@ -60,6 +63,19 @@ export const IMPERSONATE_ENDPOINTS = {
   STOP_IMPERSONATION: `${BLOCKS_IDP_BASE_URL}/api${AUTH_SUBPATH}/impersonation/stop`,
 } as const;
 
+// ─── People endpoints ─────────────────────────────────────────────────────────
+
+export const PEOPLE_ENDPOINTS = {
+  SIGNUP: `${API_BASES.IDENTIFIER}/People/Signup`,
+} as const;
+// ─── Legacy re-export (backward compat for oauth.service) ───────────────────
+
+export const IDP_ENDPOINTS = {
+  AUTHENTICATION: {
+    GET_SOCIAL_LOGIN_ENDPOINT: AUTH_ENDPOINTS.GET_SOCIAL_LOGIN_ENDPOINT,
+    TOKEN: AUTH_ENDPOINTS.TOKEN,
+  }
+};
 // ─── Identity Provider endpoints (identity-provider.service) ─────────────────
 
 export const IDENTITY_PROVIDER_ENDPOINTS = {
