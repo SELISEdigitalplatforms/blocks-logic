@@ -9,15 +9,29 @@ namespace DomainService.ManagedService.Services
     public class ServiceManagementRepository : IServiceManagementRepository
     {
         private readonly IDbContextProvider _dbContextProvider;
-
-        public ServiceManagementRepository(IDbContextProvider dbContextProvider)
+        private readonly IBlocksSecret _blocksSecret;
+        private readonly IMongoDatabase _clientDb;
+        public ServiceManagementRepository(IDbContextProvider dbContextProvider, IBlocksSecret blocksSecret)
         {
             _dbContextProvider = dbContextProvider;
+            _blocksSecret = blocksSecret;
+            _clientDb = ResolvedClientDb();
         }
 
+        private IMongoDatabase ResolvedClientDb()
+        {
+            var blocksContext = BlocksContext.GetContext();
+
+            if (blocksContext.Impersonated)
+            {
+                return _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, "BlocksRootDb");
+            }
+
+            return _dbContextProvider.GetDatabase(blocksContext.TenantId);
+        }
         public async Task<(IQueryable<BlocksManagedService>, long)> GetAllServicesAsync(GetAllServiceRequest request)
         {
-            var collection = _dbContextProvider.GetCollection<BlocksManagedService>("BlocksManagedServices");
+            var collection = _clientDb.GetCollection<BlocksManagedService>("BlocksManagedServices");
             var filter = Builders<BlocksManagedService>.Filter.Eq(s => s.TenantId, request.ProjectKey);
 
             if (!string.IsNullOrWhiteSpace(request?.Filter?.ServiceName))
@@ -42,7 +56,7 @@ namespace DomainService.ManagedService.Services
 
         public async Task SaveAsync(BlocksManagedService service)
         {
-            var collection = _dbContextProvider.GetCollection<BlocksManagedService>("BlocksManagedServices");
+            var collection = _clientDb.GetCollection<BlocksManagedService>("BlocksManagedServices");
             await collection.InsertOneAsync(service);
         }
     }

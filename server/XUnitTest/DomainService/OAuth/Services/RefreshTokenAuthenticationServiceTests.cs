@@ -54,8 +54,8 @@ namespace XUnitTest.DomainService.OAuth.Services
             var tenant = new Tenant
             {
                 TenantId = "tenant-123",
-                CookieDomain = ".example.com",
-                ApplicationDomain = "https://example.com",
+                //CookieDomain = ".example.com",
+                //ApplicationDomain = "https://example.com",
                 DbConnectionString = "Server=test;Database=test;",
                 JwtTokenParameters = new JwtTokenParameters
                 {
@@ -142,8 +142,8 @@ namespace XUnitTest.DomainService.OAuth.Services
             var tenant = new Tenant
             {
                 TenantId = "tenant-456",
-                CookieDomain = ".custom-domain.com",
-                ApplicationDomain = "https://custom-domain.com",
+                //CookieDomain = ".custom-domain.com",
+                //ApplicationDomain = "https://custom-domain.com",
                 DbConnectionString = "Server=test;Database=test;",
                 JwtTokenParameters = new JwtTokenParameters
                 {

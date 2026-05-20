@@ -32,7 +32,7 @@ namespace DomainService.ManagedService.Services
                                  IValidator<RegisterServiceRequest> registerServiceRequestValidator,
                                  IBlocksSecret blocksSecret,
                                  ICacheClient cacheClient,
-                                 ITenants tenants)
+                                 ITenants tenants,IConfiguration configuration)
         {
             _serviceManagementRepository = serviceManagementRepository;
             _registerServiceRequestValidator = registerServiceRequestValidator;
@@ -44,7 +44,7 @@ namespace DomainService.ManagedService.Services
             if (!isRabbitMq)
             {
                 _adminClient = new ServiceBusAdministrationClient(blocksSecret.LmtMessageConnectionString);
-                var configuration = new ConfigurationBuilder().AddEnvironmentVariables().Build();
+                //var configuration = new ConfigurationBuilder().AddEnvironmentVariables().Build();
                 var azureTenantId = configuration["AZURE_TENANT_ID_LMT"];
                 var azureClientId = configuration["AZURE_CLIENT_ID_LMT"];
                 var azureClientSecret = configuration["AZURE_CLIENT_SECRET_LMT"];
@@ -235,7 +235,7 @@ namespace DomainService.ManagedService.Services
         {
             var (data, count) = await _serviceManagementRepository.GetAllServicesAsync(request);
 
-            var tenantId = BlocksContext.GetContext()?.TenantId;
+            var tenantId = BlocksContext.GetContext()?.ActualTenantId;
             var tenant = _tenants.GetTenantByID(tenantId ?? string.Empty);
 
             var serviceList = data.ToList();

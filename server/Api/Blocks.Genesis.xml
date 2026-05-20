@@ -37,6 +37,12 @@
             <param name="tenantGroupId">The tenant group ID to check for migrations.</param>
             <returns>List of migration trackers with incomplete services.</returns>
         </member>
+        <member name="M:BlocksTemplate.Api.Controllers.LanguageController.Gets(Eurolm.DomainService.Services.GetLanguagesRequest)">
+            <summary>
+            Retrieves all available languages.
+            </summary>
+            <returns>A list of <see cref="T:Eurolm.DomainService.Services.Language"/> objects.</returns>
+        </member>
         <member name="T:BlocksTemplate.Api.GlobalApiRoutePrefixConvention">
             <summary>Prepends a segment (e.g. <c>api</c>) to every controller’s attribute route template.</summary>
         </member>

@@ -10,7 +10,7 @@ import {
   DialogTrigger,
 } from "@/components/ui-kits/dialog/dialog";
 import { EditProjectForm } from "@/components/edit-project-form/edit-project-form";
-import { IGetProjectResponse } from "@blocks-identifier/models/project.model";
+import { IGetProjectResponse } from "@/models/project.model";
 import { CnameValidatorProject } from "@/components/cname-validator-project/cname-validator-project";
 import { formatFullDate } from "@/lib/utils";
 

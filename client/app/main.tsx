@@ -6,13 +6,16 @@ import { Toaster } from "./components/ui-kits/toaster/toaster";
 import QueryProvider from "./providers/query-provider";
 import { router } from "./router";
 import "./styles/globals.css";
+import { TooltipProvider } from "./components/ui-kits/tooltip/tooltip";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryProvider>
       <NuqsAdapter>
-        <RouterProvider router={router} />
-        <Toaster />
+        <TooltipProvider>
+          <RouterProvider router={router} />
+          <Toaster />
+        </TooltipProvider>
       </NuqsAdapter>
     </QueryProvider>
   </StrictMode>,
