@@ -14,7 +14,7 @@ export const AUTH_ENDPOINTS = {
   GET_SOCIAL_LOGIN_ENDPOINT: `${BLOCKS_IDP_BASE_URL}${AUTH_SUBPATH}/GetSocialLogInEndPoint`,
   GET_LOGIN_OPTIONS: `${BLOCKS_IDP_BASE_URL}${AUTH_SUBPATH}/GetLoginOptions`,
   USER_INFO: `${BLOCKS_IDP_BASE_URL}/idp/UserInfo`,
-  LOGOUT: `${BLOCKS_IDP_BASE_URL}${AUTH_SUBPATH}/Logout`,
+  LOGOUT: `${BLOCKS_IDP_BASE_URL}/api${AUTH_SUBPATH}/Logout`,
 } as const;
 
 // ─── Client credential endpoints (auth-clients.service) ─────────────────────
