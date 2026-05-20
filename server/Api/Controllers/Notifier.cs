@@ -27,7 +27,7 @@ namespace Api.Controllers
         }
 
         [ApiExplorerSettings(IgnoreApi = true)]
-        [SecretEndPoint]
+        //[SecretEndPoint]
         [HttpPost]
        //[Authorize]
         public async Task<BaseResponse> SendSecretNotification([FromBody] NotifyRequest notifyRequest)
