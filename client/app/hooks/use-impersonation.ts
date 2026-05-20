@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { impersonationService } from "@/services/impersonation.service";
 
 export const useStartImpersonation = () => {
@@ -14,3 +14,10 @@ export const useStopImpersonation = () => {
     mutationFn: impersonationService.stopImpersonation,
   });
 };
+
+export const useImpersonationStatusChecker = () => {
+  return useQuery({
+    queryKey: ['impersonation', 'status'],
+    queryFn: () => impersonationService.impersonationStatus(),
+  })
+}
