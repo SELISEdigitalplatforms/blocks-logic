@@ -1,5 +1,19 @@
 import { Menu } from "@/models/menu-models";
-import { Home, Package, Users, BookMinus, Settings, Shield, Key, ShieldCheck, ScanFace, Lock, Zap, Gauge } from "lucide-react";
+import {
+  Home,
+  Package,
+  Users,
+  BookMinus,
+  Settings,
+  Shield,
+  Key,
+  ShieldCheck,
+  ScanFace,
+  Lock,
+  Zap,
+  Gauge,
+  Workflow,
+} from "lucide-react";
 
 export const navigationMenus: Menu[] = [
   {
@@ -20,38 +34,38 @@ export const navigationMenus: Menu[] = [
     path: "/project-overview/environments",
     icon: Package,
   },
-  {
-    id: "people",
-    type: "menu",
-    name: "People",
-    path: "/project-overview/people",
-    icon: Users,
-  },
-  {
-    id: "repositories",
-    type: "menu",
-    name: "Repositories",
-    path: "/project-overview/repositories",
-    icon: BookMinus,
-  },
-  {
-    id: "settings",
-    type: "menu",
-    name: "Project Settings",
-    path: "/project-overview/settings",
-    icon: Settings,
-  },
+  // {
+  //   id: "people",
+  //   type: "menu",
+  //   name: "People",
+  //   path: "/project-overview/people",
+  //   icon: Users,
+  // },
+  // {
+  //   id: "repositories",
+  //   type: "menu",
+  //   name: "Repositories",
+  //   path: "/project-overview/repositories",
+  //   icon: BookMinus,
+  // },
+  // {
+  //   id: "settings",
+  //   type: "menu",
+  //   name: "Project Settings",
+  //   path: "/project-overview/settings",
+  //   icon: Settings,
+  // },
   {
     type: "separator",
     id: "separator-identity",
   },
-  {
-    id: "service-identity__authentication",
-    type: "menu",
-    name: "IDP",
-    path: "/services/authentication",
-    icon: Key,
-  },
+  // {
+  //   id: "service-identity__authentication",
+  //   type: "menu",
+  //   name: "IDP",
+  //   path: "/services/authentication",
+  //   icon: Key,
+  // },
   // {
   //   id: "service-identity__authorization",
   //   type: "menu",
@@ -73,25 +87,32 @@ export const navigationMenus: Menu[] = [
   //   path: "/services/captcha",
   //   icon: ScanFace,
   // },
+  // {
+  //   id: "service-identity__api-settings",
+  //   type: "menu",
+  //   name: "API Settings",
+  //   path: "/services/api-settings",
+  //   icon: Settings,
+  // },
+  // {
+  //   id: "service-identity__secret-management",
+  //   type: "menu",
+  //   name: "Secrets & Configs",
+  //   path: "/services/secret-management",
+  //   icon: Lock,
+  // },
+  // {
+  //   id: "service-identity__lmt",
+  //   type: "menu",
+  //   name: "LMT",
+  //   path: "/services/lmt",
+  //   icon: Zap,
+  // },
   {
-    id: "service-identity__api-settings",
+    id: "service-workflow",
     type: "menu",
-    name: "API Settings",
-    path: "/services/api-settings",
-    icon: Settings,
-  },
-  {
-    id: "service-identity__secret-management",
-    type: "menu",
-    name: "Secrets & Configs",
-    path: "/services/secret-management",
-    icon: Lock,
-  },
-  {
-    id: "service-identity__lmt",
-    type: "menu",
-    name: "LMT",
-    path: "/services/lmt",
-    icon: Zap,
+    name: "Workflow",
+    path: "/workflow",
+    icon: Workflow,
   },
 ];

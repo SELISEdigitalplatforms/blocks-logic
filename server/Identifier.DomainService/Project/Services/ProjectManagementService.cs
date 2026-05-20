@@ -304,10 +304,10 @@ namespace DomainService.Projects
                 LastUpdatedDate = DateTime.UtcNow,
                 IsAcceptBlocksTerms = createProjectRequest.IsAcceptBlocksTerms,
                 IsUseBlocksExclusively = createProjectRequest.IsUseBlocksExclusively,
-                ApplicationDomain = applicationDomain,
+               // ApplicationDomain = applicationDomain,
                 DbConnectionString = _blocksSecret.DatabaseConnectionString,
-                CookieDomain = applicationContext.CookieDomain,
-                IsDomainVerified = applicationContext.CookieDomain == IdentifierConstants.BlocsDomain,
+                //CookieDomain = applicationContext.CookieDomain,
+                //IsDomainVerified = applicationContext.CookieDomain == IdentifierConstants.BlocsDomain,
 
                 JwtTokenParameters = new JwtTokenParameters
                 {
@@ -392,7 +392,7 @@ namespace DomainService.Projects
             var project = new GetProjectResponseData
             {
                 Name = repoProject.Name,
-                ApplicationDomain = repoProject.ApplicationDomain,
+                ApplicationDomain  = repoProject.Applications.FirstOrDefault()?.Domain ?? "",
                 ItemId = repoProject.ItemId,
                 CreatedDate = repoProject.CreatedDate,
                 LastUpdatedDate = repoProject.LastUpdatedDate,
@@ -401,12 +401,12 @@ namespace DomainService.Projects
                 CreatedBy = repoProject.CreatedBy,
                 Tags = repoProject.Tags,
                 TenantId = repoProject.TenantId,
-                IsDomainVerified = repoProject.IsDomainVerified,
-                CookieDomain = repoProject.CookieDomain,
+                IsDomainVerified = repoProject.Applications.FirstOrDefault()?.IsDomainVerified ?? false,
+               CookieDomain = repoProject.Applications.FirstOrDefault()?.CookieDomain ?? "",
                 IsDisabled = repoProject.IsDisabled,
                 Environment = repoProject.Environment,
                 TenantGroupId = repoProject.TenantGroupId,
-                CustomDomain = repoProject.CustomDomain,
+                //CustomDomain = repoProject.Applications.FirstOrDefault()?.CustomDomain ?? "",
                 TenantSlug = tenantSlug
             };
 
@@ -424,27 +424,27 @@ namespace DomainService.Projects
 
             var mainDomain = IdentifierHelper.ExtractMainDomain(request.ApplicationDomain);
 
-            if (!string.Equals(request.ApplicationDomain, project.ApplicationDomain))
-            {
-                project.IsDomainVerified = mainDomain == IdentifierConstants.BlocsDomain;
-            }
+            //if (!string.Equals(request.ApplicationDomain, project.ApplicationDomain))
+            //{
+            //    project.IsDomainVerified = mainDomain == IdentifierConstants.BlocsDomain;
+            //}
 
-            if (request.ApplicationDomain.Contains(IdentifierConstants.BlocsDomain, StringComparison.OrdinalIgnoreCase))
-            {
-                project.IsDomainVerified = true;
-            }
+            //if (request.ApplicationDomain.Contains(IdentifierConstants.BlocsDomain, StringComparison.OrdinalIgnoreCase))
+            //{
+            //    project.IsDomainVerified = true;
+            //}
 
             project.LastUpdatedDate = DateTime.UtcNow;
-            project.ApplicationDomain = request.ApplicationDomain;
+            //project.ApplicationDomain = request.ApplicationDomain;
             project.LastUpdatedBy = BlocksContext.GetContext()?.UserId;
-            project.CookieDomain = mainDomain;
-            project.CustomDomain = !string.IsNullOrWhiteSpace(request.CustomDomain) ? request.CustomDomain : project.CustomDomain;
+            //project.CookieDomain = mainDomain;
+            //project.CustomDomain = !string.IsNullOrWhiteSpace(request.CustomDomain) ? request.CustomDomain : project.CustomDomain;
             project.JwtTokenParameters.Audiences = [request.ApplicationDomain];
 
-            if (!string.IsNullOrWhiteSpace(request.CustomDomain) && !project.AllowedDomains.Contains(request.ApplicationDomain, StringComparer.OrdinalIgnoreCase))
-            {
-                project.AllowedDomains.Add(request.ApplicationDomain);
-            }   
+            //if (!string.IsNullOrWhiteSpace(request.CustomDomain) && !project.AllowedDomains.Contains(request.ApplicationDomain, StringComparer.OrdinalIgnoreCase))
+            //{
+            //    project.AllowedDomains.Add(request.ApplicationDomain);
+            //}   
 
             await Task.WhenAll(_projectRepository.UpdateProjectAsync(project),
                                 _projectRepository.UpdateIamConfiguration(project));
@@ -494,7 +494,7 @@ namespace DomainService.Projects
                 Tenant = project
             });
 
-            var domain = IdentifierConstants.CookieDomainPrefix + project.CookieDomain;
+            var domain = IdentifierConstants.CookieDomainPrefix + project.Applications.FirstOrDefault()?.CookieDomain ?? "";
             await _messageClient.SendToConsumerAsync(new ConsumerMessage<DisableDomainBindingRequest> { ConsumerName = IdentifierConstants.IdentifierQueueName, Payload = new DisableDomainBindingRequest { ProjectId = project.ItemId, Domain = domain } });
 
             return new BaseResponse { IsSuccess = true };
