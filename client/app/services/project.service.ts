@@ -1,6 +1,23 @@
+import { API_BASES } from "@/constants/endpoint.constant";
 import { http } from "@/lib/http-client";
-import { PROJECT_ENDPOINTS } from "@blocks-identifier/constants/endpoint.constant";
-import { IGetProjectPayload, IGetProjectResponse, IProjectGroup } from "@/models/project.model";
+import { 
+  IGetProjectPayload, 
+  IGetProjectResponse, 
+  IProjectGroup, 
+  ICreateProjectPayload, 
+  IGetProjectLoginOptionResponse, 
+  IValidateCNameProjectPayload, 
+  IValidateCNameProjectResponse, 
+  IUpdateProjectPayload, 
+  IUpdateProjectResponse, 
+  IUpdateTenantGroupPayload, 
+  IUpdateTenantGroupResponse, 
+  IDisableProjectPayload,
+  IDisableProjectResponse,
+  IEnvRepository 
+} from "@/models/project.model";
+import { APIResponse } from "@/models/api-response";
+import { PROJECT_ENDPOINTS } from "@/constants/projects";
 
 export class ProjectService {
   getProjects(page = 0, pageSize = 100, tenantGroupId = ""): Promise<IProjectGroup[]> {
@@ -12,6 +29,62 @@ export class ProjectService {
     const url = `${PROJECT_ENDPOINTS.GET}?projectId=${payload.projectId}`;
     return http.get(url);
   }
+getEnvRepositories(projectKey: string): Promise<APIResponse<IEnvRepository[]>> {
+    const url = `${API_BASES.CLOUD_BUILD}/build/repos-list?projectkey=${projectKey}`;
+    return http.get(url);
+  }
+
+  repoUpdate(payload: {
+    projectKey: string;
+    projectEnv: string;
+    repoWithDomains: {
+      repoId: string;
+      repoUrl: string;
+      customDeploymentDomain: string;
+    }[];
+  }): Promise<{
+    errors: unknown | null;
+    isSuccess: boolean;
+  }> {
+    const url = `/cloudbuild/v1/build/repo-update`;
+    return http.post(url, payload);
+  }
+
+  createProject(payload: ICreateProjectPayload): Promise<{
+    isSuccess: boolean;
+    errors: Record<string, string | string[]>;
+    tenantGroupId: string;
+  }> {
+    return http.post(`/identifier/v1/Project/Create`, payload);
+  }
+
+  validateCNameProject(
+    payload: IValidateCNameProjectPayload,
+  ): Promise<IValidateCNameProjectResponse> {
+    const url = `/identifier/v1/Domain/Configure`;
+    return http.post(url, payload);
+  }
+
+  updateProject(payload: IUpdateProjectPayload): Promise<IUpdateProjectResponse> {
+    const url = `/identifier/v1/Project/UpdateProject`;
+    return http.post(url, payload);
+  }
+
+  updateTenantGroup(payload: IUpdateTenantGroupPayload): Promise<IUpdateTenantGroupResponse> {
+    const url = `/identifier/v1/Project/UpdateTenantGroup`;
+    return http.post(url, payload);
+  }
+
+
+  getProjectLoginOption(): Promise<IGetProjectLoginOptionResponse> {
+    const url = `/identifier/v1/Project/GetLoginOptions`;
+    return http.get(url);
+  }
+  disableProject(payload: IDisableProjectPayload): Promise<IDisableProjectResponse> {
+    return http.post(PROJECT_ENDPOINTS.DISABLE, payload);
+  }
+
 }
+
 
 export const projectService = new ProjectService();

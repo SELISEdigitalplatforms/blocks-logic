@@ -80,19 +80,18 @@ run_frontend() {
 
     if [ ! -d "$CLIENT_DIR/node_modules" ]; then
         echo "Installing dependencies..."
-        npm --prefix "$CLIENT_DIR" install
+        (cd "$CLIENT_DIR" && npm clean-install)
     fi
 
     free_port $FRONTEND_PORT
 
-    npm --prefix "$CLIENT_DIR" run dev
+    cd "$CLIENT_DIR" && npm run dev
 }
 
 build_frontend() {
     echo "Building frontend..."
 
-    npm --prefix "$CLIENT_DIR" install
-    npm --prefix "$CLIENT_DIR" run build
+    (cd "$CLIENT_DIR" && npm install && npm run build)
 
     mkdir -p "$WWWROOT_DIR"
 

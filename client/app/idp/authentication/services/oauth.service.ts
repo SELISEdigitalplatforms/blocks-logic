@@ -12,7 +12,7 @@ export class OAuthService {
   getSocialLoginEndpoint(
     payload: IGetSocialLoginEndpointPayload,
   ): Promise<IGetSocialLoginEndpointResponse> {
-    return http.post(AUTH_ENDPOINTS.GET_SOCIAL_LOGIN_ENDPOINT, payload);
+    return http.post(IDP_ENDPOINTS.AUTHENTICATION.GET_SOCIAL_LOGIN_ENDPOINT, payload);
   }
 
   signinBySSO(payload: ISigninBySSOPayload): Promise<ISigninBySSOResponse> {
@@ -22,7 +22,7 @@ export class OAuthService {
     body.append("state", payload.state);
 
     return http.post(
-      IDP_ENDPOINTS.AUTHENTICATION.TOKEN,
+      AUTH_ENDPOINTS.TOKEN,
       body,
       {
         "Content-Type": "application/x-www-form-urlencoded",

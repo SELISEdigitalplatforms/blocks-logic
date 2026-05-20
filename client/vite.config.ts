@@ -20,6 +20,7 @@ export default defineConfig(({ mode }) => {
         "@blocks-localization": path.resolve(__dirname, "./app/cross-modules/localization"),
         "@blocks-utilities": path.resolve(__dirname, "./app/cross-modules/utilities"),
         "@blocks-ai": path.resolve(__dirname, "./app/cross-modules/ai"),
+        "@blocks-workflow": path.resolve(__dirname, "./app/modules/workflow"),
       },
     },
     build: {
@@ -30,9 +31,10 @@ export default defineConfig(({ mode }) => {
       host: true, // Listen on all addresses (0.0.0.0)
       port: 4000,
       allowedHosts: [
-        "dev-cloud.seliseblocks.com",
+        "dev-cloud.blocksdevelopers.com",
         "localhost",
         ".seliseblocks.com",
+        ".blocksdevelopers.com",
       ],
       proxy: {
           "/dev-idp-proxy": {

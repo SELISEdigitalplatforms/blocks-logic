@@ -4,7 +4,7 @@ import { Button } from "@/components/ui-kits/button/button";
 import { formatFullDate } from "@/lib/utils";
 import { Skeleton } from "@/components/ui-kits/skeleton/skeleton";
 import { MaskedText } from "@/components/masked-text";
-import { IProject } from "@blocks-identifier/models/project.model";
+import { IProject } from "@/models/project.model";
 import { environmentOptions } from "@/constants/environment-options";
 import { getProjectBlocksApiUrl } from "@/lib/domain";
 
