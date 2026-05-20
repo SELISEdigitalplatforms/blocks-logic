@@ -19,7 +19,7 @@ namespace Api.Controllers
         }
 
         [HttpPost]
-        [Authorize]
+        //[Authorize]
         //[ProtectedEndPoint]
         public async Task<BaseResponse> Notify([FromBody] NotifyRequest notifyRequest)
         {
@@ -27,9 +27,9 @@ namespace Api.Controllers
         }
 
         [ApiExplorerSettings(IgnoreApi = true)]
-        //[SecretEnpPoint]
+        [SecretEndPoint]
         [HttpPost]
-        [Authorize]
+       //[Authorize]
         public async Task<BaseResponse> SendSecretNotification([FromBody] NotifyRequest notifyRequest)
         {
             return await _notificationService.NotifyAsync(notifyRequest);
