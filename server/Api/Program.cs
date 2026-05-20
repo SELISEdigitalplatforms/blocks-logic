@@ -20,7 +20,7 @@ var serviceName = "blocks-logic";
 //Console.WriteLine($"Using Genesis vault type: {vaultType}");
 var secret = await ApplicationConfigurations.ConfigureLogAndSecretsAsync(serviceName, VaultType.Azure);
 var builder = WebApplication.CreateBuilder(args);
-
+ApplicationConfigurations.ConfigureApiEnv(builder, args);
 ApplicationConfigurations.ConfigureServices(builder.Services, LogicConstants.GetMessageConfiguration(secret.MessageConnectionString));
 
 builder.Services.Configure<FormOptions>(options =>
@@ -33,6 +33,7 @@ var services = builder.Services;
 services.AddHealthChecks();
 
 ApplicationConfigurations.ConfigureApi(services, serviceName);
+
 
 builder.Services.Configure<MvcOptions>(options =>
 {
