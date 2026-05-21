@@ -7,6 +7,7 @@ using DomainService.Shared;
 using DomainService.Shared.Entities;
 using FluentValidation;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using MongoDB.Driver.Linq;
 using SeliseBlocks.LMT.Client;
 using StackExchange.Redis;
@@ -26,18 +27,20 @@ namespace DomainService.ManagedService.Services
         private readonly ArmClient _armClient;
         private readonly string? _azureSubscriptionId;
         private readonly string? _azureResourceGroupName;
+        private readonly ILogger<ServiceManagement> _logger;
 
         [ExcludeFromCodeCoverage]
         public ServiceManagement(IServiceManagementRepository serviceManagementRepository,
                                  IValidator<RegisterServiceRequest> registerServiceRequestValidator,
                                  IBlocksSecret blocksSecret,
                                  ICacheClient cacheClient,
-                                 ITenants tenants,IConfiguration configuration)
+                                 ITenants tenants,IConfiguration configuration,ILogger<ServiceManagement> logger)
         {
             _serviceManagementRepository = serviceManagementRepository;
             _registerServiceRequestValidator = registerServiceRequestValidator;
             _blocksSecret = blocksSecret;
             _cacheClient = cacheClient;
+            _logger = logger;
            
             _tenants = tenants;
             var isRabbitMq = IdentifierHelper.IsRabbitMq(_blocksSecret.LmtMessageConnectionString);
@@ -233,27 +236,37 @@ namespace DomainService.ManagedService.Services
 
         public async Task<GetAllServiceResponse> GetAllServicesAsync(GetAllServiceRequest request)
         {
-            var (data, count) = await _serviceManagementRepository.GetAllServicesAsync(request);
-
-            var tenantId = BlocksContext.GetContext()?.ActualTenantId;
-            var tenant = _tenants.GetTenantByID(tenantId ?? string.Empty);
-
-            var serviceList = data.ToList();
-
-            foreach (var item in serviceList)
+            try
             {
-                item.ServiceBusConnectionString = EncryptionHelper.Decrypt(
-                    item.ServiceBusConnectionString,
-                    tenant?.TenantSalt ?? "LMT"
-                );
-                item.ServiceType = item.ServiceType ?? "backend";
+                var (data, count) = await _serviceManagementRepository.GetAllServicesAsync(request);
+                var tenantId = BlocksContext.GetContext().TenantId;
+                var tenant = _tenants.GetTenantByID(tenantId ?? string.Empty);
+
+                var serviceList = data.ToList();
+
+                foreach (var item in serviceList)
+                {
+                    item.ServiceBusConnectionString = EncryptionHelper.Decrypt(
+                        item.ServiceBusConnectionString,
+                        tenant?.TenantSalt ?? "LMT"
+                    );
+                    item.ServiceType = item.ServiceType ?? "backend";
+                }
+
+                return new GetAllServiceResponse
+                {
+                    Data = serviceList.AsQueryable(),
+                    TotalCount = count
+                };
             }
-
-            return new GetAllServiceResponse
+            catch (Exception ex)
             {
-                Data = serviceList.AsQueryable(),
-                TotalCount = count
-            };
+                
+                _logger.LogError(ex.ToString(), "Error occurred while fetching services");
+                throw;
+
+            }
+           
         }
 
     }
