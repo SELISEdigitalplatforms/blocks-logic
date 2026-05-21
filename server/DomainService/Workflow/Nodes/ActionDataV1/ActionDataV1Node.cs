@@ -311,9 +311,9 @@ namespace DomainService.Workflow.Nodes.ActionDataV1
             if (parameters.AuthenticationType == "triggerNodeCookie")
             {
                 var blocksContext = BlocksContext.GetContext();
-                if (blocksContext != null && !string.IsNullOrWhiteSpace(blocksContext.RefreshToken))
+                if (blocksContext != null && !string.IsNullOrWhiteSpace(blocksContext.OAuthToken))
                 {
-                    var token = await GetTokenFromRefreshTokenAsync(blocksContext.RefreshToken, parameters.ProjectKey);
+                    var token = await GetTokenFromRefreshTokenAsync(blocksContext.OAuthToken, parameters.ProjectKey);
                     if (!string.IsNullOrEmpty(token))
                         request.Headers.Add("Authorization", $"Bearer {token}");
                 }
