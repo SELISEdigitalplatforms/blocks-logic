@@ -61,8 +61,8 @@ services.AddCloudConfigurationServices();
 services.AddWorkflowExecutionEngine();
 services.RegisterAllNotificationApplicationServices();
 services.RegisterBlocksEurolmServices();
+await services.RegisterBlocksDeploymentServicesAsync(VaultType.Azure);
 services.RegisterBlocksObservabilityServices();
-services.RegisterBlocksDeploymentServicesAsync();
 
 var app = builder.Build();
 
