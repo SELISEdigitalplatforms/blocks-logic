@@ -22,8 +22,8 @@
     <PackageReference Include="HotChocolate.AspNetCore" />
     <PackageReference Include="SeliseBlocks.EurolmDriver" />
     <PackageReference Include="SeliseBlocks.MailDriver" />
-    <!--<PackageReference Include="SeliseBlocks.DeploymentDriver" />-->
-    <!--<PackageReference Include="SeliseBlocks.ObservabilityDriver" />-->
+    <PackageReference Include="SeliseBlocks.DeploymentDriver" />
+    <PackageReference Include="SeliseBlocks.ObservabilityDriver" />
     <PackageReference Include="SeliseBlocks.StorageDriver" />
   </ItemGroup>
   <ItemGroup>
