@@ -20,7 +20,7 @@ export const AUTH_ENDPOINTS = {
 // ─── Client credential endpoints (auth-clients.service) ─────────────────────
 
 export const AUTH_CLIENT_ENDPOINTS = {
-  GET_CLIENT_CREDENTIALS: `/api${AUTH_SUBPATH}/GetClientCredentials`,
+  GET_CLIENT_CREDENTIALS: `/api/Authentication/GetClientCredentials`,
   SAVE_CLIENT_CREDENTIAL: `/api${AUTH_SUBPATH}/SaveClientCredential`,
   DELETE_CLIENT_CREDENTIAL: `/api${AUTH_SUBPATH}/DeleteClientCredential`,
 } as const;

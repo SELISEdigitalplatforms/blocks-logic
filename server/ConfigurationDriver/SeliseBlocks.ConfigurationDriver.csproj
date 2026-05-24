@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>SeliseBlocks.ConfigurationDriver</PackageId>
+    <Version>10.0.0-preview.1</Version>
+    <Authors>SELISE Digital Platforms</Authors>
+    <Company>SELISE Digital Platforms</Company>
+    <Description>MongoDB-backed IConfigurationProvider for SeliseBlocks applications. Loads key-value pairs stored in a MongoDB collection into IConfiguration at application startup.</Description>
+    <PackageTags>mongodb;configuration;seliseblocks;blocks;driver</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/SELISEdigitalplatforms/blocks-logic</RepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MongoDB.Driver" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions"/>
+    <PackageReference Include="Microsoft.Extensions.Configuration"/>
+  </ItemGroup>
+
+</Project>
