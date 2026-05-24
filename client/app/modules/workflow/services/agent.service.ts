@@ -4,12 +4,14 @@ import {
   IGetAgentsPayload,
   IGetAgentsResponse,
 } from "../types/agent.service.type";
-import { API_BASES } from "@/constants/endpoint.constant";
+import { getRuntimeEnv } from "@/lib/runtime-env";
 
 export class AgentService {
   getAgents(payload: IGetAgentsPayload): Promise<IGetAgentsResponse> {
+    const baseUrl = getRuntimeEnv("BLOCKS_AGENT_API_BASE_URL") || getRuntimeEnv("BLOCKS_API_BASE_URL");
+    const url = `${baseUrl}/api${AI_ENDPOINTS.AGENT_QUERIES}`;
     return http.post(
-      `${API_BASES.AI}${AI_ENDPOINTS.AGENT_QUERIES}`,
+      url,
       payload,
       undefined,
       { absoluteUrl: true },
