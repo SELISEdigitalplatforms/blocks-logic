@@ -239,7 +239,7 @@ namespace DomainService.ManagedService.Services
             try
             {
                 var (data, count) = await _serviceManagementRepository.GetAllServicesAsync(request);
-                var tenantId = BlocksContext.GetContext().OrganizationId;
+                var tenantId = BlocksContext.GetContext().TenantId;
                 var tenant = _tenants.GetTenantByID(tenantId ?? string.Empty);
 
                 var serviceList = data.ToList();
