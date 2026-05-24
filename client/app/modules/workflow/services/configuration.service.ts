@@ -75,9 +75,8 @@ class ConfigurationService {
   getSchemaList(
     payload: IGetSchemaListPayload,
   ): Promise<IGetSchemaListResponse> {
-    const udsBaseUrl = getRuntimeEnv("BLOCKS_UDS_API_BASE_URL") || "";
-    const baseUrl = udsBaseUrl ? `${udsBaseUrl}/api/schemas` : SCHEMA_ENDPOINTS.LIST;
-    const url = `${baseUrl}?Keyword=${payload.keyword}&PageSize=${payload.pageSize}&PageNo=${payload.pageNo}&SortDescending=${payload.sortDescending}&SortBy=${payload.sortBy}&ProjectKey=${payload.projectKey}&SchemaType=${payload.schemaType}`;
+    const baseUrl = getRuntimeEnv("BLOCKS_UDS_API_BASE_URL") || getRuntimeEnv("BLOCKS_API_BASE_URL");
+    const url = `${baseUrl}${API_BASES.UDS}${SCHEMA_ENDPOINTS.LIST}?Keyword=${payload.keyword}&PageSize=${payload.pageSize}&PageNo=${payload.pageNo}&SortDescending=${payload.sortDescending}&SortBy=${payload.sortBy}&ProjectKey=${payload.projectKey}&SchemaType=${payload.schemaType}`;
     return http.get(url, undefined, { absoluteUrl: true });
   }
 
@@ -92,11 +91,11 @@ class ConfigurationService {
     id: string,
     projectKey: string,
   ): Promise<IGetSchemaDetailsResponse> {
-    const udsBaseUrl = getRuntimeEnv("BLOCKS_UDS_API_BASE_URL") || "";
-    const baseUrl = udsBaseUrl ? `${udsBaseUrl}/api/schemas/get-by-id` : `${API_BASES.UDS}/schemas/get-by-id`;
+    const baseUrl = getRuntimeEnv("BLOCKS_UDS_API_BASE_URL") || getRuntimeEnv("BLOCKS_API_BASE_URL");
+    const url = `${baseUrl}${API_BASES.UDS}/schemas/get-by-id`;
     const params = new URLSearchParams({ id, projectKey });
     return http.get(
-      `${baseUrl}?${params.toString()}`,
+      `${url}?${params.toString()}`,
       undefined,
       { absoluteUrl: true },
     );
