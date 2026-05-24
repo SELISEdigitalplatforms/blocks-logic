@@ -311,16 +311,16 @@ namespace DomainService.Workflow.Nodes.ActionDataV1
             if (parameters.AuthenticationType == "triggerNodeCookie")
             {
                 var blocksContext = BlocksContext.GetContext();
-                if (blocksContext != null && !string.IsNullOrWhiteSpace(blocksContext.RefreshToken))
-                {
-                    var token = await GetTokenFromRefreshTokenAsync(blocksContext.RefreshToken, parameters.ProjectKey);
-                    if (!string.IsNullOrEmpty(token))
-                        request.Headers.Add("Authorization", $"Bearer {token}");
-                }
-                else
-                {
-                    _logger.LogWarning("ActionDataV1Node: Trigger Node Cookie selected but no RefreshToken available in BlocksContext");
-                }
+                //if (blocksContext != null && !string.IsNullOrWhiteSpace(blocksContext.RefreshToken))
+                //{
+                //    var token = await GetTokenFromRefreshTokenAsync(blocksContext.RefreshToken, parameters.ProjectKey);
+                //    if (!string.IsNullOrEmpty(token))
+                //        request.Headers.Add("Authorization", $"Bearer {token}");
+                //}
+                //else
+                //{
+                //    _logger.LogWarning("ActionDataV1Node: Trigger Node Cookie selected but no RefreshToken available in BlocksContext");
+                //}
             }
             else if (parameters.AuthenticationType == "clientCredential"
                 && !string.IsNullOrWhiteSpace(parameters.ClientId) && !string.IsNullOrWhiteSpace(parameters.ClientSecret))
