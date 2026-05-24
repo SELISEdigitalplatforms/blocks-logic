@@ -42,7 +42,6 @@ import {
   PIPELINE_ENDPOINTS,
 } from "../constants/data-gateway-endpoint.constant";
 import { IImportFile } from "@blocks-workflow/models/language";
-import { API_BASES } from "@/constants/endpoint.constant";
 import { getRuntimeEnv } from "@/lib/runtime-env";
 
 class ConfigurationService {
@@ -76,7 +75,7 @@ class ConfigurationService {
     payload: IGetSchemaListPayload,
   ): Promise<IGetSchemaListResponse> {
     const baseUrl = getRuntimeEnv("BLOCKS_UDS_API_BASE_URL") || getRuntimeEnv("BLOCKS_API_BASE_URL");
-    const url = `${baseUrl}${API_BASES.UDS}${SCHEMA_ENDPOINTS.LIST}?Keyword=${payload.keyword}&PageSize=${payload.pageSize}&PageNo=${payload.pageNo}&SortDescending=${payload.sortDescending}&SortBy=${payload.sortBy}&ProjectKey=${payload.projectKey}&SchemaType=${payload.schemaType}`;
+    const url = `${baseUrl}/api/schemas?Keyword=${payload.keyword}&PageSize=${payload.pageSize}&PageNo=${payload.pageNo}&SortDescending=${payload.sortDescending}&SortBy=${payload.sortBy}&ProjectKey=${payload.projectKey}&SchemaType=${payload.schemaType}`;
     return http.get(url, undefined, { absoluteUrl: true });
   }
 
@@ -92,7 +91,7 @@ class ConfigurationService {
     projectKey: string,
   ): Promise<IGetSchemaDetailsResponse> {
     const baseUrl = getRuntimeEnv("BLOCKS_UDS_API_BASE_URL") || getRuntimeEnv("BLOCKS_API_BASE_URL");
-    const url = `${baseUrl}${API_BASES.UDS}/schemas/get-by-id`;
+    const url = `${baseUrl}/api/schemas/get-by-id`;
     const params = new URLSearchParams({ id, projectKey });
     return http.get(
       `${url}?${params.toString()}`,
