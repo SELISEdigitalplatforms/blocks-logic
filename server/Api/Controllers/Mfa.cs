@@ -88,7 +88,7 @@ namespace Api.Controllers
         [HttpGet]
         [Authorize]
         //[ProtectedEndPoint]
-        public async Task<GetMfaConfigurationResponse> Get([FromQuery] GetAuthenticationConfigurationRequest request)
+        public async Task<GetMfaConfigurationResponse> Get()
         {
             return await _configurationService.GetMfaConfigurationAsync();
         }
