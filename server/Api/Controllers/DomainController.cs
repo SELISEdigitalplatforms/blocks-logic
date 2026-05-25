@@ -16,8 +16,9 @@ namespace Api.Controllers
             _domainManagementService = domainManagementService;
         }
 
-        [ProtectedEndPoint]
+        //[ProtectedEndPoint]
         [HttpPost]
+        [Authorize]
         public async Task<BaseResponse> Configure([FromBody] ConfigureDomainRequest request)
         {
             if (string.IsNullOrWhiteSpace(request.CookieDomain) || string.IsNullOrWhiteSpace(request.ProjectKey))

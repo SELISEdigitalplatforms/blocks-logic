@@ -1,22 +1,37 @@
-using BlocksTemplate.Api;
+using Blocks.Extensions.DependencyInjection;
 using Blocks.Genesis;
+using BlocksTemplate.Api;
+using SeliseBlocks.ConfigurationDriver;
+using Captcha.DomainService.Configuration;
 using Cloud.DomainService.Utilities;
-using DomainService.Utilities;
-using DomainService.Shared;
-using Microsoft.AspNetCore.Http.Features;
-using Microsoft.AspNetCore.Mvc;
 using Cloud.LmtService.Utilities;
 using CloudConfiguration.DomainService.Shared.Utilities;
-using Captcha.DomainService.Configuration;
+using DomainService.Notification;
+using DomainService.Shared;
+using DomainService.Utilities;
+using DomainService.Workflow;
+using DomainService.Workflow.Utils;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Mvc;
 using MongoDB.Driver;
+using Path = System.IO.Path;
 
-var serviceName = "blocks-os-api";
+var serviceName = "blocks-logic";
 //var vaultType = ResolveVaultType();
 //Console.WriteLine($"Using Genesis vault type: {vaultType}");
 var secret = await ApplicationConfigurations.ConfigureLogAndSecretsAsync(serviceName, VaultType.Azure);
 var builder = WebApplication.CreateBuilder(args);
+ApplicationConfigurations.ConfigureApiEnv(builder, args);
 
-ApplicationConfigurations.ConfigureServices(builder.Services, IdpConstants.GetMessageConfiguration(secret.MessageConnectionString));
+builder.Configuration.AddMongoDbConfiguration(options =>
+{
+    options.ConnectionString = secret.DatabaseConnectionString;
+    options.DatabaseName     = secret.RootDatabaseName;
+    options.CollectionName   = "Secrets";
+    options.SecretKey        = "blocks-Secret";
+});
+
+ApplicationConfigurations.ConfigureServices(builder.Services, LogicConstants.GetMessageConfiguration(secret.MessageConnectionString));
 
 builder.Services.Configure<FormOptions>(options =>
 {
@@ -27,7 +42,8 @@ var services = builder.Services;
 
 services.AddHealthChecks();
 
-ApplicationConfigurations.ConfigureApi(services);
+ApplicationConfigurations.ConfigureApi(services, serviceName);
+
 
 builder.Services.Configure<MvcOptions>(options =>
 {
@@ -37,13 +53,16 @@ builder.Services.Configure<MvcOptions>(options =>
 var wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
 Directory.CreateDirectory(wwwrootPath);
 
-//ApplyFrontendRuntimeSettings(builder.Configuration, wwwrootPath);
-
 services.RegisterAllServices();
 services.AddApplicationServices();
 services.AddCloudDomainServices();
 services.AddCloudLmtServices();
 services.AddCloudConfigurationServices();
+services.AddWorkflowExecutionEngine();
+services.RegisterAllNotificationApplicationServices();
+services.RegisterBlocksEurolmServices();
+await services.RegisterBlocksDeploymentServicesAsync(VaultType.Azure);
+services.RegisterBlocksObservabilityServices();
 
 var app = builder.Build();
 
@@ -57,79 +76,60 @@ if (File.Exists(indexHtml))
 
     app.MapFallback(async context =>
     {
+        if (context.Request.Path.StartsWithSegments("/api"))
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            await context.Response.WriteAsJsonAsync(new { message = "Not Found" });
+            return;
+        }
+
         var tenantService = context.RequestServices.GetRequiredService<ITenants>();
         var dbContext = context.RequestServices.GetRequiredService<IDbContextProvider>();
         var host = context.Request.Host.Value;
         var tenant = tenantService.GetTenantByApplicationDomain(host);
         var database = dbContext.GetDatabase(tenant.TenantId);
         var captcheSetting = await (await database.GetCollection<CaptchaConfiguration>("CaptchaConfigurations").FindAsync(Builders<CaptchaConfiguration>.Filter.Eq(mc => mc.IsEnable, true))).FirstOrDefaultAsync();
-        ApplyFrontendRuntimeSettings(builder.Configuration, wwwrootPath,  tenant.TenantId, captcheSetting.CaptchaKey);
+        ApplyFrontendRuntimeSettings(builder.Configuration, wwwrootPath, tenant.TenantId, captcheSetting.CaptchaKey);
 
         context.Response.Cookies.Append("x-blocks-key", tenant.TenantId, new CookieOptions
         {
-            Domain = tenant.CookieDomain,
+            Domain = tenant.Applications.FirstOrDefault()?.CookieDomain,
             HttpOnly = true,
             Secure = true,
-            SameSite =  SameSiteMode.None,
+            SameSite = SameSiteMode.None,
             Path = "/"
         });
 
         await context.Response.SendFileAsync(indexHtml);
 
     });
-
-    // x-blocks-key cookie
-    // check if domain match 
-    // get google captch key BLOCKS_GOOGLE_SITE_KEY
-    // Base Url 
-    // Construct URL 
-
 }
 
-ApplicationConfigurations.ConfigureMiddleware(app);
-
+//ApplicationConfigurations.ConfigureMiddleware(app);
+ApplicationConfigurations.ConfigureMiddleware(app,
+    tenantValidationPrefixes: new[] { "notificationHub" });
+app.MapHub<NotificationHub>("/notificationHub").WithDisplayName("Controller/notificationHub"); 
 await app.RunAsync();
-
-//static VaultType ResolveVaultType()
-//{
-//    var configuredVaultType = Environment.GetEnvironmentVariable("BLOCKS_VAULT_TYPE");
-//    if (!string.IsNullOrWhiteSpace(configuredVaultType) &&
-//        Enum.TryParse<VaultType>(configuredVaultType, true, out var parsedVaultType))
-//    {
-//        return parsedVaultType;
-//    }
-
-//    var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ??
-//                      Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT");
-
-//    return string.Equals(environment, "Development", StringComparison.OrdinalIgnoreCase)
-//        ? VaultType.OnPrem
-//        : VaultType.Azure;
-//}
 
 static void ApplyFrontendRuntimeSettings(IConfiguration configuration, string webRootPath, string blocksKey, string googleSiteKey)
 {
-  //  var envFilePath = Path.Combine(Directory.GetCurrentDirectory(), ".env");
-    //var section = configuration.GetSection("FrontendRuntime");
-    //var replacements = new Dictionary<string, string?>
-    //{
-    //    ["__BLOCKS_API_BASE_URL__"] = section["BLOCKS_API_BASE_URL"],
-    //    ["__BLOCKS_X_BLOCKS_KEY__"] = section["BLOCKS_X_BLOCKS_KEY"],
-    //    ["__BLOCKS_GOOGLE_SITE_KEY__"] = section["BLOCKS_GOOGLE_SITE_KEY"],
-    //    ["__BLOCKS_CONSTRUCT_URL__"] = section["BLOCKS_CONSTRUCT_URL"]
-    //};
 
     DotNetEnv.Env.Load();
 
-    blocksKey = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("BLOCKS_X_BLOCKS_KEY"))? Environment.GetEnvironmentVariable("BLOCKS_X_BLOCKS_KEY") : blocksKey;
+    blocksKey = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("BLOCKS_X_BLOCKS_KEY")) ? Environment.GetEnvironmentVariable("BLOCKS_X_BLOCKS_KEY") : blocksKey;
     googleSiteKey = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("BLOCKS_GOOGLE_SITE_KEY")) ? Environment.GetEnvironmentVariable("BLOCKS_GOOGLE_SITE_KEY") : googleSiteKey;
 
     var replacements = new Dictionary<string, string?>
     {
-       // ["__BLOCKS_API_BASE_URL__"] = Environment.GetEnvironmentVariable("BLOCKS_API_BASE_URL"),
+        ["__BLOCKS_API_BASE_URL__"] = configuration["LogicBaseUrl"],
         ["__BLOCKS_X_BLOCKS_KEY__"] = blocksKey,
         ["__BLOCKS_GOOGLE_SITE_KEY__"] = googleSiteKey,
-        ["__BLOCKS_CONSTRUCT_URL__"] = Environment.GetEnvironmentVariable("BLOCKS_CONSTRUCT_URL"),
+        ["__BLOCKS_CONSTRUCT_URL__"] = configuration["ConstructBaseUrl"],
+        ["__BLOCKS_UDS_API_BASE_URL__"] = configuration["UdsBaseUrl"],
+        ["__BLOCKS_IDP_API_BASE_URL__"] = configuration["IdpBaseUrl"],
+        ["__BLOCKS_AGENT_API_BASE_URL__"] = configuration["AgentBaseUrl"],
+        ["__BLOCKS_EUROLM_API_BASE_URL__"] = configuration["EurolmBaseUrl"],
+        ["__BLOCKS_UTILITY_API_BASE_URL__"] = configuration["UtilityBaseUrl"]
     };
 
     var files = Directory.EnumerateFiles(webRootPath, "*", SearchOption.AllDirectories)

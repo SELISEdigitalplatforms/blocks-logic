@@ -6,17 +6,32 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet" />
-    <title>Blocks OS</title>
+    <title>Blocks Logic</title>
   </head>
   <body class="min-h-screen bg-background font-sans text-foreground antialiased">
     <div id="root"></div>
     <div id="portal-root"></div>
     <script>
       window.__BLOCKS_ENV__ = {
-        BLOCKS_API_BASE_URL: "__BLOCKS_API_BASE_URL__",
-        BLOCKS_X_BLOCKS_KEY: "__BLOCKS_X_BLOCKS_KEY__",
+        // BLOCKS_API_BASE_URL: "__BLOCKS_API_BASE_URL__",
+        // BLOCKS_IDP_BASE_URL: "__BLOCKS_IDP_BASE_URL__",
+        // BLOCKS_UDS_API_BASE_URL: "__BLOCKS_UDS_API_BASE_URL__",
+
+        // BLOCKS_X_BLOCKS_KEY: "__BLOCKS_X_BLOCKS_KEY__",
+        // BLOCKS_GOOGLE_SITE_KEY: "__BLOCKS_GOOGLE_SITE_KEY__",
+        // BLOCKS_CONSTRUCT_URL: "__BLOCKS_CONSTRUCT_URL__",
+        // BLOCKS_GITHUB_SSO_CLIENT_ID: "__BLOCKS_GITHUB_SSO_CLIENT_ID__",
+        // BLOCKS_OIDC_CLIENT_ID: "__BLOCKS_OIDC_CLIENT_ID__",
+
+        BLOCKS_API_BASE_URL: "https://logic.seliseblocks.com",
+        BLOCKS_IDP_BASE_URL: "https://iam.seliseblocks.com",
+        BLOCKS_UDS_API_BASE_URL: "https://data.seliseblocks.com",
+        BLOCKS_AGENT_API_BASE_URL: "https://agents.seliseblocks.com",
+        BLOCKS_X_BLOCKS_KEY: "acf19d8d8841400a8999f0a5337fadf5",
         BLOCKS_GOOGLE_SITE_KEY: "__BLOCKS_GOOGLE_SITE_KEY__",
-        BLOCKS_CONSTRUCT_URL: "__BLOCKS_CONSTRUCT_URL__"
+        BLOCKS_CONSTRUCT_URL: "__BLOCKS_CONSTRUCT_URL__",
+        BLOCKS_GITHUB_SSO_CLIENT_ID: "__BLOCKS_GITHUB_SSO_CLIENT_ID__",
+        BLOCKS_OIDC_CLIENT_ID: "a25aee32-73ae-484b-b813-522a8d091f89"
       };
     </script>
     <script type="module" src="/app/main.tsx"></script>

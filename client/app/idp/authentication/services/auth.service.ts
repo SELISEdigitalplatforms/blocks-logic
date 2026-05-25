@@ -9,12 +9,12 @@ import {
   IVerifyMfaPayload,
   IVerifyMfaResponse,
 } from "@blocks-idp/authentication/models/auth.model";
-import { AUTH_ENDPOINTS } from "../constants/endpoint.constant";
-import { PEOPLE_ENDPOINTS } from "@blocks-identifier/constants/endpoint.constant";
-import { IDP_BASE_URL } from "@/constants/endpoint.constant";
+import { AUTH_ENDPOINTS, PEOPLE_ENDPOINTS } from "../constants/endpoint.constant";
 
 export class AuthService {
-  signinByEmail(payload: ISigninByEmailPayload): Promise<ISigninByEmailResponse> {
+  signinByEmail(
+    payload: ISigninByEmailPayload,
+  ): Promise<ISigninByEmailResponse> {
     const body = new URLSearchParams();
     body.append("grant_type", "password");
     body.append("username", payload.username);
@@ -51,20 +51,21 @@ export class AuthService {
     body.append("client_secret", "e048ec1b63d548dd85d053f364d5d54c");
 
     return http.post(
-      `${IDP_BASE_URL}${AUTH_ENDPOINTS.TOKEN}`,
+      `${AUTH_ENDPOINTS.TOKEN}`,
       body,
       {
         "Content-Type": "application/x-www-form-urlencoded",
-        "Authorization": "Basic c2VsaXNlYmxvY2tzOkJsMDNrc0B1JFU3VjEwUw=="
+        Authorization: "Basic c2VsaXNlYmxvY2tzOkJsMDNrc0B1JFU3VjEwUw==",
       },
       {
         absoluteUrl: true,
-
       },
     );
   }
 
-  signupByEmail(payload: ISignupByEmailPayload): Promise<ISignupByEmailResponse> {
+  signupByEmail(
+    payload: ISignupByEmailPayload,
+  ): Promise<ISignupByEmailResponse> {
     return http.post(PEOPLE_ENDPOINTS.SIGNUP, payload);
   }
 
@@ -74,9 +75,15 @@ export class AuthService {
 
   logout() {
     // For localhost, send actual refresh token; for remote, send empty (uses cookie)
-    const isLocalhost = getRuntimeEnv("BLOCKS_API_BASE_URL")?.includes("localhost");
-    const refreshToken = isLocalhost ? (useAuthStore.getState().refreshToken || "") : "";
-    return http.post(AUTH_ENDPOINTS.LOGOUT, { refreshToken });
+    const isLocalhost = getRuntimeEnv("BLOCKS_API_BASE_URL")?.includes(
+      "localhost",
+    );
+    const refreshToken = isLocalhost
+      ? useAuthStore.getState().refreshToken || ""
+      : "";
+    return http.post(AUTH_ENDPOINTS.LOGOUT, { refreshToken }, undefined, {
+      absoluteUrl: true,
+    });
   }
 }
 
