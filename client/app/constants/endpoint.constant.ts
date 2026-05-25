@@ -1,18 +1,24 @@
-export const IDP_BASE_URL = "https://dev-idp.blocksdevelopers.com";
-export const DEPLOYMENT_BASE_URL = "https://dev-deployment.blocksdevelopers.com";
+import { getRuntimeEnv } from "@/lib/runtime-env";
+
+export const DEPLOYMENT_BASE_URL =
+  "https://deployment.seliseblocks.com";
+
 
 export const API_BASES = {
   COMMUNICATION: "/api",
   CLOUD_CONFIGURATION: "/api",
-  UDS: "/api",
+  UDS: getRuntimeEnv("BLOCKS_UDS_API_BASE_URL") + "/api",
   UILM: "/api",
   UTILITIES: "/api",
   CLOUD_BUILD: "/api",
-  IDP: "/api",
+  IDP: getRuntimeEnv("BLOCKS_IDP_BASE_URL") + "/api",
   IDENTIFIER: "/api",
   LMT: "/api",
   MFA: "/api",
   ALERT: "/api",
-  AI: "/api",
+  AI: getRuntimeEnv("BLOCKS_AGENT_API_BASE_URL") + "/api",
   STUDIO: "/api",
+  WORKFLOW: "/api",
+  EUROLM: getRuntimeEnv("BLOCKS_EUROLM_API_BASE_URL") + "/api",
+  LOGIC: getRuntimeEnv("BLOCKS_API_BASE_URL") + "/api",
 } as const;

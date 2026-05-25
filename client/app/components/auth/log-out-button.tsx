@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui-kits/button/button";
-import { useLanguageViewStore } from "@/cross-modules/localization/store/use-language-view-store";
+import { useLanguageViewStore } from "@/modules/workflow/store/use-language-view-store";
 import { useLogout } from "@/idp/authentication/hooks/use-auth";
 import { getQueryClient } from "@/providers/query-provider";
 import { useAuthStore } from "@/store/useAuthStore";
