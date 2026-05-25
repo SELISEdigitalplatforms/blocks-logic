@@ -22,6 +22,5 @@ export const API_BASES = {
   STUDIO: "/api",
   WORKFLOW: "/api",
   EUROLM: getRuntimeEnv("BLOCKS_EUROLM_API_BASE_URL") + "/api",
-  UTILITY: getRuntimeEnv("BLOCKS_UTILITY_API_BASE_URL") + "/api",
   LOGIC: getRuntimeEnv("BLOCKS_API_BASE_URL") + "/api",
 } as const;
