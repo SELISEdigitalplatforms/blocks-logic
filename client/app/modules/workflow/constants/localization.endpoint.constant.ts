@@ -4,5 +4,5 @@ const LANGUAGE_SUBPATH = "/Language";
 
 // Language endpoints
 export const LANGUAGE_ENDPOINTS = {
-  GETS: `${API_BASES.EUROLM}${LANGUAGE_SUBPATH}/Gets`,
+  GETS: `${API_BASES.LOGIC}${LANGUAGE_SUBPATH}/Gets`,
 } as const;
