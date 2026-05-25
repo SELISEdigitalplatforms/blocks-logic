@@ -7,7 +7,7 @@ import {
   mockSigninBySSOPayload,
   mockSigninBySSOResponse,
 } from "../../test-utils/__mocks__";
-import { AUTH_ENDPOINTS } from "../constants/endpoint.constant";
+import { AUTH_ENDPOINTS, IDP_ENDPOINTS } from "../constants/endpoint.constant";
 import { OAuthService } from "./oauth.service";
 
 vi.mock("@/lib/http-client", () => mockHttpClientFactory());
@@ -32,7 +32,7 @@ describe("OAuthService", () => {
       const result = await service.getSocialLoginEndpoint(mockGetSocialLoginPayload);
 
       expect(http.post).toHaveBeenCalledWith(
-        AUTH_ENDPOINTS.GET_SOCIAL_LOGIN_ENDPOINT,
+        IDP_ENDPOINTS.AUTHENTICATION.GET_SOCIAL_LOGIN_ENDPOINT,
         mockGetSocialLoginPayload,
       );
       expect(result).toEqual(mockGetSocialLoginResponse);

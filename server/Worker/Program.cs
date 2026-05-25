@@ -17,12 +17,17 @@ using Worker.Configuration;
 using Worker.Consumers;
 using Worker.Consumers.Identifier;
 using Worker.Consumers.Users;
+using DomainService.Workflow.Utils;
+using DomainService.Workflow;
+using DomainService.Workflow.Events;
+using DomainService.Workflow.Nodes.TriggerDataV1;
+using Worker.Consumers.Workflow;
 
-const string _serviceName = "blocks-os-worker";
+const string _serviceName = "blocks-logic-worker";
 
 var vaultType = ResolveVaultType();
 Console.WriteLine($"Using Genesis vault type: {vaultType}");
-var secret = await ApplicationConfigurations.ConfigureLogAndSecretsAsync(_serviceName, vaultType);
+var secret = await ApplicationConfigurations.ConfigureLogAndSecretsAsync(_serviceName, VaultType.Azure);
 
 await CreateHostBuilder(args).Build().RunAsync();
 
@@ -55,7 +60,7 @@ IHostBuilder CreateHostBuilder(string[] args) =>
 
             services.RegisterAllServices();
 
-           
+
 
             #region Identifier Service Consumers
             services.AddApplicationServices();
@@ -69,7 +74,14 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             services.AddSingleton<IConsumer<PublishScheduleCommand>, DataCleanupConsumer>();
             services.AddSingleton<IConsumer<UpdateResourceUsageCommand_Identifier>, UpdateResourceUsageConsumer>();
 
-            ApplicationConfigurations.ConfigureWorker(services, IdpConstants.GetMessageConfiguration(secret.MessageConnectionString));
+
+
+            services.AddWorkflowExecutionEngine();
+            services.AddSingleton<IConsumer<AddExcuationNodeEvent>, AddExcuationNodeConsumer>();
+            services.AddSingleton<IConsumer<EmailTriggerEvent>, EmailTriggerConsumer>();
+            services.AddSingleton<IConsumer<DataChangeEvent>, DataTriggerConsumer>();
+
+            ApplicationConfigurations.ConfigureWorker(services, LogicConstants.GetMessageConfiguration(secret.MessageConnectionString));
             //ApplicationConfigurations.ConfigureWorker(services, IdentifierConstants.GetMessageConfiguration(secret.MessageConnectionString));
             #endregion
         });
