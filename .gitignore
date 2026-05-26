@@ -160,4 +160,4 @@ server/Api/wwwroot/**
 # **/appsettings.*.json
 # **/appsetting.*.json
 
-# server/**/launchSettings.json
+server/**/launchSettings.json
