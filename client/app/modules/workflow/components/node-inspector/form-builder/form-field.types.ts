@@ -3,6 +3,7 @@ export type FieldType =
   | "textarea"
   | "number"
   | "select"
+  | "select-with-description"
   | "multiselect"
   | "checkbox"
   | "switch"
@@ -19,6 +20,7 @@ export type FieldType =
 export interface SelectOption {
   value: string;
   label: string;
+  description?: string;
 }
 
 export interface FieldSchema<Whole = Record<string, unknown>> {
