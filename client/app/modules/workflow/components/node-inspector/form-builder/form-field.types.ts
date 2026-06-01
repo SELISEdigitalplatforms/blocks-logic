@@ -1,3 +1,5 @@
+import { WorkflowStore } from "@/modules/workflow/store";
+
 export type FieldType =
   | "text"
   | "textarea"
@@ -36,14 +38,18 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
 
   displayValue?: (
     data: Whole,
-    config: { projectKey: string; workflowId: string; nodeId: string },
+    config: { projectKey: string; workflowId: string; nodeId: string; store: WorkflowStore },
   ) => unknown;
-  onChange?: (value: unknown, data: Whole) => Whole | void;
+  onChange?: (
+    value: unknown,
+    data: Whole,
+    config: { projectKey: string; workflowId: string; nodeId: string; store: WorkflowStore },
+  ) => Whole | void;
   options?:
     | SelectOption[]
     | ((
         data: Whole,
-        config: { projectKey: string; workflowId: string },
+        config: { projectKey: string; workflowId: string; store: WorkflowStore },
       ) => Promise<SelectOption[]>);
   copyable?: boolean;
   maxLength?: number;
@@ -73,7 +79,7 @@ export interface FieldProps<T = unknown> {
   value: T;
   onChange: (value: T) => void;
   data: Record<string, unknown>;
-  config: { projectKey: string; workflowId: string; nodeId: string };
+  config: { projectKey: string; workflowId: string; nodeId: string; store: WorkflowStore };
   readOnly?: boolean;
   className?: string;
   placeholder?:string
