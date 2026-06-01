@@ -13,6 +13,7 @@ import { ScrollText, Save, Loader2 } from "lucide-react";
 import PageBreadcrumb from "@/components/breadcrumb/breadcrumb";
 import { WorkflowEditor } from "../../components/workflow-editor";
 import { ReactFlowProvider } from "@xyflow/react";
+import { WorkflowStoreProvider } from "../../store";
 import { useWorkflow, useAutoSaveWorkflow } from "../../hooks";
 import { Separator } from "@/components/ui-kits/separator/separator";
 import { ToggleStatusWorkflow } from "../../components/toggle-status-workflow";
@@ -165,7 +166,9 @@ export const WorkflowDetails = () => {
   if (!id) return;
   return (
     <ReactFlowProvider>
-      <WorkflowDetailsContent workflowId={id} />
+      <WorkflowStoreProvider>
+        <WorkflowDetailsContent workflowId={id} />
+      </WorkflowStoreProvider>
     </ReactFlowProvider>
   );
 };
