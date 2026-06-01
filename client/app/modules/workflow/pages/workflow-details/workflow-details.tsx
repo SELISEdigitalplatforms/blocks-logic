@@ -20,9 +20,10 @@ import { ToggleStatusWorkflow } from "../../components/toggle-status-workflow";
 import { format } from "date-fns";
 import { useGetWorkflowById } from "@blocks-workflow/hooks/use-workflow-api";
 import { WorkflowExecutions } from "@blocks-workflow/components/workflow-execution";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useProjectStore } from "@/store/useProjectStore";
 import { BREADCRUMB_CUSTOM_TITLES } from "@/constants/breadcrumb-custom-title";
+import { showErrorToast } from "@/hooks/use-toast";
 
 type WorkflowDetailPageProps = {
   workflowId: string;
@@ -32,6 +33,7 @@ export const WorkflowDetailsContent = ({
   workflowId,
 }: WorkflowDetailPageProps) => {
   const projectKey = useProjectStore().selectedProject?.tenantId || "";
+  const navigate = useNavigate();
   const [isToggleStatusModalOpen, setIsToggleStatusModalOpen] = useState(false);
   const { isDirty, isActive: workflowIsActive, setWorkflow } = useWorkflow();
   const { data, isLoading, isFetched, isFetching, isFetchedAfterMount } =
@@ -41,11 +43,16 @@ export const WorkflowDetailsContent = ({
     });
 
   useEffect(() => {
-    if (data?.data && isFetched && isFetchedAfterMount) {
-      const workflowData = data.data;
-      setWorkflow(workflowData);
+    if (isFetched && isFetchedAfterMount) {
+      if (data?.data) {
+        const workflowData = data.data;
+        setWorkflow(workflowData);
+      } else {
+        showErrorToast({"errors": "Workflow not found"});
+        navigate("/workflow");
+      }
     }
-  }, [data, isFetched, isFetchedAfterMount, setWorkflow]);
+  }, [data, isFetched, isFetchedAfterMount, setWorkflow, navigate]);
 
   const { isSaving, saveNow } = useAutoSaveWorkflow({
     workflowId,
@@ -59,7 +66,7 @@ export const WorkflowDetailsContent = ({
   const handleManualSave = () => saveNow();
 
   BREADCRUMB_CUSTOM_TITLES[`/workflow/${workflowId}`] =
-    data?.data.name || "Workflow Details";
+    data?.data?.name || "Workflow Details";
   return (
     <>
       <div className="flex h-full flex-col">
@@ -75,7 +82,7 @@ export const WorkflowDetailsContent = ({
             defaultValue="editor"
             className="flex w-full flex-1 flex-col overflow-hidden"
             onValueChange={(v) => {
-              if (v === "editor" && data) {
+              if (v === "editor" && data?.data) {
                 const workflowData = data.data;
                 setWorkflow(workflowData);
               }
@@ -94,8 +101,8 @@ export const WorkflowDetailsContent = ({
                       <Loader2 className="h-3 w-3 animate-spin" />
                       Saving...
                     </span>
-                  ) : data?.data.lastUpdatedDate ? (
-                    `Last saved: ${format(new Date(data?.data.lastUpdatedDate), "dd/MM/yyyy, hh:mm a")}`
+                  ) : data?.data?.lastUpdatedDate ? (
+                    `Last saved: ${format(new Date(data.data.lastUpdatedDate), "dd/MM/yyyy, hh:mm a")}`
                   ) : (
                     "Not saved yet"
                   )}
