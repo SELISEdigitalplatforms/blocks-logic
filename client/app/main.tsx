@@ -7,13 +7,21 @@ import QueryProvider from "./providers/query-provider";
 import { router } from "./router";
 import "./styles/globals.css";
 import { TooltipProvider } from "./components/ui-kits/tooltip/tooltip";
+import { BlocksAppLayout } from "@seliseblocks/blocks-kit";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryProvider>
       <NuqsAdapter>
         <TooltipProvider>
-          <RouterProvider router={router} />
+          <BlocksAppLayout
+            config={{
+              userBaseUrlKey: "BLOCKS_IDP_BASE_URL",
+              projectBaseUrlKey: "BLOCKS_API_BASE_URL",
+            }}
+          >
+            <RouterProvider router={router} />
+          </BlocksAppLayout>
           <Toaster />
         </TooltipProvider>
       </NuqsAdapter>
