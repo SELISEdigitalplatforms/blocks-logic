@@ -1,9 +1,7 @@
-// export const IDP_BASE_URL = "https://dev-idp.blocksdevelopers.com";
-
 import { getRuntimeEnv } from "@/lib/runtime-env";
 
 export const DEPLOYMENT_BASE_URL =
-  "https://dev-deployment.blocksdevelopers.com";
+  "https://deployment.seliseblocks.com";
 
 
 export const API_BASES = {
