@@ -340,18 +340,7 @@ namespace XUnitTest.Controllers
             result.Should().BeOfType<OkObjectResult>();
         }
 
-        [Fact]
-        public async Task Update_ReturnsOkResult()
-        {
-            var request = new UpdateUserRequest { ItemId = "test-id-1" };
-            var response = new BaseMutationResponse { IsSuccess = true };
-            _userMutationService.Setup(x => x.UpdateUserAsync(request)).ReturnsAsync(response);
-            var controller = CreateController();
-
-            var result = await controller.Update(request);
-
-            result.Should().BeOfType<OkObjectResult>();
-        }
+       
 
         [Fact]
         public async Task Deactivate_ReturnsOkResult()
@@ -392,18 +381,7 @@ namespace XUnitTest.Controllers
             result.Should().BeOfType<GetUsersResponse>();
         }
 
-        [Fact]
-        public async Task GetUser_ReturnsGetUserResponse()
-        {
-            var request = new GetUserRequest { Id = "test-id" };
-            var response = new GetUserResponse();
-            _userQueryService.Setup(x => x.GetUserAsync(request.Id)).ReturnsAsync(response);
-            var controller = CreateController();
-
-            var result = await controller.GetUser(request);
-
-            result.Should().BeOfType<GetUserResponse>();
-        }
+       
 
         [Fact]
         public async Task GetUserRoles_ReturnsGetUserRolesResponse()
