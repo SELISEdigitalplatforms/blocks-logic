@@ -67,6 +67,8 @@ import {
   ConsolePage,
   CallbackPage,
 } from "@seliseblocks/blocks-kit";
+import { EnvironmentsPage } from "./pages/environments/environments";
+import { ProjectOverviewLayout } from "./layouts/project-overview-layout";
 
 export const router = createBrowserRouter([
   {
@@ -116,15 +118,31 @@ export const router = createBrowserRouter([
                 element: (
                   <ImpersonationChecker>
                     <ImpersonationTerminator>
-                      <ConsoleLayout>
-                        <Outlet />
-                      </ConsoleLayout>
+                      <Outlet />
                     </ImpersonationTerminator>
                   </ImpersonationChecker>
                 ),
                 children: [
-                  { path: "/profile", element: <ProfilePage /> },
-                  { path: "/console", element: <ConsolePage /> },
+                  {
+                    element: (
+                      <ConsoleLayout>
+                        <Outlet />
+                      </ConsoleLayout>
+                    ),
+                    children: [
+                      { path: "/profile", element: <ProfilePage /> },
+                      { path: "/console", element: <ConsolePage /> },
+                    ],
+                  },
+                  {
+                    element: <ProjectOverviewLayout />,
+                    children: [
+                      {
+                        path: "/project-overview/environments",
+                        element: <EnvironmentsPage />,
+                      },
+                    ],
+                  },
                 ],
               },
               {
@@ -144,10 +162,11 @@ export const router = createBrowserRouter([
               },
             ],
           },
-
-          { path: "/", element: <Navigate to="/console" replace /> },
-          { path: "*", element: <Navigate to="/login" replace /> },
         ],
+      },
+      {
+        path: "*",
+        element: <Navigate to="/console" replace />,
       },
     ],
   },
