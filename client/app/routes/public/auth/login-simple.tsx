@@ -3,7 +3,6 @@ import { BlocksLoginPage } from "@/components/blocks-login-page";
 import { getRuntimeEnv } from "@/lib/runtime-env";
 import { showErrorToast } from "@/hooks/use-toast";
 import { API_BASES } from "@/constants/endpoint.constant";
-
 export default function LoginSimplePage() {
 	const [isStarting, setIsStarting] = useState(false);
 
