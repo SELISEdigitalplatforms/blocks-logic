@@ -64,74 +64,91 @@ import {
   ImpersonationChecker,
   ImpersonationTerminator,
   ImpersonationSynchronizer,
+  ConsolePage,
+  CallbackPage,
 } from "@seliseblocks/blocks-kit";
+
 export const router = createBrowserRouter([
   {
-    // Set User Auth Information and resolve authentication state before rendering any route
-    element: (
-      <AuthResolver>
-        <Outlet />
-      </AuthResolver>
-    ),
+    element: <Outlet />,
     children: [
-      // publuc
+      // All Redirect Url Handle here
       {
-        element: (
-          <PublicGuard>
-            <Outlet />
-          </PublicGuard>
-        ),
-        children: [
-          { path: "/login", element: <LoginPage /> },
-          { path: "/login/callback", element: <LoginCallbackPage /> },
-        ],
-      },
-
-      // protected
-      {
-        element: (
-          <ProtectedGuard>
-            <Outlet />
-          </ProtectedGuard>
-        ),
+        element: <Outlet />,
         children: [
           {
-            element: (
-              <ImpersonationChecker>
-                <ImpersonationTerminator>
-                  <ConsoleLayout>
-                    <Outlet />
-                  </ConsoleLayout>
-                </ImpersonationTerminator>
-              </ImpersonationChecker>
-            ),
-            children: [
-              { path: "/profile", element: <ProfilePage /> },
-              { path: "/console", element: <Console /> },
-            ],
-          },
-          {
-            // impersonate
-            element: (
-              <ImpersonationChecker>
-                <ImpersonationSynchronizer>
-                  <DashboardLayout />
-                </ImpersonationSynchronizer>
-              </ImpersonationChecker>
-            ),
-            children: [
-              { path: "/dashboard", element: <DashboardOverview /> },
-              { path: "/workflow/:id", element: <WorkflowDetailsPage /> },
-              { path: "/workflow", element: <WorkflowsPage /> },
-            ],
+            path: "/login/callback",
+            element: <CallbackPage redirectUrl="/console" />,
           },
         ],
       },
+      {
+        // Set User Auth Information and resolve authentication state before rendering any route
+        element: (
+          <AuthResolver>
+            <Outlet />
+          </AuthResolver>
+        ),
+        children: [
+          // publuc
+          {
+            path: "/dashboard/callback",
+            element: <CallbackPage redirectUrl="/dashboard" />,
+          },
+          {
+            element: (
+              <PublicGuard>
+                <Outlet />
+              </PublicGuard>
+            ),
+            children: [{ path: "/login", element: <LoginPage /> }],
+          },
 
-      { path: "/", element: <Navigate to="/console" replace /> },
+          // protected
+          {
+            element: (
+              <ProtectedGuard>
+                <Outlet />
+              </ProtectedGuard>
+            ),
+            children: [
+              {
+                element: (
+                  <ImpersonationChecker>
+                    <ImpersonationTerminator>
+                      <ConsoleLayout>
+                        <Outlet />
+                      </ConsoleLayout>
+                    </ImpersonationTerminator>
+                  </ImpersonationChecker>
+                ),
+                children: [
+                  { path: "/profile", element: <ProfilePage /> },
+                  { path: "/console", element: <ConsolePage /> },
+                ],
+              },
+              {
+                // impersonate
+                element: (
+                  <ImpersonationChecker>
+                    <ImpersonationSynchronizer>
+                      <DashboardLayout />
+                    </ImpersonationSynchronizer>
+                  </ImpersonationChecker>
+                ),
+                children: [
+                  { path: "/dashboard", element: <DashboardOverview /> },
+                  { path: "/workflow/:id", element: <WorkflowDetailsPage /> },
+                  { path: "/workflow", element: <WorkflowsPage /> },
+                ],
+              },
+            ],
+          },
 
-      // ── Catch-all: redirect to login ──
-      { path: "*", element: <Navigate to="/login" replace /> },
+          { path: "/", element: <Navigate to="/console" replace /> },
+          { path: "*", element: <Navigate to="/login" replace /> },
+        ],
+      },
     ],
   },
 ]);
