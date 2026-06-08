@@ -1,4 +1,3 @@
-import { useProjectStore } from "@/store/useProjectStore";
 import { useGetProjects } from "@/hooks/use-project";
 import { AddEnvironmentModal } from "@/components/environment-card/add-environment-modal";
 import {
@@ -17,7 +16,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui-kits/tooltip/tooltip";
 import { CircleHelp } from "lucide-react";
-import { EnvironmentCard } from "@seliseblocks/blocks-kit";
+import { EnvironmentCard, useProjectStore } from "@seliseblocks/blocks-kit";
 
 const ProjectGroupLoading = () => (
   <main className="flex flex-1 flex-col gap-4 p-4 sm:mx-10 md:gap-6">
