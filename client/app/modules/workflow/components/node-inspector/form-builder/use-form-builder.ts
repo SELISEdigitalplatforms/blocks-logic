@@ -11,7 +11,7 @@ import {
   cascadeFieldResets,
   stripTransientKeys,
 } from "./utils";
-import { useProjectStore } from "@/store/useProjectStore";
+import { useProjectStore } from "@seliseblocks/blocks-kit";
 
 export interface FormBuilderConfig {
   projectKey: string;
