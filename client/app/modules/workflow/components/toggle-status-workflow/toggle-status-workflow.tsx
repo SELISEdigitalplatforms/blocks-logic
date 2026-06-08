@@ -2,7 +2,7 @@ import ConfirmationModal from "@/components/confirmation-modal/confirmation-moda
 import { Dialog } from "@/components/ui-kits/dialog/dialog";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { isErrorWithErrors } from "@/lib/error";
-import { useProjectStore } from "@/store/useProjectStore";
+import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { useUpdateWorkflow } from "@blocks-workflow/hooks/use-workflow-api";
 
 type ToggleStatusWorkflowProps = {
@@ -29,13 +29,15 @@ export const ToggleStatusWorkflow = ({
         projectKey: tenantId,
         isActive: !isActive,
       });
-      if (!res.isSuccess) return showErrorToast({ errors: res.errors || "Something went wrong" });
+      if (!res.isSuccess)
+        return showErrorToast({ errors: res.errors || "Something went wrong" });
       showSuccessToast({
         description: `Workflow ${isActive ? "deactivated" : "activated"} successfully`,
       });
       onOpenChange(false);
     } catch (error) {
-      if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
+      if (isErrorWithErrors(error))
+        return showErrorToast({ errors: error.errors });
       return showErrorToast({ errors: "Something went wrong" });
     }
   };
