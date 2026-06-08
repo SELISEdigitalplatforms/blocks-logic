@@ -92,11 +92,6 @@ export const router = createBrowserRouter([
           </AuthResolver>
         ),
         children: [
-          // publuc
-          {
-            path: "/dashboard/callback",
-            element: <CallbackPage redirectUrl="/dashboard" />,
-          },
           {
             element: (
               <PublicGuard>
