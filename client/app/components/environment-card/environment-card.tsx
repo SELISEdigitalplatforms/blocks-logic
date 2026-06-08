@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle } from "@/components/ui-kits/card/card";
 import { Dialog } from "@/components/ui-kits/dialog/dialog";
 import ConfirmationModal from "@/components/confirmation-modal/confirmation-modal";
 import { IProject } from "@/models/project.model";
-import { useProjectStore } from "@/store/useProjectStore";
+import { useProjectStore } from "@seliseblocks/blocks-kit";
 import {
   Tooltip,
   TooltipContent,
@@ -57,7 +57,11 @@ export const EnvironmentCard = ({
           <CardTitle className="line-clamp-1 break-all text-lg leading-tight">
             <div className="flex w-fit flex-row items-center gap-1">
               <div className="text-base text-medium-emphasis">
-                {environmentOptions.find((option) => option.value === project?.environment)?.label}
+                {
+                  environmentOptions.find(
+                    (option) => option.value === project?.environment,
+                  )?.label
+                }
               </div>
               {isMigrationOngoing && (
                 <TooltipProvider>
@@ -77,8 +81,12 @@ export const EnvironmentCard = ({
         </CardHeader>
         <div className="mt-2">
           <div className="flex flex-wrap items-center gap-1.5 py-0.5 text-xs sm:py-1 md:py-1.5">
-            <span className="font-semibold text-muted-foreground">X-Blocks-Key:</span>
-            <span className="truncate font-mono text-muted-foreground">{project?.tenantId}</span>
+            <span className="font-semibold text-muted-foreground">
+              X-Blocks-Key:
+            </span>
+            <span className="truncate font-mono text-muted-foreground">
+              {project?.tenantId}
+            </span>
           </div>
         </div>
       </Card>
