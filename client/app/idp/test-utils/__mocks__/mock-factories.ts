@@ -9,7 +9,7 @@
  *
  * Usage in test files (vi.mock calls must be at the top level of the test file):
  *
- *   vi.mock("@/store/useProjectStore", () => mockProjectStoreFactory());
+ *   vi.mock("@seliseblocks/blocks-kit", () => mockProjectStoreFactory());
  *   vi.mock("@/hooks/use-toast", () => mockToastFactory());
  *   vi.mock("@/lib/http-client", () => mockHttpClientFactory());
  *   vi.mock("@blocks-idp/authentication/services/auth.service", () => mockAuthServiceFactory());

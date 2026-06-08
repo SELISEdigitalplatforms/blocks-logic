@@ -2,7 +2,7 @@ import ConfirmationModal from "@/components/confirmation-modal/confirmation-moda
 import { Dialog } from "@/components/ui-kits/dialog/dialog";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { isErrorWithErrors } from "@/lib/error";
-import { useProjectStore } from "@/store/useProjectStore";
+import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { useDeleteWorkflow } from "@blocks-workflow/hooks/use-workflow-api";
 
 type DeleteWorkflowProps = {
@@ -11,7 +11,11 @@ type DeleteWorkflowProps = {
   onOpenChange: (value: boolean) => void;
 };
 
-export const DeleteWorkflow = ({ workflowId, open, onOpenChange }: DeleteWorkflowProps) => {
+export const DeleteWorkflow = ({
+  workflowId,
+  open,
+  onOpenChange,
+}: DeleteWorkflowProps) => {
   const tenantId = useProjectStore().selectedProject?.tenantId || "";
   const { mutateAsync } = useDeleteWorkflow();
 
@@ -22,11 +26,13 @@ export const DeleteWorkflow = ({ workflowId, open, onOpenChange }: DeleteWorkflo
         id: workflowId,
         projectKey: tenantId,
       });
-      if (!res.isSuccess) return showErrorToast({ errors: res.errors || "Something went wrong" });
+      if (!res.isSuccess)
+        return showErrorToast({ errors: res.errors || "Something went wrong" });
       showSuccessToast({ description: "Workflow deleted successfully" });
       onOpenChange(false);
     } catch (error) {
-      if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
+      if (isErrorWithErrors(error))
+        return showErrorToast({ errors: error.errors });
       return showErrorToast({ errors: "Something went wrong" });
     }
   };
