@@ -12,7 +12,7 @@ import {
 import { WorkflowEditorEdgeTypes } from "../workflow-editor-edges";
 import { getStatusStyles } from "@blocks-workflow/utils/workflow-execution-editor.util";
 import { NodeInspector } from "../node-inspector";
-import { useProjectStore } from "@/store/useProjectStore";
+import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { EditorFitConfig } from "../workflow-editor-controls";
 
 export const WorkflowExecutionEditor = ({ id }: { id: string }) => {

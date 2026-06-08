@@ -1,7 +1,12 @@
 import { Link } from "react-router-dom";
 import { Plus } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui-kits/card/card";
-import { useProjectStore } from "@/store/useProjectStore";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui-kits/card/card";
+import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { useGetEnvRepositories, useGetProject } from "@/hooks/use-project";
 import { Skeleton } from "@/components/ui-kits/skeleton/skeleton";
 import { Button } from "@/components/ui-kits/button/button";
@@ -23,7 +28,10 @@ const LoadingSkeleton = () => (
 );
 
 export const GitCommandSnippet = () => {
-  const { itemId } = useProjectStore().selectedProject || { itemId: "", tenantId: "" };
+  const { itemId } = useProjectStore().selectedProject || {
+    itemId: "",
+    tenantId: "",
+  };
   const { data, isLoading } = useGetProject({ projectId: itemId });
   const {
     data: envRepositoriesResponse,
@@ -31,8 +39,10 @@ export const GitCommandSnippet = () => {
     isFetching: isFetchingEnvRepos,
   } = useGetEnvRepositories(itemId || "");
 
-  if (isLoading || isLoadingEnvRepos || isFetchingEnvRepos) return <LoadingSkeleton />;
-  const branchName = data?.data.environment === "prod" ? "main" : data?.data.environment;
+  if (isLoading || isLoadingEnvRepos || isFetchingEnvRepos)
+    return <LoadingSkeleton />;
+  const branchName =
+    data?.data.environment === "prod" ? "main" : data?.data.environment;
   const repo = envRepositoriesResponse?.data?.find(
     (repo) =>
       repo.defaultDeploymentUrl === data?.data.applicationDomain ||
@@ -51,7 +61,8 @@ export const GitCommandSnippet = () => {
         {!hasRepository && (
           <div className="flex flex-col items-center justify-between gap-3 rounded-sm border border-base-error bg-blocks-error-100 px-4 py-4 text-base font-normal text-blocks-error-800 md:flex-row md:gap-4">
             <p>
-              Please add a repository and set the Application Domain above to enable git commands.
+              Please add a repository and set the Application Domain above to
+              enable git commands.
             </p>
             <Link to="/project-overview/repositories">
               <Button size="sm">
@@ -61,7 +72,13 @@ export const GitCommandSnippet = () => {
             </Link>
           </div>
         )}
-        <div className={!hasRepository ? "pointer-events-none mt-4 select-none opacity-50" : ""}>
+        <div
+          className={
+            !hasRepository
+              ? "pointer-events-none mt-4 select-none opacity-50"
+              : ""
+          }
+        >
           <CopyableSnippet code={gitCommands} isCopyable={hasRepository} />
         </div>
       </CardContent>
