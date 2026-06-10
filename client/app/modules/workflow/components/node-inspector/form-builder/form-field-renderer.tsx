@@ -3,9 +3,8 @@
 import { Label } from "@/components/ui-kits/label/label";
 import { Info } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
-import { FieldSchema } from "./form-field.types";
+import { FieldSchema, FormFieldType } from "./form-field.types";
 import { FIELD_COMPONENTS_REGISTRY } from "./fields";
-import { FormFieldType } from "../form-field-schema.types";
 import { FormBuilderConfig } from "./use-form-builder";
 
 interface FormFieldRendererProps {
