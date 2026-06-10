@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { http } from "@/lib/http-client";
+import { getRuntimeEnv } from "@/lib/runtime-env";
 import { APIResponse } from "@/models/api-response";
 import {
   IClientConfigResponse,
@@ -15,8 +16,9 @@ export class AuthClientsService {
   getClientCredentials(
     payload: IGetClientsPayload,
   ): Promise<IClientConfigResponse[]> {
+    const baseUrl = getRuntimeEnv("BLOCKS_IDP_BASE_URL") || getRuntimeEnv("BLOCKS_API_BASE_URL");
     return http.get(
-      `${AUTH_CLIENT_ENDPOINTS.GET_CLIENT_CREDENTIALS}?ProjectKey=${payload.projectKey}`,
+      `${baseUrl}${AUTH_CLIENT_ENDPOINTS.GET_CLIENT_CREDENTIALS}?ProjectKey=${payload.projectKey}`,
       undefined,
       { absoluteUrl: true },
     );

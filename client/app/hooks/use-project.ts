@@ -1,11 +1,12 @@
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { projectService } from "@/services/project.service";
-import { useProjectStore } from "@/store/useProjectStore";
+import { useProjectStore } from "@seliseblocks/blocks-kit";
 
 const crossProjectService = projectService;
 export const useGetProjects = (tenantGroupId = "") => {
-  const { setProjects, selectedProject, setSelectedProject } = useProjectStore();
+  const { setProjects, selectedProject, setSelectedProject } =
+    useProjectStore();
 
   const query = useQuery({
     queryKey: ["identifier", "projects", tenantGroupId],
@@ -70,12 +71,13 @@ export const useDisableProject = (options: { projectKey: string }) => {
     mutationKey: ["identifier", "projects", "disable"],
     mutationFn: crossProjectService.disableProject,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["identifier", "project", options] });
+      queryClient.invalidateQueries({
+        queryKey: ["identifier", "project", options],
+      });
       queryClient.invalidateQueries({ queryKey: ["identifier", "projects"] });
     },
   });
 };
-
 
 export const useValidateCNameProject = (options: { projectKey: string }) => {
   const queryClient = useQueryClient();
@@ -83,11 +85,12 @@ export const useValidateCNameProject = (options: { projectKey: string }) => {
     mutationKey: ["identifier", "projects", "validate cname"],
     mutationFn: crossProjectService.validateCNameProject,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["identifier", "project", options] });
+      queryClient.invalidateQueries({
+        queryKey: ["identifier", "project", options],
+      });
     },
   });
 };
-
 
 export const useCreateProject = () => {
   const queryClient = useQueryClient();

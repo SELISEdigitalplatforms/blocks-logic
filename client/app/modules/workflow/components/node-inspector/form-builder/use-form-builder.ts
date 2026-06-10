@@ -3,7 +3,6 @@
 import { useMemo, useCallback } from "react";
 import { FieldSchema } from "./form-field.types";
 import { useWorkflow } from "@blocks-workflow/hooks";
-
 import {
   getValueByPath,
   setValueByPath,
@@ -11,12 +10,14 @@ import {
   cascadeFieldResets,
   stripTransientKeys,
 } from "./utils";
-import { useProjectStore } from "@/store/useProjectStore";
+import { useWorkflowStoreApi, WorkflowStore } from "@/modules/workflow/store";
+import { useProjectStore } from "@seliseblocks/blocks-kit";
 
 export interface FormBuilderConfig {
   projectKey: string;
   workflowId: string;
   nodeId: string;
+  store: WorkflowStore;
 }
 
 interface UseFormBuilderProps {
@@ -58,13 +59,16 @@ export const useFormBuilder = ({
   const tenantId = useProjectStore().selectedProject?.tenantId || "";
   const { selectedNode, workflowId } = useWorkflow();
 
+  const store = useWorkflowStoreApi();
+
   const config: FormBuilderConfig = useMemo(
     () => ({
       projectKey: tenantId,
       workflowId: workflowId || "",
       nodeId: selectedNode?.id || "",
+      store,
     }),
-    [tenantId, workflowId, selectedNode],
+    [tenantId, workflowId, selectedNode, store],
   );
 
   const isWorkflowExecuted = !!selectedNode?.data?.isWorkflowExecuted;
@@ -76,7 +80,7 @@ export const useFormBuilder = ({
       // Run field-level side-effects (e.g., recalculate cronExpression)
       let sideEffectKeys: string[] = [];
       if (field.onChange) {
-        const result = field.onChange(value, updated) || {};
+        const result = field.onChange(value, updated, config) || {};
         if (result) {
           sideEffectKeys = Object.keys(result);
           updated = { ...updated, ...result };
@@ -88,7 +92,7 @@ export const useFormBuilder = ({
       const persisted = stripTransientKeys(updated, fields);
       onChange(persisted);
     },
-    [data, fields, onChange],
+    [data, fields, onChange, config],
   );
 
   const visibleFields = useMemo(
