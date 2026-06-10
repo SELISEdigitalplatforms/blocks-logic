@@ -20,8 +20,8 @@ import { ToggleStatusWorkflow } from "../../components/toggle-status-workflow";
 import { format } from "date-fns";
 import { useGetWorkflowById } from "@blocks-workflow/hooks/use-workflow-api";
 import { WorkflowExecutions } from "@blocks-workflow/components/workflow-execution";
-import { useParams, useNavigate } from "react-router-dom";
-import { useProjectStore } from "@/store/useProjectStore";
+import { useNavigate, useParams } from "react-router-dom";
+import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { BREADCRUMB_CUSTOM_TITLES } from "@/constants/breadcrumb-custom-title";
 import { showErrorToast } from "@/hooks/use-toast";
 

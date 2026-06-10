@@ -1,4 +1,4 @@
-import { useProjectStore } from "@/store/useProjectStore";
+import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { NodeSchemaDefinition } from "./node-schema.type";
 
 import { authClientService } from "@blocks-idp/authentication/services/auth-clients.service";

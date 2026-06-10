@@ -19,7 +19,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Api.Controllers
 {
     [ApiController]
-    [Route("[controller]/[action]")]
+    [Route("iam")]
 
     public class IamController : ControllerBase
     {
@@ -223,7 +223,7 @@ namespace Api.Controllers
 
         #region User
 
-        [HttpPost]
+        [HttpPost("users/create")]
         //[ProtectedEndPoint]
         [Authorize]
         public async Task<IActionResult> Create([FromBody] CreateUserRequest command)
@@ -232,16 +232,17 @@ namespace Api.Controllers
             return result.IsSuccess ? Ok(result) : BadRequest(result);
         }
 
-        [HttpPost]
+        [HttpPost("users/{id}")]
         //[ProtectedEndPoint]
         [Authorize]
-        public async Task<IActionResult> Update([FromBody] UpdateUserRequest command)
+        public async Task<IActionResult> Update([FromRoute] string id, [FromBody] UpdateUserRequest command)
         {
+            command.ItemId = id;
             var result = await _userManagementMutationService.UpdateUserAsync(command);
             return result.IsSuccess ? Ok(result) : BadRequest(result);
         }
 
-        [HttpPost]
+        [HttpPost("users/deactivate")]
         [Authorize]
         public async Task<IActionResult> Deactivate([FromBody] DeactivateUserRequest request)
         {
@@ -258,21 +259,21 @@ namespace Api.Controllers
             return result.IsSuccess ? Ok(result) : BadRequest(result);
         }
 
-        [HttpPost]
+        [HttpGet("users")]
         //[ProtectedEndPoint]
         [Authorize]
-        public async Task<GetUsersResponse> GetUsers([FromBody] GetUsersRequest query)
+        public async Task<GetUsersResponse> GetUsers([FromQuery] GetUsersRequest query)
         {
             return await _userManagementQueryService.GetUsersAsync(query);
         }
 
-        [HttpGet()]
+        [HttpGet("users/{id}")]
         //[ProtectedEndPoint]
         [Authorize]
-        public async Task<GetUserResponse> GetUser([FromQuery] GetUserRequest query)
+        public async Task<GetUserResponse> GetUser([FromRoute] string id)
         {
 ;
-            return await _userManagementQueryService.GetUserAsync(query.Id);
+            return await _userManagementQueryService.GetUserAsync(id);
         }
 
         [HttpGet()]

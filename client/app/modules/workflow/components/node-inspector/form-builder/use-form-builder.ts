@@ -10,8 +10,8 @@ import {
   cascadeFieldResets,
   stripTransientKeys,
 } from "./utils";
-import { useProjectStore } from "@/store/useProjectStore";
 import { useWorkflowStoreApi, WorkflowStore } from "@/modules/workflow/store";
+import { useProjectStore } from "@seliseblocks/blocks-kit";
 
 export interface FormBuilderConfig {
   projectKey: string;

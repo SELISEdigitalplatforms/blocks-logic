@@ -23,7 +23,7 @@ import { duplicateWorkflowSchema, DuplicateWorkflowFormValues } from "./schema";
 import { isErrorWithErrors } from "@/lib/error";
 import { useDuplicateWorkflow } from "@blocks-workflow/hooks/use-workflow-api";
 import { addCopySuffix } from "@blocks-workflow/utils/add-copy-suffix.util";
-import { useProjectStore } from "@/store/useProjectStore";
+import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { useNavigate } from "react-router-dom";
 
 type DuplicateWorkflowProps = {
@@ -44,7 +44,9 @@ export const DuplicateWorkflow = ({
   const navigate = useNavigate();
 
   const form = useForm<DuplicateWorkflowFormValues>({
-    values: { name: name ? addCopySuffix(name) : "" } as DuplicateWorkflowFormValues,
+    values: {
+      name: name ? addCopySuffix(name) : "",
+    } as DuplicateWorkflowFormValues,
     resolver: zodResolver(duplicateWorkflowSchema),
   });
 
@@ -63,7 +65,8 @@ export const DuplicateWorkflow = ({
       navigate(`/workflow/${res.itemId}`);
       onOpenChange(false);
     } catch (error) {
-      if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
+      if (isErrorWithErrors(error))
+        return showErrorToast({ errors: error.errors });
       return showErrorToast({ errors: "Failed to create workflow" });
     }
   };
@@ -86,7 +89,10 @@ export const DuplicateWorkflow = ({
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+          <form
+            onSubmit={form.handleSubmit(handleSubmit)}
+            className="space-y-6"
+          >
             <FormField
               control={form.control}
               name="name"
