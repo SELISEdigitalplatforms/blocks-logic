@@ -1,4 +1,4 @@
-import { useProjectStore } from "@/store/useProjectStore";
+import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { configurationService } from "../../services/configuration.service";
 import { NodeSchemaDefinition } from "./node-schema.type";
 
