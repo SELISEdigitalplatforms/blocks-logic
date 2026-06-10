@@ -22,10 +22,14 @@ import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { Input } from "@/components/ui-kits/input/input";
 import { Plus } from "lucide-react";
-import { addWorkflowDefaultValues, AddWorkflowFormValues, addWorkflowSchema } from "./utils";
+import {
+  addWorkflowDefaultValues,
+  AddWorkflowFormValues,
+  addWorkflowSchema,
+} from "./utils";
 import { isErrorWithErrors } from "@/lib/error";
 import { useCreateWorkflow } from "@blocks-workflow/hooks/use-workflow-api";
-import { useProjectStore } from "@/store/useProjectStore";
+import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { useNavigate } from "react-router-dom";
 
 export const AddWorkflow = () => {
@@ -53,7 +57,8 @@ export const AddWorkflow = () => {
       navigate(`/workflow/${res.itemId}`);
       onOpenChange(false);
     } catch (error) {
-      if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
+      if (isErrorWithErrors(error))
+        return showErrorToast({ errors: error.errors });
       return showErrorToast({ errors: "Failed to create workflow" });
     }
   };
@@ -68,7 +73,11 @@ export const AddWorkflow = () => {
   return (
     <Dialog open={open} onOpenChange={handleModalClose}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="ghost" className="text-primary hover:text-primary">
+        <Button
+          size="sm"
+          variant="ghost"
+          className="text-primary hover:text-primary"
+        >
           <Plus className="h-4 w-4" />
           <span className="sr-only sm:not-sr-only sm:ml-2.5">Add Workflow</span>
         </Button>
@@ -83,7 +92,10 @@ export const AddWorkflow = () => {
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+          <form
+            onSubmit={form.handleSubmit(handleSubmit)}
+            className="space-y-6"
+          >
             <FormField
               control={form.control}
               name="name"
