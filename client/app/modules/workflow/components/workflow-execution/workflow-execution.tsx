@@ -6,7 +6,7 @@ import { WorkflowExecutionList } from "../workflow-execution-list";
 import { WorkflowExecution } from "@blocks-workflow/types/workflow.service.type";
 import { useWorkflow } from "@blocks-workflow/hooks";
 import { WorkflowExecutionEditor } from "./workflow-execution-editor";
-import { useProjectStore } from "@/store/useProjectStore";
+import { useProjectStore } from "@seliseblocks/blocks-kit";
 
 export const WorkflowExecutions = () => {
   const { workflowId } = useWorkflow();

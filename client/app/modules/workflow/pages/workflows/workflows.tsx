@@ -6,7 +6,7 @@ import { WorkflowFilterToolBar } from "../../components/workflow-filter-toolbar"
 import { Pagination } from "@/components/ui-kits/pagination/pagination";
 import { useGetWorkflows } from "@blocks-workflow/hooks/use-workflow-api";
 import { useWorkflowFilterQueryParams } from "@blocks-workflow/hooks";
-import { useProjectStore } from "@/store/useProjectStore";
+import { useProjectStore } from "@seliseblocks/blocks-kit";
 
 export const Workflows = () => {
   const { queryParams, setQueryParams } = useWorkflowFilterQueryParams();

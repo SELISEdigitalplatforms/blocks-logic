@@ -1,6 +1,6 @@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui-kits/tabs/tabs";
 import { ScrollArea, ScrollBar } from "@/components/ui-kits/scroll-area/scroll-area";
-import { useWorkflowStore } from "@blocks-workflow/store/workflow-store";
+import { useWorkflowStore } from "@blocks-workflow/store";
 import { copyToClipboard } from "@blocks-workflow/utils/copy-to-clipboard";
 import { useCallback, useMemo, useState } from "react";
 import { inferSchemaFromRuntimeRows } from "@blocks-workflow/utils/runtime-node-data";

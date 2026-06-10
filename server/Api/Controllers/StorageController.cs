@@ -16,7 +16,7 @@ namespace BlocksTemplate.Api.Controllers
     public class StorageController : ControllerBase
     {
         private readonly IConfigurationService _configurationService;
-        
+
         private readonly IFileManagementService _fileManagementService;
 
         public StorageController(IConfigurationService configurationService,
@@ -31,7 +31,7 @@ namespace BlocksTemplate.Api.Controllers
         [Authorize]
         public async Task<BaseMutationResponse> Save([FromBody] SaveStorageConfigurationRequest request)
         {
-           
+
             return await _configurationService.SaveStorageConfigurationAsync(request);
         }
 
@@ -44,7 +44,7 @@ namespace BlocksTemplate.Api.Controllers
         }
 
         [HttpGet]
-       // [ProtectedEndPoint]
+        // [ProtectedEndPoint]
         [Authorize]
         public async Task<StorageConfiguration> Get([FromQuery] GetStorageConfigurationRequest request)
         {
@@ -52,10 +52,10 @@ namespace BlocksTemplate.Api.Controllers
         }
 
         [HttpPost]
-       //[ProtectedEndPoint]
+        //[ProtectedEndPoint]
         public async Task<BaseResponse> Delete([FromQuery] DeleteStorageConfigurationRequest request)
         {
-            
+
             return await _configurationService.DeleteStorageConfigurationAsync(request?.ConfigurationName ?? string.Empty);
         }
 
@@ -64,7 +64,7 @@ namespace BlocksTemplate.Api.Controllers
         [Authorize]
         public async Task<GetPreSignedUrlForUploadResponse> GetPreSignedUrlForUpload([FromBody] GetPreSignedUrlForUploadRequest request)
         {
-           
+
             return await _fileManagementService.GetPerSignedUrlForUploadAsync(request);
         }
 
@@ -73,7 +73,7 @@ namespace BlocksTemplate.Api.Controllers
         [Authorize]
         public async Task<FileResponse?> GetFile([FromQuery] GetFileRequest request)
         {
-           
+
             return await _fileManagementService.GetUrlForDownloadFileAsync(request);
         }
 
@@ -85,5 +85,12 @@ namespace BlocksTemplate.Api.Controllers
             return await _fileManagementService.GetMultipleUrlsForDownloadFilesAsync(request);
         }
 
+        [HttpPost]
+        //[ProtectedEndPoint]
+        [Authorize]
+        public async Task<BaseResponse> DeleteFile([FromBody] DeleteFileRequest request)
+        {
+            return await _fileManagementService.DeleteFileAsync(request);
+        }
     }
 }
