@@ -153,7 +153,6 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		type: "setfield",
 		category: "transform",
 		version: "v1",
-		isComingSoon: true,
 		defaultName: "Set Field",
 		handleSpec: {
 			source: ["source"],
