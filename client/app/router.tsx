@@ -44,7 +44,7 @@ import OidcEmailSentConfirmationPage from "./routes/public/oidc/email-sent-confi
 // import CaptchaLogsPage from "./routes/public/dashboard/captcha-logs";
 // import ApiSettingsPage from "./routes/public/dashboard/api-settings";
 // import RateLimiterPage from "./routes/public/dashboard/rate-limiter";
-import ProfilePage from "./routes/public/dashboard/profile";
+// import ProfilePage from "./routes/public/dashboard/profile";
 
 // Console pages
 import { Console } from "./pages/console/console";
@@ -69,6 +69,7 @@ import {
 } from "@seliseblocks/blocks-kit";
 import { EnvironmentsPage } from "./pages/environments/environments";
 import { ProjectOverviewLayout } from "./layouts/project-overview-layout";
+import { ProfilePage } from "./routes/public/dashboard/profile";
 
 export const router = createBrowserRouter([
   {
@@ -99,7 +100,7 @@ export const router = createBrowserRouter([
               </PublicGuard>
             ),
             children: [
-              { path: "/login", element: <LoginPage name="blocks-logic" /> },
+              { path: "/login", element: <LoginPage/> },
             ],
           },
 
