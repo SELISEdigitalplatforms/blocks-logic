@@ -1,4 +1,6 @@
-export type FieldType =
+import { WorkflowStore } from "@/modules/workflow/store";
+
+export type FormFieldType =
   | "text"
   | "textarea"
   | "number"
@@ -10,12 +12,12 @@ export type FieldType =
   | "radio"
   | "code-editor"
   | "key-value-pairs"
-  | "conditions"
   | "array"
-  | "expression"
-  | "display"
   | "schema-fields"
-  | "schema-field-picker";
+  | "schema-field-picker"
+  | "conditions"
+  | "expression"
+  | "display";
 
 export interface SelectOption {
   value: string;
@@ -25,7 +27,7 @@ export interface SelectOption {
 
 export interface FieldSchema<Whole = Record<string, unknown>> {
   id: string;
-  type: FieldType;
+  type: FormFieldType;
   key: string;
   label?: string;
   info?: string;
@@ -38,14 +40,18 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
 
   displayValue?: (
     data: Whole,
-    config: { projectKey: string; workflowId: string; nodeId: string },
+    config: { projectKey: string; workflowId: string; nodeId: string; store: WorkflowStore },
   ) => unknown;
-  onChange?: (value: unknown, data: Whole) => Whole | void;
+  onChange?: (
+    value: unknown,
+    data: Whole,
+    config: { projectKey: string; workflowId: string; nodeId: string; store: WorkflowStore },
+  ) => Whole | void;
   options?:
     | SelectOption[]
     | ((
         data: Whole,
-        config: { projectKey: string; workflowId: string },
+        config: { projectKey: string; workflowId: string; store: WorkflowStore },
       ) => Promise<SelectOption[]>);
   copyable?: boolean;
   maxLength?: number;
@@ -58,7 +64,7 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
   keyLabel?: string;
   valueLabel?: string;
   addButtonText?: string;
-  itemType?: FieldType;
+  itemType?: FormFieldType;
   searchable?: boolean;
   prefix?: string;
   className?: string;
@@ -75,7 +81,7 @@ export interface FieldProps<T = unknown> {
   value: T;
   onChange: (value: T) => void;
   data: Record<string, unknown>;
-  config: { projectKey: string; workflowId: string; nodeId: string };
+  config: { projectKey: string; workflowId: string; nodeId: string; store: WorkflowStore };
   readOnly?: boolean;
   className?: string;
   placeholder?:string
