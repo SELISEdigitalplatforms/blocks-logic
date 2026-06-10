@@ -2,7 +2,7 @@
 import { Input } from "@/components/ui-kits/input/input";
 import { FieldProps } from "../form-field.types";
 import { useEffect, useState, useRef, useMemo } from "react";
-import { useWorkflowStore } from "@blocks-workflow/store/workflow-store";
+import { useWorkflowStore } from "@blocks-workflow/store";
 import { Edge } from "@xyflow/react";
 import { EditorNode } from "@blocks-workflow/models/node.model";
 import { cn } from "@/lib/utils";
