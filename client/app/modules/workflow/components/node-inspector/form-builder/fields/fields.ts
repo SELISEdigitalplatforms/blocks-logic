@@ -1,5 +1,4 @@
-import { FormFieldType } from "../../form-field-schema.types";
-import { FieldComponentProps } from "../form-field.types";
+import { FieldComponentProps, FormFieldType } from "../form-field.types";
 import { ArrayField } from "./array-field";
 import { CheckboxField } from "./checkbox-field";
 import { CodeEditorField } from "./code-editor-field";
