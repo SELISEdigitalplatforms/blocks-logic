@@ -2,6 +2,7 @@ export { TextField } from "./text-field";
 export { TextareaField } from "./textarea-field";
 export { NumberField } from "./number-field";
 export { SelectField } from "./select-field";
+export { SelectWithDescriptionField } from "./select-with-description-field";
 export { CheckboxField } from "./checkbox-field";
 export { SwitchField } from "./switch-field";
 export { RadioField } from "./radio-field";

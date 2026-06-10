@@ -5,6 +5,7 @@ export type FormFieldType =
   | "textarea"
   | "number"
   | "select"
+  | "select-with-description"
   | "multiselect"
   | "checkbox"
   | "switch"
@@ -21,6 +22,7 @@ export type FormFieldType =
 export interface SelectOption {
   value: string;
   label: string;
+  description?: string;
 }
 
 export interface FieldSchema<Whole = Record<string, unknown>> {
