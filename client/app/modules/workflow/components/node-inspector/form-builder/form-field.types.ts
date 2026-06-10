@@ -1,6 +1,6 @@
 import { WorkflowStore } from "@/modules/workflow/store";
 
-export type FieldType =
+export type FormFieldType =
   | "text"
   | "textarea"
   | "number"
@@ -11,12 +11,12 @@ export type FieldType =
   | "radio"
   | "code-editor"
   | "key-value-pairs"
-  | "conditions"
   | "array"
-  | "expression"
-  | "display"
   | "schema-fields"
-  | "schema-field-picker";
+  | "schema-field-picker"
+  | "conditions"
+  | "expression"
+  | "display";
 
 export interface SelectOption {
   value: string;
@@ -25,7 +25,7 @@ export interface SelectOption {
 
 export interface FieldSchema<Whole = Record<string, unknown>> {
   id: string;
-  type: FieldType;
+  type: FormFieldType;
   key: string;
   label?: string;
   info?: string;
@@ -62,7 +62,7 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
   keyLabel?: string;
   valueLabel?: string;
   addButtonText?: string;
-  itemType?: FieldType;
+  itemType?: FormFieldType;
   searchable?: boolean;
   prefix?: string;
   className?: string;
