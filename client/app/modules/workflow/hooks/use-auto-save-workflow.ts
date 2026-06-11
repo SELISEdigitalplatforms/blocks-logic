@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from "react";
-import { useWorkflowStore } from "../store/workflow-store";
+import { useWorkflowStore, useWorkflowStoreApi } from "../store";
 import { WorkflowNode } from "@blocks-workflow/models/node.model";
 import { useUpdateWorkflow } from "./use-workflow-api";
 
@@ -21,6 +21,7 @@ export const useAutoSaveWorkflow = ({
   onSaveError,
 }: UseAutoSaveWorkflowOptions) => {
   const isDirty = useWorkflowStore((state) => state.isDirty);
+  const store = useWorkflowStoreApi();
   const { mutateAsync, isPending } = useUpdateWorkflow();
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isSavingRef = useRef(false);
@@ -31,8 +32,7 @@ export const useAutoSaveWorkflow = ({
     isSavingRef.current = true;
 
     try {
-      const nodesMap = useWorkflowStore.getState().nodesMap;
-      const edgesMap = useWorkflowStore.getState().edgesMap;
+      const { nodesMap, edgesMap } = store.getState();
 
       const nodes = Object.values(nodesMap) as WorkflowNode[];
       const edges = Object.values(edgesMap);
@@ -50,7 +50,7 @@ export const useAutoSaveWorkflow = ({
     } finally {
       isSavingRef.current = false;
     }
-  }, [isDirty, workflowId, projectKey, mutateAsync, onSaveSuccess, onSaveError]);
+  }, [isDirty, workflowId, projectKey, mutateAsync, onSaveSuccess, onSaveError, store]);
 
   useEffect(() => {
     if (!enabled || !isDirty) return;
