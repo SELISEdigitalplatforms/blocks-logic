@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { Connection, Edge, Node, useReactFlow } from "@xyflow/react";
-import { useWorkflowStore } from "../store/workflow-store";
+import { useWorkflowStore } from "../store";
 import { Workflow } from "../models/workflow.model";
 import { WorkflowNode } from "@blocks-workflow/models/node.model";
 import { getOrderedNodeData } from "@blocks-workflow/utils/runtime-node-data";

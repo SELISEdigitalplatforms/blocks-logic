@@ -1,6 +1,38 @@
 import { languageManagerService } from "@blocks-workflow/services/language.manager.service";
 import { NodeSchemaDefinition } from "./node-schema.type";
 import { emailService } from "@blocks-workflow/services/email.services";
+import { IEmailTemplate } from "../../models/email";
+import { extractTemplateBodyKeys } from "../../utils/extract-template-keys";
+
+// ── Shared template cache ──────────────────────────────────────────────
+// Both the template select `options` and the body-map `fixedKeys` resolve
+// from the same cached promise so only ONE API call is made per project.
+let _cachedProjectKey = "";
+let _cachedPromise: Promise<IEmailTemplate[]> | null = null;
+
+function getTemplates(projectKey: string): Promise<IEmailTemplate[]> {
+  if (_cachedProjectKey === projectKey && _cachedPromise) {
+    return _cachedPromise;
+  }
+  _cachedProjectKey = projectKey;
+  _cachedPromise = emailService
+    .fetchEmailTemplates(0, 100, projectKey, "", "Name", false, "", "")
+    .then((res) => res.templates);
+  return _cachedPromise;
+}
+
+function findTemplate(
+  templates: IEmailTemplate[],
+  emailTemplate: string,
+  projectKey: string,
+): IEmailTemplate | undefined {
+  return templates.find((t) => {
+    const compositeValue = `${t.name || ""}_${projectKey}`;
+    return compositeValue === emailTemplate;
+  });
+}
+
+// ── Schema ─────────────────────────────────────────────────────────────
 
 export const NodeSchemaActionSendMailV1: NodeSchemaDefinition = {
   schema: {
@@ -16,28 +48,12 @@ export const NodeSchemaActionSendMailV1: NodeSchemaDefinition = {
         key: "EmailTemplate",
         required: true,
         options: (_data, config) => {
-          return new Promise((resolve, reject) => {
-            emailService
-              .fetchEmailTemplates(
-                0,
-                100,
-                config.projectKey,
-                "",
-                "Name",
-                false,
-                "",
-                "",
-              )
-              .then((res) => {
-                if (!res.templates.length) return resolve([]);
-                resolve(
-                  res.templates.map((templa) => ({
-                    label: templa.name || "",
-                    value: `${templa.name}_${config.projectKey}`,
-                  })),
-                );
-              })
-              .catch(reject);
+          return getTemplates(config.projectKey).then((templates) => {
+            if (!templates.length) return [];
+            return templates.map((t) => ({
+              label: t.name || "",
+              value: `${t.name}_${config.projectKey}`,
+            }));
           });
         },
         onChange(value) {
@@ -83,10 +99,28 @@ export const NodeSchemaActionSendMailV1: NodeSchemaDefinition = {
       },
       {
         id: "map-body-dynmaic",
-        type: "key-value-pairs",
+        type: "fixed-key-value-pairs",
         label: "Map (Body)",
         info: "Map dynamic value",
         key: "BodyDataContext",
+        keyLabel: "Template key",
+        valueLabel: "Mapped value",
+        fixedKeysDependencies: ["EmailTemplate"],
+        fixedKeys: (data, config) => {
+          const emailTemplate = data.EmailTemplate;
+          if (!emailTemplate || typeof emailTemplate !== "string") {
+            return Promise.resolve([]);
+          }
+
+          // Resolves from the shared cache — no extra API call.
+          // On initial load the select `options` call will have already
+          // started (or completed) the same promise, so this is either
+          // instant or waits for the single in-flight request.
+          return getTemplates(config.projectKey).then((templates) => {
+            const selected = findTemplate(templates, emailTemplate, config.projectKey);
+            return extractTemplateBodyKeys(selected?.templateBody);
+          });
+        },
       },
     ],
     settings: [],
@@ -98,7 +132,7 @@ export const NodeSchemaActionSendMailV1: NodeSchemaDefinition = {
       ProjectKey: "",
       Language: "",
       To: "",
-      BodyDataContext: [],
+      BodyDataContext: {},
     },
     settings: {},
   },
