@@ -54,6 +54,13 @@ export const FixedKeyValuePairsField = ({
   const [keys, setKeys] = useState<string[]>(initialKeys);
   const [isLoading, setIsLoading] = useState(false);
 
+  const depString = useMemo(() => {
+    if (field.fixedKeysDependencies) {
+      return JSON.stringify(field.fixedKeysDependencies.map((k) => data[k]));
+    }
+    return JSON.stringify(data);
+  }, [data, field.fixedKeysDependencies]);
+
   useEffect(() => {
     if (Array.isArray(field.fixedKeys)) {
       setKeys(field.fixedKeys);
@@ -80,7 +87,8 @@ export const FixedKeyValuePairsField = ({
     return () => {
       isActive = false;
     };
-  }, [config, data, field]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config, depString, field]);
 
   const currentValue = toRecord(value);
 

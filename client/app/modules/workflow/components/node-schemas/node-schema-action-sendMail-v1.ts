@@ -90,6 +90,7 @@ export const NodeSchemaActionSendMailV1: NodeSchemaDefinition = {
         key: "BodyDataContext",
         keyLabel: "Template key",
         valueLabel: "Mapped value",
+        fixedKeysDependencies: ["EmailTemplate"],
         fixedKeys: (data, config) => {
           const emailTemplate = data.EmailTemplate;
           if (!emailTemplate || typeof emailTemplate !== "string") {
