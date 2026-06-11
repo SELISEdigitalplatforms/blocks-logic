@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Input } from "@/components/ui-kits/input/input";
 import {
   Table,
@@ -54,12 +54,26 @@ export const FixedKeyValuePairsField = ({
   const [keys, setKeys] = useState<string[]>(initialKeys);
   const [isLoading, setIsLoading] = useState(false);
 
-  const depString = useMemo(() => {
+  // Refs to hold latest onChange and value so the sync effect doesn't
+  // re-fire on every parent render (onChange is a new closure each time
+  // any form field changes, and currentValue is a new object reference).
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const valueRef = useRef(value);
+  valueRef.current = value;
+
+  const depValues = useMemo(() => {
     if (field.fixedKeysDependencies) {
-      return JSON.stringify(field.fixedKeysDependencies.map((k) => data[k]));
+      return field.fixedKeysDependencies.map((k) => data[k]);
     }
-    return JSON.stringify(data);
+    return undefined;
   }, [data, field.fixedKeysDependencies]);
+
+  const depString = useMemo(() => {
+    return depValues !== undefined
+      ? JSON.stringify(depValues)
+      : JSON.stringify(data);
+  }, [depValues, data]);
 
   useEffect(() => {
     if (Array.isArray(field.fixedKeys)) {
@@ -92,13 +106,16 @@ export const FixedKeyValuePairsField = ({
 
   const currentValue = toRecord(value);
 
+  // Sync the value shape when keys change — uses refs so this only
+  // fires when the resolved keys actually change, not on every render.
   useEffect(() => {
-    const nextValue = buildValueForKeys(keys, currentValue);
+    const current = toRecord(valueRef.current);
+    const nextValue = buildValueForKeys(keys, current);
 
-    if (!areRecordsEqual(nextValue, currentValue)) {
-      onChange(nextValue);
+    if (!areRecordsEqual(nextValue, current)) {
+      onChangeRef.current(nextValue);
     }
-  }, [currentValue, keys, onChange]);
+  }, [keys]);
 
   const handleValueChange = (key: string, nextValue: string) => {
     onChange({
