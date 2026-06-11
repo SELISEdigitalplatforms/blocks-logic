@@ -1,4 +1,4 @@
-import { create } from "zustand";
+import { createStore } from "zustand/vanilla";
 import {
   OnNodesChange,
   OnEdgesChange,
@@ -15,7 +15,7 @@ import { EditorNode } from "@blocks-workflow/models/node.model";
 
 // interface  ExtendNode extends Node, WorkflowNode {}
 
-type WorkflowState = {
+export type WorkflowState = {
   nodesMap: Record<string, EditorNode>;
   edgesMap: Record<string, Edge>;
 
@@ -76,7 +76,7 @@ type WorkflowState = {
   getEdgeById: (edgeId: string) => Edge | undefined;
 };
 
-export const useWorkflowStore = create<WorkflowState>((set, get) => ({
+export const createWorkflowStore = () => createStore<WorkflowState>((set, get) => ({
   // Initial state
   nodesMap: {},
   edgesMap: {},
@@ -357,3 +357,5 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     return get().edgesMap[edgeId];
   },
 }));
+
+export type WorkflowStore = ReturnType<typeof createWorkflowStore>;

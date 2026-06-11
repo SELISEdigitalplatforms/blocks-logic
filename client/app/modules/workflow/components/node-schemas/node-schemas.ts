@@ -1,5 +1,5 @@
 import { NodeSchemaTriggerWebhookV1 } from "./node-schema-trigger-webhook-v1";
-import { NodeSchemaActionSetFieldV1 } from "./node-schema-action-setfield-v1";
+import { NodeSchemaTransformSetFieldV1 } from "./node-schema-transform-setfield-v1";
 import { NodeSchemaDefinition } from "./node-schema.type";
 import { NodeSchemaActionAiAgentV1 } from "./node-schema-action-aiAgent-v1";
 import { NodeSchemaActionSendMailV1 } from "./node-schema-action-sendMail-v1";
@@ -16,7 +16,7 @@ export const NodeSchemasDefinition: Record<string, NodeSchemaDefinition> = {
   triggerdataGatewayv1: NodeSchemaTriggerDataGatewayV1,
   triggerblockschedulev1: NodeSchemaTriggerBlockscheduleV1,
   actionagentv1: NodeSchemaActionAiAgentV1,
-  actionsetfieldv1: NodeSchemaActionSetFieldV1,
+  transformsetfieldv1: NodeSchemaTransformSetFieldV1,
   actionsendMailv1: NodeSchemaActionSendMailV1,
   actionhttpRequestv1: NodeSchemaActionHttpRequestV1,
   actiondataActionv1: NodeSchemaActionDataActionV1,

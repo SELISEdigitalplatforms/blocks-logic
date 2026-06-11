@@ -152,8 +152,8 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		description: "Create or transform data fields for subsequent steps.",
 		type: "setfield",
 		category: "transform",
-		version: "v1",
 		isComingSoon: true,
+		version: "v1",
 		defaultName: "Set Field",
 		handleSpec: {
 			source: ["source"],
