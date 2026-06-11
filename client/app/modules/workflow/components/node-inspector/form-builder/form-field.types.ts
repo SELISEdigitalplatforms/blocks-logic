@@ -60,6 +60,7 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
         data: Whole,
         config: { projectKey: string; workflowId: string; nodeId: string; store: WorkflowStore },
       ) => Promise<string[]>);
+  fixedKeysDependencies?: string[];
   copyable?: boolean;
   maxLength?: number;
   minLength?: number;
