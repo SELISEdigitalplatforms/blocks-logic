@@ -88,7 +88,7 @@ export const FixedKeyValuePairsField = ({
       isActive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config, depString, field]);
+  }, [depString]);
 
   const currentValue = toRecord(value);
 
