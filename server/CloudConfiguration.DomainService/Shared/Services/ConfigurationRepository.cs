@@ -25,10 +25,12 @@ namespace CloudConfiguration.DomainService.Shared.Services
         private const string _notificatonConfigurationCollectionName = "NotificationConfigurations";
         private const string _storageCollectionName = "StorageConfigurations";
         private const string _mailConfigurationCollectionName = "MailServerConfigurations";
+        private readonly IBlocksSecret _blocksSecret;
 
-        public ConfigurationRepository(IDbContextProvider dbContextProvider)
+        public ConfigurationRepository(IDbContextProvider dbContextProvider, IBlocksSecret blocksSecret)
         {
             _dbContextProvider = dbContextProvider;
+            _blocksSecret = blocksSecret;
         }
 
         #region Authentication 
@@ -173,7 +175,24 @@ namespace CloudConfiguration.DomainService.Shared.Services
 
         public async Task<GetNotificationConfigurationsResponse> GetNotificationConfigurationsAsync(GetNotificationConfigurationsRequest request)
         {
-            var collection = _dbContextProvider.GetCollection<NotificationConfiguration>(_notificatonConfigurationCollectionName);
+            var blocksContext = BlocksContext.GetContext();
+            IMongoCollection<NotificationConfiguration> collection;
+
+            if (blocksContext.Impersonated)
+            {
+                var database = _dbContextProvider.GetDatabase(
+                    _blocksSecret.DatabaseConnectionString,
+                    "BlocksRootDb");
+
+                collection = database.GetCollection<NotificationConfiguration>(
+                    _notificatonConfigurationCollectionName);
+            }
+            else
+            {
+                collection = _dbContextProvider.GetCollection<NotificationConfiguration>(
+                    _notificatonConfigurationCollectionName);
+            }
+
             var filter = FilterDefinition<NotificationConfiguration>.Empty;
 
             var options = new FindOptions<NotificationConfiguration>
@@ -193,7 +212,7 @@ namespace CloudConfiguration.DomainService.Shared.Services
                 IsSuccess = true
             };
         }
-
+        
         public async Task<NotificationConfiguration> GetNotificationConfigurationByNameAsync(string name)
         {
             var collection = _dbContextProvider.GetCollection<NotificationConfiguration>(_notificatonConfigurationCollectionName);

@@ -2,7 +2,7 @@ import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { NodeSchemaDefinition } from "./node-schema.type";
 
 import { authClientService } from "@blocks-idp/authentication/services/auth-clients.service";
-import { useWorkflowStore } from "@blocks-workflow/store/workflow-store";
+// Removed useWorkflowStore
 import {
   resolveSchemaFields,
   buildEmptyFieldMapping,
@@ -57,7 +57,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
               })),
             );
         },
-        onChange: (value: unknown) => {
+        onChange: (value: unknown, _data: unknown, config: any) => {
           const parts = (value as string).split(":::");
           const collectionName = parts[0] || "";
           const schemaName = parts[1] || "";
@@ -77,10 +77,11 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
                 );
                 const fieldMapping = buildEmptyFieldMapping(schemaFields);
 
-                const store = useWorkflowStore.getState();
-                const selectedNode = store.selectedNode;
+                const store = config?.store;
+                if (!store) return;
+                const selectedNode = store.getState().selectedNode;
                 if (selectedNode) {
-                  store.updateNode(selectedNode.id, {
+                  store.getState().updateNode(selectedNode.id, {
                     parameters: {
                       ...(selectedNode.parameters as Record<string, unknown>),
                       schemaFields,
@@ -139,7 +140,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
                 })),
             );
         },
-        onChange: (value: unknown) => {
+        onChange: (value: unknown, _data: unknown, _config: any) => {
           const parts = (value as string).split(":::");
           const clientId = parts[0] || "";
           const clientSecret = parts[1] || "";
