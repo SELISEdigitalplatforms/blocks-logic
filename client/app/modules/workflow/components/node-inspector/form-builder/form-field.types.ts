@@ -12,6 +12,7 @@ export type FormFieldType =
   | "radio"
   | "code-editor"
   | "key-value-pairs"
+  | "fixed-key-value-pairs"
   | "array"
   | "schema-fields"
   | "schema-field-picker"
@@ -53,6 +54,12 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
         data: Whole,
         config: { projectKey: string; workflowId: string; store: WorkflowStore },
       ) => Promise<SelectOption[]>);
+  fixedKeys?:
+    | string[]
+    | ((
+        data: Whole,
+        config: { projectKey: string; workflowId: string; nodeId: string; store: WorkflowStore },
+      ) => Promise<string[]>);
   copyable?: boolean;
   maxLength?: number;
   minLength?: number;

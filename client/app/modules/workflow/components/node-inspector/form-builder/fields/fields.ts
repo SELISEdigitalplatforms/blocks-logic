@@ -11,6 +11,7 @@ import { SwitchField } from "./switch-field";
 import { TextField } from "./text-field";
 import { TextareaField } from "./textarea-field";
 import { ExpressionInputField } from "./expression-input-field";
+import { FixedKeyValuePairsField } from "./fixed-key-value-pairs-field";
 import { DisplayField } from "./display-field";
 import { ConditionsField } from "./conditions-field";
 import { SchemaFieldsField } from "./schema-fields-field";
@@ -36,6 +37,7 @@ export const FIELD_COMPONENTS_REGISTRY: Record<
   multiselect: SelectField,
   "code-editor": CodeEditorField,
   "key-value-pairs": KeyValuePairsField,
+  "fixed-key-value-pairs": FixedKeyValuePairsField,
   conditions: ConditionsField,
   array: ArrayField,
   expression: ExpressionInputField,

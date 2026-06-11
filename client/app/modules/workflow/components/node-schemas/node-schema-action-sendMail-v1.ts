@@ -1,6 +1,7 @@
 import { languageManagerService } from "@blocks-workflow/services/language.manager.service";
 import { NodeSchemaDefinition } from "./node-schema.type";
 import { emailService } from "@blocks-workflow/services/email.services";
+import { extractTemplateBodyKeys } from "../../utils/extract-template-keys";
 
 export const NodeSchemaActionSendMailV1: NodeSchemaDefinition = {
   schema: {
@@ -83,10 +84,40 @@ export const NodeSchemaActionSendMailV1: NodeSchemaDefinition = {
       },
       {
         id: "map-body-dynmaic",
-        type: "key-value-pairs",
+        type: "fixed-key-value-pairs",
         label: "Map (Body)",
         info: "Map dynamic value",
         key: "BodyDataContext",
+        keyLabel: "Template key",
+        valueLabel: "Mapped value",
+        fixedKeys: (data, config) => {
+          const emailTemplate = data.EmailTemplate;
+          if (!emailTemplate || typeof emailTemplate !== "string") {
+            return Promise.resolve([]);
+          }
+
+          return emailService
+            .fetchEmailTemplates(
+              0,
+              100,
+              config.projectKey,
+              "",
+              "Name",
+              false,
+              typeof data.Language === "string" ? data.Language : "",
+              "",
+            )
+            .then((res) => {
+              if (!res.templates.length) return [];
+
+              const selectedTemplate = res.templates.find((template) => {
+                const templateValue = `${template.name || ""}_${config.projectKey}`;
+                return templateValue === emailTemplate || template.name === data.Template;
+              });
+
+              return extractTemplateBodyKeys(selectedTemplate?.templateBody);
+            });
+        },
       },
     ],
     settings: [],
@@ -98,7 +129,7 @@ export const NodeSchemaActionSendMailV1: NodeSchemaDefinition = {
       ProjectKey: "",
       Language: "",
       To: "",
-      BodyDataContext: [],
+      BodyDataContext: {},
     },
     settings: {},
   },
