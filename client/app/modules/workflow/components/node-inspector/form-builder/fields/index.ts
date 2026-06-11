@@ -9,6 +9,7 @@ export { RadioField } from "./radio-field";
 export { CodeEditorField } from "./code-editor-field";
 export { KeyValueField } from "./key-value-field";
 export { KeyValuePairsField } from "./key-value-pairs-field";
+export { FixedKeyValuePairsField } from "./fixed-key-value-pairs-field";
 export { ConditionsField } from "./conditions-field";
 export { ArrayField } from "./array-field";
 export { ExpressionInputField } from "./expression-input-field";
