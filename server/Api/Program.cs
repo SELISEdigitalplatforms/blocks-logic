@@ -65,7 +65,7 @@ await services.RegisterBlocksDeploymentServicesAsync(VaultType.Azure);
 services.RegisterBlocksObservabilityServices();
 services.AddBlocksSwagger(new BlocksSwaggerOptions
 {
-    Title = "Blocks Data API",
+    Title = "Blocks Logic API",
     Version = "v1",
     EnableBearerAuth = true
 });
