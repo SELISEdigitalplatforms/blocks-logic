@@ -49,52 +49,52 @@ namespace Api.Controllers
 
         #region Account
 
-        [HttpPost]
+        [HttpPost("Activate")]
         public async Task<IActionResult> Activate([FromBody] ActivateUserRequest command)
         {
-            
+
             var result = await _accountService.ActivateAccountAsync(command);
             return result.IsSuccess ? Ok(result) : BadRequest(result);
         }
 
-        [HttpPost]
+        [HttpPost("Recover")]
         public async Task<IActionResult> Recover([FromBody] RecoveryUserRequest command)
         {
-            
+
             var result = await _accountService.RecoverAccountAsync(command);
             return result.IsSuccess ? Ok(result) : BadRequest(result);
         }
 
-        [HttpPost]
+        [HttpPost("ResetPassword")]
         public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest command)
         {
-            
+
             var result = await _accountService.ResetAccountPasswordAsync(command);
             return result.IsSuccess ? Ok(result) : BadRequest(result);
         }
 
-        [HttpPost]
+        [HttpPost("ChangePassword")]
         //[ProtectedEndPoint]
         [Authorize]
         public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest command)
         {
-            
+
             var result = await _accountService.ChangePasswordAsync(command);
             return result.IsSuccess ? Ok(result) : BadRequest(result);
         }
 
-        [HttpPost]
+        [HttpPost("ResendActivation")]
         public async Task<IActionResult> ResendActivation([FromBody] ResendActivationRequest command)
         {
-           
+
             var result = await _accountService.ResendActivationAsync(command);
             return result.IsSuccess ? Ok(result) : BadRequest(result);
         }
 
-        [HttpPost]
+        [HttpPost("ValidateActivationCode")]
         public async Task<IActionResult> ValidateActivationCode([FromBody] ValidateActivationCodeRequest command)
         {
-            
+
             var result = await _accountService.ValidateAccountActivationCodeAsync(command);
             return result.IsSuccess ? Ok(result) : BadRequest(result);
         }
@@ -103,21 +103,21 @@ namespace Api.Controllers
 
         #region Activity
 
-        [HttpGet]
+        [HttpGet("GetSessions")]
         //[ProtectedEndPoint]
         [Authorize]
         public async Task<GetSessionsResponse> GetSessions([FromQuery] BaseActivityRequest query)
         {
-          
+
             return await _userActivityService.GetSessionsAsync(query);
         }
 
-        [HttpGet]
+        [HttpGet("GetHistories")]
         //[ProtectedEndPoint]
         [Authorize]
         public async Task<GetHistorysResponse> GetHistories([FromQuery] BaseActivityRequest query)
         {
-           
+
             return await _userActivityService.GetHistoriesAsync(query);
         }
 
@@ -125,7 +125,7 @@ namespace Api.Controllers
 
         #region Resource
 
-        [HttpPost]
+        [HttpPost("CreatePermission")]
         //[ProtectedEndPoint]
         [Authorize]
         public async Task<IActionResult> CreatePermission([FromBody] CreatePermissionRequest command)
@@ -134,7 +134,7 @@ namespace Api.Controllers
             return result.IsSuccess ? Ok(result) : BadRequest(result);
         }
 
-        [HttpPost]
+        [HttpPost("UpdatePermission")]
         //[ProtectedEndPoint]
         [Authorize]
         public async Task<IActionResult> UpdatePermission([FromBody] UpdatePermissionRequest command)
@@ -143,7 +143,7 @@ namespace Api.Controllers
             return result.IsSuccess ? Ok(result) : BadRequest(result);
         }
 
-        [HttpPost]
+        [HttpPost("CreateRole")]
         //[ProtectedEndPoint]
         [Authorize]
         public async Task<IActionResult> CreateRole([FromBody] CreateRoleRequest command)
@@ -152,7 +152,7 @@ namespace Api.Controllers
             return result.IsSuccess ? Ok(result) : BadRequest(result);
         }
 
-        [HttpPost]
+        [HttpPost("UpdateRole")]
         //[ProtectedEndPoint]
         [Authorize]
         public async Task<IActionResult> UpdateRole([FromBody] UpdateRoleRequest command)
@@ -161,7 +161,7 @@ namespace Api.Controllers
             return result.IsSuccess ? Ok(result) : BadRequest(result);
         }
 
-        [HttpPost]
+        [HttpPost("GetPermissions")]
         //[ProtectedEndPoint]
         [Authorize]
         public async Task<GetPermissionsResponse> GetPermissions([FromBody] GetPermissionsRequest query)
@@ -169,24 +169,24 @@ namespace Api.Controllers
             return await _resourceQueryService.GetPermissionsAsync(query);
         }
 
-        [HttpGet]
+        [HttpGet("GetPermissionsGroupBySeverity")]
         [Authorize]
         public async Task<List<PermissionGroupBySeverityResponse>> GetPermissionsGroupBySeverity([FromQuery] GetPermissionGroupBySeverityRequest request)
         {
-            
+
             return await _resourceQueryService.GetPermissionsGroupBySeverityAsync();
         }
 
-        [HttpGet()]
+        [HttpGet("GetPermission")]
         //[ProtectedEndPoint]
         [Authorize]
         public async Task<GetPermissionResponse> GetPermission([FromQuery] GetPermissionRequest query)
         {
-           
+
             return await _resourceQueryService.GetPermissionAsync(query.Id);
         }
 
-        [HttpPost]
+        [HttpPost("GetRoles")]
         //[ProtectedEndPoint]
         [Authorize]
         public async Task<GetRolesResponse> GetRoles([FromBody] GetRolesRequest query)
@@ -194,7 +194,7 @@ namespace Api.Controllers
             return await _resourceQueryService.GetRolesAsync(query);
         }
 
-        [HttpGet()]
+        [HttpGet("GetRole")]
         //[ProtectedEndPoint]
         [Authorize]
         public async Task<GetRoleResponse> GetRole([FromQuery] GetRoleRequest query)
@@ -202,7 +202,7 @@ namespace Api.Controllers
             return await _resourceQueryService.GetRoleAsync(query.Id);
         }
 
-        [HttpPost]
+        [HttpPost("SetRoles")]
         //[ProtectedEndPoint]
         [Authorize]
         public async Task<IActionResult> SetRoles([FromBody] SetRolesRequest command)
@@ -211,7 +211,7 @@ namespace Api.Controllers
             return result.Success ? Ok(result) : BadRequest(result);
         }
 
-        [HttpGet]
+        [HttpGet("GetResourceGroups")]
         //[ProtectedEndPoint]
         [Authorize]
         public async Task<List<GetResourceGroupResponse>> GetResourceGroupsAsync([FromQuery] GetResourceGroupRequest request)
@@ -250,7 +250,7 @@ namespace Api.Controllers
             return result.IsSuccess ? Ok(result) : BadRequest(result);
         }
 
-        [HttpPost]
+        [HttpPost("UpdateAccount")]
         //[ProtectedEndPoint]
         [Authorize]
         public async Task<IActionResult> UpdateAccount([FromBody] UpdateUserRequest command)
@@ -272,11 +272,10 @@ namespace Api.Controllers
         [Authorize]
         public async Task<GetUserResponse> GetUser([FromRoute] string id)
         {
-;
             return await _userManagementQueryService.GetUserAsync(id);
         }
 
-        [HttpGet()]
+        [HttpGet("GetUserRoles")]
         //[ProtectedEndPoint]
         [Authorize]
         public async Task<GetUserRolesResponse> GetUserRoles([FromQuery] GetUserRolesRequest query)
@@ -284,7 +283,7 @@ namespace Api.Controllers
             return await _userManagementQueryService.GetUserRolesAsync(query.Id);
         }
 
-        [HttpGet()]
+        [HttpGet("GetUserPermissions")]
         //   [ProtectedEndPoint]
         [Authorize]
         public async Task<GetUserPermissionsResponse> GetUserPermissions([FromQuery] GetUserPermissionsRequest query)
@@ -292,7 +291,7 @@ namespace Api.Controllers
             return await _userManagementQueryService.GetUserPermissionsAsync(query.Id);
         }
 
-        [HttpPost]
+        [HttpPost("GetAccounts")]
         //[ProtectedEndPoint]
         [Authorize]
         public async Task<GetAccountsResponse> GetAccounts([FromBody] GetAccountsRequest query)
@@ -300,7 +299,7 @@ namespace Api.Controllers
             return await _userManagementQueryService.GetAccountsAsync(query);
         }
 
-        [HttpGet()]
+        [HttpGet("GetAccount")]
         //[ProtectedEndPoint]
         [Authorize]
         public async Task<GetAccountResponse> GetAccount()
@@ -308,7 +307,7 @@ namespace Api.Controllers
             return await _userManagementQueryService.GetAccountAsync();
         }
 
-        [HttpGet()]
+        [HttpGet("GetAccountRoles")]
         //[ProtectedEndPoint]
         [Authorize]
         public async Task<GetAccountRolesResponse> GetAccountRoles()
@@ -316,7 +315,7 @@ namespace Api.Controllers
             return await _userManagementQueryService.GetAccountRolesAsync();
         }
 
-        [HttpGet()]
+        [HttpGet("GetAccountPermissions")]
         //[ProtectedEndPoint]
         [Authorize]
         public async Task<GetAccountPermissionsResponse> GetAccountPermissions()
@@ -324,7 +323,7 @@ namespace Api.Controllers
             return await _userManagementQueryService.GetAccountPermissionsAsync();
         }
 
-        [HttpPost()]
+        [HttpPost("SaveRolesAndPermissions")]
         //[ProtectedEndPoint]
         [Authorize]
         public async Task<IActionResult> SaveRolesAndPermissions(SaveRolesAndPermissionsRequest command)
@@ -333,7 +332,7 @@ namespace Api.Controllers
             return result.IsSuccess ? Ok(result) : BadRequest(result);
         }
 
-        [HttpGet]
+        [HttpGet("IsEmailAvaiable")]
         public async Task<IActionResult> IsEmailAvaiable([FromQuery] IsEmailAvaiableRequest query)
         {
             var result = await _userManagementQueryService.IsUserAvailableAsync(query);
@@ -344,7 +343,7 @@ namespace Api.Controllers
         }
 
         [Authorize]
-        [HttpGet]
+        [HttpGet("GetUserTimelines")]
         public async Task<List<UserTimeline>> GetUserTimelinesAsync(GetUserTimeLineRequest request)
         {
             return await _userManagementQueryService.GetUserTimelinesAsync(request);
@@ -354,65 +353,65 @@ namespace Api.Controllers
 
         #region Organization
 
-        [HttpPost]
+        [HttpPost("SaveOrganization")]
         [Authorize]
         public async Task<BaseResponse> SaveOrganization([FromBody]  SaveOrganizationRequest request)
         {
-            
+
             return await _resourceMutationService.SaveOrganizationAsync(request);
         }
 
-        [HttpGet]
+        [HttpGet("GetOrganizations")]
         [Authorize]
         public async Task<GetOrganizationsResponse> GetOrganizations([FromQuery] GetOrganizationsRequest request)
         {
-            
+
             return await _resourceMutationService.GetOrganizationsAsync(request);
         }
 
-        [HttpGet]
+        [HttpGet("GetOrganization")]
         [Authorize]
         public async Task<GetOrganizationResponse> GetOrganization([FromQuery]  GetOrganizationRequest request)
         {
-           
+
             return await _resourceMutationService.GetOrganizationAsync(request);
         }
 
-        [HttpPost]
+        [HttpPost("SaveOrganizationConfig")]
         [Authorize]
         public async Task<BaseResponse> SaveOrganizationConfig([FromBody] SaveOrganizationConfigRequest request)
         {
-           
+
             return await _resourceMutationService.SaveganizationConfigAsync(request);
         }
 
-        [HttpGet]
+        [HttpGet("GetOrganizationConfig")]
         [Authorize]
         public async Task<OrganizationConfig> GetOrganizationConfig([FromQuery] GetOrganizationConfigRequest request)
         {
-           
+
             return await _resourceMutationService.GetOrganizationConfigAsync(request);
         }
 
-        [HttpPost]
+        [HttpPost("SaveSignUpSetting")]
         //[ProtectedEndPoint]
         [Authorize]
         public async Task<SaveSignUpSettingResponse> SaveSignUpSetting([FromBody] SaveSignUpSettingRequest request)
         {
-            
+
             return await _accountService.SaveSingUpSettingAsync(request);
         }
 
-        [HttpGet]
+        [HttpGet("GetSignUpSetting")]
         public async Task<SignUpSetting> GetSignUpSetting([FromQuery] GetSignUpSettingRequest request)
         {
-           
+
             return await _accountService.GetSignUpSettingAsync(request);
         }
 
         #endregion
         #region Cloud configuration
-        [HttpPost]
+        [HttpPost("Save")]
         //[ProtectedEndPoint]
         [Authorize]
         public async Task<IActionResult> Save([FromBody] SaveIamConfigurationRequest request)
@@ -421,7 +420,7 @@ namespace Api.Controllers
             return result.IsSuccess ? Ok(result) : BadRequest(result);
         }
 
-        [HttpGet]
+        [HttpGet("Get")]
         //[ProtectedEndPoint]
         [Authorize]
         public async Task<GetConfigurationResponse> Get([FromQuery] GetAuthenticationConfigurationRequest request)
