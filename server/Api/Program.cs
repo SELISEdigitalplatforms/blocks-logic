@@ -20,6 +20,7 @@ var serviceName = "blocks-logic";
 //var vaultType = ResolveVaultType();
 //Console.WriteLine($"Using Genesis vault type: {vaultType}");
 var secret = await ApplicationConfigurations.ConfigureLogAndSecretsAsync(serviceName, VaultType.Azure);
+
 var builder = WebApplication.CreateBuilder(args);
 ApplicationConfigurations.ConfigureApiEnv(builder, args);
 
@@ -63,12 +64,6 @@ services.RegisterAllNotificationApplicationServices();
 services.RegisterBlocksEurolmServices();
 await services.RegisterBlocksDeploymentServicesAsync(VaultType.Azure);
 services.RegisterBlocksObservabilityServices();
-services.AddBlocksSwagger(new BlocksSwaggerOptions
-{
-    Title = "Blocks Logic API",
-    Version = "v1",
-    EnableBearerAuth = true
-});
 
 var app = builder.Build();
 
