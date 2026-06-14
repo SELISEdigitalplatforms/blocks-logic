@@ -1,10 +1,42 @@
 import react from "@vitejs/plugin-react";
 import path from "path";
 import { defineConfig, loadEnv } from "vite";
+import fs from "fs";
+
+// HTTPS is driven solely by the machine env vars LOGIC_SSL_CERT / LOGIC_SSL_KEY.
+// If either is unset/empty, or the file it points to is missing, fall back to HTTP (no throw).
+function getHttpsConfig(): false | { key: Buffer; cert: Buffer } {
+  const certPath = process.env.LOGIC_SSL_CERT;
+  const keyPath = process.env.LOGIC_SSL_KEY;
+
+  if (!certPath || !keyPath) {
+    console.warn(
+      "[vite] LOGIC_SSL_CERT / LOGIC_SSL_KEY not set — serving over HTTP.",
+    );
+    return false;
+  }
+
+  const resolvedCertPath = path.resolve(__dirname, certPath);
+  const resolvedKeyPath = path.resolve(__dirname, keyPath);
+
+  if (!fs.existsSync(resolvedCertPath) || !fs.existsSync(resolvedKeyPath)) {
+    console.warn(
+      `[vite] SSL cert files not found (cert: ${resolvedCertPath}, key: ${resolvedKeyPath}) — serving over HTTP.`,
+    );
+    return false;
+  }
+
+  return {
+    key: fs.readFileSync(resolvedKeyPath),
+    cert: fs.readFileSync(resolvedCertPath),
+  };
+}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, __dirname, "BLOCKS_");
   const proxyTarget = env.BLOCKS_API_BASE_URL;
+  const httpsConfig = getHttpsConfig();
+  getHttpsConfig();
 
   return {
     envPrefix: ["BLOCKS_"],
@@ -30,6 +62,7 @@ export default defineConfig(({ mode }) => {
     server: {
       host: true, // Listen on all addresses (0.0.0.0)
       port: 4000,
+      https: httpsConfig || undefined,
       allowedHosts: [
         "dev-cloud.blocksdevelopers.com",
         "localhost",
