@@ -63,6 +63,12 @@ services.RegisterAllNotificationApplicationServices();
 services.RegisterBlocksEurolmServices();
 await services.RegisterBlocksDeploymentServicesAsync(VaultType.Azure);
 services.RegisterBlocksObservabilityServices();
+services.AddBlocksSwagger(new BlocksSwaggerOptions
+{
+    Title = "Blocks Data API",
+    Version = "v1",
+    EnableBearerAuth = true
+});
 
 var app = builder.Build();
 
