@@ -18,6 +18,7 @@ createRoot(document.getElementById("root")!).render(
             config={{
               userBaseUrlKey: "BLOCKS_IDP_BASE_URL",
               projectBaseUrlKey: "BLOCKS_API_BASE_URL",
+              name: "blocks-logic"
             }}
           >
             <RouterProvider router={router} />
