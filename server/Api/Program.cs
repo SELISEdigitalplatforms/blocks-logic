@@ -107,8 +107,8 @@ if (File.Exists(indexHtml))
 
 //ApplicationConfigurations.ConfigureMiddleware(app);
 ApplicationConfigurations.ConfigureMiddleware(app,
-    tenantValidationPrefixes: new[] { "notificationHub" });
-app.MapHub<NotificationHub>("/notificationHub").WithDisplayName("Controller/notificationHub"); 
+    tenantValidationPrefixes: new[] { "api/notificationHub" });
+app.MapHub<NotificationHub>("/api/notificationHub").WithDisplayName("Controller/notificationHub"); 
 await app.RunAsync();
 
 static void ApplyFrontendRuntimeSettings(IConfiguration configuration, string webRootPath, string blocksKey, string googleSiteKey)
