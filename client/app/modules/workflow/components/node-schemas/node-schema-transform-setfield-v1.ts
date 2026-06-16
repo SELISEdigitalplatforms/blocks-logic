@@ -22,7 +22,7 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
         type: "key-value-pairs",
         label: "Set Fields",
         info: "Set fields",
-        key: "parameter.setFields",
+        key: "manualMappingFields",
         dependsOn: {
           key: "mode",
           value: "manual_mapping",
@@ -53,9 +53,21 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
         info: "How to select the fields you want to include in your output items",
         key: "includeInputs",
         options: [
-          { label: "All Fields", value: "all_fields", description: "Include all fields from the input items" },
-          { label: "Specific Fields", value: "specific_fields", description: "Include specific fields from the input items" },
-          { label: "Exclude Fields", value: "exclude_fields", description: "Exclude specific fields from the input items" },
+          {
+            label: "All Fields",
+            value: "all_fields",
+            description: "Include all fields from the input items",
+          },
+          {
+            label: "Specific Fields",
+            value: "specific_fields",
+            description: "Include specific fields from the input items",
+          },
+          {
+            label: "Exclude Fields",
+            value: "exclude_fields",
+            description: "Exclude specific fields from the input items",
+          },
         ],
         dependsOn: {
           key: "otherInputs",
@@ -84,7 +96,6 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
           value: "exclude_fields",
         },
       },
-
     ],
     settings: [
       {
@@ -103,6 +114,7 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
       includeFields: [],
       excludeFields: [],
       mode: "manual_mapping",
+      manualMappingFields: {},
     },
     settings: {
       continueOnError: false,
