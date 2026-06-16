@@ -2,7 +2,7 @@ import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { getRuntimeEnv } from "@/lib/runtime-env";
 import { getQueryClient } from "@/providers/query-provider";
 import { useAuthStore } from "@/store/useAuthStore";
-import { AUTH_OIDC_ENDPOINTS } from "@/idp/authentication/constants/endpoint.constant";
+import { AUTH_OIDC_ENDPOINTS } from "@/constants/endpoint.constant";
 
 class HttpError extends Error {
   status: number;
