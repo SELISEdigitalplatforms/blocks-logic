@@ -1,7 +1,6 @@
 import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { NodeSchemaDefinition } from "./node-schema.type";
 
-import { authClientService } from "@blocks-idp/authentication/services/auth-clients.service";
 // Removed useWorkflowStore
 import {
   resolveSchemaFields,
@@ -10,6 +9,7 @@ import {
 import { configurationService } from "../../services/configuration.service";
 // import { API_BASES } from "@/constants/endpoint.constant";
 import { getRuntimeEnv } from "@/lib/runtime-env";
+import { authClientService } from "../../services/iam.service";
 
 export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
   schema: {
