@@ -28,11 +28,11 @@ interface KeyTypeValue {
 }
 
 const DATA_TYPES = [
-  "String",
-  "Number",
-  "Array",
-  "Boolean",
-  "Date & Time",
+  { label: "String", value: "string" },
+  { label: "Number", value: "number" },
+  { label: "Array", value: "array" },
+  { label: "Boolean", value: "boolean" },
+  { label: "Date & Time", value: "datetime" },
 ];
 
 export const KeyTypeValueField = ({
@@ -42,19 +42,14 @@ export const KeyTypeValueField = ({
   readOnly,
   data,
   config,
-}: FieldProps<Record<string, unknown>>) => {
-  // Convert object to key-type-value array
-  const pairs: KeyTypeValue[] = Object.entries(value || {}).map(([key, val]) => {
-    if (typeof val === "object" && val !== null && "type" in val) {
-      return { key, type: (val as any).type, value: (val as any).value };
-    }
-    return { key, type: "String", value: val };
-  });
+}: FieldProps<KeyTypeValue[]>) => {
+  // Use array directly
+  const pairs: KeyTypeValue[] = Array.isArray(value) ? value : [];
 
   const [keyValuePairs, setKeyValuePairs] = useState<KeyTypeValue[]>(pairs);
 
   const handleAddPair = () => {
-    const newPairs = [...keyValuePairs, { key: "", type: "String", value: "" }];
+    const newPairs = [...keyValuePairs, { key: "", type: "string", value: "" }];
     setKeyValuePairs(newPairs);
     updateValue(newPairs);
   };
@@ -77,7 +72,7 @@ export const KeyTypeValueField = ({
     const newPairs = keyValuePairs.map((pair, i) => {
       if (i === index) {
         // Reset value if type changes
-        const newValue = newType === "Array" ? [] : "";
+        const newValue = newType === "array" ? [] : "";
         return { ...pair, type: newType, value: newValue };
       }
       return pair;
@@ -95,12 +90,13 @@ export const KeyTypeValueField = ({
   };
 
   const updateValue = (pairs: KeyTypeValue[]) => {
-    const result: Record<string, unknown> = {};
-    pairs.forEach((pair) => {
-      if (pair.key.trim()) {
-        result[pair.key.trim()] = { type: pair.type, value: pair.value };
-      }
-    });
+    const result = pairs
+      .filter((pair) => pair.key.trim() !== "")
+      .map((pair) => ({
+        key: pair.key.trim(),
+        type: pair.type,
+        value: pair.value,
+      }));
     onChange(result);
   };
 
@@ -149,8 +145,8 @@ export const KeyTypeValueField = ({
                 </SelectTrigger>
                 <SelectContent>
                   {DATA_TYPES.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type}
+                    <SelectItem key={type.value} value={type.value}>
+                      {type.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -158,7 +154,7 @@ export const KeyTypeValueField = ({
             </div>
 
             <div className="flex flex-col min-w-0">
-              {pair.type === "Array" ? (
+              {pair.type === "array" ? (
                 <ChipsInput
                   value={Array.isArray(pair.value) ? pair.value : []}
                   onChange={(val) => handleValueChange(index, val)}

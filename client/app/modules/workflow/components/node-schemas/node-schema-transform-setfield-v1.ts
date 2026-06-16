@@ -114,7 +114,7 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
       includeFields: [],
       excludeFields: [],
       mode: "manual_mapping",
-      manualMappingFields: {},
+      manualMappingFields: [],
     },
     settings: {
       continueOnError: false,
