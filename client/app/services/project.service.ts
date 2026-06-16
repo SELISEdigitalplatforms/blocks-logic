@@ -5,7 +5,6 @@ import {
   IGetProjectResponse,
   IProjectGroup,
   ICreateProjectPayload,
-  IGetProjectLoginOptionResponse,
   IValidateCNameProjectPayload,
   IValidateCNameProjectResponse,
   IUpdateProjectPayload,
@@ -85,10 +84,6 @@ export class ProjectService {
     return http.post(url, payload);
   }
 
-  getProjectLoginOption(): Promise<IGetProjectLoginOptionResponse> {
-    const url = `/identifier/v1/Project/GetLoginOptions`;
-    return http.get(url);
-  }
   disableProject(
     payload: IDisableProjectPayload,
   ): Promise<IDisableProjectResponse> {

@@ -2,6 +2,13 @@
 
 import { getRuntimeEnv } from "@/lib/runtime-env";
 
+// ─── Subpaths ─────────────────────────────────────────────────────────────────
+
+const BLOCKS_IDP_BASE_URL = getRuntimeEnv("BLOCKS_IDP_BASE_URL");
+const AUTH_OIDC_SUBPATH = "/oidc";
+
+
+
 export const DEPLOYMENT_BASE_URL =
   "https://dev-deployment.blocksdevelopers.com";
 
@@ -23,4 +30,11 @@ export const API_BASES = {
   WORKFLOW: "/api",
   EUROLM: getRuntimeEnv("BLOCKS_EUROLM_API_BASE_URL") + "/api",
   LOGIC: getRuntimeEnv("BLOCKS_API_BASE_URL") + "/api",
+} as const;
+
+
+// ─── OIDC client endpoints (auth-clients-oidc.service) ──────────────────────
+
+export const AUTH_OIDC_ENDPOINTS = {
+  OIDC_TOKEN: `${BLOCKS_IDP_BASE_URL}/api${AUTH_OIDC_SUBPATH}/token`,
 } as const;

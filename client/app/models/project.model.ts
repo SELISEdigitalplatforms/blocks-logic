@@ -1,5 +1,3 @@
-import { GRANT_TYPES, SSO_PROVIDERS } from "@/idp/authentication/constants";
-
 export interface IProject {
   itemId: string;
   createdDate: string;
@@ -112,14 +110,3 @@ export interface IUpdateTenantGroupResponse {
   errors: unknown | null;
   isSuccess: boolean;
 }
-
-type SSO_INFO = {
-  provider: SSO_PROVIDERS;
-  audience: string;
-};
-
-export type LoginOption = {
-  allowedGrantTypes: GRANT_TYPES[];
-  ssoInfo: SSO_INFO[];
-};
-export type IGetProjectLoginOptionResponse = LoginOption;
