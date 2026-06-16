@@ -1,4 +1,4 @@
-import { User } from "@blocks-idp/iam/models/user";
+import { User } from "../models/user";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
