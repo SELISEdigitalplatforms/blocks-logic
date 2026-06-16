@@ -19,7 +19,7 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
       },
       {
         id: "set-fields",
-        type: "key-value-pairs",
+        type: "key-type-value-pairs",
         label: "Set Fields",
         info: "Set fields",
         key: "manualMappingFields",
