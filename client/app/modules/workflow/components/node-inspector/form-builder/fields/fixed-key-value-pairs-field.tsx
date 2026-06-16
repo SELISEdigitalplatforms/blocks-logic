@@ -53,6 +53,7 @@ export const FixedKeyValuePairsField = ({
   );
   const [keys, setKeys] = useState<string[]>(initialKeys);
   const [isLoading, setIsLoading] = useState(false);
+  const hasLoadedKeysRef = useRef(Array.isArray(field.fixedKeys));
 
   // Refs to hold latest onChange and value so the sync effect doesn't
   // re-fire on every parent render (onChange is a new closure each time
@@ -77,6 +78,7 @@ export const FixedKeyValuePairsField = ({
 
   useEffect(() => {
     if (Array.isArray(field.fixedKeys)) {
+      hasLoadedKeysRef.current = true;
       setKeys(field.fixedKeys);
       return;
     }
@@ -89,10 +91,16 @@ export const FixedKeyValuePairsField = ({
     field
       .fixedKeys(data, config)
       .then((resolvedKeys) => {
-        if (isActive) setKeys(resolvedKeys);
+        if (isActive) {
+          hasLoadedKeysRef.current = true;
+          setKeys(resolvedKeys);
+        }
       })
       .catch(() => {
-        if (isActive) setKeys([]);
+        if (isActive) {
+          hasLoadedKeysRef.current = true;
+          setKeys([]);
+        }
       })
       .finally(() => {
         if (isActive) setIsLoading(false);
@@ -109,6 +117,8 @@ export const FixedKeyValuePairsField = ({
   // Sync the value shape when keys change — uses refs so this only
   // fires when the resolved keys actually change, not on every render.
   useEffect(() => {
+    if (!hasLoadedKeysRef.current) return;
+
     const current = toRecord(valueRef.current);
     const nextValue = buildValueForKeys(keys, current);
 
