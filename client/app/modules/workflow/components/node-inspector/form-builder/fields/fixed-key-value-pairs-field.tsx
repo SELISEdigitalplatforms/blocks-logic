@@ -2,16 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Input } from "@/components/ui-kits/input/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui-kits/table/table";
+import { Textarea } from "@/components/ui-kits/textarea/textarea";
 import { FieldProps } from "../form-field.types";
-import { ExpressionInputField } from "./expression-input-field";
 import { ExpressionHighlighter } from "../utils/expression-highlighter";
 
 const toRecord = (value: unknown): Record<string, unknown> => {
@@ -151,43 +143,28 @@ export const FixedKeyValuePairsField = ({
   }
 
   return (
-    <div className="overflow-hidden rounded border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-2/5">{field.keyLabel || "Key"}</TableHead>
-            <TableHead>{field.valueLabel || "Value"}</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {keys.map((key) => (
-            <TableRow key={key}>
-              <TableCell className="align-top">
-                <ExpressionHighlighter value={key} isMultiline={false}>
-                  <Input
-                    value={key}
-                    readOnly
-                    disabled={field.disabled as boolean}
-                    className="bg-muted/40 focus-visible:ring-0 focus-visible:ring-offset-0"
-                  />
-                </ExpressionHighlighter>
-              </TableCell>
-              <TableCell className="align-top">
-                <ExpressionInputField
-                  placeholder={field.placeholder || "Value"}
-                  value={String(currentValue[key] ?? "")}
-                  onChange={(nextValue) => handleValueChange(key, nextValue)}
-                  readOnly={readOnly}
-                  data={data}
-                  config={config}
-                  field={field}
-                  className="focus-visible:ring-0 focus-visible:ring-offset-0"
-                />
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+    <div className="space-y-3">
+      {keys.map((key) => (
+        <div key={key} className="flex-1">
+            <Input
+              value={key}
+              readOnly
+              disabled={field.disabled as boolean}
+              className="rounded-b-none bg-muted/40 focus-visible:ring-0 focus-visible:ring-offset-0"
+            />
+          <ExpressionHighlighter value={String(currentValue[key] ?? "")} isMultiline={true}>
+            <Textarea
+              placeholder={field.placeholder || "Value"}
+              value={String(currentValue[key] ?? "")}
+              onChange={readOnly ? undefined : (e) => handleValueChange(key, e.target.value)}
+              readOnly={readOnly}
+              rows={1}
+              disabled={field.disabled as boolean}
+              className="min-h-9 resize-y rounded-t-none border-t-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+            />
+          </ExpressionHighlighter>
+        </div>
+      ))}
     </div>
   );
 };
