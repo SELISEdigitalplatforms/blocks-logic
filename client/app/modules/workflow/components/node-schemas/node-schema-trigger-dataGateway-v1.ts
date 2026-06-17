@@ -1,5 +1,5 @@
 import { useProjectStore } from "@seliseblocks/blocks-kit";
-import { configurationService } from "../../services/configuration.service";
+import { dataService } from "../../services/data.service";
 import { NodeSchemaDefinition } from "./node-schema.type";
 
 export const NodeSchemaTriggerDataGatewayV1: NodeSchemaDefinition = {
@@ -17,7 +17,7 @@ export const NodeSchemaTriggerDataGatewayV1: NodeSchemaDefinition = {
         required: true,
         searchable: true,
         options: (_data, config) => {
-          return configurationService
+          return dataService
             .getSchemaList({
               projectKey: config.projectKey,
               pageNo: 1,
