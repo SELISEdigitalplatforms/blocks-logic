@@ -6,7 +6,7 @@ import {
   resolveSchemaFields,
   buildEmptyFieldMapping,
 } from "@blocks-workflow/utils/resolve-schema-fields";
-import { configurationService } from "../../services/configuration.service";
+import { dataService } from "../../services/data.service";
 // import { API_BASES } from "@/constants/endpoint.constant";
 import { getRuntimeEnv } from "@/lib/runtime-env";
 import { authClientService } from "../../services/iam.service";
@@ -40,7 +40,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
         required: true,
         searchable: true,
         options: (_data, config) => {
-          return configurationService
+          return dataService
             .getSchemaList({
               projectKey: config.projectKey,
               pageNo: 1,
@@ -67,7 +67,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
 
           // Auto-populate schemaFields from collection schema
           if (schemaId && projectKey) {
-            configurationService
+            dataService
               .getSchemaDetails(schemaId, projectKey)
               .then(async (res) => {
                 const fields = res.data.fields ?? [];
@@ -223,7 +223,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
       ...node,
       parameters: {
         ...node.parameters,
-        apiBaseUrl: getRuntimeEnv("BLOCKS_UDS_API_BASE_URL") || "",
+        apiBaseUrl: getRuntimeEnv("BLOCKS_DATA_BASE_URL") || "",
         projectKey: selectedProject?.tenantId ?? "",
         projectShortKey: selectedProject?.tenantSlug ?? "",
       },
