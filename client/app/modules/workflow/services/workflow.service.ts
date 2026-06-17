@@ -21,12 +21,13 @@ import {
 
 export class WorkflowService {
   private readonly LogicHttpClient = serviceInstances.logicService;
-  getWorkflows(payload: IGetWorkflowsPayload): Promise<IGetWorkflowsResponse> {
+
+  getWorkflows = (payload: IGetWorkflowsPayload): Promise<IGetWorkflowsResponse> => {
     return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.GET_ALL}`, payload);
     // return this.LogicHttpClient.post("http://localhost:5054/Workflow/GetAll", payload, {}, { absoluteUrl: true });
   }
 
-  async getWorkflowById(payload: IGetWorkflowByIdPayload): Promise<IGetWorkflowByIdResponse> {
+  getWorkflowById = async (payload: IGetWorkflowByIdPayload): Promise<IGetWorkflowByIdResponse> => {
     const response = await this.LogicHttpClient.get<IGetWorkflowByIdResponse>(
       `${WORKFLOW_ENDPOINTS.GET}?WorkflowId=${payload.id}&projectKey=${payload.projectKey}`,
     );
@@ -40,12 +41,12 @@ export class WorkflowService {
     return response;
   }
 
-  createWorkflow(payload: ICreateWorkflowPayload): Promise<ICreateWorkflowResponse> {
+  createWorkflow = (payload: ICreateWorkflowPayload): Promise<ICreateWorkflowResponse> => {
     return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.CREATE}`, payload);
     // return this.LogicHttpClient.post(`http://localhost:5054/Workflow/Create`, payload, {}, { absoluteUrl: true });
   }
 
-  duplicateWorkflow(payload: IDuplicateWorkflowPayload): Promise<IDuplicateWorkflowResponse> {
+  duplicateWorkflow = (payload: IDuplicateWorkflowPayload): Promise<IDuplicateWorkflowResponse> => {
     return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.DUPLICATE}`, payload);
     // return this.LogicHttpClient.post(
     //   `http://localhost:5054/Workflow/Duplicate`,
@@ -55,12 +56,12 @@ export class WorkflowService {
     // );
   }
 
-  updateWorkflow(payload: IUpdateWorkflowPayload): Promise<IUpdateWorkflowResponse> {
+  updateWorkflow = (payload: IUpdateWorkflowPayload): Promise<IUpdateWorkflowResponse> => {
     return this.LogicHttpClient.put(`${WORKFLOW_ENDPOINTS.UPDATE}`, payload);
     // return this.LogicHttpClient.put(`http://localhost:5054/Workflow/Update`, payload, {}, { absoluteUrl: true });
   }
 
-  deleteWorkflow(payload: IDeleteWorkflowPayload): Promise<IDeleteWorkflowResponse> {
+  deleteWorkflow = (payload: IDeleteWorkflowPayload): Promise<IDeleteWorkflowResponse> => {
     return this.LogicHttpClient.delete(
       `${WORKFLOW_ENDPOINTS.DELETE}?id=${payload.id}&projectKey=${payload.projectKey}`,
     );
@@ -71,9 +72,9 @@ export class WorkflowService {
     // );
   }
 
-  getWorkflowExecutions(
+  getWorkflowExecutions = (
     payload: IGetWorkflowExecutionsPayload,
-  ): Promise<IGetWorkflowExecutionsResponse> {
+  ): Promise<IGetWorkflowExecutionsResponse> => {
     const params = new URLSearchParams({
       ProjectKey: payload.projectKey,
       WorkflowId: payload.workflowId,
@@ -86,9 +87,9 @@ export class WorkflowService {
     // );
   }
 
-  getWorkflowExecutionById(
+  getWorkflowExecutionById = (
     payload: IGetWorkflowExecutionByIdPayload,
-  ): Promise<IGetWorkflowExecutionByIdResponse> {
+  ): Promise<IGetWorkflowExecutionByIdResponse> => {
     const params = new URLSearchParams({
       ProjectKey: payload.projectKey,
       ExecutionId: payload.executionId,
