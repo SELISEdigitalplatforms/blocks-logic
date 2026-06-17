@@ -32,9 +32,11 @@ namespace DomainService.Workflow.Nodes
             if (string.IsNullOrEmpty(text)) return default;
 
 
-            var resolved = Regex.Replace(text, @"\{\{([^{}]+)\}\}", match => ResolveExpression(match.Groups[1].Value.Trim(), inputItem, context));
+            var resolved = Regex.Replace(text, @"^\{\{([^{}]+)\}\}$", match => ResolveExpression(match.Groups[1].Value.Trim(), inputItem, context));
 
             if (typeof(T) == typeof(string)) return (T)(object)resolved;
+
+            if (typeof(T) == typeof(object)) return (T)(object)resolved;
 
             try { return Newtonsoft.Json.JsonConvert.DeserializeObject<T>(resolved); }
             catch { return default; }
