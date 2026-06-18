@@ -82,53 +82,67 @@ namespace DomainService.Workflow.Nodes.TransformSetFieldV1
         }
 
         private JsonObject ParseJsonValue(
-       string jsonCode,
-       Models.WorkflowItemExecutionModel inputItem,
-       NodeExecutionContext context)
+        string jsonCode,
+        Models.WorkflowItemExecutionModel inputItem,
+        NodeExecutionContext context)
         {
-            var result = new JsonObject();
-            var entries = jsonCode.Trim().TrimStart('{').TrimEnd('}').Split(',');
-
-            foreach (var entry in entries)
+            var resolved = System.Text.RegularExpressions.Regex.Replace(jsonCode, @"\{\{(.+?)\}\}", match =>
             {
-                if (string.IsNullOrWhiteSpace(entry)) continue;
+                var value = parseExpression<object>(match.Value, inputItem, context);
+                if (value == null) return "null";
+                var strValue = value switch
+                {
+                    string s => s,
+                    bool b => b.ToString().ToLower(),
+                    _ => Newtonsoft.Json.JsonConvert.SerializeObject(value)
+                };
 
-                var parts = entry.Trim().Split(':', 2);
-                if (parts.Length < 2) continue;
+                try
+                {
+                    JsonDocument.Parse(strValue);
+                    return strValue;
+                }
+                catch
+                {
+                    return $"\"{strValue}\"";
+                }
+            });
 
-                var rawKey = parts[0].Trim().Trim('"');
-                var key = parseExpression<object>(rawKey, inputItem, context)?.ToString();
-                var value = parseExpression<object>(parts[1].Trim(), inputItem, context)?.ToString();
-
-                if (string.IsNullOrWhiteSpace(key)) continue;
-
-                result[key] = JsonValue.Create(value);
-            }
-
-            return result;
+            return JsonNode.Parse(resolved)!.AsObject();
         }
 
         private JsonObject FilterInput(JsonElement input, List<string> fields, bool include)
         {
             var result = new JsonObject();
+
+            if (fields == null || fields.Count == 0)
+            {
+                if (include) return new JsonObject();
+                return JsonNode.Parse(input.GetRawText()) as JsonObject ?? new JsonObject();
+            }
+
             foreach (var prop in input.EnumerateObject())
             {
-                bool shouldInclude = include ? fields.Contains(prop.Name) : !fields.Contains(prop.Name);
-                if (shouldInclude)
-                    result[prop.Name] = JsonNode.Parse(prop.Value.GetRawText());
+                var nestedFields = fields
+                    .Where(f => f.StartsWith(prop.Name + "."))
+                    .Select(f => f[(prop.Name.Length + 1)..])
+                    .ToList();
+
+                if (nestedFields.Any())
+                {
+                    var nested = FilterInput(prop.Value, nestedFields, include);
+                    foreach (var nestedProp in nested)
+                        result[nestedProp.Key] = nestedProp.Value?.DeepClone();
+                }
+                else
+                {
+                    bool shouldInclude = include ? fields.Contains(prop.Name) : !fields.Contains(prop.Name);
+                    if (shouldInclude)
+                        result[prop.Name] = JsonNode.Parse(prop.Value.GetRawText());
+                }
             }
+
             return result;
-        }
-
-        private JsonElement MergeJsonElements(JsonElement @base, JsonElement patch)
-        {
-            var baseNode = JsonNode.Parse(@base.GetRawText()) as JsonObject ?? new JsonObject();
-            var patchNode = JsonNode.Parse(patch.GetRawText()) as JsonObject ?? new JsonObject();
-
-            foreach (var prop in patchNode)
-                baseNode[prop.Key] = prop.Value?.DeepClone();
-
-            return JsonSerializer.Deserialize<JsonElement>(baseNode.ToJsonString());
         }
 
         private JsonObject GetBaseItem(JsonElement inputElement, TransformSetFieldV1Parameters parameters)
@@ -137,19 +151,13 @@ namespace DomainService.Workflow.Nodes.TransformSetFieldV1
                 return new JsonObject();
 
             var otherFieldsMode = parameters.OtherFieldsMode?.ToLower();
+            var includedFields = parameters.IncludedFields?.Split(',').Select(f => f.Trim()).ToList() ?? new List<string>();
+            var excludedFields = parameters.ExcludeFields?.Split(',').Select(f => f.Trim()).ToList() ?? new List<string>();
 
             return otherFieldsMode switch
             {
-                "include" => FilterInput(
-                    inputElement,
-                    parameters.IncludedFields.Split(',').Select(f => f.Trim()).ToList(),
-                    include: true),
-
-                "exclude" => FilterInput(
-                    inputElement,
-                    parameters.ExcludeFields.Split(',').Select(f => f.Trim()).ToList(),
-                    include: false),
-
+                "include" => FilterInput(inputElement, includedFields, include: true),
+                "exclude" => FilterInput(inputElement, excludedFields, include: false),
                 _ => JsonNode.Parse(inputElement.GetRawText()) as JsonObject ?? new JsonObject()
             };
         }
