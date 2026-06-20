@@ -16,11 +16,12 @@ createRoot(document.getElementById("root")!).render(
         <TooltipProvider>
           <BlocksAppLayout
             config={{
-              userBaseUrlKey: "BLOCKS_IAM_BASE_URL",
-              projectBaseUrlKey: "BLOCKS_API_BASE_URL",
-              name: "blocks-logic"
-            }}
-          >
+              name: "blocks-logic",
+              appLogoUrl: {
+                dark: "/Logo_Black.svg",
+                light: "/Logo.svg",
+              },
+            }}>
             <RouterProvider router={router} />
           </BlocksAppLayout>
           <Toaster />
