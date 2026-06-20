@@ -9,7 +9,7 @@ export class AuthClientsService {
   getClientCredentials(
     payload: IGetClientsPayload,
   ): Promise<IClientConfigResponse[]> {
-    const baseUrl = getRuntimeEnv("BLOCKS_IAM_BASE_URL") || getRuntimeEnv("BLOCKS_API_BASE_URL");
+    const baseUrl = getRuntimeEnv("BLOCKS_IAM_BASE_URL") || getRuntimeEnv("BLOCKS_LOGIC_BASE_URL");
     return this.IamHttpClient.get(
       `${baseUrl}${AUTH_CLIENT_ENDPOINTS.GET_CLIENT_CREDENTIALS}?ProjectKey=${payload.projectKey}`,
       undefined,
