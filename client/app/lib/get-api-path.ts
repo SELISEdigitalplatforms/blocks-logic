@@ -5,6 +5,6 @@ export const getApiPath = (_servicePath: string): string => {
 };
 
 export const getApiUrl = (_servicePath: string, endpoint: string): string => {
-  const baseUrl = getRuntimeEnv("BLOCKS_API_BASE_URL");
+  const baseUrl = getRuntimeEnv("BLOCKS_LOGIC_BASE_URL");
   return `${baseUrl}/api/${endpoint}`;
 };

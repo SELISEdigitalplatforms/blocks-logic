@@ -1,6 +1,6 @@
 import { ResolvedSchemaField } from "@blocks-workflow/types/resolved-schema-field.types";
 import { OutputSchemaField } from "@blocks-workflow/types/output-schema.types";
-import { configurationService } from "../services/configuration.service";
+import { dataService } from "../services/data.service";
 import { IRemoteSchemaField } from "../models/data-service";
 
 const MAX_DEPTH = 10;
@@ -14,7 +14,7 @@ export async function resolveSchemaFields(
   projectKey: string,
 ): Promise<ResolvedSchemaField[]> {
   // Fetch all DTO schemas to build a name lookup map
-  const dtoSchemas = await configurationService
+  const dtoSchemas = await dataService
     .getSchemaList({
       projectKey,
       pageNo: 1,

@@ -1,17 +1,15 @@
-import { http } from "@/lib/http-client";
-import { AI_ENDPOINTS } from "@blocks-workflow/constants/ai.endpoint.constant";
+import { serviceInstances } from "@/lib/http-client";
+import { AI_ENDPOINTS } from "@/modules/workflow/constants/agents.endpoint.constant";
 import {
   IGetAgentsPayload,
   IGetAgentsResponse,
 } from "../types/agent.service.type";
-import { getRuntimeEnv } from "@/lib/runtime-env";
 
 export class AgentService {
+  private readonly AgentHttpClient = serviceInstances.agentsService;
   getAgents(payload: IGetAgentsPayload): Promise<IGetAgentsResponse> {
-    const baseUrl = getRuntimeEnv("BLOCKS_AGENT_API_BASE_URL") || getRuntimeEnv("BLOCKS_API_BASE_URL");
-    const url = `${baseUrl}/api${AI_ENDPOINTS.AGENT_QUERIES}`;
-    return http.post(
-      url,
+    return this.AgentHttpClient.post(
+      AI_ENDPOINTS.AGENT_QUERIES,
       payload,
       undefined,
       { absoluteUrl: true },

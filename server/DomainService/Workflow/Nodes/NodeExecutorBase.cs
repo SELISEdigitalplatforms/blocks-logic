@@ -31,10 +31,11 @@ namespace DomainService.Workflow.Nodes
         {
             if (string.IsNullOrEmpty(text)) return default;
 
-
-            var resolved = Regex.Replace(text, @"\{\{([^{}]+)\}\}", match => ResolveExpression(match.Groups[1].Value.Trim(), inputItem, context));
+            var resolved = Regex.Replace(text, @"\{\{([^{}]+)\}\}", match =>
+                ResolveExpression(match.Groups[1].Value.Trim(), inputItem, context));
 
             if (typeof(T) == typeof(string)) return (T)(object)resolved;
+            if (typeof(T) == typeof(object)) return (T)Newtonsoft.Json.JsonConvert.DeserializeObject(resolved)!;
 
             try { return Newtonsoft.Json.JsonConvert.DeserializeObject<T>(resolved); }
             catch { return default; }
@@ -95,7 +96,16 @@ namespace DomainService.Workflow.Nodes
             var json = BsonValueToJson(output);
             var token = JToken.Parse(json);
             var selected = token.SelectToken(path);
-            return selected?.Type == JTokenType.String ? selected.Value<string>() ?? "" : selected?.ToString() ?? "";
+            return selected.Type switch
+            {
+                JTokenType.String => selected.Value<string>() ?? "",
+                JTokenType.Boolean => selected.Value<bool>().ToString().ToLower(), // "false" / "true"
+                JTokenType.Null => "null",
+                // Objects/arrays stay as JSON strings so downstream deserialize works
+                JTokenType.Object or JTokenType.Array => selected.ToString(Newtonsoft.Json.Formatting.None),
+                // Integers, floats, etc — use Newtonsoft's serialization, not .ToString()
+                _ => Newtonsoft.Json.JsonConvert.SerializeObject(selected.ToObject<object>())
+            };
         }
 
         /// <summary>
@@ -144,11 +154,8 @@ namespace DomainService.Workflow.Nodes
 
         private static string BsonValueToJson(BsonValue value)
         {
-            if (value is BsonDocument doc)
-                return doc.ToJson(new JsonWriterSettings { OutputMode = JsonOutputMode.RelaxedExtendedJson });
-            if (value is BsonArray arr)
-                return arr.ToJson(new JsonWriterSettings { OutputMode = JsonOutputMode.RelaxedExtendedJson });
-            return value?.ToString() ?? "";
+            if (value == null) return "";
+            return value.ToJson(new JsonWriterSettings { OutputMode = JsonOutputMode.RelaxedExtendedJson });
         }
 
         private static string BsonToJson(BsonDocument doc) =>
