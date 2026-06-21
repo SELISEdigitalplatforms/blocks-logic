@@ -11,6 +11,7 @@ using DomainService.Workflow.Nodes.TriggerEmailV1;
 using DomainService.Workflow.Nodes.TriggerDataV1;
 using DomainService.Workflow.Nodes.LogicIFV1;
 using DomainService.Workflow.Nodes.TriggerWebhookV1;
+using DomainService.Workflow.Nodes.TransformSetFieldV1;
 using DomainService.MagicLink.Service;
 
 namespace DomainService.Workflow
@@ -39,6 +40,10 @@ namespace DomainService.Workflow
 
             // Logic nodes
             services.AddSingleton<INodeExecutor, LogicIfV1Node>();
+
+
+            // Transform nodes
+            services.AddSingleton<INodeExecutor, TransformSetFieldV1Node>();
 
             // Action nodes
             services.AddSingleton<INodeExecutor, ActionAIAgentV1Node>();

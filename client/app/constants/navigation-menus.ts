@@ -2,16 +2,6 @@ import { Menu } from "@/models/menu-models";
 import {
   Home,
   Package,
-  Users,
-  BookMinus,
-  Settings,
-  Shield,
-  Key,
-  ShieldCheck,
-  ScanFace,
-  Lock,
-  Zap,
-  Gauge,
   Workflow,
 } from "lucide-react";
 

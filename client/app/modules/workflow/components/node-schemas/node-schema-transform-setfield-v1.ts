@@ -19,10 +19,10 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
       },
       {
         id: "set-fields",
-        type: "key-value-pairs",
+        type: "key-type-value-pairs",
         label: "Set Fields",
         info: "Set fields",
-        key: "parameter.setFields",
+        key: "manualMappingFields",
         dependsOn: {
           key: "mode",
           value: "manual_mapping",
@@ -40,37 +40,50 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
         key: "jsonCode",
       },
       {
-        id: "other-inputs",
+        id: "includeOtherFields",
         type: "switch",
         label: "Include Other Input Fields",
         info: "Include other input fields",
-        key: "otherInputs",
+        key: "includeOtherFields",
       },
       {
-        id: "include-inputs",
+        id: "otherFieldsMode",
         type: "select-with-description",
         label: "Input Fields to Include",
         info: "How to select the fields you want to include in your output items",
-        key: "includeInputs",
-        options: [
-          { label: "All Fields", value: "all_fields", description: "Include all fields from the input items" },
-          { label: "Specific Fields", value: "specific_fields", description: "Include specific fields from the input items" },
-          { label: "Exclude Fields", value: "exclude_fields", description: "Exclude specific fields from the input items" },
-        ],
+
+        key: "otherFieldsMode",
         dependsOn: {
-          key: "otherInputs",
+          key: "includeOtherFields",
           value: true,
         },
+        options: [
+          {
+            label: "All Fields",
+            value: "all",
+            description: "Include all fields from the input items",
+          },
+          {
+            label: "Specific Fields",
+            value: "include",
+            description: "Include specific fields from the input items",
+          },
+          {
+            label: "Exclude Fields",
+            value: "exclude",
+            description: "Exclude specific fields from the input items",
+          },
+        ],
       },
       {
         id: "include-fields",
         type: "text",
         label: "Fields to Include",
         info: "Fields to include in the output items",
-        key: "includeSpecificFields",
+        key: "includedFields",
         dependsOn: {
-          key: "includeInputs",
-          value: "specific_fields",
+          key: "otherFieldsMode",
+          value: "include",
         },
       },
       {
@@ -80,11 +93,10 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
         info: "Fields to exclude from the output items",
         key: "excludeFields",
         dependsOn: {
-          key: "includeInputs",
-          value: "exclude_fields",
+          key: "otherFieldsMode",
+          value: "exclude",
         },
       },
-
     ],
     settings: [
       {
@@ -98,11 +110,12 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
   },
   defaults: {
     parameters: {
-      otherInputs: false,
-      includeFieldsMode: "all_fields",
-      includeFields: [],
+      includeOtherFields: false,
+      otherFieldsMode: "all",
+      includedFields: [],
       excludeFields: [],
       mode: "manual_mapping",
+      manualMappingFields: [],
     },
     settings: {
       continueOnError: false,
