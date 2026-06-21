@@ -13,6 +13,7 @@ export type FormFieldType =
   | "code-editor"
   | "key-value-pairs"
   | "fixed-key-value-pairs"
+  | "key-type-value-pairs"
   | "array"
   | "schema-fields"
   | "schema-field-picker"

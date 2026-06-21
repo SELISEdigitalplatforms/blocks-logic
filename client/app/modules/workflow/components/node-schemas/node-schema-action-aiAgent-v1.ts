@@ -70,7 +70,7 @@ export const NodeSchemaActionAiAgentV1: NodeSchemaDefinition = {
     ...node,
     parameters: {
       ...node.parameters,
-      ApiBaseUrl: API_BASES.AI,
+      ApiBaseUrl: API_BASES.AGENTS,
     },
   }),
 };

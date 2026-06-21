@@ -1,10 +1,11 @@
-import { http } from "@/lib/http-client";
+import { serviceInstances } from "@/lib/http-client";
 import { LANGUAGE_ENDPOINTS } from "../constants/localization.endpoint.constant";
 import { ILanguageConfig } from "../models/language";
 
 class LanguageManagerService {
+  private readonly LogicHttpClient = serviceInstances.logicService;
   fetchBlocksLanguages = (projectKey: string): Promise<ILanguageConfig[]> => {
-    return http.get(
+    return this.LogicHttpClient.get(
       `${LANGUAGE_ENDPOINTS.GETS}?projectKey=${projectKey}`,
       undefined,
       { absoluteUrl: true },

@@ -20,6 +20,7 @@ var serviceName = "blocks-logic";
 //var vaultType = ResolveVaultType();
 //Console.WriteLine($"Using Genesis vault type: {vaultType}");
 var secret = await ApplicationConfigurations.ConfigureLogAndSecretsAsync(serviceName, VaultType.Azure);
+
 var builder = WebApplication.CreateBuilder(args);
 ApplicationConfigurations.ConfigureApiEnv(builder, args);
 
@@ -107,8 +108,8 @@ if (File.Exists(indexHtml))
 
 //ApplicationConfigurations.ConfigureMiddleware(app);
 ApplicationConfigurations.ConfigureMiddleware(app,
-    tenantValidationPrefixes: new[] { "notificationHub" });
-app.MapHub<NotificationHub>("/notificationHub").WithDisplayName("Controller/notificationHub"); 
+    tenantValidationPrefixes: new[] { "api/notificationHub" });
+app.MapHub<NotificationHub>("/api/notificationHub").WithDisplayName("Controller/notificationHub"); 
 await app.RunAsync();
 
 static void ApplyFrontendRuntimeSettings(IConfiguration configuration, string webRootPath, string blocksKey, string googleSiteKey)
