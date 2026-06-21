@@ -29,7 +29,7 @@ builder.Configuration.AddMongoDbConfiguration(options =>
     options.ConnectionString = secret.DatabaseConnectionString;
     options.DatabaseName     = secret.RootDatabaseName;
     options.CollectionName   = "Secrets";
-    options.SecretKey        = "blocks-Secret";
+    options.SecretKey        = "blocks-secret-logic";
 });
 
 ApplicationConfigurations.ConfigureServices(builder.Services, LogicConstants.GetMessageConfiguration(secret.MessageConnectionString));
