@@ -44,10 +44,10 @@ jobs:
           file: ${{ env[matrix.dockerfile] }}
           platforms: linux/amd64
           push: true
-          tags: ${{ env.AUTHOR }}/${{ env.REPO_NAME }}-${{ matrix.component }}:${{ github.sha }}
+          tags: ${{ secrets.DOCKERHUB_ORG }}/${{ env.REPO_NAME }}-${{ matrix.component }}:${{ github.sha }}
           cache-from: type=gha,scope=${{ env.REPO_NAME }}-${{ matrix.component }}
           cache-to: type=gha,mode=max,scope=${{ env.REPO_NAME }}-${{ matrix.component }}
 
       - name: Summary
         run: |
-          echo "Pushed \`${{ env.AUTHOR }}/${{ env.REPO_NAME }}-${{ matrix.component }}:${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Pushed \`${{ secrets.DOCKERHUB_ORG }}/${{ env.REPO_NAME }}-${{ matrix.component }}:${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
