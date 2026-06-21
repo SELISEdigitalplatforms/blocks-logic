@@ -50,7 +50,7 @@ export const SelectField = ({
           {isLoading && <Loader2 className="h-4 w-4 animate-spin opacity-50" />}
         </div>
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent className="max-h-60">
         {options?.map((option) => (
           <SelectItem key={String(option.value)} value={String(option.value)}>
             {option.label}
