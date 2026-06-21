@@ -42,7 +42,7 @@ export const SelectField = ({
       <SelectTrigger id={field.id}>
         <SelectValue placeholder={field.placeholder || "Select an option"} />
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent className="max-h-60">
         {options?.map((option) => (
           <SelectItem key={String(option.value)} value={String(option.value)}>
             {option.label}
