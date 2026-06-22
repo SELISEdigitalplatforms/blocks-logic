@@ -17,9 +17,9 @@ using MongoDB.Driver;
 using Path = System.IO.Path;
 
 var serviceName = "blocks-logic";
-//var vaultType = ResolveVaultType();
+var vaultType = ApplicationConfigurations.ResolveVaultType();
 //Console.WriteLine($"Using Genesis vault type: {vaultType}");
-var secret = await ApplicationConfigurations.ConfigureLogAndSecretsAsync(serviceName, VaultType.Azure);
+var secret = await ApplicationConfigurations.ConfigureLogAndSecretsAsync(serviceName, vaultType);
 
 var builder = WebApplication.CreateBuilder(args);
 ApplicationConfigurations.ConfigureApiEnv(builder, args);
