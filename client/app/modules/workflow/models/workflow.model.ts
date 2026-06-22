@@ -73,3 +73,13 @@ export interface ExecutedNode {
   error: string | null;
   attemptNumber: number;
 }
+
+export interface WorkflowVersion {
+  id: string;
+  name: string;
+  description?: string;
+  author?: string;
+  date?: string;
+  isActive?: boolean;
+  [key: string]: any;
+}

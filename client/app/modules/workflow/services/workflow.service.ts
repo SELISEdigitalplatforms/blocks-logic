@@ -17,6 +17,10 @@ import {
   IGetWorkflowExecutionsResponse,
   IGetWorkflowExecutionByIdPayload,
   IGetWorkflowExecutionByIdResponse,
+  ICreateWorkflowVersionPayload,
+  ICreateWorkflowVersionResponse,
+  IGetWorkflowVersionsPayload,
+  IGetWorkflowVersionsResponse,
 } from "../types/workflow.service.type";
 
 export class WorkflowService {
@@ -100,6 +104,14 @@ export class WorkflowService {
     //   {},
     //   { absoluteUrl: true },
     // );
+  }
+
+  createWorkflowVersion = (payload: ICreateWorkflowVersionPayload): Promise<ICreateWorkflowVersionResponse> => {
+    return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.CREATE_VERSION}`, payload);
+  }
+
+  getWorkflowVersions = (payload: IGetWorkflowVersionsPayload): Promise<IGetWorkflowVersionsResponse> => {
+    return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.GET_VERSIONS}`, payload);
   }
 }
 
