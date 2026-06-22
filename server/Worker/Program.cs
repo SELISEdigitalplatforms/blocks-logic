@@ -7,25 +7,29 @@ using DomainService.Shared.Dtos;
 using DomainService.Shared.Entities;
 using DomainService.Utilities;
 using DomainService.Worker;
+using DomainService.Workflow;
+using DomainService.Workflow.Events;
+using DomainService.Workflow.Nodes.TriggerDataV1;
+using DomainService.Workflow.Utils;
 using Iam.DomainService.Accounts;
 using Iam.DomainService.Dtos;
 using Iam.DomainService.Shared.Dtos;
 using Iam.DomainService.Users;
 using Mfa.DomainService.Configuration;
+using Renci.SshNet.Messages;
 using Worker;
 using Worker.Configuration;
 using Worker.Consumers;
 using Worker.Consumers.Identifier;
 using Worker.Consumers.Users;
-using DomainService.Workflow.Utils;
-using DomainService.Workflow;
-using DomainService.Workflow.Events;
-using DomainService.Workflow.Nodes.TriggerDataV1;
 using Worker.Consumers.Workflow;
 
 const string _serviceName = "blocks-logic-worker";
-Console.WriteLine($"Using Genesis vault type: {VaultType.Azure}");
-var secret = await ApplicationConfigurations.ConfigureLogAndSecretsAsync(_serviceName, VaultType.Azure);
+var vaultType = ApplicationConfigurations.ResolveVaultType();
+//Console.WriteLine($"Using Genesis vault type: {vaultType}");
+
+Console.WriteLine($"Using Genesis vault type: {vaultType}");
+var secret = await ApplicationConfigurations.ConfigureLogAndSecretsAsync(_serviceName, vaultType);
 
 await CreateHostBuilder(args).Build().RunAsync();
 
