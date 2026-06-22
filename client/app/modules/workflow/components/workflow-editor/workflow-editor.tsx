@@ -27,8 +27,8 @@ export const WorkflowEditor = () => {
     onConnect,
     isValidConnection,
     openNodeLibraryPanel,
-    copyNode,
-    pasteNode,
+    copySelectedNodes,
+    pasteNodes,
   } = useWorkflow();
 
   useEffect(() => {
@@ -44,20 +44,18 @@ export const WorkflowEditor = () => {
 
       // Ctrl/Cmd + C
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
-        if (selectedNode) {
-          copyNode(selectedNode.id);
-        }
+        copySelectedNodes();
       }
 
       // Ctrl/Cmd + V
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") {
-        pasteNode();
+        pasteNodes();
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedNode, copyNode, pasteNode]);
+  }, [selectedNode, copySelectedNodes, pasteNodes]);
 
   return (
     <>
@@ -73,6 +71,8 @@ export const WorkflowEditor = () => {
           nodeTypes={WorkflowEditorNodeTypes}
           defaultEdgeOptions={WorkflowEditorDefaultEdgeOptions}
           edgeTypes={WorkflowEditorEdgeTypes}
+          multiSelectionKeyCode={["Meta", "Control", "Shift"]}
+          deleteKeyCode={["Backspace", "Delete"]}
           className="bg-background"
           fitView={EditorFitConfig.fitView}
           fitViewOptions={EditorFitConfig.fitViewOptions}
