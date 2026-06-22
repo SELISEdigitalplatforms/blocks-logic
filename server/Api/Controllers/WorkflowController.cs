@@ -11,16 +11,16 @@ namespace Utilities.Api.Controllers
     [Route("[controller]/[action]")]
     public class WorkflowController : ControllerBase
     {
-        
+
         private readonly IWorkflowService _workflowService;
         private readonly IWorkflowExecutionService _workflowExecutionService;
 
         public WorkflowController(
-          
+
             IWorkflowService workflowService,
             IWorkflowExecutionService workflowExecutionService)
         {
-           
+
             _workflowService = workflowService;
             _workflowExecutionService = workflowExecutionService;
         }
@@ -73,6 +73,20 @@ namespace Utilities.Api.Controllers
             return Ok(result);
         }
 
+        [HttpPost]
+        public async Task<IActionResult> CreateVersion([FromBody] WorkflowVersionCreateRequestDto dto)
+        {
+            var result = await _workflowService.CreateVersion(dto);
+            return StatusCode(StatusCodes.Status201Created, result);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> GetVersions([FromBody] WorkflowGetVersionsRequestDto dto)
+        {
+            var result = await _workflowService.GetVersions(dto);
+            return StatusCode(StatusCodes.Status200OK, result);
+        }
+
         [HttpPost("{projectKey}/{workflowId}/{webhookId}")]
         public async Task<IActionResult> Webhook(string projectKey, string workflowId, string webhookId, [FromBody] JsonElement input)
         {
@@ -119,7 +133,7 @@ namespace Utilities.Api.Controllers
 
         private void ApplyContext(IProjectKey request)
         {
-            
+
         }
     }
 }
