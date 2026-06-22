@@ -31,7 +31,8 @@ export const useWorkflow = () => {
   const deleteNode = useWorkflowStore((state) => state.deleteNode);
   const duplicateNode = useWorkflowStore((state) => state.duplicateNode);
   const copyNode = useWorkflowStore((state) => state.copyNode);
-  const pasteNode = useWorkflowStore((state) => state.pasteNode);
+  const copySelectedNodes = useWorkflowStore((state) => state.copySelectedNodes);
+  const pasteNodes = useWorkflowStore((state) => state.pasteNodes);
   const createEdge = useWorkflowStore((state) => state.createEdge);
   const deleteEdge = useWorkflowStore((state) => state.deleteEdge);
   const selectNode = useWorkflowStore((state) => state.selectNode);
@@ -114,7 +115,10 @@ export const useWorkflow = () => {
   }, [nodes, edges, isDirty]);
 
   const onNodeClick = useCallback(
-    (_event: React.MouseEvent, node: Node) => {
+    (event: React.MouseEvent, node: Node) => {
+      if (event.ctrlKey || event.metaKey || event.shiftKey) {
+        return;
+      }
       const nodeData = getNodeById(node.id);
       if (!nodeData) return;
       selectAndConfigureNode(nodeData);
@@ -174,7 +178,8 @@ export const useWorkflow = () => {
     deleteNode,
     duplicateNode,
     copyNode,
-    pasteNode,
+    copySelectedNodes,
+    pasteNodes,
     createEdge,
     deleteEdge,
 

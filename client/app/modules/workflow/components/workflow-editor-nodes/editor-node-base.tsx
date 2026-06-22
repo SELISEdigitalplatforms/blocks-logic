@@ -28,13 +28,13 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
     useWorkflow();
   const node = getNodeById(id);
   if (!node) return null;
-  const isSelected = node.id === selectedNode?.id;
+  const isSelected = node.id === selectedNode?.id || node.selected;
   return (
     <>
       <div
         className={cn(
-          "peer rounded-md border bg-background px-5 py-4 shadow-lg transition-shadow hover:shadow-xl",
-          isSelected && "border-medium-emphasis",
+          "peer rounded-md border bg-background px-5 py-4 shadow-lg transition-all hover:shadow-xl",
+          isSelected && "border-primary ring-1 ring-primary",
           node.className || "",
         )}
       >
