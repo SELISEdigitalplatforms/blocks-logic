@@ -1,4 +1,5 @@
 "use client";
+import { useEffect } from "react";
 import { ReactFlow, Background, BackgroundVariant } from "@xyflow/react";
 import { Button } from "@/components/ui-kits/button/button";
 import { Plus } from "lucide-react";
@@ -26,7 +27,37 @@ export const WorkflowEditor = () => {
     onConnect,
     isValidConnection,
     openNodeLibraryPanel,
+    copyNode,
+    pasteNode,
   } = useWorkflow();
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input/textarea
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target as HTMLElement).isContentEditable
+      ) {
+        return;
+      }
+
+      // Ctrl/Cmd + C
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
+        if (selectedNode) {
+          copyNode(selectedNode.id);
+        }
+      }
+
+      // Ctrl/Cmd + V
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") {
+        pasteNode();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedNode, copyNode, pasteNode]);
 
   return (
     <>

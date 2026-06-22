@@ -30,6 +30,8 @@ export const useWorkflow = () => {
   const updateNode = useWorkflowStore((state) => state.updateNode);
   const deleteNode = useWorkflowStore((state) => state.deleteNode);
   const duplicateNode = useWorkflowStore((state) => state.duplicateNode);
+  const copyNode = useWorkflowStore((state) => state.copyNode);
+  const pasteNode = useWorkflowStore((state) => state.pasteNode);
   const createEdge = useWorkflowStore((state) => state.createEdge);
   const deleteEdge = useWorkflowStore((state) => state.deleteEdge);
   const selectNode = useWorkflowStore((state) => state.selectNode);
@@ -171,6 +173,8 @@ export const useWorkflow = () => {
     updateNode,
     deleteNode,
     duplicateNode,
+    copyNode,
+    pasteNode,
     createEdge,
     deleteEdge,
 
