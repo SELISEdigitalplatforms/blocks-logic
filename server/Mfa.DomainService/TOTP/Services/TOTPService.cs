@@ -1,4 +1,5 @@
 ﻿using Blocks.Genesis;
+using DomainService.Storage;
 using FluentValidation;
 using Mfa.DomainService.Entities;
 using Mfa.DomainService.Services;
@@ -8,6 +9,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using OtpNet;
 using QRCoder;
+using StorageDriver;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -25,6 +27,7 @@ namespace Mfa.DomainService.TOTP
         private readonly ICacheClient _cacheClient;
         private readonly IValidator<VerifyOtpRequest> _validator;
         private readonly ITenants _tenant;
+        private readonly IStorageDriverService _storageDriverService;
 
         private HttpClient _httpClient;
         const long _defaultTotpLoginSession = 15 * 60;
@@ -35,12 +38,14 @@ namespace Mfa.DomainService.TOTP
                            IConfiguration configuration,
                            ICacheClient cacheClient,
                            IValidator<VerifyOtpRequest> validator,
-                           ITenants tenant)
+                           ITenants tenant,
+                           IStorageDriverService storageDriverService)
         {
             _repository = repository;
             _logger = logger;
             _httpContextAccessor = httpContextAccessor;
             _configuration = configuration;
+            _storageDriverService = storageDriverService;
             _cacheClient = cacheClient;
             _validator = validator;
             _tenant = tenant;
@@ -83,12 +88,13 @@ namespace Mfa.DomainService.TOTP
                 return CreateOtpResponse(false);
             }
 
-            var imageUri = await GetFileUriAsync(fileId);
+           // var imageUri = await GetFileUriAsync(fileId);
+            var fileResponse = await _storageDriverService.GetUrlForDownloadFileAsync(new GetFileRequest { FileId = fileId });
 
-            if (!string.IsNullOrWhiteSpace(imageUri))
+            if (!string.IsNullOrWhiteSpace(fileResponse.Url))
             {
-                await SaveOtpInfoAsync(userInfo.ItemId, secret, imageUri, fileId, twoFactorId);
-                return CreateOtpResponse(true, imageUri, secret);
+                await SaveOtpInfoAsync(userInfo.ItemId, secret, fileResponse.Url, fileId, twoFactorId);
+                return CreateOtpResponse(true, fileResponse.Url, secret);
             }
 
             return CreateOtpResponse(false);
@@ -104,9 +110,9 @@ namespace Mfa.DomainService.TOTP
 
         private async Task<string> GetPreSignedUrlAsync(string fileId)
         {
-            var url = _configuration["PreSignedUriForUpload"];
+           // var url = _configuration["PreSignedUriForUpload"];
 
-            var requestBody = new
+            var requestBody = new GetPreSignedUrlForUploadRequest
             {
                 ItemId = fileId,
                 MetaData = "{\"Title\":{\"Type\":\"String\",\"Value\":\"QrImage.png\"},\"OriginalName\":{\"Type\":\"String\",\"Value\":\"image\"}}",
@@ -117,8 +123,9 @@ namespace Mfa.DomainService.TOTP
                 ProjectKey = BlocksContext.GetContext()?.TenantId
             };
 
-            var response = await SendAuthorizedRequestAsync(HttpMethod.Post, url, requestBody);
-            return response.GetProperty("uploadUrl").GetString() ?? string.Empty;
+           // var response = await SendAuthorizedRequestAsync(HttpMethod.Post, url, requestBody);
+            var response = await _storageDriverService.GetPerSignedUrlForUploadAsync(requestBody);
+            return response.UploadUrl ?? string.Empty;
         }
 
         private async Task<string> GetFileUriAsync(string fileId)
