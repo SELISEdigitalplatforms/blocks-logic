@@ -18,7 +18,7 @@ createRoot(document.getElementById("root")!).render(
             config={{
               name: "blocks-logic",
               appLogoUrl: {
-                dark: "/Logo_Black.svg",
+                dark: "/Logo_White.svg",
                 light: "/Logo.svg",
               },
             }}>
