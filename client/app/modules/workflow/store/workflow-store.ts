@@ -30,6 +30,8 @@ export type WorkflowState = {
   selectedNode: EditorNode | null;
   selectedHandle: string | null;
 
+  copiedNode: EditorNode | null;
+
   isConfigModalOpen: boolean;
   isPanelOpen: boolean;
 
@@ -43,6 +45,8 @@ export type WorkflowState = {
   updateNode: (nodeId: string, updates: Partial<EditorNode>) => void;
   deleteNode: (nodeId: string) => void;
   duplicateNode: (nodeId: string) => void;
+  copyNode: (nodeId: string) => void;
+  pasteNode: (position?: { x: number; y: number }) => void;
   selectNode: (node: EditorNode) => void;
   deselectNode: () => void;
 
@@ -84,6 +88,7 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
   nodeIdCounter: 1,
   selectedNode: null,
   selectedHandle: null,
+  copiedNode: null,
   isConfigModalOpen: false,
   isPanelOpen: false,
   workflowId: null,
@@ -214,9 +219,49 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
       ...node,
       id: newId,
       name: uniqueName,
+      selected: false,
       position: {
         x: node.position.x + 50,
-        y: node.position.y + 50,
+        y: node.position.y + 100,
+      },
+    };
+
+    set({
+      nodesMap: { ...nodesMap, [newId]: newNode },
+      isDirty: true,
+    });
+  },
+
+  copyNode: (nodeId: string) => {
+    const { nodesMap } = get();
+    const node = nodesMap[nodeId];
+    if (node) {
+      set({ copiedNode: node });
+    }
+  },
+
+  pasteNode: (position?: { x: number; y: number }) => {
+    const { copiedNode, nodesMap } = get();
+    if (!copiedNode) return;
+
+    const newId = uuidv4().replace(/-/g, "");
+    // Enforce unique name for pasted node
+    const existingNames = new Set(Object.values(nodesMap).map((n) => n.name));
+    let uniqueName = copiedNode.name;
+    let counter = 1;
+    while (existingNames.has(uniqueName)) {
+      uniqueName = `${copiedNode.name} ${counter}`;
+      counter++;
+    }
+
+    const newNode: EditorNode = {
+      ...copiedNode,
+      id: newId,
+      name: uniqueName,
+      selected: false,
+      position: position || {
+        x: copiedNode.position.x + 50,
+        y: copiedNode.position.y + 100,
       },
     };
 
