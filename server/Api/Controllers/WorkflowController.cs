@@ -87,6 +87,22 @@ namespace Utilities.Api.Controllers
             return StatusCode(StatusCodes.Status200OK, result);
         }
 
+        [HttpPost]
+        public async Task<IActionResult> Publish([FromBody] WorkflowPublishRequestDto dto)
+        {
+            var result = await _workflowService.PublishAsync(dto);
+            return StatusCode(StatusCodes.Status200OK, result);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> Restore([FromBody] WorkflowRestoreRequestDto dto)
+        {
+            var result = await _workflowService.RestoreAsync(dto);
+            return StatusCode(StatusCodes.Status200OK, result);
+        }
+
+
+
         [HttpPost("{projectKey}/{workflowId}/{webhookId}")]
         public async Task<IActionResult> Webhook(string projectKey, string workflowId, string webhookId, [FromBody] JsonElement input)
         {

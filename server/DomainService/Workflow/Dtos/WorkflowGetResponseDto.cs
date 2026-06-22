@@ -25,7 +25,9 @@ namespace DomainService.Workflow.Dtos
 
         public string? PublishedVersionId { get; set; }
 
-        public bool HasUnpublishedChanges { get; set; }
+        public bool IsDirty { get; set; }
+
+        public bool RequiresVersion { get; set; }
 
         public Dictionary<string, List<NodeOutputSchemaField>>? NodeOutputSchemas { get; set; }
     }
