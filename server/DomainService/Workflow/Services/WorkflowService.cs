@@ -9,6 +9,7 @@ using MongoDB.Bson;
 using Newtonsoft.Json;
 using System.Security.Cryptography;
 using System.Text;
+using MongoDB.Bson.Serialization;
 namespace DomainService.Workflow.Services
 {
     [ExcludeFromCodeCoverage]
@@ -260,6 +261,10 @@ namespace DomainService.Workflow.Services
                 Parameters = JsonDocument.Parse(n.Parameters.ToJson()).RootElement,
                 Settings = JsonDocument.Parse(n.Settings.ToJson()).RootElement
             }).ToList();
+
+            var isDirty = String.IsNullOrEmpty(workflow.PublishedVersionId) || workflow.DraftHash != snapshot?.SnapshotHash;
+            var publishRequired = !isDirty && !String.IsNullOrEmpty(workflow.PublishedVersionId);
+
             var workflowDto = new Dtos.WorkflowResponseDto
             {
                 ItemId = workflow.ItemId,
@@ -276,7 +281,8 @@ namespace DomainService.Workflow.Services
                 CreatedBy = workflow.CreatedBy,
                 LastUpdatedBy = workflow.LastUpdatedBy,
                 PublishedVersionId = workflow.PublishedVersionId,
-                HasUnpublishedChanges = string.IsNullOrEmpty(workflow.PublishedVersionId) ? false : ComputeHash(workflow.ToJson()) != snapshot?.SnapshotHash
+                IsDirty = isDirty,
+                PublishRequired = publishRequired
             };
             return new WorkflowGetResponseDto
             {
@@ -328,6 +334,8 @@ namespace DomainService.Workflow.Services
             }
             workflow.LastUpdatedDate = DateTime.UtcNow;
             workflow.LastUpdatedBy = BlocksContext.GetContext().UserId ?? "system";
+
+            workflow.DraftHash = ComputeHash(workflow);
 
             await _workflowRepository.UpdateWorkflowAsync(workflow);
 
@@ -384,10 +392,19 @@ namespace DomainService.Workflow.Services
             };
         }
 
-        public string ComputeHash(string json)
+        public string ComputeHash(WorkflowModel workflow)
         {
+            var model = new
+            {
+                workflow.Name,
+                workflow.Nodes,
+                workflow.Edges,
+                workflow.Settings,
+                workflow.Description,
+
+            };
             return Convert.ToHexString(
-                SHA256.HashData(Encoding.UTF8.GetBytes(json))
+                SHA256.HashData(Encoding.UTF8.GetBytes(model.ToJson()))
             );
         }
 
@@ -414,7 +431,7 @@ namespace DomainService.Workflow.Services
                 Name = dto.Name,
                 Description = dto.Description,
                 Snapshot = workflow.ToJson(),
-                SnapshotHash = ComputeHash(workflow.ToJson()),
+                SnapshotHash = ComputeHash(workflow),
                 CreatedDate = DateTime.UtcNow,
                 LastUpdatedDate = DateTime.UtcNow,
                 CreatedBy = BlocksContext.GetContext().UserId ?? "system",
@@ -467,6 +484,77 @@ namespace DomainService.Workflow.Services
                     Errors = new Dictionary<string, string> { { "Message", "Something went wrong" } },
                 };
             }
+        }
+
+        public async Task<BaseMutationResponse> PublishAsync(WorkflowPublishRequestDto dto)
+        {
+            var workflow = await _workflowRepository.GetWorkflowAsync(dto.WorkflowId, dto.ProjectKey);
+            if (workflow == null)
+            {
+                return new BaseMutationResponse
+                {
+                    IsSuccess = false,
+                    Errors = new Dictionary<string, string> { { "Message", "Workflow not found" } },
+                    ItemId = null
+                };
+            }
+            var version = await _workflowSnapshotRepository.GetWorkflowSnapshotAsync(dto.ProjectKey, dto.VersionId);
+            if (version == null)
+            {
+                return new BaseMutationResponse
+                {
+                    IsSuccess = false,
+                    Errors = new Dictionary<string, string> { { "Message", "Version not found" } },
+                    ItemId = null
+                };
+            }
+            workflow.PublishedVersionId = dto.VersionId;
+            await _workflowRepository.UpdateWorkflowAsync(workflow);
+            return new BaseMutationResponse
+            {
+                IsSuccess = true,
+                ItemId = workflow.ItemId,
+                Errors = null
+            };
+        }
+
+        public async Task<BaseMutationResponse> RestoreAsync(WorkflowRestoreRequestDto dto)
+        {
+            var workflow = await _workflowRepository.GetWorkflowAsync(dto.WorkflowId, dto.ProjectKey);
+            if (workflow == null)
+            {
+                return new BaseMutationResponse
+                {
+                    IsSuccess = false,
+                    Errors = new Dictionary<string, string> { { "Message", "Workflow not found" } },
+                    ItemId = null
+                };
+            }
+            var version = await _workflowSnapshotRepository.GetWorkflowSnapshotAsync(dto.ProjectKey, dto.VersionId);
+            if (version == null)
+            {
+                return new BaseMutationResponse
+                {
+                    IsSuccess = false,
+                    Errors = new Dictionary<string, string> { { "Message", "Version not found" } },
+                    ItemId = null
+                };
+            }
+
+            var snapshotWorkflow = BsonSerializer.Deserialize<WorkflowModel>(version.Snapshot);
+            var updatedWorkflow = snapshotWorkflow;
+            updatedWorkflow.ItemId = workflow.ItemId;
+            updatedWorkflow.LastUpdatedDate = DateTime.UtcNow;
+            updatedWorkflow.LastUpdatedBy = BlocksContext.GetContext().UserId ?? "system";
+            updatedWorkflow.PublishedVersionId = workflow.PublishedVersionId;
+            updatedWorkflow.DraftHash = ComputeHash(snapshotWorkflow);
+            await _workflowRepository.UpdateWorkflowAsync(updatedWorkflow);
+            return new BaseMutationResponse
+            {
+                IsSuccess = true,
+                ItemId = workflow.ItemId,
+                Errors = null
+            };
         }
     }
 
