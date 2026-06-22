@@ -30,7 +30,8 @@ export type WorkflowState = {
   selectedNode: EditorNode | null;
   selectedHandle: string | null;
 
-  copiedNode: EditorNode | null;
+  copiedNodes: EditorNode[];
+  copiedEdges: Edge[];
 
   isConfigModalOpen: boolean;
   isPanelOpen: boolean;
@@ -46,7 +47,8 @@ export type WorkflowState = {
   deleteNode: (nodeId: string) => void;
   duplicateNode: (nodeId: string) => void;
   copyNode: (nodeId: string) => void;
-  pasteNode: (position?: { x: number; y: number }) => void;
+  copySelectedNodes: () => void;
+  pasteNodes: (position?: { x: number; y: number }) => void;
   selectNode: (node: EditorNode) => void;
   deselectNode: () => void;
 
@@ -88,7 +90,8 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
   nodeIdCounter: 1,
   selectedNode: null,
   selectedHandle: null,
-  copiedNode: null,
+  copiedNodes: [],
+  copiedEdges: [],
   isConfigModalOpen: false,
   isPanelOpen: false,
   workflowId: null,
@@ -112,10 +115,24 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
     const shouldDirty = changes.some((change) =>
       ["position", "remove", "add", "replace"].includes(change.type),
     );
-    set({
-      nodesMap,
-      ...(shouldDirty && { isDirty: true }),
-    });
+    const stateUpdate: Partial<WorkflowState> = { nodesMap };
+    
+    if (shouldDirty) {
+      stateUpdate.isDirty = true;
+    }
+
+    const selectedNodeId = get().selectedNode?.id;
+    if (selectedNodeId) {
+      const isSelectedNodeDeselected = changes.some(
+        (change) => change.type === "select" && !change.selected && change.id === selectedNodeId
+      );
+      if (isSelectedNodeDeselected) {
+        stateUpdate.selectedNode = null;
+        stateUpdate.isConfigModalOpen = false;
+      }
+    }
+
+    set(stateUpdate);
   },
 
   onEdgesChange: (changes) => {
@@ -236,37 +253,92 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
     const { nodesMap } = get();
     const node = nodesMap[nodeId];
     if (node) {
-      set({ copiedNode: node });
+      set({ copiedNodes: [node], copiedEdges: [] });
     }
   },
 
-  pasteNode: (position?: { x: number; y: number }) => {
-    const { copiedNode, nodesMap } = get();
-    if (!copiedNode) return;
+  copySelectedNodes: () => {
+    const { nodesMap, edgesMap } = get();
+    const selectedNodes = Object.values(nodesMap).filter((node) => node.selected);
+    if (selectedNodes.length > 0) {
+      const selectedNodeIds = new Set(selectedNodes.map((n) => n.id));
+      const copiedEdges = Object.values(edgesMap).filter(
+        (edge) => selectedNodeIds.has(edge.source) && selectedNodeIds.has(edge.target),
+      );
+      set({ copiedNodes: selectedNodes, copiedEdges });
+    }
+  },
 
-    const newId = uuidv4().replace(/-/g, "");
-    // Enforce unique name for pasted node
-    const existingNames = new Set(Object.values(nodesMap).map((n) => n.name));
-    let uniqueName = copiedNode.name;
-    let counter = 1;
-    while (existingNames.has(uniqueName)) {
-      uniqueName = `${copiedNode.name} ${counter}`;
-      counter++;
+  pasteNodes: (position?: { x: number; y: number }) => {
+    const { copiedNodes, copiedEdges, nodesMap, edgesMap } = get();
+    if (!copiedNodes || copiedNodes.length === 0) return;
+
+    let newNodesMap = { ...nodesMap };
+    let newEdgesMap = { ...edgesMap };
+    let existingNames = new Set(Object.values(newNodesMap).map((n) => n.name));
+
+    const newPastedNodeIds = new Set<string>();
+    const oldToNewId: Record<string, string> = {};
+
+    copiedNodes.forEach((copiedNode) => {
+      const newId = uuidv4().replace(/-/g, "");
+      oldToNewId[copiedNode.id] = newId;
+      // Enforce unique name for pasted node
+      let uniqueName = copiedNode.name;
+      let counter = 1;
+      while (existingNames.has(uniqueName)) {
+        uniqueName = `${copiedNode.name} ${counter}`;
+        counter++;
+      }
+      existingNames.add(uniqueName);
+
+      const newNode: EditorNode = {
+        ...copiedNode,
+        id: newId,
+        name: uniqueName,
+        selected: true,
+        position: position || {
+          x: copiedNode.position.x + 50,
+          y: copiedNode.position.y + 100,
+        },
+      };
+      newNodesMap[newId] = newNode;
+      newPastedNodeIds.add(newId);
+    });
+
+    if (copiedEdges && copiedEdges.length > 0) {
+      copiedEdges.forEach((edge) => {
+        const newSource = oldToNewId[edge.source];
+        const newTarget = oldToNewId[edge.target];
+        if (newSource && newTarget) {
+          const newEdgeId = `xy-edge__${newSource}-${newTarget}`;
+          newEdgesMap[newEdgeId] = {
+            ...edge,
+            id: newEdgeId,
+            source: newSource,
+            target: newTarget,
+            selected: true,
+          };
+        }
+      });
     }
 
-    const newNode: EditorNode = {
-      ...copiedNode,
-      id: newId,
-      name: uniqueName,
-      selected: false,
-      position: position || {
-        x: copiedNode.position.x + 50,
-        y: copiedNode.position.y + 100,
-      },
-    };
+    // Deselect existing nodes
+    Object.keys(newNodesMap).forEach((id) => {
+      if (!newPastedNodeIds.has(id)) {
+         newNodesMap[id] = { ...newNodesMap[id], selected: false };
+      }
+    });
+    // Deselect existing edges
+    Object.keys(newEdgesMap).forEach((id) => {
+      if (edgesMap[id]) {
+        newEdgesMap[id] = { ...newEdgesMap[id], selected: false };
+      }
+    });
 
     set({
-      nodesMap: { ...nodesMap, [newId]: newNode },
+      nodesMap: newNodesMap,
+      edgesMap: newEdgesMap,
       isDirty: true,
     });
   },
