@@ -24,6 +24,15 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { BREADCRUMB_CUSTOM_TITLES } from "@/constants/breadcrumb-custom-title";
 import { showErrorToast } from "@/hooks/use-toast";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui-kits/dropdown-menu/dropdown-menu";
+import { History } from "lucide-react";
+import { VersionHistorySidebar } from "../../components/version-history-sidebar";
+import { PublishWorkflowAction } from "../../components/publish-workflow-action";
 
 type WorkflowDetailPageProps = {
   workflowId: string;
@@ -35,6 +44,7 @@ export const WorkflowDetailsContent = ({
   const projectKey = useProjectStore().selectedProject?.tenantId || "";
   const navigate = useNavigate();
   const [isToggleStatusModalOpen, setIsToggleStatusModalOpen] = useState(false);
+  const [isVersionHistoryMode, setIsVersionHistoryMode] = useState(false);
   const { isDirty, isActive: workflowIsActive, setWorkflow } = useWorkflow();
   const { data, isLoading, isFetched, isFetching, isFetchedAfterMount } =
     useGetWorkflowById({
@@ -117,6 +127,21 @@ export const WorkflowDetailsContent = ({
                   className="h-4 bg-muted-foreground"
                 />
                 <div className="flex items-center gap-2">
+                  <PublishWorkflowAction />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9"
+                    onClick={() => setIsVersionHistoryMode(true)}
+                  >
+                    <History className="h-4 w-4" />
+                  </Button>
+                </div>
+                <Separator
+                  orientation="vertical"
+                  className="h-4 bg-muted-foreground"
+                />
+                <div className="flex items-center gap-2">
                   <span className="text-sm text-medium-emphasis">
                     {workflowIsActive ? "Active" : "Inactive"}
                   </span>
@@ -148,8 +173,18 @@ export const WorkflowDetailsContent = ({
               </div>
             </div>
 
-            <TabsContent value="editor" className="flex-1">
-              <WorkflowEditor />
+            <TabsContent value="editor" className="flex-1 overflow-hidden">
+              <div className="flex h-full w-full">
+                <div className="flex-1 relative h-full">
+                  <WorkflowEditor />
+                  {isVersionHistoryMode && (
+                    <div className="absolute inset-0 z-10 bg-black/5" />
+                  )}
+                </div>
+                {isVersionHistoryMode && (
+                  <VersionHistorySidebar onClose={() => setIsVersionHistoryMode(false)} />
+                )}
+              </div>
             </TabsContent>
 
             <TabsContent value="executions" className="flex-1 overflow-hidden">

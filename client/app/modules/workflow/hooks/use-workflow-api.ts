@@ -5,6 +5,8 @@ import {
   IGetWorkflowByIdPayload,
   IGetWorkflowExecutionsPayload,
   IGetWorkflowExecutionByIdPayload,
+  ICreateWorkflowVersionPayload,
+  IGetWorkflowVersionsPayload,
 } from "../types/workflow.service.type";
 
 export const useGetWorkflows = (options: IGetWorkflowsPayload) => {
@@ -86,5 +88,24 @@ export const useGetWorkflowExecutionById = (
     queryFn: () => workflowService.getWorkflowExecutionById(payload),
     enabled: !!payload.projectKey && !!payload.executionId,
     refetchInterval: 5000,
+  });
+};
+
+export const useCreateWorkflowVersion = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: ["workflow-version", "create"],
+    mutationFn: workflowService.createWorkflowVersion,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["workflow-versions"] });
+    },
+  });
+};
+
+export const useGetWorkflowVersions = (payload: IGetWorkflowVersionsPayload) => {
+  return useQuery({
+    queryKey: ["workflow-versions", payload],
+    queryFn: () => workflowService.getWorkflowVersions(payload),
+    enabled: !!payload.projectKey,
   });
 };

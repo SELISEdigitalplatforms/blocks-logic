@@ -1,5 +1,5 @@
 import { Edge } from "@xyflow/react";
-import { ExecutedItem, ExecutedNode, Workflow, WorkflowSummary } from "../models/workflow.model";
+import { ExecutedItem, ExecutedNode, Workflow, WorkflowSummary, WorkflowVersion } from "../models/workflow.model";
 import { WorkflowNode } from "@blocks-workflow/models/node.model";
 import { OutputSchemaField } from "./output-schema.types";
 
@@ -112,4 +112,25 @@ export interface IGetWorkflowExecutionByIdResponse {
   workflowSnapshot: Workflow;
   nodeExecutions: ExecutedNode[];
   items: ExecutedItem[];
+}
+
+export interface ICreateWorkflowVersionPayload {
+  projectKey: string;
+  workflowId: string;
+  name: string;
+  Description?: string;
+}
+
+export interface ICreateWorkflowVersionResponse {
+  [key: string]: any;
+}
+
+export interface IGetWorkflowVersionsPayload {
+  projectKey: string;
+  workflowId: string;
+}
+
+export interface IGetWorkflowVersionsResponse {
+  data?: WorkflowVersion[];
+  [key: string]: any;
 }
