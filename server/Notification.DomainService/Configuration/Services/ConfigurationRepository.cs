@@ -8,15 +8,31 @@ namespace DomainService.Configuration.Services
     {
         private readonly IDbContextProvider _dbContextProvider;
         private const string _collectionName = "NotificationConfigurations";
+        private readonly IBlocksSecret _blocksSecret;
+        private IMongoDatabase _notificationDb;
 
-        public ConfigurationRepository(IDbContextProvider dbContextProvider)
+        public ConfigurationRepository(IDbContextProvider dbContextProvider, IBlocksSecret blocksSecret)
         {
             _dbContextProvider = dbContextProvider;
+            _blocksSecret = blocksSecret;
+            _notificationDb = ResolveNotificationDb();
         }
+
+        private IMongoDatabase ResolveNotificationDb()
+    {
+        var blocksContext = BlocksContext.GetContext();
+
+        if(blocksContext.Impersonated)
+        {
+            return _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, "BlocksRootDb");
+        }
+
+        return _dbContextProvider.GetDatabase(blocksContext.TenantId);
+    }
 
         public async Task<NotificationConfiguration> GetByNameAsync(string name)
         {
-            var collection = _dbContextProvider.GetCollection<NotificationConfiguration>(_collectionName);
+            var collection = _notificationDb.GetCollection<NotificationConfiguration>(_collectionName);
 
             var filter = Builders<NotificationConfiguration>.Filter.Eq(mc => mc.Name, name);
             return await (await collection.FindAsync(filter)).FirstOrDefaultAsync();
@@ -24,7 +40,7 @@ namespace DomainService.Configuration.Services
 
         public async Task<NotificationConfiguration> GetByIdAsync(string id)
         {
-            var collection = _dbContextProvider.GetCollection<NotificationConfiguration>(_collectionName);
+            var collection = _notificationDb.GetCollection<NotificationConfiguration>(_collectionName);
 
             var filter = Builders<NotificationConfiguration>.Filter.Eq(mc => mc.ItemId, id);
             return await (await collection.FindAsync(filter)).FirstOrDefaultAsync();
@@ -32,7 +48,7 @@ namespace DomainService.Configuration.Services
 
         public async Task SaveAsync(NotificationConfiguration configuration)
         {
-            var collection = _dbContextProvider.GetCollection<NotificationConfiguration>(_collectionName);
+            var collection = _notificationDb.GetCollection<NotificationConfiguration>(_collectionName);
 
             var filter = Builders<NotificationConfiguration>.Filter.Eq(mc => mc.ItemId, configuration.ItemId);
 
@@ -45,7 +61,7 @@ namespace DomainService.Configuration.Services
 
         public async Task<GetConfigurationsResponse> GetConfigurationsAsync(GetConfigurationsRequest request)
         {
-            var collection = _dbContextProvider.GetCollection<NotificationConfiguration>(_collectionName);
+            var collection = _notificationDb.GetCollection<NotificationConfiguration>(_collectionName);
             var builder = Builders<NotificationConfiguration>.Filter;
             var filter = FilterDefinition<NotificationConfiguration>.Empty;
             var userId = BlocksContext.GetContext()?.UserId;
@@ -70,7 +86,7 @@ namespace DomainService.Configuration.Services
 
         public async Task<BaseResponse> DeleteConfigurationAsync(DeleteConfigurationRequest request)
         {
-            var collection = _dbContextProvider.GetCollection<NotificationConfiguration>(_collectionName);
+            var collection = _notificationDb.GetCollection<NotificationConfiguration>(_collectionName);
             var filter = Builders<NotificationConfiguration>.Filter.Eq(mc => mc.ItemId, request.ItemId);
             await collection.DeleteOneAsync(filter);
             

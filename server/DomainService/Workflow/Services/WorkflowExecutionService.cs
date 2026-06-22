@@ -303,7 +303,7 @@ namespace DomainService.Workflow.Services
                 Settings = BsonJsonConverter.ToJsonElement(item.Settings)
             }).ToList();
 
-            var workflow = new DomainService.Workflow.Dtos.Workflow
+            var workflow = new WorkflowResponseDto
             {
                 ItemId = execution.WorkflowSnapshot.ItemId,
                 Name = execution.WorkflowSnapshot.Name,
