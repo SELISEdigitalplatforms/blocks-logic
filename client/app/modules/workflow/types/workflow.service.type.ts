@@ -131,8 +131,9 @@ export interface IGetWorkflowVersionsPayload {
 }
 
 export interface IGetWorkflowVersionsResponse {
-  data?: WorkflowVersion[];
-  [key: string]: any;
+  data: WorkflowVersion[];
+  totalCount: number;
+  errors: unknown;
 }
 
 export interface IPublishWorkflowPayload {
@@ -143,7 +144,9 @@ export interface IPublishWorkflowPayload {
 }
 
 export interface IPublishWorkflowResponse {
-  [key: string]: any;
+  itemId: string;
+  isSuccess: boolean;
+  errors: unknown;
 }
 
 export interface IUnpublishWorkflowPayload {
@@ -152,7 +155,9 @@ export interface IUnpublishWorkflowPayload {
 }
 
 export interface IUnpublishWorkflowResponse {
-  [key: string]: any;
+  itemId: string;
+  isSuccess: boolean;
+  errors: unknown;
 }
 
 export interface IRestoreWorkflowPayload {
