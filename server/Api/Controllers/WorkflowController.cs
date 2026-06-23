@@ -76,14 +76,21 @@ namespace Utilities.Api.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateVersion([FromBody] WorkflowVersionCreateRequestDto dto)
         {
-            var result = await _workflowService.CreateVersion(dto);
+            var result = await _workflowService.CreateVersionAsync(dto);
             return StatusCode(StatusCodes.Status201Created, result);
         }
 
         [HttpPost]
         public async Task<IActionResult> GetVersions([FromBody] WorkflowGetVersionsRequestDto dto)
         {
-            var result = await _workflowService.GetVersions(dto);
+            var result = await _workflowService.GetVersionsAsync(dto);
+            return Ok(result);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> GetWorkflowByVersion([FromBody] GetWorkflowByVersionRequestDto dto)
+        {
+            var result = await _workflowService.GetWorkflowByVersionAsync(dto);
             return Ok(result);
         }
 
