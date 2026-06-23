@@ -25,11 +25,19 @@ namespace DomainService.Workflow.Dtos
 
         public string? PublishedVersionId { get; set; }
 
+        public WorkflowVersionDto? PublishedVersion { get; set; }
+
         public bool IsDirty { get; set; }
 
-        public bool RequiresVersion { get; set; }
-
         public Dictionary<string, List<NodeOutputSchemaField>>? NodeOutputSchemas { get; set; }
+    }
+
+    public class WorkflowVersionDto
+    {
+        public string VersionId { get; set; }
+        public string Name { get; set; }
+        public string Description { get; set; }
+
     }
 
 }
