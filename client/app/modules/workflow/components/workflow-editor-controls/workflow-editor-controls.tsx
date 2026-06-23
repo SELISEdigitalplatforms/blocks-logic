@@ -2,8 +2,13 @@ import { Button } from "@/components/ui-kits/button/button";
 import { Separator } from "@/components/ui-kits/separator/separator";
 import { useWorkflow } from "@blocks-workflow/hooks";
 import { Controls } from "@xyflow/react";
-import { Eraser, Plus, Maximize, ZoomIn, ZoomOut } from "lucide-react";
+import { Wand, Plus, Maximize, ZoomIn, ZoomOut } from "lucide-react";
 import { Fragment } from "react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui-kits/tooltip/tooltip";
 
 export const EditorFitConfig = {
   fitView: true,
@@ -15,20 +20,24 @@ export const WorkflowEditorControls = () => {
 
   const controls = [
     {
+      label: "Fit View",
       icon: Maximize,
       action: () =>
         fitView({ maxZoom: EditorFitConfig.fitViewOptions.maxZoom }),
     },
     {
+      label: "Zoom in",
       icon: ZoomIn,
       action: zoomIn,
     },
     {
+      label: "Zoom out",
       icon: ZoomOut,
       action: zoomOut,
     },
     {
-      icon: Eraser,
+      label: "Organize",
+      icon: Wand,
       action: () => {
         tidyUpWorkflow();
         setTimeout(
@@ -43,6 +52,7 @@ export const WorkflowEditorControls = () => {
       },
     },
     {
+      label: "Open Node Library",
       icon: Plus,
       action: () => {
         openNodeLibraryPanel();
@@ -58,19 +68,25 @@ export const WorkflowEditorControls = () => {
       showFitView={false}
       showInteractive={false}
     >
-      {controls.map(({ icon: Icon, action }, index) => (
+      {controls.map(({ label, icon: Icon, action }, index) => (
         <Fragment key={index}>
-          <Button
-            variant="ghost"
-            className="h-fit w-fit p-1.5 text-medium-emphasis"
-            onClick={(e) => {
-              e.stopPropagation();
-              action();
-            }}
-            key={index}
-          >
-            <Icon className="aspect-square h-5" />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                className="h-fit w-fit p-1.5 text-medium-emphasis"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  action();
+                }}
+              >
+                <Icon className="aspect-square h-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{label}</p>
+            </TooltipContent>
+          </Tooltip>
           {index === 3 && (
             <Separator orientation="vertical" className="h-auto mx-1" />
           )}
