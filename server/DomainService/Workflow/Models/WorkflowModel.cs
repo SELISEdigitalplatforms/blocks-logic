@@ -17,7 +17,7 @@ namespace DomainService.Workflow.Models
 
         public Dictionary<string, string> Settings { get; set; }
 
-        public bool IsActive { get; set; } = true;
+        public bool IsPublished { get; set; } = false;
 
         public bool IsDirty { get; set; } = true;
 
