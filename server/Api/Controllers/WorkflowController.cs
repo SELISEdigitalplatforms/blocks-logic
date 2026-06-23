@@ -84,8 +84,31 @@ namespace Utilities.Api.Controllers
         public async Task<IActionResult> GetVersions([FromBody] WorkflowGetVersionsRequestDto dto)
         {
             var result = await _workflowService.GetVersions(dto);
-            return StatusCode(StatusCodes.Status200OK, result);
+            return Ok(result);
         }
+
+        [HttpPost]
+        public async Task<IActionResult> Publish([FromBody] WorkflowPublishRequestDto dto)
+        {
+            var result = await _workflowService.PublishAsync(dto);
+            return Ok(result);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> Unpublish([FromBody] WorkflowUnpublishRequestDto dto)
+        {
+            var result = await _workflowService.UnpublishAsync(dto);
+            return Ok(result);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> Restore([FromBody] WorkflowRestoreRequestDto dto)
+        {
+            var result = await _workflowService.RestoreAsync(dto);
+            return Ok(result);
+        }
+
+
 
         [HttpPost("{projectKey}/{workflowId}/{webhookId}")]
         public async Task<IActionResult> Webhook(string projectKey, string workflowId, string webhookId, [FromBody] JsonElement input)

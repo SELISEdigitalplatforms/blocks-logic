@@ -5,7 +5,7 @@ using DomainService.Workflow.Models;
 
 namespace DomainService.Workflow.Dtos
 {
-    public class WorkflowGetVersionsResponseDto : BaseQueryListResponse<List<WorkflowSnapshotModel>>
+    public class WorkflowGetVersionsResponseDto : BaseQueryListResponse<List<WorkflowVersionModel>>
     {
     }
 }

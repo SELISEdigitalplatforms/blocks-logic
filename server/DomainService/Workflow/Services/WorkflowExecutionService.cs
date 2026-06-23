@@ -309,7 +309,7 @@ namespace DomainService.Workflow.Services
                 Name = execution.WorkflowSnapshot.Name,
                 Nodes = nodes,
                 Edges = execution.WorkflowSnapshot.Edges,
-                IsActive = execution.WorkflowSnapshot.IsActive,
+                IsPublished = execution.WorkflowSnapshot.IsPublished,
                 Settings = execution.WorkflowSnapshot.Settings,
                 TenantId = execution.WorkflowSnapshot.TenantId
             };
