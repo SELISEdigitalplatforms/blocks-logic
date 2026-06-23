@@ -15,7 +15,11 @@ import {
   WorkflowEditorControls,
 } from "../workflow-editor-controls";
 
-export const WorkflowEditor = () => {
+interface WorkflowEditorProps {
+  isReadonly?: boolean;
+}
+
+export const WorkflowEditor = ({ isReadonly = false }: WorkflowEditorProps) => {
   const {
     nodes,
     edges,
@@ -45,6 +49,8 @@ export const WorkflowEditor = () => {
           className="bg-background"
           fitView={EditorFitConfig.fitView}
           fitViewOptions={EditorFitConfig.fitViewOptions}
+          nodesDraggable={!isReadonly}
+          nodesConnectable={!isReadonly}
         >
           <Background
             variant={BackgroundVariant.Dots}

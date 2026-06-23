@@ -134,7 +134,7 @@ export class WorkflowService {
     return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.RESTORE}`, payload);
   }
 
-  getWorkflowByVersion = (payload: IGetWorkflowByVersionPayload): Promise<IGetWorkflowByVersionResponse> => {
+  getWorkflowByVersion = (payload: IGetWorkflowByVersionPayload): Promise<IGetWorkflowByIdResponse> => {
     return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.GET_WORKFLOW_BY_VERSION}`, payload);
   }
 }

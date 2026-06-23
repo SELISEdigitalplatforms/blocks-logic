@@ -20,7 +20,8 @@ export type ExecutedItem = {
 export interface WorkflowSummary {
   createdBy: string;
   createdDate: string;
-  isActive: boolean;
+  isDirty: boolean;
+  isPublished: boolean;
   itemId: string;
   language: string | null;
   lastUpdatedBy: string;
