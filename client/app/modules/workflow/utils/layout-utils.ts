@@ -1,9 +1,9 @@
 import { Edge } from "@xyflow/react";
 import { EditorNode } from "@blocks-workflow/models/node.model";
 
-const NODE_WIDTH = 350;
+const NODE_WIDTH = 200;
 const NODE_HEIGHT = 150;
-const HORIZONTAL_SPACING = 150;
+const HORIZONTAL_SPACING = 70;
 const VERTICAL_SPACING = 50;
 
 /**
