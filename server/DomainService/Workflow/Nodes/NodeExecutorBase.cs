@@ -35,7 +35,17 @@ namespace DomainService.Workflow.Nodes
                 ResolveExpression(match.Groups[1].Value.Trim(), inputItem, context));
 
             if (typeof(T) == typeof(string)) return (T)(object)resolved;
-            if (typeof(T) == typeof(object)) return (T)Newtonsoft.Json.JsonConvert.DeserializeObject(resolved)!;
+            if (typeof(T) == typeof(object))
+            {
+                try
+                {
+                    return (T)Newtonsoft.Json.JsonConvert.DeserializeObject(resolved)!;
+                }
+                catch
+                {
+                    return (T)(object)resolved;
+                }
+            }
 
             try { return Newtonsoft.Json.JsonConvert.DeserializeObject<T>(resolved); }
             catch { return default; }
