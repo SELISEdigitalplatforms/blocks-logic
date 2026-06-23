@@ -31,7 +31,15 @@ export const WorkflowEditorControls = () => {
       icon: Eraser,
       action: () => {
         tidyUpWorkflow();
-        setTimeout(() => fitView({ duration: 800, maxZoom: EditorFitConfig.fitViewOptions.maxZoom }), 50);
+        setTimeout(
+          () =>
+            fitView({
+              duration: 800,
+              padding: 0.2,
+              maxZoom: EditorFitConfig.fitViewOptions.maxZoom,
+            }),
+          50,
+        );
       },
     },
     {
