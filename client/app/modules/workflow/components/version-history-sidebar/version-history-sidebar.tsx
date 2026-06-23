@@ -8,14 +8,15 @@ import { Button } from "@/components/ui-kits/button/button";
 import { MoreVertical, X, Loader2 } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
-import { useGetWorkflowVersions } from "../../hooks/use-workflow-api";
+import { useGetWorkflowVersions, usePublishWorkflow, useRestoreWorkflow } from "../../hooks/use-workflow-api";
 import { format } from "date-fns";
 
 interface VersionHistorySidebarProps {
   onClose: () => void;
+  onSelectVersion: (version: any) => void;
 }
 
-export const VersionHistorySidebar = ({ onClose }: VersionHistorySidebarProps) => {
+export const VersionHistorySidebar = ({ onClose, onSelectVersion }: VersionHistorySidebarProps) => {
   const { id: workflowId } = useParams<{ id: string }>();
   const projectKey = useProjectStore().selectedProject?.tenantId || "";
   
@@ -23,6 +24,25 @@ export const VersionHistorySidebar = ({ onClose }: VersionHistorySidebarProps) =
     projectKey,
     workflowId: workflowId || "",
   });
+
+  const publishWorkflow = usePublishWorkflow();
+  const restoreWorkflow = useRestoreWorkflow();
+
+  const handlePublish = (version: any) => {
+    publishWorkflow.mutate({
+      workflowId: workflowId || "",
+      projectKey,
+      name: version.name || "Published Version",
+    });
+  };
+
+  const handleRestore = (version: any) => {
+    restoreWorkflow.mutate({
+      workflowId: workflowId || "",
+      projectKey,
+      versionId: version.itemId || version.id,
+    });
+  };
 
   const rawVersions = versionsData?.data || [];
   const versions = Array.isArray(rawVersions) ? rawVersions : [];
@@ -45,7 +65,11 @@ export const VersionHistorySidebar = ({ onClose }: VersionHistorySidebarProps) =
           </div>
         ) : (
           versions.map((version: any) => (
-            <div key={version.id || version.versionId || Math.random()} className="flex flex-col gap-1 p-2 rounded-md hover:bg-muted/50 relative group">
+            <div 
+              key={version.itemId || version.id || Math.random()} 
+              className="flex flex-col gap-1 p-2 rounded-md hover:bg-muted/50 relative group cursor-pointer"
+              onClick={() => onSelectVersion(version)}
+            >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {version.isActive ? (
@@ -62,10 +86,8 @@ export const VersionHistorySidebar = ({ onClose }: VersionHistorySidebarProps) =
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem>Restore version</DropdownMenuItem>
-                    <DropdownMenuItem>Publish version</DropdownMenuItem>
-                    <DropdownMenuItem>Clone to new workflow</DropdownMenuItem>
-                    <DropdownMenuItem>Open version in new tab</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleRestore(version)}>Restore version</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handlePublish(version)}>Publish version</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
