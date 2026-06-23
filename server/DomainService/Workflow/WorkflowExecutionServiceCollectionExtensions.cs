@@ -24,12 +24,15 @@ namespace DomainService.Workflow
     {
         public static IServiceCollection AddWorkflowExecutionEngine(this IServiceCollection services)
         {
+            // register business services
             services.AddSingleton<IWorkflowService, WorkflowService>();
-            services.AddSingleton<IWorkflowRepository, WorkflowRepository>();
-
-            services.AddSingleton<IWorkflowExecutionRepository, WorkflowExecutionRepository>();
             services.AddSingleton<IWorkflowExecutionService, WorkflowExecutionService>();
             services.AddSingleton<IWorkflowEngineService, WorkflowEngineService>();
+
+            // register repositories
+            services.AddSingleton<IWorkflowRepository, WorkflowRepository>();
+            services.AddSingleton<IWorkflowSnapshotRepository, WorkflowSnapshotRepository>();
+            services.AddSingleton<IWorkflowExecutionRepository, WorkflowExecutionRepository>();
 
             //  rigister node executors
 
