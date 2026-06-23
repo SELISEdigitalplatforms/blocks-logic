@@ -111,11 +111,6 @@ export const NodeSchemaActionSendMailV1: NodeSchemaDefinition = {
           if (!emailTemplate || typeof emailTemplate !== "string") {
             return Promise.resolve([]);
           }
-
-          // Resolves from the shared cache — no extra API call.
-          // On initial load the select `options` call will have already
-          // started (or completed) the same promise, so this is either
-          // instant or waits for the single in-flight request.
           return getTemplates(config.projectKey).then((templates) => {
             const selected = findTemplate(templates, emailTemplate, config.projectKey);
             return extractTemplateBodyKeys(selected?.templateBody);
