@@ -7,6 +7,9 @@ import {
   IGetWorkflowExecutionByIdPayload,
   ICreateWorkflowVersionPayload,
   IGetWorkflowVersionsPayload,
+  IPublishWorkflowPayload,
+  IUnpublishWorkflowPayload,
+  IRestoreWorkflowPayload,
 } from "../types/workflow.service.type";
 
 export const useGetWorkflows = (options: IGetWorkflowsPayload) => {
@@ -107,5 +110,42 @@ export const useGetWorkflowVersions = (payload: IGetWorkflowVersionsPayload) => 
     queryKey: ["workflow-versions", payload],
     queryFn: () => workflowService.getWorkflowVersions(payload),
     enabled: !!payload.projectKey,
+  });
+};
+
+export const usePublishWorkflow = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: ["workflow", "publish"],
+    mutationFn: workflowService.publishWorkflow,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["workflows"] });
+      queryClient.invalidateQueries({ queryKey: ["workflow"] });
+    },
+  });
+};
+
+export const useUnpublishWorkflow = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: ["workflow", "unpublish"],
+    mutationFn: workflowService.unpublishWorkflow,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["workflows"] });
+      queryClient.invalidateQueries({ queryKey: ["workflow"] });
+    },
+  });
+};
+
+export const useRestoreWorkflow = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: ["workflow", "restore"],
+    mutationFn: workflowService.restoreWorkflow,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["workflows"] });
+      queryClient.invalidateQueries({ queryKey: ["workflow"] });
+      queryClient.invalidateQueries({ queryKey: ["workflow-versions"] });
+    },
   });
 };

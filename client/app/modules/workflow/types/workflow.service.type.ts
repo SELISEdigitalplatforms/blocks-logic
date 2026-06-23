@@ -134,3 +134,33 @@ export interface IGetWorkflowVersionsResponse {
   data?: WorkflowVersion[];
   [key: string]: any;
 }
+
+export interface IPublishWorkflowPayload {
+  workflowId: string;
+  projectKey: string;
+  name: string;
+  Description?: string;
+}
+
+export interface IPublishWorkflowResponse {
+  [key: string]: any;
+}
+
+export interface IUnpublishWorkflowPayload {
+  workflowId: string;
+  projectKey: string;
+}
+
+export interface IUnpublishWorkflowResponse {
+  [key: string]: any;
+}
+
+export interface IRestoreWorkflowPayload {
+  workflowId: string;
+  projectKey: string;
+  versionId: string;
+}
+
+export interface IRestoreWorkflowResponse {
+  [key: string]: any;
+}
