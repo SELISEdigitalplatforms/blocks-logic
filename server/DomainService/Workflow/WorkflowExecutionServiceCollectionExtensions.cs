@@ -11,6 +11,7 @@ using DomainService.Workflow.Nodes.TriggerEmailV1;
 using DomainService.Workflow.Nodes.TriggerDataV1;
 using DomainService.Workflow.Nodes.LogicIFV1;
 using DomainService.Workflow.Nodes.TriggerWebhookV1;
+using DomainService.Workflow.Nodes.TransformSetFieldV1;
 using DomainService.MagicLink.Service;
 
 namespace DomainService.Workflow
@@ -23,12 +24,15 @@ namespace DomainService.Workflow
     {
         public static IServiceCollection AddWorkflowExecutionEngine(this IServiceCollection services)
         {
+            // register business services
             services.AddSingleton<IWorkflowService, WorkflowService>();
-            services.AddSingleton<IWorkflowRepository, WorkflowRepository>();
-
-            services.AddSingleton<IWorkflowExecutionRepository, WorkflowExecutionRepository>();
             services.AddSingleton<IWorkflowExecutionService, WorkflowExecutionService>();
             services.AddSingleton<IWorkflowEngineService, WorkflowEngineService>();
+
+            // register repositories
+            services.AddSingleton<IWorkflowRepository, WorkflowRepository>();
+            services.AddSingleton<IWorkflowSnapshotRepository, WorkflowSnapshotRepository>();
+            services.AddSingleton<IWorkflowExecutionRepository, WorkflowExecutionRepository>();
 
             //  rigister node executors
 
@@ -39,6 +43,10 @@ namespace DomainService.Workflow
 
             // Logic nodes
             services.AddSingleton<INodeExecutor, LogicIfV1Node>();
+
+
+            // Transform nodes
+            services.AddSingleton<INodeExecutor, TransformSetFieldV1Node>();
 
             // Action nodes
             services.AddSingleton<INodeExecutor, ActionAIAgentV1Node>();

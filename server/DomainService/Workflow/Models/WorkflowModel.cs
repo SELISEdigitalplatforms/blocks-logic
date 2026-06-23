@@ -19,6 +19,9 @@ namespace DomainService.Workflow.Models
 
         public string Description { get; set; } = string.Empty;
 
+        public string? PublishedVersionId { get; set; }
+
         public Dictionary<string, List<NodeOutputSchemaField>>? NodeOutputSchemas { get; set; }
+
     }
 }
