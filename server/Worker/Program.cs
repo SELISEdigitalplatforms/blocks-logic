@@ -24,9 +24,7 @@ using DomainService.Workflow.Nodes.TriggerDataV1;
 using Worker.Consumers.Workflow;
 
 const string _serviceName = "blocks-logic-worker";
-
-var vaultType = ResolveVaultType();
-Console.WriteLine($"Using Genesis vault type: {vaultType}");
+Console.WriteLine($"Using Genesis vault type: {VaultType.Azure}");
 var secret = await ApplicationConfigurations.ConfigureLogAndSecretsAsync(_serviceName, VaultType.Azure);
 
 await CreateHostBuilder(args).Build().RunAsync();

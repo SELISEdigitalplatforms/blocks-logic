@@ -22,7 +22,7 @@ namespace DomainService.Workflow.Dtos
         public JsonElement Context { get; set; } = new();
         public List<string> ActiveNodeIds { get; set; } = new();
         public List<NodeExecutionResponseDto> NodeExecutions { get; set; } = new();
-        public Workflow? WorkflowSnapshot { get; set; }
+        public WorkflowResponseDto? WorkflowSnapshot { get; set; }
         public List<WorkflowItemExecutionDto> Items { get; set; } = new();
     }
 

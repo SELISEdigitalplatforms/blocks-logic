@@ -1,6 +1,5 @@
 import { createBrowserRouter, Navigate, Outlet } from "react-router-dom";
-import { DashboardLayout } from "./layouts/dashboard-layout";
-import { DashboardOverview } from "./pages/dashboard/dashboard-overview";
+// import { DashboardOverview } from "./pages/dashboard/dashboard-overview";
 
 import WorkflowsPage from "./routes/private/workflows/workflows-page";
 import WorkflowDetailsPage from "./routes/private/workflow-details/workflow-details-page";
@@ -17,9 +16,16 @@ import {
   ConsolePage,
   CallbackPage,
   ProfilePage,
+  ProjectOverviewLayout,
+  DashboardOverview,
+  DashboardLayout,
+  EnvironmentsPage,
 } from "@seliseblocks/blocks-kit";
-import { EnvironmentsPage } from "./pages/environments/environments";
-import { ProjectOverviewLayout } from "./layouts/project-overview-layout";
+import { navigationMenus } from "./constants/navigation-menus";
+
+const redirectPaths: Record<string, string> = {
+  "/workflow/*": "/workflow",
+};
 
 export const router = createBrowserRouter([
   {
@@ -83,7 +89,14 @@ export const router = createBrowserRouter([
                     ],
                   },
                   {
-                    element: <ProjectOverviewLayout />,
+                    path: "/project-overview",
+                    element: (
+                      <ProjectOverviewLayout
+                        redirectPaths={redirectPaths}
+                        navigationMenus={navigationMenus}>
+                        <Outlet />
+                      </ProjectOverviewLayout>
+                    ),
                     children: [
                       {
                         path: "/project-overview/environments",
@@ -96,11 +109,11 @@ export const router = createBrowserRouter([
               {
                 // impersonate
                 element: (
-                  <ImpersonationChecker>
-                    <ImpersonationSynchronizer>
-                      <DashboardLayout />
-                    </ImpersonationSynchronizer>
-                  </ImpersonationChecker>
+                  <DashboardLayout
+                    redirectPaths={redirectPaths}
+                    navigationMenus={navigationMenus}>
+                    <Outlet />
+                  </DashboardLayout>
                 ),
                 children: [
                   { path: "/dashboard", element: <DashboardOverview /> },
