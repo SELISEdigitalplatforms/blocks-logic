@@ -46,6 +46,7 @@ export const useWorkflow = () => {
   const setWorkflow = useWorkflowStore((state) => state.setWorkflow);
   const setWorkflowActive = useWorkflowStore((state) => state.setWorkflowActive);
   const resetWorkflow = useWorkflowStore((state) => state.resetWorkflow);
+  const tidyUpWorkflow = useWorkflowStore((state) => state.tidyUpWorkflow);
   const getNodeById = useWorkflowStore((state) => state.getNodeById);
   const getEdgeById = useWorkflowStore((state) => state.getEdgeById);
   const executedItems = useWorkflowStore((state) => state.executedItems);
@@ -200,6 +201,7 @@ export const useWorkflow = () => {
     setWorkflow,
     setWorkflowActive,
     resetWorkflow,
+    tidyUpWorkflow,
     exportWorkflow,
     importWorkflow,
 
