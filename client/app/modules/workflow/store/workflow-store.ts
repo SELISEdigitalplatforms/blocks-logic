@@ -12,6 +12,7 @@ import {
 import { v4 as uuidv4 } from "uuid";
 import { ExecutedItem, ExecutedNode, Workflow } from "../models/workflow.model";
 import { EditorNode } from "@blocks-workflow/models/node.model";
+import { getLayoutedElements } from "../utils/layout-utils";
 
 // interface  ExtendNode extends Node, WorkflowNode {}
 
@@ -76,6 +77,7 @@ export type WorkflowState = {
   setWorkflow: (workflow: Workflow) => void;
   setWorkflowActive: (isActive: boolean) => void;
   resetWorkflow: () => void;
+  tidyUpWorkflow: () => void;
 
   // Utility methods
   getNodeById: (nodeId: string) => EditorNode | undefined;
@@ -462,6 +464,15 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
       isDirty: false,
       executedItems: [],
       executedNodes: [],
+    });
+  },
+
+  tidyUpWorkflow: () => {
+    const { nodesMap, edgesMap } = get();
+    const newNodesMap = getLayoutedElements(nodesMap, edgesMap);
+    set({
+      nodesMap: newNodesMap,
+      isDirty: true,
     });
   },
 

@@ -11,7 +11,7 @@ export const EditorFitConfig = {
 };
 
 export const WorkflowEditorControls = () => {
-  const { fitView, zoomIn, zoomOut, openNodeLibraryPanel } = useWorkflow();
+  const { fitView, zoomIn, zoomOut, openNodeLibraryPanel, tidyUpWorkflow } = useWorkflow();
 
   const controls = [
     {
@@ -29,7 +29,10 @@ export const WorkflowEditorControls = () => {
     },
     {
       icon: Eraser,
-      action: () => {},
+      action: () => {
+        tidyUpWorkflow();
+        setTimeout(() => fitView({ duration: 800, maxZoom: EditorFitConfig.fitViewOptions.maxZoom }), 50);
+      },
     },
     {
       icon: Plus,
