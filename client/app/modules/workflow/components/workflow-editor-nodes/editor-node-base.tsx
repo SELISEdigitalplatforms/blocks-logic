@@ -13,7 +13,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui-kits/tooltip/tooltip";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 
 type EditorNodeBaseProps = {
@@ -24,17 +24,43 @@ type EditorNodeBaseProps = {
 
 export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
   const [isToolbarVisible, setIsToolbarVisible] = useState(false);
-  const { getNodeById, deleteNode, selectAndConfigureNode, selectedNode, duplicateNode, copyNode } =
+  const { getNodeById, deleteNode, selectAndConfigureNode, selectedNode, updateNode } =
     useWorkflow();
   const node = getNodeById(id);
+
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [editName, setEditName] = useState(node?.name || "");
+
+  useEffect(() => {
+    if (!isRenaming && node?.name) {
+      setEditName(node.name);
+    }
+  }, [node?.name, isRenaming]);
+
+  const handleRenameSubmit = () => {
+    if (editName.trim() && editName !== node?.name) {
+      updateNode(id, { name: editName.trim() });
+    }
+    setIsRenaming(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      handleRenameSubmit();
+    } else if (e.key === "Escape") {
+      setIsRenaming(false);
+      setEditName(node?.name || "");
+    }
+  };
+
   if (!node) return null;
-  const isSelected = node.id === selectedNode?.id || node.selected;
+  const isSelected = node.id === selectedNode?.id;
   return (
     <>
       <div
         className={cn(
-          "peer rounded-md border bg-background px-5 py-4 shadow-lg transition-all hover:shadow-xl",
-          isSelected && "border-primary ring-1 ring-primary",
+          "peer rounded-md border bg-background px-5 py-4 shadow-lg transition-shadow hover:shadow-xl",
+          isSelected && "border-medium-emphasis",
           node.className || "",
         )}
       >
@@ -117,6 +143,8 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
               className="cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation();
+                setIsRenaming(true);
+                setIsToolbarVisible(false);
               }}
             >
               <span>Rename</span>
@@ -126,7 +154,6 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
               className="cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation();
-                copyNode(id);
               }}
             >
               <span>Copy</span>
@@ -135,7 +162,6 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
               className="cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation();
-                duplicateNode(id);
               }}
             >
               <span>Duplicate</span>
@@ -145,7 +171,6 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
               className="cursor-pointer text-error"
               onClick={(e) => {
                 e.stopPropagation();
-                deleteNode(id);
               }}
             >
               <span>Delete</span>
@@ -153,9 +178,28 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <h4 className="absolute left-1/2 mt-2 w-full min-w-24 -translate-x-1/2 transform text-center text-medium-emphasis">
-        {node?.name}
-      </h4>
+      {isRenaming ? (
+        <input
+          autoFocus
+          maxLength={80}
+          className="absolute left-1/2 mt-2 w-full min-w-24 -translate-x-1/2 transform rounded border border-primary bg-background px-2 py-1 text-center text-sm outline-none"
+          value={editName}
+          onChange={(e) => setEditName(e.target.value)}
+          onBlur={handleRenameSubmit}
+          onKeyDown={handleKeyDown}
+          onClick={(e) => e.stopPropagation()}
+        />
+      ) : (
+        <h4
+          className="absolute left-1/2 mt-2 w-full min-w-24 -translate-x-1/2 transform text-center text-medium-emphasis"
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            setIsRenaming(true);
+          }}
+        >
+          {node?.name}
+        </h4>
+      )}
     </>
   );
 };
