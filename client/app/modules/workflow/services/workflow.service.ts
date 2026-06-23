@@ -27,6 +27,8 @@ import {
   IUnpublishWorkflowResponse,
   IRestoreWorkflowPayload,
   IRestoreWorkflowResponse,
+  IGetWorkflowByVersionPayload,
+  IGetWorkflowByVersionResponse,
 } from "../types/workflow.service.type";
 
 export class WorkflowService {
@@ -130,6 +132,10 @@ export class WorkflowService {
 
   restoreWorkflow = (payload: IRestoreWorkflowPayload): Promise<IRestoreWorkflowResponse> => {
     return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.RESTORE}`, payload);
+  }
+
+  getWorkflowByVersion = (payload: IGetWorkflowByVersionPayload): Promise<IGetWorkflowByVersionResponse> => {
+    return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.GET_WORKFLOW_BY_VERSION}`, payload);
   }
 }
 
