@@ -395,7 +395,7 @@ namespace DomainService.Workflow.Services
             };
         }
 
-        public async Task<BaseMutationResponse> CreateVersion(WorkflowVersionCreateRequestDto dto)
+        public async Task<BaseMutationResponse> CreateVersionAsync(WorkflowVersionCreateRequestDto dto)
         {
             _logger.LogInformation("Creating workflow version for ProjectKey: {ProjectKey}, WorkflowId: {WorkflowId}", dto.ProjectKey, dto.WorkflowId);
             var workflow = await _workflowRepository.GetWorkflowAsync(dto.WorkflowId, dto.ProjectKey);
@@ -446,17 +446,31 @@ namespace DomainService.Workflow.Services
             }
         }
 
-        public async Task<WorkflowGetVersionsResponseDto> GetVersions(WorkflowGetVersionsRequestDto dto)
+        public async Task<WorkflowGetVersionsResponseDto> GetVersionsAsync(WorkflowGetVersionsRequestDto dto)
         {
             try
             {
                 _logger.LogInformation("Fetching workflow versions for ProjectKey: {ProjectKey}, WorkflowId: {WorkflowId}", dto.ProjectKey, dto.WorkflowId);
                 var versions = await _workflowVersionRepository.GetWorkflowVersionsAsync(dto.ProjectKey, dto.WorkflowId);
                 _logger.LogInformation("Successfully fetched {Count} workflow versions for ProjectKey: {ProjectKey}, WorkflowId: {WorkflowId}", versions.Count, dto.ProjectKey, dto.WorkflowId);
+
+                var versionSummaries = versions.Select(v => new WorkflowGetVersionSummary
+                {
+                    ItemId = v.ItemId,
+                    WorkflowId = v.WorkflowId,
+                    TenantId = v.TenantId,
+                    Name = v.Name,
+                    Description = v.Description,
+                    CreatedDate = v.CreatedDate,
+                    LastUpdatedDate = v.LastUpdatedDate,
+                    CreatedBy = v.CreatedBy,
+                    LastUpdatedBy = v.LastUpdatedBy
+                }).ToList();
+
                 return new WorkflowGetVersionsResponseDto
                 {
-                    Data = versions,
-                    TotalCount = versions.Count,
+                    Data = versionSummaries,
+                    TotalCount = versionSummaries.Count,
                     Errors = null,
                 };
             }
@@ -619,6 +633,56 @@ namespace DomainService.Workflow.Services
                     Errors = new Dictionary<string, string> { { "Message", "Something went wrong" } }
                 };
             }
+        }
+
+        public async Task<GetWorkflowByVersionResponseDto> GetWorkflowByVersionAsync(GetWorkflowByVersionRequestDto dto)
+        {
+            var version = await _workflowVersionRepository.GetWorkflowVersionAsync(dto.ProjectKey, dto.VersionId);
+            if (version == null)
+            {
+                return new GetWorkflowByVersionResponseDto
+                {
+                    IsSuccess = false,
+                    data = null,
+                    Errors = new Dictionary<string, string> { { "Message", "Version not found" } }
+                };
+            }
+            var snapShot = BsonSerializer.Deserialize<WorkflowModel>(version.Snapshot);
+            var workflow = new WorkflowResponseDto
+            {
+                ItemId = snapShot.ItemId,
+                Name = snapShot.Name,
+                TenantId = snapShot.TenantId,
+                Nodes = snapShot.Nodes.Select(n => new NodeDto
+                {
+                    Id = n.Id,
+                    Name = n.Name,
+                    Category = n.Category,
+                    Type = n.Type,
+                    Version = n.Version,
+                    Position = n.Position,
+                    Parameters = JsonDocument.Parse(n.Parameters.ToJson()).RootElement,
+                    Settings = JsonDocument.Parse(n.Settings.ToJson()).RootElement
+                }).ToList(),
+                Edges = snapShot.Edges,
+                Settings = snapShot.Settings ?? new Dictionary<string, string>(),
+                IsPublished = snapShot.IsPublished,
+                Description = snapShot.Description,
+                NodeOutputSchemas = snapShot.NodeOutputSchemas,
+                LastUpdatedDate = snapShot.LastUpdatedDate,
+                CreatedDate = snapShot.CreatedDate,
+                CreatedBy = snapShot.CreatedBy,
+                LastUpdatedBy = snapShot.LastUpdatedBy,
+                PublishedVersionId = snapShot.PublishedVersionId,
+                IsDirty = snapShot.IsDirty
+            };
+            return new GetWorkflowByVersionResponseDto
+            {
+                IsSuccess = true,
+                data = workflow,
+                Errors = null
+            };
+
         }
     }
 
