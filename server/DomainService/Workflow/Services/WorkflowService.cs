@@ -148,7 +148,7 @@ namespace DomainService.Workflow.Services
             existingWorkflow.LastUpdatedDate = DateTime.UtcNow;
             existingWorkflow.CreatedBy = BlocksContext.GetContext().UserId ?? "";
             existingWorkflow.LastUpdatedBy = BlocksContext.GetContext().UserId ?? "";
-            existingWorkflow.IsActive = true;
+            existingWorkflow.IsPublished = false;
 
             try
             {
@@ -180,7 +180,7 @@ namespace DomainService.Workflow.Services
             var workflows = await _workflowRepository.GetAllWorkflowsAsync(dto.PageSize, dto.PageNumber, dto.Search, dto.IsActive, dto.ProjectKey);
             var totalCount = await _workflowRepository.GetWorkflowsCountAsync(dto.Search, dto.IsActive, dto.ProjectKey);
 
-            var workflowDtos = workflows.Select(w => new WorkflowItemDto
+            var workflowDtos = workflows.Select(w => new WorkflowListItemDto
             {
                 ItemId = w.ItemId,
                 Name = w.Name,
@@ -191,7 +191,7 @@ namespace DomainService.Workflow.Services
                 LastUpdatedBy = w.LastUpdatedBy,
                 Language = w.Language,
                 Tags = w.Tags ?? new List<string>(),
-                IsActive = w.IsActive,
+                IsPublished = w.IsPublished,
             }).ToList();
 
             _logger.LogInformation("Completed fetching workflows. ProjectKey: {ProjectKey}, Page: {Page}, PageSize: {PageSize}, Search: {Search}, IsActive: {IsActive}", dto.ProjectKey, dto.PageNumber, dto.PageSize, dto.Search, dto.IsActive);
@@ -262,13 +262,12 @@ namespace DomainService.Workflow.Services
                 Settings = JsonDocument.Parse(n.Settings.ToJson()).RootElement
             }).ToList();
 
-            var publishedVersion = new WorkflowVersionDto
+            var publishedVersion = version is null ? null : new WorkflowVersionDto
             {
-                VersionId = version?.ItemId,
-                Name = version?.Name,
-                Description = version?.Description
+                VersionId = version.ItemId,
+                Name = version.Name,
+                Description = version.Description
             };
-
 
             var workflowDto = new Dtos.WorkflowResponseDto
             {
@@ -278,7 +277,7 @@ namespace DomainService.Workflow.Services
                 Nodes = nodes,
                 Edges = workflow.Edges,
                 Settings = workflow.Settings ?? new Dictionary<string, string>(),
-                IsActive = workflow.IsActive,
+                IsPublished = workflow.IsPublished,
                 Description = workflow.Description,
                 NodeOutputSchemas = workflow.NodeOutputSchemas,
                 LastUpdatedDate = workflow.LastUpdatedDate,
@@ -320,7 +319,7 @@ namespace DomainService.Workflow.Services
 
             // Replace simple properties
             workflow.Name = dto.Name ?? workflow.Name;
-            workflow.IsActive = dto.IsActive ?? workflow.IsActive;
+            workflow.IsPublished = dto.IsPublished ?? workflow.IsPublished;
             workflow.Edges = dto.Edges ?? workflow.Edges;
             workflow.NodeOutputSchemas = dto.NodeOutputSchemas ?? workflow.NodeOutputSchemas;
             workflow.IsDirty = true;
@@ -519,6 +518,7 @@ namespace DomainService.Workflow.Services
             {
                 workflow.PublishedVersionId = version.ItemId;
                 workflow.IsDirty = false;
+                workflow.IsPublished = true;
                 await _workflowRepository.UpdateWorkflowAsync(workflow);
                 return new BaseMutationResponse
                 {
@@ -577,6 +577,48 @@ namespace DomainService.Workflow.Services
                 ItemId = workflow.ItemId,
                 Errors = null
             };
+        }
+
+        public async Task<BaseMutationResponse> UnpublishAsync(WorkflowUnpublishRequestDto dto)
+        {
+            try
+            {
+                _logger.LogInformation($"Unpublishing workflow workflowId: {dto.WorkflowId}, projectKey: {dto.ProjectKey}");
+                var workflow = await _workflowRepository.GetWorkflowAsync(dto.WorkflowId, dto.ProjectKey);
+                if (workflow == null)
+                {
+                    _logger.LogWarning("Workflow with Id {WorkflowId} not found for unpublishing.", dto.WorkflowId);
+                    return new BaseMutationResponse
+                    {
+                        IsSuccess = false,
+                        Errors = new Dictionary<string, string> { { "Message", "Workflow not found" } },
+                        ItemId = null
+                    };
+                }
+                _logger.LogInformation($"Successfully fetched workflow. WorkflowId: {workflow.ItemId}, Name: {workflow.Name}");
+                workflow.IsPublished = false;
+                workflow.PublishedVersionId = null;
+                await _workflowRepository.UpdateWorkflowAsync(workflow);
+                _logger.LogInformation($"Successfully unpublished workflow. WorkflowId: {workflow.ItemId}");
+
+                return new BaseMutationResponse
+                {
+                    IsSuccess = true,
+                    ItemId = workflow.ItemId,
+                    Errors = null
+                };
+
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Error unpublishing workflow: {StackTrace}", ex.StackTrace);
+                return new BaseMutationResponse
+                {
+                    IsSuccess = false,
+                    ItemId = null,
+                    Errors = new Dictionary<string, string> { { "Message", "Something went wrong" } }
+                };
+            }
         }
     }
 

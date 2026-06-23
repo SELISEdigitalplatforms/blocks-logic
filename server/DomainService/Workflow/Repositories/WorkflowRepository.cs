@@ -39,7 +39,7 @@ namespace DomainService.Workflow.Repositories
             await collection.InsertOneAsync(workflow, null);
         }
 
-        public async Task<long> GetWorkflowsCountAsync(string? search, bool? isActive, string tenantId)
+        public async Task<long> GetWorkflowsCountAsync(string? search, bool? isPublished, string tenantId)
         {
             var collection = GetCollection(tenantId);
             var filter = Builders<WorkflowModel>.Filter.Empty;
@@ -47,14 +47,14 @@ namespace DomainService.Workflow.Repositories
             {
                 filter &= Builders<WorkflowModel>.Filter.Regex(w => w.Name, new MongoDB.Bson.BsonRegularExpression(search, "i"));
             }
-            if (isActive.HasValue)
+            if (isPublished.HasValue)
             {
-                filter &= Builders<WorkflowModel>.Filter.Eq(w => w.IsActive, isActive.Value);
+                filter &= Builders<WorkflowModel>.Filter.Eq(w => w.IsPublished, isPublished.Value);
             }
             return await collection.CountDocumentsAsync(filter);
         }
 
-        public async Task<List<WorkflowModel>> GetAllWorkflowsAsync(int pageSize, int pageNumber, string? search, bool? isActive, string tenantId)
+        public async Task<List<WorkflowModel>> GetAllWorkflowsAsync(int pageSize, int pageNumber, string? search, bool? isPublished, string tenantId)
         {
             var collection = GetCollection(tenantId);
             var filter = Builders<WorkflowModel>.Filter.Empty;
@@ -62,9 +62,9 @@ namespace DomainService.Workflow.Repositories
             {
                 filter &= Builders<WorkflowModel>.Filter.Regex(w => w.Name, new MongoDB.Bson.BsonRegularExpression(search, "i"));
             }
-            if (isActive.HasValue)
+            if (isPublished.HasValue)
             {
-                filter &= Builders<WorkflowModel>.Filter.Eq(w => w.IsActive, isActive.Value);
+                filter &= Builders<WorkflowModel>.Filter.Eq(w => w.IsPublished, isPublished.Value);
             }
             return await collection.Find(filter)
                 .SortByDescending(x => x.CreatedDate)
@@ -100,7 +100,7 @@ namespace DomainService.Workflow.Repositories
             );
 
             var filter = Builders<WorkflowModel>.Filter.And(
-                Builders<WorkflowModel>.Filter.Eq(w => w.IsActive, true),
+                Builders<WorkflowModel>.Filter.Eq(w => w.IsPublished, true),
                 Builders<WorkflowModel>.Filter.ElemMatch(w => w.Nodes, nodeFilter)
             );
 
