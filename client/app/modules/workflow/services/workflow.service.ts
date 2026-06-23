@@ -21,6 +21,12 @@ import {
   ICreateWorkflowVersionResponse,
   IGetWorkflowVersionsPayload,
   IGetWorkflowVersionsResponse,
+  IPublishWorkflowPayload,
+  IPublishWorkflowResponse,
+  IUnpublishWorkflowPayload,
+  IUnpublishWorkflowResponse,
+  IRestoreWorkflowPayload,
+  IRestoreWorkflowResponse,
 } from "../types/workflow.service.type";
 
 export class WorkflowService {
@@ -112,6 +118,18 @@ export class WorkflowService {
 
   getWorkflowVersions = (payload: IGetWorkflowVersionsPayload): Promise<IGetWorkflowVersionsResponse> => {
     return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.GET_VERSIONS}`, payload);
+  }
+
+  publishWorkflow = (payload: IPublishWorkflowPayload): Promise<IPublishWorkflowResponse> => {
+    return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.PUBLISH}`, payload);
+  }
+
+  unpublishWorkflow = (payload: IUnpublishWorkflowPayload): Promise<IUnpublishWorkflowResponse> => {
+    return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.UNPUBLISH}`, payload);
+  }
+
+  restoreWorkflow = (payload: IRestoreWorkflowPayload): Promise<IRestoreWorkflowResponse> => {
+    return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.RESTORE}`, payload);
   }
 }
 
