@@ -54,13 +54,13 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
   };
 
   if (!node) return null;
-  const isSelected = node.id === selectedNode?.id;
+  const isSelected = node.selected;
   return (
     <>
       <div
         className={cn(
           "peer rounded-md border bg-background px-5 py-4 shadow-lg transition-shadow hover:shadow-xl",
-          isSelected && "border-medium-emphasis",
+          isSelected && "border-primary ring-1 ring-primary",
           node.className || "",
         )}
       >
