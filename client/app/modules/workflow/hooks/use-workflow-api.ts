@@ -10,6 +10,7 @@ import {
   IPublishWorkflowPayload,
   IUnpublishWorkflowPayload,
   IRestoreWorkflowPayload,
+  IGetWorkflowByVersionPayload,
 } from "../types/workflow.service.type";
 
 export const useGetWorkflows = (options: IGetWorkflowsPayload) => {
@@ -110,6 +111,14 @@ export const useGetWorkflowVersions = (payload: IGetWorkflowVersionsPayload) => 
     queryKey: ["workflow-versions", payload],
     queryFn: () => workflowService.getWorkflowVersions(payload),
     enabled: !!payload.projectKey,
+  });
+};
+
+export const useGetWorkflowByVersion = (payload: IGetWorkflowByVersionPayload) => {
+  return useQuery({
+    queryKey: ["workflow-version", payload],
+    queryFn: () => workflowService.getWorkflowByVersion(payload),
+    enabled: !!payload.projectKey && !!payload.workflowId && !!payload.versionId,
   });
 };
 

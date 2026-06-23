@@ -164,3 +164,13 @@ export interface IRestoreWorkflowPayload {
 export interface IRestoreWorkflowResponse {
   [key: string]: any;
 }
+
+export interface IGetWorkflowByVersionPayload {
+  workflowId: string;
+  projectKey: string;
+  versionId: string;
+}
+
+export interface IGetWorkflowByVersionResponse {
+  [key: string]: any;
+}
