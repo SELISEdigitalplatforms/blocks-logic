@@ -10,7 +10,10 @@ import {
   WorkflowEditorNodeTypes,
 } from "../workflow-editor-nodes";
 import { WorkflowEditorEdgeTypes } from "../workflow-editor-edges";
-import { getStatusStyles } from "@blocks-workflow/utils/workflow-execution-editor.util";
+import {
+  getStatusStyles,
+  buildExecutedSubgraph,
+} from "@blocks-workflow/utils/workflow-execution-editor.util";
 import { NodeInspector } from "../node-inspector";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { EditorFitConfig } from "../workflow-editor-controls";
@@ -26,23 +29,40 @@ export const WorkflowExecutionEditor = ({ id }: { id: string }) => {
   useEffect(() => {
     if (data?.workflowSnapshot && isFetched) {
       const workflowData = data.workflowSnapshot;
+
+      // Build the actually-executed subgraph via BFS
+      const { reachableNodeIds, traversedEdgeIds } = buildExecutedSubgraph(
+        workflowData.nodes,
+        workflowData.edges,
+        data.nodeExecutions,
+        data.items,
+      );
+
+      const nodeExecutionMap = new Map(
+        data.nodeExecutions.map((ne) => [ne.nodeId, ne]),
+      );
+
+      // Style nodes — only colour nodes on the executed path
       workflowData.nodes.forEach((node) => {
         node.data = {
           isWorkflowExecuted: true,
           hasToolbar: false,
           hasHandleArrow: false,
         };
-        const executionNode = data.nodeExecutions.find(
-          (ne) => ne.nodeId === node.id,
-        );
-        if (executionNode) {
-          const styles = getStatusStyles(executionNode.status);
-          node.className = styles.nodeClass;
 
-          const edges = workflowData.edges.filter(
-            (e) => e.source === executionNode.nodeId,
-          );
-          for (const edge of edges) {
+        if (reachableNodeIds.has(node.id)) {
+          const execNode = nodeExecutionMap.get(node.id)!;
+          const styles = getStatusStyles(execNode.status);
+          node.className = styles.nodeClass;
+        }
+      });
+
+      // Style edges — only colour edges that were actually traversed
+      for (const edge of workflowData.edges) {
+        if (traversedEdgeIds.has(edge.id)) {
+          const sourceExec = nodeExecutionMap.get(edge.source);
+          if (sourceExec) {
+            const styles = getStatusStyles(sourceExec.status);
             edge.markerEnd = {
               type: "arrow",
               color: styles.edgeColor,
@@ -53,7 +73,8 @@ export const WorkflowExecutionEditor = ({ id }: { id: string }) => {
             edge.style = { stroke: styles.edgeColor };
           }
         }
-      });
+      }
+
       workflowData.items = data.items;
       workflowData.nodeExecutions = data.nodeExecutions;
       setWorkflow(workflowData);
