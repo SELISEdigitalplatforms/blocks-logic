@@ -8,23 +8,40 @@ namespace DomainService.Notification
     public class NotificationRepository : INotificationRepository
     {
         private readonly IDbContextProvider _dbContextProvider;
+        private readonly IBlocksSecret _blocksSecret;
+        private IMongoDatabase _clientDb;
 
         private const string _notificationCollection = "OfflineNotifications";
 
-        public NotificationRepository(IDbContextProvider dbContextProvider)
+        public NotificationRepository(IDbContextProvider dbContextProvider, IBlocksSecret blocksSecret)
+
         {
             _dbContextProvider = dbContextProvider;
+            _blocksSecret = blocksSecret;
+            _clientDb = ResolvedClientDb();
         }
+
+        private IMongoDatabase ResolvedClientDb()
+    {
+        var blocksContext = BlocksContext.GetContext();
+
+        if(blocksContext.Impersonated)
+        {
+            return _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, "BlocksRootDb");
+        }
+
+        return _dbContextProvider.GetDatabase(blocksContext.TenantId);
+    }
 
         public void Save<T>(T data, string collectionName = "")
         {
-            IMongoCollection<T> collection = _dbContextProvider.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? (typeof(T).Name + "s") : collectionName);
+            IMongoCollection<T> collection = _clientDb.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? (typeof(T).Name + "s") : collectionName);
             collection.InsertOne(data);
         }
 
         public async Task<T> GetItemAsync<T>(Expression<Func<T, bool>> filterExpression, string collectionName = "")
         {
-            var collection = _dbContextProvider.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? typeof(T).Name + "s" : collectionName);
+            var collection = _clientDb.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? typeof(T).Name + "s" : collectionName);
             var filterBuilder = Builders<T>.Filter;
             var filter = filterBuilder.Where(filterExpression);
 
@@ -34,7 +51,7 @@ namespace DomainService.Notification
 
         public async Task<List<T>> GetItemsAsync<T>(Expression<Func<T, bool>> filterExpression, string collectionName = "")
         {
-            var collection = _dbContextProvider.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? typeof(T).Name + "s" : collectionName);
+            var collection = _clientDb.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? typeof(T).Name + "s" : collectionName);
             var filterBuilder = Builders<T>.Filter;
             var filter = filterBuilder.Where(filterExpression);
 
@@ -44,31 +61,31 @@ namespace DomainService.Notification
 
         public async Task SaveAsync<T>(T data, string collectionName = "")
         {
-            IMongoCollection<T> collection = _dbContextProvider.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? (typeof(T).Name + "s") : collectionName);
+            IMongoCollection<T> collection = _clientDb.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? (typeof(T).Name + "s") : collectionName);
             await collection.InsertOneAsync(data);
         }
 
         public async Task SaveAsync<T>(List<T> listOfData)
         {
-            IMongoCollection<T> collection = _dbContextProvider.GetCollection<T>(typeof(T).Name + "s");
+            IMongoCollection<T> collection = _clientDb.GetCollection<T>(typeof(T).Name + "s");
            await collection.InsertManyAsync(listOfData);
         }
 
         public async Task DeleteAsync<T>(Expression<Func<T, bool>> dataFilters)
         {
-            IMongoCollection<T> collection = _dbContextProvider.GetCollection<T>(typeof(T).Name + "s");
+            IMongoCollection<T> collection = _clientDb.GetCollection<T>(typeof(T).Name + "s");
             await collection.DeleteManyAsync(dataFilters);
         }
 
         public IQueryable<T> GetItems<T>()
         {
-           return _dbContextProvider.GetCollection<T>(typeof(T).Name + "s").AsQueryable();
+           return _clientDb.GetCollection<T>(typeof(T).Name + "s").AsQueryable();
         }
 
         public async Task UpdateNotificationAsReadByUserIdAsync(string userId)
         {
             var builder = Builders<OfflineNotification>.Filter;
-            var collection = _dbContextProvider.GetCollection<OfflineNotification>(_notificationCollection);
+            var collection = _clientDb.GetCollection<OfflineNotification>(_notificationCollection);
 
             // Match all notifications visible to this user (aligned with GetNotificationsAsync scope)
             var userNotificationFilter = builder.Or(
@@ -99,12 +116,12 @@ namespace DomainService.Notification
             var updateDefinition = new UpdateDefinitionBuilder<OfflineNotification>().AddToSet(p => p.ReadByUserIds,
                 userId.ToString());
 
-            await _dbContextProvider.GetCollection<OfflineNotification>(_notificationCollection).UpdateOneAsync(filter, updateDefinition);
+            await _clientDb.GetCollection<OfflineNotification>(_notificationCollection).UpdateOneAsync(filter, updateDefinition);
         }
 
         public async Task<GetNotificationsResponse> GetNotificationsAsync(GetNotificationsRequest request)
         {
-            var collection = _dbContextProvider.GetCollection<OfflineNotification>("OfflineNotifications");
+            var collection = _clientDb.GetCollection<OfflineNotification>("OfflineNotifications");
             var builder = Builders<OfflineNotification>.Filter;
             var filter = FilterDefinition<OfflineNotification>.Empty;
             var userId = BlocksContext.GetContext()?.UserId;
