@@ -12,6 +12,7 @@ namespace DomainService.Workflow.Models
         public required string WorkflowName { get; set; }
         public required WorkflowModel WorkflowSnapshot { get; set; }
         public WorkflowExecutionStatus Status { get; set; } = WorkflowExecutionStatus.Init;
+        public WorkflowExecutionMode ExecutionMode { get; set; } = WorkflowExecutionMode.Test;
         public List<string> ActiveNodeIds { get; set; } = new();
         public BsonDocument Context { get; set; } = new BsonDocument();
         public List<NodeExecutionModel> NodeExecutions { get; set; } = new();
