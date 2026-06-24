@@ -129,7 +129,35 @@ namespace Utilities.Api.Controllers
 
             try
             {
-                var response = await _workflowExecutionService.WebhookStartAsync(
+                var response = await _workflowExecutionService.TriggerWebhookAsync(
+                    workflowId,
+                    webhookId,
+                    projectKey,
+                    input
+                );
+
+                return Ok(response);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return StatusCode(401, new { message = "Unauthorized" });
+            }
+
+        }
+
+        [HttpPost("/webhook-test/{projectKey}/{workflowId}/{webhookId}")]
+        public async Task<IActionResult> TestWebhook(string projectKey, string workflowId, string webhookId, [FromBody] JsonElement input)
+        {
+            var dto = new WorkflowWebhookRequestDto
+            {
+                ProjectKey = projectKey,
+                Input = input
+            };
+            ApplyContext(dto);
+
+            try
+            {
+                var response = await _workflowExecutionService.TriggerTestWebhookAsync(
                     workflowId,
                     webhookId,
                     projectKey,
