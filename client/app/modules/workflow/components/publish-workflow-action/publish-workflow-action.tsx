@@ -10,16 +10,9 @@ import { ChevronDown, Loader2 } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { usePublishWorkflow, useUnpublishWorkflow } from "../../hooks/use-workflow-api";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui-kits/dialog/dialog";
-import { Input } from "@/components/ui-kits/input/input";
-import { Textarea } from "@/components/ui-kits/textarea/textarea";
-import { Label } from "@/components/ui-kits/label/label";
+import { Dialog } from "@/components/ui-kits/dialog/dialog";
+import ConfirmationModal from "@/components/confirmation-modal/confirmation-modal";
+import { PublishWorkflowModal } from "../publish-workflow-modal/publish-workflow-modal";
 
 interface PublishWorkflowActionProps {
   isDirty?: boolean;
@@ -38,6 +31,7 @@ export const PublishWorkflowAction = ({
   const projectKey = useProjectStore().selectedProject?.tenantId || "";
   
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
+  const [isUnpublishDialogOpen, setIsUnpublishDialogOpen] = useState(false);
   const [publishVersionName, setPublishVersionName] = useState("");
   const [publishDescription, setPublishDescription] = useState("");
 
@@ -71,6 +65,7 @@ export const PublishWorkflowAction = ({
     if (!workflowId) return;
     try {
       await unpublishWorkflow({ projectKey, workflowId });
+      setIsUnpublishDialogOpen(false);
       onActionComplete?.();
     } catch (error) {
       console.error(error);
@@ -93,53 +88,37 @@ export const PublishWorkflowAction = ({
           <DropdownMenuItem onClick={handleOpenPublishDialog} disabled={!isDirty || hasUnsavedChanges}>
             Publish
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={handleUnpublish} disabled={!isPublished }>
+          <DropdownMenuItem onClick={() => setIsUnpublishDialogOpen(true)} disabled={!isPublished}>
             Unpublish
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <Dialog open={isPublishDialogOpen} onOpenChange={setIsPublishDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Publish workflow</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="version-name">
-                Version name <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="version-name"
-                value={publishVersionName}
-                onChange={(e) => setPublishVersionName(e.target.value)}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="description">Describe changes (optional)</Label>
-              <Textarea
-                id="description"
-                value={publishDescription}
-                onChange={(e) => setPublishDescription(e.target.value)}
-                rows={4}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setIsPublishDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handlePublish}
-              disabled={!publishVersionName.trim() || isPublishing}
-            >
-              {isPublishing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Publish
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+      <PublishWorkflowModal
+        open={isPublishDialogOpen}
+        onOpenChange={setIsPublishDialogOpen}
+        publishVersionName={publishVersionName}
+        setPublishVersionName={setPublishVersionName}
+        publishDescription={publishDescription}
+        setPublishDescription={setPublishDescription}
+        onPublish={handlePublish}
+        isPublishing={isPublishing}
+      />
+
+      <Dialog open={isUnpublishDialogOpen} onOpenChange={setIsUnpublishDialogOpen}>
+        <ConfirmationModal
+          data={{
+            dialogTitle: "Unpublish workflow",
+            dialogSubtitle: "Are you sure you want to unpublish this workflow? It will no longer be available for execution.",
+            confirmButton: "Unpublish",
+          }}
+          onConfirm={handleUnpublish}
+          onCancel={() => setIsUnpublishDialogOpen(false)}
+          buttonState={{ confirm: { disable: isUnpublishing } }}
+        />
       </Dialog>
     </>
   );
 };
+
 

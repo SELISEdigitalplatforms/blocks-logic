@@ -21,7 +21,7 @@ export type WorkflowState = {
 
   workflowId: string | null;
   workflowName: string;
-  isActive: boolean;
+  isPublished: boolean;
   isDirty: boolean;
   executedItems: ExecutedItem[];
 
@@ -68,7 +68,6 @@ export type WorkflowState = {
 
   // Workflow operations
   setWorkflow: (workflow: Workflow) => void;
-  setWorkflowActive: (isActive: boolean) => void;
   resetWorkflow: () => void;
 
   // Utility methods
@@ -88,7 +87,7 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
   isPanelOpen: false,
   workflowId: null,
   workflowName: "",
-  isActive: false,
+  isPublished: false,
   isDirty: false,
   executedItems: [],
   executedNodes: [],
@@ -321,16 +320,16 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
       edgesMap,
       workflowId: workflow.itemId || null,
       workflowName: workflow.name || "",
-      isActive: workflow.isActive || false,
+      isPublished: workflow.isPublished || false,
       isDirty: false,
       executedItems,
       executedNodes,
     });
   },
 
-  setWorkflowActive: (isActive: boolean) => {
-    set({ isActive, isDirty: true });
-  },
+  // setWorkflowActive: (isActive: boolean) => {
+  //   set({ isActive, isDirty: true });
+  // },
 
   resetWorkflow: () => {
     set({
@@ -341,7 +340,7 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
       isPanelOpen: false,
       workflowId: null,
       workflowName: "",
-      isActive: false,
+      isPublished: false,
       isDirty: false,
       executedItems: [],
       executedNodes: [],
