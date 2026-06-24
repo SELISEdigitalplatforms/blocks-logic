@@ -38,10 +38,9 @@ export const WorkflowDetailsContent = ({
   const projectKey = useProjectStore().selectedProject?.tenantId || "";
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<string>("editor");
-  const [isToggleStatusModalOpen, setIsToggleStatusModalOpen] = useState(false);
   const [isVersionHistoryMode, setIsVersionHistoryMode] = useState(false);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
-  const { isDirty, isActive: workflowIsActive, setWorkflow } = useWorkflow();
+  const { isDirty, setWorkflow } = useWorkflow();
   const { data, isLoading, isFetched, isFetching, isFetchedAfterMount, refetch } =
     useGetWorkflowById({
       id: workflowId,
@@ -193,18 +192,6 @@ export const WorkflowDetailsContent = ({
                   orientation="vertical"
                   className="h-4 bg-muted-foreground"
                 />
-                {/* <div className="flex items-center gap-2">
-                  <span className="text-sm text-medium-emphasis">
-                    {workflowIsActive ? "Active" : "Inactive"}
-                  </span>
-                  <Switch
-                    size="sm"
-                    checked={workflowIsActive}
-                    onCheckedChange={(_checked) =>
-                      setIsToggleStatusModalOpen(true)
-                    }
-                  />
-                </div> */}
                 <Button variant="outline" size="sm" className="gap-2">
                   <ScrollText className="h-4 w-4" />
                   Logs
@@ -255,12 +242,6 @@ export const WorkflowDetailsContent = ({
           </Tabs>
         )}
       </div>
-      <ToggleStatusWorkflow
-        open={isToggleStatusModalOpen}
-        onOpenChange={setIsToggleStatusModalOpen}
-        isActive={workflowIsActive}
-        workflowId={workflowId}
-      />
     </>
   );
 };
