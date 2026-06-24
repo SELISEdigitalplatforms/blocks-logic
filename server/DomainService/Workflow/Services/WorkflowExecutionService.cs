@@ -342,7 +342,8 @@ namespace DomainService.Workflow.Services
                 FinishedAt = e.FinishedAt,
                 ErrorMessage = e.ErrorMessage,
                 TriggerType = e.TriggerType,
-                AttemptNumber = e.AttemptNumber
+                AttemptNumber = e.AttemptNumber,
+                ExecutionMode = e.ExecutionMode
             }).ToList();
 
             return new WorkflowExecutionsGetResponseDto
@@ -392,6 +393,7 @@ namespace DomainService.Workflow.Services
                 WorkflowId = execution.WorkflowId,
                 WorkflowName = execution.WorkflowName,
                 Status = execution.Status,
+                ExecutionMode = execution.ExecutionMode,
                 StartedAt = execution.StartedAt,
                 FinishedAt = execution.FinishedAt,
                 ErrorMessage = execution.ErrorMessage,
