@@ -12,6 +12,7 @@ namespace DomainService.Workflow.Dtos
         public required string WorkflowId { get; set; }
         public required string WorkflowName { get; set; }
         public required WorkflowExecutionStatus Status { get; set; }
+        public required WorkflowExecutionMode ExecutionMode { get; set; }
         public required DateTime StartedAt { get; set; }
         public DateTime? FinishedAt { get; set; }
         public TimeSpan? Duration { get; set; }
