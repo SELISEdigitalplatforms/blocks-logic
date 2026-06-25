@@ -5,6 +5,9 @@ import { useWorkflow } from "../../hooks";
 import { EditorNodeHandle, EditorNodeHandleArrow } from "./editor-node-handle";
 import { getNodeDefinition } from "../node-library-panel";
 import { useMemo } from "react";
+import { CheckCircle2, Loader2, XCircle, AlertCircle, Clock, CircleDashed } from "lucide-react";
+import { WorkflowExecutionStatus, getStatusConfig } from "../../utils/workflow-execution-list.util";
+import { cn } from "@/lib/utils";
 
 export const EditorNodeSimple = ({ id }: Node) => {
   const { getNodeById } = useWorkflow();
@@ -17,6 +20,19 @@ export const EditorNodeSimple = ({ id }: Node) => {
 
   if (!node) return null;
   if (!nodeDefinition) return null;
+
+  const executionStatus = node.data?.executionStatus as WorkflowExecutionStatus | undefined;
+  let StatusIcon = null;
+  let statusConfig = null;
+  if (executionStatus !== undefined) {
+    statusConfig = getStatusConfig(executionStatus);
+    if (executionStatus === WorkflowExecutionStatus.Completed) StatusIcon = CheckCircle2;
+    else if (executionStatus === WorkflowExecutionStatus.Failed) StatusIcon = XCircle;
+    else if (executionStatus === WorkflowExecutionStatus.Running) StatusIcon = Loader2;
+    else if (executionStatus === WorkflowExecutionStatus.Pending) StatusIcon = Clock;
+    else if (executionStatus === WorkflowExecutionStatus.Queued) StatusIcon = CircleDashed;
+    else if (executionStatus === WorkflowExecutionStatus.Init) StatusIcon = AlertCircle;
+  }
 
   return (
     <EditorNodeBase id={id}>
@@ -48,6 +64,11 @@ export const EditorNodeSimple = ({ id }: Node) => {
           </EditorNodeHandle>
         ))}
       </div>
+      {StatusIcon && statusConfig && (
+        <div className="absolute -bottom-2 -right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-background shadow-sm border">
+            <StatusIcon className={cn("h-4 w-4", statusConfig.textClass, executionStatus === WorkflowExecutionStatus.Running && "animate-spin")} />
+        </div>
+      )}
     </EditorNodeBase>
   );
 };

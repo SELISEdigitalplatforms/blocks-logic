@@ -46,6 +46,7 @@ export const PublishWorkflowModal = ({
             <Input
               id="version-name"
               value={publishVersionName}
+              maxLength={50}
               onChange={(e) => setPublishVersionName(e.target.value)}
             />
           </div>
@@ -54,7 +55,7 @@ export const PublishWorkflowModal = ({
             <Textarea
               id="description"
               value={publishDescription}
-              maxLength={100}
+              maxLength={255}
               onChange={(e) => setPublishDescription(e.target.value)}
               rows={4}
             />
