@@ -24,7 +24,7 @@ type EditorNodeBaseProps = {
 
 export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
   const [isToolbarVisible, setIsToolbarVisible] = useState(false);
-  const { getNodeById, deleteNode, selectAndConfigureNode, selectedNode, updateNode } =
+  const { getNodeById, deleteNode, selectAndConfigureNode, selectedNode, updateNode, duplicateNode, copyNode } =
     useWorkflow();
   const node = getNodeById(id);
 
@@ -154,6 +154,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
               className="cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation();
+                copyNode(id);
               }}
             >
               <span>Copy</span>
@@ -162,6 +163,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
               className="cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation();
+                duplicateNode(id);
               }}
             >
               <span>Duplicate</span>
@@ -171,6 +173,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
               className="cursor-pointer text-error"
               onClick={(e) => {
                 e.stopPropagation();
+                deleteNode(id);
               }}
             >
               <span>Delete</span>
