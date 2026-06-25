@@ -15,7 +15,6 @@ export const useWorkflow = () => {
   const isPanelOpen = useWorkflowStore((state) => state.isPanelOpen);
   const workflowId = useWorkflowStore((state) => state.workflowId);
   const workflowName = useWorkflowStore((state) => state.workflowName);
-  const isActive = useWorkflowStore((state) => state.isActive);
   const isDirty = useWorkflowStore((state) => state.isDirty);
 
   // Compute nodes and edges arrays from objects
@@ -44,7 +43,6 @@ export const useWorkflow = () => {
   const openNodeLibraryPanel = useWorkflowStore((state) => state.openNodeLibraryPanel);
   const closeNodeLibraryPanel = useWorkflowStore((state) => state.closeNodeLibraryPanel);
   const setWorkflow = useWorkflowStore((state) => state.setWorkflow);
-  const setWorkflowActive = useWorkflowStore((state) => state.setWorkflowActive);
   const resetWorkflow = useWorkflowStore((state) => state.resetWorkflow);
   const tidyUpWorkflow = useWorkflowStore((state) => state.tidyUpWorkflow);
   const getNodeById = useWorkflowStore((state) => state.getNodeById);
@@ -84,26 +82,26 @@ export const useWorkflow = () => {
     [edges],
   );
 
-  const exportWorkflow = useCallback(() => {
-    return {
-      id: workflowId,
-      name: workflowName,
-      isActive,
-      nodes,
-      edges,
-      metadata: {
-        version: "1.0",
-        exportedAt: new Date().toISOString(),
-      },
-    };
-  }, [workflowId, workflowName, isActive, nodes, edges]);
+  // const exportWorkflow = useCallback(() => {
+  //   return {
+  //     id: workflowId,
+  //     name: workflowName,
+  //     isActive,
+  //     nodes,
+  //     edges,
+  //     metadata: {
+  //       version: "1.0",
+  //       exportedAt: new Date().toISOString(),
+  //     },
+  //   };
+  // }, [workflowId, workflowName, isActive, nodes, edges]);
 
-  const importWorkflow = useCallback(
-    (data: Workflow) => {
-      setWorkflow(data);
-    },
-    [setWorkflow],
-  );
+  // const importWorkflow = useCallback(
+  //   (data: Workflow) => {
+  //     setWorkflow(data);
+  //   },
+  //   [setWorkflow],
+  // );
 
   const validateWorkflow = useCallback(() => {}, []);
 
@@ -174,7 +172,6 @@ export const useWorkflow = () => {
     isPanelOpen,
     workflowId,
     workflowName,
-    isActive,
     isDirty,
 
     onNodesChange,
@@ -209,11 +206,10 @@ export const useWorkflow = () => {
 
     // Workflow operations
     setWorkflow,
-    setWorkflowActive,
     resetWorkflow,
     tidyUpWorkflow,
-    exportWorkflow,
-    importWorkflow,
+    // exportWorkflow,
+    // importWorkflow,
 
     // Utility methods
     getNodeById,
