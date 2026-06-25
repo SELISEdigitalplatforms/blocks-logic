@@ -74,6 +74,8 @@ export const PublishWorkflowAction = ({
 
   const isPending = isPublishing || isUnpublishing;
 
+  // console.log(hasUnsavedChanges, isDirty, isPublished);
+
   return (
     <>
       <DropdownMenu>
@@ -85,7 +87,7 @@ export const PublishWorkflowAction = ({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={handleOpenPublishDialog} disabled={!isDirty || hasUnsavedChanges}>
+          <DropdownMenuItem onClick={handleOpenPublishDialog} disabled={hasUnsavedChanges && (!isDirty || isPublished)}>
             Publish
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setIsUnpublishDialogOpen(true)} disabled={!isPublished}>

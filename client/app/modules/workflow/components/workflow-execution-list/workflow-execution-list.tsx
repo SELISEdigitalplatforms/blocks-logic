@@ -5,7 +5,7 @@ import { ScrollArea } from "@/components/ui-kits/scroll-area/scroll-area";
 import { formatDate, cn } from "@/lib/utils";
 import { differenceInSeconds } from "date-fns";
 import { Skeleton } from "@/components/ui-kits/skeleton/skeleton";
-import { FlaskConical, Rocket } from "lucide-react";
+import { FlaskConical, Rocket, CheckCircle2, CircleDashed, Loader2, XCircle, AlertCircle, Clock } from "lucide-react";
 import { WorkflowExecutionMode } from "../../models/workflow.model";
 import {
   getStatusConfig,
@@ -21,7 +21,7 @@ interface WorkflowExecutionListProps {
 
 const LoadingSkeleton = () => {
   return (
-    <ScrollArea className="h-full min-w-72 border-r bg-background p-3">
+    <ScrollArea className="h-full w-64 min-w-64 border-r bg-background p-3">
       {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]?.map((execution) => (
         <div
           key={execution}
@@ -47,7 +47,7 @@ export const WorkflowExecutionList = ({
 }: WorkflowExecutionListProps) => {
   if (isLoading) return <LoadingSkeleton />;
   return (
-    <ScrollArea className="h-full min-w-72 border-r bg-background p-3">
+    <ScrollArea className="h-full w-64 min-w-64 border-r bg-background p-3">
       {executions?.map((execution) => {
         const statusConfig = getStatusConfig(execution.status);
         const duration = execution.finishedAt
@@ -81,11 +81,14 @@ export const WorkflowExecutionList = ({
                     )}
                   </p>
                 </div>
-                <span
-                  className={cn("text-xs font-medium", statusConfig.textClass)}
-                >
-                  {statusConfig.label}
-                </span>
+                <div className="flex items-center gap-1">
+                  {execution.status === WorkflowExecutionStatus.Completed && <CheckCircle2 className={cn("h-4 w-4", statusConfig.textClass)} />}
+                  {execution.status === WorkflowExecutionStatus.Failed && <XCircle className={cn("h-4 w-4", statusConfig.textClass)} />}
+                  {execution.status === WorkflowExecutionStatus.Running && <Loader2 className={cn("h-4 w-4 animate-spin", statusConfig.textClass)} />}
+                  {execution.status === WorkflowExecutionStatus.Pending && <Clock className={cn("h-4 w-4", statusConfig.textClass)} />}
+                  {execution.status === WorkflowExecutionStatus.Queued && <CircleDashed className={cn("h-4 w-4", statusConfig.textClass)} />}
+                  {execution.status === WorkflowExecutionStatus.Init && <AlertCircle className={cn("h-4 w-4", statusConfig.textClass)} />}
+                </div>
               </div>
 
               <span className="text-xs text-muted-foreground">
