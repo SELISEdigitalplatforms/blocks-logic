@@ -9,14 +9,16 @@ import { MoreVertical, X, Loader2 } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { useGetWorkflowVersions, usePublishWorkflow, useRestoreWorkflow } from "../../hooks/use-workflow-api";
-import { format } from "date-fns";
+import { formatDate } from "@/lib/utils";
+import { WorkflowVersion } from "../../models/workflow.model";
 
 interface VersionHistorySidebarProps {
   onClose: () => void;
   onSelectVersion: (version: any) => void;
+  selectedVersionId?: string | null;
 }
 
-export const VersionHistorySidebar = ({ onClose, onSelectVersion }: VersionHistorySidebarProps) => {
+export const VersionHistorySidebar = ({ onClose, onSelectVersion, selectedVersionId }: VersionHistorySidebarProps) => {
   const { id: workflowId } = useParams<{ id: string }>();
   const projectKey = useProjectStore().selectedProject?.tenantId || "";
   
@@ -28,7 +30,7 @@ export const VersionHistorySidebar = ({ onClose, onSelectVersion }: VersionHisto
   const publishWorkflow = usePublishWorkflow();
   const restoreWorkflow = useRestoreWorkflow();
 
-  const handlePublish = (version: any) => {
+  const handlePublish = (version: WorkflowVersion) => {
     publishWorkflow.mutate({
       workflowId: workflowId || "",
       projectKey,
@@ -36,11 +38,11 @@ export const VersionHistorySidebar = ({ onClose, onSelectVersion }: VersionHisto
     });
   };
 
-  const handleRestore = (version: any) => {
+  const handleRestore = (version: WorkflowVersion) => {
     restoreWorkflow.mutate({
       workflowId: workflowId || "",
       projectKey,
-      versionId: version.itemId || version.id,
+      versionId: version.itemId,
     });
   };
 
@@ -64,24 +66,28 @@ export const VersionHistorySidebar = ({ onClose, onSelectVersion }: VersionHisto
             No versions found.
           </div>
         ) : (
-          versions.map((version: any) => (
+          versions.map((version: WorkflowVersion) => {
+            const isSelected = selectedVersionId === version.itemId;
+            return (
             <div 
-              key={version.itemId || version.id || Math.random()} 
-              className="flex flex-col gap-1 p-2 rounded-md hover:bg-muted/50 relative group cursor-pointer"
+              key={version.itemId} 
+              className={`flex flex-col gap-1 p-2 rounded-md hover:bg-muted/50 relative group cursor-pointer ${
+                isSelected ? "bg-muted" : ""
+              }`}
               onClick={() => onSelectVersion(version)}
             >
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  {version.isActive ? (
-                    <div className="w-2 h-2 rounded-full bg-yellow-500" />
+                <div className="flex items-center gap-2 overflow-hidden">
+                  {version.isPublished ? (
+                    <div className="w-2 h-2 rounded-full bg-yellow-500 flex-shrink-0" />
                   ) : (
-                    <div className="w-2 h-2 rounded-full border-2 border-muted-foreground" />
+                    <div className="w-2 h-2 rounded-full border-2 border-muted-foreground flex-shrink-0" />
                   )}
-                  <span className="font-medium text-sm">{version.name || "Unnamed Version"}</span>
+                  <span className="font-medium text-sm truncate">{version.name || "Unnamed Version"}</span>
                 </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
                       <MoreVertical className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -91,12 +97,17 @@ export const VersionHistorySidebar = ({ onClose, onSelectVersion }: VersionHisto
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
+              {version.description && (
+                <p className="text-xs text-muted-foreground truncate pl-4">
+                  {version.description}
+                </p>
+              )}
               <span className="text-xs text-muted-foreground pl-4">
-                {version.author || version.createdBy || "Unknown author"},{" "}
-                {version.date || version.createdDate ? format(new Date(version.date || version.createdDate), "MMM dd 'at' HH:mm:ss") : "Unknown date"}
+                {version.lastUpdatedDate ? formatDate(new Date(version.lastUpdatedDate)) : "Unknown date"}
               </span>
             </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

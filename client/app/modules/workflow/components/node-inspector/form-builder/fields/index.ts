@@ -13,4 +13,5 @@ export { FixedKeyValuePairsField } from "./fixed-key-value-pairs-field";
 export { ConditionsField } from "./conditions-field";
 export { ArrayField } from "./array-field";
 export { ExpressionInputField } from "./expression-input-field";
+export { TabWithTextField } from "./tab-with-text-field";
 export * from "./fields";

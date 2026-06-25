@@ -54,6 +54,7 @@ export const PublishWorkflowModal = ({
             <Textarea
               id="description"
               value={publishDescription}
+              maxLength={100}
               onChange={(e) => setPublishDescription(e.target.value)}
               rows={4}
             />

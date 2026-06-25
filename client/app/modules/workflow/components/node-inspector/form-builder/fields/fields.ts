@@ -17,6 +17,7 @@ import { DisplayField } from "./display-field";
 import { ConditionsField } from "./conditions-field";
 import { SchemaFieldsField } from "./schema-fields-field";
 import { SchemaFieldPickerField } from "./schema-field-picker-field";
+import { TabWithTextField } from "./tab-with-text-field";
 
 /**
  * Registry of all field components mapped by their field type.
@@ -46,6 +47,7 @@ export const FIELD_COMPONENTS_REGISTRY: Record<
   display: DisplayField,
   "schema-fields": SchemaFieldsField,
   "schema-field-picker": SchemaFieldPickerField,
+  "tab-with-text": TabWithTextField,
 };
 
 /**

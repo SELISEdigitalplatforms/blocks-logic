@@ -5,6 +5,8 @@ import { ScrollArea } from "@/components/ui-kits/scroll-area/scroll-area";
 import { formatDate, cn } from "@/lib/utils";
 import { differenceInSeconds } from "date-fns";
 import { Skeleton } from "@/components/ui-kits/skeleton/skeleton";
+import { FlaskConical, Rocket } from "lucide-react";
+import { WorkflowExecutionMode } from "../../models/workflow.model";
 import {
   getStatusConfig,
   WorkflowExecutionStatus,
@@ -19,7 +21,7 @@ interface WorkflowExecutionListProps {
 
 const LoadingSkeleton = () => {
   return (
-    <ScrollArea className="h-full min-w-72 border-r bg-background p-4">
+    <ScrollArea className="h-full min-w-72 border-r bg-background p-3">
       {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]?.map((execution) => (
         <div
           key={execution}
@@ -40,11 +42,12 @@ const LoadingSkeleton = () => {
 export const WorkflowExecutionList = ({
   executions,
   isLoading,
+  selectedExecutionId,
   onSelectExecution,
 }: WorkflowExecutionListProps) => {
   if (isLoading) return <LoadingSkeleton />;
   return (
-    <ScrollArea className="h-full min-w-72 border-r bg-background p-4">
+    <ScrollArea className="h-full min-w-72 border-r bg-background p-3">
       {executions?.map((execution) => {
         const statusConfig = getStatusConfig(execution.status);
         const duration = execution.finishedAt
@@ -57,17 +60,27 @@ export const WorkflowExecutionList = ({
         return (
           <div
             key={execution.id}
-            className={`flex cursor-pointer shadow transition-all hover:bg-accent`}
+            className={cn(
+              "flex cursor-pointer shadow transition-all hover:bg-accent",
+              selectedExecutionId === execution.id && "bg-accent",
+            )}
             onClick={() => onSelectExecution?.(execution)}
           >
             <div className={cn("w-1", statusConfig.color)}></div>
-            <div className="flex w-full flex-col gap-1 p-4">
+            <div className="flex w-full flex-col gap-1 p-4 pr-2">
               <div className="flex items-center justify-between">
-                <p className="text-base font-medium">
-                  {formatDate(
-                    new Date(execution.finishedAt || execution.startedAt),
+                <div className="flex items-center gap-2">
+                  {execution.executionMode === WorkflowExecutionMode.Production ? (
+                    <Rocket className="h-4 w-4 text-blue-500" />
+                  ) : (
+                    <FlaskConical className="h-4 w-4 text-orange-500" />
                   )}
-                </p>
+                  <p className="text-base font-medium">
+                    {formatDate(
+                      new Date(execution.finishedAt || execution.startedAt),
+                    )}
+                  </p>
+                </div>
                 <span
                   className={cn("text-xs font-medium", statusConfig.textClass)}
                 >
