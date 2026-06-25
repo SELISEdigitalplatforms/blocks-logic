@@ -5,15 +5,21 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui-kits/dropdown-menu/dropdown-menu";
 import { Button } from "@/components/ui-kits/button/button";
-import { MoreVertical, X, Loader2 } from "lucide-react";
+import { MoreVertical, X, Loader2, Info } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { useGetWorkflowVersions, usePublishWorkflow, useRestoreWorkflow } from "../../hooks/use-workflow-api";
 import { formatDate } from "@/lib/utils";
 import { WorkflowVersion } from "../../models/workflow.model";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui-kits/tooltip/tooltip";
 
 interface VersionHistorySidebarProps {
-  onClose: () => void;
+  onClose?: () => void;
   onSelectVersion: (version: any) => void;
   selectedVersionId?: string | null;
 }
@@ -47,15 +53,19 @@ export const VersionHistorySidebar = ({ onClose, onSelectVersion, selectedVersio
   };
 
   const rawVersions = versionsData?.data || [];
-  const versions = Array.isArray(rawVersions) ? rawVersions : [];
+  const unsortedVersions = Array.isArray(rawVersions) ? rawVersions : [];
+  const versions = unsortedVersions.sort((a, b) => new Date(b.lastUpdatedDate).getTime() - new Date(a.lastUpdatedDate).getTime());
   return (
+    <TooltipProvider>
     <div className="w-80 h-full border-l border-border bg-background flex flex-col">
-      <div className="flex items-center justify-between p-4 border-b border-border">
+      {/* <div className="flex items-center justify-between p-4 border-b border-border">
         <h3 className="font-semibold text-lg">Version History</h3>
-        <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8">
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
+        {onClose && (
+          <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8">
+            <X className="h-4 w-4" />
+          </Button>
+        )}
+      </div> */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
@@ -78,7 +88,7 @@ export const VersionHistorySidebar = ({ onClose, onSelectVersion, selectedVersio
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 overflow-hidden">
-                  {version.isPublished ? (
+                  {version.isActive ? (
                     <div className="w-2 h-2 rounded-full bg-yellow-500 flex-shrink-0" />
                   ) : (
                     <div className="w-2 h-2 rounded-full border-2 border-muted-foreground flex-shrink-0" />
@@ -98,9 +108,24 @@ export const VersionHistorySidebar = ({ onClose, onSelectVersion, selectedVersio
                 </DropdownMenu>
               </div>
               {version.description && (
-                <p className="text-xs text-muted-foreground truncate pl-4">
-                  {version.description}
-                </p>
+                <div className="flex items-center gap-1 pl-4 mr-2">
+                  <p className="text-xs text-muted-foreground truncate flex-1">
+                    {version.description}
+                  </p>
+                  <Tooltip delayDuration={300}>
+                    <TooltipTrigger asChild>
+                      <div 
+                        className="flex items-center justify-center cursor-help"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Info className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground transition-colors" />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-[250px] whitespace-normal z-[100]">
+                      <p className="text-sm">{version.description}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
               )}
               <span className="text-xs text-muted-foreground pl-4">
                 {version.lastUpdatedDate ? formatDate(new Date(version.lastUpdatedDate)) : "Unknown date"}
@@ -111,5 +136,6 @@ export const VersionHistorySidebar = ({ onClose, onSelectVersion, selectedVersio
         )}
       </div>
     </div>
+    </TooltipProvider>
   );
 };

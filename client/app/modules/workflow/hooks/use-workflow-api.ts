@@ -130,6 +130,7 @@ export const usePublishWorkflow = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["workflows"] });
       queryClient.invalidateQueries({ queryKey: ["workflow"] });
+      queryClient.invalidateQueries({ queryKey: ["workflow-versions"] });
     },
   });
 };

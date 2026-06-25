@@ -92,4 +92,5 @@ export interface WorkflowVersion {
   createdBy: string;
   lastUpdatedBy: string;
   isPublished?: boolean;
+  isActive?: boolean;
 }
