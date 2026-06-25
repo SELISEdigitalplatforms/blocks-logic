@@ -179,7 +179,7 @@ export const WorkflowDetailsContent = ({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-9 w-9"
+                    className="h-9 w-9 hover:bg-black/10 dark:hover:bg-accent hover:text-accent-foreground"
                     onClick={() => {
                       setActiveTab("editor");
                       setIsVersionHistoryMode(true);
@@ -230,7 +230,8 @@ export const WorkflowDetailsContent = ({
                 {isVersionHistoryMode && (
                   <VersionHistorySidebar 
                     onClose={handleCloseVersionHistory} 
-                    onSelectVersion={(version) => setSelectedVersionId(version.itemId || version.id)} 
+                    onSelectVersion={(version) => setSelectedVersionId(version.itemId || version.id)}
+                    selectedVersionId={selectedVersionId}
                   />
                 )}
               </div>
