@@ -1,5 +1,5 @@
 import { Edge } from "@xyflow/react";
-import { ExecutedItem, ExecutedNode, Workflow, WorkflowSummary, WorkflowVersion } from "../models/workflow.model";
+import { ExecutedItem, ExecutedNode, Workflow, WorkflowSummary, WorkflowVersion, WorkflowExecutionMode } from "../models/workflow.model";
 import { WorkflowNode } from "@blocks-workflow/models/node.model";
 import { OutputSchemaField } from "./output-schema.types";
 
@@ -90,6 +90,7 @@ export interface WorkflowExecution {
   workflowId: string;
   projectKey: string;
   status: number;
+  executionMode: WorkflowExecutionMode;
   startedAt: string;
   finishedAt: string;
   duration: number;
