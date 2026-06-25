@@ -17,6 +17,18 @@ import {
   IGetWorkflowExecutionsResponse,
   IGetWorkflowExecutionByIdPayload,
   IGetWorkflowExecutionByIdResponse,
+  ICreateWorkflowVersionPayload,
+  ICreateWorkflowVersionResponse,
+  IGetWorkflowVersionsPayload,
+  IGetWorkflowVersionsResponse,
+  IPublishWorkflowPayload,
+  IPublishWorkflowResponse,
+  IUnpublishWorkflowPayload,
+  IUnpublishWorkflowResponse,
+  IRestoreWorkflowPayload,
+  IRestoreWorkflowResponse,
+  IGetWorkflowByVersionPayload,
+  IGetWorkflowByVersionResponse,
 } from "../types/workflow.service.type";
 
 export class WorkflowService {
@@ -100,6 +112,30 @@ export class WorkflowService {
     //   {},
     //   { absoluteUrl: true },
     // );
+  }
+
+  createWorkflowVersion = (payload: ICreateWorkflowVersionPayload): Promise<ICreateWorkflowVersionResponse> => {
+    return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.CREATE_VERSION}`, payload);
+  }
+
+  getWorkflowVersions = (payload: IGetWorkflowVersionsPayload): Promise<IGetWorkflowVersionsResponse> => {
+    return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.GET_VERSIONS}`, payload);
+  }
+
+  publishWorkflow = (payload: IPublishWorkflowPayload): Promise<IPublishWorkflowResponse> => {
+    return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.PUBLISH}`, payload);
+  }
+
+  unpublishWorkflow = (payload: IUnpublishWorkflowPayload): Promise<IUnpublishWorkflowResponse> => {
+    return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.UNPUBLISH}`, payload);
+  }
+
+  restoreWorkflow = (payload: IRestoreWorkflowPayload): Promise<IRestoreWorkflowResponse> => {
+    return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.RESTORE}`, payload);
+  }
+
+  getWorkflowByVersion = (payload: IGetWorkflowByVersionPayload): Promise<IGetWorkflowByIdResponse> => {
+    return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.GET_WORKFLOW_BY_VERSION}`, payload);
   }
 }
 
