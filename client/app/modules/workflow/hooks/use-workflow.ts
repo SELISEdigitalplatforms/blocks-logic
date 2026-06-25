@@ -150,6 +150,16 @@ export const useWorkflow = () => {
     [getNodeById, executedItems],
   );
 
+  const isNodeNameUnique = useCallback(
+    (name: string, excludeNodeId?: string) => {
+      const lowerName = name.trim().toLowerCase();
+      return !nodes.some(
+        (node) => node.name?.toLowerCase() === lowerName && node.id !== excludeNodeId,
+      );
+    },
+    [nodes],
+  );
+
   // react flow instance methods
 
   const { fitView, zoomIn, zoomOut } = reactFlowInstance;
@@ -215,6 +225,7 @@ export const useWorkflow = () => {
     getWorkflowStats,
     getNodeOutput,
     getNodeInput,
+    isNodeNameUnique,
 
     // React Flow instance
     reactFlowInstance,

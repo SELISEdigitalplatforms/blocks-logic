@@ -15,6 +15,7 @@ import {
 } from "@/components/ui-kits/tooltip/tooltip";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { showErrorToast } from "@/hooks/use-toast";
 
 type EditorNodeBaseProps = {
   id: string;
@@ -24,7 +25,7 @@ type EditorNodeBaseProps = {
 
 export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
   const [isToolbarVisible, setIsToolbarVisible] = useState(false);
-  const { getNodeById, deleteNode, selectAndConfigureNode, selectedNode, updateNode, duplicateNode, copyNode } =
+  const { getNodeById, deleteNode, selectAndConfigureNode, selectedNode, updateNode, duplicateNode, copyNode, isNodeNameUnique } =
     useWorkflow();
   const node = getNodeById(id);
 
@@ -38,8 +39,16 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
   }, [node?.name, isRenaming]);
 
   const handleRenameSubmit = () => {
-    if (editName.trim() && editName !== node?.name) {
-      updateNode(id, { name: editName.trim() });
+    const newName = editName.trim();
+    if (newName && newName !== node?.name) {
+      if (!isNodeNameUnique(newName, id)) {
+        showErrorToast({
+          title: "Validation Error",
+          errors: "A node with this name already exists.",
+        });
+        return;
+      }
+      updateNode(id, { name: newName });
     }
     setIsRenaming(false);
   };
