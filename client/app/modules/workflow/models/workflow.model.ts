@@ -17,10 +17,17 @@ export type ExecutedItem = {
   createdAt: string;
 };
 
+export enum WorkflowExecutionMode {
+  Test = 0,
+  Production = 1,
+}
+
 export interface WorkflowSummary {
   createdBy: string;
   createdDate: string;
-  isActive: boolean;
+  isDirty: boolean;
+  isPublished: boolean;
+  executionMode: WorkflowExecutionMode;
   itemId: string;
   language: string | null;
   lastUpdatedBy: string;
@@ -72,4 +79,18 @@ export interface ExecutedNode {
   endedAt: string;
   error: string | null;
   attemptNumber: number;
+}
+
+export interface WorkflowVersion {
+  itemId: string;
+  workflowId: string;
+  tenantId: string;
+  name: string;
+  description: string;
+  createdDate: string;
+  lastUpdatedDate: string;
+  createdBy: string;
+  lastUpdatedBy: string;
+  isPublished?: boolean;
+  isActive?: boolean;
 }
