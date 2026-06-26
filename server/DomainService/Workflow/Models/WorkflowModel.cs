@@ -1,7 +1,9 @@
 using Blocks.Genesis;
+using MongoDB.Bson.Serialization.Attributes;
 
 namespace DomainService.Workflow.Models
 {
+    [BsonIgnoreExtraElements]
     public class WorkflowModel : BaseEntity
     {
         public string Name { get; set; } = string.Empty;
@@ -15,7 +17,9 @@ namespace DomainService.Workflow.Models
 
         public Dictionary<string, string> Settings { get; set; }
 
-        public bool IsActive { get; set; } = true;
+        public bool IsPublished { get; set; } = false;
+
+        public bool IsDirty { get; set; } = true;
 
         public string Description { get; set; } = string.Empty;
 

@@ -31,7 +31,7 @@ namespace DomainService.Workflow
 
             // register repositories
             services.AddSingleton<IWorkflowRepository, WorkflowRepository>();
-            services.AddSingleton<IWorkflowSnapshotRepository, WorkflowSnapshotRepository>();
+            services.AddSingleton<IWorkflowVersionRepository, WorkflowVersionRepository>();
             services.AddSingleton<IWorkflowExecutionRepository, WorkflowExecutionRepository>();
 
             //  rigister node executors
