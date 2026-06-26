@@ -5,7 +5,7 @@ import { useWorkflow } from "../../hooks";
 import { EditorNodeHandle, EditorNodeHandleArrow } from "./editor-node-handle";
 import { getNodeDefinition } from "../node-library-panel";
 import { useMemo } from "react";
-import { CheckCircle2, Loader2, XCircle, AlertCircle, Clock, CircleDashed } from "lucide-react";
+
 import { WorkflowExecutionStatus, getStatusConfig } from "../../utils/workflow-execution-list.util";
 import { cn } from "@/lib/utils";
 
@@ -26,12 +26,7 @@ export const EditorNodeSimple = ({ id }: Node) => {
   let statusConfig = null;
   if (executionStatus !== undefined) {
     statusConfig = getStatusConfig(executionStatus);
-    if (executionStatus === WorkflowExecutionStatus.Completed) StatusIcon = CheckCircle2;
-    else if (executionStatus === WorkflowExecutionStatus.Failed) StatusIcon = XCircle;
-    else if (executionStatus === WorkflowExecutionStatus.Running) StatusIcon = Loader2;
-    else if (executionStatus === WorkflowExecutionStatus.Pending) StatusIcon = Clock;
-    else if (executionStatus === WorkflowExecutionStatus.Queued) StatusIcon = CircleDashed;
-    else if (executionStatus === WorkflowExecutionStatus.Init) StatusIcon = AlertCircle;
+    StatusIcon = statusConfig.icon;
   }
 
   return (

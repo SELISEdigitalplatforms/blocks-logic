@@ -16,7 +16,7 @@ import {
 } from "@blocks-workflow/utils/workflow-execution-editor.util";
 import { NodeInspector } from "../node-inspector";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
-import { EditorFitConfig } from "../workflow-editor-controls";
+import { EditorFitConfig, WorkflowEditorControls } from "../workflow-editor-controls";
 
 import {
   getStatusConfig,
@@ -132,11 +132,12 @@ export const WorkflowExecutionEditor = ({
           size={1.2}
           className="bg-surface-app opacity-60"
         />
+        <WorkflowEditorControls readonly />
       </ReactFlow>
       {execution && (
         <div className="absolute left-4 top-4 z-50">
           <div className="flex items-center gap-2 rounded-md border bg-background/95 px-3 py-2 shadow-sm backdrop-blur-sm">
-            <span className="text-sm font-medium">Execution Status:</span>
+            <span className="text-sm font-medium">Status:</span>
             <div className="flex items-center gap-1.5">
               <div
                 className={cn(
@@ -154,6 +155,7 @@ export const WorkflowExecutionEditor = ({
               </span>
             </div>
           </div>
+          
         </div>
       )}
       {selectedNode && <NodeInspector key={selectedNode.id} />}
