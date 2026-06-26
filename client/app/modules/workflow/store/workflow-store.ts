@@ -133,6 +133,39 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
       }
     }
 
+    // Auto-select edges between selected nodes
+    const selectionChanged = changes.some((change) => change.type === "select");
+    if (selectionChanged) {
+      const selectedNodeIds = new Set(updatedNodes.filter((n) => n.selected).map((n) => n.id));
+      const currentEdges = Object.values(get().edgesMap);
+      let edgesChanged = false;
+      const newEdgesMap = { ...get().edgesMap };
+
+      for (const edge of currentEdges) {
+        const bothNodesSelected =
+          selectedNodeIds.has(edge.source) && selectedNodeIds.has(edge.target);
+
+        if (bothNodesSelected && !edge.selected) {
+          newEdgesMap[edge.id] = { ...edge, selected: true };
+          edgesChanged = true;
+        } else if (!bothNodesSelected && edge.selected) {
+          const edgeNodesChanged = changes.some(
+            (change) =>
+              change.type === "select" &&
+              (change.id === edge.source || change.id === edge.target)
+          );
+          if (edgeNodesChanged) {
+            newEdgesMap[edge.id] = { ...edge, selected: false };
+            edgesChanged = true;
+          }
+        }
+      }
+
+      if (edgesChanged) {
+        stateUpdate.edgesMap = newEdgesMap;
+      }
+    }
+
     set(stateUpdate);
   },
 
