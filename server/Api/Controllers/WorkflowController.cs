@@ -76,16 +76,46 @@ namespace Utilities.Api.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateVersion([FromBody] WorkflowVersionCreateRequestDto dto)
         {
-            var result = await _workflowService.CreateVersion(dto);
+            var result = await _workflowService.CreateVersionAsync(dto);
             return StatusCode(StatusCodes.Status201Created, result);
         }
 
         [HttpPost]
         public async Task<IActionResult> GetVersions([FromBody] WorkflowGetVersionsRequestDto dto)
         {
-            var result = await _workflowService.GetVersions(dto);
-            return StatusCode(StatusCodes.Status200OK, result);
+            var result = await _workflowService.GetVersionsAsync(dto);
+            return Ok(result);
         }
+
+        [HttpPost]
+        public async Task<IActionResult> GetWorkflowByVersion([FromBody] GetWorkflowByVersionRequestDto dto)
+        {
+            var result = await _workflowService.GetWorkflowByVersionAsync(dto);
+            return Ok(result);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> Publish([FromBody] WorkflowPublishRequestDto dto)
+        {
+            var result = await _workflowService.PublishAsync(dto);
+            return Ok(result);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> Unpublish([FromBody] WorkflowUnpublishRequestDto dto)
+        {
+            var result = await _workflowService.UnpublishAsync(dto);
+            return Ok(result);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> Restore([FromBody] WorkflowRestoreRequestDto dto)
+        {
+            var result = await _workflowService.RestoreAsync(dto);
+            return Ok(result);
+        }
+
+
 
         [HttpPost("{projectKey}/{workflowId}/{webhookId}")]
         public async Task<IActionResult> Webhook(string projectKey, string workflowId, string webhookId, [FromBody] JsonElement input)
@@ -99,7 +129,35 @@ namespace Utilities.Api.Controllers
 
             try
             {
-                var response = await _workflowExecutionService.WebhookStartAsync(
+                var response = await _workflowExecutionService.TriggerWebhookAsync(
+                    workflowId,
+                    webhookId,
+                    projectKey,
+                    input
+                );
+
+                return Ok(response);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return StatusCode(401, new { message = "Unauthorized" });
+            }
+
+        }
+
+        [HttpPost("/webhook-test/{projectKey}/{workflowId}/{webhookId}")]
+        public async Task<IActionResult> TestWebhook(string projectKey, string workflowId, string webhookId, [FromBody] JsonElement input)
+        {
+            var dto = new WorkflowWebhookRequestDto
+            {
+                ProjectKey = projectKey,
+                Input = input
+            };
+            ApplyContext(dto);
+
+            try
+            {
+                var response = await _workflowExecutionService.TriggerTestWebhookAsync(
                     workflowId,
                     webhookId,
                     projectKey,
