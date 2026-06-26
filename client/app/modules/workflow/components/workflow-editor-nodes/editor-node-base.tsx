@@ -25,7 +25,7 @@ type EditorNodeBaseProps = {
 
 export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
   const [isToolbarVisible, setIsToolbarVisible] = useState(false);
-  const { getNodeById, deleteNode, selectAndConfigureNode, selectedNode, updateNode, duplicateNode, copyNode, isNodeNameUnique } =
+  const { getNodeById, deleteNode, selectAndConfigureNode, selectedNode, updateNode, duplicateNode, isNodeNameUnique } =
     useWorkflow();
   const node = getNodeById(id);
 
@@ -68,7 +68,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
     <>
       <div
         className={cn(
-          "peer rounded-md border bg-background px-5 py-4 shadow-lg transition-shadow hover:shadow-xl",
+          "peer min-w-[100px] rounded-md border bg-background px-5 py-4 shadow-lg transition-shadow hover:shadow-xl",
           isSelected && "border-primary ring-1 ring-primary",
           node.className || "",
         )}
@@ -78,7 +78,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
 
       <div
         className={cn(
-          "absolute -top-12 left-1/2 flex -translate-x-1/2 transform gap-1 rounded-md bg-background px-3 py-2 opacity-0 shadow-sm transition-opacity hover:opacity-100 peer-hover:opacity-100",
+          "absolute -top-12 left-1/2 flex -translate-x-1/2 transform gap-1 rounded-md bg-background px-3 py-2 opacity-0 shadow-sm transition-opacity hover:opacity-100 peer-hover:opacity-100 after:absolute after:content-[''] after:-bottom-6 after:left-0 after:h-6 after:w-full",
           isToolbarVisible && "opacity-100",
           node.data?.hasToolbar === false && "hidden",
         )}
@@ -158,16 +158,6 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
             >
               <span>Rename</span>
             </DropdownMenuItem>
-
-            <DropdownMenuItem
-              className="cursor-pointer"
-              onClick={(e) => {
-                e.stopPropagation();
-                copyNode(id);
-              }}
-            >
-              <span>Copy</span>
-            </DropdownMenuItem>
             <DropdownMenuItem
               className="cursor-pointer"
               onClick={(e) => {
@@ -204,6 +194,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
       ) : (
         <h4
           className="absolute left-1/2 mt-2 w-full min-w-24 -translate-x-1/2 transform text-center text-medium-emphasis"
+          onClick={(e) => e.stopPropagation()}
           onDoubleClick={(e) => {
             e.stopPropagation();
             setIsRenaming(true);

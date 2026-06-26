@@ -8,7 +8,7 @@ import { Button } from "@/components/ui-kits/button/button";
 import { MoreVertical, X, Loader2, Info } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
-import { useGetWorkflowVersions, usePublishWorkflow, useRestoreWorkflow } from "../../hooks/use-workflow-api";
+import { useGetWorkflowVersions } from "../../hooks/use-workflow-api";
 import { formatDate } from "@/lib/utils";
 import { WorkflowVersion } from "../../models/workflow.model";
 import {
@@ -17,6 +17,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui-kits/tooltip/tooltip";
+import { WorkflowVersionActionDropdown } from "../workflow-version/workflow-version-action-dropdown";
 
 interface VersionHistorySidebarProps {
   onClose?: () => void;
@@ -32,25 +33,6 @@ export const VersionHistorySidebar = ({ onClose, onSelectVersion, selectedVersio
     projectKey,
     workflowId: workflowId || "",
   });
-
-  const publishWorkflow = usePublishWorkflow();
-  const restoreWorkflow = useRestoreWorkflow();
-
-  const handlePublish = (version: WorkflowVersion) => {
-    publishWorkflow.mutate({
-      workflowId: workflowId || "",
-      projectKey,
-      name: version.name || "Published Version",
-    });
-  };
-
-  const handleRestore = (version: WorkflowVersion) => {
-    restoreWorkflow.mutate({
-      workflowId: workflowId || "",
-      projectKey,
-      versionId: version.itemId,
-    });
-  };
 
   const rawVersions = versionsData?.data || [];
   const unsortedVersions = Array.isArray(rawVersions) ? rawVersions : [];
@@ -95,17 +77,11 @@ export const VersionHistorySidebar = ({ onClose, onSelectVersion, selectedVersio
                   )}
                   <span className="font-medium text-sm truncate">{version.name || "Unnamed Version"}</span>
                 </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => handleRestore(version)}>Restore version</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handlePublish(version)}>Publish version</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <WorkflowVersionActionDropdown version={version}>
+                  <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </WorkflowVersionActionDropdown>
               </div>
               {version.description && (
                 <div className="flex items-center gap-1 pl-4 mr-2">

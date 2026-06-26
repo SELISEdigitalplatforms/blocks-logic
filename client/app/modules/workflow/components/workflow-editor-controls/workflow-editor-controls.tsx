@@ -15,15 +15,22 @@ export const EditorFitConfig = {
   fitViewOptions: { maxZoom: 1 },
 };
 
-export const WorkflowEditorControls = () => {
+export interface WorkflowEditorControlsProps {
+  readonly?: boolean;
+}
+
+export const WorkflowEditorControls = ({ readonly = false }: WorkflowEditorControlsProps) => {
   const { fitView, zoomIn, zoomOut, openNodeLibraryPanel, tidyUpWorkflow } = useWorkflow();
 
-  const controls = [
+  const allControls = [
     {
       label: "Fit View",
       icon: Maximize,
       action: () =>
-        fitView({ maxZoom: EditorFitConfig.fitViewOptions.maxZoom }),
+        fitView({
+          duration: 800,
+          maxZoom: EditorFitConfig.fitViewOptions.maxZoom,
+        }),
     },
     {
       label: "Zoom in",
@@ -60,9 +67,11 @@ export const WorkflowEditorControls = () => {
     },
   ];
 
+  const controls = readonly ? allControls.slice(0, 3) : allControls;
+
   return (
     <Controls
-      className="m-0 mb-6 flex w-fit flex-row rounded-md border bg-background px-5 py-3 shadow-md"
+      className="m-0 mb-6 flex w-fit flex-row rounded-md border bg-background p-1 shadow-md"
       position="bottom-center"
       showZoom={false}
       showFitView={false}
@@ -74,20 +83,20 @@ export const WorkflowEditorControls = () => {
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
-                className="h-fit w-fit p-1.5 text-medium-emphasis"
+                className="h-fit w-fit p-2 text-medium-emphasis"
                 onClick={(e) => {
                   e.stopPropagation();
                   action();
                 }}
               >
-                <Icon className="aspect-square h-5" />
+                <Icon className="aspect-square h-4 w-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>
               <p>{label}</p>
             </TooltipContent>
           </Tooltip>
-          {index === 3 && (
+          {index === 3 && !readonly && (
             <Separator orientation="vertical" className="h-auto mx-1" />
           )}
         </Fragment>
