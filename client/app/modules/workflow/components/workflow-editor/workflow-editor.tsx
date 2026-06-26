@@ -1,4 +1,5 @@
 "use client";
+import { useEffect } from "react";
 import { ReactFlow, Background, BackgroundVariant } from "@xyflow/react";
 import { Button } from "@/components/ui-kits/button/button";
 import { Plus } from "lucide-react";
@@ -30,7 +31,35 @@ export const WorkflowEditor = ({ isReadonly = false }: WorkflowEditorProps) => {
     onConnect,
     isValidConnection,
     openNodeLibraryPanel,
+    copySelectedNodes,
+    pasteNodes,
   } = useWorkflow();
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input/textarea
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target as HTMLElement).isContentEditable
+      ) {
+        return;
+      }
+
+      // Ctrl/Cmd + C
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
+        copySelectedNodes();
+      }
+
+      // Ctrl/Cmd + V
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") {
+        pasteNodes();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedNode, copySelectedNodes, pasteNodes]);
 
   return (
     <>
@@ -46,6 +75,8 @@ export const WorkflowEditor = ({ isReadonly = false }: WorkflowEditorProps) => {
           nodeTypes={WorkflowEditorNodeTypes}
           defaultEdgeOptions={WorkflowEditorDefaultEdgeOptions}
           edgeTypes={WorkflowEditorEdgeTypes}
+          multiSelectionKeyCode={["Meta", "Control", "Shift"]}
+          deleteKeyCode={["Backspace", "Delete"]}
           className="bg-background"
           fitView={EditorFitConfig.fitView}
           fitViewOptions={EditorFitConfig.fitViewOptions}

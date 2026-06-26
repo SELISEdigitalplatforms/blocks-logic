@@ -9,8 +9,11 @@ import {
 import { WorkflowEditorEdgeTypes } from "../workflow-editor-edges";
 import { NodeInspector } from "../node-inspector";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
-import { EditorFitConfig } from "../workflow-editor-controls";
+import { EditorFitConfig, WorkflowEditorControls } from "../workflow-editor-controls";
 import { useParams } from "react-router-dom";
+import { Button } from "@/components/ui-kits/button/button";
+import { ChevronDown } from "lucide-react";
+import { WorkflowVersionActionDropdown } from "./workflow-version-action-dropdown";
 
 export const WorkflowVersionEditor = ({ version }: { version?: any }) => {
   const { id: workflowId } = useParams<{ id: string }>();
@@ -76,15 +79,23 @@ export const WorkflowVersionEditor = ({ version }: { version?: any }) => {
           size={1.2}
           className="bg-surface-app opacity-60"
         />
+        <WorkflowEditorControls readonly />
       </ReactFlow>
       {version && (
-        <div className="absolute left-4 top-4 z-50">
+        <div className="absolute px-4 left-4 top-6 z-50 flex w-[calc(100%-2rem)] justify-between">
           <div className="flex items-center gap-2 rounded-md border bg-background/95 px-3 py-2 shadow-sm backdrop-blur-sm">
             <span className="text-sm font-medium">Version:</span>
             <span className="text-sm text-muted-foreground">
               {version?.name || "Unnamed Version"}
             </span>
           </div>
+          
+          <WorkflowVersionActionDropdown version={version}>
+            <Button variant="outline" size="sm" className="bg-background/95 shadow-sm backdrop-blur-sm">
+              Action
+              <ChevronDown className="ml-2 h-4 w-4" />
+            </Button>
+          </WorkflowVersionActionDropdown>
         </div>
       )}
       {selectedNode && <NodeInspector key={selectedNode.id} />}
