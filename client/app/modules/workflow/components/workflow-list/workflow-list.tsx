@@ -245,7 +245,7 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
 
   const handleRowClick = useCallback(
     (itemId: number | string) => {
-      navigate(`/workflow/${itemId}`);
+      navigate(`/app/workflow/${itemId}`);
     },
     [navigate],
   );
