@@ -24,7 +24,7 @@ import {
 import { navigationMenus } from "./constants/navigation-menus";
 
 const redirectPaths: Record<string, string> = {
-  "/workflow/*": "/workflow",
+  "/workflow/*": "/app/workflow",
 };
 
 export const router = createBrowserRouter([
@@ -37,7 +37,7 @@ export const router = createBrowserRouter([
         children: [
           {
             path: "/login/callback",
-            element: <CallbackPage redirectUrl="/console" />,
+            element: <CallbackPage defaultRedirectUrl="/app/console" />,
           },
         ],
       },
@@ -84,12 +84,12 @@ export const router = createBrowserRouter([
                       </ConsoleLayout>
                     ),
                     children: [
-                      { path: "/profile", element: <ProfilePage /> },
-                      { path: "/console", element: <ConsolePage /> },
+                      { path: "/app/profile", element: <ProfilePage /> },
+                      { path: "/app/console", element: <ConsolePage /> },
                     ],
                   },
                   {
-                    path: "/project-overview",
+                    path: "/app/project-overview",
                     element: (
                       <ProjectOverviewLayout
                         redirectPaths={redirectPaths}
@@ -99,7 +99,7 @@ export const router = createBrowserRouter([
                     ),
                     children: [
                       {
-                        path: "/project-overview/environments",
+                        path: "/app/project-overview/environments",
                         element: <EnvironmentsPage />,
                       },
                     ],
@@ -116,9 +116,9 @@ export const router = createBrowserRouter([
                   </DashboardLayout>
                 ),
                 children: [
-                  { path: "/dashboard", element: <DashboardOverview /> },
-                  { path: "/workflow/:id", element: <WorkflowDetailsPage /> },
-                  { path: "/workflow", element: <WorkflowsPage /> },
+                  { path: "/app/dashboard", element: <DashboardOverview /> },
+                  { path: "/app/workflow/:id", element: <WorkflowDetailsPage /> },
+                  { path: "/app/workflow", element: <WorkflowsPage /> },
                 ],
               },
             ],
