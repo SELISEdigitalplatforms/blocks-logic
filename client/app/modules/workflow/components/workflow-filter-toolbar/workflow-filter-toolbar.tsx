@@ -2,7 +2,7 @@
 import { FilterToolbar } from "@/components/filter-toolbar";
 import { useWorkflowFilterQueryParams } from "@blocks-workflow/hooks";
 
-type WorkflowFilter = { search: string; isActive: string };
+type WorkflowFilter = { search: string; isPublished: string };
 
 export function WorkflowFilterToolBar() {
   const { queryParams, setQueryParams } = useWorkflowFilterQueryParams();
@@ -22,20 +22,20 @@ export function WorkflowFilterToolBar() {
       filters={[
         { key: "search", type: "SearchInput", label: "" },
         {
-          key: "isActive",
+          key: "isPublished",
           type: "Radio",
           label: "Status",
           props: {
             options: [
               { label: "All", value: "all" },
-              { label: "Active", value: "1" },
-              { label: "Inactive", value: "0" },
+              { label: "Published", value: "1" },
+              { label: "Unpublished", value: "0" },
             ],
           },
         },
       ]}
-      values={{ search: queryParams.search, isActive: queryParams.isActive }}
-      defaultValues={{ search: "", isActive: "all" }}
+      values={{ search: queryParams.search, isPublished: queryParams.isPublished }}
+      defaultValues={{ search: "", isPublished: "all" }}
       onChange={changeHandler}
       onReset={resetHandler}
     />

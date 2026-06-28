@@ -8,7 +8,7 @@ export interface IGetWorkflowsPayload {
   pageNumber?: number;
   projectKey: string;
   search?: string;
-  isActive?: boolean;
+  isPublished?: boolean;
 }
 
 export interface IGetWorkflowsResponse {
@@ -35,7 +35,7 @@ export interface ICreateWorkflowPayload {
   nodes?: WorkflowNode[];
   edges?: Edge[];
   settings?: Record<string, unknown>;
-  isActive?: boolean;
+  // isActive?: boolean;
   nodeOutputSchemas?: Record<string, OutputSchemaField[]>;
 }
 
@@ -113,6 +113,7 @@ export interface IGetWorkflowExecutionByIdResponse {
   workflowSnapshot: Workflow;
   nodeExecutions: ExecutedNode[];
   items: ExecutedItem[];
+  executionMode: WorkflowExecutionMode;
 }
 
 export interface ICreateWorkflowVersionPayload {

@@ -16,10 +16,10 @@ export const Workflows = () => {
     pageNumber: Number(queryParams.page),
     projectKey: tenantId,
     search: queryParams.search || "",
-    isActive:
-      queryParams.isActive === "all"
+    isPublished:
+      queryParams.isPublished === "all"
         ? undefined
-        : queryParams.isActive === "1"
+        : queryParams.isPublished === "1"
           ? true
           : false,
   });
