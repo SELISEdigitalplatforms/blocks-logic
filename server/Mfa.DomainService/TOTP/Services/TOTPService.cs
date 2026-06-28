@@ -26,8 +26,8 @@ namespace Mfa.DomainService.TOTP
         private readonly IConfiguration _configuration;
         private readonly ICacheClient _cacheClient;
         private readonly IValidator<VerifyOtpRequest> _validator;
-        private readonly ITenants _tenant;
         private readonly IStorageDriverService _storageDriverService;
+        private readonly ITenants _tenant;
 
         private HttpClient _httpClient;
         const long _defaultTotpLoginSession = 15 * 60;
@@ -49,6 +49,7 @@ namespace Mfa.DomainService.TOTP
             _cacheClient = cacheClient;
             _validator = validator;
             _tenant = tenant;
+            _storageDriverService = storageDriverService;
         }
 
         public async Task<OtpGenerationResponse> GenerateAsync(UserInfo userInfo, string? sendPhoneNumberAsEmailDomain = null)
@@ -110,8 +111,6 @@ namespace Mfa.DomainService.TOTP
 
         private async Task<string> GetPreSignedUrlAsync(string fileId)
         {
-           // var url = _configuration["PreSignedUriForUpload"];
-
             var requestBody = new GetPreSignedUrlForUploadRequest
             {
                 ItemId = fileId,
@@ -119,22 +118,26 @@ namespace Mfa.DomainService.TOTP
                 Name = "QrImage.png",
                 Tags = "[\"File\"]",
                 ParentDirectoryId = string.Empty,
-                AccessModifier = "Public",
-                ProjectKey = BlocksContext.GetContext()?.TenantId
+                AccessModifier = "Public"
             };
 
-           // var response = await SendAuthorizedRequestAsync(HttpMethod.Post, url, requestBody);
-            var response = await _storageDriverService.GetPerSignedUrlForUploadAsync(requestBody);
-            return response.UploadUrl ?? string.Empty;
+            //var response = await SendAuthorizedRequestAsync(HttpMethod.Post, url, requestBody);
+            //return response.GetProperty("uploadUrl").GetString() ?? string.Empty;
+
+            var presignedUrlResponse = await _storageDriverService.GetPerSignedUrlForUploadAsync(requestBody);
+            return presignedUrlResponse.UploadUrl;
         }
 
         private async Task<string> GetFileUriAsync(string fileId)
         {
-            var projectKey = BlocksContext.GetContext()?.TenantId ?? "";
-            projectKey = !string.IsNullOrWhiteSpace(projectKey) ? $"&ProjectKey={projectKey}" : "";
-            var url = $"{_configuration["GetFileEnpPoint"]}{fileId}{projectKey}";
-            var response = await SendAuthorizedRequestAsync(HttpMethod.Get, url);
-            return response.GetProperty("url").GetString() ?? string.Empty;
+            //var projectKey = BlocksContext.GetContext()?.TenantId ?? "";
+            //projectKey = !string.IsNullOrWhiteSpace(projectKey) ? $"&ProjectKey={projectKey}" : "";
+            //var url = $"{_configuration["GetFileEnpPoint"]}{fileId}{projectKey}";
+            //var response = await SendAuthorizedRequestAsync(HttpMethod.Get, url);
+            //return response.GetProperty("url").GetString() ?? string.Empty;
+
+            var fileUriResponse = await _storageDriverService.GetUrlForDownloadFileAsync(new GetFileRequest { FileId = fileId });
+            return fileUriResponse.Url;
         }
 
         private async Task<HttpResponseMessage> UploadQrCodeAsync(string preSignedUrl, byte[] qrCodeData)
