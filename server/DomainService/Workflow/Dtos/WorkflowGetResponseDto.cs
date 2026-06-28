@@ -23,8 +23,6 @@ namespace DomainService.Workflow.Dtos
 
         public string Description { get; set; } = string.Empty;
 
-        public string? PublishedVersionId { get; set; }
-
         public WorkflowVersionDto? PublishedVersion { get; set; }
 
         public bool IsDirty { get; set; }
