@@ -49,7 +49,7 @@ export const WorkflowDetailsContent = ({
         setWorkflow(workflowData);
       } else {
         showErrorToast({"errors": "Workflow not found"});
-        navigate("/workflow");
+        navigate("/app/workflow");
       }
     }
   }, [data, isFetched, isFetchedAfterMount, setWorkflow, navigate]);
