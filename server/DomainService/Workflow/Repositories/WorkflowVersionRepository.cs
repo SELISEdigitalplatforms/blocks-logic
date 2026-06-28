@@ -29,13 +29,11 @@ namespace DomainService.Workflow.Repositories
             await collection.InsertOneAsync(versionModel, null);
         }
 
-        public Task<List<WorkflowVersionModel>> GetWorkflowVersionsAsync(string projectKey, string workflowId, WorkflowVersionFilter? query = null)
+        public Task<List<WorkflowVersionModel>> GetWorkflowVersionsAsync(string projectKey, string[] workflowIds)
         {
             var collection = GetCollection(projectKey);
             var filters = Builders<WorkflowVersionModel>.Filter.Eq(f => f.TenantId, projectKey) &
-                         Builders<WorkflowVersionModel>.Filter.Eq(f => f.WorkflowId, workflowId);
-
-            if (query != null && query.IsPublished.HasValue) filters &= Builders<WorkflowVersionModel>.Filter.Eq(f => f.IsPublished, query.IsPublished.Value);
+                         Builders<WorkflowVersionModel>.Filter.In(f => f.WorkflowId, workflowIds);
 
             return collection.Find(filters).ToListAsync();
         }
@@ -54,13 +52,5 @@ namespace DomainService.Workflow.Repositories
             return collection.FindOneAndReplaceAsync(filter => filter.TenantId == projectKey && filter.ItemId == versionId, versionModel);
         }
 
-        public Task<WorkflowVersionModel> GetPublishedWorkflowVersionAsync(string projectKey, string workflowId)
-        {
-            var collection = GetCollection(projectKey);
-            var filter = Builders<WorkflowVersionModel>.Filter.Eq(f => f.TenantId, projectKey) &
-                         Builders<WorkflowVersionModel>.Filter.Eq(f => f.WorkflowId, workflowId) &
-                         Builders<WorkflowVersionModel>.Filter.Eq(f => f.IsPublished, true);
-            return collection.Find(filter).FirstOrDefaultAsync();
-        }
     }
 }
