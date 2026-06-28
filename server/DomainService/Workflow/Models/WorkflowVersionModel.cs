@@ -9,6 +9,5 @@ namespace DomainService.Workflow.Models
         public required string Name { get; set; }
         public string Description { get; set; } = string.Empty;
         public required WorkflowModel Snapshot { get; set; }
-        public required bool IsPublished { get; set; } = false;
     }
 }
