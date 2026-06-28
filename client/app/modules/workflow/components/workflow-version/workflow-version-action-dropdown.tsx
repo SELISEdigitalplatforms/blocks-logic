@@ -62,7 +62,6 @@ export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVer
   const handleEditSubmit = async () => {
     try {
       await updateWorkflowVersion.mutateAsync({
-        workflowId: workflowId || "",
         projectKey,
         versionId: version.itemId,
         name: editVersionName || "Version Name",
