@@ -186,7 +186,7 @@ export interface IUpdateWorkflowVersionPayload {
   projectKey: string;
   versionId: string;
   name?: string;
-  Description?: string;
+  description?: string;
 }
 
 export interface IUpdateWorkflowVersionResponse {
