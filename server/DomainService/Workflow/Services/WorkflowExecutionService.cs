@@ -145,7 +145,7 @@ namespace DomainService.Workflow.Services
                     return new WorkflowWebhookResponseDto
                     {
                         ExecutionId = null,
-                        Status = "Something went wrong"
+                        Status = "Workflow not found",
                     };
                 }
                 var authType = triggerNode.Parameters.GetValue("authType");
@@ -460,17 +460,35 @@ namespace DomainService.Workflow.Services
             }
 
             var operationStr = dataEvent.Operation.ToString();
-            var workflows = await _workflowRepository.GetWorkflowsByDataCollectionAsync(
-                dataEvent.CollectionName, operationStr, projectKey);
+            var triggerData = BuildTriggerData(dataEvent, operationStr);
+            var isMockedData = triggerData.All(data => data.AsBsonDocument.Contains("Tags") && data.AsBsonDocument
+              ["Tags"].AsBsonArray.Contains("mock-data"));
+
+            List<WorkflowModel> workflows = new List<WorkflowModel>();
+            // If the data is mocked, we will use the workflow as is, otherwise we will only published workflows that are published.
+            if (isMockedData)
+            {
+                workflows = await _workflowRepository.GetWorkflowsByDataCollectionAsync(dataEvent.CollectionName, operationStr, projectKey);
+            }
+            else
+            {
+                var publishedWorkflows = await _workflowRepository.GetPublishWorkflowsByDataCollectionAsync(dataEvent.CollectionName, operationStr, projectKey);
+                var publishedWorkflowsId = publishedWorkflows.Select(w => w.ItemId).ToList();
+                var versions = await _workflowVersionRepository.GetWorkflowVersionsAsync(projectKey, publishedWorkflowsId.ToArray());
+                workflows = versions.Select(v => v.Snapshot).Where(s => s != null).ToList()!;
+            }
+
+
 
             _logger.LogInformation("Found {Count} workflows for Collection: {CollectionName}, Operation: {Operation}",
                 workflows.Count, dataEvent.CollectionName, operationStr);
 
-            var triggerData = BuildTriggerData(dataEvent, operationStr);
+
 
             foreach (var workflow in workflows)
             {
-                await QueueDataTriggerExecutionAsync(workflow, dataEvent, operationStr, triggerData, projectKey);
+                var executionMode = isMockedData ? WorkflowExecutionMode.Test : WorkflowExecutionMode.Production;
+                await QueueDataTriggerExecutionAsync(workflow, executionMode, dataEvent, operationStr, triggerData, projectKey);
             }
         }
 
@@ -544,7 +562,7 @@ namespace DomainService.Workflow.Services
         }
 
         private async Task QueueDataTriggerExecutionAsync(
-            WorkflowModel workflow, DataChangeEvent dataEvent, string operationStr,
+            WorkflowModel workflow, WorkflowExecutionMode executionMode, DataChangeEvent dataEvent, string operationStr,
             BsonArray triggerData, string projectKey)
         {
             try
@@ -565,23 +583,9 @@ namespace DomainService.Workflow.Services
                         workflow.ItemId, dataEvent.CollectionName);
                     return;
                 }
-                var isMockedData = triggerData.Any(data => data.AsBsonDocument.Contains("Tags") && data.AsBsonDocument
-                ["Tags"].AsBsonArray.Contains("mock-data"));
 
-                if (!isMockedData && (!workflow.IsPublished || string.IsNullOrWhiteSpace(workflow.PublishedVersionId)))
-                {
-                    _logger.LogWarning("Workflow {WorkflowId} is not published. Skipping execution for Data Trigger.", workflow.ItemId);
-                    return;
-                }
 
-                var executableWorkflow = isMockedData ? workflow : await GetPublishedWorkflowAsync(workflow);
-                var executionMode = isMockedData ? WorkflowExecutionMode.Test : WorkflowExecutionMode.Production;
-                if (executableWorkflow == null)
-                {
-                    _logger.LogWarning("Published workflow not found for WorkflowId: {WorkflowId}. Skipping execution for Data Trigger.", workflow.ItemId);
-                    return;
-                }
-                var execution = await CreateExecutionAsync(executableWorkflow, executionMode);
+                var execution = await CreateExecutionAsync(workflow, executionMode);
                 execution.Context["Input"] = triggerData;
                 execution.Status = WorkflowExecutionStatus.Queued;
                 execution.ActiveNodeIds.Add(triggerNode.Id);
@@ -653,16 +657,5 @@ namespace DomainService.Workflow.Services
             return doc;
         }
 
-        private async Task<WorkflowModel?> GetPublishedWorkflowAsync(WorkflowModel workflow)
-        {
-            if (!workflow.IsPublished || string.IsNullOrWhiteSpace(workflow.PublishedVersionId)) return null;
-
-            var publishedVersion = await _workflowVersionRepository.GetWorkflowVersionAsync(workflow.TenantId, workflow.PublishedVersionId);
-            if (publishedVersion == null) return null;
-
-            var workfowSnapshot = publishedVersion.Snapshot;
-            if (workfowSnapshot == null) return null;
-            return workfowSnapshot;
-        }
     }
 }
