@@ -70,11 +70,7 @@ export const router = createBrowserRouter([
             children: [
               {
                 element: (
-                  <ImpersonationChecker>
-                    <ImpersonationTerminator>
-                      <Outlet />
-                    </ImpersonationTerminator>
-                  </ImpersonationChecker>
+                  <Outlet />
                 ),
                 children: [
                   {
@@ -127,7 +123,7 @@ export const router = createBrowserRouter([
       },
       {
         path: "*",
-        element: <Navigate to="/console" replace />,
+        element: <Navigate to="/app/console" replace />,
       },
     ],
   },
