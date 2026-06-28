@@ -13,8 +13,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui-kits/tooltip/tooltip";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { showErrorToast } from "@/hooks/use-toast";
 
 type EditorNodeBaseProps = {
   id: string;
@@ -24,17 +25,51 @@ type EditorNodeBaseProps = {
 
 export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
   const [isToolbarVisible, setIsToolbarVisible] = useState(false);
-  const { getNodeById, deleteNode, selectAndConfigureNode, selectedNode } =
+  const { getNodeById, deleteNode, selectAndConfigureNode, selectedNode, updateNode, duplicateNode, isNodeNameUnique } =
     useWorkflow();
   const node = getNodeById(id);
+
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [editName, setEditName] = useState(node?.name || "");
+
+  useEffect(() => {
+    if (!isRenaming && node?.name) {
+      setEditName(node.name);
+    }
+  }, [node?.name, isRenaming]);
+
+  const handleRenameSubmit = () => {
+    const newName = editName.trim();
+    if (newName && newName !== node?.name) {
+      if (!isNodeNameUnique(newName, id)) {
+        showErrorToast({
+          title: "Validation Error",
+          errors: "A node with this name already exists.",
+        });
+        return;
+      }
+      updateNode(id, { name: newName });
+    }
+    setIsRenaming(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      handleRenameSubmit();
+    } else if (e.key === "Escape") {
+      setIsRenaming(false);
+      setEditName(node?.name || "");
+    }
+  };
+
   if (!node) return null;
-  const isSelected = node.id === selectedNode?.id;
+  const isSelected = node.selected;
   return (
     <>
       <div
         className={cn(
-          "peer rounded-md border bg-background px-5 py-4 shadow-lg transition-shadow hover:shadow-xl",
-          isSelected && "border-medium-emphasis",
+          "peer min-w-[100px] rounded-md border bg-background px-5 py-4 shadow-lg transition-shadow hover:shadow-xl",
+          isSelected && "border-primary ring-1 ring-primary",
           node.className || "",
         )}
       >
@@ -43,7 +78,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
 
       <div
         className={cn(
-          "absolute -top-12 left-1/2 flex -translate-x-1/2 transform gap-1 rounded-md bg-background px-3 py-2 opacity-0 shadow-sm transition-opacity hover:opacity-100 peer-hover:opacity-100",
+          "absolute -top-12 left-1/2 flex -translate-x-1/2 transform gap-1 rounded-md bg-background px-3 py-2 opacity-0 shadow-sm transition-opacity hover:opacity-100 peer-hover:opacity-100 after:absolute after:content-[''] after:-bottom-6 after:left-0 after:h-6 after:w-full",
           isToolbarVisible && "opacity-100",
           node.data?.hasToolbar === false && "hidden",
         )}
@@ -117,23 +152,17 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
               className="cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation();
+                setIsRenaming(true);
+                setIsToolbarVisible(false);
               }}
             >
               <span>Rename</span>
             </DropdownMenuItem>
-
             <DropdownMenuItem
               className="cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation();
-              }}
-            >
-              <span>Copy</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="cursor-pointer"
-              onClick={(e) => {
-                e.stopPropagation();
+                duplicateNode(id);
               }}
             >
               <span>Duplicate</span>
@@ -143,6 +172,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
               className="cursor-pointer text-error"
               onClick={(e) => {
                 e.stopPropagation();
+                deleteNode(id);
               }}
             >
               <span>Delete</span>
@@ -150,9 +180,29 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <h4 className="absolute left-1/2 mt-2 w-full min-w-24 -translate-x-1/2 transform text-center text-medium-emphasis">
-        {node?.name}
-      </h4>
+      {isRenaming ? (
+        <input
+          autoFocus
+          maxLength={80}
+          className="absolute left-1/2 mt-2 w-full min-w-24 -translate-x-1/2 transform rounded border border-primary bg-background px-2 py-1 text-center text-sm outline-none"
+          value={editName}
+          onChange={(e) => setEditName(e.target.value)}
+          onBlur={handleRenameSubmit}
+          onKeyDown={handleKeyDown}
+          onClick={(e) => e.stopPropagation()}
+        />
+      ) : (
+        <h4
+          className="absolute left-1/2 mt-2 w-full min-w-24 -translate-x-1/2 transform text-center text-medium-emphasis"
+          onClick={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            setIsRenaming(true);
+          }}
+        >
+          {node?.name}
+        </h4>
+      )}
     </>
   );
 };

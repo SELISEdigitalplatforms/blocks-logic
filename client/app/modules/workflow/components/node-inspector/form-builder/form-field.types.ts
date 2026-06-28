@@ -19,7 +19,8 @@ export type FormFieldType =
   | "schema-field-picker"
   | "conditions"
   | "expression"
-  | "display";
+  | "display"
+  | "tab-with-text";
 
 export interface SelectOption {
   value: string;
@@ -42,24 +43,24 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
 
   displayValue?: (
     data: Whole,
-    config: { projectKey: string; workflowId: string; nodeId: string; store: WorkflowStore },
+    config: { projectKey: string; workflowId: string; nodeId: string; store: WorkflowStore; executionMode?: number },
   ) => unknown;
   onChange?: (
     value: unknown,
     data: Whole,
-    config: { projectKey: string; workflowId: string; nodeId: string; store: WorkflowStore },
+    config: { projectKey: string; workflowId: string; nodeId: string; store: WorkflowStore; executionMode?: number },
   ) => Whole | void;
   options?:
     | SelectOption[]
     | ((
         data: Whole,
-        config: { projectKey: string; workflowId: string; store: WorkflowStore },
+        config: { projectKey: string; workflowId: string; store: WorkflowStore; executionMode?: number },
       ) => Promise<SelectOption[]>);
   fixedKeys?:
     | string[]
     | ((
         data: Whole,
-        config: { projectKey: string; workflowId: string; nodeId: string; store: WorkflowStore },
+        config: { projectKey: string; workflowId: string; nodeId: string; store: WorkflowStore; executionMode?: number },
       ) => Promise<string[]>);
   fixedKeysDependencies?: string[];
   copyable?: boolean;
@@ -90,7 +91,7 @@ export interface FieldProps<T = unknown> {
   value: T;
   onChange: (value: T) => void;
   data: Record<string, unknown>;
-  config: { projectKey: string; workflowId: string; nodeId: string; store: WorkflowStore };
+  config: { projectKey: string; workflowId: string; nodeId: string; store: WorkflowStore; executionMode?: number };
   readOnly?: boolean;
   className?: string;
   placeholder?:string
