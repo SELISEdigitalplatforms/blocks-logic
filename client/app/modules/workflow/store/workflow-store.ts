@@ -81,6 +81,12 @@ export type WorkflowState = {
   // Utility methods
   getNodeById: (nodeId: string) => EditorNode | undefined;
   getEdgeById: (edgeId: string) => Edge | undefined;
+
+  // Editor mode
+  editorMode: "editor" | "execution" | "version";
+  executionMode: number | null;
+  setEditorMode: (mode: "editor" | "execution" | "version") => void;
+  setExecutionMode: (mode: number | null) => void;
 };
 
 export const createWorkflowStore = () => createStore<WorkflowState>((set, get) => ({
@@ -101,6 +107,11 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
   isDirty: false,
   executedItems: [],
   executedNodes: [],
+  editorMode: "editor",
+  executionMode: null,
+
+  setEditorMode: (mode) => set({ editorMode: mode }),
+  setExecutionMode: (mode) => set({ executionMode: mode }),
 
   // React Flow handlers
   onNodesChange: (changes) => {
