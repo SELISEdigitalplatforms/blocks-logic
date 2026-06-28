@@ -31,12 +31,19 @@ export const WorkflowExecutionEditor = ({
   execution?: WorkflowExecution;
 }) => {
   const id = execution?.id || "";
-  const { setWorkflow, onNodeClick, selectedNode } = useWorkflow();
+  const { setWorkflow, onNodeClick, selectedNode, setEditorMode, setExecutionMode } = useWorkflow();
   const tenantId = useProjectStore().selectedProject?.tenantId || "";
   const { data, isFetched, isLoading } = useGetWorkflowExecutionById({
     executionId: id,
     projectKey: tenantId,
   });
+
+  useEffect(() => {
+    setEditorMode("execution");
+    if (execution) {
+      setExecutionMode(execution.executionMode);
+    }
+  }, [setEditorMode, setExecutionMode, execution]);
 
   useEffect(() => {
     if (data?.workflowSnapshot && isFetched) {

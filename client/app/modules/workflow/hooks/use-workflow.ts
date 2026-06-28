@@ -16,7 +16,9 @@ export const useWorkflow = () => {
   const workflowId = useWorkflowStore((state) => state.workflowId);
   const workflowName = useWorkflowStore((state) => state.workflowName);
   const isDirty = useWorkflowStore((state) => state.isDirty);
-
+  const editorMode = useWorkflowStore((state) => state.editorMode);
+  const executionMode = useWorkflowStore((state) => state.executionMode);
+  
   // Compute nodes and edges arrays from objects
   const nodes = useMemo(() => Object.values(nodesMap), [nodesMap]);
   const edges = useMemo(() => Object.values(edgesMap), [edgesMap]);
@@ -43,6 +45,8 @@ export const useWorkflow = () => {
   const openNodeLibraryPanel = useWorkflowStore((state) => state.openNodeLibraryPanel);
   const closeNodeLibraryPanel = useWorkflowStore((state) => state.closeNodeLibraryPanel);
   const setWorkflow = useWorkflowStore((state) => state.setWorkflow);
+  const setEditorMode = useWorkflowStore((state) => state.setEditorMode);
+  const setExecutionMode = useWorkflowStore((state) => state.setExecutionMode);
   const resetWorkflow = useWorkflowStore((state) => state.resetWorkflow);
   const tidyUpWorkflow = useWorkflowStore((state) => state.tidyUpWorkflow);
   const getNodeById = useWorkflowStore((state) => state.getNodeById);
@@ -173,6 +177,8 @@ export const useWorkflow = () => {
     workflowId,
     workflowName,
     isDirty,
+    editorMode,
+    executionMode,
 
     onNodesChange,
     onEdgesChange,
@@ -206,6 +212,8 @@ export const useWorkflow = () => {
 
     // Workflow operations
     setWorkflow,
+    setEditorMode,
+    setExecutionMode,
     resetWorkflow,
     tidyUpWorkflow,
     // exportWorkflow,

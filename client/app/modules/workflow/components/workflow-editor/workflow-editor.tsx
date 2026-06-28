@@ -33,7 +33,12 @@ export const WorkflowEditor = ({ isReadonly = false }: WorkflowEditorProps) => {
     openNodeLibraryPanel,
     copySelectedNodes,
     pasteNodes,
+    setEditorMode,
   } = useWorkflow();
+
+  useEffect(() => {
+    setEditorMode("editor");
+  }, [setEditorMode]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
