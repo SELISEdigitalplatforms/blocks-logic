@@ -145,7 +145,7 @@ namespace Utilities.Api.Controllers
 
         }
 
-        [HttpPost("/webhook-test/{projectKey}/{workflowId}/{webhookId}")]
+        [HttpPost("webhook-test/{projectKey}/{workflowId}/{webhookId}")]
         public async Task<IActionResult> TestWebhook(string projectKey, string workflowId, string webhookId, [FromBody] JsonElement input)
         {
             var dto = new WorkflowWebhookRequestDto
