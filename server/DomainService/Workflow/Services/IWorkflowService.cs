@@ -24,7 +24,9 @@ namespace DomainService.Workflow.Services
 
         Task<GetWorkflowByVersionResponseDto> GetWorkflowByVersionAsync(GetWorkflowByVersionRequestDto dto);
 
-        Task<BaseMutationResponse> PublishAsync(WorkflowPublishRequestDto dto);
+        Task<BaseMutationResponse> PublishNewVersionAsync(WorkflowPublishNewVersionRequestDto dto);
+
+        Task<BaseMutationResponse> PublishVersionAsync(WorkflowPublishVersionRequestDto dto);
 
         Task<BaseMutationResponse> UnpublishAsync(WorkflowUnpublishRequestDto dto);
 
