@@ -100,8 +100,25 @@ namespace DomainService.Workflow.Repositories
             );
 
             var filter = Builders<WorkflowModel>.Filter.And(
-                Builders<WorkflowModel>.Filter.Eq(w => w.IsPublished, true),
                 Builders<WorkflowModel>.Filter.ElemMatch(w => w.Nodes, nodeFilter)
+            );
+
+            return await collection.Find(filter).ToListAsync();
+        }
+
+        public async Task<List<WorkflowModel>> GetPublishWorkflowsByDataCollectionAsync(string collectionName, string operation, string tenantId)
+        {
+            var collection = GetCollection(tenantId);
+
+            var nodeFilter = Builders<NodeModel>.Filter.And(
+                Builders<NodeModel>.Filter.Eq("Parameters.collectionName", collectionName),
+                Builders<NodeModel>.Filter.Eq("Parameters.operation", operation),
+                Builders<NodeModel>.Filter.Eq("Type", "dataGateway"),
+                Builders<NodeModel>.Filter.Eq("Category", "trigger")
+            );
+
+            var filter = Builders<WorkflowModel>.Filter.And(
+                Builders<WorkflowModel>.Filter.ElemMatch(w => w.PublishedMeta.TriggerNodes, nodeFilter)
             );
 
             return await collection.Find(filter).ToListAsync();
