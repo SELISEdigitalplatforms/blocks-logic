@@ -8,15 +8,13 @@ import {
   TabsTrigger,
 } from "@/components/ui-kits/tabs/tabs";
 import { Button } from "@/components/ui-kits/button/button";
-import { Switch } from "@/components/ui-kits/switch/switch";
-import { ScrollText, Save, Loader2 } from "lucide-react";
+import { ScrollText, Save, Loader2, AlertCircle } from "lucide-react";
 import PageBreadcrumb from "@/components/breadcrumb/breadcrumb";
 import { WorkflowEditor } from "../../components/workflow-editor";
 import { ReactFlowProvider } from "@xyflow/react";
 import { WorkflowStoreProvider } from "../../store";
 import { useWorkflow, useAutoSaveWorkflow } from "../../hooks";
 import { Separator } from "@/components/ui-kits/separator/separator";
-import { ToggleStatusWorkflow } from "../../components/toggle-status-workflow";
 import { format } from "date-fns";
 import { useGetWorkflowById } from "@blocks-workflow/hooks/use-workflow-api";
 import { WorkflowExecutions } from "@blocks-workflow/components/workflow-execution";
@@ -24,6 +22,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { BREADCRUMB_CUSTOM_TITLES } from "@/constants/breadcrumb-custom-title";
 import { showErrorToast } from "@/hooks/use-toast";
+import { PublishWorkflowAction } from "../../components/publish-workflow-action";
+import { WorkflowVersions } from "../../components/workflow-version";
 
 type WorkflowDetailPageProps = {
   workflowId: string;
@@ -34,9 +34,9 @@ export const WorkflowDetailsContent = ({
 }: WorkflowDetailPageProps) => {
   const projectKey = useProjectStore().selectedProject?.tenantId || "";
   const navigate = useNavigate();
-  const [isToggleStatusModalOpen, setIsToggleStatusModalOpen] = useState(false);
-  const { isDirty, isActive: workflowIsActive, setWorkflow } = useWorkflow();
-  const { data, isLoading, isFetched, isFetching, isFetchedAfterMount } =
+  const [activeTab, setActiveTab] = useState<string>("editor");
+  const { isDirty, setWorkflow } = useWorkflow();
+  const { data, isLoading, isFetched, isFetching, isFetchedAfterMount, refetch } =
     useGetWorkflowById({
       id: workflowId,
       projectKey,
@@ -49,7 +49,7 @@ export const WorkflowDetailsContent = ({
         setWorkflow(workflowData);
       } else {
         showErrorToast({"errors": "Workflow not found"});
-        navigate("/workflow");
+        navigate("/app/workflow");
       }
     }
   }, [data, isFetched, isFetchedAfterMount, setWorkflow, navigate]);
@@ -58,7 +58,7 @@ export const WorkflowDetailsContent = ({
     workflowId,
     projectKey,
     debounceMs: 20000,
-    enabled: true,
+    enabled: false,
     onSaveSuccess: () => {},
     onSaveError: (_error) => {},
   });
@@ -73,28 +73,41 @@ export const WorkflowDetailsContent = ({
         <div className="px-4 mt-4">
           <PageBreadcrumb />
         </div>
+        {!isLoading && isFetchedAfterMount && data?.data?.isDirty && (
+          <div className="rounded-lg mx-4 my-2 bg-yellow-50 border border-yellow-500 text-yellow-700 dark:bg-yellow-950/60 dark:text-yellow-300 dark:border dark:border-yellow-700 p-3">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="h-5 w-5 text-amber-500" />
+              <p className="text-sm font-medium">You have unadapted changes. Please click on the Publish button to adapt them.</p>
+            </div>
+          </div>
+        )}
         {isLoading || !isFetchedAfterMount ? (
           <div className="flex h-full items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : (
           <Tabs
-            defaultValue="editor"
+            value={activeTab}
             className="flex w-full flex-1 flex-col overflow-hidden"
             onValueChange={(v) => {
-              if (v === "editor" && data?.data) {
-                const workflowData = data.data;
-                setWorkflow(workflowData);
-              }
+              setActiveTab(v);
             }}
           >
             <div className="flex items-center justify-between border-b px-4 py-4">
               <TabsList>
                 <TabsTrigger value="editor">Editor</TabsTrigger>
                 <TabsTrigger value="executions">Executions</TabsTrigger>
+                <TabsTrigger value="versions">Versions</TabsTrigger>
               </TabsList>
 
               <div className="flex items-center gap-4">
+                <div className={`text-sm font-medium ${data?.data?.isPublished ? "text-green-500" : "text-yellow-500"}`}>
+                  {data?.data?.isPublished ? "Published" : "Unpublished"}
+                </div>
+                <Separator
+                  orientation="vertical"
+                  className="h-4 bg-muted-foreground"
+                />
                 <div className="text-sm text-muted-foreground">
                   {isSaving ? (
                     <span className="flex items-center gap-1">
@@ -117,17 +130,17 @@ export const WorkflowDetailsContent = ({
                   className="h-4 bg-muted-foreground"
                 />
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-medium-emphasis">
-                    {workflowIsActive ? "Active" : "Inactive"}
-                  </span>
-                  <Switch
-                    size="sm"
-                    checked={workflowIsActive}
-                    onCheckedChange={(_checked) =>
-                      setIsToggleStatusModalOpen(true)
-                    }
+                  <PublishWorkflowAction 
+                    isDirty={data?.data?.isDirty} 
+                    hasUnsavedChanges={isDirty}
+                    isPublished={data?.data?.isPublished} 
+                    onActionComplete={() => refetch()} 
                   />
                 </div>
+                <Separator
+                  orientation="vertical"
+                  className="h-4 bg-muted-foreground"
+                />
                 <Button variant="outline" size="sm" className="gap-2">
                   <ScrollText className="h-4 w-4" />
                   Logs
@@ -148,22 +161,24 @@ export const WorkflowDetailsContent = ({
               </div>
             </div>
 
-            <TabsContent value="editor" className="flex-1">
-              <WorkflowEditor />
+            <TabsContent value="editor" className="flex-1 overflow-hidden">
+              <div className="flex h-full w-full">
+                <div className="relative h-full flex-1">
+                  <WorkflowEditor />
+                </div>
+              </div>
             </TabsContent>
 
             <TabsContent value="executions" className="flex-1 overflow-hidden">
               <WorkflowExecutions />
             </TabsContent>
+
+            <TabsContent value="versions" className="flex-1 overflow-hidden">
+              <WorkflowVersions sidebarPosition="left" />
+            </TabsContent>
           </Tabs>
         )}
       </div>
-      <ToggleStatusWorkflow
-        open={isToggleStatusModalOpen}
-        onOpenChange={setIsToggleStatusModalOpen}
-        isActive={workflowIsActive}
-        workflowId={workflowId}
-      />
     </>
   );
 };
