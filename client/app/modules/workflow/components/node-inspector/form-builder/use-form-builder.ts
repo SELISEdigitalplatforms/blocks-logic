@@ -12,12 +12,14 @@ import {
 } from "./utils";
 import { useWorkflowStoreApi, WorkflowStore } from "@/modules/workflow/store";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
+import { useGetWorkflowById } from "@blocks-workflow/hooks/use-workflow-api";
 
 export interface FormBuilderConfig {
   projectKey: string;
   workflowId: string;
   nodeId: string;
   store: WorkflowStore;
+  executionMode?: number;
 }
 
 interface UseFormBuilderProps {
@@ -61,14 +63,18 @@ export const useFormBuilder = ({
 
   const store = useWorkflowStoreApi();
 
+  const { data: workflowReq } = useGetWorkflowById({ id: workflowId || "", projectKey: tenantId });
+  const executionMode = workflowReq?.data?.executionMode;
+
   const config: FormBuilderConfig = useMemo(
     () => ({
       projectKey: tenantId,
       workflowId: workflowId || "",
       nodeId: selectedNode?.id || "",
       store,
+      executionMode,
     }),
-    [tenantId, workflowId, selectedNode, store],
+    [tenantId, workflowId, selectedNode, store, executionMode],
   );
 
   const isWorkflowExecuted = !!selectedNode?.data?.isWorkflowExecuted;

@@ -12,6 +12,7 @@ import {
 import { v4 as uuidv4 } from "uuid";
 import { ExecutedItem, ExecutedNode, Workflow } from "../models/workflow.model";
 import { EditorNode } from "@blocks-workflow/models/node.model";
+import { getLayoutedElements } from "../utils/layout-utils";
 
 // interface  ExtendNode extends Node, WorkflowNode {}
 
@@ -21,7 +22,7 @@ export type WorkflowState = {
 
   workflowId: string | null;
   workflowName: string;
-  isActive: boolean;
+  isPublished: boolean;
   isDirty: boolean;
   executedItems: ExecutedItem[];
 
@@ -29,6 +30,9 @@ export type WorkflowState = {
 
   selectedNode: EditorNode | null;
   selectedHandle: string | null;
+
+  copiedNodes: EditorNode[];
+  copiedEdges: Edge[];
 
   isConfigModalOpen: boolean;
   isPanelOpen: boolean;
@@ -43,6 +47,9 @@ export type WorkflowState = {
   updateNode: (nodeId: string, updates: Partial<EditorNode>) => void;
   deleteNode: (nodeId: string) => void;
   duplicateNode: (nodeId: string) => void;
+  copyNode: (nodeId: string) => void;
+  copySelectedNodes: () => void;
+  pasteNodes: (position?: { x: number; y: number }) => void;
   selectNode: (node: EditorNode) => void;
   deselectNode: () => void;
 
@@ -68,8 +75,8 @@ export type WorkflowState = {
 
   // Workflow operations
   setWorkflow: (workflow: Workflow) => void;
-  setWorkflowActive: (isActive: boolean) => void;
   resetWorkflow: () => void;
+  tidyUpWorkflow: () => void;
 
   // Utility methods
   getNodeById: (nodeId: string) => EditorNode | undefined;
@@ -84,11 +91,13 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
   nodeIdCounter: 1,
   selectedNode: null,
   selectedHandle: null,
+  copiedNodes: [],
+  copiedEdges: [],
   isConfigModalOpen: false,
   isPanelOpen: false,
   workflowId: null,
   workflowName: "",
-  isActive: false,
+  isPublished: false,
   isDirty: false,
   executedItems: [],
   executedNodes: [],
@@ -107,10 +116,57 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
     const shouldDirty = changes.some((change) =>
       ["position", "remove", "add", "replace"].includes(change.type),
     );
-    set({
-      nodesMap,
-      ...(shouldDirty && { isDirty: true }),
-    });
+    const stateUpdate: Partial<WorkflowState> = { nodesMap };
+    
+    if (shouldDirty) {
+      stateUpdate.isDirty = true;
+    }
+
+    const selectedNodeId = get().selectedNode?.id;
+    if (selectedNodeId) {
+      const isSelectedNodeDeselected = changes.some(
+        (change) => change.type === "select" && !change.selected && change.id === selectedNodeId
+      );
+      if (isSelectedNodeDeselected) {
+        stateUpdate.selectedNode = null;
+        stateUpdate.isConfigModalOpen = false;
+      }
+    }
+
+    // Auto-select edges between selected nodes
+    const selectionChanged = changes.some((change) => change.type === "select");
+    if (selectionChanged) {
+      const selectedNodeIds = new Set(updatedNodes.filter((n) => n.selected).map((n) => n.id));
+      const currentEdges = Object.values(get().edgesMap);
+      let edgesChanged = false;
+      const newEdgesMap = { ...get().edgesMap };
+
+      for (const edge of currentEdges) {
+        const bothNodesSelected =
+          selectedNodeIds.has(edge.source) && selectedNodeIds.has(edge.target);
+
+        if (bothNodesSelected && !edge.selected) {
+          newEdgesMap[edge.id] = { ...edge, selected: true };
+          edgesChanged = true;
+        } else if (!bothNodesSelected && edge.selected) {
+          const edgeNodesChanged = changes.some(
+            (change) =>
+              change.type === "select" &&
+              (change.id === edge.source || change.id === edge.target)
+          );
+          if (edgeNodesChanged) {
+            newEdgesMap[edge.id] = { ...edge, selected: false };
+            edgesChanged = true;
+          }
+        }
+      }
+
+      if (edgesChanged) {
+        stateUpdate.edgesMap = newEdgesMap;
+      }
+    }
+
+    set(stateUpdate);
   },
 
   onEdgesChange: (changes) => {
@@ -214,14 +270,109 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
       ...node,
       id: newId,
       name: uniqueName,
+      selected: false,
       position: {
         x: node.position.x + 50,
-        y: node.position.y + 50,
+        y: node.position.y + 100,
       },
     };
 
     set({
       nodesMap: { ...nodesMap, [newId]: newNode },
+      isDirty: true,
+    });
+  },
+
+  copyNode: (nodeId: string) => {
+    const { nodesMap } = get();
+    const node = nodesMap[nodeId];
+    if (node) {
+      set({ copiedNodes: [node], copiedEdges: [] });
+    }
+  },
+
+  copySelectedNodes: () => {
+    const { nodesMap, edgesMap } = get();
+    const selectedNodes = Object.values(nodesMap).filter((node) => node.selected);
+    if (selectedNodes.length > 0) {
+      const selectedNodeIds = new Set(selectedNodes.map((n) => n.id));
+      const copiedEdges = Object.values(edgesMap).filter(
+        (edge) => selectedNodeIds.has(edge.source) && selectedNodeIds.has(edge.target),
+      );
+      set({ copiedNodes: selectedNodes, copiedEdges });
+    }
+  },
+
+  pasteNodes: (position?: { x: number; y: number }) => {
+    const { copiedNodes, copiedEdges, nodesMap, edgesMap } = get();
+    if (!copiedNodes || copiedNodes.length === 0) return;
+
+    let newNodesMap = { ...nodesMap };
+    let newEdgesMap = { ...edgesMap };
+    let existingNames = new Set(Object.values(newNodesMap).map((n) => n.name));
+
+    const newPastedNodeIds = new Set<string>();
+    const oldToNewId: Record<string, string> = {};
+
+    copiedNodes.forEach((copiedNode) => {
+      const newId = uuidv4().replace(/-/g, "");
+      oldToNewId[copiedNode.id] = newId;
+      // Enforce unique name for pasted node
+      let uniqueName = copiedNode.name;
+      let counter = 1;
+      while (existingNames.has(uniqueName)) {
+        uniqueName = `${copiedNode.name} ${counter}`;
+        counter++;
+      }
+      existingNames.add(uniqueName);
+
+      const newNode: EditorNode = {
+        ...copiedNode,
+        id: newId,
+        name: uniqueName,
+        selected: true,
+        position: position || {
+          x: copiedNode.position.x + 50,
+          y: copiedNode.position.y + 100,
+        },
+      };
+      newNodesMap[newId] = newNode;
+      newPastedNodeIds.add(newId);
+    });
+
+    if (copiedEdges && copiedEdges.length > 0) {
+      copiedEdges.forEach((edge) => {
+        const newSource = oldToNewId[edge.source];
+        const newTarget = oldToNewId[edge.target];
+        if (newSource && newTarget) {
+          const newEdgeId = `xy-edge__${newSource}-${newTarget}`;
+          newEdgesMap[newEdgeId] = {
+            ...edge,
+            id: newEdgeId,
+            source: newSource,
+            target: newTarget,
+            selected: true,
+          };
+        }
+      });
+    }
+
+    // Deselect existing nodes
+    Object.keys(newNodesMap).forEach((id) => {
+      if (!newPastedNodeIds.has(id)) {
+         newNodesMap[id] = { ...newNodesMap[id], selected: false };
+      }
+    });
+    // Deselect existing edges
+    Object.keys(newEdgesMap).forEach((id) => {
+      if (edgesMap[id]) {
+        newEdgesMap[id] = { ...newEdgesMap[id], selected: false };
+      }
+    });
+
+    set({
+      nodesMap: newNodesMap,
+      edgesMap: newEdgesMap,
       isDirty: true,
     });
   },
@@ -321,16 +472,16 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
       edgesMap,
       workflowId: workflow.itemId || null,
       workflowName: workflow.name || "",
-      isActive: workflow.isActive || false,
+      isPublished: workflow.isPublished || false,
       isDirty: false,
       executedItems,
       executedNodes,
     });
   },
 
-  setWorkflowActive: (isActive: boolean) => {
-    set({ isActive, isDirty: true });
-  },
+  // setWorkflowActive: (isActive: boolean) => {
+  //   set({ isActive, isDirty: true });
+  // },
 
   resetWorkflow: () => {
     set({
@@ -341,10 +492,19 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
       isPanelOpen: false,
       workflowId: null,
       workflowName: "",
-      isActive: false,
+      isPublished: false,
       isDirty: false,
       executedItems: [],
       executedNodes: [],
+    });
+  },
+
+  tidyUpWorkflow: () => {
+    const { nodesMap, edgesMap } = get();
+    const newNodesMap = getLayoutedElements(nodesMap, edgesMap);
+    set({
+      nodesMap: newNodesMap,
+      isDirty: true,
     });
   },
 
