@@ -22,6 +22,8 @@ namespace DomainService.Workflow.Models
 
         public string? PublishedVersionId { get; set; }
 
+        public string? LastPublishedVersionId { get; set; }
+
         public PublishedWorkflowMeta? PublishedMeta { get; set; }
 
         public string Description { get; set; } = string.Empty;
