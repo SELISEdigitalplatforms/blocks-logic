@@ -180,3 +180,16 @@ export interface IGetWorkflowByVersionPayload {
 export interface IGetWorkflowByVersionResponse {
   [key: string]: any;
 }
+
+export interface IUpdateWorkflowVersionPayload {
+  projectKey: string;
+  versionId: string;
+  name?: string;
+  Description?: string;
+}
+
+export interface IUpdateWorkflowVersionResponse {
+  itemId: string;
+  isSuccess: boolean;
+  errors?: unknown;
+}

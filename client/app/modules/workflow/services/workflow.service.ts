@@ -29,6 +29,8 @@ import {
   IRestoreWorkflowResponse,
   IGetWorkflowByVersionPayload,
   IGetWorkflowByVersionResponse,
+  IUpdateWorkflowVersionPayload,
+  IUpdateWorkflowVersionResponse,
 } from "../types/workflow.service.type";
 
 export class WorkflowService {
@@ -136,6 +138,10 @@ export class WorkflowService {
 
   getWorkflowByVersion = (payload: IGetWorkflowByVersionPayload): Promise<IGetWorkflowByIdResponse> => {
     return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.GET_WORKFLOW_BY_VERSION}`, payload);
+  }
+
+  updateWorkflowVersion = (payload: IUpdateWorkflowVersionPayload): Promise<IUpdateWorkflowVersionResponse> => {
+    return this.LogicHttpClient.put(`${WORKFLOW_ENDPOINTS.UPDATE_VERSION}`, payload);
   }
 }
 

@@ -159,3 +159,14 @@ export const useRestoreWorkflow = () => {
     },
   });
 };
+
+export const useUpdateWorkflowVersion = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: ["workflow-version", "update"],
+    mutationFn: workflowService.updateWorkflowVersion,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["workflow-versions"] });
+    },
+  });
+};
