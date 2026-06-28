@@ -8,6 +8,7 @@ namespace DomainService.Workflow.Models
         public required string TenantId { get; set; }
         public required string Name { get; set; }
         public string Description { get; set; } = string.Empty;
-        public required string Snapshot { get; set; }
+        public required WorkflowModel Snapshot { get; set; }
+        public required bool IsPublished { get; set; } = false;
     }
 }

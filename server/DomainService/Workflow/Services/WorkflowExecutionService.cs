@@ -13,6 +13,7 @@ using DomainService.Workflow.Nodes.TriggerDataV1;
 using MongoDB.Bson;
 using System.Diagnostics.CodeAnalysis;
 using MongoDB.Bson.Serialization;
+using DotLiquid.Util;
 
 
 
@@ -23,7 +24,6 @@ namespace DomainService.Workflow.Services
     {
         private readonly IWorkflowRepository _workflowRepository;
         private readonly IWorkflowExecutionRepository _executionRepository;
-
         private readonly IWorkflowVersionRepository _workflowVersionRepository;
 
         private readonly IMessageClient _messageClient;
@@ -106,7 +106,7 @@ namespace DomainService.Workflow.Services
                 };
             }
 
-            var workfowSnapshot = BsonSerializer.Deserialize<WorkflowModel>(publishedVersion.Snapshot);
+            var workfowSnapshot = publishedVersion.Snapshot;
             if (workfowSnapshot == null)
             {
                 return new WorkflowWebhookResponseDto
@@ -565,8 +565,23 @@ namespace DomainService.Workflow.Services
                         workflow.ItemId, dataEvent.CollectionName);
                     return;
                 }
+                var isMockedData = triggerData.Any(data => data.AsBsonDocument.Contains("Tags") && data.AsBsonDocument
+                ["Tags"].AsBsonArray.Contains("mock-data"));
 
-                var execution = await CreateExecutionAsync(workflow);
+                if (!isMockedData && (!workflow.IsPublished || string.IsNullOrWhiteSpace(workflow.PublishedVersionId)))
+                {
+                    _logger.LogWarning("Workflow {WorkflowId} is not published. Skipping execution for Data Trigger.", workflow.ItemId);
+                    return;
+                }
+
+                var executableWorkflow = isMockedData ? workflow : await GetPublishedWorkflowAsync(workflow);
+                var executionMode = isMockedData ? WorkflowExecutionMode.Test : WorkflowExecutionMode.Production;
+                if (executableWorkflow == null)
+                {
+                    _logger.LogWarning("Published workflow not found for WorkflowId: {WorkflowId}. Skipping execution for Data Trigger.", workflow.ItemId);
+                    return;
+                }
+                var execution = await CreateExecutionAsync(executableWorkflow, executionMode);
                 execution.Context["Input"] = triggerData;
                 execution.Status = WorkflowExecutionStatus.Queued;
                 execution.ActiveNodeIds.Add(triggerNode.Id);
@@ -594,7 +609,7 @@ namespace DomainService.Workflow.Services
             }
         }
 
-        #region Helpers
+
 
         private static BsonDocument DictionaryToBsonDocument(Dictionary<string, object?> dict)
         {
@@ -638,6 +653,16 @@ namespace DomainService.Workflow.Services
             return doc;
         }
 
-        #endregion
+        private async Task<WorkflowModel?> GetPublishedWorkflowAsync(WorkflowModel workflow)
+        {
+            if (!workflow.IsPublished || string.IsNullOrWhiteSpace(workflow.PublishedVersionId)) return null;
+
+            var publishedVersion = await _workflowVersionRepository.GetWorkflowVersionAsync(workflow.TenantId, workflow.PublishedVersionId);
+            if (publishedVersion == null) return null;
+
+            var workfowSnapshot = publishedVersion.Snapshot;
+            if (workfowSnapshot == null) return null;
+            return workfowSnapshot;
+        }
     }
 }
