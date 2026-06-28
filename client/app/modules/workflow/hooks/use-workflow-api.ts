@@ -134,6 +134,18 @@ export const usePublishWorkflow = () => {
     },
   });
 };
+export const usePublishNewWorkflow = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: ["workflow", "publish"],
+    mutationFn: workflowService.publishWorkflowNewVersion,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["workflows"] });
+      queryClient.invalidateQueries({ queryKey: ["workflow"] });
+      queryClient.invalidateQueries({ queryKey: ["workflow-versions"] });
+    },
+  });
+};
 
 export const useUnpublishWorkflow = () => {
   const queryClient = useQueryClient();
