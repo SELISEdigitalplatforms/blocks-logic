@@ -81,6 +81,14 @@ namespace Utilities.Api.Controllers
         }
 
         [HttpPost]
+        public async Task<IActionResult> UpdateVersion([FromBody] WorkflowVersionUpdateRequestDto dto)
+        {
+            var result = await _workflowService.UpdateVersionAsync(dto);
+            return Ok(result);
+        }
+
+
+        [HttpPost]
         public async Task<IActionResult> GetVersions([FromBody] WorkflowGetVersionsRequestDto dto)
         {
             var result = await _workflowService.GetVersionsAsync(dto);
@@ -95,9 +103,16 @@ namespace Utilities.Api.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> Publish([FromBody] WorkflowPublishRequestDto dto)
+        public async Task<IActionResult> PublishNewVersion([FromBody] WorkflowPublishNewVersionRequestDto dto)
         {
-            var result = await _workflowService.PublishAsync(dto);
+            var result = await _workflowService.PublishNewVersionAsync(dto);
+            return Ok(result);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> PublishVersion([FromBody] WorkflowPublishVersionRequestDto dto)
+        {
+            var result = await _workflowService.PublishVersionAsync(dto);
             return Ok(result);
         }
 
@@ -145,7 +160,8 @@ namespace Utilities.Api.Controllers
 
         }
 
-        [HttpPost("webhook-test/{projectKey}/{workflowId}/{webhookId}")]
+        [ActionName("webhook-test")]
+        [HttpPost("{projectKey}/{workflowId}/{webhookId}")]
         public async Task<IActionResult> TestWebhook(string projectKey, string workflowId, string webhookId, [FromBody] JsonElement input)
         {
             var dto = new WorkflowWebhookRequestDto
