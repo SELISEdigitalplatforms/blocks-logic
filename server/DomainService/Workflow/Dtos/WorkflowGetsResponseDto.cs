@@ -12,6 +12,7 @@ namespace DomainService.Workflow.Dtos
     {
         public required string ItemId { get; set; }
         public required string Name { get; set; }
+        public required bool IsDirty { get; set; }
         public required bool IsPublished { get; set; }
         public Dictionary<string, string> Settings { get; set; } = new();
         public DateTime CreatedDate { get; set; }
