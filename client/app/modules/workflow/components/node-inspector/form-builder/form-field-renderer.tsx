@@ -40,7 +40,7 @@ export const FormFieldRenderer = ({
 
   return (
     <div className="space-y-3">
-      {field.label && (
+      {field.label && field.type !== "tab-with-text" && (
         <div className="flex items-center gap-2">
           <Label
             htmlFor={field.id}

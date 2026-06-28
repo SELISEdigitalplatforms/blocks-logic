@@ -8,8 +8,12 @@ import { useWorkflow } from "@blocks-workflow/hooks";
 import { WorkflowExecutionEditor } from "./workflow-execution-editor";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
 
+import { ReactFlowProvider } from "@xyflow/react";
+import { WorkflowStoreProvider } from "../../store";
+import { useParams } from "react-router-dom";
+
 export const WorkflowExecutions = () => {
-  const { workflowId } = useWorkflow();
+  const { id: workflowId } = useParams<{ id: string }>();
   const tenantId = useProjectStore().selectedProject?.tenantId || "";
   const [selectedExecution, setSelectedExecution] = useState<
     WorkflowExecution | undefined
@@ -25,17 +29,21 @@ export const WorkflowExecutions = () => {
   };
 
   return (
-    <div className="flex h-full ">
-      <WorkflowExecutionList
-        executions={data?.data || []}
-        isLoading={isLoading}
-        selectedExecutionId={selectedExecution?.id}
-        onSelectExecution={handleSelectExecution}
-      />
-      <WorkflowExecutionEditor
-        id={selectedExecution?.id || ""}
-        key={selectedExecution?.id}
-      />
-    </div>
+    <ReactFlowProvider>
+      <WorkflowStoreProvider>
+        <div className="flex h-full ">
+          <WorkflowExecutionList
+            executions={data?.data || []}
+            isLoading={isLoading}
+            selectedExecutionId={selectedExecution?.id}
+            onSelectExecution={handleSelectExecution}
+          />
+          <WorkflowExecutionEditor
+            execution={data?.data?.find(e => e.id === selectedExecution?.id) || selectedExecution}
+            key={selectedExecution?.id}
+          />
+        </div>
+      </WorkflowStoreProvider>
+    </ReactFlowProvider>
   );
 };
