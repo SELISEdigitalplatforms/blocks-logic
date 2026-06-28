@@ -551,7 +551,7 @@ namespace DomainService.Workflow.Services
             }
         }
 
-        public async Task<BaseMutationResponse> PublishAsync(WorkflowPublishRequestDto dto)
+        public async Task<BaseMutationResponse> PublishNewVersionAsync(WorkflowPublishNewVersionRequestDto dto)
         {
             var workflow = await _workflowRepository.GetWorkflowAsync(dto.WorkflowId, dto.ProjectKey);
             if (workflow == null)
@@ -622,6 +622,47 @@ namespace DomainService.Workflow.Services
                 };
             }
 
+        }
+
+        public async Task<BaseMutationResponse> PublishVersionAsync(WorkflowPublishVersionRequestDto dto)
+        {
+            var workflow = await _workflowRepository.GetWorkflowAsync(dto.WorkflowId, dto.ProjectKey);
+            if (workflow == null)
+            {
+                return new BaseMutationResponse
+                {
+                    IsSuccess = false,
+                    Errors = new Dictionary<string, string> { { "Message", "Workflow not found" } },
+                    ItemId = null
+                };
+            }
+
+            var version = await _workflowVersionRepository.GetWorkflowVersionAsync(dto.ProjectKey, dto.VersionId);
+            if (version == null)
+            {
+                return new BaseMutationResponse
+                {
+                    IsSuccess = false,
+                    Errors = new Dictionary<string, string> { { "Message", "Version not found" } },
+                    ItemId = null
+                };
+            }
+
+            workflow.IsDirty = false;
+            workflow.IsPublished = true;
+            workflow.PublishedVersionId = version.ItemId;
+            workflow.PublishedMeta = new PublishedWorkflowMeta
+            {
+                TriggerNodes = version.Snapshot.Nodes.Where(n => n.Category == "trigger").ToList()
+            };
+            await _workflowRepository.UpdateWorkflowAsync(workflow);
+
+            return new BaseMutationResponse
+            {
+                IsSuccess = true,
+                ItemId = workflow.ItemId,
+                Errors = null
+            };
         }
 
         public async Task<BaseMutationResponse> RestoreAsync(WorkflowRestoreRequestDto dto)

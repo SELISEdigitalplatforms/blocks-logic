@@ -103,9 +103,16 @@ namespace Utilities.Api.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> Publish([FromBody] WorkflowPublishRequestDto dto)
+        public async Task<IActionResult> PublishNewVersion([FromBody] WorkflowPublishNewVersionRequestDto dto)
         {
-            var result = await _workflowService.PublishAsync(dto);
+            var result = await _workflowService.PublishNewVersionAsync(dto);
+            return Ok(result);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> PublishVersion([FromBody] WorkflowPublishVersionRequestDto dto)
+        {
+            var result = await _workflowService.PublishVersionAsync(dto);
             return Ok(result);
         }
 
