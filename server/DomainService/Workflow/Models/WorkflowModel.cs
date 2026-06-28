@@ -22,9 +22,16 @@ namespace DomainService.Workflow.Models
 
         public string? PublishedVersionId { get; set; }
 
+        public PublishedWorkflowMeta? PublishedMeta { get; set; }
+
         public string Description { get; set; } = string.Empty;
 
         public Dictionary<string, List<NodeOutputSchemaField>>? NodeOutputSchemas { get; set; }
 
+    }
+
+    public class PublishedWorkflowMeta
+    {
+        public List<NodeModel> TriggerNodes { get; set; } = new();
     }
 }
