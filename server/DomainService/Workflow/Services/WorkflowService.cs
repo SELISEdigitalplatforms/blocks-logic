@@ -456,6 +456,49 @@ namespace DomainService.Workflow.Services
             }
         }
 
+        public async Task<BaseMutationResponse> UpdateVersionAsync(WorkflowVersionUpdateRequestDto dto)
+        {
+            _logger.LogInformation("Updating workflow version for ProjectKey: {ProjectKey}, VersionId: {VersionId}", dto.ProjectKey, dto.VersionId);
+            var version = await _workflowVersionRepository.GetWorkflowVersionAsync(dto.ProjectKey, dto.VersionId);
+
+            if (version == null)
+            {
+                _logger.LogWarning("Workflow version with Id {VersionId} not found for update.", dto.VersionId);
+                return new BaseMutationResponse
+                {
+                    IsSuccess = false,
+                    ItemId = null,
+                    Errors = new Dictionary<string, string> { { "Message", "Workflow version not found" } }
+                };
+            }
+
+            version.Name = dto.Name ?? version.Name;
+            version.Description = dto.Description ?? version.Description;
+            version.LastUpdatedDate = DateTime.UtcNow;
+            version.LastUpdatedBy = BlocksContext.GetContext().UserId ?? "system";
+
+            try
+            {
+                await _workflowVersionRepository.UpdateWorkflowVersionAsync(dto.ProjectKey, dto.VersionId, version);
+                _logger.LogInformation("Successfully updated workflow version with Id: {VersionId}", dto.VersionId);
+                return new BaseMutationResponse
+                {
+                    IsSuccess = true,
+                    ItemId = version.ItemId,
+                    Errors = null
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Error updating workflow version for VersionId: {VersionId}: {Message}", dto.VersionId, ex.Message);
+                return new BaseMutationResponse
+                {
+                    IsSuccess = false,
+                    ItemId = null,
+                    Errors = new Dictionary<string, string> { { "Message", "Failed to update workflow version" } }
+                };
+            }
+        }
         public async Task<WorkflowGetVersionsResponseDto> GetVersionsAsync(WorkflowGetVersionsRequestDto dto)
         {
             try
