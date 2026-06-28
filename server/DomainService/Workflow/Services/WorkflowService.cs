@@ -95,6 +95,7 @@ namespace DomainService.Workflow.Services
                 IsPublished = false,
                 PublishedVersionId = null,
                 PublishedMeta = null,
+                LastPublishedVersionId = null,
                 Settings = dto.Settings,
                 Description = dto.Description,
                 NodeOutputSchemas = dto.NodeOutputSchemas,
@@ -149,6 +150,7 @@ namespace DomainService.Workflow.Services
             existingWorkflow.IsDirty = true;
             existingWorkflow.IsPublished = false;
             existingWorkflow.PublishedVersionId = null;
+            existingWorkflow.LastPublishedVersionId = null;
             existingWorkflow.PublishedMeta = null;
             existingWorkflow.CreatedDate = DateTime.UtcNow;
             existingWorkflow.LastUpdatedDate = DateTime.UtcNow;
@@ -599,6 +601,7 @@ namespace DomainService.Workflow.Services
                 workflow.IsDirty = false;
                 workflow.IsPublished = true;
                 workflow.PublishedVersionId = version.ItemId;
+                workflow.LastPublishedVersionId = workflow.PublishedVersionId; // Store the previous published version ID
                 workflow.PublishedMeta = new PublishedWorkflowMeta
                 {
                     TriggerNodes = workflow.Nodes.Where(n => n.Category == "trigger").ToList()
@@ -637,6 +640,21 @@ namespace DomainService.Workflow.Services
                 };
             }
 
+            // if the versionId is null or empty, then publish the last published version
+            if (string.IsNullOrEmpty(dto.VersionId))
+            {
+                if (string.IsNullOrEmpty(workflow.LastPublishedVersionId))
+                {
+                    return new BaseMutationResponse
+                    {
+                        IsSuccess = false,
+                        Errors = new Dictionary<string, string> { { "Message", "No version to publish" } },
+                        ItemId = null
+                    };
+                }
+                dto.VersionId = workflow.LastPublishedVersionId;
+            }
+
             var version = await _workflowVersionRepository.GetWorkflowVersionAsync(dto.ProjectKey, dto.VersionId);
             if (version == null)
             {
@@ -650,6 +668,7 @@ namespace DomainService.Workflow.Services
 
             workflow.IsDirty = false;
             workflow.IsPublished = true;
+            workflow.LastPublishedVersionId = workflow.PublishedVersionId; // Store the previous published version ID
             workflow.PublishedVersionId = version.ItemId;
             workflow.PublishedMeta = new PublishedWorkflowMeta
             {
@@ -696,6 +715,7 @@ namespace DomainService.Workflow.Services
             updatedWorkflow.IsDirty = true;
             updatedWorkflow.IsPublished = workflow.IsPublished;
             updatedWorkflow.PublishedVersionId = workflow.PublishedVersionId;
+            updatedWorkflow.LastPublishedVersionId = workflow.LastPublishedVersionId;
             updatedWorkflow.PublishedMeta = workflow.PublishedMeta;
             updatedWorkflow.LastUpdatedDate = DateTime.UtcNow;
             updatedWorkflow.LastUpdatedBy = BlocksContext.GetContext().UserId ?? "system"; ;
