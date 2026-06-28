@@ -1,5 +1,5 @@
 import { Edge } from "@xyflow/react";
-import { ExecutedItem, ExecutedNode, Workflow, WorkflowSummary } from "../models/workflow.model";
+import { ExecutedItem, ExecutedNode, Workflow, WorkflowSummary, WorkflowVersion, WorkflowExecutionMode } from "../models/workflow.model";
 import { WorkflowNode } from "@blocks-workflow/models/node.model";
 import { OutputSchemaField } from "./output-schema.types";
 
@@ -90,6 +90,7 @@ export interface WorkflowExecution {
   workflowId: string;
   projectKey: string;
   status: number;
+  executionMode: WorkflowExecutionMode;
   startedAt: string;
   finishedAt: string;
   duration: number;
@@ -112,4 +113,70 @@ export interface IGetWorkflowExecutionByIdResponse {
   workflowSnapshot: Workflow;
   nodeExecutions: ExecutedNode[];
   items: ExecutedItem[];
+}
+
+export interface ICreateWorkflowVersionPayload {
+  projectKey: string;
+  workflowId: string;
+  name: string;
+  Description?: string;
+}
+
+export interface ICreateWorkflowVersionResponse {
+  [key: string]: any;
+}
+
+export interface IGetWorkflowVersionsPayload {
+  projectKey: string;
+  workflowId: string;
+}
+
+export interface IGetWorkflowVersionsResponse {
+  data: WorkflowVersion[];
+  totalCount: number;
+  errors: unknown;
+}
+
+export interface IPublishWorkflowPayload {
+  workflowId: string;
+  projectKey: string;
+  name: string;
+  Description?: string;
+}
+
+export interface IPublishWorkflowResponse {
+  itemId: string;
+  isSuccess: boolean;
+  errors: unknown;
+}
+
+export interface IUnpublishWorkflowPayload {
+  workflowId: string;
+  projectKey: string;
+}
+
+export interface IUnpublishWorkflowResponse {
+  itemId: string;
+  isSuccess: boolean;
+  errors: unknown;
+}
+
+export interface IRestoreWorkflowPayload {
+  workflowId: string;
+  projectKey: string;
+  versionId: string;
+}
+
+export interface IRestoreWorkflowResponse {
+  [key: string]: any;
+}
+
+export interface IGetWorkflowByVersionPayload {
+  workflowId: string;
+  projectKey: string;
+  versionId: string;
+}
+
+export interface IGetWorkflowByVersionResponse {
+  [key: string]: any;
 }

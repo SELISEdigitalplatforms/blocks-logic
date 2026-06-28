@@ -6,6 +6,9 @@ import { EditorNodeHandle, EditorNodeHandleArrow } from "./editor-node-handle";
 import { getNodeDefinition } from "../node-library-panel";
 import { useMemo } from "react";
 
+import { WorkflowExecutionStatus, getStatusConfig } from "../../utils/workflow-execution-list.util";
+import { cn } from "@/lib/utils";
+
 export const EditorNodeSimple = ({ id }: Node) => {
   const { getNodeById } = useWorkflow();
   const node = getNodeById(id);
@@ -17,6 +20,14 @@ export const EditorNodeSimple = ({ id }: Node) => {
 
   if (!node) return null;
   if (!nodeDefinition) return null;
+
+  const executionStatus = node.data?.executionStatus as WorkflowExecutionStatus | undefined;
+  let StatusIcon = null;
+  let statusConfig = null;
+  if (executionStatus !== undefined) {
+    statusConfig = getStatusConfig(executionStatus);
+    StatusIcon = statusConfig.icon;
+  }
 
   return (
     <EditorNodeBase id={id}>
@@ -48,6 +59,11 @@ export const EditorNodeSimple = ({ id }: Node) => {
           </EditorNodeHandle>
         ))}
       </div>
+      {StatusIcon && statusConfig && (
+        <div className="absolute -bottom-2 -right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-background shadow-sm border">
+            <StatusIcon className={cn("h-4 w-4", statusConfig.textClass, executionStatus === WorkflowExecutionStatus.Running && "animate-spin")} />
+        </div>
+      )}
     </EditorNodeBase>
   );
 };
