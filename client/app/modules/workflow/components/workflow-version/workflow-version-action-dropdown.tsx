@@ -50,8 +50,7 @@ export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVer
       await publishWorkflow.mutateAsync({
         workflowId: workflowId || "",
         projectKey,
-        name: publishVersionName || "Published Version",
-        Description: publishDescription,
+        versionId: version.itemId,
       });
       setIsPublishModalOpen(false);
     } catch (error) {

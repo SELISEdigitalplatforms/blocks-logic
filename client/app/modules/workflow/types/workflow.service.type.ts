@@ -141,14 +141,20 @@ export interface IGetWorkflowVersionsResponse {
 export interface IPublishWorkflowPayload {
   workflowId: string;
   projectKey: string;
-  name: string;
-  Description?: string;
+  versionId?: string;
 }
 
 export interface IPublishWorkflowResponse {
   itemId: string;
   isSuccess: boolean;
   errors: unknown;
+}
+
+export interface IPublishNewWorkflowPayload {
+  workflowId: string;
+  projectKey: string;
+  name?: string;
+  description?: string;
 }
 
 export interface IUnpublishWorkflowPayload {

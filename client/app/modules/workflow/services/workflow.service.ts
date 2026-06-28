@@ -23,6 +23,7 @@ import {
   IGetWorkflowVersionsResponse,
   IPublishWorkflowPayload,
   IPublishWorkflowResponse,
+  IPublishNewWorkflowPayload,
   IUnpublishWorkflowPayload,
   IUnpublishWorkflowResponse,
   IRestoreWorkflowPayload,
@@ -128,6 +129,10 @@ export class WorkflowService {
     return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.PUBLISH}`, payload);
   }
 
+  publishWorkflowNewVersion = (payload: IPublishNewWorkflowPayload): Promise<IPublishWorkflowResponse> => {
+    return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.PUBLISH_NEW}`, payload);
+  }
+
   unpublishWorkflow = (payload: IUnpublishWorkflowPayload): Promise<IUnpublishWorkflowResponse> => {
     return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.UNPUBLISH}`, payload);
   }
@@ -141,7 +146,7 @@ export class WorkflowService {
   }
 
   updateWorkflowVersion = (payload: IUpdateWorkflowVersionPayload): Promise<IUpdateWorkflowVersionResponse> => {
-    return this.LogicHttpClient.put(`${WORKFLOW_ENDPOINTS.UPDATE_VERSION}`, payload);
+    return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.UPDATE_VERSION}`, payload);
   }
 }
 

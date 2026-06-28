@@ -9,7 +9,7 @@ import { Button } from "@/components/ui-kits/button/button";
 import { ChevronDown, Loader2 } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
-import { usePublishWorkflow, useUnpublishWorkflow } from "../../hooks/use-workflow-api";
+import { usePublishNewWorkflow, useUnpublishWorkflow } from "../../hooks/use-workflow-api";
 import { Dialog } from "@/components/ui-kits/dialog/dialog";
 import ConfirmationModal from "@/components/confirmation-modal/confirmation-modal";
 import { PublishWorkflowModal } from "../publish-workflow-modal/publish-workflow-modal";
@@ -35,7 +35,7 @@ export const PublishWorkflowAction = ({
   const [publishVersionName, setPublishVersionName] = useState("");
   const [publishDescription, setPublishDescription] = useState("");
 
-  const { mutateAsync: publishWorkflow, isPending: isPublishing } = usePublishWorkflow();
+  const { mutateAsync: publishNewWorkflow, isPending: isPublishing } = usePublishNewWorkflow();
   const { mutateAsync: unpublishWorkflow, isPending: isUnpublishing } = useUnpublishWorkflow();
 
   const handleOpenPublishDialog = () => {
@@ -48,11 +48,11 @@ export const PublishWorkflowAction = ({
   const handlePublish = async () => {
     if (!workflowId) return;
     try {
-      await publishWorkflow({ 
+      await publishNewWorkflow({ 
         projectKey, 
         workflowId, 
         name: publishVersionName, 
-        Description: publishDescription 
+        description: publishDescription 
       });
       setIsPublishDialogOpen(false);
       onActionComplete?.();

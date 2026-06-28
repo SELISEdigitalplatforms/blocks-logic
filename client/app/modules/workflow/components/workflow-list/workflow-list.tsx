@@ -36,7 +36,7 @@ import { Copy, EllipsisVertical, Pen, Ban, Trash, Check } from "lucide-react";
 import { DeleteWorkflow } from "../delete-workflow";
 import { DuplicateWorkflow } from "../duplicate-workflow";
 import { Link, useNavigate } from "react-router-dom";
-import { usePublishWorkflow, useUnpublishWorkflow } from "../../hooks/use-workflow-api";
+import { usePublishNewWorkflow, useUnpublishWorkflow } from "../../hooks/use-workflow-api";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { Dialog } from "@/components/ui-kits/dialog/dialog";
 import ConfirmationModal from "@/components/confirmation-modal/confirmation-modal";
@@ -76,7 +76,7 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
   const [publishVersionName, setPublishVersionName] = useState("");
   const [publishDescription, setPublishDescription] = useState("");
 
-  const { mutateAsync: publishWorkflow, isPending: isPublishing } = usePublishWorkflow();
+  const { mutateAsync: publishWorkflow, isPending: isPublishing } = usePublishNewWorkflow();
   const { mutateAsync: unpublishWorkflow, isPending: isUnpublishing } = useUnpublishWorkflow();
 
   const handlePublish = async () => {
@@ -87,7 +87,7 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
         projectKey, 
         workflowId, 
         name: publishVersionName, 
-        Description: publishDescription 
+        description: publishDescription 
       });
       setModal({ type: null, data: {} });
     } catch (error) {
