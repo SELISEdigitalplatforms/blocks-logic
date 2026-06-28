@@ -63,6 +63,15 @@ export const NodeSchemaTriggerDataGatewayV1: NodeSchemaDefinition = {
         ],
       },
       {
+        id: "mock-data-info",
+        type: "display",
+        key: "mockDataInfo",
+        className:
+          "rounded-lg my-2 bg-yellow-50 border border-yellow-500 text-yellow-700 dark:bg-yellow-950/60 dark:text-yellow-300 dark:border dark:border-yellow-700 p-3",
+        displayValue: () =>
+          "**Note:** If `output.Tags` has the value `mock-data`, then this execution will be considered a test execution.",
+      },
+      {
         id: "output",
         type: "display",
         label: "Output",
