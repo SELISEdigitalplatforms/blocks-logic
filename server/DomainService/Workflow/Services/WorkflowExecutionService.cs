@@ -12,7 +12,8 @@ using DomainService.Workflow.Nodes.TriggerEmailV1;
 using DomainService.Workflow.Nodes.TriggerDataV1;
 using MongoDB.Bson;
 using System.Diagnostics.CodeAnalysis;
-using PdfSharpCore.Pdf.Content.Objects;
+using MongoDB.Bson.Serialization;
+using DotLiquid.Util;
 
 
 
@@ -23,6 +24,7 @@ namespace DomainService.Workflow.Services
     {
         private readonly IWorkflowRepository _workflowRepository;
         private readonly IWorkflowExecutionRepository _executionRepository;
+        private readonly IWorkflowVersionRepository _workflowVersionRepository;
 
         private readonly IMessageClient _messageClient;
 
@@ -34,7 +36,8 @@ namespace DomainService.Workflow.Services
             IWorkflowExecutionRepository executionRepository,
             IMessageClient messageClient,
             ILogger<WorkflowExecutionService> logger,
-            IWorkflowEngineService workflowEngineService
+            IWorkflowEngineService workflowEngineService,
+            IWorkflowVersionRepository workflowVersionRepository
             )
         {
             _workflowRepository = workflowRepository;
@@ -42,50 +45,119 @@ namespace DomainService.Workflow.Services
             _messageClient = messageClient;
             _workflowEngineService = workflowEngineService;
             _logger = logger;
+            _workflowVersionRepository = workflowVersionRepository;
         }
 
 
-        public async Task<WorkflowExecutionModel> CreateExecutionAsync(string workflowId, string triggerId, string tenantId)
+        public async Task<WorkflowExecutionModel> CreateExecutionAsync(WorkflowModel workflowSnapshot, WorkflowExecutionMode executionMode = WorkflowExecutionMode.Test)
         {
-
-            var workflow = await _workflowRepository.GetWorkflowAsync(workflowId, tenantId)
-                ?? throw new InvalidOperationException($"Workflow {workflowId} not found");
-
             var execution = new WorkflowExecutionModel
             {
                 Id = Guid.NewGuid().ToString().Replace("-", ""),
-                WorkflowId = workflowId,
-                WorkflowName = workflow.Name,
-                TenantId = workflow.TenantId,
-                WorkflowSnapshot = workflow,
+                WorkflowId = workflowSnapshot.ItemId,
+                WorkflowName = workflowSnapshot.Name,
+                TenantId = workflowSnapshot.TenantId,
+                WorkflowSnapshot = workflowSnapshot,
                 Status = WorkflowExecutionStatus.Init,
+                ExecutionMode = executionMode,
                 NodeExecutions = new List<NodeExecutionModel>(),
                 StartedAt = DateTime.UtcNow,
             };
             return await _executionRepository.CreateAsync(execution);
         }
 
+        public async Task<WorkflowWebhookResponseDto> TriggerWebhookAsync(string workflowId, string triggerId, string tenantId, JsonElement input)
+        {
+            var workflow = await _workflowRepository.GetWorkflowAsync(workflowId, tenantId);
+            if (workflow == null)
+            {
+                _logger.LogError("Workflow not found: {WorkflowId}, {TenantId}", workflowId, tenantId);
+                return new WorkflowWebhookResponseDto
+                {
+                    ExecutionId = null,
+                    Status = "Workflow not found"
+                };
+            }
+            if (!workflow.IsPublished)
+            {
+                _logger.LogError("Workflow is not published: {WorkflowId}, {TenantId}", workflowId, tenantId);
+                return new WorkflowWebhookResponseDto
+                {
+                    ExecutionId = null,
+                    Status = "Workflow is not published"
+                };
+            }
+            if (String.IsNullOrWhiteSpace(workflow.PublishedVersionId))
+            {
+                return new WorkflowWebhookResponseDto
+                {
+                    ExecutionId = null,
+                    Status = "Workflow is not published"
+                };
+            }
+            var publishedVersion = await _workflowVersionRepository.GetWorkflowVersionAsync(tenantId, workflow.PublishedVersionId);
 
-        public async Task<WorkflowWebhookResponseDto?> WebhookStartAsync(string workflowId, string triggerId, string tenantId, JsonElement input)
+            if (publishedVersion == null)
+            {
+                return new WorkflowWebhookResponseDto
+                {
+                    ExecutionId = null,
+                    Status = "Something went wrong"
+                };
+            }
+
+            var workfowSnapshot = publishedVersion.Snapshot;
+            if (workfowSnapshot == null)
+            {
+                return new WorkflowWebhookResponseDto
+                {
+                    ExecutionId = null,
+                    Status = "Something went wrong"
+                };
+            }
+            return await HandleWebhookExecutionAsync(workfowSnapshot, WorkflowExecutionMode.Production, triggerId, input);
+        }
+
+        public async Task<WorkflowWebhookResponseDto> TriggerTestWebhookAsync(string workflowId, string triggerId, string tenantId, JsonElement input)
+        {
+            var workflow = await _workflowRepository.GetWorkflowAsync(workflowId, tenantId);
+            if (workflow == null)
+            {
+                _logger.LogError("Workflow not found: {WorkflowId}, {TenantId}", workflowId, tenantId);
+                return new WorkflowWebhookResponseDto
+                {
+                    ExecutionId = null,
+                    Status = "Workflow not found"
+                };
+            }
+            return await HandleWebhookExecutionAsync(workflow, WorkflowExecutionMode.Test, triggerId, input);
+        }
+        private async Task<WorkflowWebhookResponseDto?> HandleWebhookExecutionAsync(WorkflowModel workflow, WorkflowExecutionMode executionMode, string triggerId, JsonElement input)
         {
             WorkflowExecutionModel execution;
             try
             {
-                var workflow = await _workflowRepository.GetWorkflowAsync(workflowId, tenantId)
-                ?? throw new InvalidOperationException($"Workflow {workflowId} not found");
+
                 var triggerNode = workflow.Nodes.FirstOrDefault(n => n.Id == triggerId);
                 if (triggerNode == null)
                 {
-                    throw new InvalidOperationException($"Trigger node {triggerId} not found in workflow {workflowId}");
+                    _logger.LogError("Trigger node {TriggerId} not found in workflow {WorkflowId}", triggerId, workflow.ItemId);
+                    return new WorkflowWebhookResponseDto
+                    {
+                        ExecutionId = null,
+                        Status = "Workflow not found",
+                    };
                 }
                 var authType = triggerNode.Parameters.GetValue("authType");
+
                 if (authType != null && authType.ToString().ToLower() == "blocksAccessToken".ToLower())
                 {
                     var blocksContext = BlocksContext.GetContext();
                     if (!blocksContext.IsAuthenticated) throw new UnauthorizedAccessException();
 
                 }
-                execution = await CreateExecutionAsync(workflowId, triggerId, tenantId);
+
+                execution = await CreateExecutionAsync(workflow, executionMode);
 
                 var normalizedInput = new BsonArray();
 
@@ -110,10 +182,10 @@ namespace DomainService.Workflow.Services
 
                 var payload = new AddExcuationNodeEvent
                 {
-                    WorkflowId = workflowId,
+                    WorkflowId = workflow.ItemId,
                     WorkflowExecutionId = execution.Id,
                     NodeId = triggerId,
-                    ProjectKey = tenantId
+                    ProjectKey = workflow.TenantId
                 };
 
                 var responseMode = triggerNode.Parameters.GetValue("httpResponseMode");
@@ -136,7 +208,7 @@ namespace DomainService.Workflow.Services
                         return null;
                     }
                     var lastExecutationNode = response.NodeExecutions.MaxBy(ne => ne.RunIndex);
-                    var lastNodeOutput = await _executionRepository.GetAllItemsByNodeExecutionIdAsync(lastExecutationNode.Id, tenantId);
+                    var lastNodeOutput = await _executionRepository.GetAllItemsByNodeExecutionIdAsync(lastExecutationNode.Id, workflow.TenantId);
                     var data = JsonDocument.Parse(new BsonArray(lastNodeOutput.Select(item => item.Data.Output)).ToJson()).RootElement;
 
                     if (responseModeData.ToString().ToLower() == "all")
@@ -174,10 +246,8 @@ namespace DomainService.Workflow.Services
             {
                 throw new InvalidOperationException("Failed to create execution for webhook", ex);
             }
-
-
-
         }
+
 
         public async Task EmailTriggerStartAsync(EmailTriggerEvent emailEvent)
         {
@@ -229,7 +299,7 @@ namespace DomainService.Workflow.Services
                         continue;
                     }
 
-                    var execution = await CreateExecutionAsync(workflow.ItemId, triggerNode.Id, projectKey);
+                    var execution = await CreateExecutionAsync(workflow);
                     var emailJson = JsonSerializer.Serialize(emailEvent.Mail);
                     var emailBsonDoc = BsonDocument.Parse(emailJson);
                     execution.Context["Input"] = new BsonArray { emailBsonDoc };
@@ -272,7 +342,8 @@ namespace DomainService.Workflow.Services
                 FinishedAt = e.FinishedAt,
                 ErrorMessage = e.ErrorMessage,
                 TriggerType = e.TriggerType,
-                AttemptNumber = e.AttemptNumber
+                AttemptNumber = e.AttemptNumber,
+                ExecutionMode = e.ExecutionMode
             }).ToList();
 
             return new WorkflowExecutionsGetResponseDto
@@ -309,7 +380,7 @@ namespace DomainService.Workflow.Services
                 Name = execution.WorkflowSnapshot.Name,
                 Nodes = nodes,
                 Edges = execution.WorkflowSnapshot.Edges,
-                IsActive = execution.WorkflowSnapshot.IsActive,
+                IsPublished = execution.WorkflowSnapshot.IsPublished,
                 Settings = execution.WorkflowSnapshot.Settings,
                 TenantId = execution.WorkflowSnapshot.TenantId
             };
@@ -322,6 +393,7 @@ namespace DomainService.Workflow.Services
                 WorkflowId = execution.WorkflowId,
                 WorkflowName = execution.WorkflowName,
                 Status = execution.Status,
+                ExecutionMode = execution.ExecutionMode,
                 StartedAt = execution.StartedAt,
                 FinishedAt = execution.FinishedAt,
                 ErrorMessage = execution.ErrorMessage,
@@ -388,17 +460,35 @@ namespace DomainService.Workflow.Services
             }
 
             var operationStr = dataEvent.Operation.ToString();
-            var workflows = await _workflowRepository.GetWorkflowsByDataCollectionAsync(
-                dataEvent.CollectionName, operationStr, projectKey);
+            var triggerData = BuildTriggerData(dataEvent, operationStr);
+            var isMockedData = triggerData.All(data => data.AsBsonDocument.Contains("Tags") && data.AsBsonDocument
+              ["Tags"].AsBsonArray.Contains("mock-data"));
+
+            List<WorkflowModel> workflows = new List<WorkflowModel>();
+            // If the data is mocked, we will use the workflow as is, otherwise we will only published workflows that are published.
+            if (isMockedData)
+            {
+                workflows = await _workflowRepository.GetWorkflowsByDataCollectionAsync(dataEvent.CollectionName, operationStr, projectKey);
+            }
+            else
+            {
+                var publishedWorkflows = await _workflowRepository.GetPublishWorkflowsByDataCollectionAsync(dataEvent.CollectionName, operationStr, projectKey);
+                var publishedWorkflowsId = publishedWorkflows.Select(w => w.ItemId).ToList();
+                var versions = await _workflowVersionRepository.GetWorkflowVersionsAsync(projectKey, publishedWorkflowsId.ToArray());
+                workflows = versions.Select(v => v.Snapshot).Where(s => s != null).ToList()!;
+            }
+
+
 
             _logger.LogInformation("Found {Count} workflows for Collection: {CollectionName}, Operation: {Operation}",
                 workflows.Count, dataEvent.CollectionName, operationStr);
 
-            var triggerData = BuildTriggerData(dataEvent, operationStr);
+
 
             foreach (var workflow in workflows)
             {
-                await QueueDataTriggerExecutionAsync(workflow, dataEvent, operationStr, triggerData, projectKey);
+                var executionMode = isMockedData ? WorkflowExecutionMode.Test : WorkflowExecutionMode.Production;
+                await QueueDataTriggerExecutionAsync(workflow, executionMode, dataEvent, operationStr, triggerData, projectKey);
             }
         }
 
@@ -472,7 +562,7 @@ namespace DomainService.Workflow.Services
         }
 
         private async Task QueueDataTriggerExecutionAsync(
-            WorkflowModel workflow, DataChangeEvent dataEvent, string operationStr,
+            WorkflowModel workflow, WorkflowExecutionMode executionMode, DataChangeEvent dataEvent, string operationStr,
             BsonArray triggerData, string projectKey)
         {
             try
@@ -494,7 +584,8 @@ namespace DomainService.Workflow.Services
                     return;
                 }
 
-                var execution = await CreateExecutionAsync(workflow.ItemId, triggerNode.Id, projectKey);
+
+                var execution = await CreateExecutionAsync(workflow, executionMode);
                 execution.Context["Input"] = triggerData;
                 execution.Status = WorkflowExecutionStatus.Queued;
                 execution.ActiveNodeIds.Add(triggerNode.Id);
@@ -522,7 +613,7 @@ namespace DomainService.Workflow.Services
             }
         }
 
-        #region Helpers
+
 
         private static BsonDocument DictionaryToBsonDocument(Dictionary<string, object?> dict)
         {
@@ -566,6 +657,5 @@ namespace DomainService.Workflow.Services
             return doc;
         }
 
-        #endregion
     }
 }

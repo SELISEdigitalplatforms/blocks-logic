@@ -12,6 +12,7 @@ export const WorkflowEditorEdgeDefault = ({
   markerEnd,
   style,
   sourceHandleId,
+  selected,
 }: EdgeProps) => {
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
@@ -26,7 +27,16 @@ export const WorkflowEditorEdgeDefault = ({
 
   return (
     <>
-      <BaseEdge id={id} path={edgePath} markerEnd={markerEnd} style={style} />
+      <BaseEdge 
+        id={id} 
+        path={edgePath} 
+        markerEnd={markerEnd} 
+        style={{
+          ...style,
+          strokeWidth: style?.strokeWidth || 1,
+          stroke: selected ? "hsl(var(--primary))" : style?.stroke,
+        }} 
+      />
 
       {label && (
         <EdgeLabelRenderer>

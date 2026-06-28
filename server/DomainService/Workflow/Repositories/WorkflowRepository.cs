@@ -39,7 +39,7 @@ namespace DomainService.Workflow.Repositories
             await collection.InsertOneAsync(workflow, null);
         }
 
-        public async Task<long> GetWorkflowsCountAsync(string? search, bool? isActive, string tenantId)
+        public Task<long> GetWorkflowsCountAsync(string? search, bool? isPublished, string tenantId)
         {
             var collection = GetCollection(tenantId);
             var filter = Builders<WorkflowModel>.Filter.Empty;
@@ -47,14 +47,24 @@ namespace DomainService.Workflow.Repositories
             {
                 filter &= Builders<WorkflowModel>.Filter.Regex(w => w.Name, new MongoDB.Bson.BsonRegularExpression(search, "i"));
             }
-            if (isActive.HasValue)
+            if (isPublished.HasValue)
             {
-                filter &= Builders<WorkflowModel>.Filter.Eq(w => w.IsActive, isActive.Value);
+                if (isPublished.Value)
+                {
+                    filter &= Builders<WorkflowModel>.Filter.Eq(w => w.IsPublished, true);
+                }
+                else
+                {
+                    filter &= Builders<WorkflowModel>.Filter.Or(
+                        Builders<WorkflowModel>.Filter.Eq(w => w.IsPublished, false),
+                        Builders<WorkflowModel>.Filter.Exists(w => w.IsPublished, false)
+                    );
+                }
             }
-            return await collection.CountDocumentsAsync(filter);
+            return collection.CountDocumentsAsync(filter);
         }
 
-        public async Task<List<WorkflowModel>> GetAllWorkflowsAsync(int pageSize, int pageNumber, string? search, bool? isActive, string tenantId)
+        public Task<List<WorkflowModel>> GetAllWorkflowsAsync(int pageSize, int pageNumber, string? search, bool? isPublished, string tenantId)
         {
             var collection = GetCollection(tenantId);
             var filter = Builders<WorkflowModel>.Filter.Empty;
@@ -62,15 +72,24 @@ namespace DomainService.Workflow.Repositories
             {
                 filter &= Builders<WorkflowModel>.Filter.Regex(w => w.Name, new MongoDB.Bson.BsonRegularExpression(search, "i"));
             }
-            if (isActive.HasValue)
+            if (isPublished.HasValue)
             {
-                filter &= Builders<WorkflowModel>.Filter.Eq(w => w.IsActive, isActive.Value);
+                if (isPublished.Value)
+                {
+                    filter &= Builders<WorkflowModel>.Filter.Eq(w => w.IsPublished, true);
+                }
+                else
+                {
+                    filter &= Builders<WorkflowModel>.Filter.Or(
+                        Builders<WorkflowModel>.Filter.Eq(w => w.IsPublished, false),
+                        Builders<WorkflowModel>.Filter.Exists(w => w.IsPublished, false)
+                    );
+                }
             }
-            return await collection.Find(filter)
+            return collection.Find(filter)
                 .SortByDescending(x => x.CreatedDate)
                 .Skip(pageNumber * pageSize)
-                .Limit(pageSize)
-                .ToListAsync();
+                .Limit(pageSize).ToListAsync();
         }
 
         public async Task<WorkflowModel> GetWorkflowAsync(string workflowId, string tenantId)
@@ -100,8 +119,25 @@ namespace DomainService.Workflow.Repositories
             );
 
             var filter = Builders<WorkflowModel>.Filter.And(
-                Builders<WorkflowModel>.Filter.Eq(w => w.IsActive, true),
                 Builders<WorkflowModel>.Filter.ElemMatch(w => w.Nodes, nodeFilter)
+            );
+
+            return await collection.Find(filter).ToListAsync();
+        }
+
+        public async Task<List<WorkflowModel>> GetPublishWorkflowsByDataCollectionAsync(string collectionName, string operation, string tenantId)
+        {
+            var collection = GetCollection(tenantId);
+
+            var nodeFilter = Builders<NodeModel>.Filter.And(
+                Builders<NodeModel>.Filter.Eq("Parameters.collectionName", collectionName),
+                Builders<NodeModel>.Filter.Eq("Parameters.operation", operation),
+                Builders<NodeModel>.Filter.Eq("Type", "dataGateway"),
+                Builders<NodeModel>.Filter.Eq("Category", "trigger")
+            );
+
+            var filter = Builders<WorkflowModel>.Filter.And(
+                Builders<WorkflowModel>.Filter.ElemMatch(w => w.PublishedMeta.TriggerNodes, nodeFilter)
             );
 
             return await collection.Find(filter).ToListAsync();
