@@ -3,7 +3,7 @@ using Blocks.Genesis;
 
 namespace DomainService.Workflow.Dtos
 {
-    public class WorkflowPublishRequestDto : IProjectKey
+    public class WorkflowPublishNewVersionRequestDto : IProjectKey
     {
         [Required]
         public required string ProjectKey { get; set; }
