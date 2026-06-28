@@ -180,10 +180,10 @@ namespace DomainService.Workflow.Services
         }
         public async Task<WorkflowGetsResponseDto> GetAllAsync(WorkflowGetsRequestDto dto)
         {
-            _logger.LogInformation($"Fetching workflows. ProjectKey: {dto.ProjectKey}, Page: {dto.PageNumber}, PageSize: {dto.PageSize}, Search: {dto.Search}, IsActive: {dto.IsActive}");
+            _logger.LogInformation($"Fetching workflows. ProjectKey: {dto.ProjectKey}, Page: {dto.PageNumber}, PageSize: {dto.PageSize}, Search: {dto.Search}, IsPublished: {dto.IsPublished}");
 
-            var workflows = await _workflowRepository.GetAllWorkflowsAsync(dto.PageSize, dto.PageNumber, dto.Search, dto.IsActive, dto.ProjectKey);
-            var totalCount = await _workflowRepository.GetWorkflowsCountAsync(dto.Search, dto.IsActive, dto.ProjectKey);
+            var workflows = await _workflowRepository.GetAllWorkflowsAsync(dto.PageSize, dto.PageNumber, dto.Search, dto.IsPublished, dto.ProjectKey);
+            var totalCount = await _workflowRepository.GetWorkflowsCountAsync(dto.Search, dto.IsPublished, dto.ProjectKey);
 
             var workflowDtos = workflows.Select(w => new WorkflowListItemDto
             {
@@ -197,9 +197,10 @@ namespace DomainService.Workflow.Services
                 Language = w.Language,
                 Tags = w.Tags ?? new List<string>(),
                 IsPublished = w.IsPublished,
+                IsDirty = w.IsDirty
             }).ToList();
 
-            _logger.LogInformation("Completed fetching workflows. ProjectKey: {ProjectKey}, Page: {Page}, PageSize: {PageSize}, Search: {Search}, IsActive: {IsActive}", dto.ProjectKey, dto.PageNumber, dto.PageSize, dto.Search, dto.IsActive);
+            _logger.LogInformation("Completed fetching workflows. ProjectKey: {ProjectKey}, Page: {Page}, PageSize: {PageSize}, Search: {Search}, IsPublished: {IsPublished}", dto.ProjectKey, dto.PageNumber, dto.PageSize, dto.Search, dto.IsPublished);
 
             return new WorkflowGetsResponseDto
             {
