@@ -1,11 +1,5 @@
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui-kits/dropdown-menu/dropdown-menu";
 import { Button } from "@/components/ui-kits/button/button";
-import { MoreVertical, X, Loader2, Info } from "lucide-react";
+import { MoreVertical, Loader2, Info } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { useGetWorkflowVersions } from "../../hooks/use-workflow-api";
@@ -70,7 +64,7 @@ export const VersionHistorySidebar = ({ onClose, onSelectVersion, selectedVersio
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 overflow-hidden">
-                  {version.isActive ? (
+                  {version.isPublished ? (
                     <div className="w-2 h-2 rounded-full bg-yellow-500 flex-shrink-0" />
                   ) : (
                     <div className="w-2 h-2 rounded-full border-2 border-muted-foreground flex-shrink-0" />
