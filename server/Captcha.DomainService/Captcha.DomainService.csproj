@@ -14,6 +14,7 @@
 	<PackageReference Include="FluentValidation" />
 	<PackageReference Include="Newtonsoft.Json" />
 	<PackageReference Include="SeliseBlocks.Genesis" />
+	<PackageReference Include="SeliseBlocks.StorageDriver" />
 	<PackageReference Include="SixLabors.Fonts" />
 	<PackageReference Include="SixLabors.ImageSharp" />
 	<PackageReference Include="SixLabors.ImageSharp.Drawing" />
