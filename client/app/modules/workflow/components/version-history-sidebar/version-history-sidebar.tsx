@@ -70,7 +70,7 @@ export const VersionHistorySidebar = ({ onClose, onSelectVersion, selectedVersio
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 overflow-hidden">
-                  {version.isActive ? (
+                  {version.isPublished ? (
                     <div className="w-2 h-2 rounded-full bg-yellow-500 flex-shrink-0" />
                   ) : (
                     <div className="w-2 h-2 rounded-full border-2 border-muted-foreground flex-shrink-0" />
