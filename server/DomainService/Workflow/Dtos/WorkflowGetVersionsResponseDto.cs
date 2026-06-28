@@ -16,6 +16,8 @@ namespace DomainService.Workflow.Dtos
         public required string TenantId { get; set; }
         public required string Name { get; set; }
         public string Description { get; set; } = string.Empty;
+
+        public required bool IsPublished { get; set; }
         public DateTime CreatedDate { get; set; }
         public DateTime LastUpdatedDate { get; set; }
         public string? CreatedBy { get; set; }
