@@ -39,7 +39,7 @@ namespace DomainService.Workflow.Repositories
             await collection.InsertOneAsync(workflow, null);
         }
 
-        public async Task<long> GetWorkflowsCountAsync(string? search, bool? isPublished, string tenantId)
+        public Task<long> GetWorkflowsCountAsync(string? search, bool? isPublished, string tenantId)
         {
             var collection = GetCollection(tenantId);
             var filter = Builders<WorkflowModel>.Filter.Empty;
@@ -49,12 +49,22 @@ namespace DomainService.Workflow.Repositories
             }
             if (isPublished.HasValue)
             {
-                filter &= Builders<WorkflowModel>.Filter.Eq(w => w.IsPublished, isPublished.Value);
+                if (isPublished.Value)
+                {
+                    filter &= Builders<WorkflowModel>.Filter.Eq(w => w.IsPublished, true);
+                }
+                else
+                {
+                    filter &= Builders<WorkflowModel>.Filter.Or(
+                        Builders<WorkflowModel>.Filter.Eq(w => w.IsPublished, false),
+                        Builders<WorkflowModel>.Filter.Exists(w => w.IsPublished, false)
+                    );
+                }
             }
-            return await collection.CountDocumentsAsync(filter);
+            return collection.CountDocumentsAsync(filter);
         }
 
-        public async Task<List<WorkflowModel>> GetAllWorkflowsAsync(int pageSize, int pageNumber, string? search, bool? isPublished, string tenantId)
+        public Task<List<WorkflowModel>> GetAllWorkflowsAsync(int pageSize, int pageNumber, string? search, bool? isPublished, string tenantId)
         {
             var collection = GetCollection(tenantId);
             var filter = Builders<WorkflowModel>.Filter.Empty;
@@ -64,13 +74,22 @@ namespace DomainService.Workflow.Repositories
             }
             if (isPublished.HasValue)
             {
-                filter &= Builders<WorkflowModel>.Filter.Eq(w => w.IsPublished, isPublished.Value);
+                if (isPublished.Value)
+                {
+                    filter &= Builders<WorkflowModel>.Filter.Eq(w => w.IsPublished, true);
+                }
+                else
+                {
+                    filter &= Builders<WorkflowModel>.Filter.Or(
+                        Builders<WorkflowModel>.Filter.Eq(w => w.IsPublished, false),
+                        Builders<WorkflowModel>.Filter.Exists(w => w.IsPublished, false)
+                    );
+                }
             }
-            return await collection.Find(filter)
+            return collection.Find(filter)
                 .SortByDescending(x => x.CreatedDate)
                 .Skip(pageNumber * pageSize)
-                .Limit(pageSize)
-                .ToListAsync();
+                .Limit(pageSize).ToListAsync();
         }
 
         public async Task<WorkflowModel> GetWorkflowAsync(string workflowId, string tenantId)
