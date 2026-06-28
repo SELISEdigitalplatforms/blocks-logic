@@ -54,7 +54,7 @@ export const AddWorkflow = () => {
       if (!res.isSuccess) return showErrorToast({ errors: res.errors });
       showSuccessToast({ description: "Workflow successfully created." });
       form.reset();
-      navigate(`/workflow/${res.itemId}`);
+      navigate(`/app/workflow/${res.itemId}`);
       onOpenChange(false);
     } catch (error) {
       if (isErrorWithErrors(error))
