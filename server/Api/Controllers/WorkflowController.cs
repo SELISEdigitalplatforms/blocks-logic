@@ -81,6 +81,14 @@ namespace Utilities.Api.Controllers
         }
 
         [HttpPost]
+        public async Task<IActionResult> UpdateVersion([FromBody] WorkflowVersionUpdateRequestDto dto)
+        {
+            var result = await _workflowService.UpdateVersionAsync(dto);
+            return Ok(result);
+        }
+
+
+        [HttpPost]
         public async Task<IActionResult> GetVersions([FromBody] WorkflowGetVersionsRequestDto dto)
         {
             var result = await _workflowService.GetVersionsAsync(dto);

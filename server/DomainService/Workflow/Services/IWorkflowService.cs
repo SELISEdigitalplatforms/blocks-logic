@@ -19,7 +19,7 @@ namespace DomainService.Workflow.Services
         Task<BaseMutationResponse> DeleteAsync(WorkflowDeleteRequestDto dto);
 
         Task<BaseMutationResponse> CreateVersionAsync(WorkflowVersionCreateRequestDto dto);
-
+        Task<BaseMutationResponse> UpdateVersionAsync(WorkflowVersionUpdateRequestDto dto);
         Task<WorkflowGetVersionsResponseDto> GetVersionsAsync(WorkflowGetVersionsRequestDto dto);
 
         Task<GetWorkflowByVersionResponseDto> GetWorkflowByVersionAsync(GetWorkflowByVersionRequestDto dto);
