@@ -15,7 +15,7 @@ export const useWorkflow = () => {
   const isPanelOpen = useWorkflowStore((state) => state.isPanelOpen);
   const workflowId = useWorkflowStore((state) => state.workflowId);
   const workflowName = useWorkflowStore((state) => state.workflowName);
-  const isDirty = useWorkflowStore((state) => state.isDirty);
+  const hasUnsavedChanges = useWorkflowStore((state) => state.hasUnsavedChanges);
   const editorMode = useWorkflowStore((state) => state.editorMode);
   const executionMode = useWorkflowStore((state) => state.executionMode);
   
@@ -113,9 +113,9 @@ export const useWorkflow = () => {
     return {
       totalNodes: nodes.length,
       totalEdges: edges.length,
-      hasUnsavedChanges: isDirty,
+      hasUnsavedChanges: hasUnsavedChanges,
     };
-  }, [nodes, edges, isDirty]);
+  }, [nodes, edges, hasUnsavedChanges]);
 
   const onNodeClick = useCallback(
     (event: React.MouseEvent, node: Node) => {
@@ -176,7 +176,7 @@ export const useWorkflow = () => {
     isPanelOpen,
     workflowId,
     workflowName,
-    isDirty,
+    hasUnsavedChanges,
     editorMode,
     executionMode,
 

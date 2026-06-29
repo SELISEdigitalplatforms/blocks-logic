@@ -179,6 +179,7 @@ export const useUpdateWorkflowVersion = () => {
     mutationFn: workflowService.updateWorkflowVersion,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["workflow-versions"] });
+      queryClient.invalidateQueries({ queryKey: ["workflow"] });
     },
   });
 };

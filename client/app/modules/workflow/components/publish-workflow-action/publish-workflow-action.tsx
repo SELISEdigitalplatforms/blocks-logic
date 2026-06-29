@@ -9,7 +9,7 @@ import { Button } from "@/components/ui-kits/button/button";
 import { ChevronDown, Loader2 } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
-import { usePublishNewWorkflow, useUnpublishWorkflow } from "../../hooks/use-workflow-api";
+import { usePublishNewWorkflow, usePublishWorkflow, useUnpublishWorkflow } from "../../hooks/use-workflow-api";
 import { Dialog } from "@/components/ui-kits/dialog/dialog";
 import ConfirmationModal from "@/components/confirmation-modal/confirmation-modal";
 import { PublishWorkflowModal } from "../publish-workflow-modal/publish-workflow-modal";
@@ -31,18 +31,24 @@ export const PublishWorkflowAction = ({
   const projectKey = useProjectStore().selectedProject?.tenantId || "";
   
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
+  const [isPublishConfirmOpen, setIsPublishConfirmOpen] = useState(false);
   const [isUnpublishDialogOpen, setIsUnpublishDialogOpen] = useState(false);
   const [publishVersionName, setPublishVersionName] = useState("");
   const [publishDescription, setPublishDescription] = useState("");
 
-  const { mutateAsync: publishNewWorkflow, isPending: isPublishing } = usePublishNewWorkflow();
+  const { mutateAsync: publishNewWorkflow, isPending: isPublishingNew } = usePublishNewWorkflow();
+  const { mutateAsync: publishWorkflow, isPending: isPublishingUnversioned } = usePublishWorkflow();
   const { mutateAsync: unpublishWorkflow, isPending: isUnpublishing } = useUnpublishWorkflow();
 
   const handleOpenPublishDialog = () => {
-    const id = Math.random().toString(16).substring(2, 10);
-    setPublishVersionName(`Version ${id}`);
-    setPublishDescription("");
-    setIsPublishDialogOpen(true);
+    if (!isPublished && !isDirty) {
+      setIsPublishConfirmOpen(true);
+    } else {
+      const id = Math.random().toString(16).substring(2, 10);
+      setPublishVersionName(`Version ${id}`);
+      setPublishDescription("");
+      setIsPublishDialogOpen(true);
+    }
   };
 
   const handlePublish = async () => {
@@ -61,6 +67,20 @@ export const PublishWorkflowAction = ({
     }
   };
 
+  const handlePublishUnversioned = async () => {
+    if (!workflowId) return;
+    try {
+      await publishWorkflow({ 
+        projectKey, 
+        workflowId 
+      });
+      setIsPublishConfirmOpen(false);
+      onActionComplete?.();
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
   const handleUnpublish = async () => {
     if (!workflowId) return;
     try {
@@ -72,7 +92,7 @@ export const PublishWorkflowAction = ({
     }
   };
 
-  const isPending = isPublishing || isUnpublishing;
+  const isPending = isPublishingNew || isPublishingUnversioned || isUnpublishing;
 
   // console.log(hasUnsavedChanges, isDirty, isPublished);
 
@@ -87,7 +107,7 @@ export const PublishWorkflowAction = ({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={handleOpenPublishDialog} disabled={hasUnsavedChanges && (!isDirty || isPublished)}>
+          <DropdownMenuItem onClick={handleOpenPublishDialog} disabled={hasUnsavedChanges && (isPublished || !isDirty)}>
             Publish
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setIsUnpublishDialogOpen(true)} disabled={!isPublished}>
@@ -104,8 +124,21 @@ export const PublishWorkflowAction = ({
         publishDescription={publishDescription}
         setPublishDescription={setPublishDescription}
         onPublish={handlePublish}
-        isPublishing={isPublishing}
+        isPublishing={isPublishingNew}
       />
+
+      <Dialog open={isPublishConfirmOpen} onOpenChange={setIsPublishConfirmOpen}>
+        <ConfirmationModal
+          data={{
+            dialogTitle: "Publish workflow",
+            dialogSubtitle: "Are you sure you want to publish this workflow?",
+            confirmButton: "Publish",
+          }}
+          onConfirm={handlePublishUnversioned}
+          onCancel={() => setIsPublishConfirmOpen(false)}
+          buttonState={{ confirm: { disable: isPublishingUnversioned } }}
+        />
+      </Dialog>
 
       <Dialog open={isUnpublishDialogOpen} onOpenChange={setIsUnpublishDialogOpen}>
         <ConfirmationModal
