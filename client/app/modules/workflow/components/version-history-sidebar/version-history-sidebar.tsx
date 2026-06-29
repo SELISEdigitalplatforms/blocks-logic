@@ -69,7 +69,8 @@ export const VersionHistorySidebar = ({ onClose, onSelectVersion, selectedVersio
                   ) : (
                     <div className="w-2 h-2 rounded-full border-2 border-muted-foreground flex-shrink-0" />
                   )}
-                  <span className="font-medium text-sm truncate">{version.name || "Unnamed Version"}{version.isPublished && " (Published)"}</span>
+                  <span className="font-medium text-sm truncate">{version.name || "Unnamed Version"}</span>
+                  <span className="font-medium text-sm">{version.isPublished && " (Published)"}</span>
 
                 </div>
                 <WorkflowVersionActionDropdown version={version}>
