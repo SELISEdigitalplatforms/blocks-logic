@@ -419,5 +419,31 @@ namespace DomainService.Workflow.Services
             await _workflowExecutionRepository.AtomicCompleteNodeAsync(
                 execution.Id, execution.TenantId, nodeExecution.NodeId, new List<string>());
         }
+
+        public async Task<WorkflowExecutionModel?> ExecuteStepNodeAsync(string executionId, string targetNodeId, string? sourceExecutionId = null)
+        {
+            var execution = await _workflowExecutionRepository.GetByIdAsync(executionId, sourceExecutionId ?? "");
+            var workflow = execution?.WorkflowSnapshot;
+            // find tropological order of nodes to execute from targetNodeId to all downstream nodes
+
+
+
+        }
+
+        private List<NodeModel> GetAncestorNodesAsync(WorkflowModel workflow, string nodeId)
+        {
+            var ancestors = new List<NodeModel>();
+            var incomingEdges = workflow.Edges.Where(e => e.Target == nodeId).ToList();
+            foreach (var edge in incomingEdges)
+            {
+                var node = workflow.Nodes.FirstOrDefault(n => n.Id == edge.Source);
+                if (node != null)
+                {
+                    ancestors.Add(node);
+                    ancestors.AddRange(GetAncestorNodesAsync(workflow, node.Id));
+                }
+            }
+            return ancestors;
+        }
     }
 }
