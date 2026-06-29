@@ -10,8 +10,7 @@ import { ChevronDown, Loader2 } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { usePublishNewWorkflow, usePublishWorkflow, useUnpublishWorkflow } from "../../hooks/use-workflow-api";
-import { Dialog } from "@/components/ui-kits/dialog/dialog";
-import ConfirmationModal from "@/components/confirmation-modal/confirmation-modal";
+import { PublishConfirmationModal, UnpublishConfirmationModal } from "../workflow-confirmation-modals";
 import { PublishWorkflowModal } from "../publish-workflow-modal/publish-workflow-modal";
 
 interface PublishWorkflowActionProps {
@@ -127,31 +126,19 @@ export const PublishWorkflowAction = ({
         isPublishing={isPublishingNew}
       />
 
-      <Dialog open={isPublishConfirmOpen} onOpenChange={setIsPublishConfirmOpen}>
-        <ConfirmationModal
-          data={{
-            dialogTitle: "Publish workflow",
-            dialogSubtitle: "Are you sure you want to publish this workflow?",
-            confirmButton: "Publish",
-          }}
-          onConfirm={handlePublishUnversioned}
-          onCancel={() => setIsPublishConfirmOpen(false)}
-          buttonState={{ confirm: { disable: isPublishingUnversioned } }}
-        />
-      </Dialog>
+      <PublishConfirmationModal
+        open={isPublishConfirmOpen}
+        onOpenChange={setIsPublishConfirmOpen}
+        onConfirm={handlePublishUnversioned}
+        isPending={isPublishingUnversioned}
+      />
 
-      <Dialog open={isUnpublishDialogOpen} onOpenChange={setIsUnpublishDialogOpen}>
-        <ConfirmationModal
-          data={{
-            dialogTitle: "Unpublish workflow",
-            dialogSubtitle: "Are you sure you want to unpublish this workflow? It will no longer be available for execution.",
-            confirmButton: "Unpublish",
-          }}
-          onConfirm={handleUnpublish}
-          onCancel={() => setIsUnpublishDialogOpen(false)}
-          buttonState={{ confirm: { disable: isUnpublishing } }}
-        />
-      </Dialog>
+      <UnpublishConfirmationModal
+        open={isUnpublishDialogOpen}
+        onOpenChange={setIsUnpublishDialogOpen}
+        onConfirm={handleUnpublish}
+        isPending={isUnpublishing}
+      />
     </>
   );
 };

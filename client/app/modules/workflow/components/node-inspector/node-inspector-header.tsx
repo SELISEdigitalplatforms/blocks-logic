@@ -5,6 +5,7 @@ import { Eye, Pen, Rocket, X } from "lucide-react";
 import { getNodeDefinition } from "../node-library-panel";
 import { useEffect, useState } from "react";
 import { showErrorToast } from "@/hooks/use-toast";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@radix-ui/react-tooltip";
 
 export const NodeInspectorHeader = () => {
   const { selectedNode, updateNode, isNodeNameUnique, closeConfigModal, editorMode } = useWorkflow();
@@ -58,7 +59,8 @@ export const NodeInspectorHeader = () => {
             <input
               autoFocus
               maxLength={80}
-              className="mt-2 min-w-24 max-w-50 bg-accent border-b border-primary px-2 py-1 text-center text-sm outline-none"
+              // className="mt-2 min-w-24 max-w-50 bg-accent border-b border-primary px-2 py-1 text-center text-sm outline-none"
+              className="left-1/2 min-w-32 rounded border border-primary bg-background px-2 py-1 text-md outline-none"
               value={editName}
               onChange={(e) => setEditName(e.target.value)}
               onBlur={handleRenameSubmit}
@@ -69,7 +71,14 @@ export const NodeInspectorHeader = () => {
             <span className="font-semibold">{selectedNode?.name}</span>
           )}
           {!isRenaming && editorMode === "editor" && (<Button variant="ghost" size="icon" className="h-fit w-fit p-1" onClick={() => setIsRenaming(true)}>
-            <Pen className="size-4 cursor-pointer" />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Pen className="size-4 cursor-pointer" />
+              </TooltipTrigger>
+            <TooltipContent>
+              <p className="border border-border rounded-md px-2 py-1 font-normal">Rename Node</p>
+            </TooltipContent>
+            </Tooltip>
           </Button>)}
           
         </SheetTitle>

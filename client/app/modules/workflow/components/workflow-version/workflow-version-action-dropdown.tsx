@@ -12,8 +12,7 @@ import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { usePublishWorkflow, useUnpublishWorkflow, useRestoreWorkflow, useUpdateWorkflowVersion } from "../../hooks/use-workflow-api";
 import { WorkflowVersion } from "../../models/workflow.model";
 import { PublishWorkflowModal } from "../publish-workflow-modal/publish-workflow-modal";
-import { Dialog } from "@/components/ui-kits/dialog/dialog";
-import ConfirmationModal from "@/components/confirmation-modal/confirmation-modal";
+import { PublishConfirmationModal, UnpublishConfirmationModal } from "../workflow-confirmation-modals";
 
 interface WorkflowVersionActionDropdownProps {
   version: WorkflowVersion;
@@ -124,31 +123,21 @@ export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVer
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <Dialog open={isPublishModalOpen} onOpenChange={setIsPublishModalOpen}>
-        <ConfirmationModal
-          data={{
-            dialogTitle: "Publish version",
-            dialogSubtitle: "Are you sure you want to publish this version?",
-            confirmButton: "Publish",
-          }}
-          onConfirm={handlePublishSubmit}
-          onCancel={() => setIsPublishModalOpen(false)}
-          buttonState={{ confirm: { disable: publishWorkflow.isPending } }}
-        />
-      </Dialog>
+      <PublishConfirmationModal
+        open={isPublishModalOpen}
+        onOpenChange={setIsPublishModalOpen}
+        onConfirm={handlePublishSubmit}
+        isPending={publishWorkflow.isPending}
+        isVersion={true}
+      />
       
-      <Dialog open={isUnpublishModalOpen} onOpenChange={setIsUnpublishModalOpen}>
-        <ConfirmationModal
-          data={{
-            dialogTitle: "Unpublish version",
-            dialogSubtitle: "Are you sure you want to unpublish this version? It will no longer be available for execution.",
-            confirmButton: "Unpublish",
-          }}
-          onConfirm={handleUnpublishSubmit}
-          onCancel={() => setIsUnpublishModalOpen(false)}
-          buttonState={{ confirm: { disable: unpublishWorkflow.isPending } }}
-        />
-      </Dialog>
+      <UnpublishConfirmationModal
+        open={isUnpublishModalOpen}
+        onOpenChange={setIsUnpublishModalOpen}
+        onConfirm={handleUnpublishSubmit}
+        isPending={unpublishWorkflow.isPending}
+        isVersion={true}
+      />
 
       <PublishWorkflowModal
         open={isEditModalOpen}

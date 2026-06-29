@@ -38,8 +38,7 @@ import { DuplicateWorkflow } from "../duplicate-workflow";
 import { Link, useNavigate } from "react-router-dom";
 import { usePublishNewWorkflow, usePublishWorkflow, useUnpublishWorkflow } from "../../hooks/use-workflow-api";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
-import { Dialog } from "@/components/ui-kits/dialog/dialog";
-import ConfirmationModal from "@/components/confirmation-modal/confirmation-modal";
+import { PublishConfirmationModal, UnpublishConfirmationModal } from "../workflow-confirmation-modals";
 import { PublishWorkflowModal } from "../publish-workflow-modal/publish-workflow-modal";
 
 
@@ -228,7 +227,7 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
                   <span>Duplicate</span>
                 </DropdownMenuItem>
 
-                <DropdownMenuItem
+                {!(info.row.original.isPublished) && (<DropdownMenuItem
                   className="cursor-pointer"
                   disabled={info.row.original.isPublished || !info.row.original.isDirty}
                   onClick={(e) => {
@@ -251,9 +250,9 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
                 >
                   <Check className="mr-2 h-4 w-4" />
                   <span>Publish</span>
-                </DropdownMenuItem>
+                </DropdownMenuItem>)}
 
-                <DropdownMenuItem
+                {info.row.original.isPublished && (<DropdownMenuItem
                   className="cursor-pointer"
                   disabled={!info.row.original.isPublished}
                   onClick={(e) => {
@@ -266,7 +265,7 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
                 >
                   <Ban className="mr-2 h-4 w-4" />
                   <span>Unpublish</span>
-                </DropdownMenuItem>
+                </DropdownMenuItem>)}
 
                 <DropdownMenuItem
                   className="cursor-pointer text-error"
@@ -375,40 +374,22 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
         onPublish={handlePublishNew}
         isPublishing={isPublishingNew}
       />
-      <Dialog 
-        open={modal.type === "publish"} 
+      <PublishConfirmationModal
+        open={modal.type === "publish"}
         onOpenChange={(open) => {
           if (!open) setModal({ type: null, data: {} });
         }}
-      >
-        <ConfirmationModal
-          data={{
-            dialogTitle: "Publish workflow",
-            dialogSubtitle: "Are you sure you want to publish this workflow?",
-            confirmButton: "Publish",
-          }}
-          onConfirm={handlePublishUnversioned}
-          onCancel={() => setModal({ type: null, data: {} })}
-          buttonState={{ confirm: { disable: isPublishingUnversioned } }}
-        />
-      </Dialog>
-      <Dialog 
-        open={modal.type === "unpublish"} 
+        onConfirm={handlePublishUnversioned}
+        isPending={isPublishingUnversioned}
+      />
+      <UnpublishConfirmationModal
+        open={modal.type === "unpublish"}
         onOpenChange={(open) => {
           if (!open) setModal({ type: null, data: {} });
         }}
-      >
-        <ConfirmationModal
-          data={{
-            dialogTitle: "Unpublish workflow",
-            dialogSubtitle: "Are you sure you want to unpublish this workflow? It will no longer be available for execution.",
-            confirmButton: "Unpublish",
-          }}
-          onConfirm={handleUnpublish}
-          onCancel={() => setModal({ type: null, data: {} })}
-          buttonState={{ confirm: { disable: isUnpublishing } }}
-        />
-      </Dialog>
+        onConfirm={handleUnpublish}
+        isPending={isUnpublishing}
+      />
       <DuplicateWorkflow
         open={modal.type === "duplicate"}
         onOpenChange={(value) => {
