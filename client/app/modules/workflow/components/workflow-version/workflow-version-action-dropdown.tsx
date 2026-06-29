@@ -9,9 +9,11 @@ import {
 } from "@/components/ui-kits/dropdown-menu/dropdown-menu";
 import { useParams } from "react-router-dom";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
-import { usePublishWorkflow, useRestoreWorkflow, useUpdateWorkflowVersion } from "../../hooks/use-workflow-api";
+import { usePublishWorkflow, useUnpublishWorkflow, useRestoreWorkflow, useUpdateWorkflowVersion } from "../../hooks/use-workflow-api";
 import { WorkflowVersion } from "../../models/workflow.model";
 import { PublishWorkflowModal } from "../publish-workflow-modal/publish-workflow-modal";
+import { Dialog } from "@/components/ui-kits/dialog/dialog";
+import ConfirmationModal from "@/components/confirmation-modal/confirmation-modal";
 
 interface WorkflowVersionActionDropdownProps {
   version: WorkflowVersion;
@@ -22,21 +24,22 @@ export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVer
   const { id: workflowId } = useParams<{ id: string }>();
   const projectKey = useProjectStore().selectedProject?.tenantId || "";
   const publishWorkflow = usePublishWorkflow();
+  const unpublishWorkflow = useUnpublishWorkflow();
   const restoreWorkflow = useRestoreWorkflow();
   const updateWorkflowVersion = useUpdateWorkflowVersion();
 
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
-  const [publishVersionName, setPublishVersionName] = useState("");
-  const [publishDescription, setPublishDescription] = useState("");
-
+  const [isUnpublishModalOpen, setIsUnpublishModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editVersionName, setEditVersionName] = useState("");
   const [editDescription, setEditDescription] = useState("");
 
   const handleOpenPublishModal = () => {
-    setPublishVersionName(version.name || "");
-    setPublishDescription(version.description || "");
     setIsPublishModalOpen(true);
+  };
+
+  const handleOpenUnpublishModal = () => {
+    setIsUnpublishModalOpen(true);
   };
 
   const handleOpenEditModal = () => {
@@ -53,6 +56,18 @@ export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVer
         versionId: version.itemId,
       });
       setIsPublishModalOpen(false);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleUnpublishSubmit = async () => {
+    try {
+      await unpublishWorkflow.mutateAsync({
+        workflowId: workflowId || "",
+        projectKey,
+      });
+      setIsUnpublishModalOpen(false);
     } catch (error) {
       console.error(error);
     }
@@ -95,23 +110,45 @@ export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVer
             e.stopPropagation();
             handleRestore();
           }}>Restore version</DropdownMenuItem>
-          <DropdownMenuItem onClick={(e) => {
+          {!version.isPublished && (<DropdownMenuItem onClick={(e) => {
             e.stopPropagation();
             handleOpenPublishModal();
-          }}>Publish version</DropdownMenuItem>
+          }}>Publish version</DropdownMenuItem>)}
+          {version.isPublished && (<DropdownMenuItem onClick={(e) => {
+            e.stopPropagation();
+            unpublishWorkflow.mutateAsync({
+              workflowId: workflowId || "",
+              projectKey,
+            });
+          }}>Unpublish version</DropdownMenuItem>)}
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <PublishWorkflowModal
-        open={isPublishModalOpen}
-        onOpenChange={setIsPublishModalOpen}
-        publishVersionName={publishVersionName}
-        setPublishVersionName={setPublishVersionName}
-        publishDescription={publishDescription}
-        setPublishDescription={setPublishDescription}
-        onPublish={handlePublishSubmit}
-        isPublishing={publishWorkflow.isPending}
-      />
+      <Dialog open={isPublishModalOpen} onOpenChange={setIsPublishModalOpen}>
+        <ConfirmationModal
+          data={{
+            dialogTitle: "Publish version",
+            dialogSubtitle: "Are you sure you want to publish this version?",
+            confirmButton: "Publish",
+          }}
+          onConfirm={handlePublishSubmit}
+          onCancel={() => setIsPublishModalOpen(false)}
+          buttonState={{ confirm: { disable: publishWorkflow.isPending } }}
+        />
+      </Dialog>
+      
+      <Dialog open={isUnpublishModalOpen} onOpenChange={setIsUnpublishModalOpen}>
+        <ConfirmationModal
+          data={{
+            dialogTitle: "Unpublish version",
+            dialogSubtitle: "Are you sure you want to unpublish this version? It will no longer be available for execution.",
+            confirmButton: "Unpublish",
+          }}
+          onConfirm={handleUnpublishSubmit}
+          onCancel={() => setIsUnpublishModalOpen(false)}
+          buttonState={{ confirm: { disable: unpublishWorkflow.isPending } }}
+        />
+      </Dialog>
 
       <PublishWorkflowModal
         open={isEditModalOpen}
