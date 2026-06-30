@@ -680,16 +680,12 @@ namespace DomainService.Workflow.Services
 
             var execution = await CreateExecutionAsync(workflow, WorkflowExecutionMode.Test);
             execution.Status = WorkflowExecutionStatus.Queued;
-            var result = await _workflowEngineService.ExecuteStepNodeAsync(execution.Id, dto.NodeId, dto.SourceExecutionId);
+            var result = await _workflowEngineService.ExecuteStepNodeAsync(dto.ProjectKey, execution.Id, dto.NodeId, dto.SourceExecutionId);
             return new StepExecuteResponseDto
             {
                 IsSuccess = true,
-
+                ItemId = result.Id,
             };
-
-
-
-            // find the 
 
         }
     }
