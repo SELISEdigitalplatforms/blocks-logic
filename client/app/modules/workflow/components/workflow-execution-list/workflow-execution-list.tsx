@@ -87,11 +87,13 @@ export const WorkflowExecutionList = ({
                     <StatusIcon className={cn(statusConfig.iconClass, statusConfig.textClass)} />
                   </div>
                 </div>
-                <div className="pl-6">
-                  <span className="text-xs text-muted-foreground">
-                    Completed in {duration} seconds
-                  </span>
-                </div>
+                {(execution.status === WorkflowExecutionStatus.Completed || 
+                  execution.status === WorkflowExecutionStatus.Failed) && (
+                  <div className="pl-6">
+                    <span className="text-xs text-muted-foreground">
+                      Completed in {duration} seconds
+                    </span>
+                </div>)}
               </div>
 
               {(execution.status === WorkflowExecutionStatus.Running ||
