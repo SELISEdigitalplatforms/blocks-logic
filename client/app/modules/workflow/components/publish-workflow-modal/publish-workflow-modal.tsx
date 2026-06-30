@@ -20,6 +20,7 @@ interface PublishWorkflowModalProps {
   setPublishDescription: (desc: string) => void;
   onPublish: () => void;
   isPublishing: boolean;
+  mode?: "publish" | "edit";
 }
 
 export const PublishWorkflowModal = ({
@@ -31,12 +32,13 @@ export const PublishWorkflowModal = ({
   setPublishDescription,
   onPublish,
   isPublishing,
+  mode = "publish",
 }: PublishWorkflowModalProps) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Publish workflow</DialogTitle>
+          <DialogTitle>{mode === "publish" ? "Publish workflow" : "Edit version details"}</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
@@ -70,7 +72,7 @@ export const PublishWorkflowModal = ({
             disabled={!publishVersionName.trim() || isPublishing}
           >
             {isPublishing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            Publish
+            {mode === "publish" ? "Publish" : "Save changes"}
           </Button>
         </DialogFooter>
       </DialogContent>

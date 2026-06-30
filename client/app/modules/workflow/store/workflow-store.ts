@@ -23,7 +23,7 @@ export type WorkflowState = {
   workflowId: string | null;
   workflowName: string;
   isPublished: boolean;
-  isDirty: boolean;
+  hasUnsavedChanges: boolean;
   executedItems: ExecutedItem[];
 
   executedNodes: ExecutedNode[];
@@ -81,6 +81,12 @@ export type WorkflowState = {
   // Utility methods
   getNodeById: (nodeId: string) => EditorNode | undefined;
   getEdgeById: (edgeId: string) => Edge | undefined;
+
+  // Editor mode
+  editorMode: "editor" | "execution" | "version";
+  executionMode: number | null;
+  setEditorMode: (mode: "editor" | "execution" | "version") => void;
+  setExecutionMode: (mode: number | null) => void;
 };
 
 export const createWorkflowStore = () => createStore<WorkflowState>((set, get) => ({
@@ -98,9 +104,14 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
   workflowId: null,
   workflowName: "",
   isPublished: false,
-  isDirty: false,
+  hasUnsavedChanges: false,
   executedItems: [],
   executedNodes: [],
+  editorMode: "editor",
+  executionMode: null,
+
+  setEditorMode: (mode) => set({ editorMode: mode }),
+  setExecutionMode: (mode) => set({ executionMode: mode }),
 
   // React Flow handlers
   onNodesChange: (changes) => {
@@ -119,7 +130,7 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
     const stateUpdate: Partial<WorkflowState> = { nodesMap };
     
     if (shouldDirty) {
-      stateUpdate.isDirty = true;
+      stateUpdate.hasUnsavedChanges = true;
     }
 
     const selectedNodeId = get().selectedNode?.id;
@@ -184,7 +195,7 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
     );
     set({
       edgesMap,
-      ...(shouldDirty && { isDirty: true }),
+      ...(shouldDirty && { hasUnsavedChanges: true }),
     });
   },
 
@@ -200,7 +211,7 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
     );
     set({
       edgesMap,
-      isDirty: true,
+      hasUnsavedChanges: true,
     });
   },
 
@@ -218,7 +229,7 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
     const nodeWithUniqueName = { ...node, name: uniqueName };
     set({
       nodesMap: { ...nodesMap, [node.id]: nodeWithUniqueName },
-      isDirty: true,
+      hasUnsavedChanges: true,
     });
   },
 
@@ -230,7 +241,7 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
     set({
       nodesMap: { ...nodesMap, [nodeId]: updatedNode },
       selectedNode: selectedNode?.id === nodeId ? updatedNode : selectedNode,
-      isDirty: true,
+      hasUnsavedChanges: true,
     });
   },
 
@@ -248,7 +259,7 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
     set({
       nodesMap: remainingNodes,
       edgesMap: remainingEdges,
-      isDirty: true,
+      hasUnsavedChanges: true,
     });
   },
 
@@ -279,7 +290,7 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
 
     set({
       nodesMap: { ...nodesMap, [newId]: newNode },
-      isDirty: true,
+      hasUnsavedChanges: true,
     });
   },
 
@@ -373,7 +384,7 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
     set({
       nodesMap: newNodesMap,
       edgesMap: newEdgesMap,
-      isDirty: true,
+      hasUnsavedChanges: true,
     });
   },
 
@@ -392,7 +403,7 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
 
     set({
       edgesMap: { ...edgesMap, [newEdge.id]: newEdge },
-      isDirty: true,
+      hasUnsavedChanges: true,
     });
   },
 
@@ -403,7 +414,7 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
 
     set({
       edgesMap: remainingEdges,
-      isDirty: true,
+      hasUnsavedChanges: true,
     });
   },
 
@@ -473,14 +484,14 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
       workflowId: workflow.itemId || null,
       workflowName: workflow.name || "",
       isPublished: workflow.isPublished || false,
-      isDirty: false,
+      hasUnsavedChanges: false,
       executedItems,
       executedNodes,
     });
   },
 
   // setWorkflowActive: (isActive: boolean) => {
-  //   set({ isActive, isDirty: true });
+  //   set({ isActive, hasUnsavedChanges: true });
   // },
 
   resetWorkflow: () => {
@@ -493,7 +504,7 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
       workflowId: null,
       workflowName: "",
       isPublished: false,
-      isDirty: false,
+      hasUnsavedChanges: false,
       executedItems: [],
       executedNodes: [],
     });
@@ -504,7 +515,7 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
     const newNodesMap = getLayoutedElements(nodesMap, edgesMap);
     set({
       nodesMap: newNodesMap,
-      isDirty: true,
+      hasUnsavedChanges: true,
     });
   },
 
