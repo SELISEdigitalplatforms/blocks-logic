@@ -189,6 +189,14 @@ namespace Utilities.Api.Controllers
 
         }
 
+        [HttpPost]
+        public async Task<IActionResult> StepExecute([FromBody] StepExecuteRequestDto dto)
+        {
+            var executions = await _workflowExecutionService.StepExecuteAsync(dto);
+            return Ok(executions);
+        }
+
+
         [HttpGet]
         public async Task<IActionResult> GetExecutions([FromQuery] WorkflowExecutionsGetRequestDto dto)
         {
