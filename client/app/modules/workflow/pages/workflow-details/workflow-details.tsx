@@ -75,7 +75,7 @@ export const WorkflowDetailsContent = ({
         </div>
         {!isLoading && isFetchedAfterMount && data?.data?.isDirty && (
           <div className="rounded-lg mx-4 mt-4 bg-yellow-50 border border-yellow-500 text-yellow-700 dark:bg-yellow-950/60 dark:text-yellow-300 dark:border dark:border-yellow-700 p-2.5">
-            <div className="flex items-center justify-center gap-3">
+            <div className="flex items-center gap-3">
               <AlertCircle className="h-5 w-5 text-amber-500" />
               <p className="text-sm font-medium">You have unadapted changes. Please click on the Publish button to adapt them.</p>
             </div>
