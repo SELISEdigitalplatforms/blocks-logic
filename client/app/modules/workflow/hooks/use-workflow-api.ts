@@ -134,6 +134,18 @@ export const usePublishWorkflow = () => {
     },
   });
 };
+export const usePublishNewWorkflow = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: ["workflow", "publish"],
+    mutationFn: workflowService.publishWorkflowNewVersion,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["workflows"] });
+      queryClient.invalidateQueries({ queryKey: ["workflow"] });
+      queryClient.invalidateQueries({ queryKey: ["workflow-versions"] });
+    },
+  });
+};
 
 export const useUnpublishWorkflow = () => {
   const queryClient = useQueryClient();
@@ -156,6 +168,18 @@ export const useRestoreWorkflow = () => {
       queryClient.invalidateQueries({ queryKey: ["workflows"] });
       queryClient.invalidateQueries({ queryKey: ["workflow"] });
       queryClient.invalidateQueries({ queryKey: ["workflow-versions"] });
+    },
+  });
+};
+
+export const useUpdateWorkflowVersion = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: ["workflow-version", "update"],
+    mutationFn: workflowService.updateWorkflowVersion,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["workflow-versions"] });
+      queryClient.invalidateQueries({ queryKey: ["workflow"] });
     },
   });
 };

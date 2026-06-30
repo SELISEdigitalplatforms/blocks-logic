@@ -35,7 +35,7 @@ export const WorkflowDetailsContent = ({
   const projectKey = useProjectStore().selectedProject?.tenantId || "";
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<string>("editor");
-  const { isDirty, setWorkflow } = useWorkflow();
+  const { hasUnsavedChanges, setWorkflow } = useWorkflow();
   const { data, isLoading, isFetched, isFetching, isFetchedAfterMount, refetch } =
     useGetWorkflowById({
       id: workflowId,
@@ -74,8 +74,8 @@ export const WorkflowDetailsContent = ({
           <PageBreadcrumb />
         </div>
         {!isLoading && isFetchedAfterMount && data?.data?.isDirty && (
-          <div className="rounded-lg mx-4 my-2 bg-yellow-50 border border-yellow-500 text-yellow-700 dark:bg-yellow-950/60 dark:text-yellow-300 dark:border dark:border-yellow-700 p-3">
-            <div className="flex items-center gap-3">
+          <div className="rounded-lg mx-4 mt-4 bg-yellow-50 border border-yellow-500 text-yellow-700 dark:bg-yellow-950/60 dark:text-yellow-300 dark:border dark:border-yellow-700 p-2.5">
+            <div className="flex items-center justify-center gap-3">
               <AlertCircle className="h-5 w-5 text-amber-500" />
               <p className="text-sm font-medium">You have unadapted changes. Please click on the Publish button to adapt them.</p>
             </div>
@@ -100,7 +100,7 @@ export const WorkflowDetailsContent = ({
                 <TabsTrigger value="versions">Versions</TabsTrigger>
               </TabsList>
 
-              <div className="flex items-center gap-4">
+              {activeTab==="editor" && (<div className="flex items-center gap-4">
                 <div className={`text-sm font-medium ${data?.data?.isPublished ? "text-green-500" : "text-yellow-500"}`}>
                   {data?.data?.isPublished ? "Published" : "Unpublished"}
                 </div>
@@ -120,7 +120,7 @@ export const WorkflowDetailsContent = ({
                     "Not saved yet"
                   )}
                 </div>
-                {isDirty && !isSaving && (
+                {hasUnsavedChanges && !isSaving && (
                   <span className="text-xs text-orange-500">
                     Unsaved changes
                   </span>
@@ -132,7 +132,7 @@ export const WorkflowDetailsContent = ({
                 <div className="flex items-center gap-2">
                   <PublishWorkflowAction 
                     isDirty={data?.data?.isDirty} 
-                    hasUnsavedChanges={isDirty}
+                    hasUnsavedChanges={hasUnsavedChanges}
                     isPublished={data?.data?.isPublished} 
                     onActionComplete={() => refetch()} 
                   />
@@ -148,7 +148,7 @@ export const WorkflowDetailsContent = ({
                 <Button
                   size="sm"
                   onClick={handleManualSave}
-                  disabled={isSaving || !isDirty}
+                  disabled={isSaving || !hasUnsavedChanges}
                   className="gap-2"
                 >
                   {isSaving ? (
@@ -158,7 +158,7 @@ export const WorkflowDetailsContent = ({
                   )}
                   Save
                 </Button>
-              </div>
+              </div>)}
             </div>
 
             <TabsContent value="editor" className="flex-1 overflow-hidden">

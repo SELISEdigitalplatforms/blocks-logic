@@ -11,7 +11,7 @@ namespace DomainService.Workflow.Dtos
         [Required]
         public required string WorkflowId { get; set; }
 
-        public required string VersionId { get; set; }
+        public string? VersionId { get; set; }
 
 
     }
