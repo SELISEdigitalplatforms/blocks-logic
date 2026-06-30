@@ -91,6 +91,24 @@ namespace DomainService.Workflow.Repositories
         }
 
         /// <summary>
+        /// Atomically clears ActiveNodeIds and marks the execution as Completed with FinishedAt=now.
+        /// Used by step-mode execution to guarantee a clean end state after the target node runs,
+        /// regardless of whether step-mode left downstream node IDs in ActiveNodeIds (non-leaf targets).
+        /// Idempotent: safe to call when the execution has already been auto-finalized by AtomicCompleteNodeAsync.
+        /// </summary>
+        public async Task AtomicFinalizeExecutionAsync(string executionId, string tenantId)
+        {
+            var collection = GetCollection(tenantId);
+            var filter = Builders<WorkflowExecutionModel>.Filter.Eq(e => e.Id, executionId);
+            var update = Builders<WorkflowExecutionModel>.Update
+                .Set(e => e.ActiveNodeIds, new List<string>())
+                .Set(e => e.Status, WorkflowExecutionStatus.Completed)
+                .Set(e => e.FinishedAt, DateTime.UtcNow);
+
+            await collection.UpdateOneAsync(filter, update);
+        }
+
+        /// <summary>
         /// Atomically pushes a new NodeExecution to the NodeExecutions array and sets Status=Running.
         /// Prevents concurrent ReplaceOneAsync from overwriting other nodes' executions.
         /// </summary>
