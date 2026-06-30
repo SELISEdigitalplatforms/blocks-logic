@@ -12,6 +12,7 @@ public class NodeModel
     public required Position Position { get; set; }
     public BsonDocument Parameters { get; set; } = new BsonDocument();
     public BsonDocument Settings { get; set; } = new BsonDocument();
+    public BsonArray? PinData { get; set; }
 }
 
 public class Position
