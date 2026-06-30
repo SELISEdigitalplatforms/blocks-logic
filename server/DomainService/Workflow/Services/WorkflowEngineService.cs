@@ -7,6 +7,7 @@ using DomainService.Workflow.Utils;
 using Microsoft.Extensions.Logging;
 using DomainService.Workflow.Nodes;
 using MongoDB.Bson;
+using MongoDB.Bson.Serialization;
 using System.Diagnostics.CodeAnalysis;
 
 namespace DomainService.Workflow.Services
@@ -421,22 +422,32 @@ namespace DomainService.Workflow.Services
                 execution.Id, execution.TenantId, nodeExecution.NodeId, new List<string>());
         }
 
-        public async Task<WorkflowExecutionModel?> ExecuteStepNodeAsync(string executionId, string targetNodeId, string? sourceExecutionId = null)
+        public async Task<WorkflowExecutionModel?> ExecuteStepNodeAsync(string tenantId, string executionId, string targetNodeId, string? sourceExecutionId = null)
         {
-            var execution = await _workflowExecutionRepository.GetByIdAsync(executionId, sourceExecutionId ?? "");
+            var execution = await _workflowExecutionRepository.GetByIdAsync(executionId, tenantId);
             if (execution == null || execution.WorkflowSnapshot == null) return execution;
 
             var workflow = execution.WorkflowSnapshot;
             var targetNode = workflow.Nodes.FirstOrDefault(n => n.Id == targetNodeId);
             if (targetNode == null) return execution;
 
+            WorkflowExecutionModel? sourceExecution = null;
+            if (!string.IsNullOrEmpty(sourceExecutionId))
+            {
+                sourceExecution = await _workflowExecutionRepository.GetByIdAsync(sourceExecutionId, tenantId);
+                if (sourceExecution != null && sourceExecution.TenantId != execution.TenantId) sourceExecution = null;
+                if (sourceExecution != null && sourceExecution.Status != WorkflowExecutionStatus.Completed) sourceExecution = null;
+            }
+
             var ordered = GetTopologicalAncestorsAndTarget(workflow, targetNodeId).ToList();
+            var remap = new Dictionary<string, string>();
 
             var noopDispatch = new Func<List<AddExcuationNodeEvent>, Task>(_ => Task.CompletedTask);
 
             for (int i = 0; i < ordered.Count; i++)
             {
                 var node = ordered[i];
+                var sourceNodeExecution = sourceExecution?.NodeExecutions.FirstOrDefault(ne => ne.NodeId == node.Id);
 
                 if (execution.Status == WorkflowExecutionStatus.Failed) return execution;
 
@@ -447,11 +458,16 @@ namespace DomainService.Workflow.Services
                     continue;
                 }
 
-                if (!string.IsNullOrEmpty(sourceExecutionId))
+                if (node.Id != targetNodeId
+                    && sourceExecution != null
+                    && sourceNodeExecution != null
+                    && sourceExecution.Status == WorkflowExecutionStatus.Completed
+                    && await TryMaterializeFromSourceExecutionAsync(execution, sourceExecution, node, remap))
                 {
-                    var applied = await TryMaterializeFromSourceAsync(execution, node, sourceExecutionId!);
                     execution = await _workflowExecutionRepository.GetByIdAsync(execution.Id, execution.TenantId);
-                    if (applied) continue;
+                    if (execution == null) return null;
+                    if (execution.Status == WorkflowExecutionStatus.Failed) return execution;
+                    continue;
                 }
 
                 var evt = new AddExcuationNodeEvent
@@ -470,6 +486,7 @@ namespace DomainService.Workflow.Services
                 if (execution.Status == WorkflowExecutionStatus.Failed) return execution;
             }
 
+            await _workflowExecutionRepository.AtomicFinalizeExecutionAsync(execution.Id, execution.TenantId);
             return await _workflowExecutionRepository.GetByIdAsync(execution.Id, execution.TenantId);
         }
 
@@ -641,84 +658,110 @@ namespace DomainService.Workflow.Services
         }
 
         /// <summary>
-        /// If <paramref name="sourceExecutionId"/> contains items for the given node,
-        /// copies them as new items under the current execution with a fresh synthetic
-        /// NodeExecution entry, and returns true. Returns false when no cached items exist.
+        /// Attempts to materialize a Completed source NodeExecution into the current execution.
+        /// Returns false if the source has no usable cached execution, or if any source item
+        /// references a parent item not yet present in <paramref name="remap"/> (conservative cascade).
+        /// On success, persists items + node execution metadata using the same sequence as
+        /// <see cref="MaterializePinDataAsync"/> and updates <paramref name="remap"/> with new item ids.
         /// </summary>
-        private async Task<bool> TryMaterializeFromSourceAsync(WorkflowExecutionModel execution, NodeModel node, string sourceExecutionId)
+        private async Task<bool> TryMaterializeFromSourceExecutionAsync(
+            WorkflowExecutionModel execution,
+            WorkflowExecutionModel sourceExecution,
+            NodeModel node,
+            Dictionary<string, string> remap)
         {
-            var sourceItems = await _workflowExecutionRepository.GetItemsByNodeIdsAsync(
-                sourceExecutionId,
-                new List<Dictionary<string, string>>
+            var sourceNodeExec = sourceExecution.NodeExecutions
+                .Where(ne => ne.NodeId == node.Id && ne.Status == NodeExecutionStatus.Completed)
+                .OrderByDescending(ne => ne.RunIndex)
+                .FirstOrDefault();
+
+            if (sourceNodeExec == null) return false;
+
+            var sourceItems = await _workflowExecutionRepository.GetAllItemsByNodeExecutionIdAsync(
+                sourceNodeExec.Id, execution.TenantId);
+
+            foreach (var si in sourceItems)
+            {
+                if (si.ParentItemIds != null)
                 {
-                    new() { { "NodeId", node.Id }, { "Branch", "main" } }
-                },
-                execution.TenantId);
-
-            if (sourceItems == null || sourceItems.Count == 0) return false;
-
-            var idMap = sourceItems.ToDictionary(si => si.Id, _ => Guid.NewGuid().ToString().Replace("-", ""));
+                    foreach (var pid in si.ParentItemIds)
+                    {
+                        if (!remap.ContainsKey(pid)) return false;
+                    }
+                }
+                if (si.AncestorMap != null)
+                {
+                    foreach (var kv in si.AncestorMap)
+                    {
+                        if (!remap.ContainsKey(kv.Value)) return false;
+                    }
+                }
+            }
 
             var now = DateTime.UtcNow;
-            var nodeExecution = new NodeExecutionModel
+            var newNodeExecution = new NodeExecutionModel
             {
                 Id = Guid.NewGuid().ToString().Replace("-", ""),
                 NodeId = node.Id,
                 NodeName = node.Name,
                 NodeType = node.Type,
-                NodeVersion = node.Version,
+                NodeVersion = sourceNodeExec.NodeVersion,
                 RunIndex = execution.NodeExecutions.Count + 1,
                 Status = NodeExecutionStatus.Running,
-                StartedAt = now
+                StartedAt = now,
+                OutputCountsByBranch = new Dictionary<string, int>(sourceNodeExec.OutputCountsByBranch)
             };
 
-            execution.NodeExecutions.Add(nodeExecution);
+            execution.NodeExecutions.Add(newNodeExecution);
             execution.Status = WorkflowExecutionStatus.Running;
 
-            await _workflowExecutionRepository.AtomicAddNodeExecutionAsync(execution.Id, execution.TenantId, nodeExecution);
+            await _workflowExecutionRepository.AtomicAddNodeExecutionAsync(
+                execution.Id, execution.TenantId, newNodeExecution);
 
-            var outputItems = new List<WorkflowItemExecutionModel>();
+            var newItems = new List<WorkflowItemExecutionModel>(sourceItems.Count);
             int index = 0;
-            foreach (var src in sourceItems.OrderBy(si => si.ItemIndex))
+            foreach (var si in sourceItems)
             {
-                var remappedAncestors = new Dictionary<string, string>();
-                if (src.AncestorMap != null)
-                {
-                    foreach (var kvp in src.AncestorMap)
-                    {
-                        if (idMap.TryGetValue(kvp.Value, out var mappedId))
-                            remappedAncestors[kvp.Key] = mappedId;
-                        else
-                            remappedAncestors[kvp.Key] = kvp.Value;
-                    }
-                }
-                if (src.NodeName != null && idMap.TryGetValue(src.Id, out var selfId))
-                    remappedAncestors[src.NodeName] = selfId;
+                var newId = Guid.NewGuid().ToString().Replace("-", "");
+                remap[si.Id] = newId;
 
-                outputItems.Add(new WorkflowItemExecutionModel
+                var remappedParents = si.ParentItemIds != null
+                    ? si.ParentItemIds.Select(p => remap[p]).ToList()
+                    : new List<string>();
+
+                var remappedAncestors = si.AncestorMap != null
+                    ? si.AncestorMap.ToDictionary(kv => kv.Key, kv => remap[kv.Value])
+                    : new Dictionary<string, string>();
+
+                newItems.Add(new WorkflowItemExecutionModel
                 {
-                    Id = idMap[src.Id],
+                    Id = newId,
                     WorkflowExecutionId = execution.Id,
                     TenantId = execution.TenantId,
                     NodeId = node.Id,
-                    NodeExecutionId = nodeExecution.Id,
+                    NodeExecutionId = newNodeExecution.Id,
                     NodeName = node.Name,
-                    Branch = src.Branch ?? "main",
-                    ParentItemIds = new List<string>(src.ParentItemIds ?? new List<string>()),
+                    Branch = si.Branch,
+                    ParentItemIds = remappedParents,
                     AncestorMap = remappedAncestors,
-                    Data = src.Data,
+                    Data = new NodeOutputItemData
+                    {
+                        Parameters = DeepCopyBson(si.Data.Parameters),
+                        Input = DeepCopyBson(si.Data.Input),
+                        Output = DeepCopyBson(si.Data.Output)
+                    },
                     ItemIndex = index++
                 });
             }
 
-            await _workflowExecutionRepository.AddItemsAsync(execution.TenantId, outputItems);
+            if (newItems.Count > 0)
+            {
+                await _workflowExecutionRepository.AddItemsAsync(execution.TenantId, newItems);
+            }
 
-            nodeExecution.Status = NodeExecutionStatus.Completed;
-            nodeExecution.OutputItemCount = outputItems.Count;
-            nodeExecution.OutputCountsByBranch = outputItems
-                .GroupBy(o => o.Branch)
-                .ToDictionary(g => g.Key, g => g.Count());
-            nodeExecution.EndedAt = DateTime.UtcNow;
+            newNodeExecution.Status = NodeExecutionStatus.Completed;
+            newNodeExecution.OutputItemCount = newItems.Count;
+            newNodeExecution.EndedAt = DateTime.UtcNow;
 
             var nextNodeIds = execution.WorkflowSnapshot.Edges
                 .Where(e => e.Source == node.Id)
@@ -727,13 +770,18 @@ namespace DomainService.Workflow.Services
                 .ToList();
 
             await _workflowExecutionRepository.AtomicUpdateNodeExecutionCompletedAsync(
-                execution.Id, execution.TenantId, nodeExecution.Id,
-                outputItems.Count, nodeExecution.OutputCountsByBranch, null);
+                execution.Id, execution.TenantId, newNodeExecution.Id,
+                newNodeExecution.OutputItemCount, newNodeExecution.OutputCountsByBranch, contextUpdates: null);
 
             await _workflowExecutionRepository.AtomicCompleteNodeAsync(
                 execution.Id, execution.TenantId, node.Id, nextNodeIds);
 
             return true;
+        }
+
+        private static BsonValue DeepCopyBson(BsonValue value)
+        {
+            return BsonSerializer.Deserialize<BsonValue>(value.ToBson());
         }
 
         private List<NodeModel> GetAncestorNodesAsync(WorkflowModel workflow, string nodeId)
