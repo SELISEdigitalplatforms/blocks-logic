@@ -1,11 +1,5 @@
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui-kits/dropdown-menu/dropdown-menu";
 import { Button } from "@/components/ui-kits/button/button";
-import { MoreVertical, X, Loader2, Info } from "lucide-react";
+import { MoreVertical, Loader2, Info } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { useGetWorkflowVersions } from "../../hooks/use-workflow-api";
@@ -76,6 +70,8 @@ export const VersionHistorySidebar = ({ onClose, onSelectVersion, selectedVersio
                     <div className="w-2 h-2 rounded-full border-2 border-muted-foreground flex-shrink-0" />
                   )}
                   <span className="font-medium text-sm truncate">{version.name || "Unnamed Version"}</span>
+                  <span className="font-medium text-sm">{version.isPublished && " (Published)"}</span>
+
                 </div>
                 <WorkflowVersionActionDropdown version={version}>
                   <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">

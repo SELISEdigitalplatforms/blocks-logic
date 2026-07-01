@@ -9,5 +9,7 @@ namespace DomainService.Workflow.Services
     {
         Task RunNodeAsync(AddExcuationNodeEvent dto);
         Task<WorkflowExecutionModel?> RunNodeInProcessAsync(AddExcuationNodeEvent dto);
+
+        Task<WorkflowExecutionModel?> ExecuteStepNodeAsync(string tenantId, string executionId, string targetNodeId, string? sourceExecutionId = null);
     }
 }
