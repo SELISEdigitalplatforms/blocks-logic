@@ -213,6 +213,13 @@ namespace Utilities.Api.Controllers
             return Ok(execution);
         }
 
+        [HttpGet]
+        public async Task<IActionResult> LastSuccessfullExecution([FromQuery] LastSuccessfullExecutionRequestDto dto)
+        {
+            var execution = await _workflowExecutionService.LastSuccessfullExecutionAsync(dto);
+            return Ok(execution);
+        }
+
         private void ApplyContext(IProjectKey request)
         {
 
