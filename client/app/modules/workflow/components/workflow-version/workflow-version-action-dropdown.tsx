@@ -9,9 +9,10 @@ import {
 } from "@/components/ui-kits/dropdown-menu/dropdown-menu";
 import { useParams } from "react-router-dom";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
-import { usePublishWorkflow, useRestoreWorkflow } from "../../hooks/use-workflow-api";
+import { usePublishWorkflow, useUnpublishWorkflow, useRestoreWorkflow, useUpdateWorkflowVersion } from "../../hooks/use-workflow-api";
 import { WorkflowVersion } from "../../models/workflow.model";
 import { PublishWorkflowModal } from "../publish-workflow-modal/publish-workflow-modal";
+import { PublishConfirmationModal, UnpublishConfirmationModal } from "../workflow-confirmation-modals";
 
 interface WorkflowVersionActionDropdownProps {
   version: WorkflowVersion;
@@ -22,16 +23,28 @@ export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVer
   const { id: workflowId } = useParams<{ id: string }>();
   const projectKey = useProjectStore().selectedProject?.tenantId || "";
   const publishWorkflow = usePublishWorkflow();
+  const unpublishWorkflow = useUnpublishWorkflow();
   const restoreWorkflow = useRestoreWorkflow();
+  const updateWorkflowVersion = useUpdateWorkflowVersion();
 
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
-  const [publishVersionName, setPublishVersionName] = useState("");
-  const [publishDescription, setPublishDescription] = useState("");
+  const [isUnpublishModalOpen, setIsUnpublishModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editVersionName, setEditVersionName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
 
   const handleOpenPublishModal = () => {
-    setPublishVersionName(version.name || "");
-    setPublishDescription(version.description || "");
     setIsPublishModalOpen(true);
+  };
+
+  const handleOpenUnpublishModal = () => {
+    setIsUnpublishModalOpen(true);
+  };
+
+  const handleOpenEditModal = () => {
+    setEditVersionName(version.name || "");
+    setEditDescription(version.description || "");
+    setIsEditModalOpen(true);
   };
 
   const handlePublishSubmit = async () => {
@@ -39,10 +52,35 @@ export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVer
       await publishWorkflow.mutateAsync({
         workflowId: workflowId || "",
         projectKey,
-        name: publishVersionName || "Published Version",
-        Description: publishDescription,
+        versionId: version.itemId,
       });
       setIsPublishModalOpen(false);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleUnpublishSubmit = async () => {
+    try {
+      await unpublishWorkflow.mutateAsync({
+        workflowId: workflowId || "",
+        projectKey,
+      });
+      setIsUnpublishModalOpen(false);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleEditSubmit = async () => {
+    try {
+      await updateWorkflowVersion.mutateAsync({
+        projectKey,
+        versionId: version.itemId,
+        name: editVersionName || "Version Name",
+        description: editDescription,
+      });
+      setIsEditModalOpen(false);
     } catch (error) {
       console.error(error);
     }
@@ -65,24 +103,52 @@ export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVer
         <DropdownMenuContent align="end">
           <DropdownMenuItem onClick={(e) => {
             e.stopPropagation();
-            handleRestore();
-          }}>Restore version</DropdownMenuItem>
+            handleOpenEditModal();
+          }}>Edit version details</DropdownMenuItem>
           <DropdownMenuItem onClick={(e) => {
             e.stopPropagation();
+            handleRestore();
+          }}>Restore version</DropdownMenuItem>
+          {!version.isPublished && (<DropdownMenuItem onClick={(e) => {
+            e.stopPropagation();
             handleOpenPublishModal();
-          }}>Publish version</DropdownMenuItem>
+          }}>Publish version</DropdownMenuItem>)}
+          {version.isPublished && (<DropdownMenuItem onClick={(e) => {
+            e.stopPropagation();
+            unpublishWorkflow.mutateAsync({
+              workflowId: workflowId || "",
+              projectKey,
+            });
+          }}>Unpublish version</DropdownMenuItem>)}
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <PublishWorkflowModal
+      <PublishConfirmationModal
         open={isPublishModalOpen}
         onOpenChange={setIsPublishModalOpen}
-        publishVersionName={publishVersionName}
-        setPublishVersionName={setPublishVersionName}
-        publishDescription={publishDescription}
-        setPublishDescription={setPublishDescription}
-        onPublish={handlePublishSubmit}
-        isPublishing={publishWorkflow.isPending}
+        onConfirm={handlePublishSubmit}
+        isPending={publishWorkflow.isPending}
+        isVersion={true}
+      />
+      
+      <UnpublishConfirmationModal
+        open={isUnpublishModalOpen}
+        onOpenChange={setIsUnpublishModalOpen}
+        onConfirm={handleUnpublishSubmit}
+        isPending={unpublishWorkflow.isPending}
+        isVersion={true}
+      />
+
+      <PublishWorkflowModal
+        open={isEditModalOpen}
+        onOpenChange={setIsEditModalOpen}
+        publishVersionName={editVersionName}
+        setPublishVersionName={setEditVersionName}
+        publishDescription={editDescription}
+        setPublishDescription={setEditDescription}
+        onPublish={handleEditSubmit}
+        isPublishing={updateWorkflowVersion.isPending}
+        mode="edit"
       />
     </>
   );
