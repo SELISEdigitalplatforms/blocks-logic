@@ -371,7 +371,8 @@ namespace DomainService.Workflow.Services
                 Category = item.Category,
                 Position = item.Position,
                 Parameters = BsonJsonConverter.ToJsonElement(item.Parameters),
-                Settings = BsonJsonConverter.ToJsonElement(item.Settings)
+                Settings = BsonJsonConverter.ToJsonElement(item.Settings),
+                PinData = BsonJsonConverter.ToJsonElementOrNull(item.PinData)
             }).ToList();
 
             var workflow = new WorkflowResponseDto
