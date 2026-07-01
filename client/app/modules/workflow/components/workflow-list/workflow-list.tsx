@@ -36,10 +36,9 @@ import { Copy, EllipsisVertical, Pen, Ban, Trash, Check } from "lucide-react";
 import { DeleteWorkflow } from "../delete-workflow";
 import { DuplicateWorkflow } from "../duplicate-workflow";
 import { Link, useNavigate } from "react-router-dom";
-import { usePublishWorkflow, useUnpublishWorkflow } from "../../hooks/use-workflow-api";
+import { usePublishNewWorkflow, usePublishWorkflow, useUnpublishWorkflow } from "../../hooks/use-workflow-api";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
-import { Dialog } from "@/components/ui-kits/dialog/dialog";
-import ConfirmationModal from "@/components/confirmation-modal/confirmation-modal";
+import { PublishConfirmationModal, UnpublishConfirmationModal } from "../workflow-confirmation-modals";
 import { PublishWorkflowModal } from "../publish-workflow-modal/publish-workflow-modal";
 
 
@@ -65,7 +64,7 @@ type WorkflowListProps = {
 export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
   const navigate = useNavigate();
   const [modal, setModal] = useState<{
-    type: "delete" | "publish" | "unpublish" | "duplicate" | null;
+    type: "delete" | "publish" | "publish_new" | "unpublish" | "duplicate" | null;
     data: Record<string, unknown>;
   }>({
     type: null,
@@ -76,18 +75,33 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
   const [publishVersionName, setPublishVersionName] = useState("");
   const [publishDescription, setPublishDescription] = useState("");
 
-  const { mutateAsync: publishWorkflow, isPending: isPublishing } = usePublishWorkflow();
+  const { mutateAsync: publishNewWorkflow, isPending: isPublishingNew } = usePublishNewWorkflow();
+  const { mutateAsync: publishWorkflow, isPending: isPublishingUnversioned } = usePublishWorkflow();
   const { mutateAsync: unpublishWorkflow, isPending: isUnpublishing } = useUnpublishWorkflow();
 
-  const handlePublish = async () => {
+  const handlePublishNew = async () => {
+    const workflowId = modal.data.id as string;
+    if (!workflowId) return;
+    try {
+      await publishNewWorkflow({ 
+        projectKey, 
+        workflowId, 
+        name: publishVersionName, 
+        description: publishDescription 
+      });
+      setModal({ type: null, data: {} });
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handlePublishUnversioned = async () => {
     const workflowId = modal.data.id as string;
     if (!workflowId) return;
     try {
       await publishWorkflow({ 
         projectKey, 
-        workflowId, 
-        name: publishVersionName, 
-        Description: publishDescription 
+        workflowId 
       });
       setModal({ type: null, data: {} });
     } catch (error) {
@@ -159,16 +173,28 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
               onClick={(e) => e.stopPropagation()}
               onCheckedChange={(_value) => {
                 if (!info.row.original.isPublished) {
-                  const id = Math.random().toString(16).substring(2, 10);
-                  setPublishVersionName(`Version ${id}`);
-                  setPublishDescription("");
+                  if (!info.row.original.isDirty) {
+                    setModal({
+                      type: "publish",
+                      data: { id: info.row.original.itemId },
+                    });
+                  } else {
+                    const id = Math.random().toString(16).substring(2, 10);
+                    setPublishVersionName(`Version ${id}`);
+                    setPublishDescription("");
+                    setModal({
+                      type: "publish_new",
+                      data: { id: info.row.original.itemId },
+                    });
+                  }
+                } else {
+                  setModal({
+                    type: "unpublish",
+                    data: {
+                      id: info.row.original.itemId,
+                    },
+                  });
                 }
-                setModal({
-                  type: info.row.original.isPublished ? "unpublish" : "publish",
-                  data: {
-                    id: info.row.original.itemId,
-                  },
-                });
               }}
             />
             <DropdownMenu>
@@ -201,28 +227,45 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
                   <span>Duplicate</span>
                 </DropdownMenuItem>
 
-                <DropdownMenuItem
+                {!(info.row.original.isPublished) && (<DropdownMenuItem
                   className="cursor-pointer"
+                  disabled={info.row.original.isPublished || !info.row.original.isDirty}
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (!info.row.original.isPublished) {
+                    if (!info.row.original.isPublished && !info.row.original.isDirty) {
+                      setModal({
+                        type: "publish",
+                        data: { id: info.row.original.itemId },
+                      });
+                    } else {
                       const id = Math.random().toString(16).substring(2, 10);
                       setPublishVersionName(`Version ${id}`);
                       setPublishDescription("");
+                      setModal({
+                        type: "publish_new",
+                        data: { id: info.row.original.itemId },
+                      });
                     }
+                  }}
+                >
+                  <Check className="mr-2 h-4 w-4" />
+                  <span>Publish</span>
+                </DropdownMenuItem>)}
+
+                {info.row.original.isPublished && (<DropdownMenuItem
+                  className="cursor-pointer"
+                  disabled={!info.row.original.isPublished}
+                  onClick={(e) => {
+                    e.stopPropagation();
                     setModal({
-                      type: info.row.original.isPublished ? "unpublish" : "publish",
+                      type: "unpublish",
                       data: { id: info.row.original.itemId },
                     });
                   }}
                 >
-                  {info.row.original.isPublished ? (
-                    <Ban className="mr-2 h-4 w-4" />
-                  ) : (
-                    <Check className="mr-2 h-4 w-4" />
-                  )}
-                  <span>{info.row.original.isPublished ? "Unpublish" : "Publish"}</span>
-                </DropdownMenuItem>
+                  <Ban className="mr-2 h-4 w-4" />
+                  <span>Unpublish</span>
+                </DropdownMenuItem>)}
 
                 <DropdownMenuItem
                   className="cursor-pointer text-error"
@@ -320,7 +363,7 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
         workflowId={modal.data.id as string}
       />
       <PublishWorkflowModal
-        open={modal.type === "publish"}
+        open={modal.type === "publish_new"}
         onOpenChange={(open) => {
           if (!open) setModal({ type: null, data: {} });
         }}
@@ -328,26 +371,25 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
         setPublishVersionName={setPublishVersionName}
         publishDescription={publishDescription}
         setPublishDescription={setPublishDescription}
-        onPublish={handlePublish}
-        isPublishing={isPublishing}
+        onPublish={handlePublishNew}
+        isPublishing={isPublishingNew}
       />
-      <Dialog 
-        open={modal.type === "unpublish"} 
+      <PublishConfirmationModal
+        open={modal.type === "publish"}
         onOpenChange={(open) => {
           if (!open) setModal({ type: null, data: {} });
         }}
-      >
-        <ConfirmationModal
-          data={{
-            dialogTitle: "Unpublish workflow",
-            dialogSubtitle: "Are you sure you want to unpublish this workflow? It will no longer be available for execution.",
-            confirmButton: "Unpublish",
-          }}
-          onConfirm={handleUnpublish}
-          onCancel={() => setModal({ type: null, data: {} })}
-          buttonState={{ confirm: { disable: isUnpublishing } }}
-        />
-      </Dialog>
+        onConfirm={handlePublishUnversioned}
+        isPending={isPublishingUnversioned}
+      />
+      <UnpublishConfirmationModal
+        open={modal.type === "unpublish"}
+        onOpenChange={(open) => {
+          if (!open) setModal({ type: null, data: {} });
+        }}
+        onConfirm={handleUnpublish}
+        isPending={isUnpublishing}
+      />
       <DuplicateWorkflow
         open={modal.type === "duplicate"}
         onOpenChange={(value) => {

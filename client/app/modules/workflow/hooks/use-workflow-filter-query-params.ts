@@ -4,7 +4,7 @@ export const useWorkflowFilterQueryParams = () => {
   const [queryParams, setQueryParams] = useQueryStates(
     {
       search: parseAsString.withDefault(""),
-      isActive: parseAsString.withDefault("all"),
+      isPublished: parseAsString.withDefault("all"),
       page: parseAsInteger.withDefault(0),
       pageSize: parseAsInteger.withDefault(10),
     },

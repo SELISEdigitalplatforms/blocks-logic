@@ -19,5 +19,6 @@ namespace DomainService.Workflow.Services
         Task<WorkflowExecutionGetResponseDto> GetExecutionByIdAsync(WorkflowExecutionGetRequestDto dto);
         Task EmailTriggerStartAsync(EmailTriggerEvent emailEvent);
         Task DataTriggerStartAsync(DataChangeEvent dataEvent);
+        Task<StepExecuteResponseDto> StepExecuteAsync(StepExecuteRequestDto dto);
     }
 }
