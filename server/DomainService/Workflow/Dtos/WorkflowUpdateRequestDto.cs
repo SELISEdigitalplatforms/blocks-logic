@@ -33,6 +33,7 @@ public class NodeDto
     public required Position Position { get; set; }
     public JsonElement Parameters { get; set; } = new();
     public JsonElement Settings { get; set; } = new();
+    public JsonElement? PinData { get; set; }
 
 }
 
