@@ -23,12 +23,15 @@ import {
   IGetWorkflowVersionsResponse,
   IPublishWorkflowPayload,
   IPublishWorkflowResponse,
+  IPublishNewWorkflowPayload,
   IUnpublishWorkflowPayload,
   IUnpublishWorkflowResponse,
   IRestoreWorkflowPayload,
   IRestoreWorkflowResponse,
   IGetWorkflowByVersionPayload,
   IGetWorkflowByVersionResponse,
+  IUpdateWorkflowVersionPayload,
+  IUpdateWorkflowVersionResponse,
 } from "../types/workflow.service.type";
 
 export class WorkflowService {
@@ -126,6 +129,10 @@ export class WorkflowService {
     return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.PUBLISH}`, payload);
   }
 
+  publishWorkflowNewVersion = (payload: IPublishNewWorkflowPayload): Promise<IPublishWorkflowResponse> => {
+    return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.PUBLISH_NEW}`, payload);
+  }
+
   unpublishWorkflow = (payload: IUnpublishWorkflowPayload): Promise<IUnpublishWorkflowResponse> => {
     return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.UNPUBLISH}`, payload);
   }
@@ -136,6 +143,10 @@ export class WorkflowService {
 
   getWorkflowByVersion = (payload: IGetWorkflowByVersionPayload): Promise<IGetWorkflowByIdResponse> => {
     return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.GET_WORKFLOW_BY_VERSION}`, payload);
+  }
+
+  updateWorkflowVersion = (payload: IUpdateWorkflowVersionPayload): Promise<IUpdateWorkflowVersionResponse> => {
+    return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.UPDATE_VERSION}`, payload);
   }
 }
 

@@ -4,7 +4,7 @@ import {
 } from "@blocks-workflow/hooks";
 import { Background, BackgroundVariant, ReactFlow } from "@xyflow/react";
 import { useEffect } from "react";
-import { Edit, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import {
   WorkflowEditorDefaultEdgeOptions,
   WorkflowEditorNodeTypes,
@@ -18,10 +18,7 @@ import { NodeInspector } from "../node-inspector";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { EditorFitConfig, WorkflowEditorControls } from "../workflow-editor-controls";
 
-import {
-  getStatusConfig,
-  WorkflowExecutionStatus,
-} from "../../utils/workflow-execution-list.util";
+import { getStatusConfig } from "../../utils/workflow-execution-list.util";
 import { WorkflowExecution } from "@blocks-workflow/types/workflow.service.type";
 import { cn } from "@/lib/utils";
 
@@ -31,12 +28,19 @@ export const WorkflowExecutionEditor = ({
   execution?: WorkflowExecution;
 }) => {
   const id = execution?.id || "";
-  const { setWorkflow, onNodeClick, selectedNode } = useWorkflow();
+  const { setWorkflow, onNodeClick, selectedNode, setEditorMode, setExecutionMode } = useWorkflow();
   const tenantId = useProjectStore().selectedProject?.tenantId || "";
   const { data, isFetched, isLoading } = useGetWorkflowExecutionById({
     executionId: id,
     projectKey: tenantId,
   });
+
+  useEffect(() => {
+    setEditorMode("execution");
+    if (execution) {
+      setExecutionMode(execution.executionMode);
+    }
+  }, [setEditorMode, setExecutionMode, execution]);
 
   useEffect(() => {
     if (data?.workflowSnapshot && isFetched) {
