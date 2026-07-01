@@ -657,5 +657,36 @@ namespace DomainService.Workflow.Services
             return doc;
         }
 
+        public async Task<StepExecuteResponseDto> StepExecuteAsync(StepExecuteRequestDto dto)
+        {
+            var workflow = await _workflowRepository.GetWorkflowAsync(dto.WorkflowId, dto.ProjectKey);
+            if (workflow == null)
+            {
+                return new StepExecuteResponseDto
+                {
+                    IsSuccess = false,
+                    Errors = new Dictionary<string, string> { { "Workflow", "Workflow not found" } }
+                };
+            }
+            var targetNode = workflow.Nodes.FirstOrDefault(n => n.Id == dto.NodeId);
+            if (targetNode == null)
+            {
+                return new StepExecuteResponseDto
+                {
+                    IsSuccess = false,
+                    Errors = new Dictionary<string, string> { { "Node", "Node not found" } }
+                };
+            }
+
+            var execution = await CreateExecutionAsync(workflow, WorkflowExecutionMode.Test);
+            execution.Status = WorkflowExecutionStatus.Queued;
+            var result = await _workflowEngineService.ExecuteStepNodeAsync(dto.ProjectKey, execution.Id, dto.NodeId, dto.SourceExecutionId);
+            return new StepExecuteResponseDto
+            {
+                IsSuccess = true,
+                ItemId = result.Id,
+            };
+
+        }
     }
 }

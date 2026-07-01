@@ -84,6 +84,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
           { label: "First Entry", value: "first" },
           { label: "No Response Body", value: "none" },
         ],
+        defaultValue: "all",
       },
     ],
     settings: [],
