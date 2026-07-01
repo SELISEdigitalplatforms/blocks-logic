@@ -392,7 +392,7 @@ namespace DomainService.Projects
             var project = new GetProjectResponseData
             {
                 Name = repoProject.Name,
-                ApplicationDomain  = repoProject.Applications.FirstOrDefault()?.Domain ?? "",
+                Applications  = repoProject.Applications,
                 ItemId = repoProject.ItemId,
                 CreatedDate = repoProject.CreatedDate,
                 LastUpdatedDate = repoProject.LastUpdatedDate,
@@ -402,7 +402,7 @@ namespace DomainService.Projects
                 Tags = repoProject.Tags,
                 TenantId = repoProject.TenantId,
                 IsDomainVerified = repoProject.Applications.FirstOrDefault()?.IsDomainVerified ?? false,
-               CookieDomain = repoProject.Applications.FirstOrDefault()?.CookieDomain ?? "",
+               // CookieDomain = repoProject.Applications.FirstOrDefault()?.CookieDomain ?? "",
                 IsDisabled = repoProject.IsDisabled,
                 Environment = repoProject.Environment,
                 TenantGroupId = repoProject.TenantGroupId,

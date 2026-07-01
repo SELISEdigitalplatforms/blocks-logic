@@ -112,8 +112,8 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
     parameters: {
       includeOtherFields: false,
       otherFieldsMode: "all",
-      includedFields: [],
-      excludeFields: [],
+      includedFields: "",
+      excludeFields: "",
       mode: "manual_mapping",
       manualMappingFields: [],
     },

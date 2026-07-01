@@ -87,17 +87,30 @@ export const NodeLibraryPanel = ({
       };
       const transformedNode = schemaDefinition?.transform?.(nodeData) ?? nodeData;
       addNode(transformedNode);
-      if (selectedNode && node.handleSpec.target.length > 0) {
-        const selectedDef = NodeDefinitions.find(
-          (d) => d.type === selectedNode.type && d.category === selectedNode.category,
-        );
-        const sourceHandle = selectedDef
-          ? getNodeNextSource(selectedNode.id, selectedDef.handleSpec.source)
-          : "source";
-        createEdge(
-          { source: selectedNode.id, sourceHandle: selectedHandle || sourceHandle },
-          { target: transformedNode.id, targetHandle: node.handleSpec.target[0] },
-        );
+      const selectedNodesToConnect = nodes.filter((n) => n.selected);
+      if (selectedNodesToConnect.length === 0 && selectedNode) {
+        selectedNodesToConnect.push(selectedNode);
+      }
+
+      if (selectedNodesToConnect.length > 0 && node.handleSpec.target.length > 0) {
+        selectedNodesToConnect.forEach((selNode) => {
+          const selectedDef = NodeDefinitions.find(
+            (d) => d.type === selNode.type && d.category === selNode.category,
+          );
+          const sourceHandle = selectedDef
+            ? getNodeNextSource(selNode.id, selectedDef.handleSpec.source)
+            : "source";
+          
+          const edgeSourceHandle =
+            selectedNodesToConnect.length === 1 && selectedHandle
+              ? selectedHandle
+              : sourceHandle;
+
+          createEdge(
+            { source: selNode.id, sourceHandle: edgeSourceHandle },
+            { target: transformedNode.id, targetHandle: node.handleSpec.target[0] },
+          );
+        });
       }
       selectNode(transformedNode);
       deselectHandle();

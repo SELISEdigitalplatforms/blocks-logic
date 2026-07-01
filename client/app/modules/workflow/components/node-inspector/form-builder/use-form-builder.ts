@@ -10,7 +10,7 @@ import {
   cascadeFieldResets,
   stripTransientKeys,
 } from "./utils";
-import { useWorkflowStoreApi, WorkflowStore } from "@/modules/workflow/store";
+import { useWorkflowStore, useWorkflowStoreApi, WorkflowStore } from "@/modules/workflow/store";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
 
 export interface FormBuilderConfig {
@@ -18,6 +18,8 @@ export interface FormBuilderConfig {
   workflowId: string;
   nodeId: string;
   store: WorkflowStore;
+  executionMode?: number;
+  editorMode?: "editor" | "execution" | "version";
 }
 
 interface UseFormBuilderProps {
@@ -60,6 +62,17 @@ export const useFormBuilder = ({
   const { selectedNode, workflowId } = useWorkflow();
 
   const store = useWorkflowStoreApi();
+  const editorMode = useWorkflowStore((state) => state.editorMode);
+  const explicitExecutionMode = useWorkflowStore((state) => state.executionMode);
+
+  let derivedExecutionMode = 0; // Default Test
+  if (editorMode === "version") {
+    derivedExecutionMode = 1; // Production
+  } else if (editorMode === "execution") {
+    derivedExecutionMode = explicitExecutionMode ?? 0;
+  } else {
+    derivedExecutionMode = 0; // Test
+  }
 
   const config: FormBuilderConfig = useMemo(
     () => ({
@@ -67,8 +80,10 @@ export const useFormBuilder = ({
       workflowId: workflowId || "",
       nodeId: selectedNode?.id || "",
       store,
+      executionMode: derivedExecutionMode,
+      editorMode,
     }),
-    [tenantId, workflowId, selectedNode, store],
+    [tenantId, workflowId, selectedNode, store, derivedExecutionMode, editorMode],
   );
 
   const isWorkflowExecuted = !!selectedNode?.data?.isWorkflowExecuted;

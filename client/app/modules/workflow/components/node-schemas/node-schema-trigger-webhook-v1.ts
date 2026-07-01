@@ -1,5 +1,6 @@
 import { API_BASES } from "@/constants/endpoint.constant";
 import { NodeSchemaDefinition } from "./node-schema.type";
+import { WorkflowExecutionMode } from "../../models/workflow.model";
 
 export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
   schema: {
@@ -9,14 +10,22 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
     parameters: [
       {
         id: "webhook-url",
-        type: "text",
+        type: "tab-with-text",
         label: "Webhook URL",
         info: "Copy this URL to trigger the workflow",
-        key: "webhookUrl",
-        displayValue: (_data: Record<string, unknown>, config) => {
-          return `${API_BASES.LOGIC}/Workflow/webhook/${config.projectKey}/${config.workflowId}/${config.nodeId}`;
+        key: "executionMode",
+        transient: true,
+        options: [
+          { label: "Test", value: String(WorkflowExecutionMode.Test) },
+          { label: "Production", value: String(WorkflowExecutionMode.Production) }
+        ],
+        displayValue: (data: Record<string, unknown>, config) => {
+          const currentMode = data.executionMode !== undefined ? Number(data.executionMode) : config.executionMode;
+          if (currentMode === WorkflowExecutionMode.Production) {
+            return `${API_BASES.LOGIC}/Workflow/webhook/${config.projectKey}/${config.workflowId}/${config.nodeId}`;
+          }
+          return `${API_BASES.LOGIC}/Workflow/webhook-test/${config.projectKey}/${config.workflowId}/${config.nodeId}`;
         },
-        disabled: true,
         copyable: true,
       },
       {
@@ -75,6 +84,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
           { label: "First Entry", value: "first" },
           { label: "No Response Body", value: "none" },
         ],
+        defaultValue: "all",
       },
     ],
     settings: [],

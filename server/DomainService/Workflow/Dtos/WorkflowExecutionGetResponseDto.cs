@@ -12,6 +12,7 @@ namespace DomainService.Workflow.Dtos
         public required string WorkflowId { get; set; }
         public required string WorkflowName { get; set; }
         public required WorkflowExecutionStatus Status { get; set; }
+        public required WorkflowExecutionMode ExecutionMode { get; set; }
         public required DateTime StartedAt { get; set; }
         public DateTime? FinishedAt { get; set; }
         public TimeSpan? Duration { get; set; }
@@ -22,7 +23,7 @@ namespace DomainService.Workflow.Dtos
         public JsonElement Context { get; set; } = new();
         public List<string> ActiveNodeIds { get; set; } = new();
         public List<NodeExecutionResponseDto> NodeExecutions { get; set; } = new();
-        public Workflow? WorkflowSnapshot { get; set; }
+        public WorkflowResponseDto? WorkflowSnapshot { get; set; }
         public List<WorkflowItemExecutionDto> Items { get; set; } = new();
     }
 
