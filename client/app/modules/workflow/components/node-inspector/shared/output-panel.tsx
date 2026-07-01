@@ -4,6 +4,7 @@ import { useWorkflowStore } from "@blocks-workflow/store";
 import { copyToClipboard } from "@blocks-workflow/utils/copy-to-clipboard";
 import { useCallback, useMemo, useState } from "react";
 import { inferSchemaFromRuntimeRows } from "@blocks-workflow/utils/runtime-node-data";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
 type BranchGroup = {
   branch: string;
@@ -11,7 +12,13 @@ type BranchGroup = {
   schema: ReturnType<typeof inferSchemaFromRuntimeRows>;
 };
 
-export const OutputPanel = () => {
+export const OutputPanel = ({
+  isCollapsed,
+  onToggleCollapse,
+}: {
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
+} = {}) => {
   const [tab, setTab] = useState("schema");
   const selectedNode = useWorkflowStore((s) => s.selectedNode);
   const executedItems = useWorkflowStore((s) => s.executedItems);
@@ -54,19 +61,29 @@ export const OutputPanel = () => {
   if (!selectedNode) return null;
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden">
+    <div className={`flex w-full flex-col overflow-hidden ${isCollapsed ? 'h-fit shrink-0' : 'h-full flex-1'}`}>
       <div className="flex items-center justify-between">
         <h3 className="font-medium text-high-emphasis">Output</h3>
-        <Tabs value={tab} onValueChange={setTab}>
-          <TabsList>
-            <TabsTrigger value="schema">Schema</TabsTrigger>
-            <TabsTrigger value="table">Table</TabsTrigger>
-            <TabsTrigger value="json">JSON</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="flex items-center gap-2">
+          <Tabs value={tab} onValueChange={setTab}>
+            <TabsList>
+              <TabsTrigger value="schema">Schema</TabsTrigger>
+              <TabsTrigger value="table">Table</TabsTrigger>
+              <TabsTrigger value="json">JSON</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          {onToggleCollapse && (
+            <button
+              onClick={onToggleCollapse}
+              className="text-low-emphasis hover:bg-surface-hover rounded p-1 transition-colors"
+            >
+              {isCollapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+            </button>
+          )}
+        </div>
       </div>
 
-      {tab === "schema" && (
+      {!isCollapsed && tab === "schema" && (
         <div className="mt-2 flex-1 overflow-y-auto rounded bg-surface-app p-2">
           {runtimeOutputRows.length === 0 ? (
             <p className="text-xs text-low-emphasis">No runtime output schema available.</p>
@@ -123,7 +140,7 @@ export const OutputPanel = () => {
         </div>
       )}
 
-      {tab === "table" && (
+      {!isCollapsed && tab === "table" && (
         <div className="mt-2 flex-1 overflow-y-auto rounded bg-surface-app p-2">
           {hasMultipleBranches ? (
             <div className="flex flex-col gap-3">
@@ -142,7 +159,7 @@ export const OutputPanel = () => {
         </div>
       )}
 
-      {tab === "json" && (
+      {!isCollapsed && tab === "json" && (
         <div className="mt-2 flex-1 overflow-y-auto rounded bg-surface-app">
           {hasMultipleBranches ? (
             <div className="flex flex-col gap-3 p-2">

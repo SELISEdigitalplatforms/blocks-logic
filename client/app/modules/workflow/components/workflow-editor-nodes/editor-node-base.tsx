@@ -1,6 +1,9 @@
 import { Button } from "@/components/ui-kits/button/button";
 import { Ban, EllipsisVertical, Play, Trash } from "lucide-react";
-import { useWorkflow } from "../../hooks";
+import { useWorkflow, useGetLastSuccessfulExecution, useStepExecute } from "../../hooks";
+import { useProjectStore } from "@seliseblocks/blocks-kit";
+import { useWorkflowStore } from "../../store";
+import { getStatusStyles } from "../../utils/workflow-execution-editor.util";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,9 +28,52 @@ type EditorNodeBaseProps = {
 
 export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
   const [isToolbarVisible, setIsToolbarVisible] = useState(false);
-  const { getNodeById, deleteNode, selectAndConfigureNode, selectedNode, updateNode, duplicateNode, isNodeNameUnique } =
+  const { getNodeById, deleteNode, selectAndConfigureNode, selectedNode, updateNode, duplicateNode, isNodeNameUnique, workflowId } =
     useWorkflow();
   const node = getNodeById(id);
+  
+  const tenantId = useProjectStore((s) => s.selectedProject?.tenantId) || "";
+  const setStepExecutionData = useWorkflowStore((s) => s.setStepExecutionData);
+
+  const { refetch: fetchLastExecution } = useGetLastSuccessfulExecution({
+    projectKey: tenantId,
+    workflowId: workflowId as string,
+  });
+
+  const { mutateAsync: stepExecute } = useStepExecute();
+
+  const handleExecuteStep = async () => {
+    if (!tenantId || !workflowId || !node) return;
+    try {
+      const { data: executionResp } = await fetchLastExecution();
+      const executionId = executionResp?.id || (executionResp as any)?.itemId;
+      if (!executionId) {
+        showErrorToast({ title: "Error", errors: "No successful execution found" });
+        return;
+      }
+      
+      const stepResp = await stepExecute({
+        ProjectKey: tenantId,
+        WorkflowId: workflowId,
+        NodeId: node.id,
+        SourceExecutionId: executionId,
+      });
+      
+      if (stepResp) {
+        setStepExecutionData(stepResp as any);
+      }
+    } catch (e) {
+      console.error(e);
+      showErrorToast({ title: "Error", errors: "Failed to execute step" });
+    }
+  };
+
+  const stepExecutionReachableNodeIds = useWorkflowStore(s => s.stepExecutionReachableNodeIds);
+  const executedNodes = useWorkflowStore(s => s.executedNodes);
+
+  const isExecutedNode = stepExecutionReachableNodeIds?.has(id);
+  const executedNodeStatus = isExecutedNode ? executedNodes.find(n => n.nodeId === id)?.status : undefined;
+  const executionStyles = executedNodeStatus ? getStatusStyles(executedNodeStatus).nodeClass : "";
 
   const [isRenaming, setIsRenaming] = useState(false);
   const [editName, setEditName] = useState(node?.name || "");
@@ -70,6 +116,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
         className={cn(
           "peer min-w-[100px] rounded-md border bg-background px-5 py-4 shadow-lg transition-shadow hover:shadow-xl",
           isSelected && "border-primary ring-1 ring-primary",
+          executionStyles,
           node.className || "",
         )}
       >
@@ -86,7 +133,10 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
       >
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-fit w-fit p-1">
+            <Button variant="ghost" size="sm" className="h-fit w-fit p-1" onClick={(e) => {
+              e.stopPropagation();
+              handleExecuteStep();
+            }}>
               <Play className="h-3.5 w-3.5" />
             </Button>
           </TooltipTrigger>
@@ -143,6 +193,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
               className="cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation();
+                handleExecuteStep();
               }}
             >
               <span>Execute step</span>

@@ -5,6 +5,7 @@ import { Input } from "@/components/ui-kits/input/input";
 import { Textarea } from "@/components/ui-kits/textarea/textarea";
 import { FieldProps } from "../form-field.types";
 import { ExpressionHighlighter } from "../utils/expression-highlighter";
+import { cn } from "@/lib/utils";
 
 const toRecord = (value: unknown): Record<string, unknown> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
@@ -30,6 +31,27 @@ const buildValueForKeys = (
     result[key] = value[key] ?? "";
     return result;
   }, {});
+
+function DroppableValueTextarea({ id, value, onChange, placeholder, disabled, readOnly, className, rows }: { id: string; value: string; onChange: (v: string) => void; placeholder: string; disabled?: boolean; readOnly?: boolean; className?: string; rows?: number }) {
+  return (
+    <div className={cn("relative flex-1")}>
+      <ExpressionHighlighter value={value || ""} isMultiline={true}>
+        <Textarea
+          id={id}
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value);
+          }}
+          readOnly={readOnly}
+          rows={rows}
+          disabled={disabled}
+          className={className}
+        />
+      </ExpressionHighlighter>
+    </div>
+  );
+}
 
 export const FixedKeyValuePairsField = ({
   field,
@@ -152,17 +174,16 @@ export const FixedKeyValuePairsField = ({
               disabled={field.disabled as boolean}
               className="rounded-b-none bg-muted/40 focus-visible:ring-0 focus-visible:ring-offset-0"
             />
-          <ExpressionHighlighter value={String(currentValue[key] ?? "")} isMultiline={true}>
-            <Textarea
-              placeholder={field.placeholder || "Value"}
-              value={String(currentValue[key] ?? "")}
-              onChange={readOnly ? undefined : (e) => handleValueChange(key, e.target.value)}
-              readOnly={readOnly}
-              rows={1}
-              disabled={field.disabled as boolean}
-              className="min-h-9 resize-y rounded-t-none border-t-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-            />
-          </ExpressionHighlighter>
+          <DroppableValueTextarea
+            id={`${field.id}-val-${key}`}
+            placeholder={field.placeholder || "Value"}
+            value={String(currentValue[key] ?? "")}
+            onChange={readOnly ? () => {} : (v) => handleValueChange(key, v)}
+            readOnly={readOnly}
+            rows={1}
+            disabled={field.disabled as boolean}
+            className="min-h-9 resize-y rounded-t-none border-t-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+          />
         </div>
       ))}
     </div>

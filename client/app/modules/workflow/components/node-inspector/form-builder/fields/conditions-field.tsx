@@ -79,6 +79,25 @@ const TYPE_OPERATORS: Record<string, { value: string; label: string }[]> = {
   ],
 };
 
+function DroppableConditionInput({ id, value, onChange, placeholder, disabled, readOnly, isMultiline }: { id: string; value: string; onChange: (v: string) => void; placeholder?: string; disabled?: boolean; readOnly?: boolean; isMultiline: boolean }) {
+  return (
+    <div className={cn("relative w-full")}>
+      <ExpressionHighlighter value={value || ""} isMultiline={isMultiline}>
+        <Input
+          id={id}
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value);
+          }}
+          readOnly={readOnly}
+          disabled={disabled}
+        />
+      </ExpressionHighlighter>
+    </div>
+  );
+}
+
 export const ConditionsField = ({
   field,
   value,
@@ -145,9 +164,14 @@ export const ConditionsField = ({
                         <div className="flex flex-col gap-2">
               <div className="flex flex-col gap-1">
                 <Label className="text-[12px] text-muted-foreground">Left Operand</Label>
-                <ExpressionHighlighter value={cond.left || ""} isMultiline={false}>
-                  <Input value={cond.left} onChange={(e) => handleLeftChange(idx, e.target.value)} />
-                </ExpressionHighlighter>
+                <DroppableConditionInput
+                  id={`${field.id}-left-${idx}`}
+                  value={cond.left || ""}
+                  onChange={(v) => handleLeftChange(idx, v)}
+                  readOnly={readOnly}
+                  disabled={field.disabled as boolean}
+                  isMultiline={false}
+                />
               </div>
               <div className="flex gap-2">
                 <SelectField
@@ -186,12 +210,14 @@ export const ConditionsField = ({
               {cond.operator !== "is_true" && cond.operator !== "is_false" && (
                 <div className="flex flex-col gap-1">
                   <Label className="text-[12px] text-muted-foreground">Right Operand</Label>
-                  <ExpressionHighlighter value={cond.right || ""} isMultiline={false}>
-                    <Input
-                      value={cond.right || ""}
-                      onChange={(e) => handleRightChange(idx, e.target.value)}
-                    />
-                  </ExpressionHighlighter>
+                  <DroppableConditionInput
+                    id={`${field.id}-right-${idx}`}
+                    value={cond.right || ""}
+                    onChange={(v) => handleRightChange(idx, v)}
+                    readOnly={readOnly}
+                    disabled={field.disabled as boolean}
+                    isMultiline={false}
+                  />
                 </div>
               )}
             </div>

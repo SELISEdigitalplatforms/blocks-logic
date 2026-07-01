@@ -32,6 +32,10 @@ import {
   IGetWorkflowByVersionResponse,
   IUpdateWorkflowVersionPayload,
   IUpdateWorkflowVersionResponse,
+  IGetLastSuccessfulExecutionPayload,
+  IGetLastSuccessfulExecutionResponse,
+  IStepExecutePayload,
+  IStepExecuteResponse,
 } from "../types/workflow.service.type";
 
 export class WorkflowService {
@@ -147,6 +151,20 @@ export class WorkflowService {
 
   updateWorkflowVersion = (payload: IUpdateWorkflowVersionPayload): Promise<IUpdateWorkflowVersionResponse> => {
     return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.UPDATE_VERSION}`, payload);
+  }
+
+  getLastSuccessfulExecution = (
+    payload: IGetLastSuccessfulExecutionPayload,
+  ): Promise<IGetLastSuccessfulExecutionResponse> => {
+    const params = new URLSearchParams({
+      projectKey: payload.projectKey,
+      workflowId: payload.workflowId,
+    });
+    return this.LogicHttpClient.get(`${WORKFLOW_ENDPOINTS.LAST_SUCCESSFUL_EXECUTION}?${params.toString()}`);
+  }
+
+  stepExecute = (payload: IStepExecutePayload): Promise<IStepExecuteResponse> => {
+    return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.STEP_EXECUTE}`, payload);
   }
 }
 

@@ -200,3 +200,40 @@ export interface IUpdateWorkflowVersionResponse {
   isSuccess: boolean;
   errors?: unknown;
 }
+
+export interface IGetLastSuccessfulExecutionPayload {
+  projectKey: string;
+  workflowId: string;
+}
+
+export interface IGetLastSuccessfulExecutionResponse {
+  id: string;
+  workflowId: string;
+  workflowName: string;
+  status: number;
+  executionMode: WorkflowExecutionMode;
+  startedAt: string;
+  finishedAt: string;
+  duration: number | null;
+  errorMessage: string | null;
+  triggerType: string;
+  attemptNumber: number;
+  triggerMetadata: Record<string, any>;
+  context: Record<string, any>;
+  activeNodeIds: string[];
+  nodeExecutions: ExecutedNode[];
+  workflowSnapshot: Workflow;
+  items: ExecutedItem[];
+}
+
+export interface IStepExecutePayload {
+  ProjectKey: string;
+  WorkflowId: string;
+  NodeId: string;
+  SourceExecutionId: string;
+}
+
+export interface IStepExecuteResponse {
+  [key: string]: any;
+}
+
