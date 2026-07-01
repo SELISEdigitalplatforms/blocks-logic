@@ -13,6 +13,8 @@ import { v4 as uuidv4 } from "uuid";
 import { ExecutedItem, ExecutedNode, Workflow } from "../models/workflow.model";
 import { EditorNode } from "@blocks-workflow/models/node.model";
 import { getLayoutedElements } from "../utils/layout-utils";
+import { IGetWorkflowExecutionByIdResponse } from "../types/workflow.service.type";
+import { buildExecutedSubgraph } from "../utils/workflow-execution-editor.util";
 
 // interface  ExtendNode extends Node, WorkflowNode {}
 
@@ -25,8 +27,10 @@ export type WorkflowState = {
   isPublished: boolean;
   hasUnsavedChanges: boolean;
   executedItems: ExecutedItem[];
-
   executedNodes: ExecutedNode[];
+
+  stepExecutionReachableNodeIds: Set<string> | null;
+  stepExecutionTraversedEdgeIds: Set<string> | null;
 
   selectedNode: EditorNode | null;
   selectedHandle: string | null;
@@ -77,6 +81,8 @@ export type WorkflowState = {
   setWorkflow: (workflow: Workflow) => void;
   resetWorkflow: () => void;
   tidyUpWorkflow: () => void;
+  setStepExecutionData: (execution: IGetWorkflowExecutionByIdResponse) => void;
+  clearStepExecutionData: () => void;
 
   // Utility methods
   getNodeById: (nodeId: string) => EditorNode | undefined;
@@ -107,6 +113,8 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
   hasUnsavedChanges: false,
   executedItems: [],
   executedNodes: [],
+  stepExecutionReachableNodeIds: null,
+  stepExecutionTraversedEdgeIds: null,
   editorMode: "editor",
   executionMode: null,
 
@@ -505,6 +513,43 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
       workflowName: "",
       isPublished: false,
       hasUnsavedChanges: false,
+      executedItems: [],
+      executedNodes: [],
+      stepExecutionReachableNodeIds: null,
+      stepExecutionTraversedEdgeIds: null,
+    });
+  },
+
+  setStepExecutionData: (execution) => {
+    const { nodesMap, edgesMap } = get();
+    
+    // Create an array of workflow nodes to pass into buildExecutedSubgraph
+    // Note: The nodes in nodesMap are EditorNode which extends Node and WorkflowNode, so they have what is needed
+    const nodesArray = Object.values(nodesMap) as any[]; 
+    const edgesArray = Object.values(edgesMap) as any[];
+
+    const { reachableNodeIds, traversedEdgeIds } = buildExecutedSubgraph(
+      nodesArray,
+      edgesArray,
+      execution.nodeExecutions,
+      execution.items
+    );
+
+    set({
+      executedItems: execution.items,
+      executedNodes: execution.nodeExecutions,
+      stepExecutionReachableNodeIds: reachableNodeIds,
+      stepExecutionTraversedEdgeIds: traversedEdgeIds,
+    });
+  },
+
+  clearStepExecutionData: () => {
+    set({
+      stepExecutionReachableNodeIds: null,
+      stepExecutionTraversedEdgeIds: null,
+      // We don't necessarily clear executedItems and executedNodes 
+      // if we only want to hide the visual layer, but clearing them prevents 
+      // the node inspector from showing leftover execution data.
       executedItems: [],
       executedNodes: [],
     });
