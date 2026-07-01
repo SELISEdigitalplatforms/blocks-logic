@@ -40,9 +40,37 @@ namespace BlocksTemplate.Api.Controllers
 
         [HttpGet]
         [Authorize]
-        public async Task<BaseApiResponse> GetReposList([FromQuery] string ProjectKey)
+        public async Task<BaseApiResponse> GetReposList()
         {
-            return await deploymentDriverService.GetReposListAsync(ProjectKey);
+            return await deploymentDriverService.GetReposListAsync();
+        }
+
+        [HttpGet]
+        [Authorize]
+        public async Task<BaseApiResponse> GetUser()
+        {
+            return await deploymentDriverService.GetUserAsync();
+        }
+
+        [HttpGet]
+        [Authorize]
+        public async Task<BaseApiResponse> GetRepos([FromQuery] string? Search, [FromQuery] int PageNumber = 1, [FromQuery] int PageSize = 30)
+        {
+            return await deploymentDriverService.SearchRepositoriesAsync(Search, PageNumber, PageSize);
+        }
+
+        [HttpGet]
+        [Authorize]
+        public async Task<BaseApiResponse> GetBranches([FromQuery] string repo)
+        {
+            return await deploymentDriverService.GetBranchesAsync(repo);
+        }
+
+        [HttpGet]
+        [Authorize]
+        public async Task<BaseApiResponse> GithubBranchExists([FromQuery] string repoId)
+        {
+            return await deploymentDriverService.GithubBranchExistsAsync(repoId);
         }
     }
 }
