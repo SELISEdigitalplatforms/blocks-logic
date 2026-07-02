@@ -17,6 +17,7 @@ namespace DomainService.Workflow.Services
         Task<WorkflowExecutionModel> CreateExecutionAsync(WorkflowModel workflow, WorkflowExecutionMode executionMode);
         Task<WorkflowExecutionsGetResponseDto> GetExecutionsByWorkflowIdAsync(WorkflowExecutionsGetRequestDto dto);
         Task<WorkflowExecutionGetResponseDto> GetExecutionByIdAsync(WorkflowExecutionGetRequestDto dto);
+        Task<WorkflowExecutionGetResponseDto> LastSuccessfullExecutionAsync(LastSuccessfullExecutionRequestDto dto);
         Task EmailTriggerStartAsync(EmailTriggerEvent emailEvent);
         Task DataTriggerStartAsync(DataChangeEvent dataEvent);
         Task<StepExecuteResponseDto> StepExecuteAsync(StepExecuteRequestDto dto);

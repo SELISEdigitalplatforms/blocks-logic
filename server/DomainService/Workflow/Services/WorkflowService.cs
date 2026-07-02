@@ -4,6 +4,7 @@ using Blocks.Genesis;
 using DomainService.Workflow.Dtos;
 using DomainService.Workflow.Models;
 using DomainService.Workflow.Repositories;
+using DomainService.Workflow.Utils;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using Newtonsoft.Json;
@@ -273,8 +274,9 @@ namespace DomainService.Workflow.Services
                 Type = n.Type,
                 Version = n.Version,
                 Position = n.Position,
-                Parameters = JsonDocument.Parse(n.Parameters.ToJson()).RootElement,
-                Settings = JsonDocument.Parse(n.Settings.ToJson()).RootElement
+                Parameters = BsonJsonConverter.ToJsonElement(n.Parameters),
+                Settings = BsonJsonConverter.ToJsonElement(n.Settings),
+                PinData = BsonJsonConverter.ToJsonElementOrNull(n.PinData),
             }).ToList();
 
             var workflowDto = new WorkflowResponseDto
@@ -346,7 +348,8 @@ namespace DomainService.Workflow.Services
                     Version = n.Version,
                     Position = n.Position,
                     Parameters = BsonDocument.Parse(n.Parameters.GetRawText()),
-                    Settings = BsonDocument.Parse(n.Settings.GetRawText())
+                    Settings = BsonDocument.Parse(n.Settings.GetRawText()),
+                    PinData = BsonJsonConverter.ToBsonArrayOrNull(n.PinData),
                 }).ToList();
             }
             workflow.LastUpdatedDate = DateTime.UtcNow;
@@ -800,8 +803,9 @@ namespace DomainService.Workflow.Services
                     Type = n.Type,
                     Version = n.Version,
                     Position = n.Position,
-                    Parameters = JsonDocument.Parse(n.Parameters.ToJson()).RootElement,
-                    Settings = JsonDocument.Parse(n.Settings.ToJson()).RootElement
+                    Parameters = BsonJsonConverter.ToJsonElement(n.Parameters),
+                    Settings = BsonJsonConverter.ToJsonElement(n.Settings),
+                    PinData = BsonJsonConverter.ToJsonElementOrNull(n.PinData),
                 }).ToList(),
                 Edges = snapShot.Edges,
                 Settings = snapShot.Settings ?? new Dictionary<string, string>(),

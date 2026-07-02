@@ -249,5 +249,18 @@ namespace DomainService.Workflow.Repositories
             var items = await collection.Find(filter).SortBy(doc => doc.ItemIndex).ToListAsync();
             return items;
         }
+
+        public Task<WorkflowExecutionModel> GetLastCompletedExecution(string tenantId, string workflowId)
+        {
+            var collection = _dbContextProvider.GetCollection<WorkflowExecutionModel>(tenantId, _collectionName);
+            return collection.Find(item =>
+                item.TenantId == tenantId &&
+                item.WorkflowId == workflowId &&
+                item.ExecutionMode == WorkflowExecutionMode.Test &&
+                item.Status == WorkflowExecutionStatus.Completed
+            )
+            .SortByDescending(item => item.FinishedAt)
+            .FirstOrDefaultAsync();
+        }
     }
 }
