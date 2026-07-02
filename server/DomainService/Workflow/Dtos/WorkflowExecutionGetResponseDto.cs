@@ -3,10 +3,16 @@ using System.Text.Json.Nodes;
 using DomainService.Workflow.Enums;
 using DomainService.Workflow.Models;
 using MongoDB.Bson;
+using Blocks.Genesis;
 
 namespace DomainService.Workflow.Dtos
 {
-    public class WorkflowExecutionGetResponseDto
+    public class WorkflowExecutionGetResponseDto : BaseResponse
+    {
+        public WorkflowExecutionDto? Data { get; set; }
+    }
+
+    public class WorkflowExecutionDto
     {
         public required string Id { get; set; }
         public required string WorkflowId { get; set; }
