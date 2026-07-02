@@ -31,6 +31,8 @@ export type WorkflowState = {
 
   stepExecutionReachableNodeIds: Set<string> | null;
   stepExecutionTraversedEdgeIds: Set<string> | null;
+  
+  lastSuccessfulExecutionData: IGetWorkflowExecutionByIdResponse | null;
 
   selectedNode: EditorNode | null;
   selectedHandle: string | null;
@@ -54,7 +56,7 @@ export type WorkflowState = {
   copyNode: (nodeId: string) => void;
   copySelectedNodes: () => void;
   pasteNodes: (position?: { x: number; y: number }) => void;
-  selectNode: (node: EditorNode) => void;
+  selectNode: (node: EditorNode | null) => void;
   deselectNode: () => void;
 
   // Handle operations
@@ -83,6 +85,7 @@ export type WorkflowState = {
   tidyUpWorkflow: () => void;
   setStepExecutionData: (execution: IGetWorkflowExecutionByIdResponse) => void;
   clearStepExecutionData: () => void;
+  setLastSuccessfulExecutionData: (data: IGetWorkflowExecutionByIdResponse | null) => void;
 
   // Utility methods
   getNodeById: (nodeId: string) => EditorNode | undefined;
@@ -115,6 +118,7 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
   executedNodes: [],
   stepExecutionReachableNodeIds: null,
   stepExecutionTraversedEdgeIds: null,
+  lastSuccessfulExecutionData: null,
   editorMode: "editor",
   executionMode: null,
 
@@ -428,11 +432,37 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
 
   // Selection operations
   selectNode: (node: EditorNode | null) => {
-    set({ selectedNode: node });
+    const { nodesMap } = get();
+    const updatedNodesMap = { ...nodesMap };
+    
+    Object.keys(updatedNodesMap).forEach((id) => {
+      updatedNodesMap[id] = {
+        ...updatedNodesMap[id],
+        selected: node ? id === node.id : false,
+      };
+    });
+
+    set({
+      nodesMap: updatedNodesMap,
+      selectedNode: node ? (updatedNodesMap[node.id] || node) : null,
+    });
   },
 
   deselectNode: () => {
-    set({ selectedNode: null });
+    const { nodesMap } = get();
+    const updatedNodesMap = { ...nodesMap };
+    
+    Object.keys(updatedNodesMap).forEach((id) => {
+      updatedNodesMap[id] = {
+        ...updatedNodesMap[id],
+        selected: false,
+      };
+    });
+
+    set({
+      nodesMap: updatedNodesMap,
+      selectedNode: null,
+    });
   },
 
   selectHandle: (handle: string) => {
@@ -531,17 +561,19 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
     const { reachableNodeIds, traversedEdgeIds } = buildExecutedSubgraph(
       nodesArray,
       edgesArray,
-      execution.nodeExecutions,
-      execution.items
+      execution.data.nodeExecutions,
+      execution.data.items
     );
 
     set({
-      executedItems: execution.items,
-      executedNodes: execution.nodeExecutions,
+      executedItems: execution.data.items,
+      executedNodes: execution.data.nodeExecutions,
       stepExecutionReachableNodeIds: reachableNodeIds,
       stepExecutionTraversedEdgeIds: traversedEdgeIds,
     });
   },
+
+  setLastSuccessfulExecutionData: (data) => set({ lastSuccessfulExecutionData: data }),
 
   clearStepExecutionData: () => {
     set({

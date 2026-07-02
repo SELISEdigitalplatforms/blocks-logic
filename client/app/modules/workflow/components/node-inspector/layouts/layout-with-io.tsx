@@ -4,8 +4,8 @@ import { useState } from "react";
 import { NodeSchema } from "../../node-schemas/node-schema.type";
 import { FormBuilder } from "../form-builder/form-builder";
 import { useWorkflow } from "@blocks-workflow/hooks";
-import { InputPanel } from "../shared/input-panel";
-import { OutputPanel } from "../shared/output-panel";
+import { InputPanel } from "../shared/input-panel/input-panel";
+import { OutputPanel } from "../shared/output-panel/output-panel";
 
 type LayoutWithIOProps = {
   schema: NodeSchema | null;

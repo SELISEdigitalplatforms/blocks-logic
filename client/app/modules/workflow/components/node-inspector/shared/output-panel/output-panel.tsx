@@ -5,6 +5,9 @@ import { copyToClipboard } from "@blocks-workflow/utils/copy-to-clipboard";
 import { useCallback, useMemo, useState } from "react";
 import { inferSchemaFromRuntimeRows } from "@blocks-workflow/utils/runtime-node-data";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { useWorkflow } from "@blocks-workflow/hooks/use-workflow";
+import { Button } from "@/components/ui-kits/button/button";
+import { Textarea } from "@/components/ui-kits/textarea/textarea";
 
 type BranchGroup = {
   branch: string;
@@ -20,8 +23,11 @@ export const OutputPanel = ({
   onToggleCollapse?: () => void;
 } = {}) => {
   const [tab, setTab] = useState("schema");
+  const [isEditingMock, setIsEditingMock] = useState(false);
+  const [mockDataInput, setMockDataInput] = useState("");
   const selectedNode = useWorkflowStore((s) => s.selectedNode);
   const executedItems = useWorkflowStore((s) => s.executedItems);
+  const { editorMode, updateNode, lastSuccessfulExecutionData } = useWorkflow();
 
   const runtimeOutputByBranch = useMemo<BranchGroup[]>(() => {
     if (!selectedNode) return [];
@@ -58,6 +64,44 @@ export const OutputPanel = ({
     copyToClipboard(stringValue);
   }, []);
 
+  const handleSetMockDataClick = useCallback(() => {
+    setIsEditingMock(true);
+    
+    let defaultData: unknown[] = [];
+    
+    if (selectedNode && lastSuccessfulExecutionData?.data?.items) {
+      const matchedNodeItem = lastSuccessfulExecutionData.data.items.find(
+        (item: { nodeId: string; data?: { Output?: unknown } }) => item.nodeId === selectedNode.id
+      );
+      
+      if (matchedNodeItem?.data?.Output !== undefined) {
+        const output = matchedNodeItem.data.Output;
+        defaultData = Array.isArray(output) ? output : [output];
+      }
+    }
+
+    setMockDataInput(JSON.stringify(defaultData, null, 2));
+  }, [selectedNode, lastSuccessfulExecutionData]);
+
+  const handleCancelMockData = useCallback(() => {
+    setIsEditingMock(false);
+  }, []);
+
+  const handleSaveMockData = useCallback(() => {
+    if (!selectedNode) return;
+    let newPinData;
+    try {
+      newPinData = JSON.parse(mockDataInput);
+    } catch (e) {
+      newPinData = [mockDataInput];
+    }
+    if (!Array.isArray(newPinData)) {
+      newPinData = [newPinData];
+    }
+    updateNode(selectedNode.id, { pinData: newPinData });
+    setIsEditingMock(false);
+  }, [mockDataInput, selectedNode, updateNode]);
+
   if (!selectedNode) return null;
 
   return (
@@ -65,13 +109,20 @@ export const OutputPanel = ({
       <div className="flex items-center justify-between">
         <h3 className="font-medium text-high-emphasis">Output</h3>
         <div className="flex items-center gap-2">
-          <Tabs value={tab} onValueChange={setTab}>
-            <TabsList>
-              <TabsTrigger value="schema">Schema</TabsTrigger>
-              <TabsTrigger value="table">Table</TabsTrigger>
-              <TabsTrigger value="json">JSON</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          {!isEditingMock && editorMode === "editor" && (
+            <Button variant="outline" size="xs" onClick={handleSetMockDataClick}>
+              Set mock data
+            </Button>
+          )}
+          {!isEditingMock && (
+            <Tabs value={tab} onValueChange={setTab}>
+              <TabsList>
+                <TabsTrigger value="schema">Schema</TabsTrigger>
+                <TabsTrigger value="table">Table</TabsTrigger>
+                <TabsTrigger value="json">JSON</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          )}
           {onToggleCollapse && (
             <button
               onClick={onToggleCollapse}
@@ -83,8 +134,29 @@ export const OutputPanel = ({
         </div>
       </div>
 
-      {!isCollapsed && tab === "schema" && (
-        <div className="mt-2 flex-1 overflow-y-auto rounded bg-surface-app p-2">
+      {isEditingMock ? (
+        <div className="mt-2 flex flex-1 flex-col gap-2 overflow-hidden rounded bg-surface-app p-2">
+          <p className="text-[11px] text-low-emphasis">
+            Data from last successful execution is inserted here. You can edit it below.
+          </p>
+          <Textarea
+            className="flex-1 resize-none font-mono text-xs"
+            value={mockDataInput}
+            onChange={(e) => setMockDataInput(e.target.value)}
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={handleCancelMockData}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={handleSaveMockData}>
+              Save
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <>
+          {!isCollapsed && tab === "schema" && (
+            <div className="mt-2 flex-1 overflow-y-auto rounded bg-surface-app p-2">
           {runtimeOutputRows.length === 0 ? (
             <p className="text-xs text-low-emphasis">No runtime output schema available.</p>
           ) : (
@@ -176,6 +248,8 @@ export const OutputPanel = ({
             <RuntimeJson rows={runtimeOutputRows} />
           )}
         </div>
+      )}
+        </>
       )}
     </div>
   );

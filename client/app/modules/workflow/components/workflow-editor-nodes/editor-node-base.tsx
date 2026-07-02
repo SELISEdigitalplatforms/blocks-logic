@@ -1,9 +1,9 @@
 import { Button } from "@/components/ui-kits/button/button";
 import { Ban, EllipsisVertical, Play, Trash } from "lucide-react";
-import { useWorkflow, useGetLastSuccessfulExecution, useStepExecute } from "../../hooks";
+import { useWorkflow, useStepExecute } from "../../hooks";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
-import { useWorkflowStore } from "../../store";
 import { getStatusStyles } from "../../utils/workflow-execution-editor.util";
+import { workflowService } from "../../services/workflow.service";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,39 +28,38 @@ type EditorNodeBaseProps = {
 
 export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
   const [isToolbarVisible, setIsToolbarVisible] = useState(false);
-  const { getNodeById, deleteNode, selectAndConfigureNode, selectedNode, updateNode, duplicateNode, isNodeNameUnique, workflowId } =
+  const { getNodeById, deleteNode, selectAndConfigureNode, selectedNode, updateNode, duplicateNode, isNodeNameUnique, workflowId, setStepExecutionData, lastSuccessfulExecutionData, stepExecutionReachableNodeIds, executedNodes } =
     useWorkflow();
   const node = getNodeById(id);
   
   const tenantId = useProjectStore((s) => s.selectedProject?.tenantId) || "";
-  const setStepExecutionData = useWorkflowStore((s) => s.setStepExecutionData);
-
-  const { refetch: fetchLastExecution } = useGetLastSuccessfulExecution({
-    projectKey: tenantId,
-    workflowId: workflowId as string,
-  });
 
   const { mutateAsync: stepExecute } = useStepExecute();
 
   const handleExecuteStep = async () => {
     if (!tenantId || !workflowId || !node) return;
     try {
-      const { data: executionResp } = await fetchLastExecution();
-      const executionId = executionResp?.id || (executionResp as any)?.itemId;
+      const executionId = lastSuccessfulExecutionData?.data.id || (lastSuccessfulExecutionData as any)?.itemId;
       if (!executionId) {
         showErrorToast({ title: "Error", errors: "No successful execution found" });
         return;
       }
       
-      const stepResp = await stepExecute({
+      const stepResp: any = await stepExecute({
         ProjectKey: tenantId,
         WorkflowId: workflowId,
         NodeId: node.id,
         SourceExecutionId: executionId,
       });
       
-      if (stepResp) {
-        setStepExecutionData(stepResp as any);
+      if (stepResp?.itemId) {
+        const executionData = await workflowService.getWorkflowExecutionById({
+          projectKey: tenantId,
+          executionId: stepResp.itemId,
+        });
+        if (executionData?.data) {
+          setStepExecutionData(executionData as any);
+        }
       }
     } catch (e) {
       console.error(e);
@@ -68,8 +67,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
     }
   };
 
-  const stepExecutionReachableNodeIds = useWorkflowStore(s => s.stepExecutionReachableNodeIds);
-  const executedNodes = useWorkflowStore(s => s.executedNodes);
+
 
   const isExecutedNode = stepExecutionReachableNodeIds?.has(id);
   const executedNodeStatus = isExecutedNode ? executedNodes.find(n => n.nodeId === id)?.status : undefined;

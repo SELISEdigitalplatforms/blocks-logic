@@ -33,7 +33,7 @@ import {
   IUpdateWorkflowVersionPayload,
   IUpdateWorkflowVersionResponse,
   IGetLastSuccessfulExecutionPayload,
-  IGetLastSuccessfulExecutionResponse,
+  // IGetLastSuccessfulExecutionResponse,
   IStepExecutePayload,
   IStepExecuteResponse,
 } from "../types/workflow.service.type";
@@ -155,7 +155,7 @@ export class WorkflowService {
 
   getLastSuccessfulExecution = (
     payload: IGetLastSuccessfulExecutionPayload,
-  ): Promise<IGetLastSuccessfulExecutionResponse> => {
+  ): Promise<IGetWorkflowExecutionByIdResponse> => {
     const params = new URLSearchParams({
       projectKey: payload.projectKey,
       workflowId: payload.workflowId,
