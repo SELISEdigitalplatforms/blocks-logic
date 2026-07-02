@@ -1,46 +1,45 @@
 import { Button } from "@/components/ui-kits/button/button";
 import { SheetHeader, SheetTitle } from "@/components/ui-kits/sheet/sheet";
-import { useWorkflow, useGetLastSuccessfulExecution, useStepExecute } from "@blocks-workflow/hooks";
+import { useWorkflow, useStepExecute } from "@blocks-workflow/hooks";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
-import { useWorkflowStore } from "../../store";
 import { Eye, Pen, Rocket, X } from "lucide-react";
 import { getNodeDefinition } from "../node-library-panel";
 import { useEffect, useState } from "react";
 import { showErrorToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@radix-ui/react-tooltip";
+import { workflowService } from "../../services/workflow.service";
 
 export const NodeInspectorHeader = () => {
-  const { selectedNode, updateNode, isNodeNameUnique, closeConfigModal, editorMode, workflowId } = useWorkflow();
+  const { selectedNode, updateNode, isNodeNameUnique, closeConfigModal, editorMode, workflowId, setStepExecutionData, lastSuccessfulExecutionData } = useWorkflow();
   
   const tenantId = useProjectStore((s) => s.selectedProject?.tenantId) || "";
-  const setStepExecutionData = useWorkflowStore((s) => s.setStepExecutionData);
-
-  const { refetch: fetchLastExecution } = useGetLastSuccessfulExecution({
-    projectKey: tenantId,
-    workflowId: workflowId as string,
-  });
 
   const { mutateAsync: stepExecute } = useStepExecute();
 
   const handleExecuteStep = async () => {
     if (!tenantId || !workflowId || !selectedNode) return;
     try {
-      const { data: executionResp } = await fetchLastExecution();
-      const executionId = executionResp?.id || (executionResp as any)?.itemId;
+      const executionId = lastSuccessfulExecutionData?.data.id;
       if (!executionId) {
         showErrorToast({ title: "Error", errors: "No successful execution found" });
         return;
       }
       
-      const stepResp = await stepExecute({
+      const stepResp: any = await stepExecute({
         ProjectKey: tenantId,
         WorkflowId: workflowId,
         NodeId: selectedNode.id,
         SourceExecutionId: executionId,
       });
       
-      if (stepResp) {
-        setStepExecutionData(stepResp as any);
+      if (stepResp?.itemId) {
+        const executionData = await workflowService.getWorkflowExecutionById({
+          projectKey: tenantId,
+          executionId: stepResp.itemId,
+        });
+        if (executionData?.data) {
+          setStepExecutionData(executionData as any);
+        }
       }
     } catch (e) {
       console.error(e);

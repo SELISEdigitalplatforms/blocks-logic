@@ -110,10 +110,17 @@ export interface IGetWorkflowExecutionByIdPayload {
 }
 
 export interface IGetWorkflowExecutionByIdResponse {
+  data: IGetWorkflowExecutionById;
+  isSuccess: boolean;
+  errors: unknown;
+}
+
+export interface IGetWorkflowExecutionById {
   workflowSnapshot: Workflow;
   nodeExecutions: ExecutedNode[];
   items: ExecutedItem[];
   executionMode: WorkflowExecutionMode;
+  id: string;
 }
 
 export interface ICreateWorkflowVersionPayload {
@@ -206,25 +213,31 @@ export interface IGetLastSuccessfulExecutionPayload {
   workflowId: string;
 }
 
-export interface IGetLastSuccessfulExecutionResponse {
-  id: string;
-  workflowId: string;
-  workflowName: string;
-  status: number;
-  executionMode: WorkflowExecutionMode;
-  startedAt: string;
-  finishedAt: string;
-  duration: number | null;
-  errorMessage: string | null;
-  triggerType: string;
-  attemptNumber: number;
-  triggerMetadata: Record<string, any>;
-  context: Record<string, any>;
-  activeNodeIds: string[];
-  nodeExecutions: ExecutedNode[];
-  workflowSnapshot: Workflow;
-  items: ExecutedItem[];
-}
+// export interface IGetLastSuccessfulExecutionResponse {
+//   data: IGetLastSuccessfulExecution;
+//   isSuccess: boolean;
+//   errors: unknown;
+// }
+
+// export interface IGetLastSuccessfulExecution {
+//   id: string;
+//   workflowId: string;
+//   workflowName: string;
+//   status: number;
+//   executionMode: WorkflowExecutionMode;
+//   startedAt: string;
+//   finishedAt: string;
+//   duration: number | null;
+//   errorMessage: string | null;
+//   triggerType: string;
+//   attemptNumber: number;
+//   triggerMetadata: Record<string, any>;
+//   context: Record<string, any>;
+//   activeNodeIds: string[];
+//   nodeExecutions: ExecutedNode[];
+//   workflowSnapshot: Workflow;
+//   items: ExecutedItem[];
+// }
 
 export interface IStepExecutePayload {
   ProjectKey: string;
@@ -234,6 +247,8 @@ export interface IStepExecutePayload {
 }
 
 export interface IStepExecuteResponse {
-  [key: string]: any;
+  itemId: string;
+  isSuccess: boolean;
+  errors?: unknown;
 }
 

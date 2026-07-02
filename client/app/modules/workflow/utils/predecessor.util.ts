@@ -14,7 +14,9 @@ export const getAllPredecessors = (
 ): EditorNode[] => {
   const predecessorNodeIds = new Set<string>();
 
-  if (executedItems.length > 0) {
+  const hasExecutionData = executedItems.length > 0 && executedItems.some((item) => item.nodeId === nodeId);
+
+  if (hasExecutionData) {
     // 1. Using Execution Data
     const itemMap = new Map(executedItems.map((item) => [item.itemId, item]));
     const stack: string[] = [];

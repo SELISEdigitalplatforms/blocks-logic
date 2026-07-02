@@ -1,6 +1,6 @@
 import { BaseEdge, EdgeLabelRenderer, EdgeProps, getBezierPath } from "@xyflow/react";
 import { getHandleLabel } from "@blocks-workflow/constants";
-import { useWorkflowStore } from "../../store";
+import { useWorkflow } from "../../hooks";
 import { getStatusStyles } from "../../utils/workflow-execution-editor.util";
 
 export const WorkflowEditorEdgeDefault = ({
@@ -26,8 +26,7 @@ export const WorkflowEditorEdgeDefault = ({
     targetPosition,
   });
 
-  const stepExecutionTraversedEdgeIds = useWorkflowStore(s => s.stepExecutionTraversedEdgeIds);
-  const executedNodes = useWorkflowStore(s => s.executedNodes);
+  const { stepExecutionTraversedEdgeIds, executedNodes } = useWorkflow();
   const isTraversed = stepExecutionTraversedEdgeIds?.has(id);
   const sourceNodeStatus = isTraversed ? executedNodes.find(n => n.nodeId === source)?.status : undefined;
   const executionStyles = sourceNodeStatus ? getStatusStyles(sourceNodeStatus) : undefined;

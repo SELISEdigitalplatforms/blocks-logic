@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
-import { useWorkflowStore } from "../store";
+import { useWorkflow } from "./use-workflow";
 import { workflowService } from "../services/workflow.service";
 import {
   IGetWorkflowsPayload,
@@ -191,7 +191,7 @@ export const useUpdateWorkflowVersion = () => {
 export const useStepExecutionHandler = () => {
   const queryClient = useQueryClient();
   const tenantId = useProjectStore((s) => s.selectedProject?.tenantId) || "";
-  const setStepExecutionData = useWorkflowStore((s) => s.setStepExecutionData);
+  const { setStepExecutionData } = useWorkflow();
 
   // const handleExecuteStep = async (executionId: string = "364a29f9c1dd47888cd3781a487497af") => {
   const handleExecuteStep = async (executionId: string = "6fb4d495cc874c19bb9b8fa651f10d38") => {
