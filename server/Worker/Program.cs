@@ -16,7 +16,7 @@ using Iam.DomainService.Dtos;
 using Iam.DomainService.Shared.Dtos;
 using Iam.DomainService.Users;
 using Mfa.DomainService.Configuration;
-using Renci.SshNet.Messages;
+using SeliseBlocks.ConfigurationDriver;
 using Worker;
 using Worker.Configuration;
 using Worker.Consumers;
@@ -37,7 +37,13 @@ IHostBuilder CreateHostBuilder(string[] args) =>
         Host.CreateDefaultBuilder(args)
         .ConfigureAppConfiguration((context, builder) =>
         {
-            // ApplicationConfigurations.ConfigureWorkerEnv(builder, args);
+            builder.AddMongoDbConfiguration(options =>
+            {
+                options.ConnectionString = secret.DatabaseConnectionString;
+                options.DatabaseName = secret.RootDatabaseName;
+                options.CollectionName = "Secrets";
+                options.SecretKey = "blocks-secret-logic";
+            });
         })
         .ConfigureServices((services) =>
         {
