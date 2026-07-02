@@ -67,6 +67,7 @@ export const router = createBrowserRouter([
                 <Outlet />
               </ProtectedGuard>
             ),
+            path: "/app",
             children: [
               {
                 element: (
@@ -80,12 +81,12 @@ export const router = createBrowserRouter([
                       </ConsoleLayout>
                     ),
                     children: [
-                      { path: "/app/profile", element: <ProfilePage /> },
-                      { path: "/app/console", element: <ConsolePage /> },
+                      { path: "profile", element: <ProfilePage /> },
+                      { path: "console", element: <ConsolePage /> },
                     ],
                   },
                   {
-                    path: "/app/project-overview",
+                    path: "project-overview",
                     element: (
                       <ProjectOverviewLayout
                         redirectPaths={redirectPaths}
@@ -95,7 +96,7 @@ export const router = createBrowserRouter([
                     ),
                     children: [
                       {
-                        path: "/app/project-overview/environments",
+                        path: "project-overview/environments",
                         element: <EnvironmentsPage />,
                       },
                     ],
@@ -112,9 +113,9 @@ export const router = createBrowserRouter([
                   </DashboardLayout>
                 ),
                 children: [
-                  { path: "/app/dashboard", element: <DashboardOverview /> },
-                  { path: "/app/workflow/:id", element: <WorkflowDetailsPage /> },
-                  { path: "/app/workflow", element: <WorkflowsPage /> },
+                  { path: "dashboard", element: <DashboardOverview /> },
+                  { path: "workflow/:id", element: <WorkflowDetailsPage /> },
+                  { path: "workflow", element: <WorkflowsPage /> },
                 ],
               },
             ],
