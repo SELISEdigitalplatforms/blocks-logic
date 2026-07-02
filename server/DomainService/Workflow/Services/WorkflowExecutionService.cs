@@ -359,6 +359,16 @@ namespace DomainService.Workflow.Services
             var execution = await _executionRepository.GetByIdAsync(dto.ExecutionId, dto.ProjectKey)
                 ?? throw new InvalidOperationException($"Execution {dto.ExecutionId} not found");
 
+
+            if (execution == null)
+            {
+                return new WorkflowExecutionGetResponseDto
+                {
+                    IsSuccess = false,
+                    Errors = new Dictionary<string, string> { { "Message", "Execution not found" } }
+                };
+            }
+
             // Get all workflow items - frontend will organize them into input/output structure
             var allItems = await _executionRepository.GetAllItemsByExecutionIdAsync(dto.ExecutionId, dto.ProjectKey);
 
@@ -390,67 +400,80 @@ namespace DomainService.Workflow.Services
 
             return new WorkflowExecutionGetResponseDto
             {
-                Id = execution.Id,
-                WorkflowId = execution.WorkflowId,
-                WorkflowName = execution.WorkflowName,
-                Status = execution.Status,
-                ExecutionMode = execution.ExecutionMode,
-                StartedAt = execution.StartedAt,
-                FinishedAt = execution.FinishedAt,
-                ErrorMessage = execution.ErrorMessage,
-                TriggerType = execution.TriggerType,
-                AttemptNumber = execution.AttemptNumber,
-                Context = BsonJsonConverter.ToJsonElement(execution.Context),
-                ActiveNodeIds = execution.ActiveNodeIds,
-                NodeExecutions = execution.NodeExecutions.Select(ne => new NodeExecutionResponseDto
+                IsSuccess = true,
+                Data = new WorkflowExecutionDto
                 {
-                    Id = ne.Id,
-                    NodeId = ne.NodeId,
-                    NodeName = ne.NodeName,
-                    NodeType = ne.NodeType,
-                    NodeVersion = ne.NodeVersion,
-                    RunIndex = ne.RunIndex,
-                    Status = ne.Status,
-                    InputItemCount = ne.InputItemCount,
-                    OutputItemCount = ne.OutputItemCount,
-                    OutputCountsByBranch = ne.OutputCountsByBranch,
-                    StartedAt = ne.StartedAt,
-                    EndedAt = ne.EndedAt,
-                    Error = ne.Error,
-                    AttemptNumber = ne.AttemptNumber,
-                    Parameters = JsonDocument.Parse(workflow.Nodes.FirstOrDefault(n => n.Id == ne.NodeId)?.Parameters.ToJson() ?? "{}"),
-                    Input = new JsonArray(
-                        allItems
-                            .Where(p => allItems
+                    Id = execution.Id,
+                    WorkflowId = execution.WorkflowId,
+                    WorkflowName = execution.WorkflowName,
+                    Status = execution.Status,
+                    ExecutionMode = execution.ExecutionMode,
+                    StartedAt = execution.StartedAt,
+                    FinishedAt = execution.FinishedAt,
+                    ErrorMessage = execution.ErrorMessage,
+                    TriggerType = execution.TriggerType,
+                    AttemptNumber = execution.AttemptNumber,
+                    Context = BsonJsonConverter.ToJsonElement(execution.Context),
+                    ActiveNodeIds = execution.ActiveNodeIds,
+                    NodeExecutions = execution.NodeExecutions.Select(ne => new NodeExecutionResponseDto
+                    {
+                        Id = ne.Id,
+                        NodeId = ne.NodeId,
+                        NodeName = ne.NodeName,
+                        NodeType = ne.NodeType,
+                        NodeVersion = ne.NodeVersion,
+                        RunIndex = ne.RunIndex,
+                        Status = ne.Status,
+                        InputItemCount = ne.InputItemCount,
+                        OutputItemCount = ne.OutputItemCount,
+                        OutputCountsByBranch = ne.OutputCountsByBranch,
+                        StartedAt = ne.StartedAt,
+                        EndedAt = ne.EndedAt,
+                        Error = ne.Error,
+                        AttemptNumber = ne.AttemptNumber,
+                        Parameters = JsonDocument.Parse(workflow.Nodes.FirstOrDefault(n => n.Id == ne.NodeId)?.Parameters.ToJson() ?? "{}"),
+                        Input = new JsonArray(
+                            allItems
+                                .Where(p => allItems
+                                    .Where(i => i.NodeExecutionId == ne.Id)
+                                    .SelectMany(i => i.ParentItemIds ?? new List<string>())
+                                    .Contains(p.Id))
+                                .Select(p => JsonNode.Parse(p.Data.Output?.ToJson() ?? "null"))
+                                .ToArray()),
+                        Output = new JsonArray(
+                            allItems
                                 .Where(i => i.NodeExecutionId == ne.Id)
-                                .SelectMany(i => i.ParentItemIds ?? new List<string>())
-                                .Contains(p.Id))
-                            .Select(p => JsonNode.Parse(p.Data.Output?.ToJson() ?? "null"))
-                            .ToArray()),
-                    Output = new JsonArray(
-                        allItems
-                            .Where(i => i.NodeExecutionId == ne.Id)
-                            .Select(i => JsonNode.Parse(i.Data.Output?.ToJson() ?? "null"))
-                            .ToArray()),
-                }).ToList(),
-                WorkflowSnapshot = workflow,
-                Items = allItems.Select(i => new WorkflowItemExecutionDto
-                {
-                    ItemId = i.Id!,
-                    NodeId = i.NodeId,
-                    NodeExecutionId = i.NodeExecutionId,
-                    Branch = i.Branch,
-                    Data = JsonDocument.Parse(i.Data.ToJson()),
-                    ParentItemIds = i.ParentItemIds,
-                    ItemIndex = i.ItemIndex,
-                    CreatedAt = i.CreatedAt
-                }).ToList()
+                                .Select(i => JsonNode.Parse(i.Data.Output?.ToJson() ?? "null"))
+                                .ToArray()),
+                    }).ToList(),
+                    WorkflowSnapshot = workflow,
+                    Items = allItems.Select(i => new WorkflowItemExecutionDto
+                    {
+                        ItemId = i.Id!,
+                        NodeId = i.NodeId,
+                        NodeExecutionId = i.NodeExecutionId,
+                        Branch = i.Branch,
+                        Data = JsonDocument.Parse(i.Data.ToJson()),
+                        ParentItemIds = i.ParentItemIds,
+                        ItemIndex = i.ItemIndex,
+                        CreatedAt = i.CreatedAt
+                    }).ToList()
+                }
             };
         }
 
         public async Task<WorkflowExecutionGetResponseDto> LastSuccessfullExecutionAsync(LastSuccessfullExecutionRequestDto dto)
         {
             var execution = await _executionRepository.GetLastCompletedExecution(dto.ProjectKey, dto.WorkflowId);
+            if (execution == null)
+            {
+                return new WorkflowExecutionGetResponseDto
+                {
+                    IsSuccess = false,
+                    Data = null,
+                    Errors = new Dictionary<string, string> { { "Message", "No Execution" } }
+                };
+            }
             var allItems = await _executionRepository.GetAllItemsByExecutionIdAsync(execution.Id, dto.ProjectKey);
 
             var nodes = execution.WorkflowSnapshot.Nodes.Select(item => new NodeDto
@@ -481,61 +504,65 @@ namespace DomainService.Workflow.Services
 
             return new WorkflowExecutionGetResponseDto
             {
-                Id = execution.Id,
-                WorkflowId = execution.WorkflowId,
-                WorkflowName = execution.WorkflowName,
-                Status = execution.Status,
-                ExecutionMode = execution.ExecutionMode,
-                StartedAt = execution.StartedAt,
-                FinishedAt = execution.FinishedAt,
-                ErrorMessage = execution.ErrorMessage,
-                TriggerType = execution.TriggerType,
-                AttemptNumber = execution.AttemptNumber,
-                Context = BsonJsonConverter.ToJsonElement(execution.Context),
-                ActiveNodeIds = execution.ActiveNodeIds,
-                NodeExecutions = execution.NodeExecutions.Select(ne => new NodeExecutionResponseDto
+                IsSuccess = true,
+                Data = new WorkflowExecutionDto
                 {
-                    Id = ne.Id,
-                    NodeId = ne.NodeId,
-                    NodeName = ne.NodeName,
-                    NodeType = ne.NodeType,
-                    NodeVersion = ne.NodeVersion,
-                    RunIndex = ne.RunIndex,
-                    Status = ne.Status,
-                    InputItemCount = ne.InputItemCount,
-                    OutputItemCount = ne.OutputItemCount,
-                    OutputCountsByBranch = ne.OutputCountsByBranch,
-                    StartedAt = ne.StartedAt,
-                    EndedAt = ne.EndedAt,
-                    Error = ne.Error,
-                    AttemptNumber = ne.AttemptNumber,
-                    Parameters = JsonDocument.Parse(workflow.Nodes.FirstOrDefault(n => n.Id == ne.NodeId)?.Parameters.ToJson() ?? "{}"),
-                    Input = new JsonArray(
-                        allItems
-                            .Where(p => allItems
+                    Id = execution.Id,
+                    WorkflowId = execution.WorkflowId,
+                    WorkflowName = execution.WorkflowName,
+                    Status = execution.Status,
+                    ExecutionMode = execution.ExecutionMode,
+                    StartedAt = execution.StartedAt,
+                    FinishedAt = execution.FinishedAt,
+                    ErrorMessage = execution.ErrorMessage,
+                    TriggerType = execution.TriggerType,
+                    AttemptNumber = execution.AttemptNumber,
+                    Context = BsonJsonConverter.ToJsonElement(execution.Context),
+                    ActiveNodeIds = execution.ActiveNodeIds,
+                    NodeExecutions = execution.NodeExecutions.Select(ne => new NodeExecutionResponseDto
+                    {
+                        Id = ne.Id,
+                        NodeId = ne.NodeId,
+                        NodeName = ne.NodeName,
+                        NodeType = ne.NodeType,
+                        NodeVersion = ne.NodeVersion,
+                        RunIndex = ne.RunIndex,
+                        Status = ne.Status,
+                        InputItemCount = ne.InputItemCount,
+                        OutputItemCount = ne.OutputItemCount,
+                        OutputCountsByBranch = ne.OutputCountsByBranch,
+                        StartedAt = ne.StartedAt,
+                        EndedAt = ne.EndedAt,
+                        Error = ne.Error,
+                        AttemptNumber = ne.AttemptNumber,
+                        Parameters = JsonDocument.Parse(workflow.Nodes.FirstOrDefault(n => n.Id == ne.NodeId)?.Parameters.ToJson() ?? "{}"),
+                        Input = new JsonArray(
+                            allItems
+                                .Where(p => allItems
+                                    .Where(i => i.NodeExecutionId == ne.Id)
+                                    .SelectMany(i => i.ParentItemIds ?? new List<string>())
+                                    .Contains(p.Id))
+                                .Select(p => JsonNode.Parse(p.Data.Output?.ToJson() ?? "null"))
+                                .ToArray()),
+                        Output = new JsonArray(
+                            allItems
                                 .Where(i => i.NodeExecutionId == ne.Id)
-                                .SelectMany(i => i.ParentItemIds ?? new List<string>())
-                                .Contains(p.Id))
-                            .Select(p => JsonNode.Parse(p.Data.Output?.ToJson() ?? "null"))
-                            .ToArray()),
-                    Output = new JsonArray(
-                        allItems
-                            .Where(i => i.NodeExecutionId == ne.Id)
-                            .Select(i => JsonNode.Parse(i.Data.Output?.ToJson() ?? "null"))
-                            .ToArray()),
-                }).ToList(),
-                WorkflowSnapshot = workflow,
-                Items = allItems.Select(i => new WorkflowItemExecutionDto
-                {
-                    ItemId = i.Id!,
-                    NodeId = i.NodeId,
-                    NodeExecutionId = i.NodeExecutionId,
-                    Branch = i.Branch,
-                    Data = JsonDocument.Parse(i.Data.ToJson()),
-                    ParentItemIds = i.ParentItemIds,
-                    ItemIndex = i.ItemIndex,
-                    CreatedAt = i.CreatedAt
-                }).ToList()
+                                .Select(i => JsonNode.Parse(i.Data.Output?.ToJson() ?? "null"))
+                                .ToArray()),
+                    }).ToList(),
+                    WorkflowSnapshot = workflow,
+                    Items = allItems.Select(i => new WorkflowItemExecutionDto
+                    {
+                        ItemId = i.Id!,
+                        NodeId = i.NodeId,
+                        NodeExecutionId = i.NodeExecutionId,
+                        Branch = i.Branch,
+                        Data = JsonDocument.Parse(i.Data.ToJson()),
+                        ParentItemIds = i.ParentItemIds,
+                        ItemIndex = i.ItemIndex,
+                        CreatedAt = i.CreatedAt
+                    }).ToList()
+                }
             };
         }
         public async Task DataTriggerStartAsync(DataChangeEvent dataEvent)
