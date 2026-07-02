@@ -27,5 +27,7 @@ namespace DomainService.Workflow.Repositories
             string tenantId);
 
         Task<List<WorkflowItemExecutionModel>> GetAllItemsByNodeExecutionIdAsync(string nodeExecutionId, string tenantId);
+
+        Task<WorkflowExecutionModel> GetLastCompletedExecution(string tenantId, string workflowId);
     }
 }
