@@ -20,18 +20,21 @@ namespace DomainService.Workflow.Services
         private readonly IMessageClient _messageClient;
 
         private readonly ILogger<WorkflowEngineService> _logger;
+        private readonly IWorkflowNotificationService _workflowNotificationService;
 
         public WorkflowEngineService(
             IWorkflowExecutionRepository workflowExecutionRepository,
             IEnumerable<INodeExecutor> nodeExecutors,
             IMessageClient messageClient,
-            ILogger<WorkflowEngineService> logger
+            ILogger<WorkflowEngineService> logger,
+            IWorkflowNotificationService workflowNotificationService
             )
         {
             _workflowExecutionRepository = workflowExecutionRepository;
             _nodeExecutors = nodeExecutors;
             _messageClient = messageClient;
             _logger = logger;
+            _workflowNotificationService = workflowNotificationService;
         }
 
         /// <summary>
@@ -382,6 +385,17 @@ namespace DomainService.Workflow.Services
                 execution.Status = WorkflowExecutionStatus.Completed;
                 execution.FinishedAt = DateTime.UtcNow;
                 execution.ActiveNodeIds = [];
+                var userIds = execution.WorkflowSnapshot.TestMeta.UserIds;
+                await _workflowNotificationService.NotifyWorkflowExecutionEvent(
+                    userIds,
+                    execution.WorkflowSnapshot, new Dictionary<string, string>
+                    {
+                        { "Event", "WorkflowCompleted" },
+                        { "Status", "Completed" },
+                        { "Message", $"Workflow {execution.WorkflowSnapshot.Name} completed successfully." },
+                        { "Data", execution.Id }
+                    }
+                );
                 await _workflowExecutionRepository.AtomicFinalizeExecutionAsync(execution.Id, execution.TenantId);
                 return [];
             }
