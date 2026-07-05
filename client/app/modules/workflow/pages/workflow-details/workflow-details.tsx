@@ -153,10 +153,10 @@ export const WorkflowDetailsContent = ({
                   orientation="vertical"
                   className="h-4 bg-muted-foreground"
                 />
-                <Button variant="outline" size="sm" className="gap-2">
+                {/* <Button variant="outline" size="sm" className="gap-2">
                   <ScrollText className="h-4 w-4" />
                   Logs
-                </Button>
+                </Button> */}
                 <Button
                   size="sm"
                   onClick={handleManualSave}
