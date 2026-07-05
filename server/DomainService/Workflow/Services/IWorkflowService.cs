@@ -31,5 +31,7 @@ namespace DomainService.Workflow.Services
         Task<BaseMutationResponse> UnpublishAsync(WorkflowUnpublishRequestDto dto);
 
         Task<BaseMutationResponse> RestoreAsync(WorkflowRestoreRequestDto dto);
+
+        Task<BaseMutationResponse> TriggerListenerAsync(TriggerListenerRequestDto dto);
     }
 }
