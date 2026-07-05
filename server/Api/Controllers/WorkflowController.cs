@@ -14,15 +14,18 @@ namespace Utilities.Api.Controllers
 
         private readonly IWorkflowService _workflowService;
         private readonly IWorkflowExecutionService _workflowExecutionService;
+        private readonly IWorkflowNotificationService _workflowNotificationService;
 
         public WorkflowController(
 
             IWorkflowService workflowService,
-            IWorkflowExecutionService workflowExecutionService)
+            IWorkflowExecutionService workflowExecutionService,
+            IWorkflowNotificationService workflowNotificationService)
         {
 
             _workflowService = workflowService;
             _workflowExecutionService = workflowExecutionService;
+            _workflowNotificationService = workflowNotificationService;
         }
 
         [HttpPost]
