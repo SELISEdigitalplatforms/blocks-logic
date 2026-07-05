@@ -54,24 +54,33 @@ namespace DomainService.Workflow.Services
         /// <summary>
         /// Core node execution pipeline: prepare → run executor → complete/fail → dispatch next nodes
         /// </summary>
-        private async Task ExecuteNodeAsync(AddExcuationNodeEvent dto, Func<List<AddExcuationNodeEvent>, Task> dispatchNextNodes)
+        private async Task ExecuteNodeAsync(
+            AddExcuationNodeEvent dto,
+            Func<List<AddExcuationNodeEvent>, Task> dispatchNextNodes,
+            Func<NodeExecutionContext, NodeModel, NodeExecutionResult, NodeExecutionResult>? postProcessResult = null)
         {
+
             var prepared = await PrepareNodeForExecutionAsync(dto);
             if (prepared == null) return;
 
             var (execution, node, nodeExecution, nodeExecutionContext, executor) = prepared.Value;
-
+            var completionNodeId = execution.ExecutionMode == WorkflowExecutionMode.Test ? execution.WorkflowSnapshot.TestMeta.CompletionNodeId : null;
             try
             {
                 var result = await executor.RunAsync(nodeExecutionContext);
+                if (postProcessResult != null)
+                {
+                    result = postProcessResult(nodeExecutionContext, node, result);
+                }
                 if (!result.IsSuccess)
                 {
                     await FailNodeExecutionAsync(execution, nodeExecution, new Exception(result.ErrorMessage));
                 }
                 else
                 {
-                    var nextEvents = await CompleteNodeExecutionAsync(nodeExecutionContext, execution, node, nodeExecution, result);
+                    var nextEvents = await CompleteNodeExecutionAsync(nodeExecutionContext, execution, node, nodeExecution, result, completionNodeId);
                     await dispatchNextNodes(nextEvents);
+
                 }
             }
             catch (Exception ex)
@@ -296,7 +305,7 @@ namespace DomainService.Workflow.Services
         /// <summary>
         /// Node completed successfully: persist items, update metadata, and return next node events
         /// </summary>
-        private async Task<List<AddExcuationNodeEvent>> CompleteNodeExecutionAsync(NodeExecutionContext context, WorkflowExecutionModel execution, NodeModel node, NodeExecutionModel nodeExecution, NodeExecutionResult result)
+        private async Task<List<AddExcuationNodeEvent>> CompleteNodeExecutionAsync(NodeExecutionContext context, WorkflowExecutionModel execution, NodeModel node, NodeExecutionModel nodeExecution, NodeExecutionResult result, string completionNodeId)
         {
             // Persist output items
             var outputItems = new List<WorkflowItemExecutionModel>();
@@ -368,6 +377,15 @@ namespace DomainService.Workflow.Services
                 }
             }
 
+            if (!string.IsNullOrEmpty(completionNodeId) && node.Id == completionNodeId)
+            {
+                execution.Status = WorkflowExecutionStatus.Completed;
+                execution.FinishedAt = DateTime.UtcNow;
+                execution.ActiveNodeIds = [];
+                await _workflowExecutionRepository.AtomicFinalizeExecutionAsync(execution.Id, execution.TenantId);
+                return [];
+            }
+
             // Determine next nodes
             var nextNodeIds = execution.WorkflowSnapshot.Edges
                 .Where(e => e.Source == node.Id)
@@ -383,6 +401,7 @@ namespace DomainService.Workflow.Services
             // Atomically update ActiveNodeIds: remove completed node, add next nodes
             var isWorkflowComplete = await _workflowExecutionRepository.AtomicCompleteNodeAsync(
                 execution.Id, execution.TenantId, node.Id, nextNodeIds);
+
 
             if (isWorkflowComplete)
             {
@@ -422,7 +441,7 @@ namespace DomainService.Workflow.Services
                 execution.Id, execution.TenantId, nodeExecution.NodeId, new List<string>());
         }
 
-        public async Task<WorkflowExecutionModel?> ExecuteStepNodeAsync(string tenantId, string executionId, string targetNodeId, string? sourceExecutionId = null)
+        public async Task<WorkflowExecutionModel?> ExecuteStepNodeAsync(string tenantId, string executionId, string triggerNodeId, string targetNodeId, string? sourceExecutionId = null)
         {
             var execution = await _workflowExecutionRepository.GetByIdAsync(executionId, tenantId);
             if (execution == null || execution.WorkflowSnapshot == null) return execution;
@@ -436,38 +455,50 @@ namespace DomainService.Workflow.Services
             {
                 sourceExecution = await _workflowExecutionRepository.GetByIdAsync(sourceExecutionId, tenantId);
                 if (sourceExecution != null && sourceExecution.TenantId != execution.TenantId) sourceExecution = null;
+                if (sourceExecution != null && sourceExecution.WorkflowId != execution.WorkflowId) sourceExecution = null;
                 if (sourceExecution != null && sourceExecution.Status != WorkflowExecutionStatus.Completed) sourceExecution = null;
             }
 
             var ordered = GetTopologicalAncestorsAndTarget(workflow, targetNodeId).ToList();
+            var cacheEligible = sourceExecution != null;
             var remap = new Dictionary<string, string>();
-
             var noopDispatch = new Func<List<AddExcuationNodeEvent>, Task>(_ => Task.CompletedTask);
 
             for (int i = 0; i < ordered.Count; i++)
             {
                 var node = ordered[i];
-                var sourceNodeExecution = sourceExecution?.NodeExecutions.FirstOrDefault(ne => ne.NodeId == node.Id);
 
                 if (execution.Status == WorkflowExecutionStatus.Failed) return execution;
 
-                if (node.PinData != null && node.PinData.Count > 0)
+                if (cacheEligible)
                 {
-                    await MaterializePinDataAsync(execution, node);
-                    execution = await _workflowExecutionRepository.GetByIdAsync(execution.Id, execution.TenantId);
-                    continue;
+                    var sourceNodeExec = sourceExecution!.NodeExecutions
+                        .FirstOrDefault(ne => ne.NodeId == node.Id);
+                    var sourceNode = sourceExecution.WorkflowSnapshot.Nodes
+                        .FirstOrDefault(n => n.Id == node.Id);
+
+                    bool cacheValid =
+                        sourceNodeExec != null
+                        && sourceNode != null
+                        && sourceNodeExec.RunIndex == i + 1
+                        && NodesAreEquivalent(sourceNode, node);
+
+                    if (cacheValid
+                        && await TryMaterializeFromSourceExecutionAsync(execution, sourceExecution!, node, remap))
+                    {
+                        execution = await _workflowExecutionRepository.GetByIdAsync(execution.Id, execution.TenantId);
+                        if (execution == null) return null;
+                        if (execution.Status == WorkflowExecutionStatus.Failed) return execution;
+                        continue;
+                    }
+
+                    cacheEligible = false;
                 }
 
-                if (node.Id != targetNodeId
-                    && sourceExecution != null
-                    && sourceNodeExecution != null
-                    && sourceExecution.Status == WorkflowExecutionStatus.Completed
-                    && await TryMaterializeFromSourceExecutionAsync(execution, sourceExecution, node, remap))
+                Func<NodeExecutionContext, NodeModel, NodeExecutionResult, NodeExecutionResult>? hook = null;
+                if (node.PinData != null && node.PinData.Count > 0)
                 {
-                    execution = await _workflowExecutionRepository.GetByIdAsync(execution.Id, execution.TenantId);
-                    if (execution == null) return null;
-                    if (execution.Status == WorkflowExecutionStatus.Failed) return execution;
-                    continue;
+                    hook = (ctx, node, result) => NodeExecutionResult.Successful(BuildPinDataOutputItems(ctx, node, result));
                 }
 
                 var evt = new AddExcuationNodeEvent
@@ -475,14 +506,13 @@ namespace DomainService.Workflow.Services
                     ProjectKey = execution.TenantId,
                     WorkflowId = execution.WorkflowId,
                     WorkflowExecutionId = execution.Id,
-                    NodeId = node.Id
+                    NodeId = node.Id,
                 };
 
-                await ExecuteNodeAsync(evt, noopDispatch);
+                await ExecuteNodeAsync(evt, noopDispatch, hook);
 
                 execution = await _workflowExecutionRepository.GetByIdAsync(execution.Id, execution.TenantId);
                 if (execution == null) return null;
-
                 if (execution.Status == WorkflowExecutionStatus.Failed) return execution;
             }
 
@@ -494,7 +524,7 @@ namespace DomainService.Workflow.Services
         /// Returns <paramref name="targetNodeId"/> plus all transitive ancestors, in topological order
         /// (every node appears after all of its parents). Cycle-safe via visited set.
         /// </summary>
-        private IEnumerable<NodeModel> GetTopologicalAncestorsAndTarget(WorkflowModel workflow, string targetNodeId)
+        public IEnumerable<NodeModel> GetTopologicalAncestorsAndTarget(WorkflowModel workflow, string targetNodeId)
         {
             var nodesById = workflow.Nodes.ToDictionary(n => n.Id);
 
@@ -782,6 +812,39 @@ namespace DomainService.Workflow.Services
         private static BsonValue DeepCopyBson(BsonValue value)
         {
             return BsonSerializer.Deserialize<BsonValue>(value.ToBson());
+        }
+
+        private static bool NodesAreEquivalent(NodeModel source, NodeModel current)
+        {
+            if (!string.Equals(source.Id, current.Id)) return false;
+            if (!string.Equals(source.Name, current.Name)) return false;
+            if (!string.Equals(source.Category, current.Category)) return false;
+            if (!string.Equals(source.Type, current.Type)) return false;
+            if (!string.Equals(source.Version, current.Version)) return false;
+            if (!EqualsBson(source.Parameters, current.Parameters)) return false;
+            if (!EqualsBson(source.Settings, current.Settings)) return false;
+            if (!EqualsBson(source.PinData, current.PinData)) return false;
+            return true;
+        }
+
+        private static bool EqualsBson(BsonValue? a, BsonValue? b)
+        {
+            if (ReferenceEquals(a, b)) return true;
+            if (a is null || b is null) return false;
+            return a.Equals(b);
+        }
+
+        private static List<NodeOutputItem> BuildPinDataOutputItems(NodeExecutionContext context, NodeModel node, NodeExecutionResult result)
+        {
+            var items = new List<NodeOutputItem>(node.PinData!.Count);
+            var index = 0;
+            foreach (var item in result.OutputItems!)
+            {
+                if (node.PinData[index] == null) continue;
+                item.Data.Output = node.PinData[index];
+                index++;
+            }
+            return result.OutputItems;
         }
 
         private List<NodeModel> GetAncestorNodesAsync(WorkflowModel workflow, string nodeId)

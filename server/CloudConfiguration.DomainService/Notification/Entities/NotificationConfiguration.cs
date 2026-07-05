@@ -1,8 +1,10 @@
 ﻿using Blocks.Genesis;
 using CloudConfiguration.DomainService.Notification.Enums;
+using MongoDB.Bson.Serialization.Attributes;
 
 namespace CloudConfiguration.DomainService.Notification.Entities
 {
+    [BsonIgnoreExtraElements]
     public class NotificationConfiguration : BaseEntity
     {
         public string Name { get; set; }
