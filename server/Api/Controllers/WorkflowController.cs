@@ -196,6 +196,13 @@ namespace Utilities.Api.Controllers
             return Ok(executions);
         }
 
+        [HttpPost]
+        public async Task<IActionResult> TriggerListener([FromBody] TriggerListenerRequestDto dto)
+        {
+            var executions = await _workflowService.TriggerListenerAsync(dto);
+            return Ok(executions);
+        }
+
 
         [HttpGet]
         public async Task<IActionResult> GetExecutions([FromQuery] WorkflowExecutionsGetRequestDto dto)
