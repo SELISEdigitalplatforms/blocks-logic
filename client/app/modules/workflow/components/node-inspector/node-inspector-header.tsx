@@ -1,14 +1,51 @@
 import { Button } from "@/components/ui-kits/button/button";
 import { SheetHeader, SheetTitle } from "@/components/ui-kits/sheet/sheet";
-import { useWorkflow } from "@blocks-workflow/hooks";
+import { useWorkflow, useStepExecute } from "@blocks-workflow/hooks";
+import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { Eye, Pen, Rocket, X } from "lucide-react";
 import { getNodeDefinition } from "../node-library-panel";
 import { useEffect, useState } from "react";
 import { showErrorToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@radix-ui/react-tooltip";
+import { workflowService } from "../../services/workflow.service";
 
 export const NodeInspectorHeader = () => {
-  const { selectedNode, updateNode, isNodeNameUnique, closeConfigModal, editorMode } = useWorkflow();
+  const { selectedNode, updateNode, isNodeNameUnique, closeConfigModal, editorMode, workflowId, setStepExecutionData, lastSuccessfulExecutionData } = useWorkflow();
+  
+  const tenantId = useProjectStore((s) => s.selectedProject?.tenantId) || "";
+
+  const { mutateAsync: stepExecute } = useStepExecute();
+
+  const handleExecuteStep = async () => {
+    if (!tenantId || !workflowId || !selectedNode) return;
+    try {
+      const executionId = lastSuccessfulExecutionData?.data.id;
+      if (!executionId) {
+        showErrorToast({ title: "Error", errors: "No successful execution found" });
+        return;
+      }
+      
+      const stepResp: any = await stepExecute({
+        ProjectKey: tenantId,
+        WorkflowId: workflowId,
+        NodeId: selectedNode.id,
+        SourceExecutionId: executionId,
+      });
+      
+      if (stepResp?.itemId) {
+        const executionData = await workflowService.getWorkflowExecutionById({
+          projectKey: tenantId,
+          executionId: stepResp.itemId,
+        });
+        if (executionData?.data) {
+          setStepExecutionData(executionData as any);
+        }
+      }
+    } catch (e) {
+      console.error(e);
+      showErrorToast({ title: "Error", errors: "Failed to execute step" });
+    }
+  };
     
   if (!selectedNode) return null;
 
@@ -87,7 +124,7 @@ export const NodeInspectorHeader = () => {
             <Eye className="h-4 w-4" />
             Focused View
           </Button>
-          <Button size="sm" className="gap-2" onClick={() => {}}>
+          <Button size="sm" className="gap-2" onClick={() => handleExecuteStep()}>
             <Rocket className="h-4 w-4" />
             Execute Step
           </Button>

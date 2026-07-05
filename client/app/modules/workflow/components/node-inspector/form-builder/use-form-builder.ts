@@ -10,7 +10,7 @@ import {
   cascadeFieldResets,
   stripTransientKeys,
 } from "./utils";
-import { useWorkflowStore, useWorkflowStoreApi, WorkflowStore } from "@/modules/workflow/store";
+import { useWorkflowStoreApi, WorkflowStore } from "@/modules/workflow/store";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
 
 export interface FormBuilderConfig {
@@ -59,11 +59,9 @@ export const useFormBuilder = ({
   onChange,
 }: UseFormBuilderProps): UseFormBuilderReturn => {
   const tenantId = useProjectStore().selectedProject?.tenantId || "";
-  const { selectedNode, workflowId } = useWorkflow();
+  const { selectedNode, workflowId, editorMode, executionMode: explicitExecutionMode } = useWorkflow();
 
   const store = useWorkflowStoreApi();
-  const editorMode = useWorkflowStore((state) => state.editorMode);
-  const explicitExecutionMode = useWorkflowStore((state) => state.executionMode);
 
   let derivedExecutionMode = 0; // Default Test
   if (editorMode === "version") {

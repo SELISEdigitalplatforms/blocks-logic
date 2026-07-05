@@ -5,7 +5,7 @@ import { NodeSchema } from "../../node-schemas/node-schema.type";
 import { FormBuilder } from "../form-builder/form-builder";
 import { useWorkflow } from "@blocks-workflow/hooks";
 import { ListenEventPanel } from "../shared";
-import { OutputPanel } from "../shared/output-panel";
+import { OutputPanel } from "../shared/output-panel/output-panel";
 
 type LayoutWithListenerProps = {
   schema: NodeSchema | null;
