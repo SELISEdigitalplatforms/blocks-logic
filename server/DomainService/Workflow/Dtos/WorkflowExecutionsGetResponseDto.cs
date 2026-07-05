@@ -19,6 +19,6 @@ namespace DomainService.Workflow.Dtos
         public DateTime? FinishedAt { get; set; }
         public string? ErrorMessage { get; set; }
         public int AttemptNumber { get; set; }
-        public TriggerMetadata? TriggerMetadata { get; set; } = new();
+        // public TriggerMetadata? TriggerMetadata { get; set; } = new();
     }
 }

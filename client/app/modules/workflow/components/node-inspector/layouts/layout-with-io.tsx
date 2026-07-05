@@ -4,8 +4,8 @@ import { useState } from "react";
 import { NodeSchema } from "../../node-schemas/node-schema.type";
 import { FormBuilder } from "../form-builder/form-builder";
 import { useWorkflow } from "@blocks-workflow/hooks";
-import { InputPanel } from "../shared/input-panel";
-import { OutputPanel } from "../shared/output-panel";
+import { InputPanel } from "../shared/input-panel/input-panel";
+import { OutputPanel } from "../shared/output-panel/output-panel";
 
 type LayoutWithIOProps = {
   schema: NodeSchema | null;
@@ -14,14 +14,30 @@ type LayoutWithIOProps = {
 export const LayoutWithIO = ({ schema }: LayoutWithIOProps) => {
   const { selectedNode, updateNode } = useWorkflow();
   const [activeTab, setActiveTab] = useState<"parameters" | "settings">("parameters");
+  const [isInputCollapsed, setIsInputCollapsed] = useState(false);
+  const [isOutputCollapsed, setIsOutputCollapsed] = useState(false);
+
+  const toggleInput = () => {
+    if (!isInputCollapsed && isOutputCollapsed) {
+      setIsOutputCollapsed(false);
+    }
+    setIsInputCollapsed(!isInputCollapsed);
+  };
+
+  const toggleOutput = () => {
+    if (!isOutputCollapsed && isInputCollapsed) {
+      setIsInputCollapsed(false);
+    }
+    setIsOutputCollapsed(!isOutputCollapsed);
+  };
 
   if (!selectedNode || !schema) return null;
 
   return (
-    <div className="flex h-full flex-col">
-      <NodeInspectorHeader />
+      <div className="flex h-full flex-col">
+        <NodeInspectorHeader />
 
-      <div className="mt-6 flex flex-1 overflow-hidden">
+        <div className="mt-6 flex flex-1 overflow-hidden">
         <div className="flex w-5/12 flex-col overflow-hidden">
           <Tabs
             value={activeTab}
@@ -58,9 +74,9 @@ export const LayoutWithIO = ({ schema }: LayoutWithIOProps) => {
           </Tabs>
         </div>
 
-        <div className="grid w-7/12 grid-rows-2 gap-4 overflow-hidden rounded border p-3">
-          <InputPanel />
-          <OutputPanel />
+        <div className="flex w-7/12 flex-col gap-4 overflow-hidden rounded border p-3">
+          <InputPanel isCollapsed={isInputCollapsed} onToggleCollapse={toggleInput} />
+          <OutputPanel isCollapsed={isOutputCollapsed} onToggleCollapse={toggleOutput} />
         </div>
       </div>
     </div>

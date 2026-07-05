@@ -18,6 +18,7 @@ export const useWorkflow = () => {
   const hasUnsavedChanges = useWorkflowStore((state) => state.hasUnsavedChanges);
   const editorMode = useWorkflowStore((state) => state.editorMode);
   const executionMode = useWorkflowStore((state) => state.executionMode);
+  const lastSuccessfulExecutionData = useWorkflowStore((state) => state.lastSuccessfulExecutionData);
   
   // Compute nodes and edges arrays from objects
   const nodes = useMemo(() => Object.values(nodesMap), [nodesMap]);
@@ -49,9 +50,14 @@ export const useWorkflow = () => {
   const setExecutionMode = useWorkflowStore((state) => state.setExecutionMode);
   const resetWorkflow = useWorkflowStore((state) => state.resetWorkflow);
   const tidyUpWorkflow = useWorkflowStore((state) => state.tidyUpWorkflow);
+  const setLastSuccessfulExecutionData = useWorkflowStore((state) => state.setLastSuccessfulExecutionData);
   const getNodeById = useWorkflowStore((state) => state.getNodeById);
   const getEdgeById = useWorkflowStore((state) => state.getEdgeById);
   const executedItems = useWorkflowStore((state) => state.executedItems);
+  const executedNodes = useWorkflowStore((state) => state.executedNodes);
+  const stepExecutionTraversedEdgeIds = useWorkflowStore((state) => state.stepExecutionTraversedEdgeIds);
+  const stepExecutionReachableNodeIds = useWorkflowStore((state) => state.stepExecutionReachableNodeIds);
+  const setStepExecutionData = useWorkflowStore((state) => state.setStepExecutionData);
 
   const selectAndConfigureNode = useCallback(
     (node: WorkflowNode) => {
@@ -179,6 +185,13 @@ export const useWorkflow = () => {
     hasUnsavedChanges,
     editorMode,
     executionMode,
+    lastSuccessfulExecutionData,
+    executedItems,
+    executedNodes,
+    stepExecutionTraversedEdgeIds,
+    stepExecutionReachableNodeIds,
+    nodesMap,
+    edgesMap,
 
     onNodesChange,
     onEdgesChange,
@@ -214,6 +227,8 @@ export const useWorkflow = () => {
     setWorkflow,
     setEditorMode,
     setExecutionMode,
+    setLastSuccessfulExecutionData,
+    setStepExecutionData,
     resetWorkflow,
     tidyUpWorkflow,
     // exportWorkflow,

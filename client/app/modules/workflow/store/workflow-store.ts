@@ -13,6 +13,8 @@ import { v4 as uuidv4 } from "uuid";
 import { ExecutedItem, ExecutedNode, Workflow } from "../models/workflow.model";
 import { EditorNode } from "@blocks-workflow/models/node.model";
 import { getLayoutedElements } from "../utils/layout-utils";
+import { IGetWorkflowExecutionByIdResponse } from "../types/workflow.service.type";
+import { buildExecutedSubgraph } from "../utils/workflow-execution-editor.util";
 
 // interface  ExtendNode extends Node, WorkflowNode {}
 
@@ -25,8 +27,12 @@ export type WorkflowState = {
   isPublished: boolean;
   hasUnsavedChanges: boolean;
   executedItems: ExecutedItem[];
-
   executedNodes: ExecutedNode[];
+
+  stepExecutionReachableNodeIds: Set<string> | null;
+  stepExecutionTraversedEdgeIds: Set<string> | null;
+  
+  lastSuccessfulExecutionData: IGetWorkflowExecutionByIdResponse | null;
 
   selectedNode: EditorNode | null;
   selectedHandle: string | null;
@@ -50,7 +56,7 @@ export type WorkflowState = {
   copyNode: (nodeId: string) => void;
   copySelectedNodes: () => void;
   pasteNodes: (position?: { x: number; y: number }) => void;
-  selectNode: (node: EditorNode) => void;
+  selectNode: (node: EditorNode | null) => void;
   deselectNode: () => void;
 
   // Handle operations
@@ -77,6 +83,9 @@ export type WorkflowState = {
   setWorkflow: (workflow: Workflow) => void;
   resetWorkflow: () => void;
   tidyUpWorkflow: () => void;
+  setStepExecutionData: (execution: IGetWorkflowExecutionByIdResponse) => void;
+  clearStepExecutionData: () => void;
+  setLastSuccessfulExecutionData: (data: IGetWorkflowExecutionByIdResponse | null) => void;
 
   // Utility methods
   getNodeById: (nodeId: string) => EditorNode | undefined;
@@ -107,6 +116,9 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
   hasUnsavedChanges: false,
   executedItems: [],
   executedNodes: [],
+  stepExecutionReachableNodeIds: null,
+  stepExecutionTraversedEdgeIds: null,
+  lastSuccessfulExecutionData: null,
   editorMode: "editor",
   executionMode: null,
 
@@ -420,11 +432,37 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
 
   // Selection operations
   selectNode: (node: EditorNode | null) => {
-    set({ selectedNode: node });
+    const { nodesMap } = get();
+    const updatedNodesMap = { ...nodesMap };
+    
+    Object.keys(updatedNodesMap).forEach((id) => {
+      updatedNodesMap[id] = {
+        ...updatedNodesMap[id],
+        selected: node ? id === node.id : false,
+      };
+    });
+
+    set({
+      nodesMap: updatedNodesMap,
+      selectedNode: node ? (updatedNodesMap[node.id] || node) : null,
+    });
   },
 
   deselectNode: () => {
-    set({ selectedNode: null });
+    const { nodesMap } = get();
+    const updatedNodesMap = { ...nodesMap };
+    
+    Object.keys(updatedNodesMap).forEach((id) => {
+      updatedNodesMap[id] = {
+        ...updatedNodesMap[id],
+        selected: false,
+      };
+    });
+
+    set({
+      nodesMap: updatedNodesMap,
+      selectedNode: null,
+    });
   },
 
   selectHandle: (handle: string) => {
@@ -505,6 +543,45 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
       workflowName: "",
       isPublished: false,
       hasUnsavedChanges: false,
+      executedItems: [],
+      executedNodes: [],
+      stepExecutionReachableNodeIds: null,
+      stepExecutionTraversedEdgeIds: null,
+    });
+  },
+
+  setStepExecutionData: (execution) => {
+    const { nodesMap, edgesMap } = get();
+    
+    // Create an array of workflow nodes to pass into buildExecutedSubgraph
+    // Note: The nodes in nodesMap are EditorNode which extends Node and WorkflowNode, so they have what is needed
+    const nodesArray = Object.values(nodesMap) as any[]; 
+    const edgesArray = Object.values(edgesMap) as any[];
+
+    const { reachableNodeIds, traversedEdgeIds } = buildExecutedSubgraph(
+      nodesArray,
+      edgesArray,
+      execution.data.nodeExecutions,
+      execution.data.items
+    );
+
+    set({
+      executedItems: execution.data.items,
+      executedNodes: execution.data.nodeExecutions,
+      stepExecutionReachableNodeIds: reachableNodeIds,
+      stepExecutionTraversedEdgeIds: traversedEdgeIds,
+    });
+  },
+
+  setLastSuccessfulExecutionData: (data) => set({ lastSuccessfulExecutionData: data }),
+
+  clearStepExecutionData: () => {
+    set({
+      stepExecutionReachableNodeIds: null,
+      stepExecutionTraversedEdgeIds: null,
+      // We don't necessarily clear executedItems and executedNodes 
+      // if we only want to hide the visual layer, but clearing them prevents 
+      // the node inspector from showing leftover execution data.
       executedItems: [],
       executedNodes: [],
     });
