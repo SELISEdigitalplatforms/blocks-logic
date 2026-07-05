@@ -838,6 +838,7 @@ namespace DomainService.Workflow.Services
                     CompletionNodeId = dto.NodeId
 
                 };
+                await _workflowRepository.UpdateWorkflowAsync(workflow);
                 return new StepExecuteResponseDto
                 {
                     IsSuccess = true,
