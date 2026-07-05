@@ -8,6 +8,7 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import { useWorkflow } from "@blocks-workflow/hooks/use-workflow";
 import { Button } from "@/components/ui-kits/button/button";
 import { Textarea } from "@/components/ui-kits/textarea/textarea";
+import { showErrorToast } from "@/hooks/use-toast";
 
 type BranchGroup = {
   branch: string;
@@ -32,6 +33,17 @@ export const OutputPanel = ({
   const runtimeOutputByBranch = useMemo<BranchGroup[]>(() => {
     if (!selectedNode) return [];
 
+    if (editorMode === "editor" && selectedNode.pinData != null) {
+      const rows = Array.isArray(selectedNode.pinData) ? selectedNode.pinData : [selectedNode.pinData];
+      return [
+        {
+          branch: "default",
+          rows,
+          schema: inferSchemaFromRuntimeRows(rows),
+        },
+      ];
+    }
+
     const groupedRows = executedItems
       .filter((item) => item.nodeId === selectedNode.id)
       .sort((a, b) => a.itemIndex - b.itemIndex)
@@ -50,7 +62,7 @@ export const OutputPanel = ({
       rows,
       schema: inferSchemaFromRuntimeRows(rows),
     }));
-  }, [executedItems, selectedNode]);
+  }, [executedItems, selectedNode, editorMode]);
 
   const runtimeOutputRows = useMemo(
     () => runtimeOutputByBranch.flatMap((group) => group.rows),
@@ -69,7 +81,9 @@ export const OutputPanel = ({
     
     let defaultData: unknown[] = [];
     
-    if (selectedNode && lastSuccessfulExecutionData?.data?.items) {
+    if (selectedNode?.pinData != null) {
+      defaultData = Array.isArray(selectedNode.pinData) ? selectedNode.pinData : [selectedNode.pinData];
+    } else if (selectedNode && lastSuccessfulExecutionData?.data?.items) {
       const matchedNodeItem = lastSuccessfulExecutionData.data.items.find(
         (item: { nodeId: string; data?: { Output?: unknown } }) => item.nodeId === selectedNode.id
       );
@@ -93,7 +107,8 @@ export const OutputPanel = ({
     try {
       newPinData = JSON.parse(mockDataInput);
     } catch (e) {
-      newPinData = [mockDataInput];
+      showErrorToast({ errors: "Invalid JSON format" });
+      return;
     }
     if (!Array.isArray(newPinData)) {
       newPinData = [newPinData];
