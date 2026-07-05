@@ -396,6 +396,10 @@ namespace DomainService.Workflow.Services
                         { "Data", execution.Id }
                     }
                 );
+                // Atomically update this NodeExecution to Completed in DB
+                await _workflowExecutionRepository.AtomicUpdateNodeExecutionCompletedAsync(
+                    execution.Id, execution.TenantId, nodeExecution.Id,
+                    outputItems.Count, nodeExecution.OutputCountsByBranch, contextUpdates);
                 await _workflowExecutionRepository.AtomicFinalizeExecutionAsync(execution.Id, execution.TenantId);
                 return [];
             }

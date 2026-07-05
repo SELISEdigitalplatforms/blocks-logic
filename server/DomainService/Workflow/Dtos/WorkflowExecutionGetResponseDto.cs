@@ -29,7 +29,7 @@ namespace DomainService.Workflow.Dtos
         public List<NodeExecutionResponseDto> NodeExecutions { get; set; } = new();
         public WorkflowResponseDto? WorkflowSnapshot { get; set; }
         public List<WorkflowItemExecutionDto> Items { get; set; } = new();
-        public TriggerMetadata? TriggerMetadata { get; set; } = new();
+        // public TriggerMetadata? TriggerMetadata { get; set; } = new();
     }
 
     public class NodeExecutionResponseDto : NodeExecutionModel
