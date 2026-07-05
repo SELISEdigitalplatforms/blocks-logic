@@ -13,6 +13,7 @@ using DomainService.Workflow.Nodes.LogicIFV1;
 using DomainService.Workflow.Nodes.TriggerWebhookV1;
 using DomainService.Workflow.Nodes.TransformSetFieldV1;
 using DomainService.MagicLink.Service;
+using DomainService.Utilities;
 
 namespace DomainService.Workflow
 {
@@ -28,6 +29,7 @@ namespace DomainService.Workflow
             services.AddSingleton<IWorkflowService, WorkflowService>();
             services.AddSingleton<IWorkflowExecutionService, WorkflowExecutionService>();
             services.AddSingleton<IWorkflowEngineService, WorkflowEngineService>();
+            services.AddSingleton<IWorkflowNotificationService, WorkflowNotificationService>();
 
             // register repositories
             services.AddSingleton<IWorkflowRepository, WorkflowRepository>();
@@ -58,6 +60,8 @@ namespace DomainService.Workflow
             // end register node executors
 
             services.AddSingleton<IClientCredentialTokenService, ClientCredentialTokenService>();
+
+            services.RegisterAllNotificationApplicationServices();
 
             services.RegisterBlocksMailService();
             services.AddHttpClient();
