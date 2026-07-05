@@ -748,7 +748,6 @@ namespace DomainService.Workflow.Services
                     };
                 }
 
-                workflow.IsDirty = false;
                 workflow.IsPublished = false;
                 workflow.PublishedVersionId = null;
                 workflow.PublishedMeta = null;
