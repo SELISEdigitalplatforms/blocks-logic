@@ -5,7 +5,7 @@ using MongoDB.Bson.Serialization.Attributes;
 namespace Iam.DomainService.Entities
 {
     [BsonIgnoreExtraElements]
-    public class User : BaseEntity  
+    public class User   
     {
         public string? Salutation { get; set; }
         public string? FirstName { get; set; }
@@ -37,6 +37,21 @@ namespace Iam.DomainService.Entities
         public string? ExternalUserId { get; set; }
         public string? Department { get; set; }
         public string? EmployeeId { get; set; }
+
+        public List<string> EmailAddresses { get; set; }
+
+        public List<string> OrganizationIds { get; set; }
+
+        #region BaseEntity
+        [BsonId]
+        public string ItemId { get; set; } = string.Empty;
+        public DateTime CreatedDate { get; set; }
+        public DateTime LastUpdatedDate { get; set; }
+        public string? CreatedBy { get; set; }
+        public string? Language { get; set; }
+        public string? LastUpdatedBy { get; set; }
+        public List<string> Tags { get; set; } = new List<string>();
+        #endregion
     }
 
     public enum UserVarifiedType

@@ -196,6 +196,13 @@ namespace Utilities.Api.Controllers
             return Ok(executions);
         }
 
+        [HttpPost]
+        public async Task<IActionResult> TriggerListener([FromBody] TriggerListenerRequestDto dto)
+        {
+            var executions = await _workflowService.TriggerListenerAsync(dto);
+            return Ok(executions);
+        }
+
 
         [HttpGet]
         public async Task<IActionResult> GetExecutions([FromQuery] WorkflowExecutionsGetRequestDto dto)
@@ -210,6 +217,13 @@ namespace Utilities.Api.Controllers
         {
             ApplyContext(dto);
             var execution = await _workflowExecutionService.GetExecutionByIdAsync(dto);
+            return Ok(execution);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> LastSuccessfullExecution([FromQuery] LastSuccessfullExecutionRequestDto dto)
+        {
+            var execution = await _workflowExecutionService.LastSuccessfullExecutionAsync(dto);
             return Ok(execution);
         }
 
