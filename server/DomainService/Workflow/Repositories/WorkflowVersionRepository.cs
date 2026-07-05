@@ -52,5 +52,20 @@ namespace DomainService.Workflow.Repositories
             return collection.FindOneAndReplaceAsync(filter => filter.TenantId == projectKey && filter.ItemId == versionId, versionModel);
         }
 
+        public Task DeleteWorkflowVersionAsync(string projectKey, string versionId)
+        {
+            var collection = GetCollection(projectKey);
+            var filter = Builders<WorkflowVersionModel>.Filter.Eq(f => f.TenantId, projectKey) &
+                         Builders<WorkflowVersionModel>.Filter.Eq(f => f.ItemId, versionId);
+            return collection.DeleteOneAsync(filter);
+        }
+
+        public Task DeleteWorkflowVersionsByWorkflowIdAsync(string projectKey, string workflowId)
+        {
+            var collection = GetCollection(projectKey);
+            var filter = Builders<WorkflowVersionModel>.Filter.Eq(f => f.TenantId, projectKey) &
+                         Builders<WorkflowVersionModel>.Filter.Eq(f => f.WorkflowId, workflowId);
+            return collection.DeleteManyAsync(filter);
+        }
     }
 }
