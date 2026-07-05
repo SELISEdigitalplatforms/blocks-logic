@@ -615,7 +615,7 @@ namespace DomainService.Workflow.Services
                 return new BaseMutationResponse
                 {
                     IsSuccess = true,
-                    ItemId = workflow.ItemId,
+                    ItemId = version.ItemId,
                     Errors = null
                 };
             }
