@@ -23,14 +23,13 @@ namespace DomainService.Workflow.Dtos
         public DateTime? FinishedAt { get; set; }
         public TimeSpan? Duration { get; set; }
         public string? ErrorMessage { get; set; }
-        public required string TriggerType { get; set; }
         public int AttemptNumber { get; set; }
-        public Dictionary<string, string> TriggerMetadata { get; set; } = new();
         public JsonElement Context { get; set; } = new();
         public List<string> ActiveNodeIds { get; set; } = new();
         public List<NodeExecutionResponseDto> NodeExecutions { get; set; } = new();
         public WorkflowResponseDto? WorkflowSnapshot { get; set; }
         public List<WorkflowItemExecutionDto> Items { get; set; } = new();
+        public TriggerMetadata? TriggerMetadata { get; set; } = new();
     }
 
     public class NodeExecutionResponseDto : NodeExecutionModel
