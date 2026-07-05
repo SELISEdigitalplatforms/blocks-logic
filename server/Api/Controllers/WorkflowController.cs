@@ -4,6 +4,7 @@ using DomainService.Workflow.Dtos;
 using DomainService.Workflow.Services;
 using MongoDB.Bson;
 using System.Text.Json;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Utilities.Api.Controllers
 {
@@ -28,6 +29,7 @@ namespace Utilities.Api.Controllers
             _workflowNotificationService = workflowNotificationService;
         }
 
+        [Authorize]
         [HttpPost]
         public async Task<IActionResult> GetAll([FromBody] WorkflowGetsRequestDto dto)
         {
@@ -36,6 +38,7 @@ namespace Utilities.Api.Controllers
             return Ok(workflows);
         }
 
+        [Authorize]
         [HttpGet]
         public async Task<IActionResult> Get([FromQuery] WorkflowGetRequestDto dto)
         {
@@ -44,6 +47,7 @@ namespace Utilities.Api.Controllers
             return Ok(workflow);
         }
 
+        [Authorize]
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] WorkflowCreateRequestDto dto)
         {
@@ -52,6 +56,7 @@ namespace Utilities.Api.Controllers
             return StatusCode(StatusCodes.Status201Created, result);
         }
 
+        [Authorize]
         [HttpPost]
         public async Task<IActionResult> Duplicate([FromBody] WorkflowDuplicateRequestDto dto)
         {
@@ -60,6 +65,7 @@ namespace Utilities.Api.Controllers
             return StatusCode(StatusCodes.Status201Created, result);
         }
 
+        [Authorize]
         [HttpPut]
         public async Task<IActionResult> Update([FromBody] WorkflowUpdateRequestDto dto)
         {
@@ -68,6 +74,7 @@ namespace Utilities.Api.Controllers
             return Ok(result);
         }
 
+        [Authorize]
         [HttpDelete]
         public async Task<IActionResult> Delete([FromQuery] WorkflowDeleteRequestDto dto)
         {
@@ -76,6 +83,7 @@ namespace Utilities.Api.Controllers
             return Ok(result);
         }
 
+        [Authorize]
         [HttpPost]
         public async Task<IActionResult> CreateVersion([FromBody] WorkflowVersionCreateRequestDto dto)
         {
@@ -83,6 +91,7 @@ namespace Utilities.Api.Controllers
             return StatusCode(StatusCodes.Status201Created, result);
         }
 
+        [Authorize]
         [HttpPost]
         public async Task<IActionResult> UpdateVersion([FromBody] WorkflowVersionUpdateRequestDto dto)
         {
@@ -91,6 +100,7 @@ namespace Utilities.Api.Controllers
         }
 
 
+        [Authorize]
         [HttpPost]
         public async Task<IActionResult> GetVersions([FromBody] WorkflowGetVersionsRequestDto dto)
         {
@@ -98,6 +108,7 @@ namespace Utilities.Api.Controllers
             return Ok(result);
         }
 
+        [Authorize]
         [HttpPost]
         public async Task<IActionResult> GetWorkflowByVersion([FromBody] GetWorkflowByVersionRequestDto dto)
         {
@@ -105,6 +116,7 @@ namespace Utilities.Api.Controllers
             return Ok(result);
         }
 
+        [Authorize]
         [HttpPost]
         public async Task<IActionResult> PublishNewVersion([FromBody] WorkflowPublishNewVersionRequestDto dto)
         {
@@ -112,6 +124,7 @@ namespace Utilities.Api.Controllers
             return Ok(result);
         }
 
+        [Authorize]
         [HttpPost]
         public async Task<IActionResult> PublishVersion([FromBody] WorkflowPublishVersionRequestDto dto)
         {
@@ -119,6 +132,7 @@ namespace Utilities.Api.Controllers
             return Ok(result);
         }
 
+        [Authorize]
         [HttpPost]
         public async Task<IActionResult> Unpublish([FromBody] WorkflowUnpublishRequestDto dto)
         {
@@ -126,6 +140,7 @@ namespace Utilities.Api.Controllers
             return Ok(result);
         }
 
+        [Authorize]
         [HttpPost]
         public async Task<IActionResult> Restore([FromBody] WorkflowRestoreRequestDto dto)
         {
@@ -191,7 +206,7 @@ namespace Utilities.Api.Controllers
             }
 
         }
-
+        [Authorize]
         [HttpPost]
         public async Task<IActionResult> StepExecute([FromBody] StepExecuteRequestDto dto)
         {
@@ -199,6 +214,7 @@ namespace Utilities.Api.Controllers
             return Ok(executions);
         }
 
+        [Authorize]
         [HttpPost]
         public async Task<IActionResult> TriggerListener([FromBody] TriggerListenerRequestDto dto)
         {
@@ -207,6 +223,7 @@ namespace Utilities.Api.Controllers
         }
 
 
+        [Authorize]
         [HttpGet]
         public async Task<IActionResult> GetExecutions([FromQuery] WorkflowExecutionsGetRequestDto dto)
         {
@@ -215,6 +232,7 @@ namespace Utilities.Api.Controllers
             return Ok(executions);
         }
 
+        [Authorize]
         [HttpGet]
         public async Task<IActionResult> GetExecution([FromQuery] WorkflowExecutionGetRequestDto dto)
         {
@@ -223,6 +241,7 @@ namespace Utilities.Api.Controllers
             return Ok(execution);
         }
 
+        [Authorize]
         [HttpGet]
         public async Task<IActionResult> LastSuccessfullExecution([FromQuery] LastSuccessfullExecutionRequestDto dto)
         {
