@@ -58,7 +58,6 @@ services.AddCloudDomainServices();
 services.AddCloudLmtServices();
 services.AddCloudConfigurationServices();
 services.AddWorkflowExecutionEngine();
-services.RegisterAllNotificationApplicationServices();
 services.RegisterBlocksEurolmServices();
 await services.RegisterBlocksDeploymentServicesAsync(vaultType);
 services.RegisterBlocksObservabilityServices();
