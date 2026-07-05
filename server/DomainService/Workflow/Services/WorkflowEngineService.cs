@@ -59,11 +59,12 @@ namespace DomainService.Workflow.Services
             Func<List<AddExcuationNodeEvent>, Task> dispatchNextNodes,
             Func<NodeExecutionContext, NodeModel, NodeExecutionResult, NodeExecutionResult>? postProcessResult = null)
         {
+
             var prepared = await PrepareNodeForExecutionAsync(dto);
             if (prepared == null) return;
 
             var (execution, node, nodeExecution, nodeExecutionContext, executor) = prepared.Value;
-
+            var completionNodeId = execution.ExecutionMode == WorkflowExecutionMode.Test ? execution.WorkflowSnapshot.TestMeta.CompletionNodeId : null;
             try
             {
                 var result = await executor.RunAsync(nodeExecutionContext);
@@ -77,8 +78,9 @@ namespace DomainService.Workflow.Services
                 }
                 else
                 {
-                    var nextEvents = await CompleteNodeExecutionAsync(nodeExecutionContext, execution, node, nodeExecution, result);
+                    var nextEvents = await CompleteNodeExecutionAsync(nodeExecutionContext, execution, node, nodeExecution, result, completionNodeId);
                     await dispatchNextNodes(nextEvents);
+
                 }
             }
             catch (Exception ex)
@@ -303,7 +305,7 @@ namespace DomainService.Workflow.Services
         /// <summary>
         /// Node completed successfully: persist items, update metadata, and return next node events
         /// </summary>
-        private async Task<List<AddExcuationNodeEvent>> CompleteNodeExecutionAsync(NodeExecutionContext context, WorkflowExecutionModel execution, NodeModel node, NodeExecutionModel nodeExecution, NodeExecutionResult result)
+        private async Task<List<AddExcuationNodeEvent>> CompleteNodeExecutionAsync(NodeExecutionContext context, WorkflowExecutionModel execution, NodeModel node, NodeExecutionModel nodeExecution, NodeExecutionResult result, string completionNodeId)
         {
             // Persist output items
             var outputItems = new List<WorkflowItemExecutionModel>();
@@ -375,6 +377,15 @@ namespace DomainService.Workflow.Services
                 }
             }
 
+            if (!string.IsNullOrEmpty(completionNodeId) && node.Id == completionNodeId)
+            {
+                execution.Status = WorkflowExecutionStatus.Completed;
+                execution.FinishedAt = DateTime.UtcNow;
+                execution.ActiveNodeIds = [];
+                await _workflowExecutionRepository.AtomicFinalizeExecutionAsync(execution.Id, execution.TenantId);
+                return [];
+            }
+
             // Determine next nodes
             var nextNodeIds = execution.WorkflowSnapshot.Edges
                 .Where(e => e.Source == node.Id)
@@ -390,6 +401,7 @@ namespace DomainService.Workflow.Services
             // Atomically update ActiveNodeIds: remove completed node, add next nodes
             var isWorkflowComplete = await _workflowExecutionRepository.AtomicCompleteNodeAsync(
                 execution.Id, execution.TenantId, node.Id, nextNodeIds);
+
 
             if (isWorkflowComplete)
             {
@@ -429,7 +441,7 @@ namespace DomainService.Workflow.Services
                 execution.Id, execution.TenantId, nodeExecution.NodeId, new List<string>());
         }
 
-        public async Task<WorkflowExecutionModel?> ExecuteStepNodeAsync(string tenantId, string executionId, string targetNodeId, string? sourceExecutionId = null)
+        public async Task<WorkflowExecutionModel?> ExecuteStepNodeAsync(string tenantId, string executionId, string triggerNodeId, string targetNodeId, string? sourceExecutionId = null)
         {
             var execution = await _workflowExecutionRepository.GetByIdAsync(executionId, tenantId);
             if (execution == null || execution.WorkflowSnapshot == null) return execution;
@@ -494,7 +506,7 @@ namespace DomainService.Workflow.Services
                     ProjectKey = execution.TenantId,
                     WorkflowId = execution.WorkflowId,
                     WorkflowExecutionId = execution.Id,
-                    NodeId = node.Id
+                    NodeId = node.Id,
                 };
 
                 await ExecuteNodeAsync(evt, noopDispatch, hook);
@@ -512,7 +524,7 @@ namespace DomainService.Workflow.Services
         /// Returns <paramref name="targetNodeId"/> plus all transitive ancestors, in topological order
         /// (every node appears after all of its parents). Cycle-safe via visited set.
         /// </summary>
-        private IEnumerable<NodeModel> GetTopologicalAncestorsAndTarget(WorkflowModel workflow, string targetNodeId)
+        public IEnumerable<NodeModel> GetTopologicalAncestorsAndTarget(WorkflowModel workflow, string targetNodeId)
         {
             var nodesById = workflow.Nodes.ToDictionary(n => n.Id);
 

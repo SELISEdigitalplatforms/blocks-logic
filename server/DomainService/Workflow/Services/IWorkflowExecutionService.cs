@@ -14,7 +14,7 @@ namespace DomainService.Workflow.Services
     {
         Task<WorkflowWebhookResponseDto> TriggerWebhookAsync(string workflowId, string triggerId, string tenantId, JsonElement input);
         Task<WorkflowWebhookResponseDto> TriggerTestWebhookAsync(string workflowId, string triggerId, string tenantId, JsonElement input);
-        Task<WorkflowExecutionModel> CreateExecutionAsync(WorkflowModel workflow, WorkflowExecutionMode executionMode);
+        Task<WorkflowExecutionModel> CreateExecutionAsync(WorkflowModel workflow, TriggerMetadata triggerMetadata, WorkflowExecutionMode executionMode);
         Task<WorkflowExecutionsGetResponseDto> GetExecutionsByWorkflowIdAsync(WorkflowExecutionsGetRequestDto dto);
         Task<WorkflowExecutionGetResponseDto> GetExecutionByIdAsync(WorkflowExecutionGetRequestDto dto);
         Task<WorkflowExecutionGetResponseDto> LastSuccessfullExecutionAsync(LastSuccessfullExecutionRequestDto dto);
