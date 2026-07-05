@@ -35,7 +35,7 @@ namespace DomainService.Workflow.Repositories
             var filters = Builders<WorkflowVersionModel>.Filter.Eq(f => f.TenantId, projectKey) &
                          Builders<WorkflowVersionModel>.Filter.In(f => f.WorkflowId, workflowIds);
 
-            return collection.Find(filters).ToListAsync();
+            return collection.Find(filters).SortByDescending(f => f.CreatedDate).ToListAsync();
         }
 
         public Task<WorkflowVersionModel> GetWorkflowVersionAsync(string projectKey, string versionId)
