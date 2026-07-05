@@ -36,11 +36,11 @@ export const InputPanel = ({
   
   const sourceExecutedNodes = (isStepExecutionEditor || isExecutionMode) 
     ? executedNodes 
-    : (isLastExecutionEditor && lastSuccessfulExecutionData ? lastSuccessfulExecutionData.data.nodeExecutions : []);
+    : (isLastExecutionEditor && lastSuccessfulExecutionData?.data ? lastSuccessfulExecutionData.data.nodeExecutions || [] : []);
 
   const sourceExecutedItems = (isStepExecutionEditor || isExecutionMode)
     ? executedItems
-    : (isLastExecutionEditor && lastSuccessfulExecutionData ? (lastSuccessfulExecutionData.data.items || []) : []);
+    : (isLastExecutionEditor && lastSuccessfulExecutionData?.data ? (lastSuccessfulExecutionData.data.items || []) : []);
 
 
   const predecessors = useMemo(() => {
