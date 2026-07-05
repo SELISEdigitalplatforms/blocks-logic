@@ -362,7 +362,7 @@ namespace DomainService.Workflow.Services
                 ErrorMessage = e.ErrorMessage,
                 AttemptNumber = e.AttemptNumber,
                 ExecutionMode = e.ExecutionMode,
-                TriggerMetadata = e.TriggerMetadata
+                // TriggerMetadata = e.TriggerMetadata
             }).ToList();
 
             return new WorkflowExecutionsGetResponseDto
@@ -433,7 +433,7 @@ namespace DomainService.Workflow.Services
                     AttemptNumber = execution.AttemptNumber,
                     Context = BsonJsonConverter.ToJsonElement(execution.Context),
                     ActiveNodeIds = execution.ActiveNodeIds,
-                    TriggerMetadata = execution.TriggerMetadata,
+                    // TriggerMetadata = execution.TriggerMetadata,
                     NodeExecutions = execution.NodeExecutions.Select(ne => new NodeExecutionResponseDto
                     {
                         Id = ne.Id,
@@ -534,7 +534,7 @@ namespace DomainService.Workflow.Services
                     StartedAt = execution.StartedAt,
                     FinishedAt = execution.FinishedAt,
                     ErrorMessage = execution.ErrorMessage,
-                    TriggerMetadata = execution.TriggerMetadata,
+                    // TriggerMetadata = execution.TriggerMetadata,
                     AttemptNumber = execution.AttemptNumber,
                     Context = BsonJsonConverter.ToJsonElement(execution.Context),
                     ActiveNodeIds = execution.ActiveNodeIds,
@@ -855,10 +855,10 @@ namespace DomainService.Workflow.Services
 
             if (oldExecution != null && oldExecution.TriggerMetadata != null && !String.IsNullOrWhiteSpace(oldExecution.TriggerMetadata.TriggerNodeId))
             {
-                currentTriggerNodeId = dto.TriggerNodeId;
+                currentTriggerNodeId = oldExecution.TriggerMetadata.TriggerNodeId;
             }
 
-            if (String.IsNullOrWhiteSpace(dto.TriggerNodeId))
+            if (!String.IsNullOrWhiteSpace(dto.TriggerNodeId))
             {
                 if (triggerNodes.Any(n => n.Id == dto.TriggerNodeId) || oldExecution?.TriggerMetadata?.TriggerNodeId == dto.TriggerNodeId)
                 {
@@ -914,7 +914,14 @@ namespace DomainService.Workflow.Services
             }
 
 
+            workflow.TestMeta = new TestWorkflowMeta
+            {
+                IsListening = true,
+                ListenerTriggerNodes = triggerNodes,
+                UserIds = BlocksContext.GetContext().UserId != null ? new List<string> { BlocksContext.GetContext().UserId } : new List<string>(),
+                CompletionNodeId = dto.NodeId
 
+            };
             var execution = await CreateExecutionAsync(workflow, triggerMetadata, WorkflowExecutionMode.Test);
             execution.Context["Input"] = triggerMetadata.TriggerData ?? new BsonArray();
             execution.Status = WorkflowExecutionStatus.Queued;
