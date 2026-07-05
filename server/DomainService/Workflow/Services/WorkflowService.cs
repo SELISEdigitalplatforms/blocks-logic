@@ -391,6 +391,8 @@ namespace DomainService.Workflow.Services
             {
                 _logger.LogInformation("Start deleting workflow with Id: {WorkflowId}", dto.Id);
                 await _workflowRepository.DeleteWorkflowAsync(dto.Id, dto.ProjectKey);
+                await _workflowVersionRepository.DeleteWorkflowVersionsByWorkflowIdAsync(dto.ProjectKey, dto.Id);
+
             }
             catch (Exception ex)
             {
