@@ -13,6 +13,6 @@
 	<PackageReference Include="SeliseBlocks.StorageDriver" />
 	<PackageReference Include="Shark.PdfConvert" />
 	<PackageReference Include="SeliseBlocks.MailDriver"/>
+	<ProjectReference Include="..\Notification.DomainService\Notification.DomainService.csproj" />
   </ItemGroup>
-
 </Project>
