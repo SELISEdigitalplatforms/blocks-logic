@@ -12,12 +12,14 @@ type LayoutWithListenerProps = {
 };
 
 export const LayoutWithListener = ({ schema }: LayoutWithListenerProps) => {
-  const { selectedNode, updateNode } = useWorkflow();
+  const { selectedNode, updateNode, isListening, listeningNodeId } = useWorkflow();
   const [activeTab, setActiveTab] = useState("parameters");
   if (!selectedNode || !schema) return null;
 
+  const isThisNodeListening = isListening && listeningNodeId === selectedNode.id;
+
   return (
-    <div className="flex h-full flex-col">
+    <div className="relative flex h-full flex-col">
       <NodeInspectorHeader />
       <div className="mt-6 flex flex-1 gap-6">
         <div className="w-5/12">

@@ -48,6 +48,13 @@ export const InputPanel = ({
     return getAllPredecessors(selectedNode.id, nodesMap, edgesMap, sourceExecutedItems as any);
   }, [selectedNode, edgesMap, nodesMap, sourceExecutedItems]);
 
+  const immediateParentIds = useMemo(() => {
+    if (!selectedNode) return [];
+    return Object.values(edgesMap)
+      .filter((e) => e.target === selectedNode.id)
+      .map((e) => e.source);
+  }, [selectedNode, edgesMap]);
+
   const [selectedPredecessorId, setSelectedPredecessorId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -121,7 +128,7 @@ export const InputPanel = ({
             runtimeInputRows={runtimeInputRows}
             isLastExecutionEditor={isLastExecutionEditor}
             nodeName={activePredecessor?.name || selectedNode.name}
-            hasSinglePredecessor={predecessors.length === 1}
+            hasSinglePredecessor={immediateParentIds.length === 1 && immediateParentIds[0] === activePredecessor?.id}
             isExecutionMode={isExecutionMode}
           />
         </div>
@@ -135,7 +142,7 @@ export const InputPanel = ({
             <TableTab 
               rows={runtimeInputRows} 
               nodeName={activePredecessor?.name || selectedNode.name} 
-              hasSinglePredecessor={predecessors.length === 1}
+              hasSinglePredecessor={immediateParentIds.length === 1 && immediateParentIds[0] === activePredecessor?.id}
               isDraggable={!isExecutionMode}
             />
           )}
@@ -150,7 +157,7 @@ export const InputPanel = ({
             <JsonTab 
               rows={runtimeInputRows} 
               nodeName={activePredecessor?.name || selectedNode.name} 
-              hasSinglePredecessor={predecessors.length === 1}
+              hasSinglePredecessor={immediateParentIds.length === 1 && immediateParentIds[0] === activePredecessor?.id}
               isDraggable={!isExecutionMode}
             />
           )}

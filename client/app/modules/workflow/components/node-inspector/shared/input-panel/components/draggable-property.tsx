@@ -13,12 +13,16 @@ export function DraggableProperty({ fieldKey, prefixPath = "", label, depth = 0,
         e.dataTransfer.setData("text/plain", expression);
         e.dataTransfer.dropEffect = "copy";
       }}
-      className={`group flex items-center gap-2 rounded px-2 py-1 text-xs touch-none select-none ${isDraggable ? 'cursor-pointer hover:bg-surface-hover' : ''} ${isDashed ? 'border border-dashed border-border/80 text-medium-emphasis bg-surface-app' : ''}`}
+      className={`group flex items-center gap-2 rounded px-2 py-1 text-xs touch-none select-none ${isDraggable ? 'cursor-pointer hover:bg-surface-hover' : ''} `}
       style={{ marginLeft: `${depth * 1}rem` }}
       title={isDraggable ? `Drag to use: ${expression}` : undefined}
     >
-      <span className={`font-mono ${isDraggable ? 'cursor-grab active:cursor-grabbing text-high-emphasis' : 'text-medium-emphasis'}`}>
-        {label || fieldKey || "output"}{!isDashed &&":"}</span>
+      <span className={`font-mono flex items-center ${isDraggable ? 'cursor-grab active:cursor-grabbing text-high-emphasis' : 'text-medium-emphasis'}`}>
+        <span className="rounded-md border border-border/80 bg-white dark:bg-gray-800 px-1.5 py-0.5 mr-0.5 shadow-sm">
+          {label || fieldKey || "output"}
+        </span>
+        {!isDashed && ":"}
+      </span>
     </div>
   );
 }

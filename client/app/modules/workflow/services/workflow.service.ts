@@ -34,8 +34,10 @@ import {
   IUpdateWorkflowVersionResponse,
   IGetLastSuccessfulExecutionPayload,
   // IGetLastSuccessfulExecutionResponse,
-  IStepExecutePayload,
   IStepExecuteResponse,
+  ITriggerListenerPayload,
+  ITriggerListenerResponse,
+  IStepExecutePayload,
 } from "../types/workflow.service.type";
 
 export class WorkflowService {
@@ -165,6 +167,10 @@ export class WorkflowService {
 
   stepExecute = (payload: IStepExecutePayload): Promise<IStepExecuteResponse> => {
     return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.STEP_EXECUTE}`, payload);
+  }
+
+  triggerListener = (payload: ITriggerListenerPayload): Promise<ITriggerListenerResponse> => {
+    return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.TRIGGER_LISTENER}`, payload);
   }
 }
 
