@@ -870,12 +870,26 @@ namespace DomainService.Workflow.Services
                     ItemId = null
                 };
             }
+            if (!String.IsNullOrWhiteSpace(dto.CompletionNodeId))
+            {
+                var completionNode = workflow.Nodes.FirstOrDefault(n => n.Id == dto.CompletionNodeId);
+                if (completionNode == null)
+                {
+                    return new BaseMutationResponse
+                    {
+                        IsSuccess = false,
+                        Errors = new Dictionary<string, string> { { "Message", "Completion node not found" } },
+                        ItemId = null
+                    };
+                }
+            }
             workflow.TestMeta = new TestWorkflowMeta
             {
                 ListenerTriggerNodes = new List<NodeModel> { triggerNode },
                 UserIds = new List<string> { BlocksContext.GetContext().UserId ?? "system" },
                 IsListening = true,
-                CompletionNodeId = null
+                CompletionNodeId = dto.CompletionNodeId ?? null,
+
             };
             await _workflowRepository.UpdateWorkflowAsync(workflow);
             return new BaseMutationResponse
