@@ -6,7 +6,7 @@ import { workflowService } from "../services/workflow.service";
 import { EXECUTION_STATUS_COMPLETED } from "../constants";
 
 export const useWorkflowNotification = () => {
-  const { isListening, setIsListening, listeningNodeId, workflowId, setStepExecutionData } = useWorkflow();
+  const { isListening, setIsListening, listeningNodeId, workflowId, setStepExecutionData,setNextExecutionId } = useWorkflow();
   const tenantId = useProjectStore((s) => s.selectedProject?.tenantId) || "";
 
   const handleNotification = useCallback(async (data: any) => {
@@ -29,7 +29,7 @@ export const useWorkflowNotification = () => {
 
           if (code === EXECUTION_STATUS_COMPLETED && status === "Completed") {
             const executionId = payload?.Information?.executionId || payload?.Information?.data;
-            
+            setNextExecutionId(payload?.Information?.executionId)
             if (isListening && listeningNodeId && workflowId && tenantId) {
               workflowService.triggerListener({
                 ProjectKey: tenantId,
