@@ -22,11 +22,10 @@ using DomainService.Workflow;
 using DomainService.Workflow.Events;
 using DomainService.Workflow.Nodes.TriggerDataV1;
 using Worker.Consumers.Workflow;
+using SeliseBlocks.ConfigurationDriver;
 
 const string _serviceName = "blocks-logic-worker";
-
-var vaultType = ResolveVaultType();
-Console.WriteLine($"Using Genesis vault type: {vaultType}");
+Console.WriteLine($"Using Genesis vault type: {VaultType.Azure}");
 var secret = await ApplicationConfigurations.ConfigureLogAndSecretsAsync(_serviceName, VaultType.Azure);
 
 await CreateHostBuilder(args).Build().RunAsync();
@@ -35,7 +34,13 @@ IHostBuilder CreateHostBuilder(string[] args) =>
         Host.CreateDefaultBuilder(args)
         .ConfigureAppConfiguration((context, builder) =>
         {
-            // ApplicationConfigurations.ConfigureWorkerEnv(builder, args);
+            builder.AddMongoDbConfiguration(options =>
+            {
+                options.ConnectionString = secret.DatabaseConnectionString;
+                options.DatabaseName = secret.RootDatabaseName;
+                options.CollectionName = "Secrets";
+                options.SecretKey = "blocks-secret-logic";
+            });
         })
         .ConfigureServices((services) =>
         {

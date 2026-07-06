@@ -1,8 +1,11 @@
 import { BaseEdge, EdgeLabelRenderer, EdgeProps, getBezierPath } from "@xyflow/react";
 import { getHandleLabel } from "@blocks-workflow/constants";
+import { useWorkflow } from "../../hooks";
+import { getStatusStyles } from "../../utils/workflow-execution-editor.util";
 
 export const WorkflowEditorEdgeDefault = ({
   id,
+  source,
   sourceX,
   sourceY,
   targetX,
@@ -12,6 +15,7 @@ export const WorkflowEditorEdgeDefault = ({
   markerEnd,
   style,
   sourceHandleId,
+  selected,
 }: EdgeProps) => {
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
@@ -22,11 +26,26 @@ export const WorkflowEditorEdgeDefault = ({
     targetPosition,
   });
 
+  const { stepExecutionTraversedEdgeIds, executedNodes } = useWorkflow();
+  const isTraversed = stepExecutionTraversedEdgeIds?.has(id);
+  const sourceNodeStatus = isTraversed ? executedNodes.find(n => n.nodeId === source)?.status : undefined;
+  const executionStyles = sourceNodeStatus ? getStatusStyles(sourceNodeStatus) : undefined;
+
   const label = getHandleLabel(sourceHandleId);
 
   return (
     <>
-      <BaseEdge id={id} path={edgePath} markerEnd={markerEnd} style={style} />
+      <BaseEdge 
+        id={id} 
+        path={edgePath} 
+        markerEnd={markerEnd} 
+        className={executionStyles?.edgeClass}
+        style={{
+          ...style,
+          strokeWidth: style?.strokeWidth || 1,
+          stroke: executionStyles?.edgeColor || (selected ? "hsl(var(--primary))" : style?.stroke),
+        }} 
+      />
 
       {label && (
         <EdgeLabelRenderer>

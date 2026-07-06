@@ -12,6 +12,9 @@ import {
 import { v4 as uuidv4 } from "uuid";
 import { ExecutedItem, ExecutedNode, Workflow } from "../models/workflow.model";
 import { EditorNode } from "@blocks-workflow/models/node.model";
+import { getLayoutedElements } from "../utils/layout-utils";
+import { IGetWorkflowExecutionByIdResponse } from "../types/workflow.service.type";
+import { buildExecutedSubgraph } from "../utils/workflow-execution-editor.util";
 
 // interface  ExtendNode extends Node, WorkflowNode {}
 
@@ -21,17 +24,29 @@ export type WorkflowState = {
 
   workflowId: string | null;
   workflowName: string;
-  isActive: boolean;
-  isDirty: boolean;
+  isPublished: boolean;
+  hasUnsavedChanges: boolean;
   executedItems: ExecutedItem[];
-
   executedNodes: ExecutedNode[];
+
+  stepExecutionReachableNodeIds: Set<string> | null;
+  stepExecutionTraversedEdgeIds: Set<string> | null;
+  
+  lastSuccessfulExecutionData: IGetWorkflowExecutionByIdResponse | null;
 
   selectedNode: EditorNode | null;
   selectedHandle: string | null;
 
+  copiedNodes: EditorNode[];
+  copiedEdges: Edge[];
+
   isConfigModalOpen: boolean;
   isPanelOpen: boolean;
+
+  // Listening state
+  isListening: boolean;
+  listeningNodeId: string | null;
+  setIsListening: (isListening: boolean, nodeId?: string | null) => void;
 
   // React Flow handlers
   onNodesChange: OnNodesChange;
@@ -43,8 +58,12 @@ export type WorkflowState = {
   updateNode: (nodeId: string, updates: Partial<EditorNode>) => void;
   deleteNode: (nodeId: string) => void;
   duplicateNode: (nodeId: string) => void;
-  selectNode: (node: EditorNode) => void;
+  copyNode: (nodeId: string) => void;
+  copySelectedNodes: () => void;
+  pasteNodes: (position?: { x: number; y: number }) => void;
+  selectNode: (node: EditorNode | null) => void;
   deselectNode: () => void;
+  deselectAllEdges: () => void;
 
   // Handle operations
   selectHandle: (handle: string) => void;
@@ -68,12 +87,21 @@ export type WorkflowState = {
 
   // Workflow operations
   setWorkflow: (workflow: Workflow) => void;
-  setWorkflowActive: (isActive: boolean) => void;
   resetWorkflow: () => void;
+  tidyUpWorkflow: () => void;
+  setStepExecutionData: (execution: IGetWorkflowExecutionByIdResponse) => void;
+  clearStepExecutionData: () => void;
+  setLastSuccessfulExecutionData: (data: IGetWorkflowExecutionByIdResponse | null) => void;
 
   // Utility methods
   getNodeById: (nodeId: string) => EditorNode | undefined;
   getEdgeById: (edgeId: string) => Edge | undefined;
+
+  // Editor mode
+  editorMode: "editor" | "execution" | "version";
+  executionMode: number | null;
+  setEditorMode: (mode: "editor" | "execution" | "version") => void;
+  setExecutionMode: (mode: number | null) => void;
 };
 
 export const createWorkflowStore = () => createStore<WorkflowState>((set, get) => ({
@@ -84,14 +112,28 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
   nodeIdCounter: 1,
   selectedNode: null,
   selectedHandle: null,
+  copiedNodes: [],
+  copiedEdges: [],
   isConfigModalOpen: false,
   isPanelOpen: false,
   workflowId: null,
   workflowName: "",
-  isActive: false,
-  isDirty: false,
+  isPublished: false,
+  hasUnsavedChanges: false,
   executedItems: [],
   executedNodes: [],
+  stepExecutionReachableNodeIds: null,
+  stepExecutionTraversedEdgeIds: null,
+  lastSuccessfulExecutionData: null,
+  editorMode: "editor",
+  executionMode: null,
+  isListening: false,
+  listeningNodeId: null,
+
+  setIsListening: (isListening, nodeId = null) => set({ isListening, listeningNodeId: nodeId }),
+
+  setEditorMode: (mode) => set({ editorMode: mode }),
+  setExecutionMode: (mode) => set({ executionMode: mode }),
 
   // React Flow handlers
   onNodesChange: (changes) => {
@@ -107,10 +149,57 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
     const shouldDirty = changes.some((change) =>
       ["position", "remove", "add", "replace"].includes(change.type),
     );
-    set({
-      nodesMap,
-      ...(shouldDirty && { isDirty: true }),
-    });
+    const stateUpdate: Partial<WorkflowState> = { nodesMap };
+    
+    if (shouldDirty) {
+      stateUpdate.hasUnsavedChanges = true;
+    }
+
+    const selectedNodeId = get().selectedNode?.id;
+    if (selectedNodeId) {
+      const isSelectedNodeDeselected = changes.some(
+        (change) => change.type === "select" && !change.selected && change.id === selectedNodeId
+      );
+      if (isSelectedNodeDeselected) {
+        stateUpdate.selectedNode = null;
+        stateUpdate.isConfigModalOpen = false;
+      }
+    }
+
+    // Auto-select edges between selected nodes
+    const selectionChanged = changes.some((change) => change.type === "select");
+    if (selectionChanged) {
+      const selectedNodeIds = new Set(updatedNodes.filter((n) => n.selected).map((n) => n.id));
+      const currentEdges = Object.values(get().edgesMap);
+      let edgesChanged = false;
+      const newEdgesMap = { ...get().edgesMap };
+
+      for (const edge of currentEdges) {
+        const bothNodesSelected =
+          selectedNodeIds.has(edge.source) && selectedNodeIds.has(edge.target);
+
+        if (bothNodesSelected && !edge.selected) {
+          newEdgesMap[edge.id] = { ...edge, selected: true };
+          edgesChanged = true;
+        } else if (!bothNodesSelected && edge.selected) {
+          const edgeNodesChanged = changes.some(
+            (change) =>
+              change.type === "select" &&
+              (change.id === edge.source || change.id === edge.target)
+          );
+          if (edgeNodesChanged) {
+            newEdgesMap[edge.id] = { ...edge, selected: false };
+            edgesChanged = true;
+          }
+        }
+      }
+
+      if (edgesChanged) {
+        stateUpdate.edgesMap = newEdgesMap;
+      }
+    }
+
+    set(stateUpdate);
   },
 
   onEdgesChange: (changes) => {
@@ -128,7 +217,7 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
     );
     set({
       edgesMap,
-      ...(shouldDirty && { isDirty: true }),
+      ...(shouldDirty && { hasUnsavedChanges: true }),
     });
   },
 
@@ -144,7 +233,7 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
     );
     set({
       edgesMap,
-      isDirty: true,
+      hasUnsavedChanges: true,
     });
   },
 
@@ -162,7 +251,7 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
     const nodeWithUniqueName = { ...node, name: uniqueName };
     set({
       nodesMap: { ...nodesMap, [node.id]: nodeWithUniqueName },
-      isDirty: true,
+      hasUnsavedChanges: true,
     });
   },
 
@@ -174,7 +263,7 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
     set({
       nodesMap: { ...nodesMap, [nodeId]: updatedNode },
       selectedNode: selectedNode?.id === nodeId ? updatedNode : selectedNode,
-      isDirty: true,
+      hasUnsavedChanges: true,
     });
   },
 
@@ -192,7 +281,7 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
     set({
       nodesMap: remainingNodes,
       edgesMap: remainingEdges,
-      isDirty: true,
+      hasUnsavedChanges: true,
     });
   },
 
@@ -214,15 +303,110 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
       ...node,
       id: newId,
       name: uniqueName,
+      selected: false,
       position: {
         x: node.position.x + 50,
-        y: node.position.y + 50,
+        y: node.position.y + 100,
       },
     };
 
     set({
       nodesMap: { ...nodesMap, [newId]: newNode },
-      isDirty: true,
+      hasUnsavedChanges: true,
+    });
+  },
+
+  copyNode: (nodeId: string) => {
+    const { nodesMap } = get();
+    const node = nodesMap[nodeId];
+    if (node) {
+      set({ copiedNodes: [node], copiedEdges: [] });
+    }
+  },
+
+  copySelectedNodes: () => {
+    const { nodesMap, edgesMap } = get();
+    const selectedNodes = Object.values(nodesMap).filter((node) => node.selected);
+    if (selectedNodes.length > 0) {
+      const selectedNodeIds = new Set(selectedNodes.map((n) => n.id));
+      const copiedEdges = Object.values(edgesMap).filter(
+        (edge) => selectedNodeIds.has(edge.source) && selectedNodeIds.has(edge.target),
+      );
+      set({ copiedNodes: selectedNodes, copiedEdges });
+    }
+  },
+
+  pasteNodes: (position?: { x: number; y: number }) => {
+    const { copiedNodes, copiedEdges, nodesMap, edgesMap } = get();
+    if (!copiedNodes || copiedNodes.length === 0) return;
+
+    let newNodesMap = { ...nodesMap };
+    let newEdgesMap = { ...edgesMap };
+    let existingNames = new Set(Object.values(newNodesMap).map((n) => n.name));
+
+    const newPastedNodeIds = new Set<string>();
+    const oldToNewId: Record<string, string> = {};
+
+    copiedNodes.forEach((copiedNode) => {
+      const newId = uuidv4().replace(/-/g, "");
+      oldToNewId[copiedNode.id] = newId;
+      // Enforce unique name for pasted node
+      let uniqueName = copiedNode.name;
+      let counter = 1;
+      while (existingNames.has(uniqueName)) {
+        uniqueName = `${copiedNode.name} ${counter}`;
+        counter++;
+      }
+      existingNames.add(uniqueName);
+
+      const newNode: EditorNode = {
+        ...copiedNode,
+        id: newId,
+        name: uniqueName,
+        selected: true,
+        position: position || {
+          x: copiedNode.position.x + 50,
+          y: copiedNode.position.y + 100,
+        },
+      };
+      newNodesMap[newId] = newNode;
+      newPastedNodeIds.add(newId);
+    });
+
+    if (copiedEdges && copiedEdges.length > 0) {
+      copiedEdges.forEach((edge) => {
+        const newSource = oldToNewId[edge.source];
+        const newTarget = oldToNewId[edge.target];
+        if (newSource && newTarget) {
+          const newEdgeId = `xy-edge__${newSource}-${newTarget}`;
+          newEdgesMap[newEdgeId] = {
+            ...edge,
+            id: newEdgeId,
+            source: newSource,
+            target: newTarget,
+            selected: true,
+          };
+        }
+      });
+    }
+
+    // Deselect existing nodes
+    Object.keys(newNodesMap).forEach((id) => {
+      if (!newPastedNodeIds.has(id)) {
+         newNodesMap[id] = { ...newNodesMap[id], selected: false };
+      }
+    });
+    // Deselect existing edges
+    Object.keys(newEdgesMap).forEach((id) => {
+      if (edgesMap[id]) {
+        newEdgesMap[id] = { ...newEdgesMap[id], selected: false };
+      }
+    });
+
+    set({
+      nodesMap: newNodesMap,
+      edgesMap: newEdgesMap,
+      hasUnsavedChanges: true,
     });
   },
 
@@ -241,7 +425,7 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
 
     set({
       edgesMap: { ...edgesMap, [newEdge.id]: newEdge },
-      isDirty: true,
+      hasUnsavedChanges: true,
     });
   },
 
@@ -252,17 +436,59 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
 
     set({
       edgesMap: remainingEdges,
-      isDirty: true,
+      hasUnsavedChanges: true,
     });
   },
 
   // Selection operations
   selectNode: (node: EditorNode | null) => {
-    set({ selectedNode: node });
+    const { nodesMap } = get();
+    const updatedNodesMap = { ...nodesMap };
+    
+    Object.keys(updatedNodesMap).forEach((id) => {
+      updatedNodesMap[id] = {
+        ...updatedNodesMap[id],
+        selected: node ? id === node.id : false,
+      };
+    });
+
+    set({
+      nodesMap: updatedNodesMap,
+      selectedNode: node ? (updatedNodesMap[node.id] || node) : null,
+    });
   },
 
   deselectNode: () => {
-    set({ selectedNode: null });
+    const { nodesMap } = get();
+    const updatedNodesMap = { ...nodesMap };
+    
+    Object.keys(updatedNodesMap).forEach((id) => {
+      updatedNodesMap[id] = {
+        ...updatedNodesMap[id],
+        selected: false,
+      };
+    });
+
+    set({
+      nodesMap: updatedNodesMap,
+      selectedNode: null,
+    });
+  },
+
+  deselectAllEdges: () => {
+    const { edgesMap } = get();
+    const updatedEdgesMap = { ...edgesMap };
+    
+    Object.keys(updatedEdgesMap).forEach((id) => {
+      updatedEdgesMap[id] = {
+        ...updatedEdgesMap[id],
+        selected: false,
+      };
+    });
+
+    set({
+      edgesMap: updatedEdgesMap,
+    });
   },
 
   selectHandle: (handle: string) => {
@@ -321,16 +547,16 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
       edgesMap,
       workflowId: workflow.itemId || null,
       workflowName: workflow.name || "",
-      isActive: workflow.isActive || false,
-      isDirty: false,
+      isPublished: workflow.isPublished || false,
+      hasUnsavedChanges: false,
       executedItems,
       executedNodes,
     });
   },
 
-  setWorkflowActive: (isActive: boolean) => {
-    set({ isActive, isDirty: true });
-  },
+  // setWorkflowActive: (isActive: boolean) => {
+  //   set({ isActive, hasUnsavedChanges: true });
+  // },
 
   resetWorkflow: () => {
     set({
@@ -341,10 +567,60 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
       isPanelOpen: false,
       workflowId: null,
       workflowName: "",
-      isActive: false,
-      isDirty: false,
+      isPublished: false,
+      hasUnsavedChanges: false,
       executedItems: [],
       executedNodes: [],
+      stepExecutionReachableNodeIds: null,
+      stepExecutionTraversedEdgeIds: null,
+      isListening: false,
+      listeningNodeId: null,
+    });
+  },
+
+  setStepExecutionData: (execution) => {
+    const { nodesMap, edgesMap } = get();
+    
+    // Create an array of workflow nodes to pass into buildExecutedSubgraph
+    // Note: The nodes in nodesMap are EditorNode which extends Node and WorkflowNode, so they have what is needed
+    const nodesArray = Object.values(nodesMap) as any[]; 
+    const edgesArray = Object.values(edgesMap) as any[];
+
+    const { reachableNodeIds, traversedEdgeIds } = buildExecutedSubgraph(
+      nodesArray,
+      edgesArray,
+      execution.data.nodeExecutions,
+      execution.data.items
+    );
+
+    set({
+      executedItems: execution.data.items,
+      executedNodes: execution.data.nodeExecutions,
+      stepExecutionReachableNodeIds: reachableNodeIds,
+      stepExecutionTraversedEdgeIds: traversedEdgeIds,
+    });
+  },
+
+  setLastSuccessfulExecutionData: (data) => set({ lastSuccessfulExecutionData: data }),
+
+  clearStepExecutionData: () => {
+    set({
+      stepExecutionReachableNodeIds: null,
+      stepExecutionTraversedEdgeIds: null,
+      // We don't necessarily clear executedItems and executedNodes 
+      // if we only want to hide the visual layer, but clearing them prevents 
+      // the node inspector from showing leftover execution data.
+      executedItems: [],
+      executedNodes: [],
+    });
+  },
+
+  tidyUpWorkflow: () => {
+    const { nodesMap, edgesMap } = get();
+    const newNodesMap = getLayoutedElements(nodesMap, edgesMap);
+    set({
+      nodesMap: newNodesMap,
+      hasUnsavedChanges: true,
     });
   },
 
