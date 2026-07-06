@@ -65,12 +65,10 @@ export const WorkflowEditor = ({ isReadonly = false }: WorkflowEditorProps) => {
         return;
       }
 
-      // Ctrl/Cmd + C
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
         copySelectedNodes();
       }
 
-      // Ctrl/Cmd + V
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") {
         pasteNodes();
       }
