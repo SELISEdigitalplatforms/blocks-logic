@@ -18,7 +18,7 @@ public class WorkflowUpdateRequestDto : IProjectKey
     public List<NodeDto>? Nodes { get; set; }
     public List<EdgeModel>? Edges { get; set; }
     public Dictionary<string, string>? Settings { get; set; }
-    public bool? IsActive { get; set; }
+    public bool? IsPublished { get; set; }
     public Dictionary<string, List<NodeOutputSchemaField>>? NodeOutputSchemas { get; set; }
 }
 
@@ -33,6 +33,7 @@ public class NodeDto
     public required Position Position { get; set; }
     public JsonElement Parameters { get; set; } = new();
     public JsonElement Settings { get; set; } = new();
+    public JsonElement? PinData { get; set; }
 
 }
 

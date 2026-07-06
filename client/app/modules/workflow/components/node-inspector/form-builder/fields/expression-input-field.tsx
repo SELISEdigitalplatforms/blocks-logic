@@ -264,7 +264,7 @@ export const ExpressionInputField = ({
   const isDisabled = typeof field.disabled === "function" ? false : field.disabled || readOnly;
 
   return (
-    <div className="relative flex-1">
+    <div className={cn("relative flex-1")}>
       <ExpressionHighlighter value={(value as string) || ""} isMultiline={false}>
         <Input
           ref={inputRef}
