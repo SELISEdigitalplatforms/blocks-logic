@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
+import { useWorkflowStore } from "../store";
 import { useWorkflow } from "./use-workflow";
 import { workflowService } from "../services/workflow.service";
 import {
@@ -226,5 +227,23 @@ export const useStepExecute = () => {
   return useMutation({
     mutationKey: ["workflow", "step-execute"],
     mutationFn: workflowService.stepExecute,
+  });
+};
+
+export const useExecuteTriggerListener = () => {
+  const tenantId = useProjectStore((s) => s.selectedProject?.tenantId) || "";
+  const workflowId = useWorkflowStore((state) => state.workflowId);
+
+  return useMutation({
+    mutationKey: ["workflow", "trigger-listener"],
+    mutationFn: async ({ triggerId, enableListener }: { triggerId: string; enableListener: boolean }) => {
+      if (!tenantId || !workflowId) return;
+      return workflowService.triggerListener({
+        ProjectKey: tenantId,
+        WorkflowId: workflowId,
+        TriggerId: triggerId,
+        EnableListener: enableListener,
+      });
+    },
   });
 };
