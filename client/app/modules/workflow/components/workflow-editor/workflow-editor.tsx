@@ -48,7 +48,7 @@ export const WorkflowEditor = ({ isReadonly = false }: WorkflowEditorProps) => {
       if (node.id === listeningNodeId) {
         return {
           ...node,
-          className: `${node.className || ""} !ring-2 !ring-green-500 rounded-md before:content-[''] before:absolute before:-top-1.5 before:-right-1.5 before:h-3 before:w-3 before:bg-green-500 before:rounded-full before:z-50 after:content-[''] after:absolute after:-top-1.5 after:-right-1.5 after:h-3 after:w-3 after:bg-green-500 after:rounded-full after:animate-ping after:z-40`.trim(),
+          className: `${node.className || ""} !ring-2 !ring-green-500 rounded-md`.trim(),
         };
       }
       return node;
