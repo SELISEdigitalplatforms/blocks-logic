@@ -236,13 +236,14 @@ export const useExecuteTriggerListener = () => {
 
   return useMutation({
     mutationKey: ["workflow", "trigger-listener"],
-    mutationFn: async ({ triggerId, enableListener }: { triggerId: string; enableListener: boolean }) => {
+    mutationFn: async ({ triggerId, enableListener, completionNodeId }: { triggerId: string; enableListener: boolean; completionNodeId?: string }) => {
       if (!tenantId || !workflowId) return;
       return workflowService.triggerListener({
         ProjectKey: tenantId,
         WorkflowId: workflowId,
         TriggerId: triggerId,
         EnableListener: enableListener,
+        ...(completionNodeId && { CompletionNodeId: completionNodeId }),
       });
     },
   });

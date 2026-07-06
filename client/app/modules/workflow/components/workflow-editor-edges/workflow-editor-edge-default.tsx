@@ -28,10 +28,39 @@ export const WorkflowEditorEdgeDefault = ({
 
   const { stepExecutionTraversedEdgeIds, executedNodes } = useWorkflow();
   const isTraversed = stepExecutionTraversedEdgeIds?.has(id);
-  const sourceNodeStatus = isTraversed ? executedNodes.find(n => n.nodeId === source)?.status : undefined;
+  const executedNode = isTraversed ? executedNodes.find(n => n.nodeId === source) : undefined;
+  const sourceNodeStatus = executedNode?.status;
   const executionStyles = sourceNodeStatus ? getStatusStyles(sourceNodeStatus) : undefined;
 
   const label = getHandleLabel(sourceHandleId);
+
+  let itemCountLabel = "";
+  if (executedNode) {
+    let count = 0;
+    const isBranchingEdge = sourceHandleId && sourceHandleId !== "source";
+    if (isBranchingEdge) {
+      const branchCounts = executedNode.outputCountsByBranch;
+      if (branchCounts) {
+        const mappedKey =
+          sourceHandleId === "if-true"
+            ? "True"
+            : sourceHandleId === "if-false"
+              ? "False"
+              : sourceHandleId;
+        if (mappedKey && mappedKey in branchCounts) {
+          count = branchCounts[mappedKey];
+        } else if (sourceHandleId && sourceHandleId in branchCounts) {
+          count = branchCounts[sourceHandleId];
+        }
+      }
+    } else if (executedNode.outputItemCount !== undefined) {
+      count = executedNode.outputItemCount;
+    }
+
+    if (count > 0) {
+      itemCountLabel = `${count} item${count > 1 ? "s" : ""}`;
+    }
+  }
 
   return (
     <>
@@ -47,7 +76,7 @@ export const WorkflowEditorEdgeDefault = ({
         }} 
       />
 
-      {label && (
+      {(label || itemCountLabel) && (
         <EdgeLabelRenderer>
           <div
             style={{
@@ -55,9 +84,18 @@ export const WorkflowEditorEdgeDefault = ({
               transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
               pointerEvents: "all",
             }}
-            className="rounded-md border border-medium-emphasis bg-background px-1.5 py-0.5 text-[10px] tracking-wider text-medium-emphasis shadow-sm dark:border-accent dark:text-primary"
+            className="flex flex-col items-center gap-1"
           >
-            {label}
+            {label && (
+              <div className="rounded-md border border-medium-emphasis bg-background px-1.5 py-0.5 text-[10px] tracking-wider text-medium-emphasis shadow-sm dark:border-accent dark:text-primary">
+                {label}
+              </div>
+            )}
+            {itemCountLabel && (
+              <div className="rounded-full bg-secondary px-2 py-0.5 text-[9px] font-semibold text-secondary-foreground shadow-sm">
+                {itemCountLabel}
+              </div>
+            )}
           </div>
         </EdgeLabelRenderer>
       )}

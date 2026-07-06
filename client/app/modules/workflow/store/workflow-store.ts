@@ -102,6 +102,8 @@ export type WorkflowState = {
   executionMode: number | null;
   setEditorMode: (mode: "editor" | "execution" | "version") => void;
   setExecutionMode: (mode: number | null) => void;
+  nextExecutionId: string | null; 
+  setNextExecutionId: (id: string | null) => void;
 };
 
 export const createWorkflowStore = () => createStore<WorkflowState>((set, get) => ({
@@ -129,6 +131,8 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
   executionMode: null,
   isListening: false,
   listeningNodeId: null,
+  nextExecutionId: null, 
+  setNextExecutionId: (id) => set({ nextExecutionId: id }),
 
   setIsListening: (isListening, nodeId = null) => set({ isListening, listeningNodeId: nodeId }),
 
@@ -579,10 +583,14 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
   },
 
   setStepExecutionData: (execution) => {
-    const { nodesMap, edgesMap } = get();
+    const { nodesMap, edgesMap, clearStepExecutionData } = get();
+    
+    // Clear any existing animation
+    if ((window as any).executionAnimationInterval) {
+      clearInterval((window as any).executionAnimationInterval);
+    }
     
     // Create an array of workflow nodes to pass into buildExecutedSubgraph
-    // Note: The nodes in nodesMap are EditorNode which extends Node and WorkflowNode, so they have what is needed
     const nodesArray = Object.values(nodesMap) as any[]; 
     const edgesArray = Object.values(edgesMap) as any[];
 
@@ -593,12 +601,57 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
       execution.data.items
     );
 
+    // Clear first to allow the UI to reset
+    clearStepExecutionData();
+
+    // First set the actual data but leave the display sets empty to start the animation
     set({
       executedItems: execution.data.items,
       executedNodes: execution.data.nodeExecutions,
-      stepExecutionReachableNodeIds: reachableNodeIds,
-      stepExecutionTraversedEdgeIds: traversedEdgeIds,
+      stepExecutionReachableNodeIds: new Set(),
+      stepExecutionTraversedEdgeIds: new Set(),
     });
+
+    const nodesToAnimate = Array.from(reachableNodeIds);
+    let currentIndex = 0;
+
+    // Use window to store interval to survive state re-creations just in case
+    (window as any).executionAnimationInterval = setInterval(() => {
+      if (currentIndex >= nodesToAnimate.length) {
+        clearInterval((window as any).executionAnimationInterval);
+        (window as any).executionAnimationInterval = null;
+        
+        // Final safety sync
+        set({
+          stepExecutionReachableNodeIds: reachableNodeIds,
+          stepExecutionTraversedEdgeIds: traversedEdgeIds,
+        });
+        return;
+      }
+
+      const nodeId = nodesToAnimate[currentIndex];
+
+      set((state) => {
+        const newNodesSet = new Set(state.stepExecutionReachableNodeIds || []);
+        newNodesSet.add(nodeId);
+
+        const newEdgesSet = new Set(state.stepExecutionTraversedEdgeIds || []);
+        for (const edgeId of traversedEdgeIds) {
+          const edge = edgesArray.find(e => e.id === edgeId);
+          // Highlight edges that start from a highlighted node
+          if (edge && newNodesSet.has(edge.source)) {
+             newEdgesSet.add(edgeId);
+          }
+        }
+
+        return {
+          stepExecutionReachableNodeIds: newNodesSet,
+          stepExecutionTraversedEdgeIds: newEdgesSet,
+        };
+      });
+
+      currentIndex++;
+    }, 250); // 250ms cascading delay between nodes
   },
 
   setLastSuccessfulExecutionData: (data) => set({ lastSuccessfulExecutionData: data }),
