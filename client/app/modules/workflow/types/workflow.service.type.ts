@@ -252,3 +252,15 @@ export interface IStepExecuteResponse {
   errors?: unknown;
 }
 
+export interface ITriggerListenerPayload {
+  ProjectKey: string;
+  WorkflowId: string;
+  TriggerId: string;
+  EnableListener: boolean;
+}
+
+export interface ITriggerListenerResponse {
+  itemId: string;
+  errors: unknown;
+  isSuccess: boolean;
+}
