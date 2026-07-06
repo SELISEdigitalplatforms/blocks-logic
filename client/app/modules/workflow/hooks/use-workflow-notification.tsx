@@ -3,6 +3,7 @@ import { useNotificationListener } from "@/hooks/use-notification-listener";
 import { useWorkflow } from "@blocks-workflow/hooks";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { workflowService } from "../services/workflow.service";
+import { EXECUTION_STATUS_COMPLETED } from "../constants";
 
 export const useWorkflowNotification = () => {
   const { isListening, setIsListening, listeningNodeId, workflowId, setStepExecutionData } = useWorkflow();
@@ -26,7 +27,7 @@ export const useWorkflowNotification = () => {
           const code = payload?.Information?.code;
           const status = payload?.Information?.status;
 
-          if (code === "WF004" && status === "Completed") {
+          if (code === EXECUTION_STATUS_COMPLETED && status === "Completed") {
             const executionId = payload?.Information?.executionId || payload?.Information?.data;
             
             if (isListening && listeningNodeId && workflowId && tenantId) {
