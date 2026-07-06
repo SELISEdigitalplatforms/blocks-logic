@@ -543,8 +543,14 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
         )
       : {};
 
-    const executedItems = workflow.items ?? [];
-    const executedNodes = workflow.nodeExecutions ?? [];
+    // Preserve execution data to prevent it from disappearing after a save/refetch
+    const executedItems = (workflow.items && workflow.items.length > 0) 
+      ? workflow.items 
+      : (get().workflowId === workflow.itemId ? get().executedItems : (workflow.items ?? []));
+      
+    const executedNodes = (workflow.nodeExecutions && workflow.nodeExecutions.length > 0) 
+      ? workflow.nodeExecutions 
+      : (get().workflowId === workflow.itemId ? get().executedNodes : (workflow.nodeExecutions ?? []));
 
     set({
       nodesMap,

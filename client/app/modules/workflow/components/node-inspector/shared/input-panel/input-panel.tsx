@@ -55,31 +55,38 @@ export const InputPanel = ({
       .map((e) => e.source);
   }, [selectedNode, edgesMap]);
 
+  const displayPredecessors = useMemo(() => {
+    if (editorMode !== "editor") {
+      return predecessors.filter((p) => immediateParentIds.includes(p.id));
+    }
+    return predecessors;
+  }, [predecessors, immediateParentIds, editorMode]);
+
   const [selectedPredecessorId, setSelectedPredecessorId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (predecessors.length > 0) {
-      if (!selectedPredecessorId || !predecessors.find((p) => p.id === selectedPredecessorId)) {
-        setSelectedPredecessorId(predecessors[0].id);
+    if (displayPredecessors.length > 0) {
+      if (!selectedPredecessorId || !displayPredecessors.find((p) => p.id === selectedPredecessorId)) {
+        setSelectedPredecessorId(displayPredecessors[0].id);
       }
     } else {
       setSelectedPredecessorId(null);
     }
-  }, [predecessors, selectedPredecessorId]);
+  }, [displayPredecessors, selectedPredecessorId]);
 
   const activePredecessor = useMemo(() => {
-    return predecessors.find((p) => p.id === selectedPredecessorId);
-  }, [predecessors, selectedPredecessorId]);
+    return displayPredecessors.find((p) => p.id === selectedPredecessorId);
+  }, [displayPredecessors, selectedPredecessorId]);
 
   const runtimeInputRows = useMemo(() => {
-    if (predecessors.length > 0 && selectedPredecessorId) {
+    if (displayPredecessors.length > 0 && selectedPredecessorId) {
       return sourceExecutedNodes?.find((en) => en.nodeId === selectedPredecessorId)?.output || [];
     }
     if (selectedNode) {
       return sourceExecutedNodes?.find((en) => en.nodeId === selectedNode.id)?.input || [];
     }
     return [];
-  }, [sourceExecutedNodes, selectedNode, predecessors, selectedPredecessorId]);
+  }, [sourceExecutedNodes, selectedNode, displayPredecessors, selectedPredecessorId]);
 
   if (!selectedNode) return null;
 
@@ -88,13 +95,13 @@ export const InputPanel = ({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h3 className="font-medium text-high-emphasis">Input</h3>
-          {predecessors.length > 0 && (
+          {displayPredecessors.length > 1 && (
             <Select value={selectedPredecessorId || ""} onValueChange={setSelectedPredecessorId}>
               <SelectTrigger className="h-7 w-[160px] text-xs">
                 <SelectValue placeholder="Select node" />
               </SelectTrigger>
               <SelectContent>
-                {predecessors.map((p) => (
+                {displayPredecessors.map((p) => (
                   <SelectItem key={p.id} value={p.id} className="text-xs">
                     {p.name}
                   </SelectItem>
