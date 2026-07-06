@@ -37,6 +37,7 @@ export const NodeLibraryPanel = ({
     selectedHandle,
     createEdge,
     selectNode,
+    deselectAllEdges,
     deselectHandle,
     getNodeNextSource,
   } = useWorkflow();
@@ -112,11 +113,12 @@ export const NodeLibraryPanel = ({
           );
         });
       }
+      deselectAllEdges();
       selectNode(transformedNode);
       deselectHandle();
       closeNodeLibraryPanel();
     },
-    [addNode, closeNodeLibraryPanel, nodes, selectedNode, createEdge, selectNode, getNodeNextSource, deselectHandle],
+    [addNode, closeNodeLibraryPanel, nodes, selectedNode, createEdge, selectNode, deselectAllEdges, getNodeNextSource, deselectHandle],
   );
   return (
     <Sheet open={isPanelOpen} onOpenChange={onOpenChange} modal={false}>

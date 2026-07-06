@@ -15,11 +15,11 @@ export function RecursiveSchemaViewer({ data, depth = 0, prefixPath = "", nodeNa
             isDraggable={isDraggable}
             isDashed={isDashed}
           />
-          {showValues && <span className="text-low-emphasis">{formatCellValue(data)}</span>}
+          {showValues && <span className="text-low-emphasis text-xs">{formatCellValue(data)}</span>}
         </div>
       );
     }
-    return showValues ? <span className="text-low-emphasis px-2 py-1">{formatCellValue(data)}</span> : null;
+    return showValues ? <span className="text-low-emphasis text-xs px-2 py-1">{formatCellValue(data)}</span> : null;
   }
 
   const isArray = Array.isArray(data);
@@ -48,7 +48,7 @@ export function RecursiveSchemaViewer({ data, depth = 0, prefixPath = "", nodeNa
               ) : (
                 <span className={`px-2 py-1 ${isDashed ? 'text-medium-emphasis border border-dashed border-border/80 rounded bg-surface-app' : 'text-low-emphasis'}`} style={{ marginLeft: `${depth * 1}rem` }}>[{key}]:</span>
               )}
-              {(!childIsObj && showValues) && <span className="text-low-emphasis">{formatCellValue(val)}</span>}
+              {(!childIsObj && showValues) && <span className="text-low-emphasis text-xs">{formatCellValue(val)}</span>}
             </div>
             {childIsObj && (
               <RecursiveSchemaViewer

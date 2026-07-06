@@ -1,5 +1,5 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { ReactFlow, Background, BackgroundVariant } from "@xyflow/react";
 import { Button } from "@/components/ui-kits/button/button";
 import { Plus } from "lucide-react";
@@ -24,6 +24,8 @@ export const WorkflowEditor = ({ isReadonly = false }: WorkflowEditorProps) => {
   const {
     nodes,
     edges,
+    isListening,
+    listeningNodeId,
     selectedNode,
     onNodeClick,
     onNodesChange,
@@ -39,6 +41,19 @@ export const WorkflowEditor = ({ isReadonly = false }: WorkflowEditorProps) => {
   useEffect(() => {
     setEditorMode("editor");
   }, [setEditorMode]);
+
+  const modifiedNodes = useMemo(() => {
+    if (!isListening || !listeningNodeId) return nodes;
+    return nodes.map((node) => {
+      if (node.id === listeningNodeId) {
+        return {
+          ...node,
+          className: `${node.className || ""} !ring-2 !ring-green-500 rounded-md`.trim(),
+        };
+      }
+      return node;
+    });
+  }, [nodes, isListening, listeningNodeId]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -66,11 +81,12 @@ export const WorkflowEditor = ({ isReadonly = false }: WorkflowEditorProps) => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedNode, copySelectedNodes, pasteNodes]);
 
+
   return (
     <>
       <div className="relative h-full w-full">
         <ReactFlow
-          nodes={nodes}
+          nodes={modifiedNodes}
           edges={edges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
