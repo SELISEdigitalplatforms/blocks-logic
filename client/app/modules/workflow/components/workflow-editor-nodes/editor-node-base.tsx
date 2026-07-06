@@ -122,7 +122,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
       </div>
       {isListening && listeningNodeId === id && (
         <>
-          <div className="absolute -bottom-2 -right-2 z-50 flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-md">
+          <div className="absolute -bottom-2 -right-2 z-50 flex h-5 w-5 items-center justify-center rounded-full bg-background border border-green-500 shadow-md">
             <Rss className="h-3 w-3 text-green-500" />
           </div>
           <div className="absolute -bottom-2 -right-2 z-40 h-5 w-5 animate-ping rounded-full bg-green-500"></div>
