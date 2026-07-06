@@ -45,7 +45,6 @@ function RecursiveJsonViewer({ data, depth = 0, prefixPath = "", nodeName, hasSi
                   isDraggable={isDraggable}
                 />
               )}
-              {!isArray && <span className="mx-1">:</span>}
               {!childIsObj ? (
                 <span className="text-green-600 dark:text-green-400">
                   {formatCellValue(val)}{index < entries.length - 1 ? "," : ""}
