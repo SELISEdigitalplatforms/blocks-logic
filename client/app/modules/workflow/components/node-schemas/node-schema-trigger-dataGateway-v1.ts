@@ -78,8 +78,6 @@ export const NodeSchemaTriggerDataGatewayV1: NodeSchemaDefinition = {
         info: "Structure of the trigger output data",
         key: "output",
         displayValue: (data) => {
-          console.log("DisplayValue data:", data);
-
           return `\`\`\`json
 {
   "Operation": "${data.operation}",

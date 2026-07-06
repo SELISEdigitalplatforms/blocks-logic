@@ -10,16 +10,13 @@ import {
   LoginPage,
   ProtectedGuard,
   ConsoleLayout,
-  ImpersonationChecker,
-  ImpersonationTerminator,
-  ImpersonationSynchronizer,
   ConsolePage,
   CallbackPage,
   ProfilePage,
   ProjectOverviewLayout,
   DashboardOverview,
   DashboardLayout,
-  EnvironmentsPage,
+  EnvironmentsPage
 } from "@seliseblocks/blocks-kit";
 import { navigationMenus } from "./constants/navigation-menus";
 

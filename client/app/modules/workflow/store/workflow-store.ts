@@ -43,6 +43,11 @@ export type WorkflowState = {
   isConfigModalOpen: boolean;
   isPanelOpen: boolean;
 
+  // Listening state
+  isListening: boolean;
+  listeningNodeId: string | null;
+  setIsListening: (isListening: boolean, nodeId?: string | null) => void;
+
   // React Flow handlers
   onNodesChange: OnNodesChange;
   onEdgesChange: OnEdgesChange;
@@ -121,6 +126,10 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
   lastSuccessfulExecutionData: null,
   editorMode: "editor",
   executionMode: null,
+  isListening: false,
+  listeningNodeId: null,
+
+  setIsListening: (isListening, nodeId = null) => set({ isListening, listeningNodeId: nodeId }),
 
   setEditorMode: (mode) => set({ editorMode: mode }),
   setExecutionMode: (mode) => set({ executionMode: mode }),
@@ -547,6 +556,8 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
       executedNodes: [],
       stepExecutionReachableNodeIds: null,
       stepExecutionTraversedEdgeIds: null,
+      isListening: false,
+      listeningNodeId: null,
     });
   },
 
