@@ -3,6 +3,7 @@ import { ArrayField } from "./array-field";
 import { CheckboxField } from "./checkbox-field";
 import { CodeEditorField } from "./code-editor-field";
 import { KeyValuePairsField } from "./key-value-pairs-field";
+import { KeyTypeValueField } from "./key-type-value-field";
 import { NumberField } from "./number-field";
 import { RadioField } from "./radio-field";
 import { SelectField } from "./select-field";
@@ -16,6 +17,7 @@ import { DisplayField } from "./display-field";
 import { ConditionsField } from "./conditions-field";
 import { SchemaFieldsField } from "./schema-fields-field";
 import { SchemaFieldPickerField } from "./schema-field-picker-field";
+import { TabWithTextField } from "./tab-with-text-field";
 
 /**
  * Registry of all field components mapped by their field type.
@@ -38,12 +40,14 @@ export const FIELD_COMPONENTS_REGISTRY: Record<
   "code-editor": CodeEditorField,
   "key-value-pairs": KeyValuePairsField,
   "fixed-key-value-pairs": FixedKeyValuePairsField,
+  "key-type-value-pairs": KeyTypeValueField,
   conditions: ConditionsField,
   array: ArrayField,
   expression: ExpressionInputField,
   display: DisplayField,
   "schema-fields": SchemaFieldsField,
   "schema-field-picker": SchemaFieldPickerField,
+  "tab-with-text": TabWithTextField,
 };
 
 /**

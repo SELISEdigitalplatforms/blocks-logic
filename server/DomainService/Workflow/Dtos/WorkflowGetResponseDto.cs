@@ -4,10 +4,10 @@ namespace DomainService.Workflow.Dtos
 {
     public class WorkflowGetResponseDto : BaseResponse
     {
-        public Workflow data { get; set; }
+        public WorkflowResponseDto data { get; set; }
     }
 
-    public class Workflow : BaseEntity
+    public class WorkflowResponseDto : BaseEntity
     {
         public string Name { get; set; }
 
@@ -15,17 +15,27 @@ namespace DomainService.Workflow.Dtos
 
         public List<NodeDto> Nodes { get; set; } = new();
 
-
         public List<EdgeModel> Edges { get; set; } = new();
 
         public Dictionary<string, string> Settings { get; set; } = new();
 
-        public bool IsActive { get; set; } = true;
+        public bool IsPublished { get; set; }
 
         public string Description { get; set; } = string.Empty;
+
+        public WorkflowVersionDto? PublishedVersion { get; set; }
+
+        public bool IsDirty { get; set; }
 
         public Dictionary<string, List<NodeOutputSchemaField>>? NodeOutputSchemas { get; set; }
     }
 
+    public class WorkflowVersionDto
+    {
+        public string VersionId { get; set; }
+        public string Name { get; set; }
+        public string Description { get; set; }
+
+    }
 
 }

@@ -1,6 +1,5 @@
 import { createBrowserRouter, Navigate, Outlet } from "react-router-dom";
-import { DashboardLayout } from "./layouts/dashboard-layout";
-import { DashboardOverview } from "./pages/dashboard/dashboard-overview";
+// import { DashboardOverview } from "./pages/dashboard/dashboard-overview";
 
 import WorkflowsPage from "./routes/private/workflows/workflows-page";
 import WorkflowDetailsPage from "./routes/private/workflow-details/workflow-details-page";
@@ -11,15 +10,19 @@ import {
   LoginPage,
   ProtectedGuard,
   ConsoleLayout,
-  ImpersonationChecker,
-  ImpersonationTerminator,
-  ImpersonationSynchronizer,
   ConsolePage,
   CallbackPage,
   ProfilePage,
+  ProjectOverviewLayout,
+  DashboardOverview,
+  DashboardLayout,
+  EnvironmentsPage
 } from "@seliseblocks/blocks-kit";
-import { EnvironmentsPage } from "./pages/environments/environments";
-import { ProjectOverviewLayout } from "./layouts/project-overview-layout";
+import { navigationMenus } from "./constants/navigation-menus";
+
+const redirectPaths: Record<string, string> = {
+  "/workflow/*": "/app/workflow",
+};
 
 export const router = createBrowserRouter([
   {
@@ -31,7 +34,7 @@ export const router = createBrowserRouter([
         children: [
           {
             path: "/login/callback",
-            element: <CallbackPage redirectUrl="/console" />,
+            element: <CallbackPage defaultRedirectUrl="/app/console" />,
           },
         ],
       },
@@ -61,14 +64,11 @@ export const router = createBrowserRouter([
                 <Outlet />
               </ProtectedGuard>
             ),
+            path: "/app",
             children: [
               {
                 element: (
-                  <ImpersonationChecker>
-                    <ImpersonationTerminator>
-                      <Outlet />
-                    </ImpersonationTerminator>
-                  </ImpersonationChecker>
+                  <Outlet />
                 ),
                 children: [
                   {
@@ -78,15 +78,22 @@ export const router = createBrowserRouter([
                       </ConsoleLayout>
                     ),
                     children: [
-                      { path: "/profile", element: <ProfilePage /> },
-                      { path: "/console", element: <ConsolePage /> },
+                      { path: "profile", element: <ProfilePage /> },
+                      { path: "console", element: <ConsolePage /> },
                     ],
                   },
                   {
-                    element: <ProjectOverviewLayout />,
+                    path: "project-overview",
+                    element: (
+                      <ProjectOverviewLayout
+                        redirectPaths={redirectPaths}
+                        navigationMenus={navigationMenus}>
+                        <Outlet />
+                      </ProjectOverviewLayout>
+                    ),
                     children: [
                       {
-                        path: "/project-overview/environments",
+                        path: "project-overview/environments",
                         element: <EnvironmentsPage />,
                       },
                     ],
@@ -96,16 +103,16 @@ export const router = createBrowserRouter([
               {
                 // impersonate
                 element: (
-                  <ImpersonationChecker>
-                    <ImpersonationSynchronizer>
-                      <DashboardLayout />
-                    </ImpersonationSynchronizer>
-                  </ImpersonationChecker>
+                  <DashboardLayout
+                    redirectPaths={redirectPaths}
+                    navigationMenus={navigationMenus}>
+                    <Outlet />
+                  </DashboardLayout>
                 ),
                 children: [
-                  { path: "/dashboard", element: <DashboardOverview /> },
-                  { path: "/workflow/:id", element: <WorkflowDetailsPage /> },
-                  { path: "/workflow", element: <WorkflowsPage /> },
+                  { path: "dashboard", element: <DashboardOverview /> },
+                  { path: "workflow/:id", element: <WorkflowDetailsPage /> },
+                  { path: "workflow", element: <WorkflowsPage /> },
                 ],
               },
             ],
@@ -114,7 +121,7 @@ export const router = createBrowserRouter([
       },
       {
         path: "*",
-        element: <Navigate to="/console" replace />,
+        element: <Navigate to="/app/console" replace />,
       },
     ],
   },

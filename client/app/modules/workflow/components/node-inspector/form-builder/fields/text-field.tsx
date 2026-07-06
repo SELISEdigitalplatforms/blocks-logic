@@ -6,6 +6,7 @@ import { Button } from "@/components/ui-kits/button/button";
 import { Copy, Check } from "lucide-react";
 import { FieldProps } from "../form-field.types";
 import { ExpressionHighlighter } from "../utils/expression-highlighter";
+import { cn } from "@/lib/utils";
 
 export const TextField = ({
 	field,
@@ -22,7 +23,7 @@ export const TextField = ({
 	};
 
 	return (
-		<div className="relative">
+		<div className={cn("relative flex-1")}>
 			<ExpressionHighlighter
 				value={value || ""}
 				isMultiline={false}
@@ -33,7 +34,9 @@ export const TextField = ({
 					type="text"
 					value={value || ""}
 					onChange={
-						readOnly ? undefined : (e) => onChange(e.target.value)
+						readOnly ? undefined : (e) => {
+							onChange(e.target.value);
+						}
 					}
 					placeholder={field.placeholder}
 					disabled={field.disabled as boolean}
@@ -41,7 +44,7 @@ export const TextField = ({
 					required={field.required as boolean}
 					maxLength={field.maxLength}
 					minLength={field.minLength}
-					className={field.copyable ? "pr-10" : ""}
+					className={`${field.copyable ? "pr-10" : ""}`}
 				/>
 			</ExpressionHighlighter>
 			{field.copyable && (

@@ -10,6 +10,7 @@ namespace DomainService.Workflow.Repositories
         Task<WorkflowExecutionModel?> GetByIdAsync(string id, string tenantId);
         Task UpdateAsync(WorkflowExecutionModel execution);
         Task<bool> AtomicCompleteNodeAsync(string executionId, string tenantId, string completedNodeId, List<string> nextNodeIds);
+        Task AtomicFinalizeExecutionAsync(string executionId, string tenantId);
         Task AtomicAddNodeExecutionAsync(string executionId, string tenantId, NodeExecutionModel nodeExecution);
         Task AtomicUpdateNodeExecutionCompletedAsync(string executionId, string tenantId, string nodeExecutionId, int outputItemCount, Dictionary<string, int> outputCountsByBranch, BsonDocument? contextUpdates);
         Task AtomicUpdateNodeExecutionFailedAsync(string executionId, string tenantId, string nodeExecutionId, string error);
@@ -26,5 +27,7 @@ namespace DomainService.Workflow.Repositories
             string tenantId);
 
         Task<List<WorkflowItemExecutionModel>> GetAllItemsByNodeExecutionIdAsync(string nodeExecutionId, string tenantId);
+
+        Task<WorkflowExecutionModel> GetLastCompletedExecution(string tenantId, string workflowId);
     }
 }
