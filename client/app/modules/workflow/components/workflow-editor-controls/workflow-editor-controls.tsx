@@ -4,7 +4,7 @@ import { useWorkflow } from "@blocks-workflow/hooks";
 import { useExecuteTriggerListener } from "@blocks-workflow/hooks/use-workflow-api";
 import { useWorkflowNotification } from "@blocks-workflow/hooks/use-workflow-notification";
 import { Controls } from "@xyflow/react";
-import { Wand, Plus, Maximize, ZoomIn, ZoomOut, Play, Square } from "lucide-react";
+import { Wand, Plus, Maximize, ZoomIn, ZoomOut, Play, Square, Loader2 } from "lucide-react";
 import { Fragment, useMemo } from "react";
 import {
   Tooltip,
@@ -131,64 +131,84 @@ export const WorkflowEditorControls = ({ readonly = false }: WorkflowEditorContr
 
       {!readonly && triggerNodesCount > 0 && (
         <div className="flex flex-row rounded-md border bg-background p-1 shadow-md">
-          {triggerNodesCount > 1 && !isListening ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" disabled={isPending} className="h-fit w-fit p-2 text-medium-emphasis">
-                  <Play className="aspect-square h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent side="top" className="max-h-60 overflow-y-auto">
-                <DropdownMenuLabel>Select Trigger</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {triggerNodes.map((node) => (
-                  <DropdownMenuItem
-                    key={node.id}
-                    onClick={() => {
-                      executeTriggerListener(
-                        { triggerId: node.id, enableListener: true },
-                        { onSuccess: () => setIsListening(true, node.id) }
-                      );
+          {!isListening ? (
+            triggerNodesCount > 1 ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" disabled={isPending} className="h-fit w-fit p-2 text-medium-emphasis">
+                    <Play className="aspect-square h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent side="top" className="max-h-60 overflow-y-auto">
+                  <DropdownMenuLabel>Select Trigger</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {triggerNodes.map((node) => (
+                    <DropdownMenuItem
+                      key={node.id}
+                      onClick={() => {
+                        executeTriggerListener(
+                          { triggerId: node.id, enableListener: true },
+                          { onSuccess: () => setIsListening(true, node.id) }
+                        );
+                      }}
+                    >
+                      {node.name || "Unnamed Trigger"}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    disabled={triggerNodesCount === 0 || isPending}
+                    className="h-fit w-fit p-2 text-medium-emphasis"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (triggerNodesCount > 0) {
+                        executeTriggerListener(
+                          { triggerId: triggerNodes[0].id, enableListener: true },
+                          { onSuccess: () => setIsListening(true, triggerNodes[0].id) }
+                        );
+                      }
                     }}
                   >
-                    {node.name || "Unnamed Trigger"}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  disabled={triggerNodesCount === 0 || isPending}
-                  className="h-fit w-fit p-2 text-medium-emphasis"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (isListening && listeningNodeId) {
-                      executeTriggerListener(
-                        { triggerId: listeningNodeId, enableListener: false },
-                        { onSuccess: () => setIsListening(false) }
-                      );
-                    } else if (triggerNodesCount > 0) {
-                      executeTriggerListener(
-                        { triggerId: triggerNodes[0].id, enableListener: true },
-                        { onSuccess: () => setIsListening(true, triggerNodes[0].id) }
-                      );
-                    }
-                  }}
-                >
-                  {isListening ? (
-                    <Square className="aspect-square h-4 w-4" />
-                  ) : (
                     <Play className="aspect-square h-4 w-4" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{isListening ? "Stop Workflow" : "Execute Workflow"}</p>
-              </TooltipContent>
-            </Tooltip>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Execute Workflow</p>
+                </TooltipContent>
+              </Tooltip>
+            )
+          ) : (
+            <div className="flex items-center gap-2 px-2">
+              <Loader2 className="h-4 w-4 animate-spin text-green-500" />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    disabled={isPending}
+                    className="h-fit w-fit p-2 text-medium-emphasis hover:bg-destructive/10 hover:text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (listeningNodeId) {
+                        executeTriggerListener(
+                          { triggerId: listeningNodeId, enableListener: false },
+                          { onSuccess: () => setIsListening(false) }
+                        );
+                      }
+                    }}
+                  >
+                    <Square className="aspect-square h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Stop Workflow</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
           )}
         </div>
       )}
