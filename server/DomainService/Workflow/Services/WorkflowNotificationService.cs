@@ -1,3 +1,7 @@
+using System.Net.Http;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Blocks.Genesis;
 using DomainService.Notification;
 using DomainService.Shared;
@@ -5,38 +9,47 @@ using DomainService.Workflow.Dtos;
 using DomainService.Workflow.Models;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using System.Text.Json;
 
 namespace DomainService.Workflow.Services
 {
     public class WorkflowNotificationService : IWorkflowNotificationService
     {
+        private static readonly JsonSerializerOptions JsonOptions = new()
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        };
+
         private readonly ICryptoService _cryptoService;
         private readonly ITenants _tenants;
         private readonly IConfiguration _configuration;
         private readonly ILogger<WorkflowNotificationService> _logger;
         private readonly INotificationService _notificationService;
+        private readonly IHttpClientFactory _httpClientFactory;
 
         public WorkflowNotificationService(
             ICryptoService cryptoService,
             ITenants tenants,
             IConfiguration configuration,
             INotificationService notificationService,
+            IHttpClientFactory httpClientFactory,
             ILogger<WorkflowNotificationService> logger)
         {
             _cryptoService = cryptoService;
             _tenants = tenants;
             _configuration = configuration;
             _notificationService = notificationService;
+            _httpClientFactory = httpClientFactory;
             _logger = logger;
         }
 
+
         public async Task<bool> Notify(List<string> userIds, NotificationData data)
         {
-            var notifyRequest = new NotifyRequest
+            var payload = new
             {
-                ConnectionId = string.Empty,
-                Roles = new List<string>(),
+                ConnectionId = "",
+                Roles = new List<string> { },
                 UserIds = userIds,
                 DenormalizedPayload = JsonSerializer.Serialize(new
                 {
@@ -48,26 +61,69 @@ namespace DomainService.Workflow.Services
                     Information = data.Information
                 }),
                 SaveDenormalizedPayloadAsAnObject = false,
-                ContentAvailable = true,
                 ConfiguratoinName = _configuration["WORKFLOW_NOTIFICATION_CONFIGURATION_NAME"],
+                ContentAvailable = true,
                 ResponseKey = data.ResponseKey,
                 ResponseValue = data.ResponseValue,
             };
+            var blocksKey = _configuration["RootTenantId"];
+            var salt = _tenants.GetTenantByID(blocksKey)?.TenantSalt;
+            var actulalSecret = _cryptoService.Hash(blocksKey, salt);
 
-            var response = await _notificationService.NotifyAsync(notifyRequest);
 
-            if (response.IsSuccess)
+            var url = _configuration["NotificationServiceUrl"];
+            if (string.IsNullOrWhiteSpace(url))
             {
-                _logger.LogInformation("Successfully sent notification to users : {Users}", string.Join(", ", userIds));
+                _logger.LogError("NotificationServiceUrl is not configured; cannot send notifications to users: {UserIds}.", string.Join(", ", userIds));
+                return false;
             }
-            else
+
+            try
             {
-                _logger.LogError("Failed to send notification to users : {Users}. Errors : {Errors}",
+                var httpClient = _httpClientFactory.CreateClient();
+                using var request = new HttpRequestMessage(HttpMethod.Post, url)
+                {
+                    Content = new StringContent(JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json")
+                };
+                request.Headers.Add("x-blocks-key", blocksKey);
+                request.Headers.Add("Secret", actulalSecret);
+
+                using var httpResponse = await httpClient.SendAsync(request);
+                var rawResponse = await httpResponse.Content.ReadAsStringAsync();
+
+                NotificationResponse? response = null;
+                if (!string.IsNullOrWhiteSpace(rawResponse))
+                {
+                    try
+                    {
+                        response = JsonSerializer.Deserialize<NotificationResponse>(rawResponse, JsonOptions);
+                    }
+                    catch (JsonException ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to deserialize notification response. Raw response: {RawResponse}", rawResponse);
+                    }
+                }
+
+                var isSuccess = httpResponse.IsSuccessStatusCode && (response?.isSuccess ?? false);
+                if (isSuccess)
+                {
+                    _logger.LogInformation("Successfully sent notification to users : {UserIds}", string.Join(", ", userIds));
+                    return true;
+                }
+
+                var errorMessage = response?.errors
+                    ?? $"HTTP {(int)httpResponse.StatusCode} {httpResponse.ReasonPhrase}";
+                _logger.LogError(
+                    "Failed to sent notification to users : {UserIds}. Error : {Error}",
                     string.Join(", ", userIds),
-                    response.Errors != null ? string.Join(", ", response.Errors.Select(kv => $"{kv.Key}={kv.Value}")) : "none");
+                    errorMessage);
+                return false;
             }
-
-            return response.IsSuccess;
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to sent notification to users : {UserIds}", string.Join(", ", userIds));
+                return false;
+            }
         }
 
         public async Task NotifyExecutionEventAsync(
