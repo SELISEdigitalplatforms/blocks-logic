@@ -41,6 +41,7 @@ export const useWorkflow = () => {
   const deleteEdge = useWorkflowStore((state) => state.deleteEdge);
   const selectNode = useWorkflowStore((state) => state.selectNode);
   const deselectNode = useWorkflowStore((state) => state.deselectNode);
+  const deselectAllEdges = useWorkflowStore((state) => state.deselectAllEdges);
   const selectHandle = useWorkflowStore((state) => state.selectHandle);
   const deselectHandle = useWorkflowStore((state) => state.deselectHandle);
   const openConfigModal = useWorkflowStore((state) => state.openConfigModal);
@@ -248,6 +249,7 @@ export const useWorkflow = () => {
     // Selection operations
     selectNode,
     deselectNode,
+    deselectAllEdges,
     selectHandle,
     deselectHandle,
     selectAndConfigureNode,

@@ -63,6 +63,7 @@ export type WorkflowState = {
   pasteNodes: (position?: { x: number; y: number }) => void;
   selectNode: (node: EditorNode | null) => void;
   deselectNode: () => void;
+  deselectAllEdges: () => void;
 
   // Handle operations
   selectHandle: (handle: string) => void;
@@ -471,6 +472,22 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
     set({
       nodesMap: updatedNodesMap,
       selectedNode: null,
+    });
+  },
+
+  deselectAllEdges: () => {
+    const { edgesMap } = get();
+    const updatedEdgesMap = { ...edgesMap };
+    
+    Object.keys(updatedEdgesMap).forEach((id) => {
+      updatedEdgesMap[id] = {
+        ...updatedEdgesMap[id],
+        selected: false,
+      };
+    });
+
+    set({
+      edgesMap: updatedEdgesMap,
     });
   },
 
