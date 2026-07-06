@@ -29,6 +29,7 @@ namespace DomainService.Workflow.Services
 
         private readonly ILogger<WorkflowExecutionService> _logger;
         private readonly IWorkflowEngineService _workflowEngineService;
+        private readonly IWorkflowNotificationService _workflowNotificationService;
 
         public WorkflowExecutionService(
             IWorkflowRepository workflowRepository,
@@ -36,7 +37,8 @@ namespace DomainService.Workflow.Services
             IMessageClient messageClient,
             ILogger<WorkflowExecutionService> logger,
             IWorkflowEngineService workflowEngineService,
-            IWorkflowVersionRepository workflowVersionRepository
+            IWorkflowVersionRepository workflowVersionRepository,
+            IWorkflowNotificationService workflowNotificationService
             )
         {
             _workflowRepository = workflowRepository;
@@ -45,6 +47,19 @@ namespace DomainService.Workflow.Services
             _workflowEngineService = workflowEngineService;
             _logger = logger;
             _workflowVersionRepository = workflowVersionRepository;
+            _workflowNotificationService = workflowNotificationService;
+        }
+
+        private async Task NotifyWorkflowStartedAsync(WorkflowExecutionModel execution)
+        {
+            await _workflowNotificationService.NotifyExecutionEventAsync(
+                execution,
+                nodeExecution: null,
+                eventName: "WorkflowStarted",
+                code: ExecutionEventCodes.WorkflowExecutionCode(WorkflowExecutionStatus.Running),
+                status: nameof(WorkflowExecutionStatus.Running),
+                data: execution.Id!,
+                message: $"Workflow '{execution.WorkflowSnapshot.Name}' started.");
         }
 
 
@@ -193,6 +208,7 @@ namespace DomainService.Workflow.Services
                 execution.ActiveNodeIds.Add(triggerId);
 
                 await _executionRepository.UpdateAsync(execution);
+                await NotifyWorkflowStartedAsync(execution);
 
                 var payload = new AddExcuationNodeEvent
                 {
@@ -327,6 +343,7 @@ namespace DomainService.Workflow.Services
                     execution.ActiveNodeIds.Add(triggerNode.Id);
 
                     await _executionRepository.UpdateAsync(execution);
+                    await NotifyWorkflowStartedAsync(execution);
                     await _messageClient.SendToConsumerAsync(new ConsumerMessage<AddExcuationNodeEvent>
                     {
                         ConsumerName = LogicConstants.NodeExecutionQueue,
@@ -733,6 +750,7 @@ namespace DomainService.Workflow.Services
                 execution.ActiveNodeIds.Add(triggerNode.Id);
 
                 await _executionRepository.UpdateAsync(execution);
+                await NotifyWorkflowStartedAsync(execution);
                 await _messageClient.SendToConsumerAsync(new ConsumerMessage<AddExcuationNodeEvent>
                 {
                     ConsumerName = LogicConstants.NodeExecutionQueue,
@@ -926,6 +944,7 @@ namespace DomainService.Workflow.Services
             execution.Context["Input"] = triggerMetadata.TriggerData ?? new BsonArray();
             execution.Status = WorkflowExecutionStatus.Queued;
             execution.ActiveNodeIds.Add(triggerNode.Id);
+            await NotifyWorkflowStartedAsync(execution);
             var result = await _workflowEngineService.ExecuteStepNodeAsync(dto.ProjectKey, execution.Id, triggerNode.Id, dto.NodeId, dto.SourceExecutionId);
             return new StepExecuteResponseDto
             {
