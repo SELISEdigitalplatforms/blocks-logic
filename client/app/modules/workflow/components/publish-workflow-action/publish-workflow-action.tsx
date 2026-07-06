@@ -106,7 +106,7 @@ export const PublishWorkflowAction = ({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={handleOpenPublishDialog} disabled={hasUnsavedChanges || (isPublished || !isDirty)}>
+          <DropdownMenuItem onClick={handleOpenPublishDialog} disabled={hasUnsavedChanges && (isPublished || !isDirty)}>
             Publish
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setIsUnpublishDialogOpen(true)} disabled={!isPublished}>
