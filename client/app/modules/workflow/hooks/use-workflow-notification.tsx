@@ -9,20 +9,20 @@ export const useWorkflowNotification = () => {
   const tenantId = useProjectStore((s) => s.selectedProject?.tenantId) || "";
 
   const handleNotification = useCallback(async (data: any) => {
-    console.log({ data });
     if (!isListening) return;
     try {
-      const denormalizedData = typeof data === "string" ? JSON.parse(data) : data;
-      console.log("WorkflowNotification", denormalizedData);
+      let cleanData = data;
+      if (typeof data === "string") {
+        cleanData = data.replace(/\x1e$/, "");
+      }
+      const denormalizedData = typeof cleanData === "string" ? JSON.parse(cleanData) : cleanData;
 
-      if (
-        denormalizedData?.type === 1 &&
-        denormalizedData?.target === "WorkflowNotification" &&
-        denormalizedData?.arguments?.length > 0
-      ) {
-        const payloadStr = denormalizedData.arguments[0]?.denormalizedPayload;
-        if (payloadStr) {
-          const payload = typeof payloadStr === "string" ? JSON.parse(payloadStr) : payloadStr;
+      const payloadStr = denormalizedData?.arguments?.length > 0 
+        ? denormalizedData.arguments[0]?.denormalizedPayload
+        : (denormalizedData?.message?.denormalizedPayload || denormalizedData?.denormalizedPayload);
+
+      if (payloadStr) {
+        const payload = typeof payloadStr === "string" ? JSON.parse(payloadStr) : payloadStr;
           const code = payload?.Information?.code;
           const status = payload?.Information?.status;
 
@@ -49,16 +49,12 @@ export const useWorkflowNotification = () => {
               }
             }
           }
-        }
       }
     } catch (error) {
       console.error("Failed to parse WorkflowNotification", error);
     }
   }, [isListening, setIsListening, listeningNodeId, workflowId, tenantId, setStepExecutionData]);
 
-  useEffect(() => {
-    console.log({ isListening });
-  }, [isListening]);
 
   useNotificationListener("WorkflowNotification", handleNotification);
 };
