@@ -64,6 +64,8 @@ export const useWorkflow = () => {
   const isListening = useWorkflowStore((state) => state.isListening);
   const listeningNodeId = useWorkflowStore((state) => state.listeningNodeId);
   const setIsListening = useWorkflowStore((state) => state.setIsListening);
+  const nextExecutionId = useWorkflowStore((state) => state.nextExecutionId);
+  const setNextExecutionId = useWorkflowStore((state) => state.setNextExecutionId);
 
   const selectAndConfigureNode = useCallback(
     (node: WorkflowNode) => {
@@ -270,6 +272,8 @@ export const useWorkflow = () => {
     tidyUpWorkflow,
     // exportWorkflow,
     // importWorkflow,
+    nextExecutionId,
+    setNextExecutionId,
 
     // Utility methods
     getNodeById,

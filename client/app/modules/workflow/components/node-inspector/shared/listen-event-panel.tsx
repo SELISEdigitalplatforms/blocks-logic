@@ -21,7 +21,7 @@ export const ListenEventPanel = () => {
       );
     } else {
       executeTriggerListener(
-        { triggerId: selectedNode.id, enableListener: true },
+        { triggerId: selectedNode.id, enableListener: true, completionNodeId: selectedNode.id },
         { onSuccess: () => setIsListening(true, selectedNode.id) }
       );
     }

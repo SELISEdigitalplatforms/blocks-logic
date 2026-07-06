@@ -57,7 +57,6 @@ export const WorkflowEditor = ({ isReadonly = false }: WorkflowEditorProps) => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if user is typing in an input/textarea
       if (
         e.target instanceof HTMLInputElement ||
         e.target instanceof HTMLTextAreaElement ||

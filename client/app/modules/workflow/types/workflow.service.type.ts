@@ -243,13 +243,15 @@ export interface IStepExecutePayload {
   ProjectKey: string;
   WorkflowId: string;
   NodeId: string;
-  SourceExecutionId: string;
+  SourceExecutionId?: string;
 }
 
 export interface IStepExecuteResponse {
   itemId: string;
   isSuccess: boolean;
   errors?: unknown;
+  message: string;
+  code: string;
 }
 
 export interface ITriggerListenerPayload {
@@ -257,6 +259,7 @@ export interface ITriggerListenerPayload {
   WorkflowId: string;
   TriggerId: string;
   EnableListener: boolean;
+  CompletionNodeId?: string;
 }
 
 export interface ITriggerListenerResponse {
