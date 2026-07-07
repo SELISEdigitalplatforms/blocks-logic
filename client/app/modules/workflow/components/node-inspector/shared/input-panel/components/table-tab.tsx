@@ -38,6 +38,7 @@ export function TableTab({ rows, nodeName, hasSinglePredecessor, isDraggable = t
                     label={column}
                     isRoot={true}
                     isDraggable={isDraggable}
+                    showColon={false}
                   />
                 ) : (
                   <DraggableProperty
@@ -46,6 +47,7 @@ export function TableTab({ rows, nodeName, hasSinglePredecessor, isDraggable = t
                     hasSinglePredecessor={hasSinglePredecessor}
                     label={column}
                     isDraggable={isDraggable}
+                    showColon={false}
                   />
                 )}
               </th>
