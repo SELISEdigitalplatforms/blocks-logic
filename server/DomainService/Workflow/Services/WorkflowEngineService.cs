@@ -339,6 +339,7 @@ namespace DomainService.Workflow.Services
 
 
                 var id = Guid.NewGuid().ToString().Replace("-", "");
+                ancestorMap.Add(node.Name, id);
                 outputItems.Add(new WorkflowItemExecutionModel
                 {
                     Id = id,
