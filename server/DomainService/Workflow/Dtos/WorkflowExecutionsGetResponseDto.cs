@@ -1,5 +1,6 @@
 using Blocks.Genesis;
 using DomainService.Workflow.Enums;
+using DomainService.Workflow.Models;
 
 namespace DomainService.Workflow.Dtos
 {
@@ -17,8 +18,7 @@ namespace DomainService.Workflow.Dtos
         public required DateTime StartedAt { get; set; }
         public DateTime? FinishedAt { get; set; }
         public string? ErrorMessage { get; set; }
-        public required string TriggerType { get; set; }
         public int AttemptNumber { get; set; }
-        public Dictionary<string, string> TriggerMetadata { get; set; } = new();
+        // public TriggerMetadata? TriggerMetadata { get; set; } = new();
     }
 }

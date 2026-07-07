@@ -25,16 +25,26 @@ namespace DomainService.Workflow.Models
         public string? LastPublishedVersionId { get; set; }
 
         public PublishedWorkflowMeta? PublishedMeta { get; set; }
+        public TestWorkflowMeta? TestMeta { get; set; }
 
         public string Description { get; set; } = string.Empty;
 
 
         public Dictionary<string, List<NodeOutputSchemaField>>? NodeOutputSchemas { get; set; }
 
+
     }
 
     public class PublishedWorkflowMeta
     {
         public List<NodeModel> TriggerNodes { get; set; } = new();
+    }
+
+    public class TestWorkflowMeta
+    {
+        public List<NodeModel> ListenerTriggerNodes { get; set; } = new();
+        public List<string> UserIds { get; set; } = new();
+        public bool IsListening { get; set; } = false;
+        public string? CompletionNodeId { get; set; }
     }
 }

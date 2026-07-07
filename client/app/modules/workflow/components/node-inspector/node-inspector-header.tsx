@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui-kits/button/button";
 import { SheetHeader, SheetTitle } from "@/components/ui-kits/sheet/sheet";
-import { useWorkflow } from "@blocks-workflow/hooks";
+import { useWorkflow, useStepExecute, useHandleExecuteStep } from "@blocks-workflow/hooks";
+import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { Eye, Pen, Rocket, X } from "lucide-react";
 import { getNodeDefinition } from "../node-library-panel";
 import { useEffect, useState } from "react";
@@ -9,6 +10,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@radix-ui/react-tooltip
 
 export const NodeInspectorHeader = () => {
   const { selectedNode, updateNode, isNodeNameUnique, closeConfigModal, editorMode } = useWorkflow();
+  
+  const { handleExecuteStep, executeStepModal } = useHandleExecuteStep();
     
   if (!selectedNode) return null;
 
@@ -83,14 +86,14 @@ export const NodeInspectorHeader = () => {
           
         </SheetTitle>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="gap-2">
+          {/* <Button variant="outline" size="sm" className="gap-2">
             <Eye className="h-4 w-4" />
             Focused View
-          </Button>
-          <Button size="sm" className="gap-2" onClick={() => {}}>
+          </Button> */}
+          {editorMode === "editor" && (<Button size="sm" className="gap-2" onClick={() => handleExecuteStep(selectedNode?.id, true)}>
             <Rocket className="h-4 w-4" />
             Execute Step
-          </Button>
+          </Button>)}
 
           <Button
             variant="ghost"
@@ -102,6 +105,7 @@ export const NodeInspectorHeader = () => {
           </Button>
         </div>
       </div>
+      {executeStepModal}
     </SheetHeader>
   );
 };

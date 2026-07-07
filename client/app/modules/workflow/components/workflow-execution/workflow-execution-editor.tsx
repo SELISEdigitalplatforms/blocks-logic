@@ -30,10 +30,12 @@ export const WorkflowExecutionEditor = ({
   const id = execution?.id || "";
   const { setWorkflow, onNodeClick, selectedNode, setEditorMode, setExecutionMode } = useWorkflow();
   const tenantId = useProjectStore().selectedProject?.tenantId || "";
-  const { data, isFetched, isLoading } = useGetWorkflowExecutionById({
+  const { data: responseData, isFetched, isLoading } = useGetWorkflowExecutionById({
     executionId: id,
     projectKey: tenantId,
   });
+
+  const data = responseData?.data;
 
   useEffect(() => {
     setEditorMode("execution");
