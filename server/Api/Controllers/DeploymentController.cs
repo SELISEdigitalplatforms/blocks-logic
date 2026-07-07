@@ -1,6 +1,7 @@
 using System.Net;
 using Blocks.Genesis;
 using DeploymentDriver;
+using Devops.DomainService.Deployment.Models.Request;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -71,6 +72,13 @@ namespace BlocksTemplate.Api.Controllers
         public async Task<BaseApiResponse> GithubBranchExists([FromQuery] string repoId)
         {
             return await deploymentDriverService.GithubBranchExistsAsync(repoId);
+        }
+
+        [HttpPost]
+        [Authorize]
+        public async Task<BaseApiResponse> UpdateRepoDomain([FromBody] RepoDomainUpdateRequest request)
+        {
+            return await deploymentDriverService.UpdateRepoDomainAsync(request);
         }
     }
 }

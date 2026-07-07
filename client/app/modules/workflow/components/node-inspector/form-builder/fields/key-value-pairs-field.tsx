@@ -14,6 +14,26 @@ interface KeyValuePair {
   value: string;
 }
 
+function DroppableKeyInput({ id, value, onChange, placeholder, disabled, readOnly, isMultiline }: { id: string; value: string; onChange: (v: string) => void; placeholder: string; disabled?: boolean; readOnly?: boolean; isMultiline: boolean }) {
+  return (
+    <div className={cn("relative flex-1")}>
+      <ExpressionHighlighter value={value || ""} isMultiline={isMultiline}>
+        <Input
+          id={id}
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value);
+          }}
+          readOnly={readOnly}
+          className="rounded-b-none focus-visible:ring-0 focus-visible:ring-offset-0"
+          disabled={disabled}
+        />
+      </ExpressionHighlighter>
+    </div>
+  );
+}
+
 export const KeyValuePairsField = ({
   field,
   value,
@@ -88,16 +108,15 @@ export const KeyValuePairsField = ({
             <Trash2 className="h-4 w-4" />
           </Button>
           <div className="flex-1">
-            <ExpressionHighlighter value={pair.key || ""} isMultiline={false}>
-              <Input
-                placeholder={field.keyLabel || "Key"}
-                value={pair.key}
-                onChange={(e) => handleKeyChange(index, e.target.value)}
-                readOnly={readOnly}
-                className="rounded-b-none focus-visible:ring-0 focus-visible:ring-offset-0"
-                disabled={field.disabled as boolean}
-              />
-            </ExpressionHighlighter>
+            <DroppableKeyInput
+              id={`${field.id}-key-${index}`}
+              value={pair.key}
+              onChange={(newKey) => handleKeyChange(index, newKey)}
+              placeholder={field.keyLabel || "Key"}
+              disabled={field.disabled as boolean}
+              readOnly={readOnly}
+              isMultiline={false}
+            />
 
             <ExpressionInputField
               placeholder={field.keyLabel || "Value"}
@@ -106,9 +125,9 @@ export const KeyValuePairsField = ({
               readOnly={readOnly}
               data={data}
               config={config}
-              field={field}
+              field={{ ...field, id: `${field.id}-val-${index}` }}
               className="rounded-t-none border-t-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-           
+              
             />
           </div>
         </div>

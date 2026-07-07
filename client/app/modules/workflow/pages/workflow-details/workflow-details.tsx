@@ -24,6 +24,7 @@ import { BREADCRUMB_CUSTOM_TITLES } from "@/constants/breadcrumb-custom-title";
 import { showErrorToast } from "@/hooks/use-toast";
 import { PublishWorkflowAction } from "../../components/publish-workflow-action";
 import { WorkflowVersions } from "../../components/workflow-version";
+import { useGetLastSuccessfulExecution } from "../../hooks";
 
 type WorkflowDetailPageProps = {
   workflowId: string;
@@ -35,12 +36,23 @@ export const WorkflowDetailsContent = ({
   const projectKey = useProjectStore().selectedProject?.tenantId || "";
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<string>("editor");
-  const { hasUnsavedChanges, setWorkflow } = useWorkflow();
+  const { hasUnsavedChanges, setWorkflow, setLastSuccessfulExecutionData } = useWorkflow();
   const { data, isLoading, isFetched, isFetching, isFetchedAfterMount, refetch } =
     useGetWorkflowById({
       id: workflowId,
       projectKey,
     });
+    
+  const { data: lastExecutionData, isFetched: isLastExecutionFetched } = useGetLastSuccessfulExecution({
+    projectKey,
+    workflowId,
+  });
+
+  useEffect(() => {
+    if (isLastExecutionFetched && lastExecutionData) {
+      setLastSuccessfulExecutionData(lastExecutionData || null);
+    }
+  }, [lastExecutionData, isLastExecutionFetched, setLastSuccessfulExecutionData]);
 
   useEffect(() => {
     if (isFetched && isFetchedAfterMount) {
@@ -141,10 +153,10 @@ export const WorkflowDetailsContent = ({
                   orientation="vertical"
                   className="h-4 bg-muted-foreground"
                 />
-                <Button variant="outline" size="sm" className="gap-2">
+                {/* <Button variant="outline" size="sm" className="gap-2">
                   <ScrollText className="h-4 w-4" />
                   Logs
-                </Button>
+                </Button> */}
                 <Button
                   size="sm"
                   onClick={handleManualSave}

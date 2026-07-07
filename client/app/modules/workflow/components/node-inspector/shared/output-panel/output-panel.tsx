@@ -4,6 +4,11 @@ import { useWorkflowStore } from "@blocks-workflow/store";
 import { copyToClipboard } from "@blocks-workflow/utils/copy-to-clipboard";
 import { useCallback, useMemo, useState } from "react";
 import { inferSchemaFromRuntimeRows } from "@blocks-workflow/utils/runtime-node-data";
+import { ChevronDown, ChevronUp } from "lucide-react";
+import { useWorkflow } from "@blocks-workflow/hooks/use-workflow";
+import { Button } from "@/components/ui-kits/button/button";
+import { Textarea } from "@/components/ui-kits/textarea/textarea";
+import { showErrorToast } from "@/hooks/use-toast";
 
 type BranchGroup = {
   branch: string;
@@ -11,13 +16,33 @@ type BranchGroup = {
   schema: ReturnType<typeof inferSchemaFromRuntimeRows>;
 };
 
-export const OutputPanel = () => {
+export const OutputPanel = ({
+  isCollapsed,
+  onToggleCollapse,
+}: {
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
+} = {}) => {
   const [tab, setTab] = useState("schema");
+  const [isEditingMock, setIsEditingMock] = useState(false);
+  const [mockDataInput, setMockDataInput] = useState("");
   const selectedNode = useWorkflowStore((s) => s.selectedNode);
   const executedItems = useWorkflowStore((s) => s.executedItems);
+  const { editorMode, updateNode, lastSuccessfulExecutionData } = useWorkflow();
 
   const runtimeOutputByBranch = useMemo<BranchGroup[]>(() => {
     if (!selectedNode) return [];
+
+    if (editorMode === "editor" && selectedNode.pinData != null) {
+      const rows = Array.isArray(selectedNode.pinData) ? selectedNode.pinData : [selectedNode.pinData];
+      return [
+        {
+          branch: "default",
+          rows,
+          schema: inferSchemaFromRuntimeRows(rows),
+        },
+      ];
+    }
 
     const groupedRows = executedItems
       .filter((item) => item.nodeId === selectedNode.id)
@@ -37,7 +62,7 @@ export const OutputPanel = () => {
       rows,
       schema: inferSchemaFromRuntimeRows(rows),
     }));
-  }, [executedItems, selectedNode]);
+  }, [executedItems, selectedNode, editorMode]);
 
   const runtimeOutputRows = useMemo(
     () => runtimeOutputByBranch.flatMap((group) => group.rows),
@@ -51,23 +76,102 @@ export const OutputPanel = () => {
     copyToClipboard(stringValue);
   }, []);
 
+  const handleSetMockDataClick = useCallback(() => {
+    setIsEditingMock(true);
+    
+    let defaultData: unknown[] = [];
+    
+    if (selectedNode?.pinData != null) {
+      defaultData = Array.isArray(selectedNode.pinData) ? selectedNode.pinData : [selectedNode.pinData];
+    } else if (selectedNode && lastSuccessfulExecutionData?.data?.items) {
+      const matchedNodeItem = lastSuccessfulExecutionData.data.items.find(
+        (item: { nodeId: string; data?: { Output?: unknown } }) => item.nodeId === selectedNode.id
+      );
+      
+      if (matchedNodeItem?.data?.Output !== undefined) {
+        const output = matchedNodeItem.data.Output;
+        defaultData = Array.isArray(output) ? output : [output];
+      }
+    }
+
+    setMockDataInput(JSON.stringify(defaultData, null, 2));
+  }, [selectedNode, lastSuccessfulExecutionData]);
+
+  const handleCancelMockData = useCallback(() => {
+    setIsEditingMock(false);
+  }, []);
+
+  const handleSaveMockData = useCallback(() => {
+    if (!selectedNode) return;
+    let newPinData;
+    try {
+      newPinData = JSON.parse(mockDataInput);
+    } catch (e) {
+      showErrorToast({ errors: "Invalid JSON format" });
+      return;
+    }
+    if (!Array.isArray(newPinData)) {
+      newPinData = [newPinData];
+    }
+    updateNode(selectedNode.id, { pinData: newPinData });
+    setIsEditingMock(false);
+  }, [mockDataInput, selectedNode, updateNode]);
+
   if (!selectedNode) return null;
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden">
+    <div className={`flex w-full flex-col overflow-hidden ${isCollapsed ? 'h-fit shrink-0' : 'h-full flex-1'}`}>
       <div className="flex items-center justify-between">
         <h3 className="font-medium text-high-emphasis">Output</h3>
-        <Tabs value={tab} onValueChange={setTab}>
-          <TabsList>
-            <TabsTrigger value="schema">Schema</TabsTrigger>
-            <TabsTrigger value="table">Table</TabsTrigger>
-            <TabsTrigger value="json">JSON</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="flex items-center gap-2">
+          {!isEditingMock && editorMode === "editor" && (
+            <Button variant="outline" size="xs" onClick={handleSetMockDataClick}>
+              Set mock data
+            </Button>
+          )}
+          {!isEditingMock && (
+            <Tabs value={tab} onValueChange={setTab}>
+              <TabsList>
+                <TabsTrigger value="schema">Schema</TabsTrigger>
+                <TabsTrigger value="table">Table</TabsTrigger>
+                <TabsTrigger value="json">JSON</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          )}
+          {onToggleCollapse && (
+            <button
+              onClick={onToggleCollapse}
+              className="text-low-emphasis hover:bg-surface-hover rounded p-1 transition-colors"
+            >
+              {isCollapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+            </button>
+          )}
+        </div>
       </div>
 
-      {tab === "schema" && (
-        <div className="mt-2 flex-1 overflow-y-auto rounded bg-surface-app p-2">
+      {isEditingMock ? (
+        <div className="mt-2 flex flex-1 flex-col gap-2 overflow-hidden rounded bg-surface-app p-2">
+          <p className="text-[11px] text-low-emphasis">
+            Data from last successful execution is inserted here. You can edit it below.
+          </p>
+          <Textarea
+            className="flex-1 resize-none font-mono text-xs"
+            value={mockDataInput}
+            onChange={(e) => setMockDataInput(e.target.value)}
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={handleCancelMockData}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={handleSaveMockData}>
+              Save
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <>
+          {!isCollapsed && tab === "schema" && (
+            <div className="mt-2 flex-1 overflow-y-auto rounded bg-surface-app p-2">
           {runtimeOutputRows.length === 0 ? (
             <p className="text-xs text-low-emphasis">No runtime output schema available.</p>
           ) : (
@@ -123,7 +227,7 @@ export const OutputPanel = () => {
         </div>
       )}
 
-      {tab === "table" && (
+      {!isCollapsed && tab === "table" && (
         <div className="mt-2 flex-1 overflow-y-auto rounded bg-surface-app p-2">
           {hasMultipleBranches ? (
             <div className="flex flex-col gap-3">
@@ -142,7 +246,7 @@ export const OutputPanel = () => {
         </div>
       )}
 
-      {tab === "json" && (
+      {!isCollapsed && tab === "json" && (
         <div className="mt-2 flex-1 overflow-y-auto rounded bg-surface-app">
           {hasMultipleBranches ? (
             <div className="flex flex-col gap-3 p-2">
@@ -159,6 +263,8 @@ export const OutputPanel = () => {
             <RuntimeJson rows={runtimeOutputRows} />
           )}
         </div>
+      )}
+        </>
       )}
     </div>
   );

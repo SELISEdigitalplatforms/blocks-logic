@@ -1,7 +1,9 @@
 using Blocks.Genesis;
+using MongoDB.Bson.Serialization.Attributes;
 
 namespace DomainService.Workflow.Models
 {
+    [BsonIgnoreExtraElements]
     public class WorkflowVersionModel : BaseEntity
     {
         public required string WorkflowId { get; set; }
