@@ -6,21 +6,20 @@ const validateExpression = (
 	content: string,
 	nodes: WorkflowNode[],
 ): boolean => {
-	// Allow simple json.input exactly
-	if (content === "json.input") {
+	// Check if it's the simple json.input format
+	if (/^json\.input(?:(?:\.[a-zA-Z0-9_]+|\[\d+\]|\["[^"]+"\]|\['[^']+'\])*)$/.test(content)) {
 		return true;
 	}
 
-	// Check if it's the simple json.output format (optionally followed by parameters)
-	const simpleMatch = content.match(
-		/^json\.output(?:\.([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*))?$/,
+	// Check if it's the simple json.output format
+	if (/^json\.output(?:(?:\.[a-zA-Z0-9_]+|\[\d+\]|\["[^"]+"\]|\['[^']+'\])*)$/.test(content)) {
+		return true;
+	}
+
+	// Check if it's the node format for json.input
+	const nodeInputMatch = content.match(
+		/^node\["([^"]+)"\]\.json\.input(?:(?:\.[a-zA-Z0-9_]+|\[\d+\]|\["[^"]+"\]|\['[^']+'\])*)$/,
 	);
-	if (simpleMatch) {
-		return true;
-	}
-
-	// Allow node json.input exactly
-	const nodeInputMatch = content.match(/^node\["([^"]+)"\]\.json\.input$/);
 	if (nodeInputMatch) {
 		const nodeName = nodeInputMatch[1];
 		return nodes.some(
@@ -31,9 +30,9 @@ const validateExpression = (
 		);
 	}
 
-	// Check if it's the node format for json.output (optionally followed by parameters)
+	// Check if it's the node format for json.output
 	const nodeMatch = content.match(
-		/^node\["([^"]+)"\]\.json\.output(?:\.([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*))?$/,
+		/^node\["([^"]+)"\]\.json\.output(?:(?:\.[a-zA-Z0-9_]+|\[\d+\]|\["[^"]+"\]|\['[^']+'\])*)$/,
 	);
 	if (nodeMatch) {
 		const nodeName = nodeMatch[1];
