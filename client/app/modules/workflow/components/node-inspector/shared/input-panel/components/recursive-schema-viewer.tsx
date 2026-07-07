@@ -46,7 +46,7 @@ export function RecursiveSchemaViewer({ data, depth = 0, prefixPath = "", nodeNa
                   isDashed={isDashed}
                 />
               ) : (
-                <span className={`px-2 py-1 ${isDashed ? 'text-medium-emphasis border border-dashed border-border/80 rounded bg-surface-app' : 'text-low-emphasis text-xs'}`} style={{ marginLeft: `${depth * 1}rem` }}>[{key}]:</span>
+                <span className={`px-2 py-1 ${isDashed ? 'text-medium-emphasis text-xs border border-dashed border-border/80 rounded bg-surface-app' : 'text-low-emphasis text-xs'}`} style={{ marginLeft: `${depth * 1}rem` }}>[{key}]:</span>
               )}
               {(!childIsObj && showValues) && <span className="text-low-emphasis text-xs">{formatCellValue(val)}</span>}
             </div>
