@@ -1,6 +1,8 @@
 import { Button } from "@/components/ui-kits/button/button";
-import { Ban, EllipsisVertical, Play, Trash } from "lucide-react";
-import { useWorkflow } from "../../hooks";
+import { Ban, EllipsisVertical, Play, Trash, Rss } from "lucide-react";
+import { useWorkflow, useStepExecute, useHandleExecuteStep } from "../../hooks";
+import { useProjectStore } from "@seliseblocks/blocks-kit";
+import { getStatusStyles } from "../../utils/workflow-execution-editor.util";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,9 +27,16 @@ type EditorNodeBaseProps = {
 
 export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
   const [isToolbarVisible, setIsToolbarVisible] = useState(false);
-  const { getNodeById, deleteNode, selectAndConfigureNode, selectedNode, updateNode, duplicateNode, isNodeNameUnique } =
+  const { getNodeById, deleteNode, selectAndConfigureNode, selectedNode, updateNode, duplicateNode, isNodeNameUnique, workflowId, stepExecutionReachableNodeIds, executedNodes, isListening, listeningNodeId } =
     useWorkflow();
   const node = getNodeById(id);
+  const { handleExecuteStep, executeStepModal } = useHandleExecuteStep();
+
+
+
+  const isExecutedNode = stepExecutionReachableNodeIds?.has(id);
+  const executedNodeStatus = isExecutedNode ? executedNodes.find(n => n.nodeId === id)?.status : undefined;
+  const executionStyles = executedNodeStatus ? getStatusStyles(executedNodeStatus).nodeClass : "";
 
   const [isRenaming, setIsRenaming] = useState(false);
   const [editName, setEditName] = useState(node?.name || "");
@@ -68,13 +77,22 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
     <>
       <div
         className={cn(
-          "peer min-w-[100px] rounded-md border bg-background px-5 py-4 shadow-lg transition-shadow hover:shadow-xl",
+          "peer min-w-[100px] rounded-md border bg-background px-5 py-4 shadow-lg transition-all duration-500 hover:shadow-xl",
           isSelected && "border-primary ring-1 ring-primary",
+          executionStyles,
           node.className || "",
         )}
       >
         {children}
       </div>
+      {isListening && listeningNodeId === id && (
+        <>
+          <div className="absolute -bottom-2 -right-2 z-50 flex h-5 w-5 items-center justify-center rounded-full bg-background border border-green-500 shadow-md">
+            <Rss className="h-3 w-3 text-green-500" />
+          </div>
+          <div className="absolute -bottom-2 -right-2 z-40 h-5 w-5 animate-ping rounded-full bg-green-500"></div>
+        </>
+      )}
 
       <div
         className={cn(
@@ -86,7 +104,10 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
       >
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-fit w-fit p-1">
+            <Button variant="ghost" size="sm" className="h-fit w-fit p-1" onClick={(e) => {
+              e.stopPropagation();
+              handleExecuteStep(id);
+            }}>
               <Play className="h-3.5 w-3.5" />
             </Button>
           </TooltipTrigger>
@@ -143,6 +164,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
               className="cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation();
+                handleExecuteStep(id);
               }}
             >
               <span>Execute step</span>
@@ -203,6 +225,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
           {node?.name}
         </h4>
       )}
+      {executeStepModal}
     </>
   );
 };

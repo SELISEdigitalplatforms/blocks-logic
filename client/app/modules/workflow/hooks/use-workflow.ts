@@ -1,9 +1,10 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { Connection, Edge, Node, useReactFlow } from "@xyflow/react";
 import { useWorkflowStore } from "../store";
-import { Workflow } from "../models/workflow.model";
 import { WorkflowNode } from "@blocks-workflow/models/node.model";
 import { getOrderedNodeData } from "@blocks-workflow/utils/runtime-node-data";
+import { useProjectStore } from "@seliseblocks/blocks-kit";
+import { workflowService } from "../services/workflow.service";
 
 export const useWorkflow = () => {
   const reactFlowInstance = useReactFlow();
@@ -18,6 +19,8 @@ export const useWorkflow = () => {
   const hasUnsavedChanges = useWorkflowStore((state) => state.hasUnsavedChanges);
   const editorMode = useWorkflowStore((state) => state.editorMode);
   const executionMode = useWorkflowStore((state) => state.executionMode);
+  const lastSuccessfulExecutionData = useWorkflowStore((state) => state.lastSuccessfulExecutionData);
+  const tenantId = useProjectStore((s) => s.selectedProject?.tenantId) || "";
   
   // Compute nodes and edges arrays from objects
   const nodes = useMemo(() => Object.values(nodesMap), [nodesMap]);
@@ -38,6 +41,7 @@ export const useWorkflow = () => {
   const deleteEdge = useWorkflowStore((state) => state.deleteEdge);
   const selectNode = useWorkflowStore((state) => state.selectNode);
   const deselectNode = useWorkflowStore((state) => state.deselectNode);
+  const deselectAllEdges = useWorkflowStore((state) => state.deselectAllEdges);
   const selectHandle = useWorkflowStore((state) => state.selectHandle);
   const deselectHandle = useWorkflowStore((state) => state.deselectHandle);
   const openConfigModal = useWorkflowStore((state) => state.openConfigModal);
@@ -49,9 +53,19 @@ export const useWorkflow = () => {
   const setExecutionMode = useWorkflowStore((state) => state.setExecutionMode);
   const resetWorkflow = useWorkflowStore((state) => state.resetWorkflow);
   const tidyUpWorkflow = useWorkflowStore((state) => state.tidyUpWorkflow);
+  const setLastSuccessfulExecutionData = useWorkflowStore((state) => state.setLastSuccessfulExecutionData);
   const getNodeById = useWorkflowStore((state) => state.getNodeById);
   const getEdgeById = useWorkflowStore((state) => state.getEdgeById);
   const executedItems = useWorkflowStore((state) => state.executedItems);
+  const executedNodes = useWorkflowStore((state) => state.executedNodes);
+  const stepExecutionTraversedEdgeIds = useWorkflowStore((state) => state.stepExecutionTraversedEdgeIds);
+  const stepExecutionReachableNodeIds = useWorkflowStore((state) => state.stepExecutionReachableNodeIds);
+  const setStepExecutionData = useWorkflowStore((state) => state.setStepExecutionData);
+  const isListening = useWorkflowStore((state) => state.isListening);
+  const listeningNodeId = useWorkflowStore((state) => state.listeningNodeId);
+  const setIsListening = useWorkflowStore((state) => state.setIsListening);
+  const nextExecutionId = useWorkflowStore((state) => state.nextExecutionId);
+  const setNextExecutionId = useWorkflowStore((state) => state.setNextExecutionId);
 
   const selectAndConfigureNode = useCallback(
     (node: WorkflowNode) => {
@@ -162,6 +176,34 @@ export const useWorkflow = () => {
     [nodes],
   );
 
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+
+    if (isListening && listeningNodeId) {
+      timeoutId = setTimeout(async () => {
+        setIsListening(false);
+        if (tenantId && workflowId) {
+          try {
+            await workflowService.triggerListener({
+              ProjectKey: tenantId,
+              WorkflowId: workflowId,
+              TriggerId: listeningNodeId,
+              EnableListener: false,
+            });
+          } catch (error) {
+            console.error("Failed to disable trigger listener after timeout:", error);
+          }
+        }
+      }, 3 * 60 * 1000); // 3 minutes
+    }
+
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [isListening, listeningNodeId, tenantId, workflowId, setIsListening]);
+
   // react flow instance methods
 
   const { fitView, zoomIn, zoomOut } = reactFlowInstance;
@@ -179,6 +221,15 @@ export const useWorkflow = () => {
     hasUnsavedChanges,
     editorMode,
     executionMode,
+    lastSuccessfulExecutionData,
+    executedItems,
+    executedNodes,
+    stepExecutionTraversedEdgeIds,
+    stepExecutionReachableNodeIds,
+    nodesMap,
+    edgesMap,
+    isListening,
+    listeningNodeId,
 
     onNodesChange,
     onEdgesChange,
@@ -200,6 +251,7 @@ export const useWorkflow = () => {
     // Selection operations
     selectNode,
     deselectNode,
+    deselectAllEdges,
     selectHandle,
     deselectHandle,
     selectAndConfigureNode,
@@ -214,10 +266,14 @@ export const useWorkflow = () => {
     setWorkflow,
     setEditorMode,
     setExecutionMode,
+    setLastSuccessfulExecutionData,
+    setStepExecutionData,
     resetWorkflow,
     tidyUpWorkflow,
     // exportWorkflow,
     // importWorkflow,
+    nextExecutionId,
+    setNextExecutionId,
 
     // Utility methods
     getNodeById,
@@ -230,6 +286,7 @@ export const useWorkflow = () => {
     getNodeOutput,
     getNodeInput,
     isNodeNameUnique,
+    setIsListening,
 
     // React Flow instance
     reactFlowInstance,
