@@ -29,8 +29,7 @@ export const VersionHistorySidebar = ({ onClose, onSelectVersion, selectedVersio
   });
 
   const rawVersions = versionsData?.data || [];
-  const unsortedVersions = Array.isArray(rawVersions) ? rawVersions : [];
-  const versions = unsortedVersions.sort((a, b) => new Date(b.lastUpdatedDate).getTime() - new Date(a.lastUpdatedDate).getTime());
+  const versions = Array.isArray(rawVersions) ? rawVersions : [];
   return (
     <TooltipProvider>
     <div className="w-80 h-full border-l border-border bg-background flex flex-col">
@@ -65,7 +64,7 @@ export const VersionHistorySidebar = ({ onClose, onSelectVersion, selectedVersio
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 overflow-hidden">
                   {version.isPublished ? (
-                    <div className="w-2 h-2 rounded-full bg-yellow-500 flex-shrink-0" />
+                    <div className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />
                   ) : (
                     <div className="w-2 h-2 rounded-full border-2 border-muted-foreground flex-shrink-0" />
                   )}

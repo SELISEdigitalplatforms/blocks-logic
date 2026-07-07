@@ -5,19 +5,21 @@ import { NodeSchema } from "../../node-schemas/node-schema.type";
 import { FormBuilder } from "../form-builder/form-builder";
 import { useWorkflow } from "@blocks-workflow/hooks";
 import { ListenEventPanel } from "../shared";
-import { OutputPanel } from "../shared/output-panel";
+import { OutputPanel } from "../shared/output-panel/output-panel";
 
 type LayoutWithListenerProps = {
   schema: NodeSchema | null;
 };
 
 export const LayoutWithListener = ({ schema }: LayoutWithListenerProps) => {
-  const { selectedNode, updateNode } = useWorkflow();
+  const { selectedNode, updateNode, isListening, listeningNodeId } = useWorkflow();
   const [activeTab, setActiveTab] = useState("parameters");
   if (!selectedNode || !schema) return null;
 
+  const isThisNodeListening = isListening && listeningNodeId === selectedNode.id;
+
   return (
-    <div className="flex h-full flex-col">
+    <div className="relative flex h-full flex-col">
       <NodeInspectorHeader />
       <div className="mt-6 flex flex-1 gap-6">
         <div className="w-5/12">
