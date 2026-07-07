@@ -4,6 +4,7 @@ using Blocks.Genesis;
 using DomainService.Workflow.Dtos;
 using DomainService.Workflow.Models;
 using DomainService.Workflow.Repositories;
+using DomainService.Workflow.Utils;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using Newtonsoft.Json;
@@ -274,8 +275,9 @@ namespace DomainService.Workflow.Services
                 Type = n.Type,
                 Version = n.Version,
                 Position = n.Position,
-                Parameters = JsonDocument.Parse(n.Parameters.ToJson()).RootElement,
-                Settings = JsonDocument.Parse(n.Settings.ToJson()).RootElement
+                Parameters = BsonJsonConverter.ToJsonElement(n.Parameters),
+                Settings = BsonJsonConverter.ToJsonElement(n.Settings),
+                PinData = BsonJsonConverter.ToJsonElementOrNull(n.PinData),
             }).ToList();
 
             var workflowDto = new WorkflowResponseDto
@@ -347,7 +349,8 @@ namespace DomainService.Workflow.Services
                     Version = n.Version,
                     Position = n.Position,
                     Parameters = BsonDocument.Parse(n.Parameters.GetRawText()),
-                    Settings = BsonDocument.Parse(n.Settings.GetRawText())
+                    Settings = BsonDocument.Parse(n.Settings.GetRawText()),
+                    PinData = BsonJsonConverter.ToBsonArrayOrNull(n.PinData),
                 }).ToList();
             }
             workflow.LastUpdatedDate = DateTime.UtcNow;
@@ -389,6 +392,8 @@ namespace DomainService.Workflow.Services
             {
                 _logger.LogInformation("Start deleting workflow with Id: {WorkflowId}", dto.Id);
                 await _workflowRepository.DeleteWorkflowAsync(dto.Id, dto.ProjectKey);
+                await _workflowVersionRepository.DeleteWorkflowVersionsByWorkflowIdAsync(dto.ProjectKey, dto.Id);
+
             }
             catch (Exception ex)
             {
@@ -611,7 +616,7 @@ namespace DomainService.Workflow.Services
                 return new BaseMutationResponse
                 {
                     IsSuccess = true,
-                    ItemId = workflow.ItemId,
+                    ItemId = version.ItemId,
                     Errors = null
                 };
             }
@@ -746,7 +751,6 @@ namespace DomainService.Workflow.Services
                     };
                 }
 
-                workflow.IsDirty = false;
                 workflow.IsPublished = false;
                 workflow.PublishedVersionId = null;
                 workflow.PublishedMeta = null;
@@ -801,8 +805,9 @@ namespace DomainService.Workflow.Services
                     Type = n.Type,
                     Version = n.Version,
                     Position = n.Position,
-                    Parameters = JsonDocument.Parse(n.Parameters.ToJson()).RootElement,
-                    Settings = JsonDocument.Parse(n.Settings.ToJson()).RootElement
+                    Parameters = BsonJsonConverter.ToJsonElement(n.Parameters),
+                    Settings = BsonJsonConverter.ToJsonElement(n.Settings),
+                    PinData = BsonJsonConverter.ToJsonElementOrNull(n.PinData),
                 }).ToList(),
                 Edges = snapShot.Edges,
                 Settings = snapShot.Settings ?? new Dictionary<string, string>(),
@@ -819,6 +824,79 @@ namespace DomainService.Workflow.Services
             {
                 IsSuccess = true,
                 data = versionedWorkflow,
+                Errors = null
+            };
+
+        }
+
+        public async Task<BaseMutationResponse> TriggerListenerAsync(TriggerListenerRequestDto dto)
+        {
+            var workflow = await _workflowRepository.GetWorkflowAsync(dto.WorkflowId, dto.ProjectKey);
+            if (workflow == null)
+            {
+                return new BaseMutationResponse
+                {
+                    IsSuccess = false,
+                    Errors = new Dictionary<string, string> { { "Message", "Workflow not found" } },
+                    ItemId = null
+                };
+            }
+            if (!dto.EnableListener)
+            {
+                workflow.TestMeta = null;
+                await _workflowRepository.UpdateWorkflowAsync(workflow);
+                return new BaseMutationResponse
+                {
+                    IsSuccess = true,
+                    ItemId = workflow.ItemId,
+                    Errors = null
+                };
+            }
+            if (String.IsNullOrEmpty(dto.TriggerId))
+            {
+                return new BaseMutationResponse
+                {
+                    IsSuccess = false,
+                    Errors = new Dictionary<string, string> { { "Message", "TriggerId is required when enabling listener" } },
+                    ItemId = null
+                };
+            }
+            var triggerNode = workflow.Nodes.FirstOrDefault(n => n.Id == dto.TriggerId && n.Category == "trigger");
+            if (triggerNode == null)
+            {
+                return new BaseMutationResponse
+                {
+                    IsSuccess = false,
+                    Errors = new Dictionary<string, string> { { "Message", "Trigger node not found" } },
+                    ItemId = null
+                };
+            }
+            if (!String.IsNullOrWhiteSpace(dto.CompletionNodeId))
+            {
+                var completionNode = workflow.Nodes.FirstOrDefault(n => n.Id == dto.CompletionNodeId);
+                if (completionNode == null)
+                {
+                    return new BaseMutationResponse
+                    {
+                        IsSuccess = false,
+                        Errors = new Dictionary<string, string> { { "Message", "Completion node not found" } },
+                        ItemId = null
+                    };
+                }
+            }
+            workflow.TestMeta = new TestWorkflowMeta
+            {
+                ListenerTriggerNodes = new List<NodeModel> { triggerNode },
+                UserIds = new List<string> { BlocksContext.GetContext().UserId ?? "system" },
+                IsListening = true,
+                CompletionNodeId = dto.CompletionNodeId ?? null,
+
+            };
+            await _workflowRepository.UpdateWorkflowAsync(workflow);
+            return new BaseMutationResponse
+            {
+                IsSuccess = true,
+                ItemId = workflow.ItemId,
                 Errors = null
             };
 
