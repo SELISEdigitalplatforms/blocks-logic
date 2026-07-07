@@ -12,7 +12,7 @@ type LayoutWithListenerProps = {
 };
 
 export const LayoutWithListener = ({ schema }: LayoutWithListenerProps) => {
-  const { selectedNode, updateNode, isListening, listeningNodeId } = useWorkflow();
+  const { selectedNode, updateNode, isListening, listeningNodeId, editorMode } = useWorkflow();
   const [activeTab, setActiveTab] = useState("parameters");
   if (!selectedNode || !schema) return null;
 
@@ -52,8 +52,8 @@ export const LayoutWithListener = ({ schema }: LayoutWithListenerProps) => {
         </div>
 
         <div className="grid min-w-0 w-7/12 grid-rows-3 gap-4 overflow-hidden border p-3">
-          <ListenEventPanel />
-          <div className="row-span-2 min-w-0 w-full overflow-hidden">
+          {editorMode === "editor" && <ListenEventPanel />}
+          <div className={`row-span-2 min-w-0 w-full overflow-hidden ${editorMode!=="editor" && "row-span-3"}`}>
             <OutputPanel />
           </div>
         </div>
