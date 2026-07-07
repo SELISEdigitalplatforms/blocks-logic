@@ -35,7 +35,7 @@ namespace DomainService.Workflow.Repositories
             var filters = Builders<WorkflowVersionModel>.Filter.Eq(f => f.TenantId, projectKey) &
                          Builders<WorkflowVersionModel>.Filter.In(f => f.WorkflowId, workflowIds);
 
-            return collection.Find(filters).ToListAsync();
+            return collection.Find(filters).SortByDescending(f => f.CreatedDate).ToListAsync();
         }
 
         public Task<WorkflowVersionModel> GetWorkflowVersionAsync(string projectKey, string versionId)
@@ -52,5 +52,20 @@ namespace DomainService.Workflow.Repositories
             return collection.FindOneAndReplaceAsync(filter => filter.TenantId == projectKey && filter.ItemId == versionId, versionModel);
         }
 
+        public Task DeleteWorkflowVersionAsync(string projectKey, string versionId)
+        {
+            var collection = GetCollection(projectKey);
+            var filter = Builders<WorkflowVersionModel>.Filter.Eq(f => f.TenantId, projectKey) &
+                         Builders<WorkflowVersionModel>.Filter.Eq(f => f.ItemId, versionId);
+            return collection.DeleteOneAsync(filter);
+        }
+
+        public Task DeleteWorkflowVersionsByWorkflowIdAsync(string projectKey, string workflowId)
+        {
+            var collection = GetCollection(projectKey);
+            var filter = Builders<WorkflowVersionModel>.Filter.Eq(f => f.TenantId, projectKey) &
+                         Builders<WorkflowVersionModel>.Filter.Eq(f => f.WorkflowId, workflowId);
+            return collection.DeleteManyAsync(filter);
+        }
     }
 }

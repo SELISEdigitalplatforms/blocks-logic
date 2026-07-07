@@ -46,9 +46,20 @@ export const WorkflowExecutionList = ({
   onSelectExecution,
 }: WorkflowExecutionListProps) => {
   if (isLoading) return <LoadingSkeleton />;
+
+  if (!executions || executions.length === 0) {
+    return (
+      <div className="h-full w-64 min-w-64 border-r bg-background p-3">
+        <div className="text-center text-sm text-muted-foreground py-8">
+          No executions found.
+        </div>
+      </div>
+    );
+  }
+
   return (
     <ScrollArea className="h-full w-64 min-w-64 border-r bg-background p-3">
-      {executions?.map((execution) => {
+      {executions.map((execution) => {
         const statusConfig = getStatusConfig(execution.status);
         const StatusIcon = statusConfig.icon;
         const duration = execution.finishedAt
