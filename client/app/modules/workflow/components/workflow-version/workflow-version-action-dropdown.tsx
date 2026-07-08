@@ -8,7 +8,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui-kits/dropdown-menu/dropdown-menu";
 import { useParams } from "react-router-dom";
-import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { usePublishWorkflow, useUnpublishWorkflow, useRestoreWorkflow, useUpdateWorkflowVersion } from "../../hooks/use-workflow-api";
 import { WorkflowVersion } from "../../models/workflow.model";
 import { PublishWorkflowModal } from "../publish-workflow-modal/publish-workflow-modal";
@@ -22,7 +21,6 @@ interface WorkflowVersionActionDropdownProps {
 
 export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVersionActionDropdownProps) => {
   const { id: workflowId } = useParams<{ id: string }>();
-  const projectKey = useProjectStore().selectedProject?.tenantId || "";
   const publishWorkflow = usePublishWorkflow();
   const unpublishWorkflow = useUnpublishWorkflow();
   const restoreWorkflow = useRestoreWorkflow();
@@ -52,7 +50,6 @@ export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVer
     try {
       await publishWorkflow.mutateAsync({
         workflowId: workflowId || "",
-        projectKey,
         versionId: version.itemId,
       });
       setIsPublishModalOpen(false);
@@ -66,7 +63,6 @@ export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVer
     try {
       await unpublishWorkflow.mutateAsync({
         workflowId: workflowId || "",
-        projectKey,
       });
       setIsUnpublishModalOpen(false);
       showSuccessToast({ description: "Workflow version successfully unpublished." });
@@ -78,7 +74,6 @@ export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVer
   const handleEditSubmit = async () => {
     try {
       await updateWorkflowVersion.mutateAsync({
-        projectKey,
         versionId: version.itemId,
         name: editVersionName || "Version Name",
         description: editDescription,
@@ -92,7 +87,6 @@ export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVer
   const handleRestore = () => {
     restoreWorkflow.mutate({
       workflowId: workflowId || "",
-      projectKey,
       versionId: version.itemId,
     });
   };
@@ -120,7 +114,6 @@ export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVer
             e.stopPropagation();
             unpublishWorkflow.mutateAsync({
               workflowId: workflowId || "",
-              projectKey,
             });
           }}>Unpublish version</DropdownMenuItem>)}
         </DropdownMenuContent>

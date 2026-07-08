@@ -37,7 +37,6 @@ import { DeleteWorkflow } from "../delete-workflow";
 import { DuplicateWorkflow } from "../duplicate-workflow";
 import { Link, useNavigate } from "react-router-dom";
 import { usePublishNewWorkflow, usePublishWorkflow, useUnpublishWorkflow } from "../../hooks/use-workflow-api";
-import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { PublishConfirmationModal, UnpublishConfirmationModal } from "../workflow-confirmation-modals";
 import { PublishWorkflowModal } from "../publish-workflow-modal/publish-workflow-modal";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
@@ -73,7 +72,6 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
     data: {},
   });
 
-  const projectKey = useProjectStore().selectedProject?.tenantId || "";
   const [publishVersionName, setPublishVersionName] = useState("");
   const [publishDescription, setPublishDescription] = useState("");
 
@@ -86,7 +84,6 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
     if (!workflowId) return;
     try {
       await publishNewWorkflow({ 
-        projectKey, 
         workflowId, 
         name: publishVersionName, 
         description: publishDescription 
@@ -102,10 +99,7 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
     const workflowId = modal.data.id as string;
     if (!workflowId) return;
     try {
-      await publishWorkflow({ 
-        projectKey, 
-        workflowId 
-      });
+      await publishWorkflow({ workflowId });
       setModal({ type: null, data: {} });
       showSuccessToast({ description: "Workflow successfully published." });
     } catch (error: any) {
@@ -117,7 +111,7 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
     const workflowId = modal.data.id as string;
     if (!workflowId) return;
     try {
-      await unpublishWorkflow({ projectKey, workflowId });
+      await unpublishWorkflow({ workflowId });
       setModal({ type: null, data: {} });
       showSuccessToast({ description: "Workflow successfully unpublished." });
     } catch (error: any) {
