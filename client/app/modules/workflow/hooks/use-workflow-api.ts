@@ -17,6 +17,7 @@ import {
   IGetLastSuccessfulExecutionPayload,
   IStepExecutePayload,
 } from "../types/workflow.service.type";
+import { showErrorToast } from "@/hooks/use-toast";
 
 export const useGetWorkflows = (options: IGetWorkflowsPayload) => {
   return useQuery({
@@ -205,8 +206,8 @@ export const useStepExecutionHandler = () => {
       if (data) {
         setStepExecutionData(data);
       }
-    } catch (e) {
-      console.error("Failed to fetch step execution", e);
+    } catch (e: any) {
+      showErrorToast({ errors: e.message || "Failed to fetch step execution" });
     }
   };
 

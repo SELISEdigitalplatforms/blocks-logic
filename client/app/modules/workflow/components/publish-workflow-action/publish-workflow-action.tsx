@@ -12,6 +12,7 @@ import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { usePublishNewWorkflow, usePublishWorkflow, useUnpublishWorkflow } from "../../hooks/use-workflow-api";
 import { PublishConfirmationModal, UnpublishConfirmationModal } from "../workflow-confirmation-modals";
 import { PublishWorkflowModal } from "../publish-workflow-modal/publish-workflow-modal";
+import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 
 interface PublishWorkflowActionProps {
   isDirty?: boolean;
@@ -61,8 +62,9 @@ export const PublishWorkflowAction = ({
       });
       setIsPublishDialogOpen(false);
       onActionComplete?.();
-    } catch (error) {
-      console.error(error);
+      showSuccessToast({ description: "Workflow successfully published." });
+    } catch (error: any) {
+      showErrorToast({ errors: error.message || "Failed to publish workflow." });
     }
   };
 
@@ -75,8 +77,9 @@ export const PublishWorkflowAction = ({
       });
       setIsPublishConfirmOpen(false);
       onActionComplete?.();
-    } catch (error) {
-      console.error(error);
+      showSuccessToast({ description: "Workflow successfully published." });
+    } catch (error: any) {
+      showErrorToast({ errors: error.message || "Failed to publish workflow." });
     }
   };
 
@@ -86,14 +89,14 @@ export const PublishWorkflowAction = ({
       await unpublishWorkflow({ projectKey, workflowId });
       setIsUnpublishDialogOpen(false);
       onActionComplete?.();
-    } catch (error) {
-      console.error(error);
+      showSuccessToast({ description: "Workflow successfully unpublished." });
+    } catch (error: any) {
+      showErrorToast({ errors: error.message || "Failed to unpublish workflow." });
     }
   };
 
   const isPending = isPublishingNew || isPublishingUnversioned || isUnpublishing;
 
-  // console.log(hasUnsavedChanges, isDirty, isPublished);
 
   return (
     <>
@@ -106,7 +109,7 @@ export const PublishWorkflowAction = ({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={handleOpenPublishDialog} disabled={hasUnsavedChanges && (isPublished || !isDirty)}>
+          <DropdownMenuItem onClick={handleOpenPublishDialog} disabled={hasUnsavedChanges || (isPublished && !isDirty)}>
             Publish
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setIsUnpublishDialogOpen(true)} disabled={!isPublished}>
