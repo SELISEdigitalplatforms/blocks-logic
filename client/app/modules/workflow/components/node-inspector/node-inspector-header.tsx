@@ -1,8 +1,7 @@
 import { Button } from "@/components/ui-kits/button/button";
 import { SheetHeader, SheetTitle } from "@/components/ui-kits/sheet/sheet";
 import { useWorkflow, useStepExecute, useHandleExecuteStep } from "@blocks-workflow/hooks";
-import { useProjectStore } from "@seliseblocks/blocks-kit";
-import { Eye, Pen, Rocket, X } from "lucide-react";
+import { Pen, Rocket, X } from "lucide-react";
 import { getNodeDefinition } from "../node-library-panel";
 import { useEffect, useState } from "react";
 import { showErrorToast } from "@/hooks/use-toast";

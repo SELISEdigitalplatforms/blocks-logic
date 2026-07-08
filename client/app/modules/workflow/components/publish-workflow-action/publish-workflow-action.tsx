@@ -8,7 +8,6 @@ import {
 import { Button } from "@/components/ui-kits/button/button";
 import { ChevronDown, Loader2 } from "lucide-react";
 import { useParams } from "react-router-dom";
-import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { usePublishNewWorkflow, usePublishWorkflow, useUnpublishWorkflow } from "../../hooks/use-workflow-api";
 import { PublishConfirmationModal, UnpublishConfirmationModal } from "../workflow-confirmation-modals";
 import { PublishWorkflowModal } from "../publish-workflow-modal/publish-workflow-modal";
@@ -28,7 +27,6 @@ export const PublishWorkflowAction = ({
   onActionComplete,
 }: PublishWorkflowActionProps) => {
   const { id: workflowId } = useParams<{ id: string }>();
-  const projectKey = useProjectStore().selectedProject?.tenantId || "";
   
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
   const [isPublishConfirmOpen, setIsPublishConfirmOpen] = useState(false);
@@ -55,7 +53,6 @@ export const PublishWorkflowAction = ({
     if (!workflowId) return;
     try {
       await publishNewWorkflow({ 
-        projectKey, 
         workflowId, 
         name: publishVersionName, 
         description: publishDescription 
@@ -71,10 +68,7 @@ export const PublishWorkflowAction = ({
   const handlePublishUnversioned = async () => {
     if (!workflowId) return;
     try {
-      await publishWorkflow({ 
-        projectKey, 
-        workflowId 
-      });
+      await publishWorkflow({ workflowId });
       setIsPublishConfirmOpen(false);
       onActionComplete?.();
       showSuccessToast({ description: "Workflow successfully published." });
@@ -86,7 +80,7 @@ export const PublishWorkflowAction = ({
   const handleUnpublish = async () => {
     if (!workflowId) return;
     try {
-      await unpublishWorkflow({ projectKey, workflowId });
+      await unpublishWorkflow({ workflowId });
       setIsUnpublishDialogOpen(false);
       onActionComplete?.();
       showSuccessToast({ description: "Workflow successfully unpublished." });

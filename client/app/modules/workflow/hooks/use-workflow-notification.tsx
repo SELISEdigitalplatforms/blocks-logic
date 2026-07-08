@@ -1,14 +1,12 @@
 import { useCallback, useEffect } from "react";
 import { useNotificationListener } from "@/hooks/use-notification-listener";
 import { useWorkflow } from "@blocks-workflow/hooks";
-import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { workflowService } from "../services/workflow.service";
 import { EXECUTION_STATUS_COMPLETED } from "../constants";
 import { showErrorToast } from "@/hooks/use-toast";
 
 export const useWorkflowNotification = () => {
   const { isListening, setIsListening, listeningNodeId, workflowId, setStepExecutionData,setNextExecutionId } = useWorkflow();
-  const tenantId = useProjectStore((s) => s.selectedProject?.tenantId) || "";
 
   const handleNotification = useCallback(async (data: any) => {
     if (!isListening) return;
@@ -31,9 +29,8 @@ export const useWorkflowNotification = () => {
           if (code === EXECUTION_STATUS_COMPLETED && status === "Completed") {
             const executionId = payload?.Information?.executionId || payload?.Information?.data;
             setNextExecutionId(payload?.Information?.executionId)
-            if (isListening && listeningNodeId && workflowId && tenantId) {
+            if (isListening && listeningNodeId && workflowId ) {
               workflowService.triggerListener({
-                ProjectKey: tenantId,
                 WorkflowId: workflowId,
                 TriggerId: listeningNodeId,
                 EnableListener: false,
@@ -43,9 +40,8 @@ export const useWorkflowNotification = () => {
               setIsListening(false);
             }
 
-            if (executionId && tenantId) {
+            if (executionId) {
               const executionData = await workflowService.getWorkflowExecutionById({
-                projectKey: tenantId,
                 executionId: executionId,
               });
               if (executionData?.data) {
@@ -57,7 +53,7 @@ export const useWorkflowNotification = () => {
     } catch (error: any) {
       showErrorToast({ errors: error.message || "Failed to parse WorkflowNotification" });
     }
-  }, [isListening, setIsListening, listeningNodeId, workflowId, tenantId, setStepExecutionData]);
+  }, [isListening, setIsListening, listeningNodeId, workflowId, setStepExecutionData]);
 
 
   useNotificationListener("WorkflowNotification", handleNotification);

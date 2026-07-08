@@ -5,7 +5,7 @@ import { useUpdateWorkflow } from "./use-workflow-api";
 
 type UseAutoSaveWorkflowOptions = {
   workflowId: string;
-  projectKey: string;
+  // projectKey: string;
   debounceMs?: number;
   enabled?: boolean;
   onSaveSuccess?: () => void;
@@ -14,7 +14,7 @@ type UseAutoSaveWorkflowOptions = {
 
 export const useAutoSaveWorkflow = ({
   workflowId,
-  projectKey,
+  // projectKey,
   debounceMs = 10000,
   enabled = true,
   onSaveSuccess,
@@ -39,7 +39,7 @@ export const useAutoSaveWorkflow = ({
 
       await mutateAsync({
         itemId: workflowId,
-        projectKey,
+        // projectKey,
         nodes,
         edges,
       });
@@ -50,7 +50,7 @@ export const useAutoSaveWorkflow = ({
     } finally {
       isSavingRef.current = false;
     }
-  }, [hasUnsavedChanges, workflowId, projectKey, mutateAsync, onSaveSuccess, onSaveError, store]);
+  }, [hasUnsavedChanges, workflowId, mutateAsync, onSaveSuccess, onSaveError, store]);
 
   useEffect(() => {
     if (!enabled || !hasUnsavedChanges) return;
