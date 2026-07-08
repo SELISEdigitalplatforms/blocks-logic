@@ -15,11 +15,11 @@ namespace DomainService.Workflow.Services
         Task<WorkflowWebhookResponseDto> TriggerWebhookAsync(string workflowId, string triggerId, string tenantId, JsonElement input);
         Task<WorkflowWebhookResponseDto> TriggerTestWebhookAsync(string workflowId, string triggerId, string tenantId, JsonElement input);
         Task<WorkflowExecutionModel> CreateExecutionAsync(WorkflowModel workflow, TriggerMetadata triggerMetadata, WorkflowExecutionMode executionMode);
-        Task<WorkflowExecutionsGetResponseDto> GetExecutionsByWorkflowIdAsync(WorkflowExecutionsGetRequestDto dto);
-        Task<WorkflowExecutionGetResponseDto> GetExecutionByIdAsync(WorkflowExecutionGetRequestDto dto);
-        Task<WorkflowExecutionGetResponseDto> LastSuccessfullExecutionAsync(LastSuccessfullExecutionRequestDto dto);
+        Task<WorkflowExecutionsGetResponseDto> GetExecutionsByWorkflowIdAsync(string projectKey, WorkflowExecutionsGetRequestDto dto);
+        Task<WorkflowExecutionGetResponseDto> GetExecutionByIdAsync(string projectKey, WorkflowExecutionGetRequestDto dto);
+        Task<WorkflowExecutionGetResponseDto> LastSuccessfullExecutionAsync(string projectKey, LastSuccessfullExecutionRequestDto dto);
         Task EmailTriggerStartAsync(EmailTriggerEvent emailEvent);
         Task DataTriggerStartAsync(DataChangeEvent dataEvent);
-        Task<StepExecuteResponseDto> StepExecuteAsync(StepExecuteRequestDto dto);
+        Task<StepExecuteResponseDto> StepExecuteAsync(string tenantId, StepExecuteRequestDto dto);
     }
 }
