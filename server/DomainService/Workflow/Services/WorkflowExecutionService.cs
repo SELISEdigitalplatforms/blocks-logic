@@ -83,7 +83,7 @@ namespace DomainService.Workflow.Services
 
         public async Task<WorkflowWebhookResponseDto> TriggerWebhookAsync(string workflowId, string triggerId, string tenantId, JsonElement input)
         {
-            var workflow = await _workflowRepository.GetWorkflowAsync(workflowId, tenantId);
+            var workflow = await _workflowRepository.GetWorkflowAsync(tenantId, workflowId);
             if (workflow == null)
             {
                 _logger.LogError("Workflow not found: {WorkflowId}, {TenantId}", workflowId, tenantId);
@@ -135,7 +135,7 @@ namespace DomainService.Workflow.Services
 
         public async Task<WorkflowWebhookResponseDto> TriggerTestWebhookAsync(string workflowId, string triggerId, string tenantId, JsonElement input)
         {
-            var workflow = await _workflowRepository.GetWorkflowAsync(workflowId, tenantId);
+            var workflow = await _workflowRepository.GetWorkflowAsync(tenantId, workflowId);
             if (workflow == null)
             {
                 _logger.LogError("Workflow not found: {WorkflowId}, {TenantId}", workflowId, tenantId);
@@ -282,8 +282,8 @@ namespace DomainService.Workflow.Services
         public async Task EmailTriggerStartAsync(EmailTriggerEvent emailEvent)
         {
             _logger.LogInformation("Starting EmailTriggerStartAsync for MailServerConfigurationId: {MailServerConfigurationId} and status: {Status}", emailEvent.Mail.MailServerConfigurationId, emailEvent.Mail.Status);
-            var projectKey = emailEvent.ProjectKey;
-            if (string.IsNullOrEmpty(projectKey))
+            var tenantId = emailEvent.ProjectKey;
+            if (string.IsNullOrEmpty(tenantId))
             {
                 _logger.LogError("ProjectKey (TenantId) is null or empty in BlocksContext");
                 return;
@@ -307,7 +307,7 @@ namespace DomainService.Workflow.Services
                 return;
             }
 
-            var workflows = await _workflowRepository.GetWorkflowsByMailServerConfigurationIdAsync(emailEvent.Mail.MailServerConfigurationId, projectKey);
+            var workflows = await _workflowRepository.GetWorkflowsByMailServerConfigurationIdAsync(tenantId, emailEvent.Mail.MailServerConfigurationId);
             _logger.LogInformation("Found {WorkflowCount} workflows for MailServerConfigurationId: {MailServerConfigurationId}", workflows.Count, emailEvent.Mail.MailServerConfigurationId);
 
             foreach (var workflow in workflows)
@@ -352,7 +352,7 @@ namespace DomainService.Workflow.Services
                             WorkflowId = workflow.ItemId,
                             WorkflowExecutionId = execution.Id!,
                             NodeId = triggerNode.Id,
-                            ProjectKey = projectKey
+                            ProjectKey = tenantId
                         }
                     });
                     _logger.LogInformation("Queued execution {ExecutionId} for WorkflowId: {WorkflowId}", execution.Id, workflow.ItemId);
@@ -364,9 +364,9 @@ namespace DomainService.Workflow.Services
             }
         }
 
-        public async Task<WorkflowExecutionsGetResponseDto> GetExecutionsByWorkflowIdAsync(WorkflowExecutionsGetRequestDto dto)
+        public async Task<WorkflowExecutionsGetResponseDto> GetExecutionsByWorkflowIdAsync(string projectKey, WorkflowExecutionsGetRequestDto dto)
         {
-            var executions = await _executionRepository.GetByWorkflowIdAsync(dto.WorkflowId, dto.ProjectKey);
+            var executions = await _executionRepository.GetByWorkflowIdAsync(dto.WorkflowId, projectKey);
 
             var executionItems = executions.Select(e => new WorkflowExecutionItemDto
             {
@@ -390,9 +390,9 @@ namespace DomainService.Workflow.Services
             };
         }
 
-        public async Task<WorkflowExecutionGetResponseDto> GetExecutionByIdAsync(WorkflowExecutionGetRequestDto dto)
+        public async Task<WorkflowExecutionGetResponseDto> GetExecutionByIdAsync(string projectKey, WorkflowExecutionGetRequestDto dto)
         {
-            var execution = await _executionRepository.GetByIdAsync(dto.ExecutionId, dto.ProjectKey)
+            var execution = await _executionRepository.GetByIdAsync(dto.ExecutionId, projectKey)
                 ?? throw new InvalidOperationException($"Execution {dto.ExecutionId} not found");
 
 
@@ -406,7 +406,7 @@ namespace DomainService.Workflow.Services
             }
 
             // Get all workflow items - frontend will organize them into input/output structure
-            var allItems = await _executionRepository.GetAllItemsByExecutionIdAsync(dto.ExecutionId, dto.ProjectKey);
+            var allItems = await _executionRepository.GetAllItemsByExecutionIdAsync(dto.ExecutionId, projectKey);
 
             var nodes = execution.WorkflowSnapshot.Nodes.Select(item => new NodeDto
             {
@@ -498,9 +498,9 @@ namespace DomainService.Workflow.Services
             };
         }
 
-        public async Task<WorkflowExecutionGetResponseDto> LastSuccessfullExecutionAsync(LastSuccessfullExecutionRequestDto dto)
+        public async Task<WorkflowExecutionGetResponseDto> LastSuccessfullExecutionAsync(string projectKey, LastSuccessfullExecutionRequestDto dto)
         {
-            var execution = await _executionRepository.GetLastCompletedExecution(dto.ProjectKey, dto.WorkflowId);
+            var execution = await _executionRepository.GetLastCompletedExecution(projectKey, dto.WorkflowId);
             if (execution == null)
             {
                 return new WorkflowExecutionGetResponseDto
@@ -510,7 +510,7 @@ namespace DomainService.Workflow.Services
                     Errors = new Dictionary<string, string> { { "Message", "No Execution" } }
                 };
             }
-            var allItems = await _executionRepository.GetAllItemsByExecutionIdAsync(execution.Id, dto.ProjectKey);
+            var allItems = await _executionRepository.GetAllItemsByExecutionIdAsync(execution.Id, projectKey);
 
             var nodes = execution.WorkflowSnapshot.Nodes.Select(item => new NodeDto
             {
@@ -606,8 +606,8 @@ namespace DomainService.Workflow.Services
             _logger.LogInformation("Starting DataTriggerStartAsync for Collection: {CollectionName}, Operation: {Operation}",
                 dataEvent.CollectionName, dataEvent.Operation);
 
-            var projectKey = dataEvent.ProjectKey;
-            if (string.IsNullOrEmpty(projectKey))
+            var tenantId = dataEvent.ProjectKey;
+            if (string.IsNullOrEmpty(tenantId))
             {
                 _logger.LogError("ProjectKey (TenantId) is null or empty in BlocksContext");
                 return;
@@ -622,13 +622,13 @@ namespace DomainService.Workflow.Services
             // If the data is mocked, we will use the workflow as is, otherwise we will only published workflows that are published.
             if (isMockedData)
             {
-                workflows = await _workflowRepository.GetWorkflowsByDataCollectionAsync(dataEvent.CollectionName, operationStr, projectKey);
+                workflows = await _workflowRepository.GetWorkflowsByDataCollectionAsync(tenantId, dataEvent.CollectionName, operationStr);
             }
             else
             {
-                var publishedWorkflows = await _workflowRepository.GetPublishWorkflowsByDataCollectionAsync(dataEvent.CollectionName, operationStr, projectKey);
+                var publishedWorkflows = await _workflowRepository.GetPublishWorkflowsByDataCollectionAsync(tenantId, dataEvent.CollectionName, operationStr);
                 var publishedWorkflowsId = publishedWorkflows.Select(w => w.ItemId).ToList();
-                var versions = await _workflowVersionRepository.GetWorkflowVersionsAsync(projectKey, publishedWorkflowsId.ToArray());
+                var versions = await _workflowVersionRepository.GetWorkflowVersionsAsync(tenantId, publishedWorkflowsId.ToArray());
                 workflows = versions.Select(v => v.Snapshot).Where(s => s != null).ToList()!;
             }
 
@@ -642,7 +642,7 @@ namespace DomainService.Workflow.Services
             foreach (var workflow in workflows)
             {
                 var executionMode = isMockedData ? WorkflowExecutionMode.Test : WorkflowExecutionMode.Production;
-                await QueueDataTriggerExecutionAsync(workflow, executionMode, dataEvent, operationStr, triggerData, projectKey);
+                await QueueDataTriggerExecutionAsync(workflow, executionMode, dataEvent, operationStr, triggerData, tenantId);
             }
         }
 
@@ -817,9 +817,9 @@ namespace DomainService.Workflow.Services
             return doc;
         }
 
-        public async Task<StepExecuteResponseDto> StepExecuteAsync(StepExecuteRequestDto dto)
+        public async Task<StepExecuteResponseDto> StepExecuteAsync(string tenantId, StepExecuteRequestDto dto)
         {
-            var workflow = await _workflowRepository.GetWorkflowAsync(dto.WorkflowId, dto.ProjectKey);
+            var workflow = await _workflowRepository.GetWorkflowAsync(tenantId, dto.WorkflowId);
             if (workflow == null)
             {
                 return new StepExecuteResponseDto
@@ -838,7 +838,7 @@ namespace DomainService.Workflow.Services
                 };
             }
 
-            var oldExecution = await _executionRepository.GetByIdAsync(dto.SourceExecutionId, dto.ProjectKey);
+            var oldExecution = await _executionRepository.GetByIdAsync(dto.SourceExecutionId, tenantId);
             var ancestors = _workflowEngineService.GetTopologicalAncestorsAndTarget(workflow, dto.NodeId);
             var triggerNodes = ancestors.Where(n => n.Category == "trigger").ToList();
             var hasAnyPinnedTriggerData = triggerNodes.Any(n => n.PinData != null && n.PinData.Count > 0);
@@ -945,7 +945,7 @@ namespace DomainService.Workflow.Services
             execution.Status = WorkflowExecutionStatus.Queued;
             execution.ActiveNodeIds.Add(triggerNode.Id);
             await NotifyWorkflowStartedAsync(execution);
-            var result = await _workflowEngineService.ExecuteStepNodeAsync(dto.ProjectKey, execution.Id, triggerNode.Id, dto.NodeId, dto.SourceExecutionId);
+            var result = await _workflowEngineService.ExecuteStepNodeAsync(tenantId, execution.Id, triggerNode.Id, dto.NodeId, dto.SourceExecutionId);
             return new StepExecuteResponseDto
             {
                 IsSuccess = true,
