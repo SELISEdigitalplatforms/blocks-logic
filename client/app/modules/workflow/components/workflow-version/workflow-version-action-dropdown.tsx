@@ -13,6 +13,7 @@ import { usePublishWorkflow, useUnpublishWorkflow, useRestoreWorkflow, useUpdate
 import { WorkflowVersion } from "../../models/workflow.model";
 import { PublishWorkflowModal } from "../publish-workflow-modal/publish-workflow-modal";
 import { PublishConfirmationModal, UnpublishConfirmationModal } from "../workflow-confirmation-modals";
+import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 
 interface WorkflowVersionActionDropdownProps {
   version: WorkflowVersion;
@@ -55,8 +56,9 @@ export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVer
         versionId: version.itemId,
       });
       setIsPublishModalOpen(false);
-    } catch (error) {
-      console.error(error);
+      showSuccessToast({ description: "Workflow version successfully published." });
+    } catch (error: any) {
+      showErrorToast({ errors: error.message || "Failed to publish workflow version." });
     }
   };
 
@@ -67,8 +69,9 @@ export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVer
         projectKey,
       });
       setIsUnpublishModalOpen(false);
-    } catch (error) {
-      console.error(error);
+      showSuccessToast({ description: "Workflow version successfully unpublished." });
+    } catch (error: any) {
+      showErrorToast({ errors: error.message || "Failed to unpublish workflow version." });
     }
   };
 
@@ -81,8 +84,8 @@ export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVer
         description: editDescription,
       });
       setIsEditModalOpen(false);
-    } catch (error) {
-      console.error(error);
+    } catch (error: any) {
+      showErrorToast({ errors: error.message || "Failed to edit workflow version." });
     }
   };
 

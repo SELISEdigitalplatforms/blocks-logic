@@ -4,6 +4,7 @@ import { useWorkflow } from "@blocks-workflow/hooks";
 import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { workflowService } from "../services/workflow.service";
 import { EXECUTION_STATUS_COMPLETED } from "../constants";
+import { showErrorToast } from "@/hooks/use-toast";
 
 export const useWorkflowNotification = () => {
   const { isListening, setIsListening, listeningNodeId, workflowId, setStepExecutionData,setNextExecutionId } = useWorkflow();
@@ -36,7 +37,9 @@ export const useWorkflowNotification = () => {
                 WorkflowId: workflowId,
                 TriggerId: listeningNodeId,
                 EnableListener: false,
-              }).catch((err) => console.error("Failed to disable listener on completion", err));
+              }).catch((err) => {
+                showErrorToast({ errors: err.message || "Failed to disable listener on completion" });
+              });
               setIsListening(false);
             }
 
@@ -51,8 +54,8 @@ export const useWorkflowNotification = () => {
             }
           }
       }
-    } catch (error) {
-      console.error("Failed to parse WorkflowNotification", error);
+    } catch (error: any) {
+      showErrorToast({ errors: error.message || "Failed to parse WorkflowNotification" });
     }
   }, [isListening, setIsListening, listeningNodeId, workflowId, tenantId, setStepExecutionData]);
 
