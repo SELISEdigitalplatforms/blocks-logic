@@ -607,6 +607,14 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
       execution.data.items
     );
 
+    const lastExecutedNode = execution.data.nodeExecutions[execution.data.nodeExecutions.length - 1];
+    if (lastExecutedNode) {
+      const outgoingEdges = edgesArray.filter((e) => e.source === lastExecutedNode.nodeId);
+      for (const edge of outgoingEdges) {
+        traversedEdgeIds.add(edge.id);
+      }
+    }
+
     // Clear first to allow the UI to reset
     clearStepExecutionData();
 
@@ -657,7 +665,7 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
       });
 
       currentIndex++;
-    }, 250); // 250ms cascading delay between nodes
+    }, 150); // 250ms cascading delay between nodes
   },
 
   setLastSuccessfulExecutionData: (data) => set({ lastSuccessfulExecutionData: data }),

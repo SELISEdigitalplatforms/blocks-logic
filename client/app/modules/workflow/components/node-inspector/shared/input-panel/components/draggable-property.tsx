@@ -1,6 +1,17 @@
-export function DraggableProperty({ fieldKey, prefixPath = "", label, depth = 0, nodeName, hasSinglePredecessor, isRoot = false, isDraggable = true, isDashed = false }: { fieldKey?: string; prefixPath?: string; label?: string; depth?: number; nodeName: string; hasSinglePredecessor: boolean; isRoot?: boolean; isDraggable?: boolean; isDashed?: boolean }) {
+type DraggablePropertyProps = {
+  fieldKey?: string,
+  prefixPath?: string,
+  label?: string,
+  depth?: number,
+  nodeName: string,
+  hasSinglePredecessor: boolean,
+  isRoot?: boolean,
+  isDraggable?: boolean;
+  showColon?: boolean;
+}
+export function DraggableProperty({ fieldKey, prefixPath = "", label, depth = 0, nodeName, hasSinglePredecessor = true, isRoot = false, isDraggable = true, showColon = true }: DraggablePropertyProps) {
   const expressionPath = prefixPath ? (fieldKey ? `${prefixPath}.${fieldKey}` : prefixPath) : (fieldKey || "");
-  
+
   const expression = hasSinglePredecessor
     ? `{{$json.output${expressionPath ? '.' + expressionPath : ''}}}`
     : `{{$node["${nodeName}"].json.output${expressionPath ? '.' + expressionPath : ''}}}`;
@@ -18,10 +29,10 @@ export function DraggableProperty({ fieldKey, prefixPath = "", label, depth = 0,
       title={isDraggable ? `Drag to use: ${expression}` : undefined}
     >
       <span className={`font-mono flex items-center ${isDraggable ? 'cursor-grab active:cursor-grabbing text-high-emphasis' : 'text-medium-emphasis'}`}>
-        <span className="rounded-md border border-border/80 bg-white dark:bg-gray-800 px-1.5 py-0.5 mr-0.5 shadow-sm">
+        <span className={`rounded-md border border-border/80 px-1.5 py-0.5 mr-0.5 shadow-sm ${isDraggable && "bg-white dark:bg-gray-800"}`}>
           {label || fieldKey || "output"}
         </span>
-        {!isDashed && ":"}
+        {!showColon && ":"}
       </span>
     </div>
   );
