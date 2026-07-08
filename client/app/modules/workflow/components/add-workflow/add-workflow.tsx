@@ -29,13 +29,11 @@ import {
 } from "./utils";
 import { isErrorWithErrors } from "@/lib/error";
 import { useCreateWorkflow } from "@blocks-workflow/hooks/use-workflow-api";
-import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { useNavigate } from "react-router-dom";
 
 export const AddWorkflow = () => {
   const [open, onOpenChange] = useState(false);
   const { isPending, mutateAsync } = useCreateWorkflow();
-  const projectKey = useProjectStore().selectedProject?.tenantId || "";
   const navigate = useNavigate();
 
   const form = useForm<AddWorkflowFormValues>({
@@ -45,10 +43,7 @@ export const AddWorkflow = () => {
 
   const handleSubmit = async (values: AddWorkflowFormValues) => {
     try {
-      const payload = {
-        name: values.name,
-        projectKey: projectKey,
-      };
+      const payload = {name: values.name};
 
       const res = await mutateAsync(payload);
       if (!res.isSuccess) return showErrorToast({ errors: res.errors });
