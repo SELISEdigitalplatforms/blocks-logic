@@ -25,6 +25,6 @@ public class Position
 
 public class Handle
 {
-    public List<string> Source = new();
-    public List<string> Target = new();
+    public List<string> Sources = new();
+    public List<string> Targets = new();
 }
