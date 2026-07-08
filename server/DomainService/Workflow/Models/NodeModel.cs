@@ -11,7 +11,7 @@ public class NodeModel
     public required string Type { get; set; }
     public required string Version { get; set; }
     public required Position Position { get; set; }
-    public required Handle Handle { get; set; }
+    public Handle? Handle { get; set; } = new();
     public BsonDocument Parameters { get; set; } = new BsonDocument();
     public BsonDocument Settings { get; set; } = new BsonDocument();
     public BsonArray? PinData { get; set; }
@@ -25,6 +25,6 @@ public class Position
 
 public class Handle
 {
-    public List<string> Source = new();
-    public List<string> Target = new();
+    public List<string> Sources = new();
+    public List<string> Targets = new();
 }
