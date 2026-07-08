@@ -416,6 +416,7 @@ namespace DomainService.Workflow.Services
                 Version = item.Version,
                 Category = item.Category,
                 Position = item.Position,
+                Handle = item.Handle,
                 Parameters = BsonJsonConverter.ToJsonElement(item.Parameters),
                 Settings = BsonJsonConverter.ToJsonElement(item.Settings),
                 PinData = BsonJsonConverter.ToJsonElementOrNull(item.PinData)
@@ -520,6 +521,7 @@ namespace DomainService.Workflow.Services
                 Version = item.Version,
                 Category = item.Category,
                 Position = item.Position,
+                Handle = item.Handle,
                 Parameters = BsonJsonConverter.ToJsonElement(item.Parameters),
                 Settings = BsonJsonConverter.ToJsonElement(item.Settings),
                 PinData = BsonJsonConverter.ToJsonElementOrNull(item.PinData)
