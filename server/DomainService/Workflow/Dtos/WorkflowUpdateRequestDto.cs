@@ -25,6 +25,7 @@ public class NodeDto
     public required string Type { get; set; }
     public required string Version { get; set; }
     public required Position Position { get; set; }
+    public required Handle Handle { get; set; }
     public JsonElement Parameters { get; set; } = new();
     public JsonElement Settings { get; set; } = new();
     public JsonElement? PinData { get; set; }
