@@ -32,7 +32,7 @@ export function DraggableProperty({ fieldKey, prefixPath = "", label, depth = 0,
         <span className={`rounded-md border border-border/80 px-1.5 py-0.5 mr-0.5 shadow-sm ${isDraggable && "bg-white dark:bg-gray-800"}`}>
           {label || fieldKey || "output"}
         </span>
-        {!showColon && ":"}
+        {showColon && ":"}
       </span>
     </div>
   );

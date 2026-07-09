@@ -1,7 +1,7 @@
 import { DraggableProperty } from "./draggable-property";
 import { formatCellValue } from "../utils/format.util";
 
-export function RecursiveSchemaViewer({ data, depth = 0, prefixPath = "", nodeName, hasSinglePredecessor, showValues = true, isDraggable = true, showColon = false }: { data: unknown; depth?: number; prefixPath?: string; nodeName: string; hasSinglePredecessor: boolean; showValues?: boolean; isDraggable?: boolean; showColon?: boolean }) {
+export function RecursiveSchemaViewer({ data, depth = 0, prefixPath = "", nodeName, hasSinglePredecessor, showValues = true, isDraggable = true, showColon = true }: { data: unknown; depth?: number; prefixPath?: string; nodeName: string; hasSinglePredecessor: boolean; showValues?: boolean; isDraggable?: boolean; showColon?: boolean }) {
   if (typeof data !== "object" || data === null) {
     if (!prefixPath) {
       return (
