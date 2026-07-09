@@ -37,9 +37,10 @@ import { DeleteWorkflow } from "../delete-workflow";
 import { DuplicateWorkflow } from "../duplicate-workflow";
 import { Link, useNavigate } from "react-router-dom";
 import { usePublishNewWorkflow, usePublishWorkflow, useUnpublishWorkflow } from "../../hooks/use-workflow-api";
-import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { PublishConfirmationModal, UnpublishConfirmationModal } from "../workflow-confirmation-modals";
 import { PublishWorkflowModal } from "../publish-workflow-modal/publish-workflow-modal";
+import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
 
 
 const WorkflowListSkeleton = ({ length }: { length: number }) => {
@@ -71,7 +72,6 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
     data: {},
   });
 
-  const projectKey = useProjectStore().selectedProject?.tenantId || "";
   const [publishVersionName, setPublishVersionName] = useState("");
   const [publishDescription, setPublishDescription] = useState("");
 
@@ -84,14 +84,14 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
     if (!workflowId) return;
     try {
       await publishNewWorkflow({ 
-        projectKey, 
         workflowId, 
         name: publishVersionName, 
         description: publishDescription 
       });
       setModal({ type: null, data: {} });
-    } catch (error) {
-      console.error(error);
+      showSuccessToast({ description: "Workflow successfully published." });
+    } catch (error: any) {
+      showErrorToast({ errors: error.message || "Failed to publish workflow." });
     }
   };
 
@@ -99,13 +99,11 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
     const workflowId = modal.data.id as string;
     if (!workflowId) return;
     try {
-      await publishWorkflow({ 
-        projectKey, 
-        workflowId 
-      });
+      await publishWorkflow({ workflowId });
       setModal({ type: null, data: {} });
-    } catch (error) {
-      console.error(error);
+      showSuccessToast({ description: "Workflow successfully published." });
+    } catch (error: any) {
+      showErrorToast({ errors: error.message || "Failed to publish workflow." });
     }
   };
 
@@ -113,10 +111,11 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
     const workflowId = modal.data.id as string;
     if (!workflowId) return;
     try {
-      await unpublishWorkflow({ projectKey, workflowId });
+      await unpublishWorkflow({ workflowId });
       setModal({ type: null, data: {} });
-    } catch (error) {
-      console.error(error);
+      showSuccessToast({ description: "Workflow successfully unpublished." });
+    } catch (error: any) {
+      showErrorToast({ errors: error.message || "Failed to unpublish workflow." });
     }
   };
   const columns = useMemo<ColumnDef<WorkflowSummary>[]>(
@@ -167,36 +166,45 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
         header: () => <div className="font-bold text-medium-emphasis"></div>,
         cell: (info) => (
           <div className="ml-2 flex items-center gap-4 sm:ml-0">
-            <Switch
-              size="md"
-              checked={info.row.original.isPublished}
-              onClick={(e) => e.stopPropagation()}
-              onCheckedChange={(_value) => {
-                if (!info.row.original.isPublished) {
-                  if (!info.row.original.isDirty) {
-                    setModal({
-                      type: "publish",
-                      data: { id: info.row.original.itemId },
-                    });
-                  } else {
-                    const id = Math.random().toString(16).substring(2, 10);
-                    setPublishVersionName(`Version ${id}`);
-                    setPublishDescription("");
-                    setModal({
-                      type: "publish_new",
-                      data: { id: info.row.original.itemId },
-                    });
-                  }
-                } else {
-                  setModal({
-                    type: "unpublish",
-                    data: {
-                      id: info.row.original.itemId,
-                    },
-                  });
-                }
-              }}
-            />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div>
+                  <Switch
+                    size="md"
+                    checked={info.row.original.isPublished}
+                    onClick={(e) => e.stopPropagation()}
+                    onCheckedChange={(_value) => {
+                      if (!info.row.original.isPublished) {
+                        if (!info.row.original.isDirty) {
+                          setModal({
+                            type: "publish",
+                            data: { id: info.row.original.itemId },
+                          });
+                        } else {
+                          const id = Math.random().toString(16).substring(2, 10);
+                          setPublishVersionName(`Version ${id}`);
+                          setPublishDescription("");
+                          setModal({
+                            type: "publish_new",
+                            data: { id: info.row.original.itemId },
+                          });
+                        }
+                      } else {
+                        setModal({
+                          type: "unpublish",
+                          data: {
+                            id: info.row.original.itemId,
+                          },
+                        });
+                      }
+                    }}
+                  />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{info.row.original.isPublished ? "Unpublish workflow" : "Publish workflow"}</p>
+              </TooltipContent>
+            </Tooltip>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="h-5 w-5 p-0">
@@ -309,7 +317,7 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
     <>
       <Table>
         <TableHeader>
-          <TableRow isHoverable>
+          <TableRow>
             {table
               .getHeaderGroups()
               .map((headerGroup) =>

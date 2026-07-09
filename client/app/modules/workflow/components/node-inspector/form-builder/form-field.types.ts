@@ -20,6 +20,7 @@ export type FormFieldType =
   | "conditions"
   | "expression"
   | "display"
+  | "callout-accordion-display"
   | "tab-with-text";
 
 export interface SelectOption {
