@@ -1,15 +1,10 @@
-using System;
 using System.ComponentModel.DataAnnotations;
-using Blocks.Genesis;
 
 
 namespace DomainService.Workflow.Dtos;
 
-public class WorkflowDuplicateRequestDto : IProjectKey
+public class WorkflowDuplicateRequestDto
 {
-    [Required]
-    public required string ProjectKey { get; set; }
-
     [Required]
     public required string Name { get; set; }
 

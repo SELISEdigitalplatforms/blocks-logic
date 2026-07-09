@@ -1,5 +1,4 @@
-import { useProjectStore } from "@seliseblocks/blocks-kit";
-import { useStepExecute, useExecuteTriggerListener } from "./use-workflow-api";
+import { useStepExecute, useExecuteTriggerListener, useUpdateWorkflow } from "./use-workflow-api";
 import { useWorkflow } from "./use-workflow";
 import { workflowService } from "../services/workflow.service";
 import { showErrorToast } from "@/hooks/use-toast";
@@ -16,9 +15,9 @@ import { getAllPredecessors } from "../utils/predecessor.util";
 import { EditorNode } from "@blocks-workflow/models/node.model";
 
 export const useHandleExecuteStep = () => {
-  const tenantId = useProjectStore((s) => s.selectedProject?.tenantId) || "";
   const { mutateAsync: stepExecute } = useStepExecute();
   const { mutateAsync: executeTriggerListener } = useExecuteTriggerListener();
+  const { mutateAsync: updateWorkflow } = useUpdateWorkflow();
   const { workflowId, setStepExecutionData, nextExecutionId, setNextExecutionId, setIsListening, nodesMap, edgesMap, executedItems } = useWorkflow();
 
   const [triggerSelectionNodes, setTriggerSelectionNodes] = useState<EditorNode[]>([]);
@@ -38,7 +37,7 @@ export const useHandleExecuteStep = () => {
   };
 
   const handleExecuteStep = async (nodeId?: string, requireExecutionId = false) => {
-    if (!tenantId || !workflowId || !nodeId) return;
+    if ( !workflowId || !nodeId) return;
 
     if (requireExecutionId && !nextExecutionId) {
       showErrorToast({ title: "Error", errors: "No successful execution found" });
@@ -46,8 +45,13 @@ export const useHandleExecuteStep = () => {
     }
 
     try {
+      await updateWorkflow({
+        itemId: workflowId,
+        nodes: Object.values(nodesMap) as any[],
+        edges: Object.values(edgesMap),
+      });
+
       const stepResp: any = await stepExecute({
-        ProjectKey: tenantId,
         WorkflowId: workflowId,
         NodeId: nodeId,
         ...(nextExecutionId && { SourceExecutionId: nextExecutionId }),
@@ -80,7 +84,6 @@ export const useHandleExecuteStep = () => {
       
       if (stepResp?.itemId) {
         const executionData = await workflowService.getWorkflowExecutionById({
-          projectKey: tenantId,
           executionId: stepResp.itemId,
         });
         if (executionData?.data) {

@@ -16,7 +16,9 @@ import {
   ProjectOverviewLayout,
   DashboardOverview,
   DashboardLayout,
-  EnvironmentsPage
+  EnvironmentsPage,
+  ProjectOverviewRoute,
+  DashboardRoute
 } from "@seliseblocks/blocks-kit";
 import { navigationMenus } from "./constants/navigation-menus";
 
@@ -82,37 +84,35 @@ export const router = createBrowserRouter([
                       { path: "console", element: <ConsolePage /> },
                     ],
                   },
+                     // Project-overview scope
                   {
-                    path: "project-overview",
+                    path: "project/:tenantGroupId",
                     element: (
-                      <ProjectOverviewLayout
+                      <ProjectOverviewRoute
                         redirectPaths={redirectPaths}
-                        navigationMenus={navigationMenus}>
-                        <Outlet />
-                      </ProjectOverviewLayout>
+                        navigationMenus={navigationMenus}
+                      />
                     ),
                     children: [
-                      {
-                        path: "project-overview/environments",
-                        element: <EnvironmentsPage />,
-                      },
+                      { index: true, element: <Navigate to="environments" replace /> },
+                      { path: "environments", element: <EnvironmentsPage /> },
                     ],
                   },
                 ],
               },
               {
                 // impersonate
-                element: (
-                  <DashboardLayout
-                    redirectPaths={redirectPaths}
-                    navigationMenus={navigationMenus}>
-                    <Outlet />
-                  </DashboardLayout>
-                ),
-                children: [
-                  { path: "dashboard", element: <DashboardOverview /> },
-                  { path: "workflow/:id", element: <WorkflowDetailsPage /> },
-                  { path: "workflow", element: <WorkflowsPage /> },
+                  path: ":itemId",
+                  element: (
+                    <DashboardRoute
+                      redirectPaths={redirectPaths}
+                      navigationMenus={navigationMenus}
+                    />
+                  ),
+                  children: [
+                    { path: "dashboard", element: <DashboardOverview /> },
+                    { path: "workflow/:id", element: <WorkflowDetailsPage /> },
+                    { path: "workflow", element: <WorkflowsPage /> },
                 ],
               },
             ],

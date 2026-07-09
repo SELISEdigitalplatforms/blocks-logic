@@ -1,8 +1,5 @@
-using System.Text.Json;
 using Blocks.Genesis;
 using DomainService.Workflow.Models;
-using Microsoft.Extensions.Configuration;
-using MongoDB.Bson;
 using MongoDB.Driver;
 using System.Diagnostics.CodeAnalysis;
 
@@ -15,9 +12,7 @@ namespace DomainService.Workflow.Repositories
         private readonly IDbContextProvider _dbContextProvider;
         private const string _collectionName = "Workflows";
 
-        public WorkflowRepository(
-            IDbContextProvider dbContextProvider,
-            IConfiguration configuration)
+        public WorkflowRepository(IDbContextProvider dbContextProvider)
         {
             _dbContextProvider = dbContextProvider;
 
@@ -39,7 +34,7 @@ namespace DomainService.Workflow.Repositories
             await collection.InsertOneAsync(workflow, null);
         }
 
-        public Task<long> GetWorkflowsCountAsync(string? search, bool? isPublished, string tenantId)
+        public Task<long> GetWorkflowsCountAsync(string tenantId, string? search, bool? isPublished)
         {
             var collection = GetCollection(tenantId);
             var filter = Builders<WorkflowModel>.Filter.Empty;
@@ -64,7 +59,7 @@ namespace DomainService.Workflow.Repositories
             return collection.CountDocumentsAsync(filter);
         }
 
-        public Task<List<WorkflowModel>> GetAllWorkflowsAsync(int pageSize, int pageNumber, string? search, bool? isPublished, string tenantId)
+        public Task<List<WorkflowModel>> GetAllWorkflowsAsync(string tenantId, int pageSize, int pageNumber, string? search, bool? isPublished)
         {
             var collection = GetCollection(tenantId);
             var filter = Builders<WorkflowModel>.Filter.Empty;
@@ -92,14 +87,14 @@ namespace DomainService.Workflow.Repositories
                 .Limit(pageSize).ToListAsync();
         }
 
-        public async Task<WorkflowModel> GetWorkflowAsync(string workflowId, string tenantId)
+        public async Task<WorkflowModel> GetWorkflowAsync(string tenantId, string workflowId)
         {
             var collection = GetCollection(tenantId);
             var filter = Builders<WorkflowModel>.Filter.Eq(w => w.ItemId, workflowId);
             return await collection.Find(filter).FirstOrDefaultAsync();
         }
 
-        public async Task<List<WorkflowModel>> GetWorkflowsByMailServerConfigurationIdAsync(string mailServerConfigurationId, string tenantId)
+        public async Task<List<WorkflowModel>> GetWorkflowsByMailServerConfigurationIdAsync(string tenantId, string mailServerConfigurationId)
         {
             var collection = GetCollection(tenantId);
 
@@ -107,7 +102,7 @@ namespace DomainService.Workflow.Repositories
             return await collection.Find(filter).ToListAsync();
         }
 
-        public async Task<List<WorkflowModel>> GetWorkflowsByDataCollectionAsync(string collectionName, string operation, string tenantId)
+        public async Task<List<WorkflowModel>> GetWorkflowsByDataCollectionAsync(string tenantId, string collectionName, string operation)
         {
             var collection = GetCollection(tenantId);
 
@@ -125,7 +120,7 @@ namespace DomainService.Workflow.Repositories
             return await collection.Find(filter).ToListAsync();
         }
 
-        public async Task<List<WorkflowModel>> GetPublishWorkflowsByDataCollectionAsync(string collectionName, string operation, string tenantId)
+        public async Task<List<WorkflowModel>> GetPublishWorkflowsByDataCollectionAsync(string tenantId, string collectionName, string operation)
         {
             var collection = GetCollection(tenantId);
 
@@ -157,7 +152,7 @@ namespace DomainService.Workflow.Repositories
             }
         }
 
-        public async Task DeleteWorkflowAsync(string workflowId, string tenantId)
+        public async Task DeleteWorkflowAsync(string tenantId, string workflowId)
         {
             var collection = GetCollection(tenantId);
             var filter = Builders<WorkflowModel>.Filter.Eq(w => w.ItemId, workflowId);

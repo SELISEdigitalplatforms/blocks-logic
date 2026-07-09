@@ -1,6 +1,4 @@
-import { getRuntimeEnv } from "@/lib/runtime-env";
-
-// ─── Subpaths ─────────────────────────────────────────────────────────────────
+import { getRuntimeEnv } from "@seliseblocks/blocks-kit";
 
 const BLOCKS_IAM_BASE_URL = getRuntimeEnv("BLOCKS_IAM_BASE_URL");
 const AUTH_OIDC_SUBPATH = "/oidc";

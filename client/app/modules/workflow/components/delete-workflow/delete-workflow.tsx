@@ -2,7 +2,6 @@ import ConfirmationModal from "@/components/confirmation-modal/confirmation-moda
 import { Dialog } from "@/components/ui-kits/dialog/dialog";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { isErrorWithErrors } from "@/lib/error";
-import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { useDeleteWorkflow } from "@blocks-workflow/hooks/use-workflow-api";
 
 type DeleteWorkflowProps = {
@@ -16,15 +15,12 @@ export const DeleteWorkflow = ({
   open,
   onOpenChange,
 }: DeleteWorkflowProps) => {
-  const tenantId = useProjectStore().selectedProject?.tenantId || "";
   const { mutateAsync } = useDeleteWorkflow();
 
   const confirmHandler = async () => {
     try {
-      if (!tenantId) return showErrorToast({ errors: "Something went wrong" });
       const res = await mutateAsync({
         id: workflowId,
-        projectKey: tenantId,
       });
       if (!res.isSuccess)
         return showErrorToast({ errors: res.errors || "Something went wrong" });
