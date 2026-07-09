@@ -96,7 +96,6 @@ namespace DomainService.Workflow.Services
                 LastPublishedVersionId = null,
                 Settings = dto.Settings,
                 Description = dto.Description,
-                NodeOutputSchemas = dto.NodeOutputSchemas,
                 CreatedDate = DateTime.UtcNow,
                 LastUpdatedDate = DateTime.UtcNow,
                 CreatedBy = BlocksContext.GetContext().UserId ?? "system",
@@ -287,7 +286,6 @@ namespace DomainService.Workflow.Services
                 Settings = workflow.Settings ?? new Dictionary<string, string>(),
                 IsPublished = workflow.IsPublished,
                 Description = workflow.Description,
-                NodeOutputSchemas = workflow.NodeOutputSchemas,
                 LastUpdatedDate = workflow.LastUpdatedDate,
                 CreatedDate = workflow.CreatedDate,
                 CreatedBy = workflow.CreatedBy,
@@ -333,7 +331,6 @@ namespace DomainService.Workflow.Services
             // Replace simple properties
             workflow.Name = dto.Name ?? workflow.Name;
             workflow.Edges = dto.Edges ?? workflow.Edges;
-            workflow.NodeOutputSchemas = dto.NodeOutputSchemas ?? workflow.NodeOutputSchemas;
             workflow.IsDirty = true;
             if (dto.Nodes != null)
             {
@@ -812,7 +809,6 @@ namespace DomainService.Workflow.Services
                 Settings = snapShot.Settings ?? new Dictionary<string, string>(),
                 IsPublished = workflow.IsPublished,
                 Description = snapShot.Description,
-                NodeOutputSchemas = snapShot.NodeOutputSchemas,
                 LastUpdatedDate = snapShot.LastUpdatedDate,
                 CreatedDate = snapShot.CreatedDate,
                 CreatedBy = snapShot.CreatedBy,
