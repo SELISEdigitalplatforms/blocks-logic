@@ -27,7 +27,6 @@ namespace DomainService.Workflow.Dtos
 
         public bool IsDirty { get; set; }
 
-        public Dictionary<string, List<NodeOutputSchemaField>>? NodeOutputSchemas { get; set; }
     }
 
     public class WorkflowVersionDto

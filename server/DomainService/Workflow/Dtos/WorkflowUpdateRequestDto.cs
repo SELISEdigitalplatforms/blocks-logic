@@ -13,7 +13,6 @@ public class WorkflowUpdateRequestDto
     public List<EdgeModel>? Edges { get; set; }
     public Dictionary<string, string>? Settings { get; set; }
     public bool? IsPublished { get; set; }
-    public Dictionary<string, List<NodeOutputSchemaField>>? NodeOutputSchemas { get; set; }
 }
 
 
