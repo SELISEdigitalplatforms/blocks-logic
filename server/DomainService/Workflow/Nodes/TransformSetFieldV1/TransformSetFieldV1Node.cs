@@ -3,6 +3,7 @@ using DomainService.Workflow.Utils;
 using MongoDB.Bson;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using DomainService.Workflow.Entities;
 
 namespace DomainService.Workflow.Nodes.TransformSetFieldV1
 {
@@ -60,7 +61,7 @@ namespace DomainService.Workflow.Nodes.TransformSetFieldV1
 
         private JsonObject ParsedMappedValue(
             List<ManualMappingField> fields,
-            Models.WorkflowItemExecutionModel inputItem,
+            WorkflowItemExecutionEntity inputItem,
             NodeExecutionContext context)
         {
             var result = new JsonObject();
@@ -83,7 +84,7 @@ namespace DomainService.Workflow.Nodes.TransformSetFieldV1
 
         private JsonObject ParseJsonValue(
         string jsonCode,
-        Models.WorkflowItemExecutionModel inputItem,
+        WorkflowItemExecutionEntity inputItem,
         NodeExecutionContext context)
         {
             var resolved = System.Text.RegularExpressions.Regex.Replace(jsonCode, @"\{\{(.+?)\}\}", match =>
