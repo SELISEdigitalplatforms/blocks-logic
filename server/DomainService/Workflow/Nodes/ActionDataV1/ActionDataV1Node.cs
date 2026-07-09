@@ -7,7 +7,7 @@ using MongoDB.Bson;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text.Json;
-using DomainService.Workflow.Models;
+using DomainService.Workflow.Entities;
 
 namespace DomainService.Workflow.Nodes.ActionDataV1
 {
@@ -536,7 +536,7 @@ namespace DomainService.Workflow.Nodes.ActionDataV1
             return string.Join(" ", fields);
         }
 
-        private string BuildWhereClause(ActionDataV1Parameters parameters, WorkflowItemExecutionModel inputItem, NodeExecutionContext context)
+        private string BuildWhereClause(ActionDataV1Parameters parameters, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
         {
             var whereParts = new List<string>();
             if (parameters.Filter != null && parameters.Filter.Count > 0)
@@ -552,7 +552,7 @@ namespace DomainService.Workflow.Nodes.ActionDataV1
             return string.Join(", ", whereParts);
         }
 
-        private BsonDocument BuildDataDocument(ActionDataV1Parameters parameters, WorkflowItemExecutionModel inputItem, NodeExecutionContext context)
+        private BsonDocument BuildDataDocument(ActionDataV1Parameters parameters, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
         {
             var dataDoc = new BsonDocument();
             if (parameters.FieldMapping != null)

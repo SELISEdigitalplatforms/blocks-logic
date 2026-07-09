@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using DomainService.Workflow.Models;
 
 namespace DomainService.Workflow.Dtos;
 

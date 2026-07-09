@@ -1,6 +1,5 @@
 using Blocks.Genesis;
 using DomainService.Workflow.Dtos;
-using DomainService.Workflow.Models;
 
 namespace DomainService.Workflow.Services
 {
