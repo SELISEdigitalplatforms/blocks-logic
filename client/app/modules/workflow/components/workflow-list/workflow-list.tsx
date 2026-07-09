@@ -41,6 +41,7 @@ import { PublishConfirmationModal, UnpublishConfirmationModal } from "../workflo
 import { PublishWorkflowModal } from "../publish-workflow-modal/publish-workflow-modal";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
+import { useScopedPath } from "@seliseblocks/blocks-kit";
 
 
 const WorkflowListSkeleton = ({ length }: { length: number }) => {
@@ -71,6 +72,7 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
     type: null,
     data: {},
   });
+  const scoped = useScopedPath();
 
   const [publishVersionName, setPublishVersionName] = useState("");
   const [publishDescription, setPublishDescription] = useState("");
@@ -214,7 +216,7 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
               <DropdownMenuContent align="end">
                 <DropdownMenuItem className="cursor-pointer">
                   <Link
-                    to={`/workflow/${info.row.original.itemId}`}
+                    to={scoped(`workflow/${info.row.original.itemId}`)}
                     className="flex w-full items-center"
                   >
                     <ArrowRightFromLine className="mr-2 h-4 w-4" />
@@ -296,7 +298,7 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
 
   const handleRowClick = useCallback(
     (itemId: number | string) => {
-      navigate(`/app/workflow/${itemId}`);
+      navigate(scoped(`workflow/${itemId}`));
     },
     [navigate],
   );
