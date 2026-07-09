@@ -18,7 +18,7 @@ import {
   DashboardLayout,
   EnvironmentsPage,
   ProjectOverviewRoute,
-  DashboardRoute
+  DashboardRoute,
 } from "@seliseblocks/blocks-kit";
 import { navigationMenus } from "./constants/navigation-menus";
 
@@ -54,75 +54,52 @@ export const router = createBrowserRouter([
                 <Outlet />
               </PublicGuard>
             ),
-            children: [
-              { path: "/login", element: <LoginPage/> },
-            ],
+            children: [{ path: "/login", element: <LoginPage /> }],
           },
 
           // protected
           {
+            path: "/app",
             element: (
               <ProtectedGuard>
                 <Outlet />
               </ProtectedGuard>
             ),
-            path: "/app",
+
             children: [
+              { index: true, element: <Navigate to="/app/console" replace /> },
               {
                 element: (
-                  <Outlet />
+                  <ConsoleLayout>
+                    <Outlet />
+                  </ConsoleLayout>
                 ),
                 children: [
-                  {
-                    element: (
-                      <ConsoleLayout>
-                        <Outlet />
-                      </ConsoleLayout>
-                    ),
-                    children: [
-                      { path: "profile", element: <ProfilePage /> },
-                      { path: "console", element: <ConsolePage /> },
-                    ],
-                  },
-                     // Project-overview scope
-                  {
-                    path: "project/:tenantGroupId",
-                    element: (
-                      <ProjectOverviewRoute
-                        redirectPaths={redirectPaths}
-                        navigationMenus={navigationMenus}
-                      />
-                    ),
-                    children: [
-                      { index: true, element: <Navigate to="environments" replace /> },
-                      { path: "environments", element: <EnvironmentsPage /> },
-                    ],
-                  },
+                  { path: "console", element: <ConsolePage /> },
+                  { path: "profile", element: <ProfilePage /> },
                 ],
               },
               {
+                path: "project/:tenantGroupId",
+                element: <ProjectOverviewRoute redirectPaths={redirectPaths} navigationMenus={navigationMenus} />,
+                children: [{ path: "environments", element: <EnvironmentsPage /> }],
+              },
+              {
                 // impersonate
-                  path: ":itemId",
-                  element: (
-                    <DashboardRoute
-                      redirectPaths={redirectPaths}
-                      navigationMenus={navigationMenus}
-                    />
-                  ),
-                  children: [
-                    { path: "dashboard", element: <DashboardOverview /> },
-                    { path: "workflow/:id", element: <WorkflowDetailsPage /> },
-                    { path: "workflow", element: <WorkflowsPage /> },
+                path: ":itemId",
+                element: <DashboardRoute redirectPaths={redirectPaths} navigationMenus={navigationMenus} />,
+                children: [
+                  { path: "dashboard", element: <DashboardOverview /> },
+                  { path: "workflow/:id", element: <WorkflowDetailsPage /> },
+                  { path: "workflow", element: <WorkflowsPage /> },
                 ],
               },
             ],
           },
         ],
       },
-      {
-        path: "*",
-        element: <Navigate to="/app/console" replace />,
-      },
+      { path: "/", element: <Navigate to="/app/console" replace /> },
+      { path: "*", element: <Navigate to="/login" replace /> },
     ],
   },
 ]);
