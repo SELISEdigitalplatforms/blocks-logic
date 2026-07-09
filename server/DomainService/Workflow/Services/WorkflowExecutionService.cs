@@ -629,7 +629,7 @@ namespace DomainService.Workflow.Services
                 var publishedWorkflows = await _workflowRepository.GetPublishWorkflowsByDataCollectionAsync(dataEvent.CollectionName, operationStr, projectKey);
                 var publishedWorkflowsId = publishedWorkflows.Select(w => w.ItemId).ToList();
                 var versions = await _workflowVersionRepository.GetWorkflowVersionsAsync(projectKey, publishedWorkflowsId.ToArray());
-                workflows = versions.Select(v => v.Snapshot).Where(s => s != null).ToList()!;
+                workflows = versions.Where(v => publishedWorkflowsId.Contains(v.ItemId)).Select(item => item.Snapshot).ToList();
             }
 
 
