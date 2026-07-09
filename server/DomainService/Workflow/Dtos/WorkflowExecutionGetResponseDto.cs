@@ -1,9 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using DomainService.Workflow.Enums;
-using DomainService.Workflow.Models;
-using MongoDB.Bson;
 using Blocks.Genesis;
+using DomainService.Workflow.Entities;
 
 namespace DomainService.Workflow.Dtos
 {
@@ -32,7 +31,7 @@ namespace DomainService.Workflow.Dtos
         // public TriggerMetadata? TriggerMetadata { get; set; } = new();
     }
 
-    public class NodeExecutionResponseDto : NodeExecutionModel
+    public class NodeExecutionResponseDto : NodeExecutionEntity
     {
         public JsonDocument Parameters { get; set; } = JsonDocument.Parse("{}");
         public JsonArray Input { get; set; } = new JsonArray();

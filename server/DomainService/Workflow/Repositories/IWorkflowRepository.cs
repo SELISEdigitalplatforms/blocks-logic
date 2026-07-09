@@ -1,24 +1,24 @@
-using DomainService.Workflow.Models;
+using DomainService.Workflow.Entities;
 
 namespace DomainService.Workflow.Repositories
 {
     public interface IWorkflowRepository
     {
-        Task CreateWorkflowAsync(WorkflowModel workflow);
+        Task CreateWorkflowAsync(WorkflowEntity workflow);
 
-        Task<List<WorkflowModel>> GetAllWorkflowsAsync(string tenantId, int pageSize, int pageNumber, string? search, bool? isPublished);
+        Task<List<WorkflowEntity>> GetAllWorkflowsAsync(string tenantId, int pageSize, int pageNumber, string? search, bool? isPublished);
 
-        Task<List<WorkflowModel>> GetWorkflowsByMailServerConfigurationIdAsync(string tenantId, string mailServerConfigurationId);
+        Task<List<WorkflowEntity>> GetWorkflowsByMailServerConfigurationIdAsync(string tenantId, string mailServerConfigurationId);
 
-        Task<List<WorkflowModel>> GetWorkflowsByDataCollectionAsync(string tenantId, string collectionName, string operation);
+        Task<List<WorkflowEntity>> GetWorkflowsByDataCollectionAsync(string tenantId, string collectionName, string operation);
 
-        Task<List<WorkflowModel>> GetPublishWorkflowsByDataCollectionAsync(string tenantId, string collectionName, string operation);
+        Task<List<WorkflowEntity>> GetPublishWorkflowsByDataCollectionAsync(string tenantId, string collectionName, string operation);
 
         Task<long> GetWorkflowsCountAsync(string tenantId, string? search, bool? isPublished);
 
-        Task<WorkflowModel> GetWorkflowAsync(string tenantId, string workflowId);
+        Task<WorkflowEntity> GetWorkflowAsync(string tenantId, string workflowId);
 
-        Task UpdateWorkflowAsync(WorkflowModel workflow);
+        Task UpdateWorkflowAsync(WorkflowEntity workflow);
 
         Task DeleteWorkflowAsync(string tenantId, string workflowId);
     }
