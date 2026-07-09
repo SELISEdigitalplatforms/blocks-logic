@@ -6,7 +6,6 @@ import { OutputSchemaField } from "./output-schema.types";
 export interface IGetWorkflowsPayload {
   pageSize?: number;
   pageNumber?: number;
-  projectKey: string;
   search?: string;
   isPublished?: boolean;
 }
@@ -19,7 +18,6 @@ export interface IGetWorkflowsResponse {
 
 export interface IGetWorkflowByIdPayload {
   id: string;
-  projectKey: string;
 }
 
 export interface IGetWorkflowByIdResponse {
@@ -30,7 +28,6 @@ export interface IGetWorkflowByIdResponse {
 
 export interface ICreateWorkflowPayload {
   name: string;
-  projectKey: string;
   description?: string;
   nodes?: WorkflowNode[];
   edges?: Edge[];
@@ -48,7 +45,6 @@ export interface ICreateWorkflowResponse {
 export interface IDuplicateWorkflowPayload {
   name: string;
   workflowId: string;
-  projectKey: string;
 }
 
 export interface IDuplicateWorkflowResponse {
@@ -59,7 +55,6 @@ export interface IDuplicateWorkflowResponse {
 
 export interface IUpdateWorkflowPayload extends Omit<ICreateWorkflowPayload, "name"> {
   itemId: string;
-  projectKey: string;
   name?: string;
 }
 
@@ -71,7 +66,6 @@ export interface IUpdateWorkflowResponse {
 
 export interface IDeleteWorkflowPayload {
   id: string;
-  projectKey: string;
 }
 
 export interface IDeleteWorkflowResponse {
@@ -81,7 +75,6 @@ export interface IDeleteWorkflowResponse {
 }
 
 export interface IGetWorkflowExecutionsPayload {
-  projectKey: string;
   workflowId: string;
 }
 
@@ -105,7 +98,6 @@ export interface IGetWorkflowExecutionsResponse {
 }
 
 export interface IGetWorkflowExecutionByIdPayload {
-  projectKey: string;
   executionId: string;
 }
 
@@ -124,7 +116,6 @@ export interface IGetWorkflowExecutionById {
 }
 
 export interface ICreateWorkflowVersionPayload {
-  projectKey: string;
   workflowId: string;
   name: string;
   Description?: string;
@@ -135,7 +126,6 @@ export interface ICreateWorkflowVersionResponse {
 }
 
 export interface IGetWorkflowVersionsPayload {
-  projectKey: string;
   workflowId: string;
 }
 
@@ -147,7 +137,6 @@ export interface IGetWorkflowVersionsResponse {
 
 export interface IPublishWorkflowPayload {
   workflowId: string;
-  projectKey: string;
   versionId?: string;
 }
 
@@ -159,14 +148,12 @@ export interface IPublishWorkflowResponse {
 
 export interface IPublishNewWorkflowPayload {
   workflowId: string;
-  projectKey: string;
   name?: string;
   description?: string;
 }
 
 export interface IUnpublishWorkflowPayload {
   workflowId: string;
-  projectKey: string;
 }
 
 export interface IUnpublishWorkflowResponse {
@@ -177,7 +164,6 @@ export interface IUnpublishWorkflowResponse {
 
 export interface IRestoreWorkflowPayload {
   workflowId: string;
-  projectKey: string;
   versionId: string;
 }
 
@@ -187,7 +173,6 @@ export interface IRestoreWorkflowResponse {
 
 export interface IGetWorkflowByVersionPayload {
   workflowId: string;
-  projectKey: string;
   versionId: string;
 }
 
@@ -196,7 +181,6 @@ export interface IGetWorkflowByVersionResponse {
 }
 
 export interface IUpdateWorkflowVersionPayload {
-  projectKey: string;
   versionId: string;
   name?: string;
   description?: string;
@@ -209,7 +193,6 @@ export interface IUpdateWorkflowVersionResponse {
 }
 
 export interface IGetLastSuccessfulExecutionPayload {
-  projectKey: string;
   workflowId: string;
 }
 
@@ -240,7 +223,6 @@ export interface IGetLastSuccessfulExecutionPayload {
 // }
 
 export interface IStepExecutePayload {
-  ProjectKey: string;
   WorkflowId: string;
   NodeId: string;
   SourceExecutionId?: string;
@@ -255,7 +237,6 @@ export interface IStepExecuteResponse {
 }
 
 export interface ITriggerListenerPayload {
-  ProjectKey: string;
   WorkflowId: string;
   TriggerId: string;
   EnableListener: boolean;
