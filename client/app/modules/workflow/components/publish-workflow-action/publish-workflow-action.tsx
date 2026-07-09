@@ -8,10 +8,10 @@ import {
 import { Button } from "@/components/ui-kits/button/button";
 import { ChevronDown, Loader2 } from "lucide-react";
 import { useParams } from "react-router-dom";
-import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { usePublishNewWorkflow, usePublishWorkflow, useUnpublishWorkflow } from "../../hooks/use-workflow-api";
 import { PublishConfirmationModal, UnpublishConfirmationModal } from "../workflow-confirmation-modals";
 import { PublishWorkflowModal } from "../publish-workflow-modal/publish-workflow-modal";
+import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 
 interface PublishWorkflowActionProps {
   isDirty?: boolean;
@@ -27,7 +27,6 @@ export const PublishWorkflowAction = ({
   onActionComplete,
 }: PublishWorkflowActionProps) => {
   const { id: workflowId } = useParams<{ id: string }>();
-  const projectKey = useProjectStore().selectedProject?.tenantId || "";
   
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
   const [isPublishConfirmOpen, setIsPublishConfirmOpen] = useState(false);
@@ -54,46 +53,44 @@ export const PublishWorkflowAction = ({
     if (!workflowId) return;
     try {
       await publishNewWorkflow({ 
-        projectKey, 
         workflowId, 
         name: publishVersionName, 
         description: publishDescription 
       });
       setIsPublishDialogOpen(false);
       onActionComplete?.();
-    } catch (error) {
-      console.error(error);
+      showSuccessToast({ description: "Workflow successfully published." });
+    } catch (error: any) {
+      showErrorToast({ errors: error.message || "Failed to publish workflow." });
     }
   };
 
   const handlePublishUnversioned = async () => {
     if (!workflowId) return;
     try {
-      await publishWorkflow({ 
-        projectKey, 
-        workflowId 
-      });
+      await publishWorkflow({ workflowId });
       setIsPublishConfirmOpen(false);
       onActionComplete?.();
-    } catch (error) {
-      console.error(error);
+      showSuccessToast({ description: "Workflow successfully published." });
+    } catch (error: any) {
+      showErrorToast({ errors: error.message || "Failed to publish workflow." });
     }
   };
 
   const handleUnpublish = async () => {
     if (!workflowId) return;
     try {
-      await unpublishWorkflow({ projectKey, workflowId });
+      await unpublishWorkflow({ workflowId });
       setIsUnpublishDialogOpen(false);
       onActionComplete?.();
-    } catch (error) {
-      console.error(error);
+      showSuccessToast({ description: "Workflow successfully unpublished." });
+    } catch (error: any) {
+      showErrorToast({ errors: error.message || "Failed to unpublish workflow." });
     }
   };
 
   const isPending = isPublishingNew || isPublishingUnversioned || isUnpublishing;
 
-  // console.log(hasUnsavedChanges, isDirty, isPublished);
 
   return (
     <>
@@ -106,7 +103,7 @@ export const PublishWorkflowAction = ({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={handleOpenPublishDialog} disabled={hasUnsavedChanges && (isPublished || !isDirty)}>
+          <DropdownMenuItem onClick={handleOpenPublishDialog} disabled={hasUnsavedChanges || (isPublished && !isDirty)}>
             Publish
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setIsUnpublishDialogOpen(true)} disabled={!isPublished}>
