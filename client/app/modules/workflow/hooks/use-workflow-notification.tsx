@@ -2,7 +2,7 @@ import { useCallback, useEffect } from "react";
 import { useNotificationListener } from "@/hooks/use-notification-listener";
 import { useWorkflow } from "@blocks-workflow/hooks";
 import { workflowService } from "../services/workflow.service";
-import { EXECUTION_STATUS_COMPLETED } from "../constants";
+import { EXECUTION_STATUS_COMPLETED, EXECUTION_STATUS_FAILED } from "../constants";
 import { showErrorToast } from "@/hooks/use-toast";
 
 export const useWorkflowNotification = () => {
@@ -26,7 +26,7 @@ export const useWorkflowNotification = () => {
           const code = payload?.Information?.code;
           const status = payload?.Information?.status;
 
-          if (code === EXECUTION_STATUS_COMPLETED && status === "Completed") {
+          if (code === EXECUTION_STATUS_COMPLETED || code === EXECUTION_STATUS_FAILED) {
             const executionId = payload?.Information?.executionId || payload?.Information?.data;
             setNextExecutionId(payload?.Information?.executionId)
             if (isListening && listeningNodeId && workflowId ) {
