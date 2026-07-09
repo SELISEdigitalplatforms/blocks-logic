@@ -21,5 +21,4 @@ public class WorkflowCreateRequestDto
 
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
-    public Dictionary<string, List<NodeOutputSchemaField>> NodeOutputSchemas { get; set; } = new();
 }
