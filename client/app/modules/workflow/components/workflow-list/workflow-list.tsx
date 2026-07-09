@@ -32,7 +32,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui-kits/dropdown-menu/dropdown-menu";
 import { Button } from "@/components/ui-kits/button/button";
-import { Copy, EllipsisVertical, Pen, Ban, Trash, Check } from "lucide-react";
+import { Copy, EllipsisVertical, ArrowRightFromLine, Ban, Trash, Check } from "lucide-react";
 import { DeleteWorkflow } from "../delete-workflow";
 import { DuplicateWorkflow } from "../duplicate-workflow";
 import { Link, useNavigate } from "react-router-dom";
@@ -217,7 +217,7 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
                     to={`/workflow/${info.row.original.itemId}`}
                     className="flex w-full items-center"
                   >
-                    <Pen className="mr-2 h-4 w-4" />
+                    <ArrowRightFromLine className="mr-2 h-4 w-4" />
                     <span>Open</span>
                   </Link>
                 </DropdownMenuItem>
