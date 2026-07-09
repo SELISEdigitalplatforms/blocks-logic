@@ -90,6 +90,7 @@ export const router = createBrowserRouter([
               { path: "dashboard", element: <DashboardOverview /> },
               { path: "workflow/:id", element: <WorkflowDetailsPage /> },
               { path: "workflow", element: <WorkflowsPage /> },
+              { path: "profile", element: <ProfilePage /> },
             ],
           },
         ],
