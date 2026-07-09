@@ -2,7 +2,7 @@ using System.Text.Json;
 using System.Diagnostics.CodeAnalysis;
 using Blocks.Genesis;
 using DomainService.Workflow.Dtos;
-using DomainService.Workflow.Models;
+using DomainService.Workflow.Entities;
 using DomainService.Workflow.Repositories;
 using DomainService.Workflow.Utils;
 using Microsoft.Extensions.Logging;
@@ -58,7 +58,7 @@ namespace DomainService.Workflow.Services
         /// <summary>
         /// Safely gets a workflow and handles errors using common error responses
         /// </summary>
-        private async Task<(WorkflowModel? workflow, BaseMutationResponse? errorResponse)> TryGetWorkflowAsync(string tenantId, string workflowId, string context)
+        private async Task<(WorkflowEntity? workflow, BaseMutationResponse? errorResponse)> TryGetWorkflowAsync(string tenantId, string workflowId, string context)
         {
             try
             {
@@ -82,12 +82,12 @@ namespace DomainService.Workflow.Services
 
         {
             _logger.LogInformation($"Creating workflow for ProjectKey: {tenantId}, Name: {dto.Name},");
-            var model = new WorkflowModel
+            var model = new WorkflowEntity
             {
                 ItemId = Guid.NewGuid().ToString().Replace("-", ""),
                 Name = dto.Name,
                 TenantId = tenantId,
-                Nodes = JsonConvert.DeserializeObject<List<NodeModel>>(dto.Nodes.GetRawText()) ?? new(),
+                Nodes = JsonConvert.DeserializeObject<List<NodeEntity>>(dto.Nodes.GetRawText()) ?? new(),
                 Edges = dto.Edges,
                 IsDirty = true,
                 IsPublished = false,
@@ -211,7 +211,7 @@ namespace DomainService.Workflow.Services
         public async Task<WorkflowGetResponseDto> GetAsync(string tenantId, WorkflowGetRequestDto dto)
         {
             _logger.LogInformation($"Fetching workflow for ProjectKey: {tenantId}, WorkflowId: {dto.WorkflowId}");
-            WorkflowModel workflow;
+            WorkflowEntity workflow;
             try
             {
                 workflow = await _workflowRepository.GetWorkflowAsync(tenantId, dto.WorkflowId);
@@ -249,7 +249,7 @@ namespace DomainService.Workflow.Services
             }
             _logger.LogInformation("Successfully fetched workflow with Id: {WorkflowId}", dto.WorkflowId);
 
-            WorkflowVersionModel publishedVersion = null;
+            WorkflowVersionEntity publishedVersion = null;
             if (workflow.IsPublished && !string.IsNullOrEmpty(workflow.PublishedVersionId))
             {
                 _logger.LogInformation("Fetching published version for workflow with Id: {WorkflowId}, PublishedVersionId: {PublishedVersionId}", dto.WorkflowId, workflow.PublishedVersionId);
@@ -334,7 +334,7 @@ namespace DomainService.Workflow.Services
             workflow.IsDirty = true;
             if (dto.Nodes != null)
             {
-                workflow.Nodes = dto.Nodes.Select(n => new NodeModel
+                workflow.Nodes = dto.Nodes.Select(n => new NodeEntity
                 {
                     Name = n.Name,
                     Id = n.Id,
@@ -423,7 +423,7 @@ namespace DomainService.Workflow.Services
                     Errors = new Dictionary<string, string> { { "Message", "Workflow not found" } }
                 };
             }
-            var snapshot = new WorkflowVersionModel
+            var snapshot = new WorkflowVersionEntity
             {
                 ItemId = Guid.NewGuid().ToString().Replace("-", ""),
                 WorkflowId = workflow.ItemId,
@@ -568,7 +568,7 @@ namespace DomainService.Workflow.Services
             }
 
 
-            var version = new WorkflowVersionModel
+            var version = new WorkflowVersionEntity
             {
                 ItemId = Guid.NewGuid().ToString().Replace("-", ""),
                 WorkflowId = workflow.ItemId,
@@ -881,7 +881,7 @@ namespace DomainService.Workflow.Services
             }
             workflow.TestMeta = new TestWorkflowMeta
             {
-                ListenerTriggerNodes = new List<NodeModel> { triggerNode },
+                ListenerTriggerNodes = new List<NodeEntity> { triggerNode },
                 UserIds = new List<string> { BlocksContext.GetContext().UserId ?? "system" },
                 IsListening = true,
                 CompletionNodeId = dto.CompletionNodeId ?? null,

@@ -1,5 +1,5 @@
 using MongoDB.Bson;
-using DomainService.Workflow.Models;
+using DomainService.Workflow.Entities;
 
 namespace DomainService.Workflow.Nodes
 {
@@ -13,10 +13,10 @@ namespace DomainService.Workflow.Nodes
         public required string WorkflowExecutionId { get; set; }
         public required string TenantId { get; set; }
         public required BsonDocument Parameters { get; set; }
-        public required IReadOnlyList<WorkflowItemExecutionModel> InputItems { get; set; }
+        public required IReadOnlyList<WorkflowItemExecutionEntity> InputItems { get; set; }
         public required int IterationCount { get; init; }
         public required BsonDocument WorkflowContext { get; init; }
-        public IReadOnlyDictionary<string, List<WorkflowItemExecutionModel>> AncestorNodeOutputs { get; set; } = new Dictionary<string, List<WorkflowItemExecutionModel>>();
+        public IReadOnlyDictionary<string, List<WorkflowItemExecutionEntity>> AncestorNodeOutputs { get; set; } = new Dictionary<string, List<WorkflowItemExecutionEntity>>();
         public bool IsRetry { get; set; }
         public int AttemptNumber { get; set; } = 1;
         public CancellationToken CancellationToken { get; set; } = default;

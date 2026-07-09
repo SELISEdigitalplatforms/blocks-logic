@@ -1,4 +1,4 @@
-using DomainService.Workflow.Models;
+using DomainService.Workflow.Entities;
 using MongoDB.Bson;
 using MongoDB.Bson.IO;
 using Newtonsoft.Json.Linq;
@@ -27,7 +27,7 @@ namespace DomainService.Workflow.Nodes
         /// - {{$context.key}} - workflow context
         /// - {{$node["nodeName"].json.field}} - ancestor node output (automatically resolves via lineage)
         /// </summary>
-        protected T? parseExpression<T>(string text, WorkflowItemExecutionModel inputItem, NodeExecutionContext context)
+        protected T? parseExpression<T>(string text, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
         {
             if (string.IsNullOrEmpty(text)) return default;
 
@@ -51,7 +51,7 @@ namespace DomainService.Workflow.Nodes
             catch { return default; }
         }
 
-        private static string ResolveExpression(string expr, WorkflowItemExecutionModel inputItem, NodeExecutionContext context)
+        private static string ResolveExpression(string expr, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
         {
 
             if (expr.StartsWith("$node"))
@@ -66,7 +66,7 @@ namespace DomainService.Workflow.Nodes
             return "";
         }
 
-        private static string ResolveNodeReference(string expr, WorkflowItemExecutionModel inputItem, NodeExecutionContext context)
+        private static string ResolveNodeReference(string expr, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
         {
             var nodeMatch = Regex.Match(expr, @"^\$node\[""(?<node>[^""]+)""\]\.json\.output\.(?<path>.+)$");
             var nodeName = nodeMatch.Groups["node"].Value;
@@ -82,7 +82,7 @@ namespace DomainService.Workflow.Nodes
             return SelectPath(ancestorItem.Data, path);
         }
 
-        private static string ResolveJsonExpression(string expr, WorkflowItemExecutionModel inputItem, NodeExecutionContext context)
+        private static string ResolveJsonExpression(string expr, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
         {
             var path = expr.Length > 13 ? expr.Substring(13) : "";
             if (string.IsNullOrEmpty(path))

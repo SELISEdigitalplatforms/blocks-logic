@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
-using DomainService.Workflow.Models;
+using DomainService.Workflow.Entities;
 
 namespace DomainService.Workflow.Dtos;
 
@@ -10,7 +10,7 @@ public class WorkflowUpdateRequestDto
     public required string ItemId { get; set; }
     public string? Name { get; set; }
     public List<NodeDto>? Nodes { get; set; }
-    public List<EdgeModel>? Edges { get; set; }
+    public List<EdgeEnity>? Edges { get; set; }
     public Dictionary<string, string>? Settings { get; set; }
     public bool? IsPublished { get; set; }
 }

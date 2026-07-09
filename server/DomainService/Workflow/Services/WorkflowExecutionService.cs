@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Blocks.Genesis;
-using DomainService.Workflow.Models;
+using DomainService.Workflow.Entities;
 using DomainService.Workflow.Repositories;
 using DomainService.Workflow.Dtos;
 using DomainService.Workflow.Events;
@@ -50,7 +50,7 @@ namespace DomainService.Workflow.Services
             _workflowNotificationService = workflowNotificationService;
         }
 
-        private async Task NotifyWorkflowStartedAsync(WorkflowExecutionModel execution)
+        private async Task NotifyWorkflowStartedAsync(WorkflowExecutionEntity execution)
         {
             await _workflowNotificationService.NotifyExecutionEventAsync(
                 execution,
@@ -63,9 +63,9 @@ namespace DomainService.Workflow.Services
         }
 
 
-        public async Task<WorkflowExecutionModel> CreateExecutionAsync(WorkflowModel workflowSnapshot, TriggerMetadata triggerMetadata, WorkflowExecutionMode executionMode = WorkflowExecutionMode.Test)
+        public async Task<WorkflowExecutionEntity> CreateExecutionAsync(WorkflowEntity workflowSnapshot, TriggerMetadata triggerMetadata, WorkflowExecutionMode executionMode = WorkflowExecutionMode.Test)
         {
-            var execution = new WorkflowExecutionModel
+            var execution = new WorkflowExecutionEntity
             {
                 Id = Guid.NewGuid().ToString().Replace("-", ""),
                 WorkflowId = workflowSnapshot.ItemId,
@@ -75,7 +75,7 @@ namespace DomainService.Workflow.Services
                 Status = WorkflowExecutionStatus.Init,
                 ExecutionMode = executionMode,
                 TriggerMetadata = triggerMetadata,
-                NodeExecutions = new List<NodeExecutionModel>(),
+                NodeExecutions = new List<NodeExecutionEntity>(),
                 StartedAt = DateTime.UtcNow,
             };
             return await _executionRepository.CreateAsync(execution);
@@ -156,9 +156,9 @@ namespace DomainService.Workflow.Services
             }
             return await HandleWebhookExecutionAsync(workflow, WorkflowExecutionMode.Test, triggerId, input);
         }
-        private async Task<WorkflowWebhookResponseDto?> HandleWebhookExecutionAsync(WorkflowModel workflow, WorkflowExecutionMode executionMode, string triggerId, JsonElement input)
+        private async Task<WorkflowWebhookResponseDto?> HandleWebhookExecutionAsync(WorkflowEntity workflow, WorkflowExecutionMode executionMode, string triggerId, JsonElement input)
         {
-            WorkflowExecutionModel execution;
+            WorkflowExecutionEntity execution;
             try
             {
 
@@ -620,7 +620,7 @@ namespace DomainService.Workflow.Services
             var isMockedData = triggerData.All(data => data.AsBsonDocument.Contains("Tags") && data.AsBsonDocument
               ["Tags"].AsBsonArray.Contains("mock-data"));
 
-            List<WorkflowModel> workflows = new List<WorkflowModel>();
+            List<WorkflowEntity> workflows = new List<WorkflowEntity>();
             // If the data is mocked, we will use the workflow as is, otherwise we will only published workflows that are published.
             if (isMockedData)
             {
@@ -720,7 +720,7 @@ namespace DomainService.Workflow.Services
         }
 
         private async Task QueueDataTriggerExecutionAsync(
-            WorkflowModel workflow, WorkflowExecutionMode executionMode, DataChangeEvent dataEvent, string operationStr,
+            WorkflowEntity workflow, WorkflowExecutionMode executionMode, DataChangeEvent dataEvent, string operationStr,
             BsonArray triggerData, string projectKey)
         {
             try
