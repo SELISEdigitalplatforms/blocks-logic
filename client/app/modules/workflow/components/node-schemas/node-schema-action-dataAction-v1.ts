@@ -8,7 +8,7 @@ import {
 } from "@blocks-workflow/utils/resolve-schema-fields";
 import { dataService } from "../../services/data.service";
 // import { API_BASES } from "@/constants/endpoint.constant";
-import { getRuntimeEnv } from "@/lib/runtime-env";
+import { getRuntimeEnv } from "@seliseblocks/blocks-kit";
 import { authClientService } from "../../services/iam.service";
 
 export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
