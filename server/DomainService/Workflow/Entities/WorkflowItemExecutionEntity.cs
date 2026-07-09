@@ -1,9 +1,8 @@
 using DomainService.Workflow.Nodes;
-using MongoDB.Bson;
 
-namespace DomainService.Workflow.Models
+namespace DomainService.Workflow.Entities
 {
-    public class WorkflowItemExecutionModel
+    public class WorkflowItemExecutionEntity
     {
         public required string Id { get; set; }
         public required string WorkflowExecutionId { get; set; }

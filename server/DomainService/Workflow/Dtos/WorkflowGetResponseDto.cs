@@ -1,5 +1,5 @@
 using Blocks.Genesis;
-using DomainService.Workflow.Models;
+using DomainService.Workflow.Entities;
 namespace DomainService.Workflow.Dtos
 {
     public class WorkflowGetResponseDto : BaseResponse
@@ -15,7 +15,7 @@ namespace DomainService.Workflow.Dtos
 
         public List<NodeDto> Nodes { get; set; } = new();
 
-        public List<EdgeModel> Edges { get; set; } = new();
+        public List<EdgeEnity> Edges { get; set; } = new();
 
         public Dictionary<string, string> Settings { get; set; } = new();
 
