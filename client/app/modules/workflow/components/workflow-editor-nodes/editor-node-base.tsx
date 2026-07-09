@@ -141,7 +141,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            <p>Open</p>
+            <p>Duplicate</p>
           </TooltipContent>
         </Tooltip>
         <Tooltip>
