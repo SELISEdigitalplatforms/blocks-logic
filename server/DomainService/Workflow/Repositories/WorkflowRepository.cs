@@ -137,6 +137,7 @@ namespace DomainService.Workflow.Repositories
             );
 
             var filter = Builders<WorkflowModel>.Filter.And(
+                Builders<WorkflowModel>.Filter.Eq(w => w.IsPublished, true),
                 Builders<WorkflowModel>.Filter.ElemMatch(w => w.PublishedMeta.TriggerNodes, nodeFilter)
             );
 
