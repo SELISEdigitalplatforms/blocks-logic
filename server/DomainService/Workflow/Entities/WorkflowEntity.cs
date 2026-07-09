@@ -1,18 +1,18 @@
 using Blocks.Genesis;
 using MongoDB.Bson.Serialization.Attributes;
 
-namespace DomainService.Workflow.Models
+namespace DomainService.Workflow.Entities
 {
     [BsonIgnoreExtraElements]
-    public class WorkflowModel : BaseEntity
+    public class WorkflowEntity : BaseEntity
     {
         public string Name { get; set; } = string.Empty;
 
         public required string TenantId { get; set; }
 
-        public List<NodeModel> Nodes { get; set; } = new();
+        public List<NodeEntity> Nodes { get; set; } = new();
 
-        public List<EdgeModel> Edges { get; set; } = new();
+        public List<EdgeEnity> Edges { get; set; } = new();
 
         public Dictionary<string, string> Settings { get; set; }
 
@@ -33,12 +33,12 @@ namespace DomainService.Workflow.Models
 
     public class PublishedWorkflowMeta
     {
-        public List<NodeModel> TriggerNodes { get; set; } = new();
+        public List<NodeEntity> TriggerNodes { get; set; } = new();
     }
 
     public class TestWorkflowMeta
     {
-        public List<NodeModel> ListenerTriggerNodes { get; set; } = new();
+        public List<NodeEntity> ListenerTriggerNodes { get; set; } = new();
         public List<string> UserIds { get; set; } = new();
         public bool IsListening { get; set; } = false;
         public string? CompletionNodeId { get; set; }
