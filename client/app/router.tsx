@@ -28,72 +28,68 @@ const redirectPaths: Record<string, string> = {
 
 export const router = createBrowserRouter([
   {
-    element: <Outlet />,
+    // Set User Auth Information and resolve authentication state before rendering any route
+    element: (
+      <AuthResolver>
+        <Outlet />
+      </AuthResolver>
+    ),
     children: [
-      // All Redirect Url Handle here
       {
-        element: <Outlet />,
-        children: [
-          {
-            path: "/login/callback",
-            element: <CallbackPage defaultRedirectUrl="/app/console" />,
-          },
-        ],
-      },
-      {
-        // Set User Auth Information and resolve authentication state before rendering any route
         element: (
-          <AuthResolver>
+          <PublicGuard>
             <Outlet />
-          </AuthResolver>
+          </PublicGuard>
         ),
         children: [
           {
-            element: (
-              <PublicGuard>
-                <Outlet />
-              </PublicGuard>
-            ),
-            children: [{ path: "/login", element: <LoginPage /> }],
-          },
-
-          // protected
-          {
-            path: "/app",
-            element: (
-              <ProtectedGuard>
-                <Outlet />
-              </ProtectedGuard>
-            ),
-
+            path: "/login",
             children: [
-              { index: true, element: <Navigate to="/app/console" replace /> },
+              { index: true, element: <LoginPage /> },
               {
-                element: (
-                  <ConsoleLayout>
-                    <Outlet />
-                  </ConsoleLayout>
-                ),
-                children: [
-                  { path: "console", element: <ConsolePage /> },
-                  { path: "profile", element: <ProfilePage /> },
-                ],
+                path: "callback",
+                element: <CallbackPage defaultRedirectUrl="/app/console" />,
               },
-              {
-                path: "project/:tenantGroupId",
-                element: <ProjectOverviewRoute redirectPaths={redirectPaths} navigationMenus={navigationMenus} />,
-                children: [{ path: "environments", element: <EnvironmentsPage /> }],
-              },
-              {
-                // impersonate
-                path: ":itemId",
-                element: <DashboardRoute redirectPaths={redirectPaths} navigationMenus={navigationMenus} />,
-                children: [
-                  { path: "dashboard", element: <DashboardOverview /> },
-                  { path: "workflow/:id", element: <WorkflowDetailsPage /> },
-                  { path: "workflow", element: <WorkflowsPage /> },
-                ],
-              },
+            ],
+          },
+        ],
+      },
+
+      // protected
+      {
+        path: "/app",
+        element: (
+          <ProtectedGuard>
+            <Outlet />
+          </ProtectedGuard>
+        ),
+
+        children: [
+          { index: true, element: <Navigate to="/app/console" replace /> },
+          {
+            element: (
+              <ConsoleLayout>
+                <Outlet />
+              </ConsoleLayout>
+            ),
+            children: [
+              { path: "console", element: <ConsolePage /> },
+              { path: "profile", element: <ProfilePage /> },
+            ],
+          },
+          {
+            path: "project/:tenantGroupId",
+            element: <ProjectOverviewRoute redirectPaths={redirectPaths} navigationMenus={navigationMenus} />,
+            children: [{ path: "environments", element: <EnvironmentsPage /> }],
+          },
+          {
+            // impersonate
+            path: ":itemId",
+            element: <DashboardRoute redirectPaths={redirectPaths} navigationMenus={navigationMenus} />,
+            children: [
+              { path: "dashboard", element: <DashboardOverview /> },
+              { path: "workflow/:id", element: <WorkflowDetailsPage /> },
+              { path: "workflow", element: <WorkflowsPage /> },
             ],
           },
         ],
