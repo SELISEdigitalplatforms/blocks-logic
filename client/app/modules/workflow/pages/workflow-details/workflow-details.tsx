@@ -24,6 +24,7 @@ import { showErrorToast } from "@/hooks/use-toast";
 import { PublishWorkflowAction } from "../../components/publish-workflow-action";
 import { WorkflowVersions } from "../../components/workflow-version";
 import { useGetLastSuccessfulExecution } from "../../hooks";
+import { useScopedPath } from "@seliseblocks/blocks-kit";
 
 type WorkflowDetailPageProps = {
   workflowId: string;
@@ -33,6 +34,8 @@ export const WorkflowDetailsContent = ({
   workflowId,
 }: WorkflowDetailPageProps) => {
   const navigate = useNavigate();
+  const scoped = useScopedPath();
+
   const [activeTab, setActiveTab] = useState<string>("editor");
 
   const { hasUnsavedChanges, setWorkflow, setLastSuccessfulExecutionData } = useWorkflow();
@@ -53,7 +56,7 @@ export const WorkflowDetailsContent = ({
         setWorkflow(workflowData);
       } else {
         showErrorToast({"errors": "Workflow not found"});
-        navigate("/app/workflow");
+        navigate(scoped("/app/workflow"));
       }
     }
   }, [data, isFetched, isFetchedAfterMount, setWorkflow, navigate]);
@@ -74,7 +77,7 @@ export const WorkflowDetailsContent = ({
     <>
       <div className="flex h-full flex-col">
         <div className="px-4 mt-4">
-          <PageBreadcrumb />
+          <PageBreadcrumb breadcrumbIndex={3}/>
         </div>
 
         {!isLoading && isFetchedAfterMount && data?.data?.isDirty && (

@@ -112,9 +112,7 @@ export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVer
           }}>Publish version</DropdownMenuItem>)}
           {version.isPublished && (<DropdownMenuItem onClick={(e) => {
             e.stopPropagation();
-            unpublishWorkflow.mutateAsync({
-              workflowId: workflowId || "",
-            });
+            handleOpenUnpublishModal();
           }}>Unpublish version</DropdownMenuItem>)}
         </DropdownMenuContent>
       </DropdownMenu>
