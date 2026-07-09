@@ -45,7 +45,6 @@ namespace Mfa.DomainService.TOTP
             _logger = logger;
             _httpContextAccessor = httpContextAccessor;
             _configuration = configuration;
-            _storageDriverService = storageDriverService;
             _cacheClient = cacheClient;
             _validator = validator;
             _tenant = tenant;
@@ -89,13 +88,12 @@ namespace Mfa.DomainService.TOTP
                 return CreateOtpResponse(false);
             }
 
-           // var imageUri = await GetFileUriAsync(fileId);
-            var fileResponse = await _storageDriverService.GetUrlForDownloadFileAsync(new GetFileRequest { FileId = fileId });
+            var imageUri = await GetFileUriAsync(fileId);
 
-            if (!string.IsNullOrWhiteSpace(fileResponse.Url))
+            if (!string.IsNullOrWhiteSpace(imageUri))
             {
-                await SaveOtpInfoAsync(userInfo.ItemId, secret, fileResponse.Url, fileId, twoFactorId);
-                return CreateOtpResponse(true, fileResponse.Url, secret);
+                await SaveOtpInfoAsync(userInfo.ItemId, secret, imageUri, fileId, twoFactorId);
+                return CreateOtpResponse(true, imageUri, secret);
             }
 
             return CreateOtpResponse(false);

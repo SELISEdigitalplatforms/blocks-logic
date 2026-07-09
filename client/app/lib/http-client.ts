@@ -1,4 +1,4 @@
-import { getRuntimeEnv } from "@/lib/runtime-env";
+import { getRuntimeEnv } from "@seliseblocks/blocks-kit";
 import { HttpClient } from "@seliseblocks/blocks-kit";
 
 export const serviceInstances = {

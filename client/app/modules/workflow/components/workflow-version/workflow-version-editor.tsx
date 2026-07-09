@@ -8,7 +8,6 @@ import {
 } from "../workflow-editor-nodes";
 import { WorkflowEditorEdgeTypes } from "../workflow-editor-edges";
 import { NodeInspector } from "../node-inspector";
-import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { EditorFitConfig, WorkflowEditorControls } from "../workflow-editor-controls";
 import { useParams } from "react-router-dom";
 import { Button } from "@/components/ui-kits/button/button";
@@ -19,11 +18,9 @@ export const WorkflowVersionEditor = ({ version }: { version?: any }) => {
   const { id: workflowId } = useParams<{ id: string }>();
   const versionId = version?.itemId || version?.id || "";
   const { setWorkflow, onNodeClick, selectedNode, setEditorMode } = useWorkflow();
-  const tenantId = useProjectStore().selectedProject?.tenantId || "";
   
   const { data, isFetched, isFetching } = useGetWorkflowByVersion({
     workflowId: workflowId || "",
-    projectKey: tenantId,
     versionId,
   });
 

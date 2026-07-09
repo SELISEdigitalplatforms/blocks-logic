@@ -6,7 +6,6 @@ import { WorkflowExecutionList } from "../workflow-execution-list";
 import { WorkflowExecution } from "@blocks-workflow/types/workflow.service.type";
 import { useWorkflow } from "@blocks-workflow/hooks";
 import { WorkflowExecutionEditor } from "./workflow-execution-editor";
-import { useProjectStore } from "@seliseblocks/blocks-kit";
 
 import { ReactFlowProvider } from "@xyflow/react";
 import { WorkflowStoreProvider } from "../../store";
@@ -14,13 +13,11 @@ import { useParams } from "react-router-dom";
 
 export const WorkflowExecutions = () => {
   const { id: workflowId } = useParams<{ id: string }>();
-  const tenantId = useProjectStore().selectedProject?.tenantId || "";
   const [selectedExecution, setSelectedExecution] = useState<
     WorkflowExecution | undefined
   >();
 
   const { data, isLoading } = useGetWorkflowExecutions({
-    projectKey: tenantId,
     workflowId: workflowId || "",
   });
 

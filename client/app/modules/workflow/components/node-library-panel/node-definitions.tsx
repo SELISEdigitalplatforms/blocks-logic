@@ -1,15 +1,15 @@
 import { WorkflowNodeDefinition } from "@blocks-workflow/models/node.model";
 import {
-  GitFork,
-  Webhook,
-  SquarePen,
-  Bot,
-  Mail,
-  Globe,
-  Inbox,
-  Database,
-  Clock,
-  DatabaseZap,
+	GitFork,
+	Webhook,
+	SquarePen,
+	Bot,
+	Mail,
+	Globe,
+	Inbox,
+	Database,
+	Clock,
+	DatabaseZap,
 } from "lucide-react";
 
 export const NodeDefinitions: WorkflowNodeDefinition[] = [
@@ -163,12 +163,14 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 ];
 
 export const getNodeDefinition = (
-  category: string,
-  type: string,
-  version: string,
+	category: string,
+	type: string,
+	version: string,
 ) => {
-  return NodeDefinitions.find(
-    (def) =>
-      def.category === category && def.type === type && def.version === version,
-  );
+	return NodeDefinitions.find(
+		(def) =>
+			def.category === category &&
+			def.type === type &&
+			def.version === version,
+	);
 };

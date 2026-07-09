@@ -1,10 +1,7 @@
-using Blocks.Genesis;
-
 namespace DomainService.Workflow.Dtos
 {
-    public class WorkflowExecutionsGetRequestDto : IProjectKey
+    public class WorkflowExecutionsGetRequestDto
     {
-        public required string ProjectKey { get; set; }
         public required string WorkflowId { get; set; }
     }
 }
