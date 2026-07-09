@@ -1,16 +1,10 @@
-
 using System.ComponentModel.DataAnnotations;
-using System.Text.Json;
-using Blocks.Genesis;
 using DomainService.Workflow.Models;
 
 namespace DomainService.Workflow.Dtos;
 
-public class WorkflowVersionCreateRequestDto : IProjectKey
+public class WorkflowVersionCreateRequestDto
 {
-    [Required]
-    public required string ProjectKey { get; set; }
-
     [Required]
     public required string WorkflowId { get; set; }
 

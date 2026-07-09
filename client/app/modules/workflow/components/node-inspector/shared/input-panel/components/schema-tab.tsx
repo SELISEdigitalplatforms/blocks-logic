@@ -33,7 +33,7 @@ export function SchemaTab({
             hasSinglePredecessor={hasSinglePredecessor}
             showValues={!isLastExecutionEditor}
             isDraggable={!isExecutionMode}
-            isDashed={isLastExecutionEditor}
+            showColon={!isLastExecutionEditor}
           />
         </div>
       ))}

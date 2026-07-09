@@ -1,17 +1,11 @@
-using System;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
-using Blocks.Genesis;
 using DomainService.Workflow.Models;
-using Newtonsoft.Json.Linq;
 
 namespace DomainService.Workflow.Dtos;
 
-public class WorkflowUpdateRequestDto : IProjectKey
+public class WorkflowUpdateRequestDto
 {
-    [Required]
-    public required string ProjectKey { get; set; }
-
     [Required]
     public required string ItemId { get; set; }
     public string? Name { get; set; }
@@ -31,9 +25,9 @@ public class NodeDto
     public required string Type { get; set; }
     public required string Version { get; set; }
     public required Position Position { get; set; }
+    public Handle? Handle { get; set; }
     public JsonElement Parameters { get; set; } = new();
     public JsonElement Settings { get; set; } = new();
     public JsonElement? PinData { get; set; }
 
 }
-

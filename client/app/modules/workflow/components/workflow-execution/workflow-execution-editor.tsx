@@ -15,7 +15,6 @@ import {
   buildExecutedSubgraph,
 } from "@blocks-workflow/utils/workflow-execution-editor.util";
 import { NodeInspector } from "../node-inspector";
-import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { EditorFitConfig, WorkflowEditorControls } from "../workflow-editor-controls";
 
 import { getStatusConfig } from "../../utils/workflow-execution-list.util";
@@ -29,10 +28,8 @@ export const WorkflowExecutionEditor = ({
 }) => {
   const id = execution?.id || "";
   const { setWorkflow, onNodeClick, selectedNode, setEditorMode, setExecutionMode } = useWorkflow();
-  const tenantId = useProjectStore().selectedProject?.tenantId || "";
   const { data: responseData, isFetched, isLoading } = useGetWorkflowExecutionById({
     executionId: id,
-    projectKey: tenantId,
   });
 
   const data = responseData?.data;
