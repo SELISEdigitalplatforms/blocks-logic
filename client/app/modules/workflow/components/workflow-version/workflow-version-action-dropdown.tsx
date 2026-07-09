@@ -8,11 +8,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui-kits/dropdown-menu/dropdown-menu";
 import { useParams } from "react-router-dom";
-import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { usePublishWorkflow, useUnpublishWorkflow, useRestoreWorkflow, useUpdateWorkflowVersion } from "../../hooks/use-workflow-api";
 import { WorkflowVersion } from "../../models/workflow.model";
 import { PublishWorkflowModal } from "../publish-workflow-modal/publish-workflow-modal";
 import { PublishConfirmationModal, UnpublishConfirmationModal } from "../workflow-confirmation-modals";
+import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 
 interface WorkflowVersionActionDropdownProps {
   version: WorkflowVersion;
@@ -21,7 +21,6 @@ interface WorkflowVersionActionDropdownProps {
 
 export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVersionActionDropdownProps) => {
   const { id: workflowId } = useParams<{ id: string }>();
-  const projectKey = useProjectStore().selectedProject?.tenantId || "";
   const publishWorkflow = usePublishWorkflow();
   const unpublishWorkflow = useUnpublishWorkflow();
   const restoreWorkflow = useRestoreWorkflow();
@@ -51,12 +50,12 @@ export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVer
     try {
       await publishWorkflow.mutateAsync({
         workflowId: workflowId || "",
-        projectKey,
         versionId: version.itemId,
       });
       setIsPublishModalOpen(false);
-    } catch (error) {
-      console.error(error);
+      showSuccessToast({ description: "Workflow version successfully published." });
+    } catch (error: any) {
+      showErrorToast({ errors: error.message || "Failed to publish workflow version." });
     }
   };
 
@@ -64,32 +63,30 @@ export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVer
     try {
       await unpublishWorkflow.mutateAsync({
         workflowId: workflowId || "",
-        projectKey,
       });
       setIsUnpublishModalOpen(false);
-    } catch (error) {
-      console.error(error);
+      showSuccessToast({ description: "Workflow version successfully unpublished." });
+    } catch (error: any) {
+      showErrorToast({ errors: error.message || "Failed to unpublish workflow version." });
     }
   };
 
   const handleEditSubmit = async () => {
     try {
       await updateWorkflowVersion.mutateAsync({
-        projectKey,
         versionId: version.itemId,
         name: editVersionName || "Version Name",
         description: editDescription,
       });
       setIsEditModalOpen(false);
-    } catch (error) {
-      console.error(error);
+    } catch (error: any) {
+      showErrorToast({ errors: error.message || "Failed to edit workflow version." });
     }
   };
 
   const handleRestore = () => {
     restoreWorkflow.mutate({
       workflowId: workflowId || "",
-      projectKey,
       versionId: version.itemId,
     });
   };
@@ -115,10 +112,7 @@ export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVer
           }}>Publish version</DropdownMenuItem>)}
           {version.isPublished && (<DropdownMenuItem onClick={(e) => {
             e.stopPropagation();
-            unpublishWorkflow.mutateAsync({
-              workflowId: workflowId || "",
-              projectKey,
-            });
+            handleOpenUnpublishModal();
           }}>Unpublish version</DropdownMenuItem>)}
         </DropdownMenuContent>
       </DropdownMenu>

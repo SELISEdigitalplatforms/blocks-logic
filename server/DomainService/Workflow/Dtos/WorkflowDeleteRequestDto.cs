@@ -1,15 +1,11 @@
 using System.ComponentModel.DataAnnotations;
-using Blocks.Genesis;
 
 namespace DomainService.Workflow.Dtos
 {
-    public class WorkflowDeleteRequestDto : IProjectKey
+    public class WorkflowDeleteRequestDto
     {
         [Required]
         public required string Id { get; set; }
-
-        [Required]
-        public required string ProjectKey { get; set; }
     }
 
 }

@@ -1,7 +1,7 @@
 import { DraggableProperty } from "./draggable-property";
 import { formatCellValue } from "../utils/format.util";
 
-export function RecursiveSchemaViewer({ data, depth = 0, prefixPath = "", nodeName, hasSinglePredecessor, showValues = true, isDraggable = true, isDashed = false }: { data: unknown; depth?: number; prefixPath?: string; nodeName: string; hasSinglePredecessor: boolean; showValues?: boolean; isDraggable?: boolean; isDashed?: boolean }) {
+export function RecursiveSchemaViewer({ data, depth = 0, prefixPath = "", nodeName, hasSinglePredecessor, showValues = true, isDraggable = true, showColon = true }: { data: unknown; depth?: number; prefixPath?: string; nodeName: string; hasSinglePredecessor: boolean; showValues?: boolean; isDraggable?: boolean; showColon?: boolean }) {
   if (typeof data !== "object" || data === null) {
     if (!prefixPath) {
       return (
@@ -13,7 +13,7 @@ export function RecursiveSchemaViewer({ data, depth = 0, prefixPath = "", nodeNa
             label="(value)"
             isRoot={true}
             isDraggable={isDraggable}
-            isDashed={isDashed}
+            showColon={showColon}
           />
           {showValues && <span className="text-low-emphasis text-xs">{formatCellValue(data)}</span>}
         </div>
@@ -43,10 +43,10 @@ export function RecursiveSchemaViewer({ data, depth = 0, prefixPath = "", nodeNa
                   hasSinglePredecessor={hasSinglePredecessor}
                   label={key}
                   isDraggable={isDraggable}
-                  isDashed={isDashed}
+                  showColon={showColon}
                 />
               ) : (
-                <span className={`px-2 py-1 ${isDashed ? 'text-medium-emphasis border border-dashed border-border/80 rounded bg-surface-app' : 'text-low-emphasis text-xs'}`} style={{ marginLeft: `${depth * 1}rem` }}>[{key}]:</span>
+                <span className={`px-2 py-1 ${showColon ? 'text-medium-emphasis text-xs border border-dashed border-border/80 rounded bg-surface-app' : 'text-low-emphasis text-xs'}`} style={{ marginLeft: `${depth * 1}rem` }}>[{key}]:</span>
               )}
               {(!childIsObj && showValues) && <span className="text-low-emphasis text-xs">{formatCellValue(val)}</span>}
             </div>
@@ -59,7 +59,7 @@ export function RecursiveSchemaViewer({ data, depth = 0, prefixPath = "", nodeNa
                 hasSinglePredecessor={hasSinglePredecessor}
                 showValues={showValues}
                 isDraggable={isDraggable}
-                isDashed={isDashed}
+                showColon={showColon}
               />
             )}
           </div>

@@ -143,8 +143,8 @@ export const InputPanel = ({
 
       {!isCollapsed && tab === "table" && (
         <div className="mt-2 flex-1 overflow-y-auto rounded bg-surface-app p-2">
-          {runtimeInputRows.length === 0 ? (
-            <p className="text-xs text-low-emphasis">{isLastExecutionEditor ? "No input data available. Execute Node to view." : "No runtime input data available."}</p>
+          {runtimeInputRows.length === 0 || isLastExecutionEditor ? (
+            <p className="text-xs text-low-emphasis">{"No input data available."}{isLastExecutionEditor && " Execute Node to view."}</p>
           ) : (
             <TableTab 
               rows={runtimeInputRows} 
@@ -158,8 +158,8 @@ export const InputPanel = ({
 
       {!isCollapsed && tab === "json" && (
         <div className="mt-2 flex-1 overflow-y-auto rounded bg-surface-app p-2">
-          {runtimeInputRows.length === 0 ? (
-            <p className="text-xs text-low-emphasis">{isLastExecutionEditor ? "No input data available. Execute Node to view." : "No runtime input data available."}</p>
+          {runtimeInputRows.length === 0 || isLastExecutionEditor ? (
+            <p className="text-xs text-low-emphasis">{"No input data available."}{isLastExecutionEditor && " Execute Node to view."}</p>
           ) : (
             <JsonTab 
               rows={runtimeInputRows} 

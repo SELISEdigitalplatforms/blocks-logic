@@ -1,7 +1,6 @@
 import { Button } from "@/components/ui-kits/button/button";
-import { Ban, EllipsisVertical, Play, Trash, Rss } from "lucide-react";
+import { Copy, EllipsisVertical, Play, Trash, Rss, Ban } from "lucide-react";
 import { useWorkflow, useStepExecute, useHandleExecuteStep } from "../../hooks";
-import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { getStatusStyles } from "../../utils/workflow-execution-editor.util";
 import {
   DropdownMenu,
@@ -102,9 +101,9 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        <Tooltip>
+        {listeningNodeId !==id && <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-fit w-fit p-1" onClick={(e) => {
+            <Button variant="ghost" size="sm" className="h-fit w-fit p-1" disabled={isListening} onClick={(e) => {
               e.stopPropagation();
               handleExecuteStep(id);
             }}>
@@ -114,15 +113,35 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
           <TooltipContent>
             <p>Execute Node</p>
           </TooltipContent>
-        </Tooltip>
-        <Tooltip>
+        </Tooltip>}
+
+        {isListening && listeningNodeId===id && <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-fit w-fit p-1">
+            <Button variant="ghost" size="sm" className="h-fit w-fit p-1" onClick={(e) => {
+              e.stopPropagation();
+            }}>
               <Ban className="h-3.5 w-3.5" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>
             <p>Stop Execution</p>
+          </TooltipContent>
+        </Tooltip>}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="h-fit w-fit p-1" 
+              onClick={(e) => {
+                e.stopPropagation();
+                duplicateNode(id);
+              }}>
+              <Copy className="h-3.5 w-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Duplicate</p>
           </TooltipContent>
         </Tooltip>
         <Tooltip>
@@ -142,9 +161,16 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
         </Tooltip>
         <DropdownMenu onOpenChange={setIsToolbarVisible}>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-fit w-fit p-1">
-              <EllipsisVertical className="h-3.5 w-3.5" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" className="h-fit w-fit p-1">
+                  <EllipsisVertical className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>More options</p>
+              </TooltipContent>
+            </Tooltip>
           </DropdownMenuTrigger>
           <DropdownMenuContent
             align="end"
@@ -162,6 +188,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
             </DropdownMenuItem>
             <DropdownMenuItem
               className="cursor-pointer"
+              disabled={isListening}
               onClick={(e) => {
                 e.stopPropagation();
                 handleExecuteStep(id);
