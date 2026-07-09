@@ -65,10 +65,10 @@ namespace DomainService.Workflow.Nodes.ActionDataV1
                         _logger.LogWarning("ActionDataV1Node: ApiBaseUrl is empty. Set it in node parameters or configure 'ApiBaseUrl' in appsettings.");
                 }
 
-                if (string.IsNullOrEmpty(parameters.ProjectShortKey))
-                {
-                    _logger.LogWarning("ActionDataV1Node: ProjectShortKey is empty. Please re-save the workflow node to auto-populate this value from the frontend.");
-                }
+                // if (string.IsNullOrEmpty(parameters.ProjectShortKey))
+                // {
+                //     _logger.LogWarning("ActionDataV1Node: ProjectShortKey is empty. Please re-save the workflow node to auto-populate this value from the frontend.");
+                // }
 
                 List<NodeOutputItem> outputItems;
 
@@ -305,7 +305,7 @@ namespace DomainService.Workflow.Nodes.ActionDataV1
             ActionDataV1Parameters parameters, string graphqlQuery)
         {
             var httpClient = _httpClientFactory.CreateClient();
-            var requestUrl = $"{parameters.ApiBaseUrl}/{parameters.ProjectShortKey}/gateway";
+            var requestUrl = $"{parameters.ApiBaseUrl}/api/gateway";
             var request = new HttpRequestMessage(HttpMethod.Post, requestUrl);
             // Authenticate based on selected authentication type
             if (parameters.AuthenticationType == "triggerNodeCookie")
