@@ -14,18 +14,18 @@ namespace DomainService.Workflow.Entities
 
         public List<EdgeEnity> Edges { get; set; } = new();
 
-        public Dictionary<string, string> Settings { get; set; }
+        public Dictionary<string, string> Settings { get; set; } = new();
 
         public bool IsDirty { get; set; } = true;
 
         public bool IsPublished { get; set; } = false;
 
-        public string? PublishedVersionId { get; set; }
+        public string? PublishedVersionId { get; set; } = null;
 
-        public string? LastPublishedVersionId { get; set; }
+        public string? LastPublishedVersionId { get; set; } = null;
 
-        public PublishedWorkflowMeta? PublishedMeta { get; set; }
-        public TestWorkflowMeta? TestMeta { get; set; }
+        public PublishedWorkflowMeta? PublishedMeta { get; set; } = null;
+        public TestWorkflowMeta? TestMeta { get; set; } = null;
 
         public string Description { get; set; } = string.Empty;
 
@@ -41,6 +41,6 @@ namespace DomainService.Workflow.Entities
         public List<NodeEntity> ListenerTriggerNodes { get; set; } = new();
         public List<string> UserIds { get; set; } = new();
         public bool IsListening { get; set; } = false;
-        public string? CompletionNodeId { get; set; }
+        public string? CompletionNodeId { get; set; } = null;
     }
 }

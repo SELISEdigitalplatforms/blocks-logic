@@ -13,15 +13,16 @@ namespace Utilities.Api.Controllers
     {
 
         private readonly IWorkflowService _workflowService;
+        private readonly IWorkflowVersionService _workflowVersionService;
         private readonly IWorkflowExecutionService _workflowExecutionService;
 
         public WorkflowController(
-
             IWorkflowService workflowService,
+            IWorkflowVersionService workflowVersionService,
             IWorkflowExecutionService workflowExecutionService)
         {
-
             _workflowService = workflowService;
+            _workflowVersionService = workflowVersionService;
             _workflowExecutionService = workflowExecutionService;
         }
 
@@ -84,7 +85,7 @@ namespace Utilities.Api.Controllers
         public async Task<IActionResult> CreateVersion([FromBody] WorkflowVersionCreateRequestDto dto)
         {
             var tenantId = GetTenantId();
-            var result = await _workflowService.CreateVersionAsync(tenantId, dto);
+            var result = await _workflowVersionService.CreateVersionAsync(tenantId, dto);
             return StatusCode(StatusCodes.Status201Created, result);
         }
 
@@ -93,7 +94,7 @@ namespace Utilities.Api.Controllers
         public async Task<IActionResult> UpdateVersion([FromBody] WorkflowVersionUpdateRequestDto dto)
         {
             var tenantId = GetTenantId();
-            var result = await _workflowService.UpdateVersionAsync(tenantId, dto);
+            var result = await _workflowVersionService.UpdateVersionAsync(tenantId, dto);
             return Ok(result);
         }
 
@@ -103,7 +104,7 @@ namespace Utilities.Api.Controllers
         public async Task<IActionResult> GetVersions([FromBody] WorkflowGetVersionsRequestDto dto)
         {
             var tenantId = GetTenantId();
-            var result = await _workflowService.GetVersionsAsync(tenantId, dto);
+            var result = await _workflowVersionService.GetWorkflowVersionsAsync(tenantId, dto);
             return Ok(result);
         }
 
@@ -162,7 +163,6 @@ namespace Utilities.Api.Controllers
                 ProjectKey = projectKey,
                 Input = input
             };
-            ApplyContext(dto);
 
             try
             {
@@ -191,7 +191,6 @@ namespace Utilities.Api.Controllers
                 ProjectKey = projectKey,
                 Input = input
             };
-            ApplyContext(dto);
 
             try
             {
@@ -254,11 +253,6 @@ namespace Utilities.Api.Controllers
             var tenantId = GetTenantId();
             var execution = await _workflowExecutionService.LastSuccessfullExecutionAsync(tenantId, dto);
             return Ok(execution);
-        }
-
-        private void ApplyContext(IProjectKey request)
-        {
-
         }
 
         private string GetTenantId()
