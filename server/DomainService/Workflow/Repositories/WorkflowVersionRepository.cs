@@ -29,41 +29,50 @@ namespace DomainService.Workflow.Repositories
             await collection.InsertOneAsync(versionModel, null);
         }
 
-        public Task<List<WorkflowVersionEntity>> GetWorkflowVersionsAsync(string projectKey, string[] workflowIds)
+        public Task<List<WorkflowVersionEntity>> GetWorkflowVersionsAsync(string tenantId, string workflowId)
         {
-            var collection = GetCollection(projectKey);
-            var filters = Builders<WorkflowVersionEntity>.Filter.Eq(f => f.TenantId, projectKey) &
+            var collection = GetCollection(tenantId);
+            var filters = Builders<WorkflowVersionEntity>.Filter.Eq(f => f.TenantId, tenantId) &
+                         Builders<WorkflowVersionEntity>.Filter.Eq(f => f.WorkflowId, workflowId);
+
+            return collection.Find(filters).SortByDescending(f => f.CreatedDate).ToListAsync();
+        }
+
+        public Task<List<WorkflowVersionEntity>> GetWorkflowVersionsAsync(string tenantId, string[] workflowIds)
+        {
+            var collection = GetCollection(tenantId);
+            var filters = Builders<WorkflowVersionEntity>.Filter.Eq(f => f.TenantId, tenantId) &
                          Builders<WorkflowVersionEntity>.Filter.In(f => f.WorkflowId, workflowIds);
 
             return collection.Find(filters).SortByDescending(f => f.CreatedDate).ToListAsync();
         }
 
-        public Task<WorkflowVersionEntity> GetWorkflowVersionAsync(string projectKey, string versionId)
+        public Task<WorkflowVersionEntity> GetWorkflowVersionAsync(string tenantId, string versionId)
         {
-            var collection = GetCollection(projectKey);
-            var filter = Builders<WorkflowVersionEntity>.Filter.Eq(f => f.TenantId, projectKey) &
+            var collection = GetCollection(tenantId);
+            var filter = Builders<WorkflowVersionEntity>.Filter.Eq(f => f.TenantId, tenantId) &
                          Builders<WorkflowVersionEntity>.Filter.Eq(f => f.ItemId, versionId);
             return collection.Find(filter).FirstOrDefaultAsync();
         }
 
-        public Task<WorkflowVersionEntity> UpdateWorkflowVersionAsync(string projectKey, string versionId, WorkflowVersionEntity versionModel)
+        public Task<WorkflowVersionEntity> UpdateWorkflowVersionAsync(string tenantId, string versionId, WorkflowVersionEntity versionModel)
         {
-            var collection = GetCollection(projectKey);
-            return collection.FindOneAndReplaceAsync(filter => filter.TenantId == projectKey && filter.ItemId == versionId, versionModel);
+            var collection = GetCollection(tenantId);
+            return collection.FindOneAndReplaceAsync(filter => filter.TenantId == tenantId && filter.ItemId == versionId, versionModel);
         }
 
-        public Task DeleteWorkflowVersionAsync(string projectKey, string versionId)
+        public Task DeleteWorkflowVersionAsync(string tenantId, string versionId)
         {
-            var collection = GetCollection(projectKey);
-            var filter = Builders<WorkflowVersionEntity>.Filter.Eq(f => f.TenantId, projectKey) &
+            var collection = GetCollection(tenantId);
+            var filter = Builders<WorkflowVersionEntity>.Filter.Eq(f => f.TenantId, tenantId) &
                          Builders<WorkflowVersionEntity>.Filter.Eq(f => f.ItemId, versionId);
             return collection.DeleteOneAsync(filter);
         }
 
-        public Task DeleteWorkflowVersionsByWorkflowIdAsync(string projectKey, string workflowId)
+        public Task DeleteWorkflowVersionsByWorkflowIdAsync(string tenantId, string workflowId)
         {
-            var collection = GetCollection(projectKey);
-            var filter = Builders<WorkflowVersionEntity>.Filter.Eq(f => f.TenantId, projectKey) &
+            var collection = GetCollection(tenantId);
+            var filter = Builders<WorkflowVersionEntity>.Filter.Eq(f => f.TenantId, tenantId) &
                          Builders<WorkflowVersionEntity>.Filter.Eq(f => f.WorkflowId, workflowId);
             return collection.DeleteManyAsync(filter);
         }

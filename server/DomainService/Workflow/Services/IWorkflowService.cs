@@ -17,12 +17,6 @@ namespace DomainService.Workflow.Services
 
         Task<BaseMutationResponse> DeleteAsync(string tenantId, WorkflowDeleteRequestDto dto);
 
-        Task<BaseMutationResponse> CreateVersionAsync(string tenantId, WorkflowVersionCreateRequestDto dto);
-
-        Task<BaseMutationResponse> UpdateVersionAsync(string tenantId, WorkflowVersionUpdateRequestDto dto);
-
-        Task<WorkflowGetVersionsResponseDto> GetVersionsAsync(string tenantId, WorkflowGetVersionsRequestDto dto);
-
         Task<GetWorkflowByVersionResponseDto> GetWorkflowByVersionAsync(string tenantId, GetWorkflowByVersionRequestDto dto);
 
         Task<BaseMutationResponse> PublishNewVersionAsync(string tenantId, WorkflowPublishNewVersionRequestDto dto);
