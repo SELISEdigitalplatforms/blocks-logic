@@ -27,11 +27,11 @@ namespace DomainService.Workflow.Repositories
             return _dbContextProvider.GetCollection<WorkflowEntity>(tenantId, _collectionName);
         }
 
-        public async Task CreateWorkflowAsync(WorkflowEntity workflow)
+        public Task CreateWorkflowAsync(WorkflowEntity workflow)
         {
 
             var collection = GetCollection(workflow.TenantId);
-            await collection.InsertOneAsync(workflow, null);
+            return collection.InsertOneAsync(workflow, null);
         }
 
         public Task<long> GetWorkflowsCountAsync(string tenantId, string? search, bool? isPublished)
@@ -87,11 +87,11 @@ namespace DomainService.Workflow.Repositories
                 .Limit(pageSize).ToListAsync();
         }
 
-        public async Task<WorkflowEntity> GetWorkflowAsync(string tenantId, string workflowId)
+        public Task<WorkflowEntity> GetWorkflowAsync(string tenantId, string workflowId)
         {
             var collection = GetCollection(tenantId);
             var filter = Builders<WorkflowEntity>.Filter.Eq(w => w.ItemId, workflowId);
-            return await collection.Find(filter).FirstOrDefaultAsync();
+            return collection.Find(filter).FirstOrDefaultAsync();
         }
 
         public async Task<List<WorkflowEntity>> GetWorkflowsByMailServerConfigurationIdAsync(string tenantId, string mailServerConfigurationId)
@@ -152,11 +152,11 @@ namespace DomainService.Workflow.Repositories
             }
         }
 
-        public async Task DeleteWorkflowAsync(string tenantId, string workflowId)
+        public Task DeleteWorkflowAsync(string tenantId, string workflowId)
         {
             var collection = GetCollection(tenantId);
             var filter = Builders<WorkflowEntity>.Filter.Eq(w => w.ItemId, workflowId);
-            await collection.DeleteOneAsync(filter);
+            return collection.DeleteOneAsync(filter);
         }
 
     }
