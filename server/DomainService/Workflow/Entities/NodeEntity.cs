@@ -1,9 +1,7 @@
-using Microsoft.Azure.Amqp.Framing;
 using MongoDB.Bson;
+namespace DomainService.Workflow.Entities;
 
-namespace DomainService.Workflow.Models;
-
-public class NodeModel
+public class NodeEntity
 {
     public required string Id { get; set; }
     public required string Name { get; set; }
