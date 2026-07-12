@@ -1,6 +1,6 @@
 using Blocks.Genesis;
 using DomainService.Workflow.Enums;
-using DomainService.Workflow.Models;
+using DomainService.Workflow.Entities;
 using Microsoft.Extensions.Configuration;
 using MongoDB.Bson;
 using MongoDB.Driver;
@@ -24,12 +24,12 @@ namespace DomainService.Workflow.Repositories
         /// Gets MongoDB collection for specific tenant.
         /// Uses tenantId from execution model for proper multi-tenancy.
         /// </summary>
-        private IMongoCollection<WorkflowExecutionModel> GetCollection(string tenantId)
+        private IMongoCollection<WorkflowExecutionEntity> GetCollection(string tenantId)
         {
-            return _dbContextProvider.GetCollection<WorkflowExecutionModel>(tenantId, _collectionName);
+            return _dbContextProvider.GetCollection<WorkflowExecutionEntity>(tenantId, _collectionName);
         }
 
-        public async Task<WorkflowExecutionModel> CreateAsync(WorkflowExecutionModel execution)
+        public async Task<WorkflowExecutionEntity> CreateAsync(WorkflowExecutionEntity execution)
         {
             if (string.IsNullOrEmpty(execution.TenantId))
                 throw new InvalidOperationException("TenantId is required for execution");
@@ -39,20 +39,20 @@ namespace DomainService.Workflow.Repositories
             return execution;
         }
 
-        public async Task<WorkflowExecutionModel?> GetByIdAsync(string id, string tenantId)
+        public async Task<WorkflowExecutionEntity?> GetByIdAsync(string id, string tenantId)
         {
             var collection = GetCollection(tenantId);
-            var filter = Builders<WorkflowExecutionModel>.Filter.Eq(e => e.Id, id);
+            var filter = Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, id);
             return await collection.Find(filter).FirstOrDefaultAsync();
         }
 
-        public async Task UpdateAsync(WorkflowExecutionModel execution)
+        public async Task UpdateAsync(WorkflowExecutionEntity execution)
         {
             if (string.IsNullOrEmpty(execution.TenantId))
                 throw new InvalidOperationException("TenantId is required for execution");
 
             var collection = GetCollection(execution.TenantId);
-            var filter = Builders<WorkflowExecutionModel>.Filter.Eq(e => e.Id, execution.Id);
+            var filter = Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, execution.Id);
             await collection.ReplaceOneAsync(filter, execution);
         }
 
@@ -64,25 +64,25 @@ namespace DomainService.Workflow.Repositories
         public async Task<bool> AtomicCompleteNodeAsync(string executionId, string tenantId, string completedNodeId, List<string> nextNodeIds)
         {
             var collection = GetCollection(tenantId);
-            var filter = Builders<WorkflowExecutionModel>.Filter.Eq(e => e.Id, executionId);
+            var filter = Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, executionId);
 
             // Step 1: Pull completed node
-            var pullUpdate = Builders<WorkflowExecutionModel>.Update.Pull(e => e.ActiveNodeIds, completedNodeId);
+            var pullUpdate = Builders<WorkflowExecutionEntity>.Update.Pull(e => e.ActiveNodeIds, completedNodeId);
             await collection.UpdateOneAsync(filter, pullUpdate);
 
             // Step 2: Add next nodes (only if not already present)
             if (nextNodeIds.Any())
             {
-                var addUpdate = Builders<WorkflowExecutionModel>.Update.AddToSetEach(e => e.ActiveNodeIds, nextNodeIds);
+                var addUpdate = Builders<WorkflowExecutionEntity>.Update.AddToSetEach(e => e.ActiveNodeIds, nextNodeIds);
                 await collection.UpdateOneAsync(filter, addUpdate);
             }
 
             // Step 3: Check if ActiveNodeIds is now empty and mark complete atomically
-            var completeFilter = Builders<WorkflowExecutionModel>.Filter.And(
-                Builders<WorkflowExecutionModel>.Filter.Eq(e => e.Id, executionId),
-                Builders<WorkflowExecutionModel>.Filter.Size(e => e.ActiveNodeIds, 0)
+            var completeFilter = Builders<WorkflowExecutionEntity>.Filter.And(
+                Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, executionId),
+                Builders<WorkflowExecutionEntity>.Filter.Size(e => e.ActiveNodeIds, 0)
             );
-            var completeUpdate = Builders<WorkflowExecutionModel>.Update
+            var completeUpdate = Builders<WorkflowExecutionEntity>.Update
                 .Set(e => e.Status, WorkflowExecutionStatus.Completed)
                 .Set(e => e.FinishedAt, DateTime.UtcNow);
 
@@ -99,8 +99,8 @@ namespace DomainService.Workflow.Repositories
         public async Task AtomicFinalizeExecutionAsync(string executionId, string tenantId)
         {
             var collection = GetCollection(tenantId);
-            var filter = Builders<WorkflowExecutionModel>.Filter.Eq(e => e.Id, executionId);
-            var update = Builders<WorkflowExecutionModel>.Update
+            var filter = Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, executionId);
+            var update = Builders<WorkflowExecutionEntity>.Update
                 .Set(e => e.ActiveNodeIds, new List<string>())
                 .Set(e => e.Status, WorkflowExecutionStatus.Completed)
                 .Set(e => e.FinishedAt, DateTime.UtcNow);
@@ -112,12 +112,12 @@ namespace DomainService.Workflow.Repositories
         /// Atomically pushes a new NodeExecution to the NodeExecutions array and sets Status=Running.
         /// Prevents concurrent ReplaceOneAsync from overwriting other nodes' executions.
         /// </summary>
-        public async Task AtomicAddNodeExecutionAsync(string executionId, string tenantId, NodeExecutionModel nodeExecution)
+        public async Task AtomicAddNodeExecutionAsync(string executionId, string tenantId, NodeExecutionEntity nodeExecution)
         {
             var collection = GetCollection(tenantId);
-            var filter = Builders<WorkflowExecutionModel>.Filter.Eq(e => e.Id, executionId);
+            var filter = Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, executionId);
 
-            var update = Builders<WorkflowExecutionModel>.Update
+            var update = Builders<WorkflowExecutionEntity>.Update
                 .Push(e => e.NodeExecutions, nodeExecution)
                 .Set(e => e.Status, WorkflowExecutionStatus.Running);
 
@@ -131,12 +131,12 @@ namespace DomainService.Workflow.Repositories
         public async Task AtomicUpdateNodeExecutionCompletedAsync(string executionId, string tenantId, string nodeExecutionId, int outputItemCount, Dictionary<string, int> outputCountsByBranch, BsonDocument? contextUpdates)
         {
             var collection = GetCollection(tenantId);
-            var filter = Builders<WorkflowExecutionModel>.Filter.And(
-                Builders<WorkflowExecutionModel>.Filter.Eq(e => e.Id, executionId),
-                Builders<WorkflowExecutionModel>.Filter.ElemMatch(e => e.NodeExecutions, ne => ne.Id == nodeExecutionId)
+            var filter = Builders<WorkflowExecutionEntity>.Filter.And(
+                Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, executionId),
+                Builders<WorkflowExecutionEntity>.Filter.ElemMatch(e => e.NodeExecutions, ne => ne.Id == nodeExecutionId)
             );
 
-            var update = Builders<WorkflowExecutionModel>.Update
+            var update = Builders<WorkflowExecutionEntity>.Update
                 .Set("NodeExecutions.$.Status", NodeExecutionStatus.Completed)
                 .Set("NodeExecutions.$.OutputItemCount", outputItemCount)
                 .Set("NodeExecutions.$.OutputCountsByBranch", outputCountsByBranch)
@@ -161,12 +161,12 @@ namespace DomainService.Workflow.Repositories
         public async Task AtomicUpdateNodeExecutionFailedAsync(string executionId, string tenantId, string nodeExecutionId, string error)
         {
             var collection = GetCollection(tenantId);
-            var filter = Builders<WorkflowExecutionModel>.Filter.And(
-                Builders<WorkflowExecutionModel>.Filter.Eq(e => e.Id, executionId),
-                Builders<WorkflowExecutionModel>.Filter.ElemMatch(e => e.NodeExecutions, ne => ne.Id == nodeExecutionId)
+            var filter = Builders<WorkflowExecutionEntity>.Filter.And(
+                Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, executionId),
+                Builders<WorkflowExecutionEntity>.Filter.ElemMatch(e => e.NodeExecutions, ne => ne.Id == nodeExecutionId)
             );
 
-            var update = Builders<WorkflowExecutionModel>.Update
+            var update = Builders<WorkflowExecutionEntity>.Update
                 .Set("NodeExecutions.$.Status", NodeExecutionStatus.Failed)
                 .Set("NodeExecutions.$.EndedAt", DateTime.UtcNow)
                 .Set("NodeExecutions.$.Error", error)
@@ -177,10 +177,10 @@ namespace DomainService.Workflow.Repositories
             await collection.UpdateOneAsync(filter, update);
         }
 
-        public async Task<List<WorkflowExecutionModel>> GetByWorkflowIdAsync(string workflowId, string tenantId)
+        public async Task<List<WorkflowExecutionEntity>> GetByWorkflowIdAsync(string workflowId, string tenantId)
         {
             var collection = GetCollection(tenantId);
-            var filter = Builders<WorkflowExecutionModel>.Filter.Eq(e => e.WorkflowId, workflowId);
+            var filter = Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.WorkflowId, workflowId);
             return await collection.Find(filter)
                 .SortByDescending(e => e.StartedAt)
                 .ToListAsync();
@@ -190,10 +190,10 @@ namespace DomainService.Workflow.Repositories
         /// Add workflow item execution models to the database.
         /// These represent individual data items flowing through nodes.
         /// </summary>
-        public async Task AddItemsAsync(string tenantId, List<WorkflowItemExecutionModel> items)
+        public async Task AddItemsAsync(string tenantId, List<WorkflowItemExecutionEntity> items)
         {
             if (!items.Any()) return;
-            var collection = _dbContextProvider.GetCollection<WorkflowItemExecutionModel>(tenantId, "WorkflowItemExecutions");
+            var collection = _dbContextProvider.GetCollection<WorkflowItemExecutionEntity>(tenantId, "WorkflowItemExecutions");
             await collection.InsertManyAsync(items);
         }
 
@@ -201,20 +201,20 @@ namespace DomainService.Workflow.Repositories
         /// Get workflow items by node IDs for a specific execution.
         /// Used to resolve input items when executing downstream nodes.
         /// </summary>
-        public async Task<List<WorkflowItemExecutionModel>> GetItemsByNodeIdsAsync(
+        public async Task<List<WorkflowItemExecutionEntity>> GetItemsByNodeIdsAsync(
             string workflowExecutionId,
             List<Dictionary<string, string>> nodeIdBranchPairs,
             string tenantId)
         {
-            var collection = _dbContextProvider.GetCollection<WorkflowItemExecutionModel>(tenantId, "WorkflowItemExecutions");
+            var collection = _dbContextProvider.GetCollection<WorkflowItemExecutionEntity>(tenantId, "WorkflowItemExecutions");
 
-            var filter = Builders<WorkflowItemExecutionModel>.Filter.And(
-                Builders<WorkflowItemExecutionModel>.Filter.Eq("WorkflowExecutionId", workflowExecutionId),
-                Builders<WorkflowItemExecutionModel>.Filter.Or(
+            var filter = Builders<WorkflowItemExecutionEntity>.Filter.And(
+                Builders<WorkflowItemExecutionEntity>.Filter.Eq("WorkflowExecutionId", workflowExecutionId),
+                Builders<WorkflowItemExecutionEntity>.Filter.Or(
                     nodeIdBranchPairs.Select(pair =>
-                        Builders<WorkflowItemExecutionModel>.Filter.And(
-                            Builders<WorkflowItemExecutionModel>.Filter.Eq("NodeId", pair["NodeId"]),
-                            Builders<WorkflowItemExecutionModel>.Filter.Eq("Branch", pair["Branch"])
+                        Builders<WorkflowItemExecutionEntity>.Filter.And(
+                            Builders<WorkflowItemExecutionEntity>.Filter.Eq("NodeId", pair["NodeId"]),
+                            Builders<WorkflowItemExecutionEntity>.Filter.Eq("Branch", pair["Branch"])
                         )
                     )
                 )
@@ -229,30 +229,30 @@ namespace DomainService.Workflow.Repositories
         /// Returns all data items that flowed through the workflow.
         /// Frontend will organize these into node input/output structure.
         /// </summary>
-        public async Task<List<WorkflowItemExecutionModel>> GetAllItemsByExecutionIdAsync(string workflowExecutionId, string tenantId)
+        public async Task<List<WorkflowItemExecutionEntity>> GetAllItemsByExecutionIdAsync(string workflowExecutionId, string tenantId)
         {
-            var collection = _dbContextProvider.GetCollection<WorkflowItemExecutionModel>(tenantId, "WorkflowItemExecutions");
+            var collection = _dbContextProvider.GetCollection<WorkflowItemExecutionEntity>(tenantId, "WorkflowItemExecutions");
 
-            var filter = Builders<WorkflowItemExecutionModel>.Filter.Eq("WorkflowExecutionId", workflowExecutionId);
+            var filter = Builders<WorkflowItemExecutionEntity>.Filter.Eq("WorkflowExecutionId", workflowExecutionId);
 
             var items = await collection.Find(filter).SortBy(doc => doc.CreatedAt).ToListAsync();
             return items;
         }
 
 
-        public async Task<List<WorkflowItemExecutionModel>> GetAllItemsByNodeExecutionIdAsync(string nodeExecutionId, string tenantId)
+        public async Task<List<WorkflowItemExecutionEntity>> GetAllItemsByNodeExecutionIdAsync(string nodeExecutionId, string tenantId)
         {
-            var collection = _dbContextProvider.GetCollection<WorkflowItemExecutionModel>(tenantId, "WorkflowItemExecutions");
+            var collection = _dbContextProvider.GetCollection<WorkflowItemExecutionEntity>(tenantId, "WorkflowItemExecutions");
 
-            var filter = Builders<WorkflowItemExecutionModel>.Filter.Eq("NodeExecutionId", nodeExecutionId);
+            var filter = Builders<WorkflowItemExecutionEntity>.Filter.Eq("NodeExecutionId", nodeExecutionId);
 
             var items = await collection.Find(filter).SortBy(doc => doc.ItemIndex).ToListAsync();
             return items;
         }
 
-        public Task<WorkflowExecutionModel> GetLastCompletedExecution(string tenantId, string workflowId)
+        public Task<WorkflowExecutionEntity> GetLastCompletedExecution(string tenantId, string workflowId)
         {
-            var collection = _dbContextProvider.GetCollection<WorkflowExecutionModel>(tenantId, _collectionName);
+            var collection = _dbContextProvider.GetCollection<WorkflowExecutionEntity>(tenantId, _collectionName);
             return collection.Find(item =>
                 item.TenantId == tenantId &&
                 item.WorkflowId == workflowId &&

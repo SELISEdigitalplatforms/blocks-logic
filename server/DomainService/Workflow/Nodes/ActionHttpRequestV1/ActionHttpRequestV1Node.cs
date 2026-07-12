@@ -4,7 +4,7 @@ using DomainService.Workflow.Utils;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using System.Diagnostics.CodeAnalysis;
-using DomainService.Workflow.Models;
+using DomainService.Workflow.Entities;
 
 namespace DomainService.Workflow.Nodes.ActionHttpRequestV1
 {
@@ -48,7 +48,7 @@ namespace DomainService.Workflow.Nodes.ActionHttpRequestV1
         }
 
         private (string? url, string httpMethod, Dictionary<string, string> headers, string bodyContent, string contentType) PrepareRequest(
-            ActionHttpRequestV1Parameters parameters, WorkflowItemExecutionModel inputItem, NodeExecutionContext context)
+            ActionHttpRequestV1Parameters parameters, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
         {
             var url = parseExpression<string>(parameters.Url, inputItem, context) ?? "";
             var httpMethod = parameters.HttpMethod.ToUpper();

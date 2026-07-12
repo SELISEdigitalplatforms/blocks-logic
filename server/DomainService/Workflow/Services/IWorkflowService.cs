@@ -1,6 +1,5 @@
 using Blocks.Genesis;
 using DomainService.Workflow.Dtos;
-using DomainService.Workflow.Models;
 
 namespace DomainService.Workflow.Services
 {
@@ -17,12 +16,6 @@ namespace DomainService.Workflow.Services
         Task<BaseMutationResponse> UpdateAsync(string tenantId, WorkflowUpdateRequestDto dto);
 
         Task<BaseMutationResponse> DeleteAsync(string tenantId, WorkflowDeleteRequestDto dto);
-
-        Task<BaseMutationResponse> CreateVersionAsync(string tenantId, WorkflowVersionCreateRequestDto dto);
-
-        Task<BaseMutationResponse> UpdateVersionAsync(string tenantId, WorkflowVersionUpdateRequestDto dto);
-
-        Task<WorkflowGetVersionsResponseDto> GetVersionsAsync(string tenantId, WorkflowGetVersionsRequestDto dto);
 
         Task<GetWorkflowByVersionResponseDto> GetWorkflowByVersionAsync(string tenantId, GetWorkflowByVersionRequestDto dto);
 
