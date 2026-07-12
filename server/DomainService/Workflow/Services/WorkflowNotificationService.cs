@@ -1,12 +1,10 @@
-using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Blocks.Genesis;
 using DomainService.Notification;
-using DomainService.Shared;
 using DomainService.Workflow.Dtos;
-using DomainService.Workflow.Models;
+using DomainService.Workflow.Entities;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -127,8 +125,8 @@ namespace DomainService.Workflow.Services
         }
 
         public async Task NotifyExecutionEventAsync(
-            WorkflowExecutionModel execution,
-            NodeExecutionModel? nodeExecution,
+            WorkflowExecutionEntity execution,
+            NodeExecutionEntity? nodeExecution,
             string eventName,
             string code,
             string status,
@@ -162,7 +160,7 @@ namespace DomainService.Workflow.Services
 
         private async Task<bool> NotifyWorkflowExecutionEventAsync(
             List<string> userIds,
-            WorkflowModel workflowModel,
+            WorkflowEntity workflowModel,
             string executionId,
             string eventName,
             string code,
@@ -193,8 +191,8 @@ namespace DomainService.Workflow.Services
 
         private async Task<bool> NotifyNodeExecutionEventAsync(
             List<string> userIds,
-            WorkflowModel workflowModel,
-            NodeExecutionModel nodeExecution,
+            WorkflowEntity workflowModel,
+            NodeExecutionEntity nodeExecution,
             string executionId,
             string eventName,
             string code,
