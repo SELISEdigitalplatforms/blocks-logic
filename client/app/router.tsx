@@ -13,11 +13,7 @@ import {
   ConsolePage,
   CallbackPage,
   ProfilePage,
-  ProjectOverviewLayout,
   DashboardOverview,
-  DashboardLayout,
-  EnvironmentsPage,
-  ProjectOverviewRoute,
   DashboardRoute,
 } from "@seliseblocks/blocks-kit";
 import { navigationMenus } from "./constants/navigation-menus";
@@ -76,11 +72,6 @@ export const router = createBrowserRouter([
               { path: "console", element: <ConsolePage /> },
               { path: "profile", element: <ProfilePage /> },
             ],
-          },
-          {
-            path: "project/:tenantGroupId",
-            element: <ProjectOverviewRoute redirectPaths={redirectPaths} navigationMenus={navigationMenus} />,
-            children: [{ path: "environments", element: <EnvironmentsPage /> }],
           },
           {
             // impersonate
