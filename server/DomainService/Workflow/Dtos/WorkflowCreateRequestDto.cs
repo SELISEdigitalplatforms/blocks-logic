@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
-using DomainService.Workflow.Models;
+using DomainService.Workflow.Entities;
 
 namespace DomainService.Workflow.Dtos;
 
@@ -13,7 +13,7 @@ public class WorkflowCreateRequestDto
 
     public JsonElement Nodes { get; set; } = JsonDocument.Parse("[]").RootElement;
 
-    public List<EdgeModel> Edges { get; set; } = new();
+    public List<EdgeEnity> Edges { get; set; } = new();
 
     public Dictionary<string, string> Settings { get; set; } = new();
 
@@ -21,5 +21,4 @@ public class WorkflowCreateRequestDto
 
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
-    public Dictionary<string, List<NodeOutputSchemaField>> NodeOutputSchemas { get; set; } = new();
 }
