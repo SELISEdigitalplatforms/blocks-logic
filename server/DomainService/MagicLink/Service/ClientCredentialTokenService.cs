@@ -68,7 +68,7 @@ namespace DomainService.MagicLink.Service
 
                 // Get the authentication endpoint from configuration
                 var authEndpoint = _configuration["AuthenticationTokenEndpoint"]
-                    ?? "https://api.seliseblocks.com/idp/v1/Authentication/token";
+                    ?? "https://iam.seliseblocks.com/api/oidc/token";
 
                 using var client = _httpClientFactory.CreateClient();
 
@@ -78,9 +78,10 @@ namespace DomainService.MagicLink.Service
                 // Prepare form data
                 var formData = new Dictionary<string, string>
                 {
-                    { "grant_type", "client_credential" },
+                    { "grant_type", "client_credentials" },
                     { "client_id", clientCredentials.ItemId },
-                    { "client_secret", clientCredentials.ClientSecret }
+                    { "client_secret", clientCredentials.ClientSecret },
+                    {"org_id","default"}
                 };
 
                 var content = new FormUrlEncodedContent(formData);
