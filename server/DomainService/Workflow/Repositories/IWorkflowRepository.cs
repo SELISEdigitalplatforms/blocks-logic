@@ -1,20 +1,25 @@
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-using DomainService.Workflow.Models;
+using DomainService.Workflow.Entities;
 
 namespace DomainService.Workflow.Repositories
 {
     public interface IWorkflowRepository
     {
-        Task CreateWorkflowAsync(WorkflowModel workflow);
-        Task<List<WorkflowModel>> GetAllWorkflowsAsync(int pageSize, int pageNumber, string? search, bool? isActive, string tenantId);
+        Task CreateWorkflowAsync(WorkflowEntity workflow);
 
-        Task<List<WorkflowModel>> GetWorkflowsByMailServerConfigurationIdAsync(string mailServerConfigurationId, string tenantId);
-        Task<List<WorkflowModel>> GetWorkflowsByDataCollectionAsync(string collectionName, string operation, string tenantId);
-        Task<long> GetWorkflowsCountAsync(string? search, bool? isActive, string tenantId);
-        Task<WorkflowModel> GetWorkflowAsync(string workflowId, string tenantId);
-        Task UpdateWorkflowAsync(WorkflowModel workflow);
-        Task DeleteWorkflowAsync(string workflowId, string tenantId);
+        Task<List<WorkflowEntity>> GetAllWorkflowsAsync(string tenantId, int pageSize, int pageNumber, string? search, bool? isPublished);
+
+        Task<List<WorkflowEntity>> GetWorkflowsByMailServerConfigurationIdAsync(string tenantId, string mailServerConfigurationId);
+
+        Task<List<WorkflowEntity>> GetWorkflowsByDataCollectionAsync(string tenantId, string collectionName, string operation);
+
+        Task<List<WorkflowEntity>> GetPublishWorkflowsByDataCollectionAsync(string tenantId, string collectionName, string operation);
+
+        Task<long> GetWorkflowsCountAsync(string tenantId, string? search, bool? isPublished);
+
+        Task<WorkflowEntity> GetWorkflowAsync(string tenantId, string workflowId);
+
+        Task UpdateWorkflowAsync(WorkflowEntity workflow);
+
+        Task DeleteWorkflowAsync(string tenantId, string workflowId);
     }
 }

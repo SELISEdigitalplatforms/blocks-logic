@@ -23,8 +23,8 @@ import { duplicateWorkflowSchema, DuplicateWorkflowFormValues } from "./schema";
 import { isErrorWithErrors } from "@/lib/error";
 import { useDuplicateWorkflow } from "@blocks-workflow/hooks/use-workflow-api";
 import { addCopySuffix } from "@blocks-workflow/utils/add-copy-suffix.util";
-import { useProjectStore } from "@/store/useProjectStore";
 import { useNavigate } from "react-router-dom";
+import { useScopedPath } from "@seliseblocks/blocks-kit";
 
 type DuplicateWorkflowProps = {
   open: boolean;
@@ -40,11 +40,13 @@ export const DuplicateWorkflow = ({
   name,
 }: DuplicateWorkflowProps) => {
   const { isPending, mutateAsync } = useDuplicateWorkflow();
-  const projectKey = useProjectStore().selectedProject?.tenantId || "";
   const navigate = useNavigate();
+  const scoped = useScopedPath();
 
   const form = useForm<DuplicateWorkflowFormValues>({
-    values: { name: name ? addCopySuffix(name) : "" } as DuplicateWorkflowFormValues,
+    values: {
+      name: name ? addCopySuffix(name) : "",
+    } as DuplicateWorkflowFormValues,
     resolver: zodResolver(duplicateWorkflowSchema),
   });
 
@@ -52,7 +54,6 @@ export const DuplicateWorkflow = ({
     try {
       const payload = {
         name: values.name,
-        projectKey: projectKey,
         workflowId: workflowId,
       };
 
@@ -60,10 +61,11 @@ export const DuplicateWorkflow = ({
       if (!res.isSuccess) return showErrorToast({ errors: res.errors });
       showSuccessToast({ description: "Workflow successfully created." });
       form.reset();
-      navigate(`/workflow/${res.itemId}`);
+      navigate(scoped(`workflow/${res.itemId}`));
       onOpenChange(false);
     } catch (error) {
-      if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
+      if (isErrorWithErrors(error))
+        return showErrorToast({ errors: error.errors });
       return showErrorToast({ errors: "Failed to create workflow" });
     }
   };
@@ -86,7 +88,10 @@ export const DuplicateWorkflow = ({
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+          <form
+            onSubmit={form.handleSubmit(handleSubmit)}
+            className="space-y-6"
+          >
             <FormField
               control={form.control}
               name="name"

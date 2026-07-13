@@ -3,7 +3,6 @@
 import { useMemo, useCallback } from "react";
 import { FieldSchema } from "./form-field.types";
 import { useWorkflow } from "@blocks-workflow/hooks";
-
 import {
   getValueByPath,
   setValueByPath,
@@ -11,12 +10,16 @@ import {
   cascadeFieldResets,
   stripTransientKeys,
 } from "./utils";
-import { useProjectStore } from "@/store/useProjectStore";
+import { useWorkflowStoreApi, WorkflowStore } from "@/modules/workflow/store";
+import { useProjectStore } from "@seliseblocks/blocks-kit";
 
 export interface FormBuilderConfig {
   projectKey: string;
   workflowId: string;
   nodeId: string;
+  store: WorkflowStore;
+  executionMode?: number;
+  editorMode?: "editor" | "execution" | "version";
 }
 
 interface UseFormBuilderProps {
@@ -56,15 +59,29 @@ export const useFormBuilder = ({
   onChange,
 }: UseFormBuilderProps): UseFormBuilderReturn => {
   const tenantId = useProjectStore().selectedProject?.tenantId || "";
-  const { selectedNode, workflowId } = useWorkflow();
+  const { selectedNode, workflowId, editorMode, executionMode: explicitExecutionMode } = useWorkflow();
+
+  const store = useWorkflowStoreApi();
+
+  let derivedExecutionMode = 0; // Default Test
+  if (editorMode === "version") {
+    derivedExecutionMode = 1; // Production
+  } else if (editorMode === "execution") {
+    derivedExecutionMode = explicitExecutionMode ?? 0;
+  } else {
+    derivedExecutionMode = 0; // Test
+  }
 
   const config: FormBuilderConfig = useMemo(
     () => ({
       projectKey: tenantId,
       workflowId: workflowId || "",
       nodeId: selectedNode?.id || "",
+      store,
+      executionMode: derivedExecutionMode,
+      editorMode,
     }),
-    [tenantId, workflowId, selectedNode],
+    [tenantId, workflowId, selectedNode, store, derivedExecutionMode, editorMode],
   );
 
   const isWorkflowExecuted = !!selectedNode?.data?.isWorkflowExecuted;
@@ -76,7 +93,7 @@ export const useFormBuilder = ({
       // Run field-level side-effects (e.g., recalculate cronExpression)
       let sideEffectKeys: string[] = [];
       if (field.onChange) {
-        const result = field.onChange(value, updated) || {};
+        const result = field.onChange(value, updated, config) || {};
         if (result) {
           sideEffectKeys = Object.keys(result);
           updated = { ...updated, ...result };
@@ -88,7 +105,7 @@ export const useFormBuilder = ({
       const persisted = stripTransientKeys(updated, fields);
       onChange(persisted);
     },
-    [data, fields, onChange],
+    [data, fields, onChange, config],
   );
 
   const visibleFields = useMemo(

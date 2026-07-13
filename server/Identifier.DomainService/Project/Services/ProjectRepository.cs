@@ -45,7 +45,9 @@ namespace DomainService.Projects
         {
             var collection = _clientDb.GetCollection<Tenant>(IdentifierConstants.TenantCollectionName);
 
-            var filter = Builders<Tenant>.Filter.Eq(mc => mc.ItemId, itemId);
+            var filter = Builders<Tenant>.Filter.And(Builders<Tenant>.Filter.Eq(mc => mc.ItemId, itemId),
+                                                    Builders<Tenant>.Filter.Eq(mc => mc.IsDisabled, false));
+
             return await collection.Find(filter).FirstOrDefaultAsync();
         }
 
@@ -135,7 +137,7 @@ namespace DomainService.Projects
 
         public async Task<List<GroupedProjectsDto>> GetAllByLastModifiedDateAsync(GetProjectsRequest request)
         {
-            var collection = _dbContextProvider.GetCollection<Project>(IdentifierConstants.TenantCollectionName);
+            var collection = _clientDb.GetCollection<Project>(IdentifierConstants.TenantCollectionName);
 
             var filter = !string.IsNullOrEmpty(request.TenantGroupId) ?
 
@@ -197,7 +199,7 @@ namespace DomainService.Projects
 
         public async Task<List<Project>> GetSharedProjectsAsync(string? tenantGroupId = null)
         {
-            var projectPeopleCollection = _dbContextProvider.GetCollection<ProjectPeople>(IdentifierConstants.ProjectPeopleCollectionName);
+            var projectPeopleCollection = _clientDb.GetCollection<ProjectPeople>(IdentifierConstants.ProjectPeopleCollectionName);
 
             var projectPeopleFilter = Builders<ProjectPeople>.Filter.And(
                 Builders<ProjectPeople>.Filter.Eq(mc => mc.UserId, BlocksContext.GetContext()?.UserId),
@@ -208,7 +210,7 @@ namespace DomainService.Projects
             var documentsCursor = await projectPeopleCollection.FindAsync(projectPeopleFilter);
             var documents = await documentsCursor.ToListAsync();
 
-            var projectCollection = _dbContextProvider.GetCollection<Project>(IdentifierConstants.TenantCollectionName);
+            var projectCollection = _clientDb.GetCollection<Project>(IdentifierConstants.TenantCollectionName);
             var filter = Builders<Project>.Filter.In(p => p.TenantId, documents?.Select(doc => doc?.TenantId)) &
                          Builders<Project>.Filter.Where(p => p.IsDisabled == false) &
                          Builders<Project>.Filter.Ne(p => p.CreatedBy, BlocksContext.GetContext().UserId);

@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui-kits/button/button";
-import { Ban, EllipsisVertical, Play, Trash } from "lucide-react";
-import { useWorkflow } from "../../hooks";
+import { Copy, EllipsisVertical, Play, Trash, Rss, Ban } from "lucide-react";
+import { useWorkflow, useStepExecute, useHandleExecuteStep } from "../../hooks";
+import { getStatusStyles } from "../../utils/workflow-execution-editor.util";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,8 +14,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui-kits/tooltip/tooltip";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { showErrorToast } from "@/hooks/use-toast";
 
 type EditorNodeBaseProps = {
   id: string;
@@ -24,49 +26,122 @@ type EditorNodeBaseProps = {
 
 export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
   const [isToolbarVisible, setIsToolbarVisible] = useState(false);
-  const { getNodeById, deleteNode, selectAndConfigureNode, selectedNode } =
+  const { getNodeById, deleteNode, selectAndConfigureNode, selectedNode, updateNode, duplicateNode, isNodeNameUnique, workflowId, stepExecutionReachableNodeIds, executedNodes, isListening, listeningNodeId } =
     useWorkflow();
   const node = getNodeById(id);
+  const { handleExecuteStep, executeStepModal } = useHandleExecuteStep();
+
+
+
+  const isExecutedNode = stepExecutionReachableNodeIds?.has(id);
+  const executedNodeStatus = isExecutedNode ? executedNodes.find(n => n.nodeId === id)?.status : undefined;
+  const executionStyles = executedNodeStatus ? getStatusStyles(executedNodeStatus).nodeClass : "";
+
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [editName, setEditName] = useState(node?.name || "");
+
+  useEffect(() => {
+    if (!isRenaming && node?.name) {
+      setEditName(node.name);
+    }
+  }, [node?.name, isRenaming]);
+
+  const handleRenameSubmit = () => {
+    const newName = editName.trim();
+    if (newName && newName !== node?.name) {
+      if (!isNodeNameUnique(newName, id)) {
+        showErrorToast({
+          title: "Validation Error",
+          errors: "A node with this name already exists.",
+        });
+        return;
+      }
+      updateNode(id, { name: newName });
+    }
+    setIsRenaming(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      handleRenameSubmit();
+    } else if (e.key === "Escape") {
+      setIsRenaming(false);
+      setEditName(node?.name || "");
+    }
+  };
+
   if (!node) return null;
-  const isSelected = node.id === selectedNode?.id;
+  const isSelected = node.selected;
   return (
     <>
       <div
         className={cn(
-          "peer rounded-md border bg-background px-5 py-4 shadow-lg transition-shadow hover:shadow-xl",
-          isSelected && "border-medium-emphasis",
+          "peer min-w-[100px] rounded-md border bg-background px-5 py-4 shadow-lg transition-all duration-500 hover:shadow-xl",
+          isSelected && "border-primary ring-1 ring-primary",
+          executionStyles,
           node.className || "",
         )}
       >
         {children}
       </div>
+      {isListening && listeningNodeId === id && (
+        <>
+          <div className="absolute -bottom-2 -right-2 z-50 flex h-5 w-5 items-center justify-center rounded-full bg-background border border-green-500 shadow-md">
+            <Rss className="h-3 w-3 text-green-500" />
+          </div>
+          <div className="absolute -bottom-2 -right-2 z-40 h-5 w-5 animate-ping rounded-full bg-green-500"></div>
+        </>
+      )}
 
       <div
         className={cn(
-          "absolute -top-12 left-1/2 flex -translate-x-1/2 transform gap-1 rounded-md bg-background px-3 py-2 opacity-0 shadow-sm transition-opacity hover:opacity-100 peer-hover:opacity-100",
+          "absolute -top-12 left-1/2 flex -translate-x-1/2 transform gap-1 rounded-md bg-background px-3 py-2 opacity-0 shadow-sm transition-opacity hover:opacity-100 peer-hover:opacity-100 after:absolute after:content-[''] after:-bottom-6 after:left-0 after:h-6 after:w-full",
           isToolbarVisible && "opacity-100",
           node.data?.hasToolbar === false && "hidden",
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        <Tooltip>
+        {listeningNodeId !==id && <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-fit w-fit p-1">
+            <Button variant="ghost" size="sm" className="h-fit w-fit p-1" disabled={isListening} onClick={(e) => {
+              e.stopPropagation();
+              handleExecuteStep(id);
+            }}>
               <Play className="h-3.5 w-3.5" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>
             <p>Execute Node</p>
           </TooltipContent>
-        </Tooltip>
-        <Tooltip>
+        </Tooltip>}
+
+        {isListening && listeningNodeId===id && <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-fit w-fit p-1">
+            <Button variant="ghost" size="sm" className="h-fit w-fit p-1" onClick={(e) => {
+              e.stopPropagation();
+            }}>
               <Ban className="h-3.5 w-3.5" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>
             <p>Stop Execution</p>
+          </TooltipContent>
+        </Tooltip>}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="h-fit w-fit p-1" 
+              onClick={(e) => {
+                e.stopPropagation();
+                duplicateNode(id);
+              }}>
+              <Copy className="h-3.5 w-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Duplicate</p>
           </TooltipContent>
         </Tooltip>
         <Tooltip>
@@ -86,9 +161,16 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
         </Tooltip>
         <DropdownMenu onOpenChange={setIsToolbarVisible}>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-fit w-fit p-1">
-              <EllipsisVertical className="h-3.5 w-3.5" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" className="h-fit w-fit p-1">
+                  <EllipsisVertical className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>More options</p>
+              </TooltipContent>
+            </Tooltip>
           </DropdownMenuTrigger>
           <DropdownMenuContent
             align="end"
@@ -106,8 +188,10 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
             </DropdownMenuItem>
             <DropdownMenuItem
               className="cursor-pointer"
+              disabled={isListening}
               onClick={(e) => {
                 e.stopPropagation();
+                handleExecuteStep(id);
               }}
             >
               <span>Execute step</span>
@@ -117,23 +201,17 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
               className="cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation();
+                setIsRenaming(true);
+                setIsToolbarVisible(false);
               }}
             >
               <span>Rename</span>
             </DropdownMenuItem>
-
             <DropdownMenuItem
               className="cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation();
-              }}
-            >
-              <span>Copy</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="cursor-pointer"
-              onClick={(e) => {
-                e.stopPropagation();
+                duplicateNode(id);
               }}
             >
               <span>Duplicate</span>
@@ -143,6 +221,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
               className="cursor-pointer text-error"
               onClick={(e) => {
                 e.stopPropagation();
+                deleteNode(id);
               }}
             >
               <span>Delete</span>
@@ -150,9 +229,30 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <h4 className="absolute left-1/2 mt-2 w-full min-w-24 -translate-x-1/2 transform text-center text-medium-emphasis">
-        {node?.name}
-      </h4>
+      {isRenaming ? (
+        <input
+          autoFocus
+          maxLength={80}
+          className="absolute left-1/2 mt-2 w-full min-w-24 -translate-x-1/2 transform rounded border border-primary bg-background px-2 py-1 text-center text-sm outline-none"
+          value={editName}
+          onChange={(e) => setEditName(e.target.value)}
+          onBlur={handleRenameSubmit}
+          onKeyDown={handleKeyDown}
+          onClick={(e) => e.stopPropagation()}
+        />
+      ) : (
+        <h4
+          className="absolute left-1/2 mt-2 w-full min-w-24 -translate-x-1/2 transform text-center text-medium-emphasis"
+          onClick={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            setIsRenaming(true);
+          }}
+        >
+          {node?.name}
+        </h4>
+      )}
+      {executeStepModal}
     </>
   );
 };

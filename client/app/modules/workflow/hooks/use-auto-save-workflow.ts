@@ -1,11 +1,11 @@
 import { useEffect, useRef, useCallback } from "react";
-import { useWorkflowStore } from "../store/workflow-store";
+import { useWorkflowStore, useWorkflowStoreApi } from "../store";
 import { WorkflowNode } from "@blocks-workflow/models/node.model";
 import { useUpdateWorkflow } from "./use-workflow-api";
 
 type UseAutoSaveWorkflowOptions = {
   workflowId: string;
-  projectKey: string;
+  // projectKey: string;
   debounceMs?: number;
   enabled?: boolean;
   onSaveSuccess?: () => void;
@@ -14,32 +14,32 @@ type UseAutoSaveWorkflowOptions = {
 
 export const useAutoSaveWorkflow = ({
   workflowId,
-  projectKey,
+  // projectKey,
   debounceMs = 10000,
   enabled = true,
   onSaveSuccess,
   onSaveError,
 }: UseAutoSaveWorkflowOptions) => {
-  const isDirty = useWorkflowStore((state) => state.isDirty);
+  const hasUnsavedChanges = useWorkflowStore((state) => state.hasUnsavedChanges);
+  const store = useWorkflowStoreApi();
   const { mutateAsync, isPending } = useUpdateWorkflow();
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isSavingRef = useRef(false);
 
   const saveWorkflow = useCallback(async () => {
-    if (!isDirty || isSavingRef.current) return;
+    if (!hasUnsavedChanges || isSavingRef.current) return;
 
     isSavingRef.current = true;
 
     try {
-      const nodesMap = useWorkflowStore.getState().nodesMap;
-      const edgesMap = useWorkflowStore.getState().edgesMap;
+      const { nodesMap, edgesMap } = store.getState();
 
       const nodes = Object.values(nodesMap) as WorkflowNode[];
       const edges = Object.values(edgesMap);
 
       await mutateAsync({
         itemId: workflowId,
-        projectKey,
+        // projectKey,
         nodes,
         edges,
       });
@@ -50,10 +50,10 @@ export const useAutoSaveWorkflow = ({
     } finally {
       isSavingRef.current = false;
     }
-  }, [isDirty, workflowId, projectKey, mutateAsync, onSaveSuccess, onSaveError]);
+  }, [hasUnsavedChanges, workflowId, mutateAsync, onSaveSuccess, onSaveError, store]);
 
   useEffect(() => {
-    if (!enabled || !isDirty) return;
+    if (!enabled || !hasUnsavedChanges) return;
 
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
@@ -68,11 +68,11 @@ export const useAutoSaveWorkflow = ({
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [isDirty, enabled, debounceMs, saveWorkflow]);
+  }, [hasUnsavedChanges, enabled, debounceMs, saveWorkflow]);
 
   useEffect(() => {
     return () => {
-      if (isDirty && enabled && debounceTimerRef.current) {
+      if (hasUnsavedChanges && enabled && debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
         saveWorkflow();
       }

@@ -6,20 +6,18 @@ import { WorkflowFilterToolBar } from "../../components/workflow-filter-toolbar"
 import { Pagination } from "@/components/ui-kits/pagination/pagination";
 import { useGetWorkflows } from "@blocks-workflow/hooks/use-workflow-api";
 import { useWorkflowFilterQueryParams } from "@blocks-workflow/hooks";
-import { useProjectStore } from "@/store/useProjectStore";
 
 export const Workflows = () => {
   const { queryParams, setQueryParams } = useWorkflowFilterQueryParams();
-  const tenantId = useProjectStore().selectedProject?.tenantId || "";
   const { data, isLoading, isFetching } = useGetWorkflows({
     pageSize: Number(queryParams.pageSize),
     pageNumber: Number(queryParams.page),
-    projectKey: tenantId,
+    // projectKey: tenantId,
     search: queryParams.search || "",
-    isActive:
-      queryParams.isActive === "all"
+    isPublished:
+      queryParams.isPublished === "all"
         ? undefined
-        : queryParams.isActive === "1"
+        : queryParams.isPublished === "1"
           ? true
           : false,
   });

@@ -1,20 +1,32 @@
 using Blocks.Genesis;
 using DomainService.Workflow.Dtos;
-using DomainService.Workflow.Models;
 
 namespace DomainService.Workflow.Services
 {
     public interface IWorkflowService
     {
-        Task<BaseMutationResponse> CreateAsync(WorkflowCreateRequestDto dto);
+        Task<BaseMutationResponse> CreateAsync(string tenantId, WorkflowCreateRequestDto dto);
 
-        Task<BaseMutationResponse> DuplicateAsync(WorkflowDuplicateRequestDto dto);
-        Task<WorkflowGetsResponseDto> GetAllAsync(WorkflowGetsRequestDto dto);
+        Task<BaseMutationResponse> DuplicateAsync(string tenantId, WorkflowDuplicateRequestDto dto);
 
-        Task<WorkflowGetResponseDto> GetAsync(WorkflowGetRequestDto dto);
+        Task<WorkflowGetsResponseDto> GetAllAsync(string tenantId, WorkflowGetsRequestDto dto);
 
-        Task<BaseMutationResponse> UpdateAsync(WorkflowUpdateRequestDto dto);
+        Task<WorkflowGetResponseDto> GetAsync(string tenantId, WorkflowGetRequestDto dto);
 
-        Task<BaseMutationResponse> DeleteAsync(WorkflowDeleteRequestDto dto);
+        Task<BaseMutationResponse> UpdateAsync(string tenantId, WorkflowUpdateRequestDto dto);
+
+        Task<BaseMutationResponse> DeleteAsync(string tenantId, WorkflowDeleteRequestDto dto);
+
+        Task<GetWorkflowByVersionResponseDto> GetWorkflowByVersionAsync(string tenantId, GetWorkflowByVersionRequestDto dto);
+
+        Task<BaseMutationResponse> PublishNewVersionAsync(string tenantId, WorkflowPublishNewVersionRequestDto dto);
+
+        Task<BaseMutationResponse> PublishVersionAsync(string tenantId, WorkflowPublishVersionRequestDto dto);
+
+        Task<BaseMutationResponse> UnpublishAsync(string tenantId, WorkflowUnpublishRequestDto dto);
+
+        Task<BaseMutationResponse> RestoreAsync(string tenantId, WorkflowRestoreRequestDto dto);
+
+        Task<BaseMutationResponse> TriggerListenerAsync(string tenantId, TriggerListenerRequestDto dto);
     }
 }

@@ -1,14 +1,13 @@
 import { Edge } from "@xyflow/react";
-import { ExecutedItem, ExecutedNode, Workflow, WorkflowSummary } from "../models/workflow.model";
+import { ExecutedItem, ExecutedNode, Workflow, WorkflowSummary, WorkflowVersion, WorkflowExecutionMode } from "../models/workflow.model";
 import { WorkflowNode } from "@blocks-workflow/models/node.model";
 import { OutputSchemaField } from "./output-schema.types";
 
 export interface IGetWorkflowsPayload {
   pageSize?: number;
   pageNumber?: number;
-  projectKey: string;
   search?: string;
-  isActive?: boolean;
+  isPublished?: boolean;
 }
 
 export interface IGetWorkflowsResponse {
@@ -19,7 +18,6 @@ export interface IGetWorkflowsResponse {
 
 export interface IGetWorkflowByIdPayload {
   id: string;
-  projectKey: string;
 }
 
 export interface IGetWorkflowByIdResponse {
@@ -30,12 +28,11 @@ export interface IGetWorkflowByIdResponse {
 
 export interface ICreateWorkflowPayload {
   name: string;
-  projectKey: string;
   description?: string;
   nodes?: WorkflowNode[];
   edges?: Edge[];
   settings?: Record<string, unknown>;
-  isActive?: boolean;
+  // isActive?: boolean;
   nodeOutputSchemas?: Record<string, OutputSchemaField[]>;
 }
 
@@ -48,7 +45,6 @@ export interface ICreateWorkflowResponse {
 export interface IDuplicateWorkflowPayload {
   name: string;
   workflowId: string;
-  projectKey: string;
 }
 
 export interface IDuplicateWorkflowResponse {
@@ -59,7 +55,6 @@ export interface IDuplicateWorkflowResponse {
 
 export interface IUpdateWorkflowPayload extends Omit<ICreateWorkflowPayload, "name"> {
   itemId: string;
-  projectKey: string;
   name?: string;
 }
 
@@ -71,7 +66,6 @@ export interface IUpdateWorkflowResponse {
 
 export interface IDeleteWorkflowPayload {
   id: string;
-  projectKey: string;
 }
 
 export interface IDeleteWorkflowResponse {
@@ -81,7 +75,6 @@ export interface IDeleteWorkflowResponse {
 }
 
 export interface IGetWorkflowExecutionsPayload {
-  projectKey: string;
   workflowId: string;
 }
 
@@ -90,6 +83,7 @@ export interface WorkflowExecution {
   workflowId: string;
   projectKey: string;
   status: number;
+  executionMode: WorkflowExecutionMode;
   startedAt: string;
   finishedAt: string;
   duration: number;
@@ -104,12 +98,153 @@ export interface IGetWorkflowExecutionsResponse {
 }
 
 export interface IGetWorkflowExecutionByIdPayload {
-  projectKey: string;
   executionId: string;
 }
 
 export interface IGetWorkflowExecutionByIdResponse {
+  data: IGetWorkflowExecutionById;
+  isSuccess: boolean;
+  errors: unknown;
+}
+
+export interface IGetWorkflowExecutionById {
   workflowSnapshot: Workflow;
   nodeExecutions: ExecutedNode[];
   items: ExecutedItem[];
+  executionMode: WorkflowExecutionMode;
+  id: string;
+}
+
+export interface ICreateWorkflowVersionPayload {
+  workflowId: string;
+  name: string;
+  Description?: string;
+}
+
+export interface ICreateWorkflowVersionResponse {
+  [key: string]: any;
+}
+
+export interface IGetWorkflowVersionsPayload {
+  workflowId: string;
+}
+
+export interface IGetWorkflowVersionsResponse {
+  data: WorkflowVersion[];
+  totalCount: number;
+  errors: unknown;
+}
+
+export interface IPublishWorkflowPayload {
+  workflowId: string;
+  versionId?: string;
+}
+
+export interface IPublishWorkflowResponse {
+  itemId: string;
+  isSuccess: boolean;
+  errors: unknown;
+}
+
+export interface IPublishNewWorkflowPayload {
+  workflowId: string;
+  name?: string;
+  description?: string;
+}
+
+export interface IUnpublishWorkflowPayload {
+  workflowId: string;
+}
+
+export interface IUnpublishWorkflowResponse {
+  itemId: string;
+  isSuccess: boolean;
+  errors: unknown;
+}
+
+export interface IRestoreWorkflowPayload {
+  workflowId: string;
+  versionId: string;
+}
+
+export interface IRestoreWorkflowResponse {
+  [key: string]: any;
+}
+
+export interface IGetWorkflowByVersionPayload {
+  workflowId: string;
+  versionId: string;
+}
+
+export interface IGetWorkflowByVersionResponse {
+  [key: string]: any;
+}
+
+export interface IUpdateWorkflowVersionPayload {
+  versionId: string;
+  name?: string;
+  description?: string;
+}
+
+export interface IUpdateWorkflowVersionResponse {
+  itemId: string;
+  isSuccess: boolean;
+  errors?: unknown;
+}
+
+export interface IGetLastSuccessfulExecutionPayload {
+  workflowId: string;
+}
+
+// export interface IGetLastSuccessfulExecutionResponse {
+//   data: IGetLastSuccessfulExecution;
+//   isSuccess: boolean;
+//   errors: unknown;
+// }
+
+// export interface IGetLastSuccessfulExecution {
+//   id: string;
+//   workflowId: string;
+//   workflowName: string;
+//   status: number;
+//   executionMode: WorkflowExecutionMode;
+//   startedAt: string;
+//   finishedAt: string;
+//   duration: number | null;
+//   errorMessage: string | null;
+//   triggerType: string;
+//   attemptNumber: number;
+//   triggerMetadata: Record<string, any>;
+//   context: Record<string, any>;
+//   activeNodeIds: string[];
+//   nodeExecutions: ExecutedNode[];
+//   workflowSnapshot: Workflow;
+//   items: ExecutedItem[];
+// }
+
+export interface IStepExecutePayload {
+  WorkflowId: string;
+  NodeId: string;
+  SourceExecutionId?: string;
+}
+
+export interface IStepExecuteResponse {
+  itemId: string;
+  isSuccess: boolean;
+  errors?: unknown;
+  message: string;
+  code: string;
+}
+
+export interface ITriggerListenerPayload {
+  WorkflowId: string;
+  TriggerId: string;
+  EnableListener: boolean;
+  CompletionNodeId?: string;
+}
+
+export interface ITriggerListenerResponse {
+  itemId: string;
+  errors: unknown;
+  isSuccess: boolean;
 }

@@ -1,29 +1,37 @@
-export type FieldType =
+import { WorkflowStore } from "@/modules/workflow/store";
+
+export type FormFieldType =
   | "text"
   | "textarea"
   | "number"
   | "select"
+  | "select-with-description"
   | "multiselect"
   | "checkbox"
   | "switch"
   | "radio"
   | "code-editor"
   | "key-value-pairs"
-  | "conditions"
+  | "fixed-key-value-pairs"
+  | "key-type-value-pairs"
   | "array"
+  | "schema-fields"
+  | "schema-field-picker"
+  | "conditions"
   | "expression"
   | "display"
-  | "schema-fields"
-  | "schema-field-picker";
+  | "callout-accordion-display"
+  | "tab-with-text";
 
 export interface SelectOption {
   value: string;
   label: string;
+  description?: string;
 }
 
 export interface FieldSchema<Whole = Record<string, unknown>> {
   id: string;
-  type: FieldType;
+  type: FormFieldType;
   key: string;
   label?: string;
   info?: string;
@@ -36,15 +44,26 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
 
   displayValue?: (
     data: Whole,
-    config: { projectKey: string; workflowId: string; nodeId: string },
+    config: { projectKey: string; workflowId: string; nodeId: string; store: WorkflowStore; executionMode?: number },
   ) => unknown;
-  onChange?: (value: unknown, data: Whole) => Whole | void;
+  onChange?: (
+    value: unknown,
+    data: Whole,
+    config: { projectKey: string; workflowId: string; nodeId: string; store: WorkflowStore; executionMode?: number },
+  ) => Whole | void;
   options?:
     | SelectOption[]
     | ((
         data: Whole,
-        config: { projectKey: string; workflowId: string },
+        config: { projectKey: string; workflowId: string; store: WorkflowStore; executionMode?: number },
       ) => Promise<SelectOption[]>);
+  fixedKeys?:
+    | string[]
+    | ((
+        data: Whole,
+        config: { projectKey: string; workflowId: string; nodeId: string; store: WorkflowStore; executionMode?: number },
+      ) => Promise<string[]>);
+  fixedKeysDependencies?: string[];
   copyable?: boolean;
   maxLength?: number;
   minLength?: number;
@@ -56,7 +75,7 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
   keyLabel?: string;
   valueLabel?: string;
   addButtonText?: string;
-  itemType?: FieldType;
+  itemType?: FormFieldType;
   searchable?: boolean;
   prefix?: string;
   className?: string;
@@ -73,7 +92,7 @@ export interface FieldProps<T = unknown> {
   value: T;
   onChange: (value: T) => void;
   data: Record<string, unknown>;
-  config: { projectKey: string; workflowId: string; nodeId: string };
+  config: { projectKey: string; workflowId: string; nodeId: string; store: WorkflowStore; executionMode?: number };
   readOnly?: boolean;
   className?: string;
   placeholder?:string

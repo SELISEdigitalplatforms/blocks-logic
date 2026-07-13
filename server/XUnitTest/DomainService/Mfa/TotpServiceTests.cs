@@ -12,6 +12,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Moq.Protected;
+using StorageDriver;
 using System.Net;
 using System.Text.Json;
 
@@ -26,6 +27,7 @@ namespace XUnitTest.DomainService.Mfa
         private readonly Mock<ICacheClient> _cacheClient;
         private readonly Mock<IValidator<VerifyOtpRequest>> _validator;
         private readonly Mock<ITenants> _tenant;
+        private readonly Mock<IStorageDriverService> _storageDriverService;
         private readonly TotpService _service;
 
         public TotpServiceTests()
@@ -37,6 +39,7 @@ namespace XUnitTest.DomainService.Mfa
             _cacheClient = new Mock<ICacheClient>();
             _validator = new Mock<IValidator<VerifyOtpRequest>>();
             _tenant = new Mock<ITenants>();
+            _storageDriverService = new Mock<IStorageDriverService>();  
 
             _service = new TotpService(
                 _repository.Object,
@@ -45,7 +48,9 @@ namespace XUnitTest.DomainService.Mfa
                 _configuration.Object,
                 _cacheClient.Object,
                 _validator.Object,
-                _tenant.Object);
+                _tenant.Object,
+                _storageDriverService.Object
+                );
         }
 
         #region GenerateAsync Tests
@@ -302,8 +307,7 @@ namespace XUnitTest.DomainService.Mfa
                 phoneNumber: "",
                 displayName: "Test User",
                 oauthToken: "test-token",
-                refreshToken: "",
-                actualTenantId: "test-tenant"
+                originalTenantId: "test-tenant-id"
             );
         }
 

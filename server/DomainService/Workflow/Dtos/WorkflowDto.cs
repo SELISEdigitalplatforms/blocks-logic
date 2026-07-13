@@ -1,10 +1,8 @@
-using System;
-using System.Collections.Generic;
-using DomainService.Workflow.Models;
+using DomainService.Workflow.Entities;
 
 namespace DomainService.Workflow.Dtos
 {
-    public class WorkflowDto : WorkflowModel
+    public class WorkflowDto : WorkflowEntity
     {
 
     }
