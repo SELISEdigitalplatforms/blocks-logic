@@ -1,4 +1,5 @@
 "use client";
+import { useEffect, useMemo } from "react";
 import { ReactFlow, Background, BackgroundVariant } from "@xyflow/react";
 import { Button } from "@/components/ui-kits/button/button";
 import { Plus } from "lucide-react";
@@ -15,10 +16,16 @@ import {
   WorkflowEditorControls,
 } from "../workflow-editor-controls";
 
-export const WorkflowEditor = () => {
+interface WorkflowEditorProps {
+  isReadonly?: boolean;
+}
+
+export const WorkflowEditor = ({ isReadonly = false }: WorkflowEditorProps) => {
   const {
     nodes,
     edges,
+    isListening,
+    listeningNodeId,
     selectedNode,
     onNodeClick,
     onNodesChange,
@@ -26,13 +33,57 @@ export const WorkflowEditor = () => {
     onConnect,
     isValidConnection,
     openNodeLibraryPanel,
+    copySelectedNodes,
+    pasteNodes,
+    setEditorMode,
   } = useWorkflow();
+
+  useEffect(() => {
+    setEditorMode("editor");
+  }, [setEditorMode]);
+
+  const modifiedNodes = useMemo(() => {
+    if (!isListening || !listeningNodeId) return nodes;
+    return nodes.map((node) => {
+      if (node.id === listeningNodeId) {
+        return {
+          ...node,
+          className: `${node.className || ""} !ring-2 !ring-green-500 rounded-md`.trim(),
+        };
+      }
+      return node;
+    });
+  }, [nodes, isListening, listeningNodeId]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target as HTMLElement).isContentEditable
+      ) {
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
+        copySelectedNodes();
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") {
+        pasteNodes();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedNode, copySelectedNodes, pasteNodes]);
+
 
   return (
     <>
       <div className="relative h-full w-full">
         <ReactFlow
-          nodes={nodes}
+          nodes={modifiedNodes}
           edges={edges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
@@ -42,9 +93,13 @@ export const WorkflowEditor = () => {
           nodeTypes={WorkflowEditorNodeTypes}
           defaultEdgeOptions={WorkflowEditorDefaultEdgeOptions}
           edgeTypes={WorkflowEditorEdgeTypes}
+          multiSelectionKeyCode={["Meta", "Control", "Shift"]}
+          deleteKeyCode={["Backspace", "Delete"]}
           className="bg-background"
           fitView={EditorFitConfig.fitView}
           fitViewOptions={EditorFitConfig.fitViewOptions}
+          nodesDraggable={!isReadonly}
+          nodesConnectable={!isReadonly}
         >
           <Background
             variant={BackgroundVariant.Dots}

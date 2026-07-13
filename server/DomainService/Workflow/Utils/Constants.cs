@@ -4,9 +4,9 @@ namespace DomainService.Workflow.Utils
 {
     public static class LogicConstants
     {
-        public const string NodeExecutionQueue = "blocks_workflow_node_execute_listener";
-        public const string EmailTriggerQueue = "blocks_workflow_email_trigger_listener";
-        public const string DataTriggerQueue = "blocks_workflow_data_trigger_listener";
+        public const string NodeExecutionQueue = "blocks_logic_workflow_node_execute_listener";
+        public const string EmailTriggerQueue = "blocks_logic_workflow_email_trigger_listener";
+        public const string DataTriggerQueue = "blocks_logic_workflow_data_trigger_listener";
 
         public const string AccessTokenCookieName = "access_token";
         public const string RefreshTokenCookieName = "refresh_token";

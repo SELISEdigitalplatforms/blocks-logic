@@ -1,9 +1,10 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { Connection, Edge, Node, useReactFlow } from "@xyflow/react";
-import { useWorkflowStore } from "../store/workflow-store";
-import { Workflow } from "../models/workflow.model";
+import { useWorkflowStore } from "../store";
 import { WorkflowNode } from "@blocks-workflow/models/node.model";
 import { getOrderedNodeData } from "@blocks-workflow/utils/runtime-node-data";
+import { workflowService } from "../services/workflow.service";
+import { showErrorToast } from "@/hooks/use-toast";
 
 export const useWorkflow = () => {
   const reactFlowInstance = useReactFlow();
@@ -15,9 +16,11 @@ export const useWorkflow = () => {
   const isPanelOpen = useWorkflowStore((state) => state.isPanelOpen);
   const workflowId = useWorkflowStore((state) => state.workflowId);
   const workflowName = useWorkflowStore((state) => state.workflowName);
-  const isActive = useWorkflowStore((state) => state.isActive);
-  const isDirty = useWorkflowStore((state) => state.isDirty);
-
+  const hasUnsavedChanges = useWorkflowStore((state) => state.hasUnsavedChanges);
+  const editorMode = useWorkflowStore((state) => state.editorMode);
+  const executionMode = useWorkflowStore((state) => state.executionMode);
+  const lastSuccessfulExecutionData = useWorkflowStore((state) => state.lastSuccessfulExecutionData);
+  
   // Compute nodes and edges arrays from objects
   const nodes = useMemo(() => Object.values(nodesMap), [nodesMap]);
   const edges = useMemo(() => Object.values(edgesMap), [edgesMap]);
@@ -30,10 +33,14 @@ export const useWorkflow = () => {
   const updateNode = useWorkflowStore((state) => state.updateNode);
   const deleteNode = useWorkflowStore((state) => state.deleteNode);
   const duplicateNode = useWorkflowStore((state) => state.duplicateNode);
+  const copyNode = useWorkflowStore((state) => state.copyNode);
+  const copySelectedNodes = useWorkflowStore((state) => state.copySelectedNodes);
+  const pasteNodes = useWorkflowStore((state) => state.pasteNodes);
   const createEdge = useWorkflowStore((state) => state.createEdge);
   const deleteEdge = useWorkflowStore((state) => state.deleteEdge);
   const selectNode = useWorkflowStore((state) => state.selectNode);
   const deselectNode = useWorkflowStore((state) => state.deselectNode);
+  const deselectAllEdges = useWorkflowStore((state) => state.deselectAllEdges);
   const selectHandle = useWorkflowStore((state) => state.selectHandle);
   const deselectHandle = useWorkflowStore((state) => state.deselectHandle);
   const openConfigModal = useWorkflowStore((state) => state.openConfigModal);
@@ -41,11 +48,23 @@ export const useWorkflow = () => {
   const openNodeLibraryPanel = useWorkflowStore((state) => state.openNodeLibraryPanel);
   const closeNodeLibraryPanel = useWorkflowStore((state) => state.closeNodeLibraryPanel);
   const setWorkflow = useWorkflowStore((state) => state.setWorkflow);
-  const setWorkflowActive = useWorkflowStore((state) => state.setWorkflowActive);
+  const setEditorMode = useWorkflowStore((state) => state.setEditorMode);
+  const setExecutionMode = useWorkflowStore((state) => state.setExecutionMode);
   const resetWorkflow = useWorkflowStore((state) => state.resetWorkflow);
+  const tidyUpWorkflow = useWorkflowStore((state) => state.tidyUpWorkflow);
+  const setLastSuccessfulExecutionData = useWorkflowStore((state) => state.setLastSuccessfulExecutionData);
   const getNodeById = useWorkflowStore((state) => state.getNodeById);
   const getEdgeById = useWorkflowStore((state) => state.getEdgeById);
   const executedItems = useWorkflowStore((state) => state.executedItems);
+  const executedNodes = useWorkflowStore((state) => state.executedNodes);
+  const stepExecutionTraversedEdgeIds = useWorkflowStore((state) => state.stepExecutionTraversedEdgeIds);
+  const stepExecutionReachableNodeIds = useWorkflowStore((state) => state.stepExecutionReachableNodeIds);
+  const setStepExecutionData = useWorkflowStore((state) => state.setStepExecutionData);
+  const isListening = useWorkflowStore((state) => state.isListening);
+  const listeningNodeId = useWorkflowStore((state) => state.listeningNodeId);
+  const setIsListening = useWorkflowStore((state) => state.setIsListening);
+  const nextExecutionId = useWorkflowStore((state) => state.nextExecutionId);
+  const setNextExecutionId = useWorkflowStore((state) => state.setNextExecutionId);
 
   const selectAndConfigureNode = useCallback(
     (node: WorkflowNode) => {
@@ -80,26 +99,26 @@ export const useWorkflow = () => {
     [edges],
   );
 
-  const exportWorkflow = useCallback(() => {
-    return {
-      id: workflowId,
-      name: workflowName,
-      isActive,
-      nodes,
-      edges,
-      metadata: {
-        version: "1.0",
-        exportedAt: new Date().toISOString(),
-      },
-    };
-  }, [workflowId, workflowName, isActive, nodes, edges]);
+  // const exportWorkflow = useCallback(() => {
+  //   return {
+  //     id: workflowId,
+  //     name: workflowName,
+  //     isActive,
+  //     nodes,
+  //     edges,
+  //     metadata: {
+  //       version: "1.0",
+  //       exportedAt: new Date().toISOString(),
+  //     },
+  //   };
+  // }, [workflowId, workflowName, isActive, nodes, edges]);
 
-  const importWorkflow = useCallback(
-    (data: Workflow) => {
-      setWorkflow(data);
-    },
-    [setWorkflow],
-  );
+  // const importWorkflow = useCallback(
+  //   (data: Workflow) => {
+  //     setWorkflow(data);
+  //   },
+  //   [setWorkflow],
+  // );
 
   const validateWorkflow = useCallback(() => {}, []);
 
@@ -107,12 +126,15 @@ export const useWorkflow = () => {
     return {
       totalNodes: nodes.length,
       totalEdges: edges.length,
-      hasUnsavedChanges: isDirty,
+      hasUnsavedChanges: hasUnsavedChanges,
     };
-  }, [nodes, edges, isDirty]);
+  }, [nodes, edges, hasUnsavedChanges]);
 
   const onNodeClick = useCallback(
-    (_event: React.MouseEvent, node: Node) => {
+    (event: React.MouseEvent, node: Node) => {
+      if (event.ctrlKey || event.metaKey || event.shiftKey) {
+        return;
+      }
       const nodeData = getNodeById(node.id);
       if (!nodeData) return;
       selectAndConfigureNode(nodeData);
@@ -143,6 +165,43 @@ export const useWorkflow = () => {
     [getNodeById, executedItems],
   );
 
+  const isNodeNameUnique = useCallback(
+    (name: string, excludeNodeId?: string) => {
+      const lowerName = name.trim().toLowerCase();
+      return !nodes.some(
+        (node) => node.name?.toLowerCase() === lowerName && node.id !== excludeNodeId,
+      );
+    },
+    [nodes],
+  );
+
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+
+    if (isListening && listeningNodeId) {
+      timeoutId = setTimeout(async () => {
+        setIsListening(false);
+        if (workflowId) {
+          try {
+            await workflowService.triggerListener({
+              WorkflowId: workflowId,
+              TriggerId: listeningNodeId,
+              EnableListener: false,
+            });
+          } catch (error: any) {
+            showErrorToast({ errors: error.message || "Failed to disable trigger listener after timeout" });
+          }
+        }
+      }, 2 * 60 * 1000); // 3 minutes
+    }
+
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [isListening, listeningNodeId, workflowId, setIsListening]);
+
   // react flow instance methods
 
   const { fitView, zoomIn, zoomOut } = reactFlowInstance;
@@ -157,8 +216,18 @@ export const useWorkflow = () => {
     isPanelOpen,
     workflowId,
     workflowName,
-    isActive,
-    isDirty,
+    hasUnsavedChanges,
+    editorMode,
+    executionMode,
+    lastSuccessfulExecutionData,
+    executedItems,
+    executedNodes,
+    stepExecutionTraversedEdgeIds,
+    stepExecutionReachableNodeIds,
+    nodesMap,
+    edgesMap,
+    isListening,
+    listeningNodeId,
 
     onNodesChange,
     onEdgesChange,
@@ -171,12 +240,16 @@ export const useWorkflow = () => {
     updateNode,
     deleteNode,
     duplicateNode,
+    copyNode,
+    copySelectedNodes,
+    pasteNodes,
     createEdge,
     deleteEdge,
 
     // Selection operations
     selectNode,
     deselectNode,
+    deselectAllEdges,
     selectHandle,
     deselectHandle,
     selectAndConfigureNode,
@@ -189,10 +262,16 @@ export const useWorkflow = () => {
 
     // Workflow operations
     setWorkflow,
-    setWorkflowActive,
+    setEditorMode,
+    setExecutionMode,
+    setLastSuccessfulExecutionData,
+    setStepExecutionData,
     resetWorkflow,
-    exportWorkflow,
-    importWorkflow,
+    tidyUpWorkflow,
+    // exportWorkflow,
+    // importWorkflow,
+    nextExecutionId,
+    setNextExecutionId,
 
     // Utility methods
     getNodeById,
@@ -204,6 +283,8 @@ export const useWorkflow = () => {
     getWorkflowStats,
     getNodeOutput,
     getNodeInput,
+    isNodeNameUnique,
+    setIsListening,
 
     // React Flow instance
     reactFlowInstance,

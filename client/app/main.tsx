@@ -7,13 +7,23 @@ import QueryProvider from "./providers/query-provider";
 import { router } from "./router";
 import "./styles/globals.css";
 import { TooltipProvider } from "./components/ui-kits/tooltip/tooltip";
+import { BlocksAppLayout } from "@seliseblocks/blocks-kit";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryProvider>
       <NuqsAdapter>
         <TooltipProvider>
-          <RouterProvider router={router} />
+          <BlocksAppLayout
+            config={{
+              name: "blocks-logic",
+              appLogoUrl: {
+                dark: "/Logo_White.svg",
+                light: "/Logo.svg",
+              },
+            }}>
+            <RouterProvider router={router} />
+          </BlocksAppLayout>
           <Toaster />
         </TooltipProvider>
       </NuqsAdapter>

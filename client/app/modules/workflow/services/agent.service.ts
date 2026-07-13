@@ -1,15 +1,15 @@
-import { http } from "@/lib/http-client";
-import { AI_ENDPOINTS } from "@blocks-workflow/constants/ai.endpoint.constant";
+import { serviceInstances } from "@/lib/http-client";
+import { AI_ENDPOINTS } from "@/modules/workflow/constants/agents.endpoint.constant";
 import {
   IGetAgentsPayload,
   IGetAgentsResponse,
 } from "../types/agent.service.type";
-import { API_BASES } from "@/constants/endpoint.constant";
 
 export class AgentService {
+  private readonly AgentHttpClient = serviceInstances.agentsService;
   getAgents(payload: IGetAgentsPayload): Promise<IGetAgentsResponse> {
-    return http.post(
-      `${API_BASES.AI}${AI_ENDPOINTS.AGENT_QUERIES}`,
+    return this.AgentHttpClient.post(
+      AI_ENDPOINTS.AGENT_QUERIES,
       payload,
       undefined,
       { absoluteUrl: true },

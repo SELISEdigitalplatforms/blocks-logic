@@ -1,15 +1,15 @@
-import { useProjectStore } from "@/store/useProjectStore";
+import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { NodeSchemaDefinition } from "./node-schema.type";
 
-import { authClientService } from "@blocks-idp/authentication/services/auth-clients.service";
-import { useWorkflowStore } from "@blocks-workflow/store/workflow-store";
+// Removed useWorkflowStore
 import {
   resolveSchemaFields,
   buildEmptyFieldMapping,
 } from "@blocks-workflow/utils/resolve-schema-fields";
-import { configurationService } from "../../services/configuration.service";
+import { dataService } from "../../services/data.service";
 // import { API_BASES } from "@/constants/endpoint.constant";
-import { getRuntimeEnv } from "@/lib/runtime-env";
+import { getRuntimeEnv } from "@seliseblocks/blocks-kit";
+import { authClientService } from "../../services/iam.service";
 
 export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
   schema: {
@@ -40,7 +40,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
         required: true,
         searchable: true,
         options: (_data, config) => {
-          return configurationService
+          return dataService
             .getSchemaList({
               projectKey: config.projectKey,
               pageNo: 1,
@@ -57,7 +57,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
               })),
             );
         },
-        onChange: (value: unknown) => {
+        onChange: (value: unknown, _data: unknown, config: any) => {
           const parts = (value as string).split(":::");
           const collectionName = parts[0] || "";
           const schemaName = parts[1] || "";
@@ -67,7 +67,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
 
           // Auto-populate schemaFields from collection schema
           if (schemaId && projectKey) {
-            configurationService
+            dataService
               .getSchemaDetails(schemaId, projectKey)
               .then(async (res) => {
                 const fields = res.data.fields ?? [];
@@ -77,10 +77,11 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
                 );
                 const fieldMapping = buildEmptyFieldMapping(schemaFields);
 
-                const store = useWorkflowStore.getState();
-                const selectedNode = store.selectedNode;
+                const store = config?.store;
+                if (!store) return;
+                const selectedNode = store.getState().selectedNode;
                 if (selectedNode) {
-                  store.updateNode(selectedNode.id, {
+                  store.getState().updateNode(selectedNode.id, {
                     parameters: {
                       ...(selectedNode.parameters as Record<string, unknown>),
                       schemaFields,
@@ -139,7 +140,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
                 })),
             );
         },
-        onChange: (value: unknown) => {
+        onChange: (value: unknown, _data: unknown, _config: any) => {
           const parts = (value as string).split(":::");
           const clientId = parts[0] || "";
           const clientSecret = parts[1] || "";
@@ -222,7 +223,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
       ...node,
       parameters: {
         ...node.parameters,
-        apiBaseUrl: getRuntimeEnv("BLOCKS_UDS_API_BASE_URL") || "",
+        apiBaseUrl: getRuntimeEnv("BLOCKS_DATA_BASE_URL") || "",
         projectKey: selectedProject?.tenantId ?? "",
         projectShortKey: selectedProject?.tenantSlug ?? "",
       },

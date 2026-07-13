@@ -57,6 +57,16 @@ export const EditorNodeHandle = ({
 
   const isConnectionInitiated =
     connection.inProgress && connection.fromNode.id === nodeId && connection.fromHandle.id === id;
+  let borderClass = "border-medium-emphasis dark:border-accent";
+  if (node.selected) {
+    borderClass = "border-primary";
+  } else if (node.className) {
+    const borderMatch = node.className.match(/border-[a-zA-Z0-9-]+/);
+    if (borderMatch) {
+      borderClass = borderMatch[0];
+    }
+  }
+
   return (
     <HandleContext.Provider
       value={{
@@ -74,7 +84,7 @@ export const EditorNodeHandle = ({
         isConnectableStart={isConnectableStart && !node.data?.isWorkflowExecuted}
         className={cn(
           "h-2.5 w-2.5 rounded-full border bg-background",
-          "border-medium-emphasis dark:border-accent",
+          borderClass,
           POSITION_CLASS[position],
           className,
         )}

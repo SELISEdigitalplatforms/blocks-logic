@@ -11,7 +11,9 @@ using DomainService.Workflow.Nodes.TriggerEmailV1;
 using DomainService.Workflow.Nodes.TriggerDataV1;
 using DomainService.Workflow.Nodes.LogicIFV1;
 using DomainService.Workflow.Nodes.TriggerWebhookV1;
+using DomainService.Workflow.Nodes.TransformSetFieldV1;
 using DomainService.MagicLink.Service;
+using DomainService.Utilities;
 
 namespace DomainService.Workflow
 {
@@ -23,12 +25,17 @@ namespace DomainService.Workflow
     {
         public static IServiceCollection AddWorkflowExecutionEngine(this IServiceCollection services)
         {
+            // register business services
             services.AddSingleton<IWorkflowService, WorkflowService>();
-            services.AddSingleton<IWorkflowRepository, WorkflowRepository>();
-
-            services.AddSingleton<IWorkflowExecutionRepository, WorkflowExecutionRepository>();
             services.AddSingleton<IWorkflowExecutionService, WorkflowExecutionService>();
             services.AddSingleton<IWorkflowEngineService, WorkflowEngineService>();
+            services.AddSingleton<IWorkflowNotificationService, WorkflowNotificationService>();
+            services.AddSingleton<IWorkflowVersionService, WorkflowVersionService>();
+
+            // register repositories
+            services.AddSingleton<IWorkflowRepository, WorkflowRepository>();
+            services.AddSingleton<IWorkflowVersionRepository, WorkflowVersionRepository>();
+            services.AddSingleton<IWorkflowExecutionRepository, WorkflowExecutionRepository>();
 
             //  rigister node executors
 
@@ -40,6 +47,10 @@ namespace DomainService.Workflow
             // Logic nodes
             services.AddSingleton<INodeExecutor, LogicIfV1Node>();
 
+
+            // Transform nodes
+            services.AddSingleton<INodeExecutor, TransformSetFieldV1Node>();
+
             // Action nodes
             services.AddSingleton<INodeExecutor, ActionAIAgentV1Node>();
             services.AddSingleton<INodeExecutor, ActionSendMailV1Node>();
@@ -50,6 +61,8 @@ namespace DomainService.Workflow
             // end register node executors
 
             services.AddSingleton<IClientCredentialTokenService, ClientCredentialTokenService>();
+
+            services.RegisterAllNotificationApplicationServices();
 
             services.RegisterBlocksMailService();
             services.AddHttpClient();
