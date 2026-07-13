@@ -11,19 +11,10 @@ namespace DomainService.MagicLink.Service
     /// </summary>
     public class TokenResponse
     {
-        [JsonPropertyName("access_token")]
         public string? AccessToken { get; set; }
-
-        [JsonPropertyName("token_type")]
         public string? TokenType { get; set; }
-
-        [JsonPropertyName("expires_in")]
         public int ExpiresIn { get; set; }
-
-        [JsonPropertyName("refresh_token")]
         public string? RefreshToken { get; set; }
-
-        [JsonPropertyName("id_token")]
         public string? IdToken { get; set; }
     }
 
@@ -67,8 +58,8 @@ namespace DomainService.MagicLink.Service
                 _logger.LogInformation("Getting token for ClientId: {ClientId}", clientCredentials.ItemId);
 
                 // Get the authentication endpoint from configuration
-                var authEndpoint = _configuration["AuthenticationTokenEndpoint"]
-                    ?? "https://api.seliseblocks.com/idp/v1/Authentication/token";
+                var authEndpoint = _configuration["ClienCredentialsTokenEndpoint"]
+                    ?? "https://iam.seliseblocks.com/api/oidc/token";
 
                 using var client = _httpClientFactory.CreateClient();
 
@@ -78,9 +69,10 @@ namespace DomainService.MagicLink.Service
                 // Prepare form data
                 var formData = new Dictionary<string, string>
                 {
-                    { "grant_type", "client_credential" },
+                    { "grant_type", "client_credentials" },
                     { "client_id", clientCredentials.ItemId },
-                    { "client_secret", clientCredentials.ClientSecret }
+                    { "client_secret", clientCredentials.ClientSecret },
+                    {"org_id","default"}
                 };
 
                 var content = new FormUrlEncodedContent(formData);
@@ -97,7 +89,10 @@ namespace DomainService.MagicLink.Service
                 }
 
                 var responseContent = await response.Content.ReadAsStringAsync();
-                var tokenResponse = JsonSerializer.Deserialize<TokenResponse>(responseContent);
+                var tokenResponse = JsonSerializer.Deserialize<TokenResponse>(responseContent, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
 
                 if (string.IsNullOrEmpty(tokenResponse?.AccessToken))
                 {
