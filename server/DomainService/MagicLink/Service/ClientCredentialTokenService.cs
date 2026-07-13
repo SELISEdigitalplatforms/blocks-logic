@@ -11,19 +11,10 @@ namespace DomainService.MagicLink.Service
     /// </summary>
     public class TokenResponse
     {
-        [JsonPropertyName("access_token")]
         public string? AccessToken { get; set; }
-
-        [JsonPropertyName("token_type")]
         public string? TokenType { get; set; }
-
-        [JsonPropertyName("expires_in")]
         public int ExpiresIn { get; set; }
-
-        [JsonPropertyName("refresh_token")]
         public string? RefreshToken { get; set; }
-
-        [JsonPropertyName("id_token")]
         public string? IdToken { get; set; }
     }
 
@@ -67,7 +58,7 @@ namespace DomainService.MagicLink.Service
                 _logger.LogInformation("Getting token for ClientId: {ClientId}", clientCredentials.ItemId);
 
                 // Get the authentication endpoint from configuration
-                var authEndpoint = _configuration["AuthenticationTokenEndpoint"]
+                var authEndpoint = _configuration["ClienCredentialsTokenEndpoint"]
                     ?? "https://iam.seliseblocks.com/api/oidc/token";
 
                 using var client = _httpClientFactory.CreateClient();
@@ -98,7 +89,10 @@ namespace DomainService.MagicLink.Service
                 }
 
                 var responseContent = await response.Content.ReadAsStringAsync();
-                var tokenResponse = JsonSerializer.Deserialize<TokenResponse>(responseContent);
+                var tokenResponse = JsonSerializer.Deserialize<TokenResponse>(responseContent, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
 
                 if (string.IsNullOrEmpty(tokenResponse?.AccessToken))
                 {
