@@ -160,18 +160,18 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
           </TooltipContent>
         </Tooltip>
         <DropdownMenu onOpenChange={setIsToolbarVisible}>
-          <DropdownMenuTrigger asChild>
-            <Tooltip>
-              <TooltipTrigger asChild>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="h-fit w-fit p-1">
                   <EllipsisVertical className="h-3.5 w-3.5" />
                 </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>More options</p>
-              </TooltipContent>
-            </Tooltip>
-          </DropdownMenuTrigger>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>More options</p>
+            </TooltipContent>
+          </Tooltip>
           <DropdownMenuContent
             align="end"
             side="bottom"
