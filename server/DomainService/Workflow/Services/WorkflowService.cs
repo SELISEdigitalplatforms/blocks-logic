@@ -518,7 +518,7 @@ namespace DomainService.Workflow.Services
 
             workflow.IsDirty = false;
             workflow.IsPublished = true;
-            workflow.LastPublishedVersionId = workflow.PublishedVersionId; // Store the previous published version ID
+            workflow.LastPublishedVersionId = !string.IsNullOrEmpty(workflow.PublishedVersionId)? workflow.PublishedVersionId : workflow.LastPublishedVersionId; // Store the previous published version ID, if the new one is not null/empty
             workflow.PublishedVersionId = version.ItemId;
             workflow.PublishedMeta = new PublishedWorkflowMeta
             {
