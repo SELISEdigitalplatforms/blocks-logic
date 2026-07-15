@@ -41,6 +41,8 @@ import { PublishConfirmationModal, UnpublishConfirmationModal } from "../workflo
 import { PublishWorkflowModal } from "../publish-workflow-modal/publish-workflow-modal";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
 import { useScopedPath } from "@seliseblocks/blocks-kit";
+import { RenameWorkflow } from "../rename-workflow/rename-workflow";
+import { Pen } from "lucide-react";
 
 
 const WorkflowListSkeleton = ({ length }: { length: number }) => {
@@ -65,7 +67,7 @@ type WorkflowListProps = {
 export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
   const navigate = useNavigate();
   const [modal, setModal] = useState<{
-    type: "delete" | "publish" | "publish_new" | "unpublish" | "duplicate" | null;
+    type: "delete" | "publish" | "publish_new" | "unpublish" | "duplicate" | "rename" | null;
     data: Record<string, unknown>;
   }>({
     type: null,
@@ -210,6 +212,19 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
                     <ArrowRightFromLine className="mr-2 h-4 w-4" />
                     <span>Open</span>
                   </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setModal({
+                      type: "rename",
+                      data: { id: info.row.original.itemId, name: info.row.original.name },
+                    });
+                  }}
+                >
+                  <Pen className="mr-2 h-4 w-4" />
+                  <span>Rename</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="cursor-pointer"
@@ -395,6 +410,15 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
         }}
         workflowId={modal.data.id as string}
         name={modal.data.name as string}
+      />
+      <RenameWorkflow
+        key={modal.type === "rename" ? (modal.data.id as string) : "closed"}
+        open={modal.type === "rename"}
+        onOpenChange={(value) => {
+          if (!value) setModal({ type: null, data: {} });
+        }}
+        workflowId={modal.data.id as string}
+        initialName={modal.data.name as string}
       />
     </>
   );
