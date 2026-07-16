@@ -264,7 +264,7 @@ namespace DomainService.Migration
                     targetedProjectKey = targetedProjectKey
                 }),
                 SaveDenormalizedPayloadAsAnObject = false,
-                ConfiguratoinName = "DataMigrationProgress",
+                ConfigurationName = "DataMigrationProgress",
                 ContentAvailable = true,
                 ResponseKey = "Environment Data Migration",
                 ResponseValue = response ? "Migration completed" : "Migration failed"
@@ -302,7 +302,7 @@ namespace DomainService.Migration
                     targetedProjectKey = targetedProjectKey
                 }),
                 SaveDenormalizedPayloadAsAnObject = false,
-                ConfiguratoinName = "EnvironmentDataMigration",
+                ConfigurationName = "EnvironmentDataMigration",
                 ContentAvailable = true,
                 ResponseKey = "Environment Data Migration",
                 ResponseValue = response ? "Migration completed" : "Migration failed"
@@ -350,7 +350,7 @@ namespace DomainService.Migration
                     targetedProjectKey = targetedProjectKey
                 }),
                 SaveDenormalizedPayloadAsAnObject = false,
-                ConfiguratoinName = "EnvironmentDataMigration",
+                ConfigurationName = "EnvironmentDataMigration",
                 ContentAvailable = true,
                 ResponseKey = "Environment Data Migration",
                 ResponseValue = "Migration started"

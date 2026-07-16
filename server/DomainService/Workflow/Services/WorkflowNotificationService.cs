@@ -59,7 +59,7 @@ namespace DomainService.Workflow.Services
                     Information = data.Information
                 }),
                 SaveDenormalizedPayloadAsAnObject = false,
-                ConfiguratoinName = _configuration["WORKFLOW_NOTIFICATION_CONFIGURATION_NAME"],
+                ConfigurationName = _configuration["WORKFLOW_NOTIFICATION_CONFIGURATION_NAME"],
                 ContentAvailable = true,
                 ResponseKey = data.ResponseKey,
                 ResponseValue = data.ResponseValue,
