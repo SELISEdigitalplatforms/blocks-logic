@@ -25,7 +25,10 @@ namespace Api.Controllers
         //[ProtectedEndPoint]
         public async Task<BaseResponse> Notify([FromBody] NotifyRequest notifyRequest)
         {
-            return await _notificationService.NotifyAsync(notifyRequest);
+            _logger.LogInformation("Received notification request: {@NotifyRequest}", notifyRequest);
+            var response= await _notificationService.NotifyAsync(notifyRequest);
+            _logger.LogInformation("Notification response: {@Response}", response);
+            return response;
         }
 
         [ApiExplorerSettings(IgnoreApi = true)]
