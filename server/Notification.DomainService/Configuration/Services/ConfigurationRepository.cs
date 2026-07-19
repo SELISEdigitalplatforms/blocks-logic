@@ -11,6 +11,7 @@ namespace DomainService.Configuration.Services
         private const string _collectionName = "NotificationConfigurations";
         private readonly IBlocksSecret _blocksSecret;
         private IMongoDatabase _notificationDb;
+        private IMongoDatabase _notificationDb1;
         private readonly ILogger<ConfigurationRepository> _logger;
 
         public ConfigurationRepository(IDbContextProvider dbContextProvider, IBlocksSecret blocksSecret, ILogger<ConfigurationRepository> logger )
@@ -37,7 +38,9 @@ namespace DomainService.Configuration.Services
 
         public async Task<NotificationConfiguration> GetByNameAsync(string name)
         {
-            var collection = _notificationDb.GetCollection<NotificationConfiguration>(_collectionName);
+            //var collection = _notificationDb.GetCollection<NotificationConfiguration>(_collectionName);
+            _notificationDb1 = ResolveNotificationDb();
+            var collection = _notificationDb1.GetCollection<NotificationConfiguration>(_collectionName);
 
             var filter = Builders<NotificationConfiguration>.Filter.Eq(mc => mc.Name, name);
             return await (await collection.FindAsync(filter)).FirstOrDefaultAsync();
