@@ -1,5 +1,6 @@
 ﻿using Blocks.Genesis;
 using DomainService.Entities;
+using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 
 namespace DomainService.Configuration.Services
@@ -10,20 +11,24 @@ namespace DomainService.Configuration.Services
         private const string _collectionName = "NotificationConfigurations";
         private readonly IBlocksSecret _blocksSecret;
         private IMongoDatabase _notificationDb;
+        private readonly ILogger<ConfigurationRepository> _logger;
 
-        public ConfigurationRepository(IDbContextProvider dbContextProvider, IBlocksSecret blocksSecret)
+        public ConfigurationRepository(IDbContextProvider dbContextProvider, IBlocksSecret blocksSecret, ILogger<ConfigurationRepository> logger )
         {
             _dbContextProvider = dbContextProvider;
             _blocksSecret = blocksSecret;
+            _logger = logger;
             _notificationDb = ResolveNotificationDb();
         }
 
         private IMongoDatabase ResolveNotificationDb()
-    {
-        var blocksContext = BlocksContext.GetContext();
-
-        if(blocksContext.Impersonated)
         {
+        var blocksContext = BlocksContext.GetContext();
+            _logger.LogInformation($"Blocks Context {blocksContext.ToString()}");
+        if (blocksContext.Impersonated)
+        {
+                _logger.LogInformation($"Blocks Impersonated {blocksContext.Impersonated}");
+                _logger.LogInformation($"Database {_blocksSecret.DatabaseConnectionString}");
             return _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, "BlocksRootDb");
         }
 
