@@ -1,13 +1,13 @@
 using DomainService.Workflow.Enums;
 
-namespace DomainService.Workflow.Models
+namespace DomainService.Workflow.Entities
 {
     /// <summary>
     /// Metadata-only model for tracking a single node's execution within a workflow.
     /// Does NOT store input/output payloads - those live in WorkflowItemExecutionModel.
     /// Contains only execution metadata: timing, status, counts, and preview information.
     /// </summary>
-    public class NodeExecutionModel
+    public class NodeExecutionEntity
     {
 
         public required string Id { get; set; }

@@ -30,6 +30,7 @@ namespace DomainService.Workflow
             services.AddSingleton<IWorkflowExecutionService, WorkflowExecutionService>();
             services.AddSingleton<IWorkflowEngineService, WorkflowEngineService>();
             services.AddSingleton<IWorkflowNotificationService, WorkflowNotificationService>();
+            services.AddSingleton<IWorkflowVersionService, WorkflowVersionService>();
 
             // register repositories
             services.AddSingleton<IWorkflowRepository, WorkflowRepository>();

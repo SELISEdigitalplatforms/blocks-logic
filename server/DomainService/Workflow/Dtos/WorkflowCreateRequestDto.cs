@@ -1,16 +1,11 @@
-
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
-using Blocks.Genesis;
-using DomainService.Workflow.Models;
+using DomainService.Workflow.Entities;
 
 namespace DomainService.Workflow.Dtos;
 
-public class WorkflowCreateRequestDto : IProjectKey
+public class WorkflowCreateRequestDto
 {
-    [Required]
-    public required string ProjectKey { get; set; }
-
     [Required]
     public required string Name { get; set; }
 
@@ -18,7 +13,7 @@ public class WorkflowCreateRequestDto : IProjectKey
 
     public JsonElement Nodes { get; set; } = JsonDocument.Parse("[]").RootElement;
 
-    public List<EdgeModel> Edges { get; set; } = new();
+    public List<EdgeEnity> Edges { get; set; } = new();
 
     public Dictionary<string, string> Settings { get; set; } = new();
 
@@ -26,5 +21,4 @@ public class WorkflowCreateRequestDto : IProjectKey
 
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
-    public Dictionary<string, List<NodeOutputSchemaField>> NodeOutputSchemas { get; set; } = new();
 }

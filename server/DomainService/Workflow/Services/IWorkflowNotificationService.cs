@@ -1,5 +1,5 @@
 using DomainService.Workflow.Dtos;
-using DomainService.Workflow.Models;
+using DomainService.Workflow.Entities;
 
 namespace DomainService.Workflow.Services
 {
@@ -8,8 +8,8 @@ namespace DomainService.Workflow.Services
         public Task<bool> Notify(List<string> userIds, NotificationData data);
 
         public Task NotifyExecutionEventAsync(
-            WorkflowExecutionModel execution,
-            NodeExecutionModel? nodeExecution,
+            WorkflowExecutionEntity execution,
+            NodeExecutionEntity? nodeExecution,
             string eventName,
             string code,
             string status,

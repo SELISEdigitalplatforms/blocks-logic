@@ -1,9 +1,7 @@
 import { Button } from "@/components/ui-kits/button/button";
-import { Ban, EllipsisVertical, Play, Trash, Rss } from "lucide-react";
-import { useWorkflow, useStepExecute } from "../../hooks";
-import { useProjectStore } from "@seliseblocks/blocks-kit";
+import { Copy, EllipsisVertical, Play, Trash, Rss, Ban } from "lucide-react";
+import { useWorkflow, useStepExecute, useHandleExecuteStep } from "../../hooks";
 import { getStatusStyles } from "../../utils/workflow-execution-editor.util";
-import { workflowService } from "../../services/workflow.service";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,44 +26,10 @@ type EditorNodeBaseProps = {
 
 export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
   const [isToolbarVisible, setIsToolbarVisible] = useState(false);
-  const { getNodeById, deleteNode, selectAndConfigureNode, selectedNode, updateNode, duplicateNode, isNodeNameUnique, workflowId, setStepExecutionData, lastSuccessfulExecutionData, stepExecutionReachableNodeIds, executedNodes, isListening, listeningNodeId } =
+  const { getNodeById, deleteNode, selectAndConfigureNode, selectedNode, updateNode, duplicateNode, isNodeNameUnique, workflowId, stepExecutionReachableNodeIds, executedNodes, isListening, listeningNodeId } =
     useWorkflow();
   const node = getNodeById(id);
-  
-  const tenantId = useProjectStore((s) => s.selectedProject?.tenantId) || "";
-
-  const { mutateAsync: stepExecute } = useStepExecute();
-
-  const handleExecuteStep = async () => {
-    if (!tenantId || !workflowId || !node) return;
-    try {
-      const executionId = lastSuccessfulExecutionData?.data.id || (lastSuccessfulExecutionData as any)?.itemId;
-      if (!executionId) {
-        showErrorToast({ title: "Error", errors: "No successful execution found" });
-        return;
-      }
-      
-      const stepResp: any = await stepExecute({
-        ProjectKey: tenantId,
-        WorkflowId: workflowId,
-        NodeId: node.id,
-        SourceExecutionId: executionId,
-      });
-      
-      if (stepResp?.itemId) {
-        const executionData = await workflowService.getWorkflowExecutionById({
-          projectKey: tenantId,
-          executionId: stepResp.itemId,
-        });
-        if (executionData?.data) {
-          setStepExecutionData(executionData as any);
-        }
-      }
-    } catch (e) {
-      console.error(e);
-      showErrorToast({ title: "Error", errors: "Failed to execute step" });
-    }
-  };
+  const { handleExecuteStep, executeStepModal } = useHandleExecuteStep();
 
 
 
@@ -112,7 +76,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
     <>
       <div
         className={cn(
-          "peer min-w-[100px] rounded-md border bg-background px-5 py-4 shadow-lg transition-shadow hover:shadow-xl",
+          "peer min-w-[100px] rounded-md border bg-background px-5 py-4 shadow-lg transition-all duration-500 hover:shadow-xl",
           isSelected && "border-primary ring-1 ring-primary",
           executionStyles,
           node.className || "",
@@ -122,7 +86,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
       </div>
       {isListening && listeningNodeId === id && (
         <>
-          <div className="absolute -bottom-2 -right-2 z-50 flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-md">
+          <div className="absolute -bottom-2 -right-2 z-50 flex h-5 w-5 items-center justify-center rounded-full bg-background border border-green-500 shadow-md">
             <Rss className="h-3 w-3 text-green-500" />
           </div>
           <div className="absolute -bottom-2 -right-2 z-40 h-5 w-5 animate-ping rounded-full bg-green-500"></div>
@@ -137,11 +101,11 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        <Tooltip>
+        {listeningNodeId !==id && <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-fit w-fit p-1" onClick={(e) => {
+            <Button variant="ghost" size="sm" className="h-fit w-fit p-1" disabled={isListening} onClick={(e) => {
               e.stopPropagation();
-              handleExecuteStep();
+              handleExecuteStep(id);
             }}>
               <Play className="h-3.5 w-3.5" />
             </Button>
@@ -149,15 +113,35 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
           <TooltipContent>
             <p>Execute Node</p>
           </TooltipContent>
-        </Tooltip>
-        <Tooltip>
+        </Tooltip>}
+
+        {isListening && listeningNodeId===id && <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-fit w-fit p-1">
+            <Button variant="ghost" size="sm" className="h-fit w-fit p-1" onClick={(e) => {
+              e.stopPropagation();
+            }}>
               <Ban className="h-3.5 w-3.5" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>
             <p>Stop Execution</p>
+          </TooltipContent>
+        </Tooltip>}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="h-fit w-fit p-1" 
+              onClick={(e) => {
+                e.stopPropagation();
+                duplicateNode(id);
+              }}>
+              <Copy className="h-3.5 w-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Duplicate</p>
           </TooltipContent>
         </Tooltip>
         <Tooltip>
@@ -176,11 +160,18 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
           </TooltipContent>
         </Tooltip>
         <DropdownMenu onOpenChange={setIsToolbarVisible}>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-fit w-fit p-1">
-              <EllipsisVertical className="h-3.5 w-3.5" />
-            </Button>
-          </DropdownMenuTrigger>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="h-fit w-fit p-1">
+                  <EllipsisVertical className="h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>More options</p>
+            </TooltipContent>
+          </Tooltip>
           <DropdownMenuContent
             align="end"
             side="bottom"
@@ -197,9 +188,10 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
             </DropdownMenuItem>
             <DropdownMenuItem
               className="cursor-pointer"
+              disabled={isListening}
               onClick={(e) => {
                 e.stopPropagation();
-                handleExecuteStep();
+                handleExecuteStep(id);
               }}
             >
               <span>Execute step</span>
@@ -260,6 +252,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
           {node?.name}
         </h4>
       )}
+      {executeStepModal}
     </>
   );
 };

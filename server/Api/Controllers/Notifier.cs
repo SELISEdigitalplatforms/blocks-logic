@@ -12,10 +12,12 @@ namespace Api.Controllers
     public class NotifierController : ControllerBase
     {
         private readonly INotificationService _notificationService;
+        private readonly ILogger<NotifierController> _logger;
 
-        public NotifierController(INotificationService notificationService)
+        public NotifierController(INotificationService notificationService,ILogger<NotifierController>logger)
         {
             _notificationService = notificationService;
+            _logger = logger;
         }
 
         [HttpPost]
@@ -23,7 +25,10 @@ namespace Api.Controllers
         //[ProtectedEndPoint]
         public async Task<BaseResponse> Notify([FromBody] NotifyRequest notifyRequest)
         {
-            return await _notificationService.NotifyAsync(notifyRequest);
+            _logger.LogInformation("Received notification request: {@NotifyRequest}", notifyRequest);
+            var response= await _notificationService.NotifyAsync(notifyRequest);
+            _logger.LogInformation("Notification response: {@Response}", response);
+            return response;
         }
 
         [ApiExplorerSettings(IgnoreApi = true)]
@@ -32,7 +37,12 @@ namespace Api.Controllers
        //[Authorize]
         public async Task<BaseResponse> SendSecretNotification([FromBody] NotifyRequest notifyRequest)
         {
-            return await _notificationService.NotifyAsync(notifyRequest);
+            _logger.LogInformation("Received notification request: {@NotifyRequest}", notifyRequest);
+
+            var response = await _notificationService.NotifyAsync(notifyRequest);
+
+            _logger.LogInformation("Notification response: {@Response}", response);
+            return response;
         }
 
         [HttpGet]

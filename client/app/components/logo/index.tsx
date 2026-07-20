@@ -6,7 +6,7 @@ interface LogoProps {
   className?: string;
 }
 
-import { useTheme } from "@/hooks/use-theme";
+import { useTheme } from "@seliseblocks/blocks-kit/hooks";
 
 export function Logo({ src, alt, width, height, className }: LogoProps) {
   const { resolvedTheme } = useTheme();

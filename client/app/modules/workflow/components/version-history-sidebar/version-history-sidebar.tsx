@@ -1,7 +1,6 @@
 import { Button } from "@/components/ui-kits/button/button";
 import { MoreVertical, Loader2, Info } from "lucide-react";
 import { useParams } from "react-router-dom";
-import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { useGetWorkflowVersions } from "../../hooks/use-workflow-api";
 import { formatDate } from "@/lib/utils";
 import { WorkflowVersion } from "../../models/workflow.model";
@@ -21,10 +20,8 @@ interface VersionHistorySidebarProps {
 
 export const VersionHistorySidebar = ({ onClose, onSelectVersion, selectedVersionId }: VersionHistorySidebarProps) => {
   const { id: workflowId } = useParams<{ id: string }>();
-  const projectKey = useProjectStore().selectedProject?.tenantId || "";
   
   const { data: versionsData, isLoading } = useGetWorkflowVersions({
-    projectKey,
     workflowId: workflowId || "",
   });
 

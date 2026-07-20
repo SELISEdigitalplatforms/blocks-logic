@@ -1,47 +1,47 @@
 import { useCallback, useEffect } from "react";
 import { useNotificationListener } from "@/hooks/use-notification-listener";
 import { useWorkflow } from "@blocks-workflow/hooks";
-import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { workflowService } from "../services/workflow.service";
+import { EXECUTION_STATUS_COMPLETED, EXECUTION_STATUS_FAILED } from "../constants";
+import { showErrorToast } from "@/hooks/use-toast";
 
 export const useWorkflowNotification = () => {
-  const { isListening, setIsListening, listeningNodeId, workflowId, setStepExecutionData } = useWorkflow();
-  const tenantId = useProjectStore((s) => s.selectedProject?.tenantId) || "";
+  const { isListening, setIsListening, listeningNodeId, workflowId, setStepExecutionData,setNextExecutionId } = useWorkflow();
 
   const handleNotification = useCallback(async (data: any) => {
-    console.log({ data });
     if (!isListening) return;
     try {
-      const denormalizedData = typeof data === "string" ? JSON.parse(data) : data;
-      console.log("WorkflowNotification", denormalizedData);
+      let cleanData = data;
+      if (typeof data === "string") {
+        cleanData = data.replace(/\x1e$/, "");
+      }
+      const denormalizedData = typeof cleanData === "string" ? JSON.parse(cleanData) : cleanData;
 
-      if (
-        denormalizedData?.type === 1 &&
-        denormalizedData?.target === "WorkflowNotification" &&
-        denormalizedData?.arguments?.length > 0
-      ) {
-        const payloadStr = denormalizedData.arguments[0]?.denormalizedPayload;
-        if (payloadStr) {
-          const payload = typeof payloadStr === "string" ? JSON.parse(payloadStr) : payloadStr;
+      const payloadStr = denormalizedData?.arguments?.length > 0 
+        ? denormalizedData.arguments[0]?.denormalizedPayload
+        : (denormalizedData?.message?.denormalizedPayload || denormalizedData?.denormalizedPayload);
+
+      if (payloadStr) {
+        const payload = typeof payloadStr === "string" ? JSON.parse(payloadStr) : payloadStr;
           const code = payload?.Information?.code;
           const status = payload?.Information?.status;
 
-          if (code === "WF004" && status === "Completed") {
+          if (code === EXECUTION_STATUS_COMPLETED || code === EXECUTION_STATUS_FAILED) {
             const executionId = payload?.Information?.executionId || payload?.Information?.data;
-            
-            if (isListening && listeningNodeId && workflowId && tenantId) {
+            setNextExecutionId(payload?.Information?.executionId)
+            if (isListening && listeningNodeId && workflowId ) {
               workflowService.triggerListener({
-                ProjectKey: tenantId,
                 WorkflowId: workflowId,
                 TriggerId: listeningNodeId,
                 EnableListener: false,
-              }).catch((err) => console.error("Failed to disable listener on completion", err));
+              }).catch((err) => {
+                showErrorToast({ errors: err.message || "Failed to disable listener on completion" });
+              });
               setIsListening(false);
             }
 
-            if (executionId && tenantId) {
+            if (executionId) {
               const executionData = await workflowService.getWorkflowExecutionById({
-                projectKey: tenantId,
                 executionId: executionId,
               });
               if (executionData?.data) {
@@ -49,16 +49,12 @@ export const useWorkflowNotification = () => {
               }
             }
           }
-        }
       }
-    } catch (error) {
-      console.error("Failed to parse WorkflowNotification", error);
+    } catch (error: any) {
+      showErrorToast({ errors: error.message || "Failed to parse WorkflowNotification" });
     }
-  }, [isListening, setIsListening, listeningNodeId, workflowId, tenantId, setStepExecutionData]);
+  }, [isListening, setIsListening, listeningNodeId, workflowId, setStepExecutionData]);
 
-  useEffect(() => {
-    console.log({ isListening });
-  }, [isListening]);
 
   useNotificationListener("WorkflowNotification", handleNotification);
 };

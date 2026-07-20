@@ -19,12 +19,12 @@ import { format } from "date-fns";
 import { useGetWorkflowById } from "@blocks-workflow/hooks/use-workflow-api";
 import { WorkflowExecutions } from "@blocks-workflow/components/workflow-execution";
 import { useNavigate, useParams } from "react-router-dom";
-import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { BREADCRUMB_CUSTOM_TITLES } from "@/constants/breadcrumb-custom-title";
 import { showErrorToast } from "@/hooks/use-toast";
 import { PublishWorkflowAction } from "../../components/publish-workflow-action";
 import { WorkflowVersions } from "../../components/workflow-version";
 import { useGetLastSuccessfulExecution } from "../../hooks";
+import { useScopedPath } from "@seliseblocks/blocks-kit";
 
 type WorkflowDetailPageProps = {
   workflowId: string;
@@ -33,20 +33,15 @@ type WorkflowDetailPageProps = {
 export const WorkflowDetailsContent = ({
   workflowId,
 }: WorkflowDetailPageProps) => {
-  const projectKey = useProjectStore().selectedProject?.tenantId || "";
   const navigate = useNavigate();
+  const scoped = useScopedPath();
+
   const [activeTab, setActiveTab] = useState<string>("editor");
+
   const { hasUnsavedChanges, setWorkflow, setLastSuccessfulExecutionData } = useWorkflow();
-  const { data, isLoading, isFetched, isFetching, isFetchedAfterMount, refetch } =
-    useGetWorkflowById({
-      id: workflowId,
-      projectKey,
-    });
-    
-  const { data: lastExecutionData, isFetched: isLastExecutionFetched } = useGetLastSuccessfulExecution({
-    projectKey,
-    workflowId,
-  });
+
+  const { data, isLoading, isFetched, isFetching, isFetchedAfterMount, refetch } = useGetWorkflowById({id: workflowId});
+  const { data: lastExecutionData, isFetched: isLastExecutionFetched } = useGetLastSuccessfulExecution({workflowId});
 
   useEffect(() => {
     if (isLastExecutionFetched && lastExecutionData) {
@@ -61,14 +56,13 @@ export const WorkflowDetailsContent = ({
         setWorkflow(workflowData);
       } else {
         showErrorToast({"errors": "Workflow not found"});
-        navigate("/app/workflow");
+        navigate(scoped("/app/workflow"));
       }
     }
   }, [data, isFetched, isFetchedAfterMount, setWorkflow, navigate]);
 
   const { isSaving, saveNow } = useAutoSaveWorkflow({
     workflowId,
-    projectKey,
     debounceMs: 20000,
     enabled: false,
     onSaveSuccess: () => {},
@@ -83,8 +77,9 @@ export const WorkflowDetailsContent = ({
     <>
       <div className="flex h-full flex-col">
         <div className="px-4 mt-4">
-          <PageBreadcrumb />
+          <PageBreadcrumb breadcrumbIndex={3}/>
         </div>
+
         {!isLoading && isFetchedAfterMount && data?.data?.isDirty && (
           <div className="rounded-lg mx-4 mt-4 bg-yellow-50 border border-yellow-500 text-yellow-700 dark:bg-yellow-950/60 dark:text-yellow-300 dark:border dark:border-yellow-700 p-2.5">
             <div className="flex items-center gap-3">
