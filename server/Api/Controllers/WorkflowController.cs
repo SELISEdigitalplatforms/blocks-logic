@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Mvc;
 using Blocks.Genesis;
 using DomainService.Workflow.Dtos;
 using DomainService.Workflow.Services;
-using MongoDB.Bson;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 
@@ -14,27 +13,25 @@ namespace Utilities.Api.Controllers
     {
 
         private readonly IWorkflowService _workflowService;
+        private readonly IWorkflowVersionService _workflowVersionService;
         private readonly IWorkflowExecutionService _workflowExecutionService;
-        private readonly IWorkflowNotificationService _workflowNotificationService;
 
         public WorkflowController(
-
             IWorkflowService workflowService,
-            IWorkflowExecutionService workflowExecutionService,
-            IWorkflowNotificationService workflowNotificationService)
+            IWorkflowVersionService workflowVersionService,
+            IWorkflowExecutionService workflowExecutionService)
         {
-
             _workflowService = workflowService;
+            _workflowVersionService = workflowVersionService;
             _workflowExecutionService = workflowExecutionService;
-            _workflowNotificationService = workflowNotificationService;
         }
 
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> GetAll([FromBody] WorkflowGetsRequestDto dto)
         {
-            ApplyContext(dto);
-            var workflows = await _workflowService.GetAllAsync(dto);
+            var tenantId = GetTenantId();
+            var workflows = await _workflowService.GetAllAsync(tenantId, dto);
             return Ok(workflows);
         }
 
@@ -42,8 +39,8 @@ namespace Utilities.Api.Controllers
         [HttpGet]
         public async Task<IActionResult> Get([FromQuery] WorkflowGetRequestDto dto)
         {
-            ApplyContext(dto);
-            var workflow = await _workflowService.GetAsync(dto);
+            var tenantId = GetTenantId();
+            var workflow = await _workflowService.GetAsync(tenantId, dto);
             return Ok(workflow);
         }
 
@@ -51,8 +48,8 @@ namespace Utilities.Api.Controllers
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] WorkflowCreateRequestDto dto)
         {
-            ApplyContext(dto);
-            var result = await _workflowService.CreateAsync(dto);
+            var tenantId = GetTenantId();
+            var result = await _workflowService.CreateAsync(tenantId, dto);
             return StatusCode(StatusCodes.Status201Created, result);
         }
 
@@ -60,8 +57,8 @@ namespace Utilities.Api.Controllers
         [HttpPost]
         public async Task<IActionResult> Duplicate([FromBody] WorkflowDuplicateRequestDto dto)
         {
-            ApplyContext(dto);
-            var result = await _workflowService.DuplicateAsync(dto);
+            var tenantId = GetTenantId();
+            var result = await _workflowService.DuplicateAsync(tenantId, dto);
             return StatusCode(StatusCodes.Status201Created, result);
         }
 
@@ -69,8 +66,8 @@ namespace Utilities.Api.Controllers
         [HttpPut]
         public async Task<IActionResult> Update([FromBody] WorkflowUpdateRequestDto dto)
         {
-            ApplyContext(dto);
-            var result = await _workflowService.UpdateAsync(dto);
+            var tenantId = GetTenantId();
+            var result = await _workflowService.UpdateAsync(tenantId, dto);
             return Ok(result);
         }
 
@@ -78,8 +75,8 @@ namespace Utilities.Api.Controllers
         [HttpDelete]
         public async Task<IActionResult> Delete([FromQuery] WorkflowDeleteRequestDto dto)
         {
-            ApplyContext(dto);
-            var result = await _workflowService.DeleteAsync(dto);
+            var tenantId = GetTenantId();
+            var result = await _workflowService.DeleteAsync(tenantId, dto);
             return Ok(result);
         }
 
@@ -87,7 +84,8 @@ namespace Utilities.Api.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateVersion([FromBody] WorkflowVersionCreateRequestDto dto)
         {
-            var result = await _workflowService.CreateVersionAsync(dto);
+            var tenantId = GetTenantId();
+            var result = await _workflowVersionService.CreateVersionAsync(tenantId, dto);
             return StatusCode(StatusCodes.Status201Created, result);
         }
 
@@ -95,7 +93,8 @@ namespace Utilities.Api.Controllers
         [HttpPost]
         public async Task<IActionResult> UpdateVersion([FromBody] WorkflowVersionUpdateRequestDto dto)
         {
-            var result = await _workflowService.UpdateVersionAsync(dto);
+            var tenantId = GetTenantId();
+            var result = await _workflowVersionService.UpdateVersionAsync(tenantId, dto);
             return Ok(result);
         }
 
@@ -104,7 +103,8 @@ namespace Utilities.Api.Controllers
         [HttpPost]
         public async Task<IActionResult> GetVersions([FromBody] WorkflowGetVersionsRequestDto dto)
         {
-            var result = await _workflowService.GetVersionsAsync(dto);
+            var tenantId = GetTenantId();
+            var result = await _workflowVersionService.GetWorkflowVersionsAsync(tenantId, dto);
             return Ok(result);
         }
 
@@ -112,7 +112,8 @@ namespace Utilities.Api.Controllers
         [HttpPost]
         public async Task<IActionResult> GetWorkflowByVersion([FromBody] GetWorkflowByVersionRequestDto dto)
         {
-            var result = await _workflowService.GetWorkflowByVersionAsync(dto);
+            var tenantId = GetTenantId();
+            var result = await _workflowService.GetWorkflowByVersionAsync(tenantId, dto);
             return Ok(result);
         }
 
@@ -120,7 +121,8 @@ namespace Utilities.Api.Controllers
         [HttpPost]
         public async Task<IActionResult> PublishNewVersion([FromBody] WorkflowPublishNewVersionRequestDto dto)
         {
-            var result = await _workflowService.PublishNewVersionAsync(dto);
+            var tenantId = GetTenantId();
+            var result = await _workflowService.PublishNewVersionAsync(tenantId, dto);
             return Ok(result);
         }
 
@@ -128,7 +130,8 @@ namespace Utilities.Api.Controllers
         [HttpPost]
         public async Task<IActionResult> PublishVersion([FromBody] WorkflowPublishVersionRequestDto dto)
         {
-            var result = await _workflowService.PublishVersionAsync(dto);
+            var tenantId = GetTenantId();
+            var result = await _workflowService.PublishVersionAsync(tenantId, dto);
             return Ok(result);
         }
 
@@ -136,7 +139,8 @@ namespace Utilities.Api.Controllers
         [HttpPost]
         public async Task<IActionResult> Unpublish([FromBody] WorkflowUnpublishRequestDto dto)
         {
-            var result = await _workflowService.UnpublishAsync(dto);
+            var tenantId = GetTenantId();
+            var result = await _workflowService.UnpublishAsync(tenantId, dto);
             return Ok(result);
         }
 
@@ -144,7 +148,8 @@ namespace Utilities.Api.Controllers
         [HttpPost]
         public async Task<IActionResult> Restore([FromBody] WorkflowRestoreRequestDto dto)
         {
-            var result = await _workflowService.RestoreAsync(dto);
+            var tenantId = GetTenantId();
+            var result = await _workflowService.RestoreAsync(tenantId, dto);
             return Ok(result);
         }
 
@@ -158,7 +163,6 @@ namespace Utilities.Api.Controllers
                 ProjectKey = projectKey,
                 Input = input
             };
-            ApplyContext(dto);
 
             try
             {
@@ -187,7 +191,6 @@ namespace Utilities.Api.Controllers
                 ProjectKey = projectKey,
                 Input = input
             };
-            ApplyContext(dto);
 
             try
             {
@@ -210,7 +213,8 @@ namespace Utilities.Api.Controllers
         [HttpPost]
         public async Task<IActionResult> StepExecute([FromBody] StepExecuteRequestDto dto)
         {
-            var executions = await _workflowExecutionService.StepExecuteAsync(dto);
+            var tenantId = GetTenantId();
+            var executions = await _workflowExecutionService.StepExecuteAsync(tenantId, dto);
             return Ok(executions);
         }
 
@@ -218,7 +222,8 @@ namespace Utilities.Api.Controllers
         [HttpPost]
         public async Task<IActionResult> TriggerListener([FromBody] TriggerListenerRequestDto dto)
         {
-            var executions = await _workflowService.TriggerListenerAsync(dto);
+            var tenantId = GetTenantId();
+            var executions = await _workflowService.TriggerListenerAsync(tenantId, dto);
             return Ok(executions);
         }
 
@@ -227,8 +232,8 @@ namespace Utilities.Api.Controllers
         [HttpGet]
         public async Task<IActionResult> GetExecutions([FromQuery] WorkflowExecutionsGetRequestDto dto)
         {
-            ApplyContext(dto);
-            var executions = await _workflowExecutionService.GetExecutionsByWorkflowIdAsync(dto);
+            var tenantId = GetTenantId();
+            var executions = await _workflowExecutionService.GetExecutionsByWorkflowIdAsync(tenantId, dto);
             return Ok(executions);
         }
 
@@ -236,8 +241,8 @@ namespace Utilities.Api.Controllers
         [HttpGet]
         public async Task<IActionResult> GetExecution([FromQuery] WorkflowExecutionGetRequestDto dto)
         {
-            ApplyContext(dto);
-            var execution = await _workflowExecutionService.GetExecutionByIdAsync(dto);
+            var tenantId = GetTenantId();
+            var execution = await _workflowExecutionService.GetExecutionByIdAsync(tenantId, dto);
             return Ok(execution);
         }
 
@@ -245,13 +250,16 @@ namespace Utilities.Api.Controllers
         [HttpGet]
         public async Task<IActionResult> LastSuccessfullExecution([FromQuery] LastSuccessfullExecutionRequestDto dto)
         {
-            var execution = await _workflowExecutionService.LastSuccessfullExecutionAsync(dto);
+            var tenantId = GetTenantId();
+            var execution = await _workflowExecutionService.LastSuccessfullExecutionAsync(tenantId, dto);
             return Ok(execution);
         }
 
-        private void ApplyContext(IProjectKey request)
+        private string GetTenantId()
         {
-
+            var context = BlocksContext.GetContext();
+            if (context == null) return "";
+            return context.TenantId;
         }
     }
 }

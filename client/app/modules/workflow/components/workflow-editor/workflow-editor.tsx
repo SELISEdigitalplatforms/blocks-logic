@@ -57,7 +57,6 @@ export const WorkflowEditor = ({ isReadonly = false }: WorkflowEditorProps) => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if user is typing in an input/textarea
       if (
         e.target instanceof HTMLInputElement ||
         e.target instanceof HTMLTextAreaElement ||
@@ -66,12 +65,10 @@ export const WorkflowEditor = ({ isReadonly = false }: WorkflowEditorProps) => {
         return;
       }
 
-      // Ctrl/Cmd + C
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
         copySelectedNodes();
       }
 
-      // Ctrl/Cmd + V
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") {
         pasteNodes();
       }

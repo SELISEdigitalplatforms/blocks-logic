@@ -32,14 +32,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui-kits/dropdown-menu/dropdown-menu";
 import { Button } from "@/components/ui-kits/button/button";
-import { Copy, EllipsisVertical, Pen, Ban, Trash, Check } from "lucide-react";
+import { Copy, EllipsisVertical, ArrowRightFromLine, Ban, Trash, Check } from "lucide-react";
 import { DeleteWorkflow } from "../delete-workflow";
 import { DuplicateWorkflow } from "../duplicate-workflow";
 import { Link, useNavigate } from "react-router-dom";
-import { usePublishNewWorkflow, usePublishWorkflow, useUnpublishWorkflow } from "../../hooks/use-workflow-api";
-import { useProjectStore } from "@seliseblocks/blocks-kit";
+import { useWorkflowActions } from "../../hooks/use-workflow-actions";
 import { PublishConfirmationModal, UnpublishConfirmationModal } from "../workflow-confirmation-modals";
 import { PublishWorkflowModal } from "../publish-workflow-modal/publish-workflow-modal";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
+import { useScopedPath } from "@seliseblocks/blocks-kit";
+import { RenameWorkflow } from "../rename-workflow/rename-workflow";
+import { Pen } from "lucide-react";
 
 
 const WorkflowListSkeleton = ({ length }: { length: number }) => {
@@ -64,60 +67,48 @@ type WorkflowListProps = {
 export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
   const navigate = useNavigate();
   const [modal, setModal] = useState<{
-    type: "delete" | "publish" | "publish_new" | "unpublish" | "duplicate" | null;
+    type: "delete" | "publish" | "publish_new" | "unpublish" | "duplicate" | "rename" | null;
     data: Record<string, unknown>;
   }>({
     type: null,
     data: {},
   });
+  const scoped = useScopedPath();
 
-  const projectKey = useProjectStore().selectedProject?.tenantId || "";
   const [publishVersionName, setPublishVersionName] = useState("");
   const [publishDescription, setPublishDescription] = useState("");
 
-  const { mutateAsync: publishNewWorkflow, isPending: isPublishingNew } = usePublishNewWorkflow();
-  const { mutateAsync: publishWorkflow, isPending: isPublishingUnversioned } = usePublishWorkflow();
-  const { mutateAsync: unpublishWorkflow, isPending: isUnpublishing } = useUnpublishWorkflow();
+  const {
+    handlePublishNew: publishNew,
+    handlePublishUnversioned: publishUnversioned,
+    handleUnpublish: unpublish,
+    isPublishingNew,
+    isPublishingUnversioned,
+    isUnpublishing,
+  } = useWorkflowActions();
 
-  const handlePublishNew = async () => {
+  const handlePublishNew = () => {
     const workflowId = modal.data.id as string;
     if (!workflowId) return;
-    try {
-      await publishNewWorkflow({ 
-        projectKey, 
-        workflowId, 
-        name: publishVersionName, 
-        description: publishDescription 
-      });
+    publishNew(workflowId, publishVersionName, publishDescription, () => {
       setModal({ type: null, data: {} });
-    } catch (error) {
-      console.error(error);
-    }
+    });
   };
 
-  const handlePublishUnversioned = async () => {
+  const handlePublishUnversioned = () => {
     const workflowId = modal.data.id as string;
     if (!workflowId) return;
-    try {
-      await publishWorkflow({ 
-        projectKey, 
-        workflowId 
-      });
+    publishUnversioned(workflowId, undefined, () => {
       setModal({ type: null, data: {} });
-    } catch (error) {
-      console.error(error);
-    }
+    });
   };
 
-  const handleUnpublish = async () => {
+  const handleUnpublish = () => {
     const workflowId = modal.data.id as string;
     if (!workflowId) return;
-    try {
-      await unpublishWorkflow({ projectKey, workflowId });
+    unpublish(workflowId, () => {
       setModal({ type: null, data: {} });
-    } catch (error) {
-      console.error(error);
-    }
+    });
   };
   const columns = useMemo<ColumnDef<WorkflowSummary>[]>(
     () => [
@@ -167,36 +158,45 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
         header: () => <div className="font-bold text-medium-emphasis"></div>,
         cell: (info) => (
           <div className="ml-2 flex items-center gap-4 sm:ml-0">
-            <Switch
-              size="md"
-              checked={info.row.original.isPublished}
-              onClick={(e) => e.stopPropagation()}
-              onCheckedChange={(_value) => {
-                if (!info.row.original.isPublished) {
-                  if (!info.row.original.isDirty) {
-                    setModal({
-                      type: "publish",
-                      data: { id: info.row.original.itemId },
-                    });
-                  } else {
-                    const id = Math.random().toString(16).substring(2, 10);
-                    setPublishVersionName(`Version ${id}`);
-                    setPublishDescription("");
-                    setModal({
-                      type: "publish_new",
-                      data: { id: info.row.original.itemId },
-                    });
-                  }
-                } else {
-                  setModal({
-                    type: "unpublish",
-                    data: {
-                      id: info.row.original.itemId,
-                    },
-                  });
-                }
-              }}
-            />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div>
+                  <Switch
+                    size="md"
+                    checked={info.row.original.isPublished}
+                    onClick={(e) => e.stopPropagation()}
+                    onCheckedChange={(_value) => {
+                      if (!info.row.original.isPublished) {
+                        if (!info.row.original.isDirty) {
+                          setModal({
+                            type: "publish",
+                            data: { id: info.row.original.itemId },
+                          });
+                        } else {
+                          const id = Math.random().toString(16).substring(2, 10);
+                          setPublishVersionName(`Version ${id}`);
+                          setPublishDescription("");
+                          setModal({
+                            type: "publish_new",
+                            data: { id: info.row.original.itemId },
+                          });
+                        }
+                      } else {
+                        setModal({
+                          type: "unpublish",
+                          data: {
+                            id: info.row.original.itemId,
+                          },
+                        });
+                      }
+                    }}
+                  />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{info.row.original.isPublished ? "Unpublish workflow" : "Publish workflow"}</p>
+              </TooltipContent>
+            </Tooltip>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="h-5 w-5 p-0">
@@ -206,12 +206,25 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
               <DropdownMenuContent align="end">
                 <DropdownMenuItem className="cursor-pointer">
                   <Link
-                    to={`/workflow/${info.row.original.itemId}`}
+                    to={scoped(`workflow/${info.row.original.itemId}`)}
                     className="flex w-full items-center"
                   >
-                    <Pen className="mr-2 h-4 w-4" />
+                    <ArrowRightFromLine className="mr-2 h-4 w-4" />
                     <span>Open</span>
                   </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setModal({
+                      type: "rename",
+                      data: { id: info.row.original.itemId, name: info.row.original.name },
+                    });
+                  }}
+                >
+                  <Pen className="mr-2 h-4 w-4" />
+                  <span>Rename</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="cursor-pointer"
@@ -288,7 +301,7 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
 
   const handleRowClick = useCallback(
     (itemId: number | string) => {
-      navigate(`/app/workflow/${itemId}`);
+      navigate(scoped(`workflow/${itemId}`));
     },
     [navigate],
   );
@@ -309,7 +322,7 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
     <>
       <Table>
         <TableHeader>
-          <TableRow isHoverable>
+          <TableRow>
             {table
               .getHeaderGroups()
               .map((headerGroup) =>
@@ -397,6 +410,15 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
         }}
         workflowId={modal.data.id as string}
         name={modal.data.name as string}
+      />
+      <RenameWorkflow
+        key={modal.type === "rename" ? (modal.data.id as string) : "closed"}
+        open={modal.type === "rename"}
+        onOpenChange={(value) => {
+          if (!value) setModal({ type: null, data: {} });
+        }}
+        workflowId={modal.data.id as string}
+        initialName={modal.data.name as string}
       />
     </>
   );

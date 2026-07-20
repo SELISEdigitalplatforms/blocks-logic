@@ -7,7 +7,7 @@ using MongoDB.Bson;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text.Json;
-using DomainService.Workflow.Models;
+using DomainService.Workflow.Entities;
 
 namespace DomainService.Workflow.Nodes.ActionDataV1
 {
@@ -65,10 +65,10 @@ namespace DomainService.Workflow.Nodes.ActionDataV1
                         _logger.LogWarning("ActionDataV1Node: ApiBaseUrl is empty. Set it in node parameters or configure 'ApiBaseUrl' in appsettings.");
                 }
 
-                if (string.IsNullOrEmpty(parameters.ProjectShortKey))
-                {
-                    _logger.LogWarning("ActionDataV1Node: ProjectShortKey is empty. Please re-save the workflow node to auto-populate this value from the frontend.");
-                }
+                // if (string.IsNullOrEmpty(parameters.ProjectShortKey))
+                // {
+                //     _logger.LogWarning("ActionDataV1Node: ProjectShortKey is empty. Please re-save the workflow node to auto-populate this value from the frontend.");
+                // }
 
                 List<NodeOutputItem> outputItems;
 
@@ -305,7 +305,7 @@ namespace DomainService.Workflow.Nodes.ActionDataV1
             ActionDataV1Parameters parameters, string graphqlQuery)
         {
             var httpClient = _httpClientFactory.CreateClient();
-            var requestUrl = $"{parameters.ApiBaseUrl}/{parameters.ProjectShortKey}/gateway";
+            var requestUrl = $"{parameters.ApiBaseUrl}/api/gateway";
             var request = new HttpRequestMessage(HttpMethod.Post, requestUrl);
             // Authenticate based on selected authentication type
             if (parameters.AuthenticationType == "triggerNodeCookie")
@@ -536,7 +536,7 @@ namespace DomainService.Workflow.Nodes.ActionDataV1
             return string.Join(" ", fields);
         }
 
-        private string BuildWhereClause(ActionDataV1Parameters parameters, WorkflowItemExecutionModel inputItem, NodeExecutionContext context)
+        private string BuildWhereClause(ActionDataV1Parameters parameters, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
         {
             var whereParts = new List<string>();
             if (parameters.Filter != null && parameters.Filter.Count > 0)
@@ -552,7 +552,7 @@ namespace DomainService.Workflow.Nodes.ActionDataV1
             return string.Join(", ", whereParts);
         }
 
-        private BsonDocument BuildDataDocument(ActionDataV1Parameters parameters, WorkflowItemExecutionModel inputItem, NodeExecutionContext context)
+        private BsonDocument BuildDataDocument(ActionDataV1Parameters parameters, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
         {
             var dataDoc = new BsonDocument();
             if (parameters.FieldMapping != null)
