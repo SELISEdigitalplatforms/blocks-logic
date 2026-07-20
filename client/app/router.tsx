@@ -13,10 +13,8 @@ import {
   ConsolePage,
   CallbackPage,
   ProfilePage,
-  ProjectOverviewLayout,
   DashboardOverview,
-  DashboardLayout,
-  EnvironmentsPage
+  DashboardRoute,
 } from "@seliseblocks/blocks-kit";
 import { navigationMenus } from "./constants/navigation-menus";
 
@@ -26,103 +24,70 @@ const redirectPaths: Record<string, string> = {
 
 export const router = createBrowserRouter([
   {
-    element: <Outlet />,
+    // Set User Auth Information and resolve authentication state before rendering any route
+    element: (
+      <AuthResolver>
+        <Outlet />
+      </AuthResolver>
+    ),
     children: [
-      // All Redirect Url Handle here
       {
-        element: <Outlet />,
-        children: [
-          {
-            path: "/login/callback",
-            element: <CallbackPage defaultRedirectUrl="/app/console" />,
-          },
-        ],
-      },
-      {
-        // Set User Auth Information and resolve authentication state before rendering any route
         element: (
-          <AuthResolver>
+          <PublicGuard>
             <Outlet />
-          </AuthResolver>
+          </PublicGuard>
         ),
         children: [
           {
-            element: (
-              <PublicGuard>
-                <Outlet />
-              </PublicGuard>
-            ),
+            path: "/login",
             children: [
-              { path: "/login", element: <LoginPage/> },
-            ],
-          },
-
-          // protected
-          {
-            element: (
-              <ProtectedGuard>
-                <Outlet />
-              </ProtectedGuard>
-            ),
-            path: "/app",
-            children: [
+              { index: true, element: <LoginPage /> },
               {
-                element: (
-                  <Outlet />
-                ),
-                children: [
-                  {
-                    element: (
-                      <ConsoleLayout>
-                        <Outlet />
-                      </ConsoleLayout>
-                    ),
-                    children: [
-                      { path: "profile", element: <ProfilePage /> },
-                      { path: "console", element: <ConsolePage /> },
-                    ],
-                  },
-                  {
-                    path: "project-overview",
-                    element: (
-                      <ProjectOverviewLayout
-                        redirectPaths={redirectPaths}
-                        navigationMenus={navigationMenus}>
-                        <Outlet />
-                      </ProjectOverviewLayout>
-                    ),
-                    children: [
-                      {
-                        path: "project-overview/environments",
-                        element: <EnvironmentsPage />,
-                      },
-                    ],
-                  },
-                ],
-              },
-              {
-                // impersonate
-                element: (
-                  <DashboardLayout
-                    redirectPaths={redirectPaths}
-                    navigationMenus={navigationMenus}>
-                    <Outlet />
-                  </DashboardLayout>
-                ),
-                children: [
-                  { path: "dashboard", element: <DashboardOverview /> },
-                  { path: "workflow/:id", element: <WorkflowDetailsPage /> },
-                  { path: "workflow", element: <WorkflowsPage /> },
-                ],
+                path: "callback",
+                element: <CallbackPage defaultRedirectUrl="/app/console" />,
               },
             ],
           },
         ],
       },
+
+      // protected
       {
-        path: "*",
-        element: <Navigate to="/app/console" replace />,
+        path: "/app",
+        element: (
+          <ProtectedGuard>
+            <Outlet />
+          </ProtectedGuard>
+        ),
+
+        children: [
+          { index: true, element: <Navigate to="/app/console" replace /> },
+          {
+            element: (
+              <ConsoleLayout>
+                <Outlet />
+              </ConsoleLayout>
+            ),
+            children: [
+              { path: "console", element: <ConsolePage /> },
+              { path: "profile", element: <ProfilePage /> },
+            ],
+          },
+          {
+            // impersonate
+            path: ":itemId",
+            element: <DashboardRoute redirectPaths={redirectPaths} navigationMenus={navigationMenus} />,
+            children: [
+              { path: "dashboard", element: <DashboardOverview /> },
+              { path: "workflow/:id", element: <WorkflowDetailsPage /> },
+              { path: "workflow", element: <WorkflowsPage /> },
+              { path: "profile", element: <ProfilePage /> },
+            ],
+          },
+        ],
       },
+      { path: "/", element: <Navigate to="/app/console" replace /> },
+      { path: "*", element: <Navigate to="/login" replace /> },
     ],
   },
 ]);

@@ -8,8 +8,7 @@ import {
 import { Button } from "@/components/ui-kits/button/button";
 import { ChevronDown, Loader2 } from "lucide-react";
 import { useParams } from "react-router-dom";
-import { useProjectStore } from "@seliseblocks/blocks-kit";
-import { usePublishNewWorkflow, usePublishWorkflow, useUnpublishWorkflow } from "../../hooks/use-workflow-api";
+import { useWorkflowActions } from "../../hooks/use-workflow-actions";
 import { PublishConfirmationModal, UnpublishConfirmationModal } from "../workflow-confirmation-modals";
 import { PublishWorkflowModal } from "../publish-workflow-modal/publish-workflow-modal";
 
@@ -27,7 +26,6 @@ export const PublishWorkflowAction = ({
   onActionComplete,
 }: PublishWorkflowActionProps) => {
   const { id: workflowId } = useParams<{ id: string }>();
-  const projectKey = useProjectStore().selectedProject?.tenantId || "";
   
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
   const [isPublishConfirmOpen, setIsPublishConfirmOpen] = useState(false);
@@ -35,9 +33,14 @@ export const PublishWorkflowAction = ({
   const [publishVersionName, setPublishVersionName] = useState("");
   const [publishDescription, setPublishDescription] = useState("");
 
-  const { mutateAsync: publishNewWorkflow, isPending: isPublishingNew } = usePublishNewWorkflow();
-  const { mutateAsync: publishWorkflow, isPending: isPublishingUnversioned } = usePublishWorkflow();
-  const { mutateAsync: unpublishWorkflow, isPending: isUnpublishing } = useUnpublishWorkflow();
+  const {
+    handlePublishNew,
+    handlePublishUnversioned: publishUnversioned,
+    handleUnpublish: unpublish,
+    isPublishingNew,
+    isPublishingUnversioned,
+    isUnpublishing,
+  } = useWorkflowActions();
 
   const handleOpenPublishDialog = () => {
     if (!isPublished && !isDirty) {
@@ -50,50 +53,32 @@ export const PublishWorkflowAction = ({
     }
   };
 
-  const handlePublish = async () => {
+  const handlePublish = () => {
     if (!workflowId) return;
-    try {
-      await publishNewWorkflow({ 
-        projectKey, 
-        workflowId, 
-        name: publishVersionName, 
-        description: publishDescription 
-      });
+    handlePublishNew(workflowId, publishVersionName, publishDescription, () => {
       setIsPublishDialogOpen(false);
       onActionComplete?.();
-    } catch (error) {
-      console.error(error);
-    }
+    });
   };
 
-  const handlePublishUnversioned = async () => {
+  const handlePublishUnversioned = () => {
     if (!workflowId) return;
-    try {
-      await publishWorkflow({ 
-        projectKey, 
-        workflowId 
-      });
+    publishUnversioned(workflowId, undefined, () => {
       setIsPublishConfirmOpen(false);
       onActionComplete?.();
-    } catch (error) {
-      console.error(error);
-    }
+    });
   };
 
-  const handleUnpublish = async () => {
+  const handleUnpublish = () => {
     if (!workflowId) return;
-    try {
-      await unpublishWorkflow({ projectKey, workflowId });
+    unpublish(workflowId, () => {
       setIsUnpublishDialogOpen(false);
       onActionComplete?.();
-    } catch (error) {
-      console.error(error);
-    }
+    });
   };
 
   const isPending = isPublishingNew || isPublishingUnversioned || isUnpublishing;
 
-  // console.log(hasUnsavedChanges, isDirty, isPublished);
 
   return (
     <>
@@ -106,10 +91,28 @@ export const PublishWorkflowAction = ({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={handleOpenPublishDialog} disabled={hasUnsavedChanges || (isPublished || !isDirty)}>
+          <DropdownMenuItem 
+            onClick={(e) => {
+              if (hasUnsavedChanges || (isPublished && !isDirty)) {
+                e.preventDefault();
+                return;
+              }
+              handleOpenPublishDialog();
+            }} 
+            disabled={hasUnsavedChanges || (isPublished && !isDirty)}
+          >
             Publish
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setIsUnpublishDialogOpen(true)} disabled={!isPublished}>
+          <DropdownMenuItem 
+            onClick={(e) => {
+              if (!isPublished) {
+                e.preventDefault();
+                return;
+              }
+              setIsUnpublishDialogOpen(true);
+            }} 
+            disabled={!isPublished}
+          >
             Unpublish
           </DropdownMenuItem>
         </DropdownMenuContent>

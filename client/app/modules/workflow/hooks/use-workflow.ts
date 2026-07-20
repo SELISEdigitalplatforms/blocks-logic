@@ -3,8 +3,8 @@ import { Connection, Edge, Node, useReactFlow } from "@xyflow/react";
 import { useWorkflowStore } from "../store";
 import { WorkflowNode } from "@blocks-workflow/models/node.model";
 import { getOrderedNodeData } from "@blocks-workflow/utils/runtime-node-data";
-import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { workflowService } from "../services/workflow.service";
+import { showErrorToast } from "@/hooks/use-toast";
 
 export const useWorkflow = () => {
   const reactFlowInstance = useReactFlow();
@@ -20,7 +20,6 @@ export const useWorkflow = () => {
   const editorMode = useWorkflowStore((state) => state.editorMode);
   const executionMode = useWorkflowStore((state) => state.executionMode);
   const lastSuccessfulExecutionData = useWorkflowStore((state) => state.lastSuccessfulExecutionData);
-  const tenantId = useProjectStore((s) => s.selectedProject?.tenantId) || "";
   
   // Compute nodes and edges arrays from objects
   const nodes = useMemo(() => Object.values(nodesMap), [nodesMap]);
@@ -64,6 +63,8 @@ export const useWorkflow = () => {
   const isListening = useWorkflowStore((state) => state.isListening);
   const listeningNodeId = useWorkflowStore((state) => state.listeningNodeId);
   const setIsListening = useWorkflowStore((state) => state.setIsListening);
+  const nextExecutionId = useWorkflowStore((state) => state.nextExecutionId);
+  const setNextExecutionId = useWorkflowStore((state) => state.setNextExecutionId);
 
   const selectAndConfigureNode = useCallback(
     (node: WorkflowNode) => {
@@ -180,19 +181,18 @@ export const useWorkflow = () => {
     if (isListening && listeningNodeId) {
       timeoutId = setTimeout(async () => {
         setIsListening(false);
-        if (tenantId && workflowId) {
+        if (workflowId) {
           try {
             await workflowService.triggerListener({
-              ProjectKey: tenantId,
               WorkflowId: workflowId,
               TriggerId: listeningNodeId,
               EnableListener: false,
             });
-          } catch (error) {
-            console.error("Failed to disable trigger listener after timeout:", error);
+          } catch (error: any) {
+            showErrorToast({ errors: error.message || "Failed to disable trigger listener after timeout" });
           }
         }
-      }, 3 * 60 * 1000); // 3 minutes
+      }, 2 * 60 * 1000); // 3 minutes
     }
 
     return () => {
@@ -200,7 +200,7 @@ export const useWorkflow = () => {
         clearTimeout(timeoutId);
       }
     };
-  }, [isListening, listeningNodeId, tenantId, workflowId, setIsListening]);
+  }, [isListening, listeningNodeId, workflowId, setIsListening]);
 
   // react flow instance methods
 
@@ -270,6 +270,8 @@ export const useWorkflow = () => {
     tidyUpWorkflow,
     // exportWorkflow,
     // importWorkflow,
+    nextExecutionId,
+    setNextExecutionId,
 
     // Utility methods
     getNodeById,

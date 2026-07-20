@@ -50,7 +50,7 @@ export class WorkflowService {
 
   getWorkflowById = async (payload: IGetWorkflowByIdPayload): Promise<IGetWorkflowByIdResponse> => {
     const response = await this.LogicHttpClient.get<IGetWorkflowByIdResponse>(
-      `${WORKFLOW_ENDPOINTS.GET}?WorkflowId=${payload.id}&projectKey=${payload.projectKey}`,
+      `${WORKFLOW_ENDPOINTS.GET}?WorkflowId=${payload.id}`,
     );
 
     // const response = await this.LogicHttpClient.get<IGetWorkflowByIdResponse>(
@@ -84,7 +84,7 @@ export class WorkflowService {
 
   deleteWorkflow = (payload: IDeleteWorkflowPayload): Promise<IDeleteWorkflowResponse> => {
     return this.LogicHttpClient.delete(
-      `${WORKFLOW_ENDPOINTS.DELETE}?id=${payload.id}&projectKey=${payload.projectKey}`,
+      `${WORKFLOW_ENDPOINTS.DELETE}?id=${payload.id}`,
     );
     // return this.LogicHttpClient.delete(
     //   `http://localhost:5054/Workflow/Delete?id=${payload.id}&projectKey=${payload.projectKey}`,
@@ -96,9 +96,8 @@ export class WorkflowService {
   getWorkflowExecutions = (
     payload: IGetWorkflowExecutionsPayload,
   ): Promise<IGetWorkflowExecutionsResponse> => {
-    const params = new URLSearchParams({
-      ProjectKey: payload.projectKey,
-      WorkflowId: payload.workflowId,
+    const params = new URLSearchParams({ 
+      WorkflowId: payload.workflowId 
     });
     return this.LogicHttpClient.get(`${WORKFLOW_ENDPOINTS.GET_EXECUTIONS}?${params.toString()}`);
     // return this.LogicHttpClient.get(
@@ -112,7 +111,6 @@ export class WorkflowService {
     payload: IGetWorkflowExecutionByIdPayload,
   ): Promise<IGetWorkflowExecutionByIdResponse> => {
     const params = new URLSearchParams({
-      ProjectKey: payload.projectKey,
       ExecutionId: payload.executionId,
     });
     return this.LogicHttpClient.get(`${WORKFLOW_ENDPOINTS.GET_EXECUTION}?${params.toString()}`);
@@ -159,7 +157,6 @@ export class WorkflowService {
     payload: IGetLastSuccessfulExecutionPayload,
   ): Promise<IGetWorkflowExecutionByIdResponse> => {
     const params = new URLSearchParams({
-      projectKey: payload.projectKey,
       workflowId: payload.workflowId,
     });
     return this.LogicHttpClient.get(`${WORKFLOW_ENDPOINTS.LAST_SUCCESSFUL_EXECUTION}?${params.toString()}`);

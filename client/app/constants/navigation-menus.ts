@@ -17,13 +17,10 @@ export const navigationMenus: Menu[] = [
     type: "separator",
     id: "separator-overview",
   },
-  {
-    id: "environments",
-    type: "menu",
-    name: "Environments",
-    path: "/app/project-overview/environments",
-    icon: Package,
-  },
+  { id: "environments", 
+    type: "menu", 
+    name: "Environments", 
+    path: "/app/project/environments" },
   {
     type: "separator",
     id: "separator-identity",

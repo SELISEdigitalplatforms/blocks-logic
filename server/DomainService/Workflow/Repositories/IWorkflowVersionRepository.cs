@@ -1,15 +1,16 @@
-using DomainService.Workflow.Models;
+using DomainService.Workflow.Entities;
 
 namespace DomainService.Workflow.Repositories
 {
     public interface IWorkflowVersionRepository
     {
-        Task CreateWorkflowVersionAsync(WorkflowVersionModel versionModel);
-        Task<List<WorkflowVersionModel>> GetWorkflowVersionsAsync(string projectKey, string[] workflowIds);
-        Task<WorkflowVersionModel> GetWorkflowVersionAsync(string projectKey, string versionId);
-        Task<WorkflowVersionModel> UpdateWorkflowVersionAsync(string projectKey, string versionId, WorkflowVersionModel versionModel);
-        Task DeleteWorkflowVersionAsync(string projectKey, string versionId);
-        Task DeleteWorkflowVersionsByWorkflowIdAsync(string projectKey, string workflowId);
+        Task CreateWorkflowVersionAsync(WorkflowVersionEntity versionModel);
+        Task<List<WorkflowVersionEntity>> GetWorkflowVersionsAsync(string tenantId, string workflowId);
+        Task<List<WorkflowVersionEntity>> GetWorkflowVersionsAsync(string tenantId, string[] workflowIds);
+        Task<WorkflowVersionEntity> GetWorkflowVersionAsync(string tenantId, string versionId);
+        Task<WorkflowVersionEntity> UpdateWorkflowVersionAsync(string tenantId, string versionId, WorkflowVersionEntity versionModel);
+        Task DeleteWorkflowVersionAsync(string tenantId, string versionId);
+        Task DeleteWorkflowVersionsByWorkflowIdAsync(string tenantId, string workflowId);
 
     }
 }

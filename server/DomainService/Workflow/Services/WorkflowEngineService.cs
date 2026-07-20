@@ -2,7 +2,7 @@ using Blocks.Genesis;
 using DomainService.Workflow.Events;
 using DomainService.Workflow.Repositories;
 using DomainService.Workflow.Enums;
-using DomainService.Workflow.Models;
+using DomainService.Workflow.Entities;
 using DomainService.Workflow.Utils;
 using Microsoft.Extensions.Logging;
 using DomainService.Workflow.Nodes;
@@ -48,7 +48,7 @@ namespace DomainService.Workflow.Services
         /// <summary>
         /// Immediate mode: executes a node and all downstream nodes sequentially in-process
         /// </summary>
-        public async Task<WorkflowExecutionModel?> RunNodeInProcessAsync(AddExcuationNodeEvent dto)
+        public async Task<WorkflowExecutionEntity?> RunNodeInProcessAsync(AddExcuationNodeEvent dto)
         {
             await ExecuteNodeAsync(dto, DispatchNodesImmediateAsync);
             return await _workflowExecutionRepository.GetByIdAsync(dto.WorkflowExecutionId, dto.ProjectKey);
@@ -60,7 +60,7 @@ namespace DomainService.Workflow.Services
         private async Task ExecuteNodeAsync(
             AddExcuationNodeEvent dto,
             Func<List<AddExcuationNodeEvent>, Task> dispatchNextNodes,
-            Func<NodeExecutionContext, NodeModel, NodeExecutionResult, NodeExecutionResult>? postProcessResult = null)
+            Func<NodeExecutionContext, NodeEntity, NodeExecutionResult, NodeExecutionResult>? postProcessResult = null)
         {
 
             var prepared = await PrepareNodeForExecutionAsync(dto);
@@ -106,7 +106,7 @@ namespace DomainService.Workflow.Services
         /// resolves inputs/ancestors, selects executor, and builds execution context.
         /// Returns null if the node should be skipped.
         /// </summary>
-        private async Task<(WorkflowExecutionModel execution, NodeModel node, NodeExecutionModel nodeExecution, NodeExecutionContext context, INodeExecutor executor)?> PrepareNodeForExecutionAsync(AddExcuationNodeEvent dto)
+        private async Task<(WorkflowExecutionEntity execution, NodeEntity node, NodeExecutionEntity nodeExecution, NodeExecutionContext context, INodeExecutor executor)?> PrepareNodeForExecutionAsync(AddExcuationNodeEvent dto)
         {
             var execution = await _workflowExecutionRepository.GetByIdAsync(dto.WorkflowExecutionId, dto.ProjectKey)
                 ?? throw new InvalidOperationException("Workflow execution not found");
@@ -127,7 +127,7 @@ namespace DomainService.Workflow.Services
             _logger.LogInformation("Node {NodeId} is ready to execute.", node.Id);
             _logger.LogInformation("Node Parameters: {Parameters}", node.Parameters);
             // Create node metadata
-            var nodeExecution = new NodeExecutionModel
+            var nodeExecution = new NodeExecutionEntity
             {
                 Id = Guid.NewGuid().ToString().Replace("-", ""),
                 NodeId = node.Id,
@@ -204,7 +204,7 @@ namespace DomainService.Workflow.Services
         /// <summary>
         /// Checks if all parent nodes are completed
         /// </summary>
-        private bool IsReadyToExecuteNode(WorkflowExecutionModel execution, string nodeId)
+        private bool IsReadyToExecuteNode(WorkflowExecutionEntity execution, string nodeId)
         {
             var incomingEdges = execution.WorkflowSnapshot.Edges
                 .Where(e => e.Target == nodeId)
@@ -225,7 +225,7 @@ namespace DomainService.Workflow.Services
         /// <summary>
         /// Resolve input items for a node (n8n-style)
         /// </summary>
-        private async Task<List<WorkflowItemExecutionModel>> ResolveInputItemsAsync(WorkflowExecutionModel execution, NodeModel node)
+        private async Task<List<WorkflowItemExecutionEntity>> ResolveInputItemsAsync(WorkflowExecutionEntity execution, NodeEntity node)
         {
             if (node.Category == "trigger") return new();
 
@@ -244,11 +244,11 @@ namespace DomainService.Workflow.Services
         /// Resolve all ancestor node outputs for expression access
         /// This allows nodes to access data from any upstream node by name
         /// </summary>
-        private async Task<Dictionary<string, List<WorkflowItemExecutionModel>>> ResolveAncestorNodeOutputsAsync(WorkflowExecutionModel execution, string currentNodeId)
+        private async Task<Dictionary<string, List<WorkflowItemExecutionEntity>>> ResolveAncestorNodeOutputsAsync(WorkflowExecutionEntity execution, string currentNodeId)
         {
 
 
-            var result = new Dictionary<string, List<WorkflowItemExecutionModel>>();
+            var result = new Dictionary<string, List<WorkflowItemExecutionEntity>>();
             var incomingEdges = execution.WorkflowSnapshot.Edges
                       .Where(e => e.Target == currentNodeId)
                       .ToList();
@@ -306,7 +306,7 @@ namespace DomainService.Workflow.Services
                 var nodeItems = execution.NodeExecutions.FirstOrDefault(ne => ne.Id == node.NodeExecutionId);
                 if (!result.ContainsKey(nodeItems.NodeName))
                 {
-                    result[nodeItems.NodeName] = new List<WorkflowItemExecutionModel>();
+                    result[nodeItems.NodeName] = new List<WorkflowItemExecutionEntity>();
                 }
                 result[nodeItems.NodeName].Add(node);
 
@@ -317,10 +317,10 @@ namespace DomainService.Workflow.Services
         /// <summary>
         /// Node completed successfully: persist items, update metadata, and return next node events
         /// </summary>
-        private async Task<List<AddExcuationNodeEvent>> CompleteNodeExecutionAsync(NodeExecutionContext context, WorkflowExecutionModel execution, NodeModel node, NodeExecutionModel nodeExecution, NodeExecutionResult result, string completionNodeId)
+        private async Task<List<AddExcuationNodeEvent>> CompleteNodeExecutionAsync(NodeExecutionContext context, WorkflowExecutionEntity execution, NodeEntity node, NodeExecutionEntity nodeExecution, NodeExecutionResult result, string completionNodeId)
         {
             // Persist output items
-            var outputItems = new List<WorkflowItemExecutionModel>();
+            var outputItems = new List<WorkflowItemExecutionEntity>();
             int index = 0;
             foreach (var output in result.OutputItems)
             {
@@ -339,7 +339,8 @@ namespace DomainService.Workflow.Services
 
 
                 var id = Guid.NewGuid().ToString().Replace("-", "");
-                outputItems.Add(new WorkflowItemExecutionModel
+                ancestorMap.Add(node.Name, id);
+                outputItems.Add(new WorkflowItemExecutionEntity
                 {
                     Id = id,
                     WorkflowExecutionId = execution.Id,
@@ -472,7 +473,7 @@ namespace DomainService.Workflow.Services
         /// <summary>
         /// Node execution failed
         /// </summary>
-        private async Task FailNodeExecutionAsync(WorkflowExecutionModel execution, NodeExecutionModel nodeExecution, Exception ex)
+        private async Task FailNodeExecutionAsync(WorkflowExecutionEntity execution, NodeExecutionEntity nodeExecution, Exception ex)
         {
             nodeExecution.Status = NodeExecutionStatus.Failed;
             nodeExecution.EndedAt = DateTime.UtcNow;
@@ -508,7 +509,7 @@ namespace DomainService.Workflow.Services
                 execution.Id, execution.TenantId, nodeExecution.NodeId, new List<string>());
         }
 
-        public async Task<WorkflowExecutionModel?> ExecuteStepNodeAsync(string tenantId, string executionId, string triggerNodeId, string targetNodeId, string? sourceExecutionId = null)
+        public async Task<WorkflowExecutionEntity?> ExecuteStepNodeAsync(string tenantId, string executionId, string triggerNodeId, string targetNodeId, string? sourceExecutionId = null)
         {
             var execution = await _workflowExecutionRepository.GetByIdAsync(executionId, tenantId);
             if (execution == null || execution.WorkflowSnapshot == null) return execution;
@@ -517,7 +518,7 @@ namespace DomainService.Workflow.Services
             var targetNode = workflow.Nodes.FirstOrDefault(n => n.Id == targetNodeId);
             if (targetNode == null) return execution;
 
-            WorkflowExecutionModel? sourceExecution = null;
+            WorkflowExecutionEntity? sourceExecution = null;
             if (!string.IsNullOrEmpty(sourceExecutionId))
             {
                 sourceExecution = await _workflowExecutionRepository.GetByIdAsync(sourceExecutionId, tenantId);
@@ -562,7 +563,7 @@ namespace DomainService.Workflow.Services
                     cacheEligible = false;
                 }
 
-                Func<NodeExecutionContext, NodeModel, NodeExecutionResult, NodeExecutionResult>? hook = null;
+                Func<NodeExecutionContext, NodeEntity, NodeExecutionResult, NodeExecutionResult>? hook = null;
                 if (node.PinData != null && node.PinData.Count > 0)
                 {
                     hook = (ctx, node, result) => NodeExecutionResult.Successful(BuildPinDataOutputItems(ctx, node, result));
@@ -603,7 +604,7 @@ namespace DomainService.Workflow.Services
         /// Returns <paramref name="targetNodeId"/> plus all transitive ancestors, in topological order
         /// (every node appears after all of its parents). Cycle-safe via visited set.
         /// </summary>
-        public IEnumerable<NodeModel> GetTopologicalAncestorsAndTarget(WorkflowModel workflow, string targetNodeId)
+        public IEnumerable<NodeEntity> GetTopologicalAncestorsAndTarget(WorkflowEntity workflow, string targetNodeId)
         {
             var nodesById = workflow.Nodes.ToDictionary(n => n.Id);
 
@@ -640,7 +641,7 @@ namespace DomainService.Workflow.Services
             }
 
             var queue = new Queue<string>(inDegree.Where(kv => kv.Value == 0).Select(kv => kv.Key));
-            var ordered = new List<NodeModel>();
+            var ordered = new List<NodeEntity>();
 
             while (queue.Count > 0)
             {
@@ -668,10 +669,10 @@ namespace DomainService.Workflow.Services
         /// Synthesizes a completed NodeExecution and one WorkflowItemExecutionModel per PinData
         /// entry, mirroring CompleteNodeExecutionAsync's persistence sequence.
         /// </summary>
-        private async Task MaterializePinDataAsync(WorkflowExecutionModel execution, NodeModel node)
+        private async Task MaterializePinDataAsync(WorkflowExecutionEntity execution, NodeEntity node)
         {
             var now = DateTime.UtcNow;
-            var nodeExecution = new NodeExecutionModel
+            var nodeExecution = new NodeExecutionEntity
             {
                 Id = Guid.NewGuid().ToString().Replace("-", ""),
                 NodeId = node.Id,
@@ -712,7 +713,7 @@ namespace DomainService.Workflow.Services
                 parentAncestorMap[pi.NodeName] = pi.Id;
             }
 
-            var outputItems = new List<WorkflowItemExecutionModel>();
+            var outputItems = new List<WorkflowItemExecutionEntity>();
             int index = 0;
             foreach (var pinValue in node.PinData!)
             {
@@ -722,7 +723,7 @@ namespace DomainService.Workflow.Services
                     [node.Name] = id
                 };
 
-                outputItems.Add(new WorkflowItemExecutionModel
+                outputItems.Add(new WorkflowItemExecutionEntity
                 {
                     Id = id,
                     WorkflowExecutionId = execution.Id,
@@ -774,9 +775,9 @@ namespace DomainService.Workflow.Services
         /// <see cref="MaterializePinDataAsync"/> and updates <paramref name="remap"/> with new item ids.
         /// </summary>
         private async Task<bool> TryMaterializeFromSourceExecutionAsync(
-            WorkflowExecutionModel execution,
-            WorkflowExecutionModel sourceExecution,
-            NodeModel node,
+            WorkflowExecutionEntity execution,
+            WorkflowExecutionEntity sourceExecution,
+            NodeEntity node,
             Dictionary<string, string> remap)
         {
             var sourceNodeExec = sourceExecution.NodeExecutions
@@ -789,26 +790,26 @@ namespace DomainService.Workflow.Services
             var sourceItems = await _workflowExecutionRepository.GetAllItemsByNodeExecutionIdAsync(
                 sourceNodeExec.Id, execution.TenantId);
 
-            foreach (var si in sourceItems)
-            {
-                if (si.ParentItemIds != null)
-                {
-                    foreach (var pid in si.ParentItemIds)
-                    {
-                        if (!remap.ContainsKey(pid)) return false;
-                    }
-                }
-                if (si.AncestorMap != null)
-                {
-                    foreach (var kv in si.AncestorMap)
-                    {
-                        if (!remap.ContainsKey(kv.Value)) return false;
-                    }
-                }
-            }
+            // foreach (var si in sourceItems)
+            // {
+            //     if (si.ParentItemIds != null)
+            //     {
+            //         foreach (var pid in si.ParentItemIds)
+            //         {
+            //             if (!remap.ContainsKey(pid)) return false;
+            //         }
+            //     }
+            //     if (si.AncestorMap != null)
+            //     {
+            //         foreach (var kv in si.AncestorMap)
+            //         {
+            //             if (!remap.ContainsKey(kv.Value)) return false;
+            //         }
+            //     }
+            // }
 
             var now = DateTime.UtcNow;
-            var newNodeExecution = new NodeExecutionModel
+            var newNodeExecution = new NodeExecutionEntity
             {
                 Id = Guid.NewGuid().ToString().Replace("-", ""),
                 NodeId = node.Id,
@@ -836,7 +837,7 @@ namespace DomainService.Workflow.Services
                 data: newNodeExecution.Id,
                 message: $"Node '{newNodeExecution.NodeName}' started executing (from cache).");
 
-            var newItems = new List<WorkflowItemExecutionModel>(sourceItems.Count);
+            var newItems = new List<WorkflowItemExecutionEntity>(sourceItems.Count);
             int index = 0;
             foreach (var si in sourceItems)
             {
@@ -851,7 +852,7 @@ namespace DomainService.Workflow.Services
                     ? si.AncestorMap.ToDictionary(kv => kv.Key, kv => remap[kv.Value])
                     : new Dictionary<string, string>();
 
-                newItems.Add(new WorkflowItemExecutionModel
+                newItems.Add(new WorkflowItemExecutionEntity
                 {
                     Id = newId,
                     WorkflowExecutionId = execution.Id,
@@ -911,7 +912,7 @@ namespace DomainService.Workflow.Services
             return BsonSerializer.Deserialize<BsonValue>(value.ToBson());
         }
 
-        private static bool NodesAreEquivalent(NodeModel source, NodeModel current)
+        private static bool NodesAreEquivalent(NodeEntity source, NodeEntity current)
         {
             if (!string.Equals(source.Id, current.Id)) return false;
             if (!string.Equals(source.Name, current.Name)) return false;
@@ -931,7 +932,7 @@ namespace DomainService.Workflow.Services
             return a.Equals(b);
         }
 
-        private static List<NodeOutputItem> BuildPinDataOutputItems(NodeExecutionContext context, NodeModel node, NodeExecutionResult result)
+        private static List<NodeOutputItem> BuildPinDataOutputItems(NodeExecutionContext context, NodeEntity node, NodeExecutionResult result)
         {
             var items = new List<NodeOutputItem>(node.PinData!.Count);
             var index = 0;
@@ -944,9 +945,9 @@ namespace DomainService.Workflow.Services
             return result.OutputItems;
         }
 
-        private List<NodeModel> GetAncestorNodesAsync(WorkflowModel workflow, string nodeId)
+        private List<NodeEntity> GetAncestorNodesAsync(WorkflowEntity workflow, string nodeId)
         {
-            var ancestor = new List<NodeModel>();
+            var ancestor = new List<NodeEntity>();
             var visited = new HashSet<string>();
             var stack = new Stack<string>();
 
