@@ -165,3 +165,6 @@ server/Api/wwwroot/**
 # **/appsetting.*.json
 
 server/**/launchSettings.json
+
+# build output (never commit)
+builds/
