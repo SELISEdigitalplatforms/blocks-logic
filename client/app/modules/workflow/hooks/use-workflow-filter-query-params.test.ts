@@ -27,7 +27,7 @@ describe("useWorkflowFilterQueryParams", () => {
     const { result } = renderHook(() => useWorkflowFilterQueryParams());
 
     expect(result.current.queryParams.search).toBe("");
-    expect(result.current.queryParams.isActive).toBe("all");
+    expect(result.current.queryParams.isPublished).toBe("all");
     expect(result.current.queryParams.page).toBe(0);
     expect(result.current.queryParams.pageSize).toBe(10);
   });
@@ -63,16 +63,16 @@ describe("useWorkflowFilterQueryParams", () => {
     expect(result.current.queryParams.page).toBe(3);
   });
 
-  it("should update isActive filter when setQueryParams is called", () => {
+  it("should update isPublished filter when setQueryParams is called", () => {
     const { result } = renderHook(() => useWorkflowFilterQueryParams());
 
     act(() => {
       result.current.setQueryParams((prev: typeof result.current.queryParams) => ({
         ...prev,
-        isActive: "true",
+        isPublished: "true",
       }));
     });
 
-    expect(result.current.queryParams.isActive).toBe("true");
+    expect(result.current.queryParams.isPublished).toBe("true");
   });
 });
