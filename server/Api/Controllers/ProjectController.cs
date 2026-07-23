@@ -66,12 +66,9 @@ namespace Api.Controllers
         //[ProtectedEndPoint]
         [HttpGet]
         [Authorize]
-        public async Task<GetProjectResponse> Get([FromQuery] string projectId)
+        public async Task<GetProjectResponse> Get()
         {
-            if (string.IsNullOrWhiteSpace(projectId))
-                return new GetProjectResponse { Errors = new Dictionary<string, string> { { "empty_project_id", "projectId_should_not_be_empty" } } };
-
-            return await _projectManagementService.GetAsync(projectId);
+            return await _projectManagementService.GetAsync(BlocksContext.GetContext().TenantId);
         }
 
         //[ProtectedEndPoint]
@@ -106,12 +103,12 @@ namespace Api.Controllers
         [Authorize]
         public async Task<BaseResponse> Disable([FromBody] DisableProjectRequest request)
         {
-            if (string.IsNullOrWhiteSpace(request.ProjectKey))
+            if (string.IsNullOrWhiteSpace(BlocksContext.GetContext().TenantId))
             {
                 return new AuthConfigResponse { Errors = new Dictionary<string, string> { { "missing_projectKey", "ProjectKey is required" } } };
             }
 
-            return await _projectManagementService.DisableProjectAsync(request.ProjectKey);
+            return await _projectManagementService.DisableProjectAsync(BlocksContext.GetContext().TenantId);
         }
 
         [HttpGet]
@@ -149,7 +146,7 @@ namespace Api.Controllers
         //[ProtectedEndPoint]
         public async Task<IActionResult> GetTokenValidationParameters([FromQuery] GetTokenValidationParametersRequest request)
         {
-            return await _projectManagementService.GetProjectTokenValidationParametersAsync(request.ProjectKey);
+            return await _projectManagementService.GetProjectTokenValidationParametersAsync(BlocksContext.GetContext().TenantId);
         }
 
         [HttpPost]
