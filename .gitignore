@@ -203,3 +203,4 @@ AGENTS.md
 .cursorrules
 .mcp.json
 copilot-instructions.md
+scripts/scan.sh
