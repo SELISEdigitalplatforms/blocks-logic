@@ -415,11 +415,11 @@ namespace DomainService.Projects
 
         public async Task<BaseResponse> UpdateProjectAsync(UpdateProjectRequest request)
         {
-            var project = await _projectRepository.GetByTenantIdAsync(request.ProjectKey);
+            var project = await _projectRepository.GetByTenantIdAsync(BlocksContext.GetContext().TenantId);
 
             if (project == null)
             {
-                return new BaseResponse() { IsSuccess = false, Errors = new Dictionary<string, string> { { "project_not_found", $"No project found with id {request.ProjectKey}" } } };
+                return new BaseResponse() { IsSuccess = false, Errors = new Dictionary<string, string> { { "project_not_found", $"No project found with id {BlocksContext.GetContext().TenantId}" } } };
             }
 
             var mainDomain = IdentifierHelper.ExtractMainDomain(request.ApplicationDomain);
@@ -538,11 +538,11 @@ namespace DomainService.Projects
         public async Task<BaseResponse> UpdateTokenValidationParametersAsync(UpdateTokenValidationParametersRequest request)
         {
 
-            var project = await _projectRepository.GetByTenantIdAsync(request.ProjectKey);
+            var project = await _projectRepository.GetByTenantIdAsync(BlocksContext.GetContext().TenantId);
 
             if (project == null)
             {
-                return new BaseResponse { IsSuccess = false, Errors = new Dictionary<string, string> { { "project_not_found", $"No project found with id {request.ProjectKey}" } } };
+                return new BaseResponse { IsSuccess = false, Errors = new Dictionary<string, string> { { "project_not_found", $"No project found with id {BlocksContext.GetContext().TenantId}" } } };
             }
 
             project.ThirdPartyJwtTokenParameters ??= new();
@@ -563,7 +563,7 @@ namespace DomainService.Projects
                 Action = "upsert",
                 TenantId = project.TenantId,
                 Tenant = project
-            }), _cacheClient.RemoveKeyAsync($"{_tenantTokenPublicCertificateCachePrefix}{request.ProjectKey}"));
+            }), _cacheClient.RemoveKeyAsync($"{_tenantTokenPublicCertificateCachePrefix}{BlocksContext.GetContext().TenantId}"));
 
             return new BaseResponse { IsSuccess = true };
         }

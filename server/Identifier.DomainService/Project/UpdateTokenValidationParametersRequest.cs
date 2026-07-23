@@ -2,9 +2,8 @@
 
 namespace DomainService.Projects
 {
-    public class UpdateTokenValidationParametersRequest : IProjectKey
+    public class UpdateTokenValidationParametersRequest
     {
-        public string ProjectKey { get; set; } = string.Empty;
         public string ProviderName { get; set; } = string.Empty;
         public string PublicCertificatePassword { get; set; } = string.Empty;
         public string Issuer { get; set; } = string.Empty;
