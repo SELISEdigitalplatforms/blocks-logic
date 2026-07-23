@@ -1,4 +1,5 @@
-﻿using DomainService.Shared;
+﻿using Blocks.Genesis;
+using DomainService.Shared;
 using FluentValidation;
 
 namespace DomainService.Projects
@@ -12,16 +13,13 @@ namespace DomainService.Projects
             _repository = repository;
 
             // Validation for ProjectId
-            RuleFor(x => x.ProjectKey)
-               .Cascade(CascadeMode.Stop)
-               .NotEmpty()
-               .NotNull();
+           
 
             RuleFor(x => x.ApplicationDomain)
                 .Cascade(CascadeMode.Stop)
                 .Must(IdentifierHelper.BeAValidUrl).WithMessage("ApplicationDomain is not in a valid format.")
                 .MustAsync(IsUniqueDomain).WithMessage("ApplicationDomain must be unique")
-                .WhenAsync((x, ct) => IsDomainUpdated(x.ApplicationDomain, x.ProjectKey, ct));
+                .WhenAsync((x, ct) => IsDomainUpdated(x.ApplicationDomain,BlocksContext.GetContext().TenantId, ct));
 
             RuleFor(x => x.CustomDomain)
                 .Cascade(CascadeMode.Stop)
