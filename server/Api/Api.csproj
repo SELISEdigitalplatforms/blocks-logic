@@ -21,7 +21,6 @@
     <!--<PackageReference Include="SeliseBlocks.DataGateway.Driver" />-->
     <PackageReference Include="HotChocolate.AspNetCore" />
     <PackageReference Include="SeliseBlocks.EurolmDriver" />
-    <PackageReference Include="SeliseBlocks.MailDriver" />
     <PackageReference Include="SeliseBlocks.DeploymentDriver" />
     <PackageReference Include="SeliseBlocks.ObservabilityDriver" />
     <PackageReference Include="SeliseBlocks.StorageDriver" />
@@ -36,6 +35,7 @@
 
     <ProjectReference Include="..\Iam.DomainService\Iam.DomainService.csproj" />
     <ProjectReference Include="..\Identifier.DomainService\Identifier.DomainService.csproj" />
+    <ProjectReference Include="..\Mail.DomainService\Mail.DomainService.csproj" />
     <ProjectReference Include="..\Mfa.DomainService\Mfa.DomainService.csproj" />
 
     <ProjectReference Include="..\DomainService\DomainService.csproj" />

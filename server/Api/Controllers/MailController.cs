@@ -2,6 +2,7 @@
 using CloudConfiguration.DomainService.Mail.Entities;
 using CloudConfiguration.DomainService.Mail.RequestModel;
 using CloudConfiguration.DomainService.Shared.Services;
+using Mail.DomainService.Mails;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -14,10 +15,12 @@ namespace BlocksTemplate.Api.Controllers
     public class MailController : ControllerBase
     {
         private readonly IConfigurationService _configurationService;
-        public MailController(IConfigurationService configurationService )
+        private readonly IMailService _mailService;
+        public MailController(IConfigurationService configurationService,IMailService mailService )
         {
             _configurationService = configurationService;
-        }
+            _mailService = mailService;
+            }
 
         [HttpPost]
         //[ProtectedEndPoint]
@@ -125,5 +128,39 @@ namespace BlocksTemplate.Api.Controllers
             var result = await _configurationService.DuplicateMailConfigurationAsync(request);
             return result.IsSuccess ? Ok(result) : BadRequest(result);
         }
+
+        #region Mail Send
+
+        [HttpPost]
+        // [ProtectedEndPoint("blocks-utilities::Mail::SendToAny")]
+        [Authorize]
+        public async Task<IActionResult> SendToAny ( [FromBody] SendMailToAny request )
+        {
+            var result = await _mailService.ProcessMailToAnyAsync(request);
+            return result.IsSuccess ? Ok(result) : BadRequest(result);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> Send ( [FromBody] SendMail request )
+        {
+            var result = await _mailService.ProcessMailAsync(request);
+            return result.IsSuccess ? Ok(result) : BadRequest(result);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetMailBoxMails ( [FromQuery] GetMailBoxMails request )
+        {
+            var result = await _mailService.GetMailBoxMailsAsync(request);
+            return result.IsSuccess ? Ok(result) : BadRequest(result);
+        }
+
+        [HttpGet]
+        [Authorize]
+        public async Task<IActionResult> GetMailBoxMail ( [FromQuery] GetMailBoxMail request )
+        {
+            var result = await _mailService.GetMailBoxMailAsync(request);
+            return result.IsSuccess ? Ok(result) : BadRequest(result);
+        }
+        #endregion
+        }
     }
-}
