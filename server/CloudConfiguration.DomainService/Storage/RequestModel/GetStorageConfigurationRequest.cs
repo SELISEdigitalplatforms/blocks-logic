@@ -2,9 +2,9 @@
 
 namespace CloudConfiguration.DomainService.Storage.RequestModel
 {
-    public class GetStorageConfigurationRequest : IProjectKey
+    public class GetStorageConfigurationRequest 
     {
-        public string ProjectKey { get; set; } = string.Empty;
+      
         public string ConfigurationName { get; set; }
     }
 }

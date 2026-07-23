@@ -2,8 +2,7 @@ using Blocks.Genesis;
 
 namespace CloudConfiguration.DomainService.Mail.RequestModel
 {
-    public class GetAllMailConfigurationsRequest : IProjectKey
+    public class GetAllMailConfigurationsRequest 
     {
-        public string ProjectKey { get; set; }
     }
 }
