@@ -2,10 +2,9 @@
 
 namespace DomainService.Projects
 {
-    public class UpdateProjectRequest : IProjectKey
+    public class UpdateProjectRequest 
     {
         public string? CustomDomain { get; set; }
         public string ApplicationDomain { get; set; }
-        public string ProjectKey { get ; set ; }
     }
 }
