@@ -1,7 +1,9 @@
 import { test as base, expect } from "@playwright/test";
 
 // Shared `test` for the whole suite. Specs import from here instead of
-// "@playwright/test" so the pause below applies everywhere automatically.
+// "@playwright/test" so the headed-mode pause applies everywhere.
+// Authentication is opt-in: authenticated specs import `login` from
+// "./auth" and call it from their own `test.beforeEach` hook.
 //
 // Headed runs hold the browser open for a moment after each test finishes, so
 // the end state is actually watchable instead of vanishing the instant the
