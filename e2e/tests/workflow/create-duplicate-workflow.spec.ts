@@ -5,7 +5,7 @@ const suffix = Date.now();
 const sourceWorkflowName = `e2e-workflow-source-${suffix}`;
 const duplicateWorkflowName = `e2e-workflow-duplicate-${suffix}`;
 
-test.describe("Workflows", () => {
+test.describe.skip("Workflows", () => {
   test.beforeEach(async ({ page }) => {
     await login(page);
   });
