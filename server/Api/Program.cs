@@ -62,7 +62,7 @@ services.AddWorkflowExecutionEngine();
 services.RegisterBlocksEurolmServices();
 services.RegisterAllMailApplicationServices();
 await services.RegisterBlocksDeploymentServicesAsync(vaultType);
-services.RegisterBlocksObservabilityServices();
+//services.RegisterBlocksObservabilityServices();
 
 var app = builder.Build();
 
