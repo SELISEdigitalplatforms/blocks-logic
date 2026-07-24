@@ -55,3 +55,27 @@ export const renderWithProviders = (ui: React.ReactElement, options: Options = {
 
   return render(ui, { wrapper: Wrapper, ...rest });
 };
+
+/**
+ * Wrapper component for renderHook that provides the same set of providers.
+ * Pass a seed callback to prime the workflow store before the hook runs.
+ */
+export const makeHookWrapper = (seedWorkflow?: (store: WorkflowStore) => void) => {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, gcTime: 0 },
+      mutations: { retry: false },
+    },
+  });
+  return ({ children }: { children: React.ReactNode }) => (
+    <QueryClientProvider client={queryClient}>
+      <ReactFlowProvider>
+        <TooltipProvider>
+          <WorkflowStoreProvider>
+            <Seeder seed={seedWorkflow}>{children}</Seeder>
+          </WorkflowStoreProvider>
+        </TooltipProvider>
+      </ReactFlowProvider>
+    </QueryClientProvider>
+  );
+};
