@@ -109,4 +109,59 @@ describe("OutputPanel", () => {
       expect(document.querySelector("pre code")).toBeTruthy(),
     );
   });
+
+  // Seeds a node plus runtime executed items (not pinData) grouped by branch,
+  // in run mode so the branch-grouping code path is exercised.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const seedRuntimeBranches = (store: any) => {
+    const n = node();
+    store.getState().addNode(n);
+    store.setState({
+      selectedNode: n,
+      editorMode: "run",
+      executedItems: [
+        { nodeId: "n1", itemIndex: 0, branch: "True", data: { Output: { city: "Paris" } } },
+        { nodeId: "n1", itemIndex: 1, branch: "False", data: { Output: "plain-value" } },
+        // items for another node are ignored
+        { nodeId: "other", itemIndex: 0, branch: "True", data: { Output: { city: "X" } } },
+      ],
+    });
+  };
+
+  it("groups runtime executed items by branch in the schema tab", () => {
+    renderWithProviders(<OutputPanel />, { seedWorkflow: seedRuntimeBranches });
+    expect(screen.getByText("Branch: True")).toBeTruthy();
+    expect(screen.getByText("Branch: False")).toBeTruthy();
+    // object row exposes its field key, primitive row is rendered directly
+    expect(screen.getByText("city:")).toBeTruthy();
+    expect(screen.getByText("plain-value")).toBeTruthy();
+  });
+
+  it("renders the multi-branch table with a primitive value column", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<OutputPanel />, { seedWorkflow: seedRuntimeBranches });
+    await user.click(screen.getByRole("tab", { name: "Table" }));
+    await waitFor(() => expect(screen.getAllByText(/Branch:/).length).toBeGreaterThan(0));
+    // the False branch holds a primitive, forcing the "(value)" column header
+    expect(screen.getByText("(value)")).toBeTruthy();
+    expect(screen.getByText("city")).toBeTruthy();
+  });
+
+  it("renders the multi-branch json tab", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<OutputPanel />, { seedWorkflow: seedRuntimeBranches });
+    await user.click(screen.getByRole("tab", { name: "JSON" }));
+    await waitFor(() =>
+      expect(document.querySelectorAll("pre code").length).toBe(2),
+    );
+  });
+
+  it("hides the schema body while collapsed", () => {
+    renderWithProviders(<OutputPanel isCollapsed onToggleCollapse={() => {}} />, {
+      seedWorkflow: seedSelected({ pinData: [{ name: "Ada" }] }),
+    });
+    // header still shows, but the schema field is not rendered when collapsed
+    expect(screen.getByText("Output")).toBeTruthy();
+    expect(screen.queryByText("name:")).toBeNull();
+  });
 });
