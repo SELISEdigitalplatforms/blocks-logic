@@ -37,7 +37,11 @@ describe("InfiniteScroll", () => {
       <InfiniteScroll<string> {...props} initialData={["b"]} />,
     );
     const scroller = container.querySelector(".overflow-scroll") as HTMLElement;
-    Object.defineProperty(scroller, "scrollTop", { value: 0, configurable: true });
+    Object.defineProperty(scroller, "scrollTop", {
+      value: 0,
+      writable: true,
+      configurable: true,
+    });
     fireEvent.scroll(scroller);
     await waitFor(() => expect(props.topFn).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByText("old1")).toBeTruthy());
@@ -50,7 +54,11 @@ describe("InfiniteScroll", () => {
       <InfiniteScroll<string> {...props} initialData={["b"]} />,
     );
     const scroller = container.querySelector(".overflow-scroll") as HTMLElement;
-    Object.defineProperty(scroller, "scrollTop", { value: 0, configurable: true });
+    Object.defineProperty(scroller, "scrollTop", {
+      value: 0,
+      writable: true,
+      configurable: true,
+    });
     fireEvent.scroll(scroller);
     await waitFor(() => expect(props.topFn).toHaveBeenCalledTimes(1));
   });
