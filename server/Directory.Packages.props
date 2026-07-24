@@ -16,7 +16,7 @@
     <PackageVersion Include="SixLabors.ImageSharp" Version="3.1.11" />
     <PackageVersion Include="SixLabors.ImageSharp.Drawing" Version="2.1.5" />
     <PackageVersion Include="System.Drawing.Common" Version="8.0.13" />
-    <PackageVersion Include="MongoDB.Driver" Version="3.8.0" />
+    <PackageVersion Include="MongoDB.Driver" Version="3.10.0" />
     <PackageVersion Include="SeliseBlocks.Genesis" Version="10.1.4" />
     <PackageVersion Include="Grpc.AspNetCore" Version="2.80.0" />
     <PackageVersion Include="Azure.Identity" Version="1.21.0" />
@@ -48,7 +48,12 @@
     <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
     <PackageVersion Include="SeliseBlocks.ConfigurationDriver" Version="10.0.0-preview.1" />
-	<PackageVersion Include="Microsoft.Graph" Version="5.68.0" />
+	<PackageVersion Include="Microsoft.Graph" Version="5.105.0" />
+	<!-- Pinned to clear GHSA-7j59-v9qr-6fq9. Microsoft.Graph 5.105.0 (latest 5.x) only pulls
+	     Microsoft.Kiota.Abstractions 1.21.1; the fix is 1.22.0, so pin the abstractions package
+	     up to the latest 1.x. Referenced directly from Mail.DomainService (which owns the Graph
+	     dependency) so downstream projects inherit the patched version. -->
+	<PackageVersion Include="Microsoft.Kiota.Abstractions" Version="1.22.2" />
 	<PackageVersion Include="MimeKit" Version="4.16.0" />
   </ItemGroup>
 </Project>
