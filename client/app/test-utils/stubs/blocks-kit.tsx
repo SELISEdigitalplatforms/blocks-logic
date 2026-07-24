@@ -74,9 +74,26 @@ export const useTheme = () => ({
   setTheme: () => {},
 });
 
-// Project store hook stand-in.
-export const useProjectStore = () => ({
-  selectedProject: { tenantId: "", projectKey: "" },
+// Project store stand-in. The real export is a zustand store, so it is both a
+// hook (callable) and carries `getState`/`setState`. Schema `transform` and
+// `onChange` handlers read `useProjectStore.getState().selectedProject`.
+type ProjectState = {
+  selectedProject: {
+    tenantId: string;
+    tenantSlug?: string;
+    projectKey: string;
+  } | null;
+};
+
+let projectState: ProjectState = {
+  selectedProject: { tenantId: "", tenantSlug: "", projectKey: "" },
+};
+
+export const useProjectStore = Object.assign(() => projectState, {
+  getState: () => projectState,
+  setState: (partial: Partial<ProjectState>) => {
+    projectState = { ...projectState, ...partial };
+  },
 });
 
 type PassthroughProps = { children?: React.ReactNode } & Record<string, unknown>;
