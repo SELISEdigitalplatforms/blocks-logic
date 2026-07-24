@@ -1,5 +1,6 @@
-import { fireEvent, screen, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
 import { EditorNodeBase } from "./editor-node-base";
 
@@ -27,6 +28,7 @@ const seed = (extra: Record<string, unknown> = {}) => (store: any) => {
 };
 
 beforeEach(() => vi.clearAllMocks());
+afterEach(() => { document.body.style.pointerEvents = ""; });
 
 describe("EditorNodeBase", () => {
   it("returns null when the node does not exist", () => {
@@ -115,16 +117,81 @@ describe("EditorNodeBase", () => {
   });
 
   it("duplicates the node from the toolbar", () => {
+    let store: unknown;
+    renderWithProviders(
+      <EditorNodeBase id="n1">
+        <span>body</span>
+      </EditorNodeBase>,
+      {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        seedWorkflow: (s: any) => {
+          store = s;
+          s.getState().addNode(node("n1"));
+        },
+      },
+    );
+    // toolbar buttons: Play(execute), Copy(duplicate), Trash(delete), More
+    const buttons = screen.getAllByRole("button");
+    fireEvent.click(buttons[1]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(Object.keys((store as any).getState().nodesMap).length).toBe(2);
+  });
+
+  it("executes the node from the toolbar play button", () => {
     renderWithProviders(
       <EditorNodeBase id="n1">
         <span>body</span>
       </EditorNodeBase>,
       { seedWorkflow: seed() },
     );
-    // toolbar Duplicate is exposed via its tooltip trigger button
     const buttons = screen.getAllByRole("button");
-    // second toolbar button (Play, Duplicate, Delete, More) - click each is safe
-    fireEvent.click(buttons[1]);
+    // play/execute is the first toolbar button
+    fireEvent.click(buttons[0]);
     expect(screen.getByText("Alpha")).toBeTruthy();
+  });
+
+  it("deletes the node from the toolbar", () => {
+    let store: unknown;
+    const { container } = renderWithProviders(
+      <EditorNodeBase id="n1">
+        <span>body</span>
+      </EditorNodeBase>,
+      {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        seedWorkflow: (s: any) => {
+          store = s;
+          s.getState().addNode(node("n1"));
+        },
+      },
+    );
+    const buttons = screen.getAllByRole("button");
+    // trash/delete is the third toolbar button
+    fireEvent.click(buttons[2]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(Object.keys((store as any).getState().nodesMap).length).toBe(0);
+    expect(container.textContent).toBe("");
+  });
+
+  it("opens the more menu and triggers its actions", async () => {
+    const user = userEvent.setup();
+    let store: unknown;
+    renderWithProviders(
+      <EditorNodeBase id="n1">
+        <span>body</span>
+      </EditorNodeBase>,
+      {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        seedWorkflow: (s: any) => {
+          store = s;
+          s.getState().addNode(node("n1"));
+        },
+      },
+    );
+    const buttons = screen.getAllByRole("button");
+    await user.click(buttons[buttons.length - 1]);
+    await user.click(await screen.findByText("Open"));
+    // opening configures the node in the store
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await waitFor(() => expect((store as any).getState().isConfigModalOpen).toBe(true));
   });
 });
