@@ -1,16 +1,16 @@
-# Blocks Logic — End-to-End Tests (Playwright)
+# Blocks Logic; End-to-End Tests (Playwright)
 
 E2E tests that drive the real app through the browser, including the dev-iam
 login redirect flow.
 
 ## One-time setup
 
-1. **Configure env** — copy the template and fill in your values:
+1. **Configure env**: copy the template and fill in your values:
    ```bash
    cd e2e
    cp .env.e2e.example .env.e2e
    ```
-   Set `E2E_USERNAME` / `E2E_PASSWORD`. `.env.e2e` is gitignored — never commit
+   Set `E2E_USERNAME` / `E2E_PASSWORD`. `.env.e2e` is gitignored; never commit
    real credentials.
 
 2. **Install** Playwright + the browser:
@@ -45,7 +45,7 @@ E2E_BASE_URL=https://dev-logic.blocksdevelopers.com
 E2E_NO_WEBSERVER=1
 ```
 
-`global-setup.ts` prints this warning on that path — it is expected and
+`global-setup.ts` prints this warning on that path; it is expected and
 harmless, because the remote host already serves its own correct base URL:
 
 ```
@@ -87,7 +87,7 @@ npm run report        # open the last HTML report
 
 | Variable | Effect |
 |---|---|
-| `E2E_BASE_URL` | Host under test. No default — a missing value fails loudly. |
+| `E2E_BASE_URL` | Host under test. No default; a missing value fails loudly. |
 | `E2E_USERNAME` / `E2E_PASSWORD` | Dev-IAM test account (captcha is disabled on dev). |
 | `E2E_NO_WEBSERVER=1` | Don't auto-start the app; you manage the server (required for remote dev). |
 | `E2E_PAUSE_MS` | How long the browser holds after **each** test. Defaults to **10 s in headed mode**, 0 when headless; `0` disables. |

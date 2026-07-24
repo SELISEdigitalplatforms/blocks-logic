@@ -1,6 +1,6 @@
-# blocks-workflow-next-sub
+# Workflow module
 
-A Next.js submodule that provides a **visual workflow builder** for the Blocks platform. It enables teams to design, configure, and execute automation workflows through a drag-and-drop canvas powered by React Flow, with support for triggers, actions, logic nodes, and real-time execution tracking.
+The client module that provides the **visual workflow builder** for Blocks Logic (historically imported from a separate repository named `blocks-workflow-next-sub`; it now builds with this Vite app). It enables teams to design, configure, and execute automation workflows through a drag-and-drop canvas powered by React Flow, with support for triggers, actions, logic nodes, and real-time execution tracking.
 
 ---
 
@@ -91,13 +91,13 @@ workflow/
 
 ## Features
 
-- **Visual Workflow Editor** — React Flow canvas with custom node/edge renderers, zoom controls, and an add-node context menu
-- **Node Library Panel** — Searchable catalogue of all available trigger, action, and logic nodes
-- **Dynamic Node Inspector** — Schema-driven form builder that renders the correct field type (text, select, checkbox, code editor, array, key-value, expression input) for each node's parameters
-- **Typed Node System** — Nodes are versioned (`v1`/`v2`/`v3`) and categorised (`trigger` / `action` / `logic` / `transform`)
-- **Auto-save** — `useAutoSaveWorkflow` debounces saves (default 10 s) and only fires when the canvas `isDirty` flag is set
-- **Execution History** — `useGetWorkflowExecutions` and `useGetWorkflowExecutionById` poll every 5 seconds to provide live execution state
-- **URL-synced Filters** — `useWorkflowFilterQueryParams` persists list filters in the browser URL
+- **Visual Workflow Editor**: React Flow canvas with custom node/edge renderers, zoom controls, and an add-node context menu
+- **Node Library Panel**: Searchable catalogue of all available trigger, action, and logic nodes
+- **Dynamic Node Inspector**: Schema-driven form builder that renders the correct field type (text, select, checkbox, code editor, array, key-value, expression input) for each node's parameters
+- **Typed Node System**: Nodes are versioned (`v1`/`v2`/`v3`) and categorised (`trigger` / `action` / `logic` / `transform`)
+- **Auto-save**: `useAutoSaveWorkflow` debounces saves (default 10 s) and only fires when the canvas `isDirty` flag is set
+- **Execution History**: `useGetWorkflowExecutions` and `useGetWorkflowExecutionById` poll every 5 seconds to provide live execution state
+- **URL-synced Filters**: `useWorkflowFilterQueryParams` persists list filters in the browser URL
 
 ---
 
@@ -105,7 +105,7 @@ workflow/
 
 ### Service → Hook → Component
 
-All API calls go through `WorkflowService`. Hooks wrap service methods with TanStack Query. Components consume hooks — never call `http` or the service directly from a component.
+All API calls go through `WorkflowService`. Hooks wrap service methods with TanStack Query. Components consume hooks; never call `http` or the service directly from a component.
 
 ### Zustand Canvas Store
 
@@ -152,10 +152,10 @@ All methods live on `WorkflowService` and are accessed via the `workflowService`
 | `useGetWorkflowById(payload)`          | Query    | `["workflow", payload]`            | Single workflow; guard on `id` or `projectKey`              |
 | `useGetWorkflowExecutions(payload)`    | Query    | `["workflow-executions", payload]` | Execution list; polls every 5 s                             |
 | `useGetWorkflowExecutionById(payload)` | Query    | `["workflow-execution", payload]`  | Single execution; polls every 5 s                           |
-| `useCreateWorkflow()`                  | Mutation | —                                  | Creates workflow; invalidates `["workflows"]`               |
-| `useDuplicateWorkflow()`               | Mutation | —                                  | Duplicates workflow; invalidates `["workflows"]`            |
-| `useUpdateWorkflow()`                  | Mutation | —                                  | Saves changes; invalidates `["workflows"]` + `["workflow"]` |
-| `useDeleteWorkflow()`                  | Mutation | —                                  | Deletes workflow; invalidates `["workflows"]`               |
+| `useCreateWorkflow()`                  | Mutation |;                                  | Creates workflow; invalidates `["workflows"]`               |
+| `useDuplicateWorkflow()`               | Mutation |;                                  | Duplicates workflow; invalidates `["workflows"]`            |
+| `useUpdateWorkflow()`                  | Mutation |;                                  | Saves changes; invalidates `["workflows"]` + `["workflow"]` |
+| `useDeleteWorkflow()`                  | Mutation |;                                  | Deletes workflow; invalidates `["workflows"]`               |
 
 ### Canvas & UI Hooks
 
