@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -47,34 +47,36 @@ afterEach(() => {
 });
 
 describe("PublishWorkflowAction", () => {
-  it("opens the publish confirmation for an unpublished, clean workflow", async () => {
+  it("publishes an unpublished, clean workflow from the confirmation", async () => {
     const user = userEvent.setup();
     wrap(<PublishWorkflowAction isPublished={false} isDirty={false} />);
     await user.click(screen.getByRole("button", { name: /Publish/ }));
     await user.click(await screen.findByRole("menuitem", { name: "Publish" }));
-    await waitFor(() =>
-      expect(document.querySelector("[role='dialog']")).toBeTruthy(),
-    );
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Publish" }));
+    await waitFor(() => expect(svc.publishWorkflow).toHaveBeenCalled());
   });
 
-  it("opens the versioned publish dialog for a dirty workflow", async () => {
+  it("publishes a new version from the dirty-workflow dialog", async () => {
     const user = userEvent.setup();
     wrap(<PublishWorkflowAction isPublished={false} isDirty={true} />);
     await user.click(screen.getByRole("button", { name: /Publish/ }));
     await user.click(await screen.findByRole("menuitem", { name: "Publish" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Publish" }));
     await waitFor(() =>
-      expect(document.querySelector("[role='dialog']")).toBeTruthy(),
+      expect(svc.publishWorkflowNewVersion).toHaveBeenCalled(),
     );
   });
 
-  it("opens the unpublish dialog for a published workflow", async () => {
+  it("unpublishes a published workflow from the confirmation", async () => {
     const user = userEvent.setup();
     wrap(<PublishWorkflowAction isPublished isDirty={false} />);
     await user.click(screen.getByRole("button", { name: /Publish/ }));
     await user.click(await screen.findByRole("menuitem", { name: "Unpublish" }));
-    await waitFor(() =>
-      expect(document.querySelector("[role='dialog']")).toBeTruthy(),
-    );
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Unpublish" }));
+    await waitFor(() => expect(svc.unpublishWorkflow).toHaveBeenCalled());
   });
 });
 
@@ -87,7 +89,7 @@ describe("WorkflowVersionActionDropdown", () => {
     isPublished: false,
   };
 
-  it("opens the edit-version modal", async () => {
+  it("edits a version's details and saves", async () => {
     const user = userEvent.setup();
     wrap(
       <WorkflowVersionActionDropdown version={version}>
@@ -96,9 +98,37 @@ describe("WorkflowVersionActionDropdown", () => {
     );
     await user.click(screen.getByText("Menu"));
     await user.click(await screen.findByText("Edit version details"));
-    await waitFor(() =>
-      expect(document.querySelector("[role='dialog']")).toBeTruthy(),
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: /Save changes/ }));
+    await waitFor(() => expect(svc.updateWorkflowVersion).toHaveBeenCalled());
+  });
+
+  it("publishes an unpublished version from the confirmation", async () => {
+    const user = userEvent.setup();
+    wrap(
+      <WorkflowVersionActionDropdown version={version}>
+        <button>Menu</button>
+      </WorkflowVersionActionDropdown>,
     );
+    await user.click(screen.getByText("Menu"));
+    await user.click(await screen.findByText("Publish version"));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Publish" }));
+    await waitFor(() => expect(svc.publishWorkflow).toHaveBeenCalled());
+  });
+
+  it("unpublishes a published version from the confirmation", async () => {
+    const user = userEvent.setup();
+    wrap(
+      <WorkflowVersionActionDropdown version={{ ...version, isPublished: true }}>
+        <button>Menu</button>
+      </WorkflowVersionActionDropdown>,
+    );
+    await user.click(screen.getByText("Menu"));
+    await user.click(await screen.findByText("Unpublish version"));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Unpublish" }));
+    await waitFor(() => expect(svc.unpublishWorkflow).toHaveBeenCalled());
   });
 
   it("restores a version", async () => {
