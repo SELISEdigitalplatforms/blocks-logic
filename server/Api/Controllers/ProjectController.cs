@@ -66,12 +66,9 @@ namespace Api.Controllers
         //[ProtectedEndPoint]
         [HttpGet]
         [Authorize]
-        public async Task<GetProjectResponse> Get([FromQuery] string projectId)
+        public async Task<GetProjectResponse> Get()
         {
-            if (string.IsNullOrWhiteSpace(projectId))
-                return new GetProjectResponse { Errors = new Dictionary<string, string> { { "empty_project_id", "projectId_should_not_be_empty" } } };
-
-            return await _projectManagementService.GetAsync(projectId);
+            return await _projectManagementService.GetAsync();
         }
 
         //[ProtectedEndPoint]

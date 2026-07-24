@@ -60,7 +60,7 @@ namespace DomainService.Projects
             {
                 (X509Certificate2 publicKeyCertificate, X509Certificate2 privateKeyCertificate) = _certificateManager.GenerateCertificates(project.JwtTokenParameters);
 
-                await Task.WhenAll( UploadPrivateCertificateIfNeeded(projectStatus, privateKeyCertificate, project),
+                await Task.WhenAll(UploadPrivateCertificateIfNeeded(projectStatus, privateKeyCertificate, project),
                                     UploadPublicCertificateIfNeeded(projectStatus, publicKeyCertificate, project));
 
                 await Task.WhenAll(UpdateProjectIfNeeded(projectStatus, project),
@@ -89,7 +89,7 @@ namespace DomainService.Projects
                 LastUpdatedDate = DateTime.UtcNow,
                 IsInvitationConfirmed = true,
                 IsInvitationSent = true,
-                Email = BlocksContext.GetContext()?.UserName?? ""
+                Email = BlocksContext.GetContext()?.UserName ?? ""
             });
 
             statusTracer.InsertedIntoProjectPeople = true;
@@ -267,8 +267,8 @@ namespace DomainService.Projects
                 return;
             }
 
-           var (assets, _) = await _projectRepository.GetTenantAssetAsync(new GetAssetRequest { TenantGroupId = project.TenantGroupId });
-           project.Resources = assets.Resources ?? [];
+            var (assets, _) = await _projectRepository.GetTenantAssetAsync(new GetAssetRequest { TenantGroupId = project.TenantGroupId });
+            project.Resources = assets.Resources ?? [];
 
         }
 
@@ -304,7 +304,7 @@ namespace DomainService.Projects
                 LastUpdatedDate = DateTime.UtcNow,
                 IsAcceptBlocksTerms = createProjectRequest.IsAcceptBlocksTerms,
                 IsUseBlocksExclusively = createProjectRequest.IsUseBlocksExclusively,
-               // ApplicationDomain = applicationDomain,
+                // ApplicationDomain = applicationDomain,
                 DbConnectionString = _blocksSecret.DatabaseConnectionString,
                 //CookieDomain = applicationContext.CookieDomain,
                 //IsDomainVerified = applicationContext.CookieDomain == IdentifierConstants.BlocsDomain,
@@ -368,18 +368,24 @@ namespace DomainService.Projects
             return new RestoreProjectResponse { IsSuccess = true };
         }
 
-        public async Task<GetProjectResponse> GetAsync(string projectId)
+        public async Task<GetProjectResponse> GetAsync()
         {
-            return await MapIntoProjectAsync(projectId);
+            return await MapIntoProjectAsync();
         }
 
-        private async Task<GetProjectResponse> MapIntoProjectAsync(string projectId)
+        private async Task<GetProjectResponse> MapIntoProjectAsync()
         {
-            var repoProject = await _projectRepository.GetByIdAsync(projectId);
+            var context = BlocksContext.GetContext();
+            if (context is null)
+            {
+                return new GetProjectResponse { Errors = new Dictionary<string, string> { { "context_not_found", "BlocksContext is null" } } };
+            }
+            var tenantId = context.TenantId;
+            var repoProject = await _projectRepository.GetByTenantIdAsync(tenantId);
 
             if (repoProject == null)
             {
-                return new GetProjectResponse { Errors = new Dictionary<string, string> { { "project_not_exist", $"project_with_id_{projectId}_not_exist_into_our_system" } } };
+                return new GetProjectResponse { Errors = new Dictionary<string, string> { { "project_not_exist", $"project_with_id_{tenantId}_not_exist_into_our_system" } } };
             }
 
             string tenantSlug = string.Empty;
@@ -392,7 +398,7 @@ namespace DomainService.Projects
             var project = new GetProjectResponseData
             {
                 Name = repoProject.Name,
-                Applications  = repoProject.Applications,
+                Applications = repoProject.Applications,
                 ItemId = repoProject.ItemId,
                 CreatedDate = repoProject.CreatedDate,
                 LastUpdatedDate = repoProject.LastUpdatedDate,
@@ -402,7 +408,7 @@ namespace DomainService.Projects
                 Tags = repoProject.Tags,
                 TenantId = repoProject.TenantId,
                 IsDomainVerified = repoProject.Applications.FirstOrDefault()?.IsDomainVerified ?? false,
-               // CookieDomain = repoProject.Applications.FirstOrDefault()?.CookieDomain ?? "",
+                // CookieDomain = repoProject.Applications.FirstOrDefault()?.CookieDomain ?? "",
                 IsDisabled = repoProject.IsDisabled,
                 Environment = repoProject.Environment,
                 TenantGroupId = repoProject.TenantGroupId,
@@ -558,7 +564,7 @@ namespace DomainService.Projects
             project.LastUpdatedDate = DateTime.UtcNow;
             await _projectRepository.UpdateProjectAsync(project);
 
-            await Task.WhenAll( _tenants.UpdateTenantVersionAsync(new TenantCacheUpdateMessage
+            await Task.WhenAll(_tenants.UpdateTenantVersionAsync(new TenantCacheUpdateMessage
             {
                 Action = "upsert",
                 TenantId = project.TenantId,
@@ -594,7 +600,7 @@ namespace DomainService.Projects
         {
             var claimsMapper = await MapJWTClaims(request);
             await _projectRepository.SaveJWTClaimsAsync(claimsMapper);
-            return new SaveThirdPartyJWTClaimsResponse { IsSuccess = true , ItemId = claimsMapper.ItemId};
+            return new SaveThirdPartyJWTClaimsResponse { IsSuccess = true, ItemId = claimsMapper.ItemId };
         }
 
         public async Task<ThirdPartyJWTClaims?> GetThirdPartyJWTClaimsAsync(GetThirdPartyJWTClaimsRequest request)
@@ -604,9 +610,9 @@ namespace DomainService.Projects
 
         private async Task<ThirdPartyJWTClaims> MapJWTClaims(SaveThirdPartyJWTClaimsRequest request)
         {
-            var thirdPartyClaims = !string.IsNullOrWhiteSpace(request.ItemId)?
-                                    await _projectRepository.GetThirdPartyJWTClaimsAsync(request.ItemId):
-                                    new ThirdPartyJWTClaims { ItemId = Guid.NewGuid().ToString(), CreatedBy = BlocksContext.GetContext()?.UserId , CreatedDate = DateTime.UtcNow};
+            var thirdPartyClaims = !string.IsNullOrWhiteSpace(request.ItemId) ?
+                                    await _projectRepository.GetThirdPartyJWTClaimsAsync(request.ItemId) :
+                                    new ThirdPartyJWTClaims { ItemId = Guid.NewGuid().ToString(), CreatedBy = BlocksContext.GetContext()?.UserId, CreatedDate = DateTime.UtcNow };
 
 
             thirdPartyClaims.UserId = request.UserId;
