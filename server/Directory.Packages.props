@@ -6,7 +6,7 @@
     <PackageVersion Include="DeviceDetector.NET" Version="6.4.2" />
     <PackageVersion Include="Handlebars.Net" Version="2.1.6" />
     <PackageVersion Include="SeliseBlocks.DataGateway.Driver" Version="10.0.0-preview.3" />
-    <PackageVersion Include="HotChocolate.AspNetCore" Version="15.0.3" />
+    <PackageVersion Include="HotChocolate.AspNetCore" Version="15.1.17" />
     <PackageVersion Include="SeliseBlocks.EurolmDriver" Version="10.0.0-preview.2" />
     <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.9.0" />
     <PackageVersion Include="FluentValidation" Version="12.0.0" />
@@ -44,11 +44,11 @@
     <PackageVersion Include="Shark.PdfConvert" Version="1.0.5" />
     <PackageVersion Include="SeliseBlocks.DeploymentDriver" Version="10.0.0-preview.5" />
     <PackageVersion Include="SeliseBlocks.ObservabilityDriver" Version="10.0.0-preview.2" />
-	 <PackageVersion Include="MailKit" Version="4.15.1" />
+	 <PackageVersion Include="MailKit" Version="4.16.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
     <PackageVersion Include="SeliseBlocks.ConfigurationDriver" Version="10.0.0-preview.1" />
 	<PackageVersion Include="Microsoft.Graph" Version="5.68.0" />
-	<PackageVersion Include="MimeKit" Version="4.15.1" />
+	<PackageVersion Include="MimeKit" Version="4.16.0" />
   </ItemGroup>
 </Project>
