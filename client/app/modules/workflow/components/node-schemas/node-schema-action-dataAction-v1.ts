@@ -1,5 +1,6 @@
 import { useProjectStore } from "@seliseblocks/blocks-kit";
 import { NodeSchemaDefinition } from "./node-schema.type";
+import type { WorkflowStore } from "@blocks-workflow/store";
 
 // Removed useWorkflowStore
 import {
@@ -57,7 +58,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
               })),
             );
         },
-        onChange: (value: unknown, _data: unknown, config: any) => {
+        onChange: (value: unknown, _data: unknown, config: { store?: WorkflowStore }) => {
           const parts = (value as string).split(":::");
           const collectionName = parts[0] || "";
           const schemaName = parts[1] || "";
@@ -140,7 +141,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
                 })),
             );
         },
-        onChange: (value: unknown, _data: unknown, _config: any) => {
+        onChange: (value: unknown, _data: unknown, _config: unknown) => {
           const parts = (value as string).split(":::");
           const clientId = parts[0] || "";
           const clientSecret = parts[1] || "";

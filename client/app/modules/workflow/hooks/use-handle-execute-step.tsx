@@ -47,15 +47,15 @@ export const useHandleExecuteStep = () => {
     try {
       await updateWorkflow({
         itemId: workflowId,
-        nodes: Object.values(nodesMap) as any[],
+        nodes: Object.values(nodesMap) as Parameters<typeof updateWorkflow>[0]["nodes"],
         edges: Object.values(edgesMap),
       });
 
-      const stepResp: any = await stepExecute({
+      const stepResp = (await stepExecute({
         WorkflowId: workflowId,
         NodeId: nodeId,
         ...(nextExecutionId && { SourceExecutionId: nextExecutionId }),
-      });
+      })) as unknown as { code?: string | number; itemId?: string };
 
       if (stepResp?.code === TRIGGER_NODE_LISTENING_CODE) {
         const predecessors = getAllPredecessors(nodeId, nodesMap, edgesMap, executedItems);
@@ -87,7 +87,7 @@ export const useHandleExecuteStep = () => {
           executionId: stepResp.itemId,
         });
         if (executionData?.data) {
-          setStepExecutionData(executionData as any);
+          setStepExecutionData(executionData as Parameters<typeof setStepExecutionData>[0]);
         }
         setNextExecutionId(stepResp.itemId);
       }

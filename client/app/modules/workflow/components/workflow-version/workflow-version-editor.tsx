@@ -14,7 +14,7 @@ import { Button } from "@/components/ui-kits/button/button";
 import { ChevronDown } from "lucide-react";
 import { WorkflowVersionActionDropdown } from "./workflow-version-action-dropdown";
 
-export const WorkflowVersionEditor = ({ version }: { version?: any }) => {
+export const WorkflowVersionEditor = ({ version }: { version?: { itemId?: string; id?: string } }) => {
   const { id: workflowId } = useParams<{ id: string }>();
   const versionId = version?.itemId || version?.id || "";
   const { setWorkflow, onNodeClick, selectedNode, setEditorMode } = useWorkflow();
@@ -32,7 +32,7 @@ export const WorkflowVersionEditor = ({ version }: { version?: any }) => {
     if (data?.data && isFetched && versionId) {
       const snapshot = data.data;
       if (snapshot.nodes && Array.isArray(snapshot.nodes)) {
-        snapshot.nodes.forEach((node: any) => {
+        snapshot.nodes.forEach((node: { data?: Record<string, unknown> }) => {
           node.data = {
             ...node.data,
             isWorkflowExecuted: true,

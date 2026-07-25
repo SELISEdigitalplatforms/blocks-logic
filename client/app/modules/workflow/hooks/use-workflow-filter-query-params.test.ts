@@ -5,8 +5,8 @@ import { useWorkflowFilterQueryParams } from "./use-workflow-filter-query-params
 // nuqs v1 has no built-in test adapter. We mock the module so that
 // useQueryStates behaves like a plain React.useState — sufficient for
 // verifying the hook's default values and setter contract.
-vi.mock("nuqs", () => {
-  const { useState } = require("react");
+vi.mock("nuqs", async () => {
+  const { useState } = await vi.importActual<typeof import("react")>("react");
   return {
     parseAsString: { withDefault: (v: string) => v },
     parseAsInteger: { withDefault: (v: number) => v },
