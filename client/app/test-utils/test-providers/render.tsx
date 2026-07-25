@@ -67,7 +67,7 @@ export const makeHookWrapper = (seedWorkflow?: (store: WorkflowStore) => void) =
       mutations: { retry: false },
     },
   });
-  return ({ children }: { children: React.ReactNode }) => (
+  const HookWrapper = ({ children }: { children: React.ReactNode }) => (
     <QueryClientProvider client={queryClient}>
       <ReactFlowProvider>
         <TooltipProvider>
@@ -78,4 +78,6 @@ export const makeHookWrapper = (seedWorkflow?: (store: WorkflowStore) => void) =
       </ReactFlowProvider>
     </QueryClientProvider>
   );
+  HookWrapper.displayName = "WorkflowHookWrapper";
+  return HookWrapper;
 };

@@ -49,16 +49,14 @@ describe("DataTableFacetedFilter", () => {
 
 describe("FilterToolbar", () => {
   const filters = [
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    { key: "search", type: "SearchInput", label: "" } as any,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    { key: "search", type: "SearchInput", label: "" },
     {
       key: "status",
       type: "Radio",
       label: "Status",
       props: { options },
-    } as any,
-  ];
+    },
+  ] as unknown as React.ComponentProps<typeof FilterToolbar>["filters"];
 
   it("renders the reset button when values differ from defaults", () => {
     const onReset = vi.fn();

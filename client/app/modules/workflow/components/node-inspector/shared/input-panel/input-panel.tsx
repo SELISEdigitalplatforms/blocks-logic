@@ -45,7 +45,12 @@ export const InputPanel = ({
 
   const predecessors = useMemo(() => {
     if (!selectedNode) return [];
-    return getAllPredecessors(selectedNode.id, nodesMap, edgesMap, sourceExecutedItems as any);
+    return getAllPredecessors(
+      selectedNode.id,
+      nodesMap,
+      edgesMap,
+      sourceExecutedItems as Parameters<typeof getAllPredecessors>[3],
+    );
   }, [selectedNode, edgesMap, nodesMap, sourceExecutedItems]);
 
   const immediateParentIds = useMemo(() => {
