@@ -13,6 +13,8 @@ namespace DomainService.Workflow.Nodes.TransformSetFieldV1
         public override string NodeType => "setfield";
         public override string Version => "v1";
 
+        private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(2);
+
         protected override async Task<NodeExecutionResult> ExecuteAsync(NodeExecutionContext context, TransformSetFieldV1Parameters? nodeparameters)
         {
             try
@@ -107,7 +109,7 @@ namespace DomainService.Workflow.Nodes.TransformSetFieldV1
                 {
                     return $"\"{strValue}\"";
                 }
-            });
+            }, System.Text.RegularExpressions.RegexOptions.None, RegexTimeout);
 
             return JsonNode.Parse(resolved)!.AsObject();
         }
