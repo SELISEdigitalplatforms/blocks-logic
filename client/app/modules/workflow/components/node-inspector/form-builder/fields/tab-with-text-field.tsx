@@ -48,7 +48,12 @@ export const TabWithTextField = ({
   let textFieldValue = String(value || "");
   if (field.displayValue) {
     const overriddenData = { ...data, [field.key]: localValue };
-    textFieldValue = String(field.displayValue(overriddenData, config as any) || "");
+    textFieldValue = String(
+      field.displayValue(
+        overriddenData,
+        config as Parameters<NonNullable<typeof field.displayValue>>[1],
+      ) || "",
+    );
   }
 
   const pseudoField = {

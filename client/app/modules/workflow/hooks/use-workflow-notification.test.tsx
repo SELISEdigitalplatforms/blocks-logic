@@ -48,9 +48,8 @@ describe("useWorkflowNotification", () => {
   });
 
   it("ignores notifications when not listening", async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     renderHook(() => useWorkflowNotification(), {
-      wrapper: makeHookWrapper((store: any) =>
+      wrapper: makeHookWrapper((store) =>
         store.getState().setWorkflow({ itemId: "w1", name: "N" }),
       ),
     });
