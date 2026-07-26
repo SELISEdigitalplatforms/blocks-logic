@@ -18,7 +18,7 @@ namespace Api.Controllers
         private readonly IProjectManagementService _projectManagementService;
         private readonly IValidator<CreateProjectRequest> _createProjectValidator;
         private readonly IValidator<UpdateProjectRequest> _updateProjectValidator;
-        
+
 
         public ProjectController(IProjectManagementService projectManagementService,
                                  IValidator<CreateProjectRequest> createProjectValidator,
@@ -28,7 +28,7 @@ namespace Api.Controllers
             _projectManagementService = projectManagementService;
             _createProjectValidator = createProjectValidator;
             _updateProjectValidator = updateProjectValidator;
-           
+
         }
 
         //[ProtectedEndPoint]
@@ -68,7 +68,7 @@ namespace Api.Controllers
         [Authorize]
         public async Task<GetProjectResponse> Get()
         {
-            return await _projectManagementService.GetAsync(BlocksContext.GetContext().TenantId);
+            return await _projectManagementService.GetAsync();
         }
 
         //[ProtectedEndPoint]
@@ -95,7 +95,7 @@ namespace Api.Controllers
                 return new BaseResponse { IsSuccess = false, Errors = new Dictionary<string, string> { { "property_missing", "TenantGroupId or ProjectNane should not be empty" } } };
             }
 
-             return await _projectManagementService.UpdateTenantGroupAsync(request);
+            return await _projectManagementService.UpdateTenantGroupAsync(request);
         }
 
         //[ProtectedEndPoint]
@@ -116,7 +116,7 @@ namespace Api.Controllers
         //[ProtectedEndPoint]
         public async Task<GetAssetResponse> GetAsset([FromQuery] GetAssetRequest request)
         {
-            return await _projectManagementService.GetAssetAsync(request);   
+            return await _projectManagementService.GetAssetAsync(request);
         }
 
         [HttpPost]
@@ -154,7 +154,7 @@ namespace Api.Controllers
         //[ProtectedEndPoint]
         public async Task<SaveThirdPartyJWTClaimsResponse> SaveThirdPartyJWTClaims([FromBody] SaveThirdPartyJWTClaimsRequest request)
         {
-            
+
             return await _projectManagementService.SaveThirdPartyJWTClaimsAsync(request);
         }
 
