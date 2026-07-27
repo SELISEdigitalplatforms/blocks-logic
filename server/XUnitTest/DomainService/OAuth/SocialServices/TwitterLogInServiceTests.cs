@@ -417,8 +417,8 @@ namespace XUnitTest.DomainService.OAuth.SocialServices
                     credential.TokenUrl,
                     It.IsAny<Dictionary<string, string>>(),
                     It.IsAny<CancellationToken>()))
-                .Callback<HttpMethod, Dictionary<string, string>, string, Dictionary<string, string>, CancellationToken>(
-                    (method, postData, url, headers, ct) =>
+                .Callback<HttpMethod, Dictionary<string, string>, string, Dictionary<string, string>, CancellationToken, int?>(
+                    (method, postData, url, headers, ct, _) =>
                     {
                         capturedPostData = postData;
                         capturedHeaders = headers;
@@ -524,8 +524,8 @@ namespace XUnitTest.DomainService.OAuth.SocialServices
                     credential.TokenUrl,
                     It.IsAny<Dictionary<string, string>>(),
                     It.IsAny<CancellationToken>()))
-                .Callback<HttpMethod, Dictionary<string, string>, string, Dictionary<string, string>, CancellationToken>(
-                    (method, postData, url, headers, ct) =>
+                .Callback<HttpMethod, Dictionary<string, string>, string, Dictionary<string, string>, CancellationToken, int?>(
+                    (method, postData, url, headers, ct, _) =>
                     {
                         capturedPostData = postData;
                         capturedHeaders = headers;
@@ -802,7 +802,7 @@ namespace XUnitTest.DomainService.OAuth.SocialServices
                     It.IsAny<string>(),
                     It.IsAny<Dictionary<string, string>>(),
                     It.IsAny<CancellationToken>()))
-                .Callback<string, Dictionary<string, string>, CancellationToken>((url, headers, ct) => capturedProfileHeaders = headers)
+                .Callback<string, Dictionary<string, string>, CancellationToken, int?>((url, headers, ct, _) => capturedProfileHeaders = headers)
                 .ReturnsAsync(((JsonDocument)null, "error"));
 
             // Act
