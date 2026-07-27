@@ -17,7 +17,7 @@
     <PackageVersion Include="SixLabors.ImageSharp.Drawing" Version="2.1.5" />
     <PackageVersion Include="System.Drawing.Common" Version="8.0.13" />
     <PackageVersion Include="MongoDB.Driver" Version="3.8.0" />
-    <PackageVersion Include="SeliseBlocks.Genesis" Version="10.1.0" />
+    <PackageVersion Include="SeliseBlocks.Genesis" Version="10.1.7" />
     <PackageVersion Include="Grpc.AspNetCore" Version="2.80.0" />
     <PackageVersion Include="Azure.Identity" Version="1.21.0" />
     <PackageVersion Include="Azure.ResourceManager.ServiceBus" Version="1.1.0" />
@@ -44,9 +44,11 @@
     <PackageVersion Include="Shark.PdfConvert" Version="1.0.5" />
     <PackageVersion Include="SeliseBlocks.DeploymentDriver" Version="10.0.0-preview.5" />
     <PackageVersion Include="SeliseBlocks.ObservabilityDriver" Version="10.0.0-preview.2" />
-    <PackageVersion Include="MailKit" Version="4.14.1" />
+	 <PackageVersion Include="MailKit" Version="4.15.1" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
     <PackageVersion Include="SeliseBlocks.ConfigurationDriver" Version="10.0.0-preview.1" />
+	<PackageVersion Include="Microsoft.Graph" Version="5.68.0" />
+	<PackageVersion Include="MimeKit" Version="4.15.1" />
   </ItemGroup>
 </Project>
