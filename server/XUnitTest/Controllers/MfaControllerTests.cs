@@ -31,7 +31,7 @@ namespace XUnitTest.Controllers
         {
            
 
-            _totpService = new Mock<TotpService>(Mock.Of<IMfaManagementRepository>(), Mock.Of<ILogger<TotpService>>(), Mock.Of<IHttpContextAccessor>(), Mock.Of<IConfiguration>(), Mock.Of<ICacheClient>(), Mock.Of<IValidator<VerifyOtpRequest>>(), Mock.Of<ITenants>());
+            _totpService = new Mock<TotpService>(Mock.Of<IMfaManagementRepository>(), Mock.Of<ILogger<TotpService>>(), Mock.Of<IHttpContextAccessor>(), Mock.Of<IConfiguration>(), Mock.Of<ICacheClient>(), Mock.Of<IValidator<VerifyOtpRequest>>(), Mock.Of<ITenants>(), Mock.Of<StorageDriver.IStorageDriverService>());
             //_changeContext = new Mock<ChangeControllerContext>( Mock.Of<ITenants>(),Mock.Of<IDbContextProvider>(), Mock.Of<IHttpContextAccessor>());
             _controller = new MfaController(_mfaService.Object, _totpService.Object,  _cloudConfig.Object);
         }

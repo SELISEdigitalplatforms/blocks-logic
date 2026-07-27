@@ -31,7 +31,8 @@ namespace XUnitTest.DomainService.Mfa
                 null, // IConfiguration
                 Mock.Of<ICacheClient>(),
                 null, // IValidator
-                null  // ITenants
+                null, // ITenants
+                null  // IStorageDriverService
             );
 
             _serviceProvider.Setup(x => x.GetService(typeof(TotpService)))
