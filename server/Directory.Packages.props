@@ -6,7 +6,7 @@
     <PackageVersion Include="DeviceDetector.NET" Version="6.4.2" />
     <PackageVersion Include="Handlebars.Net" Version="2.1.6" />
     <PackageVersion Include="SeliseBlocks.DataGateway.Driver" Version="10.0.0-preview.3" />
-    <PackageVersion Include="HotChocolate.AspNetCore" Version="15.0.3" />
+    <PackageVersion Include="HotChocolate.AspNetCore" Version="15.1.17" />
     <PackageVersion Include="SeliseBlocks.EurolmDriver" Version="10.0.0-preview.2" />
     <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.9.0" />
     <PackageVersion Include="FluentValidation" Version="12.0.0" />
@@ -16,8 +16,8 @@
     <PackageVersion Include="SixLabors.ImageSharp" Version="3.1.11" />
     <PackageVersion Include="SixLabors.ImageSharp.Drawing" Version="2.1.5" />
     <PackageVersion Include="System.Drawing.Common" Version="8.0.13" />
-    <PackageVersion Include="MongoDB.Driver" Version="3.8.0" />
-    <PackageVersion Include="SeliseBlocks.Genesis" Version="10.1.0" />
+    <PackageVersion Include="MongoDB.Driver" Version="3.10.0" />
+    <PackageVersion Include="SeliseBlocks.Genesis" Version="10.1.7" />
     <PackageVersion Include="Grpc.AspNetCore" Version="2.80.0" />
     <PackageVersion Include="Azure.Identity" Version="1.21.0" />
     <PackageVersion Include="Azure.ResourceManager.ServiceBus" Version="1.1.0" />
@@ -36,17 +36,23 @@
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.4" />
     <PackageVersion Include="Aspose.Words" Version="20.2.0" />
     <PackageVersion Include="DotLiquid" Version="2.2.692" />
-    <PackageVersion Include="HtmlRendererCore.PdfSharp" Version="1.0.5" />
     <PackageVersion Include="iTextSharp.LGPLv2.Core" Version="1.7.5" />
     <PackageVersion Include="PdfPig" Version="0.1.5" />
-    <PackageVersion Include="PdfSharpCore" Version="1.3.67" />
+    <PackageVersion Include="PdfSharp" Version="6.2.4" />
     <PackageVersion Include="PuppeteerSharp" Version="20.2.5" />
     <PackageVersion Include="Shark.PdfConvert" Version="1.0.5" />
     <PackageVersion Include="SeliseBlocks.DeploymentDriver" Version="10.0.0-preview.5" />
     <PackageVersion Include="SeliseBlocks.ObservabilityDriver" Version="10.0.0-preview.2" />
-    <PackageVersion Include="MailKit" Version="4.14.1" />
+	 <PackageVersion Include="MailKit" Version="4.16.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
     <PackageVersion Include="SeliseBlocks.ConfigurationDriver" Version="10.0.0-preview.1" />
+	<PackageVersion Include="Microsoft.Graph" Version="5.105.0" />
+	<!-- Pinned to clear GHSA-7j59-v9qr-6fq9. Microsoft.Graph 5.105.0 (latest 5.x) only pulls
+	     Microsoft.Kiota.Abstractions 1.21.1; the fix is 1.22.0, so pin the abstractions package
+	     up to the latest 1.x. Referenced directly from Mail.DomainService (which owns the Graph
+	     dependency) so downstream projects inherit the patched version. -->
+	<PackageVersion Include="Microsoft.Kiota.Abstractions" Version="1.22.2" />
+	<PackageVersion Include="MimeKit" Version="4.16.0" />
   </ItemGroup>
 </Project>

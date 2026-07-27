@@ -67,19 +67,19 @@ export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVer
 
   const handleEditSubmit = async () => {
     try {
-      const response: any = await updateWorkflowVersion.mutateAsync({
+      const response = (await updateWorkflowVersion.mutateAsync({
         versionId: version.itemId,
         name: editVersionName || "Version Name",
         description: editDescription,
-      });
+      })) as unknown as { isSuccess?: boolean; errors?: { Message?: string } };
       if (response && response.isSuccess === false) {
         showErrorToast({ errors: response.errors?.Message || "Failed to edit workflow version." });
       } else {
         setIsEditModalOpen(false);
         showSuccessToast({ description: "Workflow version details successfully updated." });
       }
-    } catch (error: any) {
-      showErrorToast({ errors: error.message || "Failed to edit workflow version." });
+    } catch (error) {
+      showErrorToast({ errors: (error instanceof Error ? error.message : "") || "Failed to edit workflow version." });
     }
   };
 

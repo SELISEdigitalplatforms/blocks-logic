@@ -188,8 +188,8 @@ export const useWorkflow = () => {
               TriggerId: listeningNodeId,
               EnableListener: false,
             });
-          } catch (error: any) {
-            showErrorToast({ errors: error.message || "Failed to disable trigger listener after timeout" });
+          } catch (error) {
+            showErrorToast({ errors: (error instanceof Error ? error.message : "") || "Failed to disable trigger listener after timeout" });
           }
         }
       }, 2 * 60 * 1000); // 3 minutes
