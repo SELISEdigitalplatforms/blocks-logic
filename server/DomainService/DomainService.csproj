@@ -15,7 +15,8 @@
 	<PackageReference Include="SeliseBlocks.Genesis" />
 	<PackageReference Include="SeliseBlocks.StorageDriver" />
 	<PackageReference Include="Shark.PdfConvert" />
-	<PackageReference Include="SeliseBlocks.MailDriver"/>
+	<!--<PackageReference Include="SeliseBlocks.MailDriver" />-->
+	<ProjectReference Include="..\Mail.DomainService\Mail.DomainService.csproj" />
 	<ProjectReference Include="..\Notification.DomainService\Notification.DomainService.csproj" />
   </ItemGroup>
 </Project>
