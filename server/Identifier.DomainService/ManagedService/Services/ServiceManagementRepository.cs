@@ -18,7 +18,7 @@ namespace DomainService.ManagedService.Services
         public async Task<(IQueryable<BlocksManagedService>, long)> GetAllServicesAsync(GetAllServiceRequest request)
         {
             var collection = _dbContextProvider.GetCollection<BlocksManagedService>("BlocksManagedServices");
-            var filter = Builders<BlocksManagedService>.Filter.Eq(s => s.TenantId, request.ProjectKey);
+            var filter = Builders<BlocksManagedService>.Filter.Eq(s => s.TenantId, BlocksContext.GetContext().TenantId);
 
             if (!string.IsNullOrWhiteSpace(request?.Filter?.ServiceName))
             {

@@ -18,7 +18,7 @@ namespace Api.Controllers
         private readonly IProjectManagementService _projectManagementService;
         private readonly IValidator<CreateProjectRequest> _createProjectValidator;
         private readonly IValidator<UpdateProjectRequest> _updateProjectValidator;
-        
+
 
         public ProjectController(IProjectManagementService projectManagementService,
                                  IValidator<CreateProjectRequest> createProjectValidator,
@@ -28,7 +28,7 @@ namespace Api.Controllers
             _projectManagementService = projectManagementService;
             _createProjectValidator = createProjectValidator;
             _updateProjectValidator = updateProjectValidator;
-           
+
         }
 
         //[ProtectedEndPoint]
@@ -66,12 +66,9 @@ namespace Api.Controllers
         //[ProtectedEndPoint]
         [HttpGet]
         [Authorize]
-        public async Task<GetProjectResponse> Get([FromQuery] string projectId)
+        public async Task<GetProjectResponse> Get()
         {
-            if (string.IsNullOrWhiteSpace(projectId))
-                return new GetProjectResponse { Errors = new Dictionary<string, string> { { "empty_project_id", "projectId_should_not_be_empty" } } };
-
-            return await _projectManagementService.GetAsync(projectId);
+            return await _projectManagementService.GetAsync();
         }
 
         //[ProtectedEndPoint]
@@ -98,7 +95,7 @@ namespace Api.Controllers
                 return new BaseResponse { IsSuccess = false, Errors = new Dictionary<string, string> { { "property_missing", "TenantGroupId or ProjectNane should not be empty" } } };
             }
 
-             return await _projectManagementService.UpdateTenantGroupAsync(request);
+            return await _projectManagementService.UpdateTenantGroupAsync(request);
         }
 
         //[ProtectedEndPoint]
@@ -106,12 +103,12 @@ namespace Api.Controllers
         [Authorize]
         public async Task<BaseResponse> Disable([FromBody] DisableProjectRequest request)
         {
-            if (string.IsNullOrWhiteSpace(request.ProjectKey))
+            if (string.IsNullOrWhiteSpace(BlocksContext.GetContext().TenantId))
             {
                 return new AuthConfigResponse { Errors = new Dictionary<string, string> { { "missing_projectKey", "ProjectKey is required" } } };
             }
 
-            return await _projectManagementService.DisableProjectAsync(request.ProjectKey);
+            return await _projectManagementService.DisableProjectAsync(BlocksContext.GetContext().TenantId);
         }
 
         [HttpGet]
@@ -119,7 +116,7 @@ namespace Api.Controllers
         //[ProtectedEndPoint]
         public async Task<GetAssetResponse> GetAsset([FromQuery] GetAssetRequest request)
         {
-            return await _projectManagementService.GetAssetAsync(request);   
+            return await _projectManagementService.GetAssetAsync(request);
         }
 
         [HttpPost]
@@ -149,7 +146,7 @@ namespace Api.Controllers
         //[ProtectedEndPoint]
         public async Task<IActionResult> GetTokenValidationParameters([FromQuery] GetTokenValidationParametersRequest request)
         {
-            return await _projectManagementService.GetProjectTokenValidationParametersAsync(request.ProjectKey);
+            return await _projectManagementService.GetProjectTokenValidationParametersAsync(BlocksContext.GetContext().TenantId);
         }
 
         [HttpPost]
@@ -157,7 +154,7 @@ namespace Api.Controllers
         //[ProtectedEndPoint]
         public async Task<SaveThirdPartyJWTClaimsResponse> SaveThirdPartyJWTClaims([FromBody] SaveThirdPartyJWTClaimsRequest request)
         {
-            
+
             return await _projectManagementService.SaveThirdPartyJWTClaimsAsync(request);
         }
 

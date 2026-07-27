@@ -1,4 +1,5 @@
 using Blocks.Genesis;
+using Mail.DomainService.Utilities;
 
 namespace DomainService.Workflow.Utils
 {
@@ -7,7 +8,7 @@ namespace DomainService.Workflow.Utils
         public const string NodeExecutionQueue = "blocks_logic_workflow_node_execute_listener";
         public const string EmailTriggerQueue = "blocks_logic_workflow_email_trigger_listener";
         public const string DataTriggerQueue = "blocks_logic_workflow_data_trigger_listener";
-
+        public const string LogicMailQueueName = "blocks_email_listener";
         public const string AccessTokenCookieName = "access_token";
         public const string RefreshTokenCookieName = "refresh_token";
 
@@ -47,7 +48,8 @@ namespace DomainService.Workflow.Utils
                 {
                     ConsumerSubscriptions = [ConsumerSubscription.BindToQueue(NodeExecutionQueue),
                                              ConsumerSubscription.BindToQueue(EmailTriggerQueue),
-                                             ConsumerSubscription.BindToQueue(DataTriggerQueue)],
+                                             ConsumerSubscription.BindToQueue(DataTriggerQueue),
+                                             ConsumerSubscription.BindToQueue(LogicMailQueueName)],
 
                 }
             };
@@ -59,7 +61,7 @@ namespace DomainService.Workflow.Utils
             {
                 AzureServiceBusConfiguration = new AzureServiceBusConfiguration
                 {
-                    Queues = [NodeExecutionQueue, EmailTriggerQueue, DataTriggerQueue],
+                    Queues = [NodeExecutionQueue, EmailTriggerQueue, DataTriggerQueue, LogicMailQueueName],
                     Topics = []
                 }
             };

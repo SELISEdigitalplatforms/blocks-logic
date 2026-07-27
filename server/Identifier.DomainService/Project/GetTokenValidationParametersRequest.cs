@@ -2,8 +2,8 @@
 
 namespace DomainService.Projects
 {
-    public class GetTokenValidationParametersRequest : IProjectKey
+    public class GetTokenValidationParametersRequest 
     {
-        public string ProjectKey { get; set; }
+
     }
 }

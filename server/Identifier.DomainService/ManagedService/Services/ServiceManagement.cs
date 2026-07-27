@@ -229,7 +229,7 @@ namespace DomainService.ManagedService.Services
                 LastUpdatedBy = userId,
                 CreatedDate = DateTime.UtcNow,
                 LastUpdatedDate = DateTime.UtcNow,
-                TenantId = request.ProjectKey ?? "",
+                TenantId = BlocksContext.GetContext().TenantId ?? "",
                 ServiceType = request.ServiceType
             };
         }
