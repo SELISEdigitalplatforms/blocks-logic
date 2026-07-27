@@ -13,12 +13,13 @@ import { useParams } from "react-router-dom";
 import { Button } from "@/components/ui-kits/button/button";
 import { ChevronDown } from "lucide-react";
 import { WorkflowVersionActionDropdown } from "./workflow-version-action-dropdown";
+import { WorkflowVersion } from "../../models/workflow.model";
 
-export const WorkflowVersionEditor = ({ version }: { version?: { itemId?: string; id?: string } }) => {
+export const WorkflowVersionEditor = ({ version }: { version: WorkflowVersion | null }) => {
   const { id: workflowId } = useParams<{ id: string }>();
   const versionId = version?.itemId || version?.id || "";
   const { setWorkflow, onNodeClick, selectedNode, setEditorMode } = useWorkflow();
-  
+
   const { data, isFetched, isFetching } = useGetWorkflowByVersion({
     workflowId: workflowId || "",
     versionId,
@@ -52,7 +53,7 @@ export const WorkflowVersionEditor = ({ version }: { version?: { itemId?: string
       </div>
     );
   }
-  
+
   if (isFetching) {
     return (
       <div className="flex h-full w-full items-center justify-center text-muted-foreground">
@@ -60,7 +61,7 @@ export const WorkflowVersionEditor = ({ version }: { version?: { itemId?: string
       </div>
     );
   }
-  
+
   return (
     <div className="relative h-full w-full flex-1">
       <ReactFlow
@@ -90,7 +91,7 @@ export const WorkflowVersionEditor = ({ version }: { version?: { itemId?: string
               {version?.name || "Unnamed Version"}
             </span>
           </div>
-          
+
           <WorkflowVersionActionDropdown version={version}>
             <Button variant="outline" size="sm" className="bg-background/95 shadow-sm backdrop-blur-sm">
               Action
