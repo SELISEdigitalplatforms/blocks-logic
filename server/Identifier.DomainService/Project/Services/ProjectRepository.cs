@@ -476,9 +476,10 @@ namespace DomainService.Projects
 
         public async Task<Tenant> GetByTenantIdAsync(string tenantId)
         {
-            var collection = _dbContextProvider.GetCollection<Tenant>(IdentifierConstants.TenantCollectionName);
+            var collection = _clientDb.GetCollection<Tenant>(IdentifierConstants.TenantCollectionName);
 
-            var filter = Builders<Tenant>.Filter.Eq(mc => mc.TenantId, tenantId);
+            var filter = Builders<Tenant>.Filter.Eq(mc => mc.TenantId, tenantId)
+                        & Builders<Tenant>.Filter.Eq(mc => mc.IsDisabled, false);
             return await (await collection.FindAsync(filter)).FirstOrDefaultAsync();
         }
 
@@ -541,11 +542,11 @@ namespace DomainService.Projects
             var tenantIds = await GetProjectIdsByGroupId(request.TenantGroupId);
             var collection = _dbContextProvider.GetCollection<Tenant>(IdentifierConstants.TenantCollectionName);
 
-           await collection.UpdateManyAsync(
-                Builders<Tenant>.Filter.In(t => t.TenantId, tenantIds),
-                Builders<Tenant>.Update.Set(t => t.Name, request.Name)
-                                       .Set(t=>t.LastUpdatedBy, BlocksContext.GetContext()?.UserId)
-                                       .Set(t=>t.LastUpdatedDate, DateTime.UtcNow));
+            await collection.UpdateManyAsync(
+                 Builders<Tenant>.Filter.In(t => t.TenantId, tenantIds),
+                 Builders<Tenant>.Update.Set(t => t.Name, request.Name)
+                                        .Set(t => t.LastUpdatedBy, BlocksContext.GetContext()?.UserId)
+                                        .Set(t => t.LastUpdatedDate, DateTime.UtcNow));
         }
 
     }

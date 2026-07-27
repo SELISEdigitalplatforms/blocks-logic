@@ -11,7 +11,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Mail.DomainService\Mail.DomainService.csproj" />
-    <ProjectReference Include="..\Mfa.DomainService\Mfa.DomainService.csproj" />
+    <!--<ProjectReference Include="..\Mfa.DomainService\Mfa.DomainService.csproj" />-->
     <ProjectReference Include="..\DomainService\DomainService.csproj" />
   </ItemGroup>
 </Project>
