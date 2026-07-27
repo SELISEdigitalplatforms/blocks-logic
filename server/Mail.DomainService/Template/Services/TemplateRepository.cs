@@ -12,6 +12,7 @@ namespace Mail.DomainService.Template.Services
     {
         private readonly IDbContextProvider _dbContextProvider;
         private const string _collectionName = "EmailTemplates";
+        private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(2);
 
         public TemplateRepository(IDbContextProvider dbContextProvider)
         {
@@ -116,7 +117,7 @@ namespace Mail.DomainService.Template.Services
             var dataBase = _dbContextProvider.GetDatabase(BlocksContext.GetContext()?.TenantId ?? "");
             var collection = dataBase.GetCollection<TemplatePluginConfig>($"{nameof(TemplatePluginConfig)}s");
 
-            var normalizedProvider = Regex.Replace(pluginProvider?.Trim() ?? "", @"\s+", " ");
+            var normalizedProvider = Regex.Replace(pluginProvider?.Trim() ?? "", @"\s+", " ", RegexOptions.None, RegexTimeout);
 
             var filter = Builders<TemplatePluginConfig>.Filter.Regex(
                x => x.PluginProvider,

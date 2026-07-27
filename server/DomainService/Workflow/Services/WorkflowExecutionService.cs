@@ -395,16 +395,6 @@ namespace DomainService.Workflow.Services
             var execution = await _executionRepository.GetByIdAsync(dto.ExecutionId, projectKey)
                 ?? throw new InvalidOperationException($"Execution {dto.ExecutionId} not found");
 
-
-            if (execution == null)
-            {
-                return new WorkflowExecutionGetResponseDto
-                {
-                    IsSuccess = false,
-                    Errors = new Dictionary<string, string> { { "Message", "Execution not found" } }
-                };
-            }
-
             // Get all workflow items - frontend will organize them into input/output structure
             var allItems = await _executionRepository.GetAllItemsByExecutionIdAsync(dto.ExecutionId, projectKey);
 
