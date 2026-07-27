@@ -82,6 +82,7 @@ export interface ExecutedNode {
 }
 
 export interface WorkflowVersion {
+  id: string;
   itemId: string;
   workflowId: string;
   tenantId: string;

@@ -14,7 +14,7 @@ import { WorkflowVersionActionDropdown } from "../workflow-version/workflow-vers
 
 interface VersionHistorySidebarProps {
   onClose?: () => void;
-  onSelectVersion: (version: any) => void;
+  onSelectVersion: (version: WorkflowVersion) => void;
   selectedVersionId?: string | null;
 }
 
