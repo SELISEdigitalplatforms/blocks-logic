@@ -32,7 +32,7 @@ export function useWorkflowStore<T>(
       "useWorkflowStore must be used within a WorkflowStoreProvider",
     );
   }
-  return useStore(store, selector as any);
+  return useStore(store, selector as (state: WorkflowState) => T);
 }
 
 // returns the raw Zustand store object, basically to get the latest store, this is what provides the .getState()

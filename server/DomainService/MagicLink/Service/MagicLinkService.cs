@@ -18,7 +18,6 @@ namespace DomainService.MagicLink.Service
         private readonly ICacheClient _cacheClient;
         private readonly IMessageClient _messageClient;
         private readonly IConfiguration _configuration;
-        private static readonly Random _random = new Random();
         private static readonly string _chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
         private const int DefaultLinkIdLength = 6;
         private const int MaxRetryAttempts = 10;
@@ -522,7 +521,7 @@ namespace DomainService.MagicLink.Service
         private static string GenerateLinkId(int length = DefaultLinkIdLength)
         {
             return new string(Enumerable.Repeat(_chars, length)
-                .Select(s => s[_random.Next(s.Length)]).ToArray());
+                .Select(s => s[System.Security.Cryptography.RandomNumberGenerator.GetInt32(s.Length)]).ToArray());
         }
 
         private string BuildShortUri(string linkId, LinkBasedActionConfig? config)

@@ -24,7 +24,7 @@ import {
 interface KeyTypeValue {
   key: string;
   type: string;
-  value: any;
+  value: unknown;
 }
 
 const DATA_TYPES = [
@@ -81,7 +81,7 @@ export const KeyTypeValueField = ({
     updateValue(newPairs);
   };
 
-  const handleValueChange = (index: number, newValue: any) => {
+  const handleValueChange = (index: number, newValue: unknown) => {
     const newPairs = keyValuePairs.map((pair, i) =>
       i === index ? { ...pair, value: newValue } : pair,
     );
@@ -166,7 +166,7 @@ export const KeyTypeValueField = ({
               ) : (
                 <ExpressionInputField
                   placeholder={field.keyLabel || "Value"}
-                  value={pair.value}
+                  value={pair.value as string}
                   onChange={(value) => handleValueChange(index, value)}
                   readOnly={readOnly}
                   data={data}

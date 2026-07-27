@@ -122,7 +122,7 @@ export interface ICreateWorkflowVersionPayload {
 }
 
 export interface ICreateWorkflowVersionResponse {
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface IGetWorkflowVersionsPayload {
@@ -168,7 +168,7 @@ export interface IRestoreWorkflowPayload {
 }
 
 export interface IRestoreWorkflowResponse {
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface IGetWorkflowByVersionPayload {
@@ -177,7 +177,7 @@ export interface IGetWorkflowByVersionPayload {
 }
 
 export interface IGetWorkflowByVersionResponse {
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface IUpdateWorkflowVersionPayload {
