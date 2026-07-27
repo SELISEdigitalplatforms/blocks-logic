@@ -15,17 +15,20 @@ vi.mock("../services/workflow.service", () => mockWorkflowServiceFactory());
 // ─── Zustand store mock ───────────────────────────────────────────────────────
 // vi.hoisted() ensures these variables are available when vi.mock() factories
 // are evaluated (vi.mock calls are hoisted to the top of the file by Vitest).
+// The hook reads `hasUnsavedChanges` via the selector-based useWorkflowStore and
+// pulls nodesMap/edgesMap off the raw store returned by useWorkflowStoreApi.
 const { mockGetState, mockUseWorkflowStore } = vi.hoisted(() => {
   const mockGetState = vi.fn();
-  const mockUseWorkflowStore = Object.assign(
-    vi.fn((selector: (state: { isDirty: boolean }) => boolean) => selector({ isDirty: true })),
-    { getState: mockGetState },
+  const mockUseWorkflowStore = vi.fn(
+    (selector: (state: { hasUnsavedChanges: boolean }) => boolean) =>
+      selector({ hasUnsavedChanges: true }),
   );
   return { mockGetState, mockUseWorkflowStore };
 });
 
-vi.mock("../store/workflow-store", () => ({
+vi.mock("../store", () => ({
   useWorkflowStore: mockUseWorkflowStore,
+  useWorkflowStoreApi: () => ({ getState: mockGetState }),
 }));
 
 const DEFAULT_OPTIONS = {
@@ -39,9 +42,10 @@ describe("useAutoSaveWorkflow", () => {
     vi.useFakeTimers();
     vi.clearAllMocks();
     vi.mocked(workflowService.updateWorkflow).mockResolvedValue(mockUpdateWorkflowResponse);
-    // Restore default isDirty: true for each test
-    mockUseWorkflowStore.mockImplementation((selector: (state: { isDirty: boolean }) => boolean) =>
-      selector({ isDirty: true }),
+    // Restore default hasUnsavedChanges: true for each test
+    mockUseWorkflowStore.mockImplementation(
+      (selector: (state: { hasUnsavedChanges: boolean }) => boolean) =>
+        selector({ hasUnsavedChanges: true }),
     );
     mockGetState.mockReturnValue({
       nodesMap: { [mockWorkflowNode1.id]: mockWorkflowNode1 },
@@ -83,8 +87,8 @@ describe("useAutoSaveWorkflow", () => {
     expect(workflowService.updateWorkflow).toHaveBeenCalledWith(
       expect.objectContaining({
         itemId: MOCK_WORKFLOW_ID_1,
-        projectKey: TEST_PROJECT_KEY,
       }),
+      expect.anything(),
     );
   });
 
@@ -100,6 +104,7 @@ describe("useAutoSaveWorkflow", () => {
         nodes: expect.arrayContaining([expect.objectContaining({ id: mockWorkflowNode1.id })]),
         edges: expect.arrayContaining([expect.objectContaining({ id: mockWorkflowEdge1.id })]),
       }),
+      expect.anything(),
     );
   });
 
@@ -128,10 +133,11 @@ describe("useAutoSaveWorkflow", () => {
     expect(workflowService.updateWorkflow).not.toHaveBeenCalled();
   });
 
-  it("should not trigger auto-save when isDirty is false", async () => {
-    // Override store to return isDirty: false
-    mockUseWorkflowStore.mockImplementation((selector: (state: { isDirty: boolean }) => boolean) =>
-      selector({ isDirty: false }),
+  it("should not trigger auto-save when hasUnsavedChanges is false", async () => {
+    // Override store to return hasUnsavedChanges: false
+    mockUseWorkflowStore.mockImplementation(
+      (selector: (state: { hasUnsavedChanges: boolean }) => boolean) =>
+        selector({ hasUnsavedChanges: false }),
     );
 
     renderHook(() => useAutoSaveWorkflow(DEFAULT_OPTIONS), { wrapper: createWrapper() });

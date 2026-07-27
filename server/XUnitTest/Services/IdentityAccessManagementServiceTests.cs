@@ -48,11 +48,11 @@ namespace XUnitTest.Services
                 .Where(m => m.Name == "Create" && m.ReturnType == typeof(BlocksContext))
                 .ToList();
 
-            var create15Method = createMethods.FirstOrDefault(m => m.GetParameters().Length == 15);
+            var create15Method = createMethods.FirstOrDefault(m => m.GetParameters().Length >= 15);
 
             if (create15Method != null)
             {
-                var context = (BlocksContext)create15Method.Invoke(null, new object[]
+                var context = (BlocksContext)create15Method.CreateContext(new object[]
                 {
                     tenantId, Array.Empty<string>(), userId, true, string.Empty, string.Empty,
                     DateTime.UtcNow.AddHours(1), "test@example.com", Array.Empty<string>(),

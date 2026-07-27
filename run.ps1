@@ -19,6 +19,15 @@ Options:
 
   -k, --kill-port      Kill process on API port
   -h, --help           Show this help
+
+Tests:
+  -tf, --test-fe       Frontend unit tests (client/: build + vitest)
+  -te, --test-e2e      End-to-end tests (e2e/: playwright)
+  -tb, --test-be       Backend unit tests (server/: clean + build + dotnet test)
+  -ta, --test-all      Frontend unit + backend unit + e2e
+
+Env:
+  SKIP_BUILD=1         Skip the client build step in --test-fe
 "@ | Write-Host
 }
 
@@ -28,6 +37,9 @@ $Worker = $false
 $All = $false
 $Frontend = $false
 $KillPort = $false
+$TestFe = $false
+$TestE2e = $false
+$TestBe = $false
 $Npm = @()
 $Dotnet = @()
 
@@ -51,6 +63,18 @@ while ($i -lt $CliArgs.Count) {
         "-k" { $KillPort = $true }
         "--kill-port" { $KillPort = $true }
 
+        "-tf" { $TestFe = $true }
+        "--test-fe" { $TestFe = $true }
+
+        "-te" { $TestE2e = $true }
+        "--test-e2e" { $TestE2e = $true }
+
+        "-tb" { $TestBe = $true }
+        "--test-be" { $TestBe = $true }
+
+        "-ta" { $TestFe = $true; $TestE2e = $true; $TestBe = $true }
+        "--test-all" { $TestFe = $true; $TestE2e = $true; $TestBe = $true }
+
         "-h" { Show-Usage; exit }
         "--help" { Show-Usage; exit }
 
@@ -69,7 +93,7 @@ while ($i -lt $CliArgs.Count) {
     $i++
 }
 
-if (-not ($Backend -or $Worker -or $All -or $Frontend -or $KillPort -or $Npm.Count -or $Dotnet.Count)) {
+if (-not ($Backend -or $Worker -or $All -or $Frontend -or $KillPort -or $TestFe -or $TestE2e -or $TestBe -or $Npm.Count -or $Dotnet.Count)) {
     Show-Usage
     exit
 }
@@ -77,6 +101,8 @@ if (-not ($Backend -or $Worker -or $All -or $Frontend -or $KillPort -or $Npm.Cou
 # ---- Paths ----
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ClientDir = Join-Path $ScriptDir "client"
+$E2eDir = Join-Path $ScriptDir "e2e"
+$Solution = Join-Path $ScriptDir "server/Blocks.slnx"
 $ApiProject = Join-Path $ScriptDir "server/Api/Api.csproj"
 $WorkerProject = Join-Path $ScriptDir "server/Worker/Worker.csproj"
 $Wwwroot = Join-Path $ScriptDir "server/Api/wwwroot"
@@ -128,10 +154,86 @@ function Run-Worker {
     dotnet run --project $WorkerProject
 }
 
+# ---- Tests ----
+
+# Native commands do not stop the script on failure, so check the exit code.
+function Invoke-Step {
+    param([scriptblock]$Step, [string]$Name)
+
+    & $Step
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "$Name failed (exit $LASTEXITCODE)"
+        exit $LASTEXITCODE
+    }
+}
+
+function Ensure-NodeModules {
+    param([string]$Dir)
+
+    if (!(Test-Path (Join-Path $Dir "node_modules"))) {
+        Write-Host "Installing dependencies in $(Split-Path -Leaf $Dir)..."
+        Invoke-Step { npm --prefix $Dir clean-install } "npm clean-install"
+    }
+}
+
+# Vitest does not read dist/, so the build is only a TypeScript gate.
+# Skip it with $env:SKIP_BUILD = "1" for a faster loop.
+function Test-Frontend {
+    Write-Host "=== Frontend unit tests ==="
+
+    Ensure-NodeModules $ClientDir
+
+    if ($env:SKIP_BUILD -eq "1") {
+        Write-Host "SKIP_BUILD=1 - skipping client build."
+    }
+    else {
+        Invoke-Step { npm --prefix $ClientDir run build } "client build"
+    }
+
+    Invoke-Step { npm --prefix $ClientDir run test } "client unit tests"
+}
+
+# Playwright reads e2e/.env.e2e. With E2E_NO_WEBSERVER=1 it tests the host in
+# E2E_BASE_URL as-is; otherwise it starts the app itself (webServer: run.sh -b).
+function Test-E2E {
+    Write-Host "=== E2E tests ==="
+
+    if (!(Test-Path (Join-Path $E2eDir ".env.e2e"))) {
+        Write-Host "Missing $E2eDir\.env.e2e - copy .env.e2e.example and set E2E_BASE_URL + credentials."
+        exit 1
+    }
+
+    Ensure-NodeModules $E2eDir
+
+    Push-Location $E2eDir
+    try {
+        Invoke-Step { npx playwright install --no-shell chromium } "playwright install"
+        Invoke-Step { npm run test } "e2e tests"
+    }
+    finally {
+        Pop-Location
+    }
+}
+
+function Test-Backend {
+    Write-Host "=== Backend unit tests ==="
+
+    Invoke-Step { dotnet clean $Solution } "dotnet clean"
+    Invoke-Step { dotnet build $Solution } "dotnet build"
+    Invoke-Step { dotnet test $Solution --no-build } "dotnet test"
+}
+
 # ---- Execution ----
 
 if ($KillPort) {
     Free-Port
+    exit
+}
+
+if ($TestFe -or $TestE2e -or $TestBe) {
+    if ($TestFe) { Test-Frontend }
+    if ($TestBe) { Test-Backend }
+    if ($TestE2e) { Test-E2E }
     exit
 }
 

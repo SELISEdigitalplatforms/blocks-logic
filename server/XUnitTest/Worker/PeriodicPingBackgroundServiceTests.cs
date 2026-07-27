@@ -43,18 +43,22 @@ namespace XUnitTest.Worker
 
             // Act
             await service.StartAsync(cts.Token);
-            await Task.Delay(100);
-            await service.StopAsync(cts.Token);
-
-            // Assert
-            mockLogger.Verify(
-                x => x.Log(
-                    LogLevel.Information,
-                    It.IsAny<EventId>(),
-                    It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("Periodic ping is disabled")),
-                    It.IsAny<Exception>(),
-                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-                Times.Once);
+            try
+            {
+                // Assert
+                await EventuallyAsync(() => mockLogger.Verify(
+                    x => x.Log(
+                        LogLevel.Information,
+                        It.IsAny<EventId>(),
+                        It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("Periodic ping is disabled")),
+                        It.IsAny<Exception>(),
+                        It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                    Times.Once));
+            }
+            finally
+            {
+                await service.StopAsync(cts.Token);
+            }
 
             // Should not create any HTTP client
             mockHttpFactory.Verify(x => x.CreateClient(It.IsAny<string>()), Times.Never);
@@ -72,18 +76,22 @@ namespace XUnitTest.Worker
 
             // Act
             await service.StartAsync(cts.Token);
-            await Task.Delay(100);
-            await service.StopAsync(cts.Token);
-
-            // Assert
-            mockLogger.Verify(
-                x => x.Log(
-                    LogLevel.Warning,
-                    It.IsAny<EventId>(),
-                    It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("PingUrl is empty")),
-                    It.IsAny<Exception>(),
-                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-                Times.Once);
+            try
+            {
+                // Assert
+                await EventuallyAsync(() => mockLogger.Verify(
+                    x => x.Log(
+                        LogLevel.Warning,
+                        It.IsAny<EventId>(),
+                        It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("PingUrl is empty")),
+                        It.IsAny<Exception>(),
+                        It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                    Times.Once));
+            }
+            finally
+            {
+                await service.StopAsync(cts.Token);
+            }
 
             mockHttpFactory.Verify(x => x.CreateClient(It.IsAny<string>()), Times.Never);
         }
@@ -100,18 +108,22 @@ namespace XUnitTest.Worker
 
             // Act
             await service.StartAsync(cts.Token);
-            await Task.Delay(100);
-            await service.StopAsync(cts.Token);
-
-            // Assert
-            mockLogger.Verify(
-                x => x.Log(
-                    LogLevel.Warning,
-                    It.IsAny<EventId>(),
-                    It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("PingUrl is empty")),
-                    It.IsAny<Exception>(),
-                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-                Times.Once);
+            try
+            {
+                // Assert
+                await EventuallyAsync(() => mockLogger.Verify(
+                    x => x.Log(
+                        LogLevel.Warning,
+                        It.IsAny<EventId>(),
+                        It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("PingUrl is empty")),
+                        It.IsAny<Exception>(),
+                        It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                    Times.Once));
+            }
+            finally
+            {
+                await service.StopAsync(cts.Token);
+            }
         }
 
         #endregion
@@ -131,24 +143,28 @@ namespace XUnitTest.Worker
 
             // Act
             await service.StartAsync(cts.Token);
-            await Task.Delay(200); // Wait for immediate ping
-            await service.StopAsync(cts.Token);
+            try
+            {
+                // Assert
+                await EventuallyAsync(() => mockLogger.Verify(
+                    x => x.Log(
+                        LogLevel.Information,
+                        It.IsAny<EventId>(),
+                        It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("Pinging")),
+                        It.IsAny<Exception>(),
+                        It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                    Times.AtLeastOnce));
 
-            // Assert
-            mockLogger.Verify(
-                x => x.Log(
-                    LogLevel.Information,
-                    It.IsAny<EventId>(),
-                    It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("Pinging")),
-                    It.IsAny<Exception>(),
-                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-                Times.AtLeastOnce);
-
-            mockHttpHandler.Protected().Verify(
-                "SendAsync",
-                Times.AtLeastOnce(),
-                ItExpr.Is<HttpRequestMessage>(req => req.Method == HttpMethod.Get && req.RequestUri.ToString().StartsWith("http://test.com")),
-                ItExpr.IsAny<CancellationToken>());
+                mockHttpHandler.Protected().Verify(
+                    "SendAsync",
+                    Times.AtLeastOnce(),
+                    ItExpr.Is<HttpRequestMessage>(req => req.Method == HttpMethod.Get && req.RequestUri.ToString().StartsWith("http://test.com")),
+                    ItExpr.IsAny<CancellationToken>());
+            }
+            finally
+            {
+                await service.StopAsync(cts.Token);
+            }
         }
 
         [Fact]
@@ -164,18 +180,22 @@ namespace XUnitTest.Worker
 
             // Act
             await service.StartAsync(cts.Token);
-            await Task.Delay(200);
-            await service.StopAsync(cts.Token);
-
-            // Assert
-            mockLogger.Verify(
-                x => x.Log(
-                    LogLevel.Debug,
-                    It.IsAny<EventId>(),
-                    It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("Ping success")),
-                    It.IsAny<Exception>(),
-                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-                Times.AtLeastOnce);
+            try
+            {
+                // Assert
+                await EventuallyAsync(() => mockLogger.Verify(
+                    x => x.Log(
+                        LogLevel.Debug,
+                        It.IsAny<EventId>(),
+                        It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("Ping success")),
+                        It.IsAny<Exception>(),
+                        It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                    Times.AtLeastOnce));
+            }
+            finally
+            {
+                await service.StopAsync(cts.Token);
+            }
         }
 
         #endregion
@@ -199,18 +219,22 @@ namespace XUnitTest.Worker
 
             // Act
             await service.StartAsync(cts.Token);
-            await Task.Delay(200);
-            await service.StopAsync(cts.Token);
-
-            // Assert
-            mockLogger.Verify(
-                x => x.Log(
-                    LogLevel.Warning,
-                    It.IsAny<EventId>(),
-                    It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("client error")),
-                    It.IsAny<Exception>(),
-                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-                Times.AtLeastOnce);
+            try
+            {
+                // Assert
+                await EventuallyAsync(() => mockLogger.Verify(
+                    x => x.Log(
+                        LogLevel.Warning,
+                        It.IsAny<EventId>(),
+                        It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("client error")),
+                        It.IsAny<Exception>(),
+                        It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                    Times.AtLeastOnce));
+            }
+            finally
+            {
+                await service.StopAsync(cts.Token);
+            }
         }
 
         [Theory]
@@ -230,18 +254,22 @@ namespace XUnitTest.Worker
 
             // Act
             await service.StartAsync(cts.Token);
-            await Task.Delay(200);
-            await service.StopAsync(cts.Token);
-
-            // Assert
-            mockLogger.Verify(
-                x => x.Log(
-                    LogLevel.Error,
-                    It.IsAny<EventId>(),
-                    It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("server error")),
-                    It.IsAny<Exception>(),
-                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-                Times.AtLeastOnce);
+            try
+            {
+                // Assert
+                await EventuallyAsync(() => mockLogger.Verify(
+                    x => x.Log(
+                        LogLevel.Error,
+                        It.IsAny<EventId>(),
+                        It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("server error")),
+                        It.IsAny<Exception>(),
+                        It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                    Times.AtLeastOnce));
+            }
+            finally
+            {
+                await service.StopAsync(cts.Token);
+            }
         }
 
         #endregion
@@ -268,18 +296,22 @@ namespace XUnitTest.Worker
 
             // Act
             await service.StartAsync(cts.Token);
-            await Task.Delay(200);
-            await service.StopAsync(cts.Token);
-
-            // Assert
-            mockLogger.Verify(
-                x => x.Log(
-                    LogLevel.Warning,
-                    It.IsAny<EventId>(),
-                    It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("timed out")),
-                    It.IsAny<Exception>(),
-                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-                Times.AtLeastOnce);
+            try
+            {
+                // Assert
+                await EventuallyAsync(() => mockLogger.Verify(
+                    x => x.Log(
+                        LogLevel.Warning,
+                        It.IsAny<EventId>(),
+                        It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("timed out")),
+                        It.IsAny<Exception>(),
+                        It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                    Times.AtLeastOnce));
+            }
+            finally
+            {
+                await service.StopAsync(cts.Token);
+            }
         }
 
         [Fact]
@@ -302,18 +334,22 @@ namespace XUnitTest.Worker
 
             // Act
             await service.StartAsync(cts.Token);
-            await Task.Delay(200);
-            await service.StopAsync(cts.Token);
-
-            // Assert
-            mockLogger.Verify(
-                x => x.Log(
-                    LogLevel.Error,
-                    It.IsAny<EventId>(),
-                    It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("request failed")),
-                    It.IsAny<HttpRequestException>(),
-                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-                Times.AtLeastOnce);
+            try
+            {
+                // Assert
+                await EventuallyAsync(() => mockLogger.Verify(
+                    x => x.Log(
+                        LogLevel.Error,
+                        It.IsAny<EventId>(),
+                        It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("request failed")),
+                        It.IsAny<HttpRequestException>(),
+                        It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                    Times.AtLeastOnce));
+            }
+            finally
+            {
+                await service.StopAsync(cts.Token);
+            }
         }
 
         [Fact]
@@ -343,11 +379,16 @@ namespace XUnitTest.Worker
 
             // Act
             await service.StartAsync(cts.Token);
-            await Task.Delay(1500); // Wait for multiple pings
-            await service.StopAsync(cts.Token);
+            try
+            {
+                // Assert - service should continue pinging after the first call throws
+                await EventuallyAsync(() => callCount.Should().BeGreaterThan(1, "Service should continue after exception"), timeoutMs: 10000);
+            }
+            finally
+            {
+                await service.StopAsync(cts.Token);
+            }
 
-            // Assert
-            callCount.Should().BeGreaterThan(1, "Service should continue after exception");
             mockLogger.Verify(
                 x => x.Log(
                     LogLevel.Error,
@@ -399,13 +440,24 @@ namespace XUnitTest.Worker
 
             // Act
             await service.StartAsync(cts.Token);
-            await Task.Delay(300); // Only immediate ping should happen
-            await service.StopAsync(cts.Token);
+            try
+            {
+                // Wait for the immediate ping to be issued
+                await EventuallyAsync(() => mockHttpHandler.Protected().Verify(
+                    "SendAsync",
+                    Times.AtLeastOnce(),
+                    ItExpr.IsAny<HttpRequestMessage>(),
+                    ItExpr.IsAny<CancellationToken>()));
+            }
+            finally
+            {
+                await service.StopAsync(cts.Token);
+            }
 
-            // Assert - Should only do immediate ping, no periodic pings
+            // Assert - Should only do immediate ping, no periodic pings (timer disabled)
             mockHttpHandler.Protected().Verify(
                 "SendAsync",
-                Times.Once(), // Only the immediate ping
+                Times.Once(),
                 ItExpr.IsAny<HttpRequestMessage>(),
                 ItExpr.IsAny<CancellationToken>());
         }
@@ -423,8 +475,19 @@ namespace XUnitTest.Worker
 
             // Act
             await service.StartAsync(cts.Token);
-            await Task.Delay(300);
-            await service.StopAsync(cts.Token);
+            try
+            {
+                // Wait for the immediate ping to be issued
+                await EventuallyAsync(() => mockHttpHandler.Protected().Verify(
+                    "SendAsync",
+                    Times.AtLeastOnce(),
+                    ItExpr.IsAny<HttpRequestMessage>(),
+                    ItExpr.IsAny<CancellationToken>()));
+            }
+            finally
+            {
+                await service.StopAsync(cts.Token);
+            }
 
             // Assert
             mockHttpHandler.Protected().Verify(
@@ -437,6 +500,25 @@ namespace XUnitTest.Worker
         #endregion
 
         #region Helper Methods
+
+        // Polls the given assertion until it succeeds or the timeout elapses. This keeps the
+        // background-service tests deterministic without depending on a fixed sleep duration.
+        private static async Task EventuallyAsync(Action assertion, int timeoutMs = 5000, int pollMs = 25)
+        {
+            var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+            while (true)
+            {
+                try
+                {
+                    assertion();
+                    return;
+                }
+                catch (Exception) when (DateTime.UtcNow < deadline)
+                {
+                    await Task.Delay(pollMs);
+                }
+            }
+        }
 
         private static IConfiguration CreateConfiguration(bool enabled, string url, int interval)
         {
