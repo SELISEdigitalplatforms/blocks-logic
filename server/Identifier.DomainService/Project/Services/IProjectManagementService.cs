@@ -13,7 +13,7 @@ namespace DomainService.Projects
         Task<CreateProjectResponse> SaveProjectAsync(CreateProjectRequest project);
         Task ConfigureProjectAsync(Tenant project, ProjectStatusTracer? projectStatus = null);
         Task<List<GroupedProjectsDto>> GetAllAsync(GetProjectsRequest request);
-        Task<GetProjectResponse> GetAsync(string projectId);
+        Task<GetProjectResponse> GetAsync();
         Task RestoreUnfinishedProjectAsync();
         Task<RestoreProjectResponse> RestoreProjectAsync(RestoreProjectRequest restoreProjectRequest);
         Task<BaseResponse> UpdateProjectAsync(UpdateProjectRequest request);
