@@ -5,6 +5,7 @@ using DomainService.Migration.Entities;
 using DomainService.Migration.Services;
 using DomainService.Shared;
 using FluentValidation;
+using Iam.DomainService.Users;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
@@ -24,6 +25,7 @@ namespace DomainService.Migration
         private readonly ITenants _tenants;
         private readonly ICryptoService _cryptoService;
         private readonly IHttpService _httpService;
+        private readonly IUserRepository _userRepository;
         private readonly ILogger<MigrationService> _logger;
 
         public MigrationService(
@@ -36,6 +38,7 @@ namespace DomainService.Migration
             ITenants tenants,
             ICryptoService cryptoService,
             IHttpService httpService,
+            IUserRepository userRepository,
             ILogger<MigrationService> logger)
         {
             _cacheClient = cacheClient;
@@ -47,6 +50,7 @@ namespace DomainService.Migration
             _tenants = tenants;
             _cryptoService = cryptoService;
             _httpService = httpService;
+            _userRepository = userRepository;
             _logger = logger;
         }
         public async Task<MigrationOtpGenerationResponse> Migrate(MigrationRequest request)
@@ -64,12 +68,16 @@ namespace DomainService.Migration
                 _logger.LogDebug("Migration request validation succeeded for ProjectKey: {ProjectKey}", request.ProjectKey);
 
                 var bc = BlocksContext.GetContext();
-                if (bc == null || string.IsNullOrEmpty(bc.UserName))
+
+                var userDetails = await _userRepository.GetUserByIdAsync(bc.UserId);
+
+                if (userDetails == null || string.IsNullOrEmpty(userDetails.UserName))
                 {
-                    _logger.LogWarning("Invalid user context encountered during migration. ProjectKey: {ProjectKey}, ContextPresent: {ContextPresent}",
-                        request.ProjectKey, bc != null);
-                    return new MigrationOtpGenerationResponse { IsSuccess = false, Errors = new Dictionary<string, string> { { "message", "invalid_user_context" } } };
+                    _logger.LogWarning("User details not found or missing UserName during migration. ProjectKey: {ProjectKey}, UserId: {UserId}",
+                        request.ProjectKey, bc.UserId);
+                    return new MigrationOtpGenerationResponse { IsSuccess = false, Errors = new Dictionary<string, string> { { "message", "user_details_not_found" } } };
                 }
+
                 var code = GenerateSecureRandomNumber();
                 var verificationId = Guid.NewGuid().ToString();
 
@@ -77,17 +85,17 @@ namespace DomainService.Migration
 
                 await _cacheClient.AddStringValueAsync(verificationId, serializedData, 600);
                 _logger.LogInformation("Migration OTP cached successfully. VerificationId: {VerificationId}, UserName: {UserName}, ExpirySeconds: {ExpirySeconds}",
-                    verificationId, bc.UserName, 600);
+                    verificationId, userDetails.UserName, 600);
 
-                var result = await SendMfaCodeAsync(bc.UserName, code, "en-US");
+                var result = await SendMfaCodeAsync(userDetails.UserName, code, "en-US");
                 if (!result)
                 {
-                    _logger.LogError("Failed to send MFA OTP email. VerificationId: {VerificationId}, UserName: {UserName}", verificationId, bc.UserName);
+                    _logger.LogError("Failed to send MFA OTP email. VerificationId: {VerificationId}, UserName: {UserName}", verificationId, userDetails.UserName);
                 }
                 else
                 {
                     _logger.LogInformation("Migration OTP email sent successfully. VerificationId: {VerificationId}, UserName: {UserName}",
-                        verificationId, bc.UserName);
+                        verificationId, userDetails.UserName);
                 }
 
                 return new MigrationOtpGenerationResponse { VerificationId = verificationId, IsSuccess = result };
