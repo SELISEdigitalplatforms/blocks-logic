@@ -3,6 +3,7 @@ using DomainService.Shared;
 using Microsoft.AspNetCore.Mvc;
 using DomainService.Migration;
 using DomainService.Migration.Services;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Api.Controllers
 {
@@ -35,8 +36,8 @@ namespace Api.Controllers
        /// <param name="command"></param>
        /// <returns></returns>
        [HttpPost]
-      //[ProtectedEndPoint]
-       public async Task<MigrationOtpGenerationResponse> Migrate([FromBody] MigrationRequest command)
+       [Authorize]
+        public async Task<MigrationOtpGenerationResponse> Migrate([FromBody] MigrationRequest command)
        {
            return await _migrationService.Migrate(command);
        }
