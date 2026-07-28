@@ -5,6 +5,7 @@ using DomainService.Migration.Entities;
 using DomainService.Migration.Services;
 using DomainService.Shared;
 using FluentValidation;
+using Iam.DomainService.Users;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
@@ -24,6 +25,7 @@ namespace DomainService.Migration
         private readonly ITenants _tenants;
         private readonly ICryptoService _cryptoService;
         private readonly IHttpService _httpService;
+        private readonly IUserRepository _userRepository;
         private readonly ILogger<MigrationService> _logger;
 
         public MigrationService(
@@ -36,6 +38,7 @@ namespace DomainService.Migration
             ITenants tenants,
             ICryptoService cryptoService,
             IHttpService httpService,
+            IUserRepository userRepository,
             ILogger<MigrationService> logger)
         {
             _cacheClient = cacheClient;
@@ -47,29 +50,62 @@ namespace DomainService.Migration
             _tenants = tenants;
             _cryptoService = cryptoService;
             _httpService = httpService;
+            _userRepository = userRepository;
             _logger = logger;
         }
         public async Task<MigrationOtpGenerationResponse> Migrate(MigrationRequest request)
         {
-            var validationResult = await _migrationRequestValidator.ValidateAsync(request);
-            if (!validationResult.IsValid)
+            try
             {
-                return new MigrationOtpGenerationResponse { IsSuccess = false, Errors = validationResult.Errors.ToDictionary(e => e.PropertyName, e => e.ErrorMessage) };
-            }
+                var validationResult = await _migrationRequestValidator.ValidateAsync(request);
+                if (!validationResult.IsValid)
+                {
+                    var validationErrors = validationResult.Errors.ToDictionary(e => e.PropertyName, e => e.ErrorMessage);
+                    _logger.LogWarning("Migration request validation failed. ProjectKey: {ProjectKey}, Errors: {@ValidationErrors}",
+                        request?.ProjectKey, validationErrors);
+                    return new MigrationOtpGenerationResponse { IsSuccess = false, Errors = validationErrors };
+                }
+                _logger.LogDebug("Migration request validation succeeded for ProjectKey: {ProjectKey}", request.ProjectKey);
 
-            var bc = BlocksContext.GetContext();
-            if (bc == null || string.IsNullOrEmpty(bc.UserName))
+                var bc = BlocksContext.GetContext();
+
+                var userDetails = await _userRepository.GetUserByIdAsync(bc.UserId);
+
+                if (userDetails == null || string.IsNullOrEmpty(userDetails.UserName))
+                {
+                    _logger.LogWarning("User details not found or missing UserName during migration. ProjectKey: {ProjectKey}, UserId: {UserId}",
+                        request.ProjectKey, bc.UserId);
+                    return new MigrationOtpGenerationResponse { IsSuccess = false, Errors = new Dictionary<string, string> { { "message", "user_details_not_found" } } };
+                }
+
+                var code = GenerateSecureRandomNumber();
+                var verificationId = Guid.NewGuid().ToString();
+
+                var serializedData = JsonSerializer.Serialize(new { Code = code, Request = request });
+
+                await _cacheClient.AddStringValueAsync(verificationId, serializedData, 600);
+                _logger.LogInformation("Migration OTP cached successfully. VerificationId: {VerificationId}, UserName: {UserName}, ExpirySeconds: {ExpirySeconds}",
+                    verificationId, userDetails.UserName, 600);
+
+                var result = await SendMfaCodeAsync(userDetails.UserName, code, "en-US");
+                if (!result)
+                {
+                    _logger.LogError("Failed to send MFA OTP email. VerificationId: {VerificationId}, UserName: {UserName}", verificationId, userDetails.UserName);
+                }
+                else
+                {
+                    _logger.LogInformation("Migration OTP email sent successfully. VerificationId: {VerificationId}, UserName: {UserName}",
+                        verificationId, userDetails.UserName);
+                }
+
+                return new MigrationOtpGenerationResponse { VerificationId = verificationId, IsSuccess = result };
+            }
+            catch (Exception ex)
             {
-                return new MigrationOtpGenerationResponse { IsSuccess = false, Errors = new Dictionary<string, string> { { "message", "invalid_user_context" } } };
+                _logger.LogError(ex, "Unexpected error occurred during migration OTP generation. ProjectKey: {ProjectKey}, TargetedProjectKey: {TargetedProjectKey}",
+                    request?.ProjectKey, request?.TargetedProjectKey);
+                throw;
             }
-            var code = GenerateSecureRandomNumber();
-            var verificationId = Guid.NewGuid().ToString();
-
-            var serializedData = JsonSerializer.Serialize(new { Code = code, Request = request });
-
-            await _cacheClient.AddStringValueAsync(verificationId, serializedData, 600);
-            var result = await SendMfaCodeAsync(bc.UserName, code, "en-US");
-            return new MigrationOtpGenerationResponse { VerificationId = verificationId, IsSuccess = result };
         }
         public static string GenerateSecureRandomNumber()
         {
@@ -83,6 +119,7 @@ namespace DomainService.Migration
         private async Task<bool> SendMfaCodeAsync(string email, string code, string language)
         {
             // var configuration = await _configurationService.GetAsync();
+            _logger.LogDebug("Preparing MFA email. Email: {Email}, Purpose: MfaViaEmail, Language: {Language}", email, language ?? "en-US");
 
             var sendMailCommand = new SendMail
             {
@@ -99,6 +136,15 @@ namespace DomainService.Migration
             };
 
             var response = await _mailDriverService.SendAsync(sendMailCommand);
+
+            if (!response.IsSuccess)
+            {
+                _logger.LogError("MailDriver failed to send MFA email. Email: {Email}, Purpose: {Purpose}", email, sendMailCommand.Purpose);
+            }
+            else
+            {
+                _logger.LogDebug("MFA email dispatched via MailDriver successfully. Email: {Email}", email);
+            }
 
             return response.IsSuccess;
         }
@@ -170,6 +216,7 @@ namespace DomainService.Migration
                 var queueName = GetQueueNameForService(service.ServiceName);
                 if (!string.IsNullOrEmpty(queueName))
                 {
+                    Console.WriteLine($"Sending migration event for service: {service.ServiceName}, Queue: {queueName}, TrackerId: {trackerId}");
                     await SendMigrationEvent(request, service.ServiceName, queueName, trackerId);
                 }
                 // If queueName is null/empty, service migration is not yet implemented
@@ -220,7 +267,7 @@ namespace DomainService.Migration
                 MigrationServiceNames.Authentication => "", // TODO: Define queue name for Authentication service
                 MigrationServiceNames.MFA => "", // TODO: Define queue name for MFA service
                 MigrationServiceNames.CAPTCHA => "", // TODO: Define queue name for CAPTCHA service
-                MigrationServiceNames.DataGateway => IdentifierConstants.GenericMigrationQueue, 
+                MigrationServiceNames.DataGateway => IdentifierConstants.GenericMigrationQueue,
                 MigrationServiceNames.Notifications => "", // TODO: Define queue name for Notifications service
                 MigrationServiceNames.Storage => "", // TODO: Define queue name for Storage service
                 _ => "" // Unknown service
@@ -409,7 +456,7 @@ namespace DomainService.Migration
                 return;
             }
 
-            _logger.LogInformation("Found {Count} incomplete services using GenericMigrationQueue for trackerId: {TrackerId}", 
+            _logger.LogInformation("Found {Count} incomplete services using GenericMigrationQueue for trackerId: {TrackerId}",
                 incompleteGenericServices.Count, trackerId);
 
             // Migrate collections for each incomplete service
@@ -418,19 +465,19 @@ namespace DomainService.Migration
                 try
                 {
                     var requiredCollections = GetRequiredCollectionsForService(serviceName);
-                    _logger.LogInformation("Migrating {CollectionCount} collections for service {ServiceName}", 
+                    _logger.LogInformation("Migrating {CollectionCount} collections for service {ServiceName}",
                         requiredCollections.Count, serviceName);
 
-                    await MigrateServiceCollections(projectKey, targetedProjectKey, shouldOverwriteExistingData, 
+                    await MigrateServiceCollections(projectKey, targetedProjectKey, shouldOverwriteExistingData,
                         serviceName, requiredCollections, trackerId);
 
                     _logger.LogInformation("Successfully migrated collections for service {ServiceName}", serviceName);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error migrating collections for service {ServiceName} in trackerId: {TrackerId}", 
+                    _logger.LogError(ex, "Error migrating collections for service {ServiceName} in trackerId: {TrackerId}",
                         serviceName, trackerId);
-                    
+
                     // Send completion event for failed migration
                     await SendMigrationCompletionEvent(trackerId, serviceName, false, ex.Message);
                 }
@@ -483,9 +530,9 @@ namespace DomainService.Migration
                 {
                     "DataServiceConfigurations",
                     "SchemaDefinitions",
-					"DataAccessPolicys",
+                    "DataAccessPolicys",
                     "DataValidations"
-				},
+                },
                 MigrationServiceNames.Email => new List<string>
                 {
                     "EmailTemplates"
@@ -526,19 +573,19 @@ namespace DomainService.Migration
             };
         }
 
-        private async Task MigrateServiceCollections(string projectKey, string targetedProjectKey, 
-            bool shouldOverwriteExistingData, MigrationServiceNames serviceName, 
+        private async Task MigrateServiceCollections(string projectKey, string targetedProjectKey,
+            bool shouldOverwriteExistingData, MigrationServiceNames serviceName,
             List<string> requiredCollections, string trackerId)
         {
             try
             {
-                _logger.LogInformation("Starting migration of {CollectionCount} collections for service {ServiceName} from {ProjectKey} to {TargetedProjectKey}", 
+                _logger.LogInformation("Starting migration of {CollectionCount} collections for service {ServiceName} from {ProjectKey} to {TargetedProjectKey}",
                     requiredCollections.Count, serviceName, projectKey, targetedProjectKey);
 
                 foreach (var collectionName in requiredCollections)
                 {
                     await MigrateCollection(projectKey, targetedProjectKey, collectionName, shouldOverwriteExistingData);
-                    _logger.LogDebug("Successfully migrated collection {CollectionName} for service {ServiceName}", 
+                    _logger.LogDebug("Successfully migrated collection {CollectionName} for service {ServiceName}",
                         collectionName, serviceName);
                 }
 
@@ -555,23 +602,23 @@ namespace DomainService.Migration
             }
         }
 
-        private async Task MigrateCollection(string sourceProjectKey, string targetProjectKey, 
+        private async Task MigrateCollection(string sourceProjectKey, string targetProjectKey,
             string collectionName, bool shouldOverwriteExistingData)
         {
             try
             {
-                _logger.LogDebug("Migrating collection {CollectionName} from {SourceProject} to {TargetProject}", 
+                _logger.LogDebug("Migrating collection {CollectionName} from {SourceProject} to {TargetProject}",
                     collectionName, sourceProjectKey, targetProjectKey);
 
-                var (totalDocuments, migratedDocuments) = await _migrationRepository.MigrateCollectionAsync(sourceProjectKey, targetProjectKey, 
+                var (totalDocuments, migratedDocuments) = await _migrationRepository.MigrateCollectionAsync(sourceProjectKey, targetProjectKey,
                     collectionName, shouldOverwriteExistingData);
 
-                _logger.LogInformation("Collection {CollectionName} migration completed: migrated {MigratedCount} out of {TotalCount} documents", 
+                _logger.LogInformation("Collection {CollectionName} migration completed: migrated {MigratedCount} out of {TotalCount} documents",
                     collectionName, migratedDocuments, totalDocuments);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to migrate collection {CollectionName} from {SourceProject} to {TargetProject}", 
+                _logger.LogError(ex, "Failed to migrate collection {CollectionName} from {SourceProject} to {TargetProject}",
                     collectionName, sourceProjectKey, targetProjectKey);
                 throw;
             }
@@ -599,7 +646,7 @@ namespace DomainService.Migration
             _logger.LogInformation("Migration completion event sent for service {ServiceName}, TrackerId: {TrackerId}, Success: {IsSuccess}",
                 serviceName, trackerId, isSuccess);
         }
-        
+
         public async Task<bool> DataCleanupAsync(DataCleanupRequest request)
         {
             if (request == null || string.IsNullOrWhiteSpace(request.ProjectKey))
