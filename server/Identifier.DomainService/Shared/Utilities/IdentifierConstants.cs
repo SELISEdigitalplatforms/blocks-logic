@@ -22,7 +22,7 @@ namespace DomainService.Shared
 
         public const string IdentifierQueueName = "blocks_identifier_listener";
         public const string DataCleanupQueue = "blocks_data_cleanup_listener";
-        public const string LanguageDataMigrationQueue = "blocks_uilm_environment_data_migration_listener";
+        public const string LanguageDataMigrationQueue = "blocks_localization_environment_data_migration_listener";
         public const string IamQueue = "blocks_iam_listener";
         public const string MailQueue = "blocks_mail_listener";
         public const string GenericMigrationQueue = "blocks_generic_migration_listener";
