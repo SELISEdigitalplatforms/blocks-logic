@@ -216,6 +216,7 @@ namespace DomainService.Migration
                 var queueName = GetQueueNameForService(service.ServiceName);
                 if (!string.IsNullOrEmpty(queueName))
                 {
+                    Console.WriteLine($"Sending migration event for service: {service.ServiceName}, Queue: {queueName}, TrackerId: {trackerId}");
                     await SendMigrationEvent(request, service.ServiceName, queueName, trackerId);
                 }
                 // If queueName is null/empty, service migration is not yet implemented
@@ -266,7 +267,7 @@ namespace DomainService.Migration
                 MigrationServiceNames.Authentication => "", // TODO: Define queue name for Authentication service
                 MigrationServiceNames.MFA => "", // TODO: Define queue name for MFA service
                 MigrationServiceNames.CAPTCHA => "", // TODO: Define queue name for CAPTCHA service
-                MigrationServiceNames.DataGateway => IdentifierConstants.GenericMigrationQueue, 
+                MigrationServiceNames.DataGateway => IdentifierConstants.GenericMigrationQueue,
                 MigrationServiceNames.Notifications => "", // TODO: Define queue name for Notifications service
                 MigrationServiceNames.Storage => "", // TODO: Define queue name for Storage service
                 _ => "" // Unknown service
@@ -455,7 +456,7 @@ namespace DomainService.Migration
                 return;
             }
 
-            _logger.LogInformation("Found {Count} incomplete services using GenericMigrationQueue for trackerId: {TrackerId}", 
+            _logger.LogInformation("Found {Count} incomplete services using GenericMigrationQueue for trackerId: {TrackerId}",
                 incompleteGenericServices.Count, trackerId);
 
             // Migrate collections for each incomplete service
@@ -464,19 +465,19 @@ namespace DomainService.Migration
                 try
                 {
                     var requiredCollections = GetRequiredCollectionsForService(serviceName);
-                    _logger.LogInformation("Migrating {CollectionCount} collections for service {ServiceName}", 
+                    _logger.LogInformation("Migrating {CollectionCount} collections for service {ServiceName}",
                         requiredCollections.Count, serviceName);
 
-                    await MigrateServiceCollections(projectKey, targetedProjectKey, shouldOverwriteExistingData, 
+                    await MigrateServiceCollections(projectKey, targetedProjectKey, shouldOverwriteExistingData,
                         serviceName, requiredCollections, trackerId);
 
                     _logger.LogInformation("Successfully migrated collections for service {ServiceName}", serviceName);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error migrating collections for service {ServiceName} in trackerId: {TrackerId}", 
+                    _logger.LogError(ex, "Error migrating collections for service {ServiceName} in trackerId: {TrackerId}",
                         serviceName, trackerId);
-                    
+
                     // Send completion event for failed migration
                     await SendMigrationCompletionEvent(trackerId, serviceName, false, ex.Message);
                 }
@@ -529,9 +530,9 @@ namespace DomainService.Migration
                 {
                     "DataServiceConfigurations",
                     "SchemaDefinitions",
-					"DataAccessPolicys",
+                    "DataAccessPolicys",
                     "DataValidations"
-				},
+                },
                 MigrationServiceNames.Email => new List<string>
                 {
                     "EmailTemplates"
@@ -572,19 +573,19 @@ namespace DomainService.Migration
             };
         }
 
-        private async Task MigrateServiceCollections(string projectKey, string targetedProjectKey, 
-            bool shouldOverwriteExistingData, MigrationServiceNames serviceName, 
+        private async Task MigrateServiceCollections(string projectKey, string targetedProjectKey,
+            bool shouldOverwriteExistingData, MigrationServiceNames serviceName,
             List<string> requiredCollections, string trackerId)
         {
             try
             {
-                _logger.LogInformation("Starting migration of {CollectionCount} collections for service {ServiceName} from {ProjectKey} to {TargetedProjectKey}", 
+                _logger.LogInformation("Starting migration of {CollectionCount} collections for service {ServiceName} from {ProjectKey} to {TargetedProjectKey}",
                     requiredCollections.Count, serviceName, projectKey, targetedProjectKey);
 
                 foreach (var collectionName in requiredCollections)
                 {
                     await MigrateCollection(projectKey, targetedProjectKey, collectionName, shouldOverwriteExistingData);
-                    _logger.LogDebug("Successfully migrated collection {CollectionName} for service {ServiceName}", 
+                    _logger.LogDebug("Successfully migrated collection {CollectionName} for service {ServiceName}",
                         collectionName, serviceName);
                 }
 
@@ -601,23 +602,23 @@ namespace DomainService.Migration
             }
         }
 
-        private async Task MigrateCollection(string sourceProjectKey, string targetProjectKey, 
+        private async Task MigrateCollection(string sourceProjectKey, string targetProjectKey,
             string collectionName, bool shouldOverwriteExistingData)
         {
             try
             {
-                _logger.LogDebug("Migrating collection {CollectionName} from {SourceProject} to {TargetProject}", 
+                _logger.LogDebug("Migrating collection {CollectionName} from {SourceProject} to {TargetProject}",
                     collectionName, sourceProjectKey, targetProjectKey);
 
-                var (totalDocuments, migratedDocuments) = await _migrationRepository.MigrateCollectionAsync(sourceProjectKey, targetProjectKey, 
+                var (totalDocuments, migratedDocuments) = await _migrationRepository.MigrateCollectionAsync(sourceProjectKey, targetProjectKey,
                     collectionName, shouldOverwriteExistingData);
 
-                _logger.LogInformation("Collection {CollectionName} migration completed: migrated {MigratedCount} out of {TotalCount} documents", 
+                _logger.LogInformation("Collection {CollectionName} migration completed: migrated {MigratedCount} out of {TotalCount} documents",
                     collectionName, migratedDocuments, totalDocuments);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to migrate collection {CollectionName} from {SourceProject} to {TargetProject}", 
+                _logger.LogError(ex, "Failed to migrate collection {CollectionName} from {SourceProject} to {TargetProject}",
                     collectionName, sourceProjectKey, targetProjectKey);
                 throw;
             }
@@ -645,7 +646,7 @@ namespace DomainService.Migration
             _logger.LogInformation("Migration completion event sent for service {ServiceName}, TrackerId: {TrackerId}, Success: {IsSuccess}",
                 serviceName, trackerId, isSuccess);
         }
-        
+
         public async Task<bool> DataCleanupAsync(DataCleanupRequest request)
         {
             if (request == null || string.IsNullOrWhiteSpace(request.ProjectKey))
