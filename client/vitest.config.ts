@@ -77,6 +77,7 @@ export default defineConfig({
       ),
     },
     coverage: {
+      reporter: ["text", "lcov"],
       all: true,
       provider: "v8",
       reporter: ["text", "json-summary", "json", "clover"],
