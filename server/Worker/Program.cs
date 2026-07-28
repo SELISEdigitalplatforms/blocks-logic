@@ -1,28 +1,41 @@
 using Blocks.Genesis;
-using DomainService.Dtos;
-using DomainService.Migration;
-using DomainService.Projects;
-using DomainService.Shared;
-using DomainService.Shared.Dtos;
-using DomainService.Shared.Entities;
-using DomainService.Utilities;
-using DomainService.Worker;
-using Iam.DomainService.Accounts;
-using Iam.DomainService.Dtos;
-using Iam.DomainService.Shared.Dtos;
-using Iam.DomainService.Users;
-using Mfa.DomainService.Configuration;
-using Worker;
-using Worker.Configuration;
-using Worker.Consumers;
-using Worker.Consumers.Identifier;
-using Worker.Consumers.Users;
-using DomainService.Workflow.Utils;
+using Dtos = DomainService.Dtos;
+//using DomainService.Dtos;
+//using DomainService.Migration;
+//using DomainService.Projects;
+//using DomainService.Shared;
+//using DomainService.Shared.Dtos;
+//using DomainService.Shared.Entities;
+//using DomainService.Utilities;
+//using DomainService.Worker;
 using DomainService.Workflow;
 using DomainService.Workflow.Events;
 using DomainService.Workflow.Nodes.TriggerDataV1;
-using Worker.Consumers.Workflow;
+using DomainService.Workflow.Utils;
+using DomainService.Shared;
+using Iam.DomainService.Utilities;
+using Mail.DomainService.Dtos;
+using Mail.DomainService.Mails;
+using Mail.DomainService.Shared.Utilities;
 using SeliseBlocks.ConfigurationDriver;
+using Worker;
+using Worker.Configuration;
+using Worker.Consumers.Workflow;
+using Worker.Consumers;
+using Iam.DomainService.Dtos;
+using DomainService.Dtos;
+using DomainService.Worker;
+using Mfa.DomainService.Configuration;
+using Iam.DomainService.Accounts;
+using Iam.DomainService.Users;
+using Iam.DomainService.Shared.Dtos;
+using Worker.Consumers.Users;
+using DomainService.Utilities;
+using Worker.Consumers.Identifier;
+using DomainService.Shared.Entities;
+using DomainService.Projects;
+using DomainService.Migration;
+using DomainService.Shared.Dtos;
 
 const string _serviceName = "blocks-logic-worker";
 var vaultType = ApplicationConfigurations.ResolveVaultType();
@@ -68,14 +81,14 @@ IHostBuilder CreateHostBuilder(string[] args) =>
 
 
 
-            #region Identifier Service Consumers
+ 
             services.AddApplicationServices();
             services.AddSingleton<IConsumer<Tenant>, ConfigureProjectConsumer>();
             services.AddSingleton<IConsumer<DisableDomainBindingRequest>, DisableDomainBindingConsumer>();
             services.AddSingleton<IConsumer<RestoreProjectRequest>, RestoreProjectConsumer>();
             services.AddSingleton<IConsumer<CreateUserByEmailPostEvent_Identifier>, CreateUserByEmailPostConsumer>();
             services.AddSingleton<IConsumer<ConfigureDomainRequest>, DomainConfigureConsumer>();
-            services.AddSingleton<IConsumer<MigrationCompletionEvent>, MigrationCompletionConsumer>();
+            //services.AddSingleton<IConsumer<MigrationCompletionEvent>, MigrationCompletionConsumer>();
             services.AddSingleton<IConsumer<EnvironmentDataMigrationEvent>, EnvironmentDataMigrationEventConsumer>();
             services.AddSingleton<IConsumer<PublishScheduleCommand>, DataCleanupConsumer>();
             services.AddSingleton<IConsumer<UpdateResourceUsageCommand_Identifier>, UpdateResourceUsageConsumer>();
@@ -84,10 +97,12 @@ IHostBuilder CreateHostBuilder(string[] args) =>
 
             services.AddWorkflowExecutionEngine();
             services.AddSingleton<IConsumer<AddExcuationNodeEvent>, AddExcuationNodeConsumer>();
-            services.AddSingleton<IConsumer<EmailTriggerEvent>, EmailTriggerConsumer>();
+           // services.AddSingleton<IConsumer<EmailTriggerEvent>, EmailTriggerConsumer>();
             services.AddSingleton<IConsumer<DataChangeEvent>, DataTriggerConsumer>();
+            services.AddSingleton<IConsumer<Dtos.MigrationCompletionEvent>, MigrationCompletionConsumer>();
+             services.AddApplicationServices();
+             services.RegisterSharedServices();
 
-            ApplicationConfigurations.ConfigureWorker(services, LogicConstants.GetMessageConfiguration(secret.MessageConnectionString));
-            //ApplicationConfigurations.ConfigureWorker(services, IdentifierConstants.GetMessageConfiguration(secret.MessageConnectionString));
-            #endregion
+             ApplicationConfigurations.ConfigureWorker(services, LogicConstants.GetMessageConfiguration(secret.MessageConnectionString));
         });
+

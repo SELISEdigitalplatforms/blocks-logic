@@ -1,12 +1,9 @@
-﻿using Blocks.Genesis;
+using Blocks.Genesis;
 using DomainService.Dtos;
 using DomainService.Migration;
 using DomainService.Migration.Services;
-using System;
-using System.Collections.Generic;
-using System.Text;
 
-namespace Worker.Consumers.Identifier
+namespace Worker.Consumers
 {
     public class MigrationCompletionConsumer : IConsumer<MigrationCompletionEvent>
     {
@@ -91,7 +88,7 @@ namespace Worker.Consumers.Identifier
                     "Error processing migration completion for TrackerId: {TrackerId}, Service: {ServiceName}",
                     migrationCompletion.TrackerId,
                     migrationCompletion.ServiceName);
-
+                
                 // Re-throw to allow message queue retry logic to handle
                 throw;
             }
