@@ -21,6 +21,7 @@ using Worker;
 using Worker.Configuration;
 using Worker.Consumers.Mail;
 using Worker.Consumers.Workflow;
+using Worker.Consumers;
 
 const string _serviceName = "blocks-logic-worker";
 var vaultType = ApplicationConfigurations.ResolveVaultType();
@@ -61,9 +62,8 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             services.AddSingleton<IConsumer<AddExcuationNodeEvent>, AddExcuationNodeConsumer>();
             //services.AddSingleton<IConsumer<EmailTriggerEvent>, EmailTriggerConsumer>();
             services.AddSingleton<IConsumer<DataChangeEvent>, DataTriggerConsumer>();
-
+            services.AddSingleton<IConsumer<Dtos.MigrationCompletionEvent>, MigrationCompletionConsumer>();
             services.AddApplicationServices();
-            services.AddSingleton<IConsumer<Dtos.MigrationCompletionEvent>, Worker.Consumers.MigrationCompletionConsumer>();
 
             ApplicationConfigurations.ConfigureWorker(services, LogicConstants.GetMessageConfiguration(secret.MessageConnectionString));
         });
