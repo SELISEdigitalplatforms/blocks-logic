@@ -13,6 +13,7 @@ using DomainService.Workflow.Events;
 using DomainService.Workflow.Nodes.TriggerDataV1;
 using DomainService.Workflow.Utils;
 using DomainService.Shared;
+using Iam.DomainService.Utilities;
 using Mail.DomainService.Dtos;
 using Mail.DomainService.Mails;
 using Mail.DomainService.Shared.Utilities;
@@ -63,7 +64,8 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             //services.AddSingleton<IConsumer<EmailTriggerEvent>, EmailTriggerConsumer>();
             services.AddSingleton<IConsumer<DataChangeEvent>, DataTriggerConsumer>();
             services.AddSingleton<IConsumer<Dtos.MigrationCompletionEvent>, MigrationCompletionConsumer>();
-            services.AddApplicationServices();
+             services.AddApplicationServices();
+             services.RegisterSharedServices();
 
-            ApplicationConfigurations.ConfigureWorker(services, LogicConstants.GetMessageConfiguration(secret.MessageConnectionString));
+             ApplicationConfigurations.ConfigureWorker(services, LogicConstants.GetMessageConfiguration(secret.MessageConnectionString));
         });
