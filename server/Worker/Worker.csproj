@@ -15,5 +15,6 @@
     <ProjectReference Include="..\Identifier.DomainService\Identifier.DomainService.csproj" />
     <ProjectReference Include="..\Mfa.DomainService\Mfa.DomainService.csproj" />
     <ProjectReference Include="..\DomainService\DomainService.csproj" />
+    <ProjectReference Include="..\Identifier.DomainService\Identifier.DomainService.csproj" />
   </ItemGroup>
 </Project>

@@ -1,26 +1,25 @@
 using Blocks.Genesis;
-using DomainService.Dtos;
-using DomainService.Migration;
-using DomainService.Projects;
-using DomainService.Shared;
-using DomainService.Shared.Dtos;
-using DomainService.Shared.Entities;
-using DomainService.Utilities;
-using DomainService.Worker;
-using Iam.DomainService.Accounts;
-using Iam.DomainService.Dtos;
-using Iam.DomainService.Shared.Dtos;
-using Iam.DomainService.Users;
-using Mfa.DomainService.Configuration;
-using Worker;
-using Worker.Configuration;
-using Worker.Consumers;
-using Worker.Consumers.Identifier;
-using Worker.Consumers.Users;
-using DomainService.Workflow.Utils;
+using Dtos = DomainService.Dtos;
+//using DomainService.Dtos;
+//using DomainService.Migration;
+//using DomainService.Projects;
+//using DomainService.Shared;
+//using DomainService.Shared.Dtos;
+//using DomainService.Shared.Entities;
+//using DomainService.Utilities;
+//using DomainService.Worker;
 using DomainService.Workflow;
 using DomainService.Workflow.Events;
 using DomainService.Workflow.Nodes.TriggerDataV1;
+using DomainService.Workflow.Utils;
+using DomainService.Shared;
+using Mail.DomainService.Dtos;
+using Mail.DomainService.Mails;
+using Mail.DomainService.Shared.Utilities;
+using SeliseBlocks.ConfigurationDriver;
+using Worker;
+using Worker.Configuration;
+using Worker.Consumers.Mail;
 using Worker.Consumers.Workflow;
 using SeliseBlocks.ConfigurationDriver;
 
@@ -86,6 +85,9 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             services.AddSingleton<IConsumer<AddExcuationNodeEvent>, AddExcuationNodeConsumer>();
             services.AddSingleton<IConsumer<EmailTriggerEvent>, EmailTriggerConsumer>();
             services.AddSingleton<IConsumer<DataChangeEvent>, DataTriggerConsumer>();
+
+            services.AddApplicationServices();
+            services.AddSingleton<IConsumer<Dtos.MigrationCompletionEvent>, Worker.Consumers.MigrationCompletionConsumer>();
 
             ApplicationConfigurations.ConfigureWorker(services, LogicConstants.GetMessageConfiguration(secret.MessageConnectionString));
             //ApplicationConfigurations.ConfigureWorker(services, IdentifierConstants.GetMessageConfiguration(secret.MessageConnectionString));
