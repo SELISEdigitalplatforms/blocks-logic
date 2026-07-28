@@ -1,4 +1,5 @@
 using Blocks.Genesis;
+using Dtos = DomainService.Dtos;
 //using DomainService.Dtos;
 //using DomainService.Migration;
 //using DomainService.Projects;
@@ -11,6 +12,7 @@ using DomainService.Workflow;
 using DomainService.Workflow.Events;
 using DomainService.Workflow.Nodes.TriggerDataV1;
 using DomainService.Workflow.Utils;
+using DomainService.Shared;
 using Mail.DomainService.Dtos;
 using Mail.DomainService.Mails;
 using Mail.DomainService.Shared.Utilities;
@@ -59,6 +61,9 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             services.AddSingleton<IConsumer<AddExcuationNodeEvent>, AddExcuationNodeConsumer>();
             //services.AddSingleton<IConsumer<EmailTriggerEvent>, EmailTriggerConsumer>();
             services.AddSingleton<IConsumer<DataChangeEvent>, DataTriggerConsumer>();
+
+            services.AddApplicationServices();
+            services.AddSingleton<IConsumer<Dtos.MigrationCompletionEvent>, Worker.Consumers.MigrationCompletionConsumer>();
 
             ApplicationConfigurations.ConfigureWorker(services, LogicConstants.GetMessageConfiguration(secret.MessageConnectionString));
         });
