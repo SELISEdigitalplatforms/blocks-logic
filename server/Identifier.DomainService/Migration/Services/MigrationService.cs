@@ -51,25 +51,53 @@ namespace DomainService.Migration
         }
         public async Task<MigrationOtpGenerationResponse> Migrate(MigrationRequest request)
         {
-            var validationResult = await _migrationRequestValidator.ValidateAsync(request);
-            if (!validationResult.IsValid)
+            try
             {
-                return new MigrationOtpGenerationResponse { IsSuccess = false, Errors = validationResult.Errors.ToDictionary(e => e.PropertyName, e => e.ErrorMessage) };
-            }
+                var validationResult = await _migrationRequestValidator.ValidateAsync(request);
+                if (!validationResult.IsValid)
+                {
+                    var validationErrors = validationResult.Errors.ToDictionary(e => e.PropertyName, e => e.ErrorMessage);
+                    _logger.LogWarning("Migration request validation failed. ProjectKey: {ProjectKey}, Errors: {@ValidationErrors}",
+                        request?.ProjectKey, validationErrors);
+                    return new MigrationOtpGenerationResponse { IsSuccess = false, Errors = validationErrors };
+                }
+                _logger.LogDebug("Migration request validation succeeded for ProjectKey: {ProjectKey}", request.ProjectKey);
 
-            var bc = BlocksContext.GetContext();
-            if (bc == null || string.IsNullOrEmpty(bc.UserName))
+                var bc = BlocksContext.GetContext();
+                if (bc == null || string.IsNullOrEmpty(bc.UserName))
+                {
+                    _logger.LogWarning("Invalid user context encountered during migration. ProjectKey: {ProjectKey}, ContextPresent: {ContextPresent}",
+                        request.ProjectKey, bc != null);
+                    return new MigrationOtpGenerationResponse { IsSuccess = false, Errors = new Dictionary<string, string> { { "message", "invalid_user_context" } } };
+                }
+                var code = GenerateSecureRandomNumber();
+                var verificationId = Guid.NewGuid().ToString();
+
+                var serializedData = JsonSerializer.Serialize(new { Code = code, Request = request });
+
+                await _cacheClient.AddStringValueAsync(verificationId, serializedData, 600);
+                _logger.LogInformation("Migration OTP cached successfully. VerificationId: {VerificationId}, UserName: {UserName}, ExpirySeconds: {ExpirySeconds}",
+                    verificationId, bc.UserName, 600);
+
+                var result = await SendMfaCodeAsync(bc.UserName, code, "en-US");
+                if (!result)
+                {
+                    _logger.LogError("Failed to send MFA OTP email. VerificationId: {VerificationId}, UserName: {UserName}", verificationId, bc.UserName);
+                }
+                else
+                {
+                    _logger.LogInformation("Migration OTP email sent successfully. VerificationId: {VerificationId}, UserName: {UserName}",
+                        verificationId, bc.UserName);
+                }
+
+                return new MigrationOtpGenerationResponse { VerificationId = verificationId, IsSuccess = result };
+            }
+            catch (Exception ex)
             {
-                return new MigrationOtpGenerationResponse { IsSuccess = false, Errors = new Dictionary<string, string> { { "message", "invalid_user_context" } } };
+                _logger.LogError(ex, "Unexpected error occurred during migration OTP generation. ProjectKey: {ProjectKey}, TargetedProjectKey: {TargetedProjectKey}",
+                    request?.ProjectKey, request?.TargetedProjectKey);
+                throw;
             }
-            var code = GenerateSecureRandomNumber();
-            var verificationId = Guid.NewGuid().ToString();
-
-            var serializedData = JsonSerializer.Serialize(new { Code = code, Request = request });
-
-            await _cacheClient.AddStringValueAsync(verificationId, serializedData, 600);
-            var result = await SendMfaCodeAsync(bc.UserName, code, "en-US");
-            return new MigrationOtpGenerationResponse { VerificationId = verificationId, IsSuccess = result };
         }
         public static string GenerateSecureRandomNumber()
         {
@@ -83,6 +111,7 @@ namespace DomainService.Migration
         private async Task<bool> SendMfaCodeAsync(string email, string code, string language)
         {
             // var configuration = await _configurationService.GetAsync();
+            _logger.LogDebug("Preparing MFA email. Email: {Email}, Purpose: MfaViaEmail, Language: {Language}", email, language ?? "en-US");
 
             var sendMailCommand = new SendMail
             {
@@ -99,6 +128,15 @@ namespace DomainService.Migration
             };
 
             var response = await _mailDriverService.SendAsync(sendMailCommand);
+
+            if (!response.IsSuccess)
+            {
+                _logger.LogError("MailDriver failed to send MFA email. Email: {Email}, Purpose: {Purpose}", email, sendMailCommand.Purpose);
+            }
+            else
+            {
+                _logger.LogDebug("MFA email dispatched via MailDriver successfully. Email: {Email}", email);
+            }
 
             return response.IsSuccess;
         }
