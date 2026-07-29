@@ -13,6 +13,7 @@ using DomainService.Workflow.Nodes.TriggerDataV1;
 using MongoDB.Bson;
 using System.Diagnostics.CodeAnalysis;
 using DotLiquid.Util;
+using Microsoft.AspNetCore.Http;
 
 
 
@@ -30,6 +31,8 @@ namespace DomainService.Workflow.Services
         private readonly ILogger<WorkflowExecutionService> _logger;
         private readonly IWorkflowEngineService _workflowEngineService;
         private readonly IWorkflowNotificationService _workflowNotificationService;
+        private readonly IWorkflowAuthService _workflowAuthService;
+        private readonly IHttpContextAccessor _httpContextAccessor;
 
         public WorkflowExecutionService(
             IWorkflowRepository workflowRepository,
@@ -38,7 +41,9 @@ namespace DomainService.Workflow.Services
             ILogger<WorkflowExecutionService> logger,
             IWorkflowEngineService workflowEngineService,
             IWorkflowVersionRepository workflowVersionRepository,
-            IWorkflowNotificationService workflowNotificationService
+            IWorkflowNotificationService workflowNotificationService,
+            IWorkflowAuthService workflowAuthService,
+            IHttpContextAccessor httpContextAccessor
             )
         {
             _workflowRepository = workflowRepository;
@@ -48,6 +53,8 @@ namespace DomainService.Workflow.Services
             _logger = logger;
             _workflowVersionRepository = workflowVersionRepository;
             _workflowNotificationService = workflowNotificationService;
+            _workflowAuthService = workflowAuthService;
+            _httpContextAccessor = httpContextAccessor;
         }
 
         private async Task NotifyWorkflowStartedAsync(WorkflowExecutionEntity execution)
@@ -177,7 +184,8 @@ namespace DomainService.Workflow.Services
                 if (authType != null && authType.ToString().ToLower() == "blocksAccessToken".ToLower())
                 {
                     var blocksContext = BlocksContext.GetContext();
-                    if (!blocksContext.IsAuthenticated) throw new UnauthorizedAccessException();
+                    var isAuthenticatedUser = await _workflowAuthService.IsAuthenticated(_httpContextAccessor.HttpContext.Request, BlocksContext.GetContext()?.TenantId ?? "");
+                    if (!isAuthenticatedUser) throw new UnauthorizedAccessException();
 
                 }
 
