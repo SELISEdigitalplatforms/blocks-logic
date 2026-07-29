@@ -29,8 +29,8 @@ import {
 } from "./utils";
 import { isErrorWithErrors } from "@/lib/error";
 import { useCreateWorkflow } from "@blocks-workflow/hooks/use-workflow-api";
-import { useNavigate } from "react-router-dom";
-import { useScopedPath } from "@seliseblocks/blocks-kit";
+import { useNavigate } from "react-router";
+import { useScopedPath } from "@seliseblocks/genesis-os";
 
 export const AddWorkflow = () => {
   const [open, onOpenChange] = useState(false);

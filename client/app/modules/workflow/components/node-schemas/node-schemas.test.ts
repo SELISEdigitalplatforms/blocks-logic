@@ -37,7 +37,7 @@ vi.mock("@blocks-workflow/services/iam.service", () => ({
   authClientService: { clients: { getClientCredentials } },
 }));
 
-import { useProjectStore } from "@seliseblocks/blocks-kit";
+import { useProjectStore } from "@seliseblocks/genesis-os";
 import { NodeSchemasDefinition } from "./node-schemas";
 import { NodeSchemaTriggerWebhookV1 } from "./node-schema-trigger-webhook-v1";
 import { NodeSchemaTriggerEmailV1 } from "./node-schema-trigger-email-v1";

@@ -9,7 +9,7 @@ import {
 import { WorkflowEditorEdgeTypes } from "../workflow-editor-edges";
 import { NodeInspector } from "../node-inspector";
 import { EditorFitConfig, WorkflowEditorControls } from "../workflow-editor-controls";
-import { useParams } from "react-router-dom";
+import { useParams } from "react-router";
 import { Button } from "@/components/ui-kits/button/button";
 import { ChevronDown } from "lucide-react";
 import { WorkflowVersionActionDropdown } from "./workflow-version-action-dropdown";

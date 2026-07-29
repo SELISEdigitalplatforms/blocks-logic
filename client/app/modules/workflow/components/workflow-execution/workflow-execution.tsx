@@ -9,7 +9,7 @@ import { WorkflowExecutionEditor } from "./workflow-execution-editor";
 
 import { ReactFlowProvider } from "@xyflow/react";
 import { WorkflowStoreProvider } from "../../store";
-import { useParams } from "react-router-dom";
+import { useParams } from "react-router";
 
 export const WorkflowExecutions = () => {
   const { id: workflowId } = useParams<{ id: string }>();
