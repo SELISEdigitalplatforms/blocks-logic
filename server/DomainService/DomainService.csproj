@@ -13,7 +13,7 @@
 	<PackageReference Include="PdfSharp" />
 	<PackageReference Include="PuppeteerSharp" />
 	<PackageReference Include="SeliseBlocks.Genesis.OS" />
-	<PackageReference Include="SeliseBlocks.StorageDriver" />
+	<PackageReference Include="SeliseBlocks.StorageDriver.OS" />
 	<PackageReference Include="Shark.PdfConvert" />
 	<!--<PackageReference Include="SeliseBlocks.MailDriver" />-->
 	<ProjectReference Include="..\Mail.DomainService\Mail.DomainService.csproj" />

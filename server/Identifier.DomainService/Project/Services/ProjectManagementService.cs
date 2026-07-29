@@ -216,8 +216,7 @@ namespace DomainService.Projects
                 Name = fileName,
                 Tags = "[\"File\"]",
                 ParentDirectoryId = string.Empty,
-                AccessModifier = "Public",
-                ProjectKey = BlocksContext.GetContext()?.TenantId
+                AccessModifier = "Public"
             };
 
             var presignedUrlResponse = await _storageDriverService.GetPerSignedUrlForUploadAsync(preSignedUriRequest);
