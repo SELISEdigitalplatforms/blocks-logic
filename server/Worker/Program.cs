@@ -1,4 +1,5 @@
 using Blocks.Genesis;
+using Dtos = DomainService.Dtos;
 //using DomainService.Dtos;
 //using DomainService.Migration;
 //using DomainService.Projects;
@@ -11,6 +12,8 @@ using DomainService.Workflow;
 using DomainService.Workflow.Events;
 using DomainService.Workflow.Nodes.TriggerDataV1;
 using DomainService.Workflow.Utils;
+using DomainService.Shared;
+using Iam.DomainService.Utilities;
 using Mail.DomainService.Dtos;
 using Mail.DomainService.Mails;
 using Mail.DomainService.Shared.Utilities;
@@ -19,6 +22,7 @@ using Worker;
 using Worker.Configuration;
 using Worker.Consumers.Mail;
 using Worker.Consumers.Workflow;
+using Worker.Consumers;
 
 const string _serviceName = "blocks-logic-worker";
 var vaultType = ApplicationConfigurations.ResolveVaultType();
@@ -59,6 +63,9 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             services.AddSingleton<IConsumer<AddExcuationNodeEvent>, AddExcuationNodeConsumer>();
             //services.AddSingleton<IConsumer<EmailTriggerEvent>, EmailTriggerConsumer>();
             services.AddSingleton<IConsumer<DataChangeEvent>, DataTriggerConsumer>();
+            services.AddSingleton<IConsumer<Dtos.MigrationCompletionEvent>, MigrationCompletionConsumer>();
+             services.AddApplicationServices();
+             services.RegisterSharedServices();
 
-            ApplicationConfigurations.ConfigureWorker(services, LogicConstants.GetMessageConfiguration(secret.MessageConnectionString));
+             ApplicationConfigurations.ConfigureWorker(services, LogicConstants.GetMessageConfiguration(secret.MessageConnectionString));
         });
