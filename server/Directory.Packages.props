@@ -5,9 +5,9 @@
   <ItemGroup>
     <PackageVersion Include="DeviceDetector.NET" Version="6.4.2" />
     <PackageVersion Include="Handlebars.Net" Version="2.1.6" />
-    <PackageVersion Include="SeliseBlocks.DataGateway.Driver" Version="10.0.0-preview.3" />
+    <!-- <PackageVersion Include="SeliseBlocks.DataGateway.Driver" Version="10.0.0-preview.3" /> -->
     <PackageVersion Include="HotChocolate.AspNetCore" Version="15.1.17" />
-    <PackageVersion Include="SeliseBlocks.EurolmDriver" Version="10.0.0-preview.2" />
+    <PackageVersion Include="SeliseBlocks.EurolmDriver.OS" Version="4.0.0" />
     <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.9.0" />
     <PackageVersion Include="FluentValidation" Version="12.0.0" />
     <PackageVersion Include="FluentValidation.AspNetCore" Version="11.3.0" />
@@ -41,8 +41,8 @@
     <PackageVersion Include="PdfSharp" Version="6.2.4" />
     <PackageVersion Include="PuppeteerSharp" Version="20.2.5" />
     <PackageVersion Include="Shark.PdfConvert" Version="1.0.5" />
-    <PackageVersion Include="SeliseBlocks.DeploymentDriver" Version="10.0.0-preview.5" />
-    <PackageVersion Include="SeliseBlocks.ObservabilityDriver" Version="10.0.0-preview.2" />
+    <PackageVersion Include="SeliseBlocks.ReleaseDriver.OS" Version="4.0.0" />
+    <PackageVersion Include="SeliseBlocks.MonitorDriver.OS" Version="4.0.0" />
 	 <PackageVersion Include="MailKit" Version="4.16.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
