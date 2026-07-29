@@ -1,4 +1,3 @@
-using Blocks.Genesis;
 using DomainService.Storage;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
@@ -25,7 +24,7 @@ namespace DomainService.PdfGenerator.service
         /// <summary>
         /// Saves a PDF file to storage
         /// </summary>
-        public async Task<bool> SavePdfToStorage(Stream inputStream, string fileId, string fileName, Dictionary<string, string>? metadata = null, string parentDirectoryId = "Blocks-PDF-Generated-Files", string? projectKey = null)
+        public async Task<bool> SavePdfToStorage(Stream inputStream, string fileId, string fileName, Dictionary<string, string>? metadata = null, string parentDirectoryId = "Blocks-PDF-Generated-Files")
         {
             _logger.LogInformation("SavePdfToStorage: Saving PDF to storage -- fileId={FileId}, fileName={FileName}", fileId, fileName);
 
@@ -49,8 +48,7 @@ namespace DomainService.PdfGenerator.service
                 MetaData = formattedMetadata.Count > 0 ? JsonConvert.SerializeObject(formattedMetadata) : string.Empty,
                 Name = fileName,
                 ParentDirectoryId = parentDirectoryId,
-                Tags = "[\"PDF\"]",
-                ProjectKey = projectKey ?? BlocksContext.GetContext()?.TenantId ?? string.Empty
+                Tags = "[\"PDF\"]"
             };
 
             var fileInfo = await _storageDriverService.GetPerSignedUrlForUploadAsync(payload);
@@ -87,14 +85,13 @@ namespace DomainService.PdfGenerator.service
         /// <summary>
         /// Gets PDF file as stream
         /// </summary>
-        public async Task<Stream?> GetPdfStream(string fileId, string? projectKey = null)
+        public async Task<Stream?> GetPdfStream(string fileId)
         {
             _logger.LogInformation("GetPdfStream: Getting PDF stream for fileId={FileId}", fileId);
 
             var fileData = await _storageDriverService.GetUrlForDownloadFileAsync(new GetFileRequest
             {
-                FileId = fileId,
-                ProjectKey = projectKey ?? BlocksContext.GetContext()?.TenantId ?? ""
+                FileId = fileId
             });
 
             if (fileData == null || string.IsNullOrEmpty(fileData.Url))
@@ -111,14 +108,13 @@ namespace DomainService.PdfGenerator.service
         /// <summary>
         /// Gets HTML file content as string
         /// </summary>
-        public async Task<string?> GetHtmlContentAsString(string fileId, string? projectKey = null)
+        public async Task<string?> GetHtmlContentAsString(string fileId)
         {
             _logger.LogInformation("GetHtmlContentAsString: Getting HTML content for fileId={FileId}", fileId);
 
             var fileData = await _storageDriverService.GetUrlForDownloadFileAsync(new GetFileRequest
             {
-                FileId = fileId,
-                ProjectKey = projectKey ?? BlocksContext.GetContext()?.TenantId ?? ""
+                FileId = fileId
             });
 
             if (fileData == null || string.IsNullOrEmpty(fileData.Url))
@@ -145,10 +141,10 @@ namespace DomainService.PdfGenerator.service
         /// <summary>
         /// Gets image file as stream
         /// </summary>
-        public async Task<Stream?> GetImageStream(string fileId, string? projectKey = null)
+        public async Task<Stream?> GetImageStream(string fileId)
         {
             _logger.LogInformation("GetImageStream: Getting image stream for fileId={FileId}", fileId);
-            return await GetPdfStream(fileId, projectKey); // Same logic
+            return await GetPdfStream(fileId); // Same logic
         }
     }
 }
