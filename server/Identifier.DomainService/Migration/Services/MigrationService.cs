@@ -71,9 +71,9 @@ namespace DomainService.Migration
 
                 var userDetails = await _userRepository.GetUserByIdAsync(bc.UserId);
 
-                if (userDetails == null || string.IsNullOrEmpty(userDetails.UserName))
+                if (userDetails == null || string.IsNullOrEmpty(userDetails.Email))
                 {
-                    _logger.LogWarning("User details not found or missing UserName during migration. ProjectKey: {ProjectKey}, UserId: {UserId}",
+                    _logger.LogWarning("User details not found or missing email during migration. ProjectKey: {ProjectKey}, UserId: {UserId}",
                         request.ProjectKey, bc.UserId);
                     return new MigrationOtpGenerationResponse { IsSuccess = false, Errors = new Dictionary<string, string> { { "message", "user_details_not_found" } } };
                 }
@@ -84,18 +84,18 @@ namespace DomainService.Migration
                 var serializedData = JsonSerializer.Serialize(new { Code = code, Request = request });
 
                 await _cacheClient.AddStringValueAsync(verificationId, serializedData, 600);
-                _logger.LogInformation("Migration OTP cached successfully. VerificationId: {VerificationId}, UserName: {UserName}, ExpirySeconds: {ExpirySeconds}",
-                    verificationId, userDetails.UserName, 600);
+                _logger.LogInformation("Migration OTP cached successfully. VerificationId: {VerificationId}, Email: {Email}, ExpirySeconds: {ExpirySeconds}",
+                    verificationId, userDetails.Email, 600);
 
-                var result = await SendMfaCodeAsync(userDetails.UserName, code, "en-US");
+                var result = await SendMfaCodeAsync(userDetails.Email, code, "en-US");
                 if (!result)
                 {
-                    _logger.LogError("Failed to send MFA OTP email. VerificationId: {VerificationId}, UserName: {UserName}", verificationId, userDetails.UserName);
+                    _logger.LogError("Failed to send MFA OTP email. VerificationId: {VerificationId}, Email: {Email}", verificationId, userDetails.Email);
                 }
                 else
                 {
-                    _logger.LogInformation("Migration OTP email sent successfully. VerificationId: {VerificationId}, UserName: {UserName}",
-                        verificationId, userDetails.UserName);
+                    _logger.LogInformation("Migration OTP email sent successfully. VerificationId: {VerificationId}, Email: {Email}",
+                        verificationId, userDetails.Email);
                 }
 
                 return new MigrationOtpGenerationResponse { VerificationId = verificationId, IsSuccess = result };
