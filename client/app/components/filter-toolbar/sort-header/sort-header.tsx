@@ -11,41 +11,42 @@ type SortHeaderProps = {
   onChange: (params: SortValue) => void;
 };
 
-export const useSortQueryParams = ({
-  initial = { property: "", isDescending: false },
-}: {
-  initial?: SortValue;
-}) => {
-  const [queryParams, setQueryParams] = useQueryStates({
-    "sort-property": parseAsString.withDefault(initial.property),
-    "sort-isDescending": parseAsBoolean.withDefault(initial.isDescending),
-  });
-
-  const setSortQueryParams = useCallback(
-    (sort: SortValue) => {
-      setQueryParams(() => ({
-        "sort-isDescending": sort.isDescending,
-        "sort-property": sort.property,
-      }));
-    },
-    [setQueryParams],
-  );
-
-  const reset = useCallback(() => {
-    setQueryParams(null);
-  }, [setQueryParams]);
-
-  const sortQueryParams = {
-    property: queryParams["sort-property"],
-    isDescending: queryParams["sort-isDescending"],
-  };
-
-  return {
-    sortQueryParams,
-    setSortQueryParams,
-    reset,
-  };
-};
+// DEADCODE 2026-07-29: no references from main.tsx/router tree or tests; commented pending review
+// export const useSortQueryParams = ({
+//   initial = { property: "", isDescending: false },
+// }: {
+//   initial?: SortValue;
+// }) => {
+//   const [queryParams, setQueryParams] = useQueryStates({
+//     "sort-property": parseAsString.withDefault(initial.property),
+//     "sort-isDescending": parseAsBoolean.withDefault(initial.isDescending),
+//   });
+//
+//   const setSortQueryParams = useCallback(
+//     (sort: SortValue) => {
+//       setQueryParams(() => ({
+//         "sort-isDescending": sort.isDescending,
+//         "sort-property": sort.property,
+//       }));
+//     },
+//     [setQueryParams],
+//   );
+//
+//   const reset = useCallback(() => {
+//     setQueryParams(null);
+//   }, [setQueryParams]);
+//
+//   const sortQueryParams = {
+//     property: queryParams["sort-property"],
+//     isDescending: queryParams["sort-isDescending"],
+//   };
+//
+//   return {
+//     sortQueryParams,
+//     setSortQueryParams,
+//     reset,
+//   };
+// };
 
 export const SortHeader = ({ label, id, value, onChange }: SortHeaderProps) => {
   const Icon = value.isDescending ? ArrowDown : ArrowUp;

@@ -14,4 +14,5 @@ class LanguageManagerService {
 }
 
 export const languageManagerService = new LanguageManagerService();
-export default LanguageManagerService;
+// DEADCODE 2026-07-29: default export has no importers (consumers use the languageManagerService instance); commented pending review
+// export default LanguageManagerService;
