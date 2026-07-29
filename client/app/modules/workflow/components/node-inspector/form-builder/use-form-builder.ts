@@ -11,7 +11,7 @@ import {
   stripTransientKeys,
 } from "./utils";
 import { useWorkflowStoreApi, WorkflowStore } from "@/modules/workflow/store";
-import { useProjectStore } from "@seliseblocks/blocks-kit";
+import { useProjectStore } from "@seliseblocks/genesis-os";
 
 export interface FormBuilderConfig {
   projectKey: string;

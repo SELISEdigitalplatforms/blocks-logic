@@ -1,6 +1,6 @@
 import React from "react";
 import { act, render, renderHook, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import useRoutePathSegments from "@/hooks/use-path-segments";
 import { useCountDown } from "@/hooks/use-count-down";

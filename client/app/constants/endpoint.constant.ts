@@ -1,4 +1,4 @@
-import { getRuntimeEnv } from "@seliseblocks/blocks-kit";
+import { getRuntimeEnv } from "@seliseblocks/genesis-os";
 
 const BLOCKS_IAM_BASE_URL = getRuntimeEnv("BLOCKS_IAM_BASE_URL");
 const AUTH_OIDC_SUBPATH = "/oidc";

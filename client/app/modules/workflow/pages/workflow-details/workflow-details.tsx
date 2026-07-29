@@ -18,13 +18,13 @@ import { Separator } from "@/components/ui-kits/separator/separator";
 import { format } from "date-fns";
 import { useGetWorkflowById } from "@blocks-workflow/hooks/use-workflow-api";
 import { WorkflowExecutions } from "@blocks-workflow/components/workflow-execution";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router";
 import { BREADCRUMB_CUSTOM_TITLES } from "@/constants/breadcrumb-custom-title";
 import { showErrorToast } from "@/hooks/use-toast";
 import { PublishWorkflowAction } from "../../components/publish-workflow-action";
 import { WorkflowVersions } from "../../components/workflow-version";
 import { useGetLastSuccessfulExecution } from "../../hooks";
-import { useScopedPath } from "@seliseblocks/blocks-kit";
+import { useScopedPath } from "@seliseblocks/genesis-os";
 
 type WorkflowDetailPageProps = {
   workflowId: string;
