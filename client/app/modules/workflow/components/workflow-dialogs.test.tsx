@@ -1,6 +1,6 @@
 import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
@@ -23,7 +23,7 @@ vi.mock("@blocks-workflow/hooks/use-workflow-api", () => ({
   useDuplicateWorkflow: () => ({ isPending: false, mutateAsync: api.duplicate }),
 }));
 vi.mock("@/hooks/use-toast", () => toasts);
-vi.mock("react-router-dom", async (orig) => {
+vi.mock("react-router", async (orig) => {
   const actual = (await orig()) as Record<string, unknown>;
   return { ...actual, useNavigate: () => navigate };
 });

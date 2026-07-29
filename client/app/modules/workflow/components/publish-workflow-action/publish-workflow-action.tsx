@@ -7,7 +7,7 @@ import {
 } from "@/components/ui-kits/dropdown-menu/dropdown-menu";
 import { Button } from "@/components/ui-kits/button/button";
 import { ChevronDown, Loader2 } from "lucide-react";
-import { useParams } from "react-router-dom";
+import { useParams } from "react-router";
 import { useWorkflowActions } from "../../hooks/use-workflow-actions";
 import { PublishConfirmationModal, UnpublishConfirmationModal } from "../workflow-confirmation-modals";
 import { PublishWorkflowModal } from "../publish-workflow-modal/publish-workflow-modal";
