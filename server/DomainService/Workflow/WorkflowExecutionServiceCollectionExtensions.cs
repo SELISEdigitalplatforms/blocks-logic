@@ -31,6 +31,7 @@ namespace DomainService.Workflow
             services.AddSingleton<IWorkflowEngineService, WorkflowEngineService>();
             services.AddSingleton<IWorkflowNotificationService, WorkflowNotificationService>();
             services.AddSingleton<IWorkflowVersionService, WorkflowVersionService>();
+            services.AddSingleton<IWorkflowAuthService, WorkflowAuthService>();
 
             // register repositories
             services.AddSingleton<IWorkflowRepository, WorkflowRepository>();
@@ -64,7 +65,7 @@ namespace DomainService.Workflow
 
             services.RegisterAllNotificationApplicationServices();
 
-            services.RegisterBlocksMailService();
+            //services.RegisterBlocksMailService();
             services.AddHttpClient();
             return services;
         }
