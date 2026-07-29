@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { serviceInstances } from "@/lib/http-client";
-import { getRuntimeEnv } from "@seliseblocks/blocks-kit";
+import { getRuntimeEnv } from "@seliseblocks/genesis-os";
 import { IClientConfigResponse, IGetClientsPayload } from "../models/iam";
 import { AUTH_CLIENT_ENDPOINTS } from "../constants/iam.endpoint.constant";
 
