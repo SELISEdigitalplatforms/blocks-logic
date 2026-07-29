@@ -23,8 +23,8 @@ import { duplicateWorkflowSchema, DuplicateWorkflowFormValues } from "./schema";
 import { isErrorWithErrors } from "@/lib/error";
 import { useDuplicateWorkflow } from "@blocks-workflow/hooks/use-workflow-api";
 import { addCopySuffix } from "@blocks-workflow/utils/add-copy-suffix.util";
-import { useNavigate } from "react-router-dom";
-import { useScopedPath } from "@seliseblocks/blocks-kit";
+import { useNavigate } from "react-router";
+import { useScopedPath } from "@seliseblocks/genesis-os";
 
 type DuplicateWorkflowProps = {
   open: boolean;

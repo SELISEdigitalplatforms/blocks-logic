@@ -1,4 +1,4 @@
-import { useProjectStore } from "@seliseblocks/blocks-kit";
+import { useProjectStore } from "@seliseblocks/genesis-os";
 import { NodeSchemaDefinition } from "./node-schema.type";
 
 const TRIGGER_INTERVAL_OPTIONS = [

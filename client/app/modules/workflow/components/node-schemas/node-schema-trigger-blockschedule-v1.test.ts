@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { useProjectStore } from "@seliseblocks/blocks-kit";
+import { useProjectStore } from "@seliseblocks/genesis-os";
 import { NodeSchemaTriggerBlockscheduleV1 as S } from "./node-schema-trigger-blockschedule-v1";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

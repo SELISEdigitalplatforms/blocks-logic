@@ -1,5 +1,5 @@
 <Solution>
-  <Project Path="../../blocks-utilities/server/Mail.Driver/Mail.Driver.csproj" />
+  <Project Path="Mail.Driver/Mail.Driver.csproj" />
   <Project Path="Api/Api.csproj" />
   <Project Path="Authentication.DomainService/Authentication.DomainService.csproj" />
   <Project Path="Captcha.DomainService/Captcha.DomainService.csproj" />
