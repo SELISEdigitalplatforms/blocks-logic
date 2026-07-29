@@ -23,7 +23,7 @@
     <PackageReference Include="SeliseBlocks.EurolmDriver" />
     <PackageReference Include="SeliseBlocks.DeploymentDriver" />
     <PackageReference Include="SeliseBlocks.ObservabilityDriver" />
-    <PackageReference Include="SeliseBlocks.StorageDriver" />
+    <PackageReference Include="SeliseBlocks.StorageDriver.OS" />
     <PackageReference Include="SeliseBlocks.ConfigurationDriver" />
   </ItemGroup>
   <ItemGroup>
