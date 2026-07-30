@@ -54,5 +54,6 @@
 // toggle wrote the cookie; on reload the two disagreed (toggle showed Dark but
 // the UI rendered Light). Consolidating on blocks-kit removes that split-brain.
 export { ThemeProvider } from "@seliseblocks/genesis-os/providers";
-export { useTheme } from "@seliseblocks/genesis-os/hooks";
-export type { Theme } from "@seliseblocks/genesis-os/hooks";
+// DEADCODE 2026-07-29: unused re-exports, consumers import useTheme and Theme from the package directly; commented pending review
+// export { useTheme } from "@seliseblocks/genesis-os/hooks";
+// export type { Theme } from "@seliseblocks/genesis-os/hooks";
