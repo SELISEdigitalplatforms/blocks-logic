@@ -1,5 +1,5 @@
 /**
- * Test-only stub for `@seliseblocks/blocks-kit` (and its `/hooks`, `/providers`
+ * Test-only stub for `@seliseblocks/genesis-os` (and its `/hooks`, `/providers`
  * subpaths).
  *
  * The real package's barrel eagerly imports framer-motion, whose `motion-utils`

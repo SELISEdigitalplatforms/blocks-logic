@@ -64,8 +64,8 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             //services.AddSingleton<IConsumer<EmailTriggerEvent>, EmailTriggerConsumer>();
             services.AddSingleton<IConsumer<DataChangeEvent>, DataTriggerConsumer>();
             services.AddSingleton<IConsumer<Dtos.MigrationCompletionEvent>, MigrationCompletionConsumer>();
-             services.AddApplicationServices();
-             services.RegisterSharedServices();
+            services.AddApplicationServices();
+            services.RegisterSharedServices();
 
-             ApplicationConfigurations.ConfigureWorker(services, LogicConstants.GetMessageConfiguration(secret.MessageConnectionString));
+            ApplicationConfigurations.ConfigureWorker(services, LogicConstants.GetMessageConfiguration(secret.MessageConnectionString));
         });

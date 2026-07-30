@@ -1,7 +1,7 @@
 import React, { createRef } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ReCaptcha } from "./captcha/reCaptcha";
 import type { CaptchaRef } from "./captcha/index.type";

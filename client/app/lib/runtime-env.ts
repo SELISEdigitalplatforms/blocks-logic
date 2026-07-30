@@ -1,6 +1,6 @@
 // const PLACEHOLDER_PREFIX = "__BLOCKS_";
 
-// import { RuntimeKey } from "@seliseblocks/blocks-kit";
+// import { RuntimeKey } from "@seliseblocks/genesis-os";
 
 // const isPlaceholder = (value?: string) =>
 //   !!value && value.startsWith(PLACEHOLDER_PREFIX) && value.endsWith("__");

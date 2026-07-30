@@ -1,4 +1,3 @@
-using Blocks.Genesis;
 using DomainService.Storage;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
@@ -46,8 +45,7 @@ namespace DomainService.TemplateEngine.service
                 MetaData = formattedMetadata.Count > 0 ? JsonConvert.SerializeObject(formattedMetadata) : string.Empty,
                 Name = fileName,
                 ParentDirectoryId = parentDirectoryId,
-                Tags = "[\"File\"]",
-                ProjectKey = BlocksContext.GetContext()?.TenantId ?? ""
+                Tags = "[\"File\"]"
             };
 
             var fileInfo = await _storageDriverService.GetPerSignedUrlForUploadAsync(payload);
@@ -83,15 +81,14 @@ namespace DomainService.TemplateEngine.service
         /// <summary>
         /// Gets file content as string
         /// </summary>
-        public async Task<string?> GetFileContentAsString(string fileId, string projectKey)
+        public async Task<string?> GetFileContentAsString(string fileId)
         {
             _logger.LogInformation("GetFileContentAsString: Getting file content for fileId={FileId}", fileId);
 
             // Get file metadata and URL
             var fileData = await _storageDriverService.GetUrlForDownloadFileAsync(new GetFileRequest
             {
-                FileId = fileId,
-                ProjectKey = projectKey
+                FileId = fileId
             });
 
             if (fileData == null || string.IsNullOrEmpty(fileData.Url))
