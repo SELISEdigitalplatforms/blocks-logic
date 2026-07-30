@@ -59,7 +59,7 @@ services.AddCloudConfigurationServices();
 services.AddWorkflowExecutionEngine();
 services.RegisterBlocksEurolmServices();
 await services.RegisterBlocksDeploymentServicesAsync(vaultType);
-//services.RegisterBlocksObservabilityServices();
+services.RegisterBlocksObservabilityServices();
 
 var app = builder.Build();
 
