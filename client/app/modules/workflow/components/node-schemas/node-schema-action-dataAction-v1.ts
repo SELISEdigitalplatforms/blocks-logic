@@ -1,4 +1,4 @@
-import { useProjectStore } from "@seliseblocks/blocks-kit";
+import { useProjectStore } from "@seliseblocks/genesis-os";
 import { NodeSchemaDefinition } from "./node-schema.type";
 import type { WorkflowStore } from "@blocks-workflow/store";
 
@@ -9,7 +9,7 @@ import {
 } from "@blocks-workflow/utils/resolve-schema-fields";
 import { dataService } from "../../services/data.service";
 // import { API_BASES } from "@/constants/endpoint.constant";
-import { getRuntimeEnv } from "@seliseblocks/blocks-kit";
+import { getRuntimeEnv } from "@seliseblocks/genesis-os";
 import { authClientService } from "../../services/iam.service";
 
 export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {

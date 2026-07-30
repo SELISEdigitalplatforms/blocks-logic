@@ -7,7 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui-kits/dropdown-menu/dropdown-menu";
-import { useParams } from "react-router-dom";
+import { useParams } from "react-router";
 import { useRestoreWorkflow, useUpdateWorkflowVersion } from "../../hooks/use-workflow-api";
 import { useWorkflowActions } from "../../hooks/use-workflow-actions";
 import { WorkflowVersion } from "../../models/workflow.model";

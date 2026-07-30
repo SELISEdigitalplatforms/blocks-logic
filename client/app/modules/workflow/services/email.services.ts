@@ -35,4 +35,5 @@ class EmailService {
 }
 
 export const emailService = new EmailService();
-export default EmailService;
+// DEADCODE 2026-07-29: default export has no importers (consumers use the emailService instance); commented pending review
+// export default EmailService;
