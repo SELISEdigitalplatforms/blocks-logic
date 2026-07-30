@@ -564,9 +564,6 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
     });
   },
 
-  // setWorkflowActive: (isActive: boolean) => {
-  //   set({ isActive, hasUnsavedChanges: true });
-  // },
 
   resetWorkflow: () => {
     set({
