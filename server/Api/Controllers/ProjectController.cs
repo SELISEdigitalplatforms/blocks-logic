@@ -31,7 +31,6 @@ namespace Api.Controllers
 
         }
 
-        //[ProtectedEndPoint]
         [HttpPost]
         [Authorize]
         public async Task<CreateProjectResponse> Create([FromBody] CreateProjectRequest request)
@@ -49,7 +48,6 @@ namespace Api.Controllers
 
         [HttpGet]
         [Authorize]
-        //[ProtectedEndPoint]
         public async Task<List<GroupedProjectsDto>> Gets([FromQuery] GetProjectsRequest request)
         {
             return await _projectManagementService.GetAllAsync(request);
@@ -57,13 +55,11 @@ namespace Api.Controllers
 
         [HttpPost]
         [Authorize]
-        // [ProtectedEndPoint]
         public async Task<RestoreProjectResponse> Restore([FromBody] RestoreProjectRequest restoreProjectRequest)
         {
             return await _projectManagementService.RestoreProjectAsync(restoreProjectRequest);
         }
 
-        //[ProtectedEndPoint]
         [HttpGet]
         [Authorize]
         public async Task<GetProjectResponse> Get()
@@ -71,7 +67,6 @@ namespace Api.Controllers
             return await _projectManagementService.GetAsync();
         }
 
-        //[ProtectedEndPoint]
         [HttpPost]
         [Authorize]
         public async Task<BaseResponse> UpdateProject([FromBody] UpdateProjectRequest request)
@@ -98,7 +93,6 @@ namespace Api.Controllers
             return await _projectManagementService.UpdateTenantGroupAsync(request);
         }
 
-        //[ProtectedEndPoint]
         [HttpPost]
         [Authorize]
         public async Task<BaseResponse> Disable([FromBody] DisableProjectRequest request)
@@ -113,7 +107,6 @@ namespace Api.Controllers
 
         [HttpGet]
         [Authorize]
-        //[ProtectedEndPoint]
         public async Task<GetAssetResponse> GetAsset([FromQuery] GetAssetRequest request)
         {
             return await _projectManagementService.GetAssetAsync(request);
@@ -121,7 +114,6 @@ namespace Api.Controllers
 
         [HttpPost]
         [Authorize]
-        //[ProtectedEndPoint]
         public async Task<BaseResponse> AddAsset([FromBody] AddAssetRequest asset)
         {
             if (string.IsNullOrWhiteSpace(asset.TenantGroupId) || asset.Resource == null)
@@ -135,7 +127,6 @@ namespace Api.Controllers
 
         [HttpPost]
         [Authorize]
-        // [ProtectedEndPoint]
         public async Task<BaseResponse> UpdateTokenValidationParameters([FromBody] UpdateTokenValidationParametersRequest request)
         {
             return await _projectManagementService.UpdateTokenValidationParametersAsync(request);
@@ -143,7 +134,6 @@ namespace Api.Controllers
 
         [HttpGet]
         [Authorize]
-        //[ProtectedEndPoint]
         public async Task<IActionResult> GetTokenValidationParameters([FromQuery] GetTokenValidationParametersRequest request)
         {
             return await _projectManagementService.GetProjectTokenValidationParametersAsync(BlocksContext.GetContext().TenantId);
@@ -151,7 +141,6 @@ namespace Api.Controllers
 
         [HttpPost]
         [Authorize]
-        //[ProtectedEndPoint]
         public async Task<SaveThirdPartyJWTClaimsResponse> SaveThirdPartyJWTClaims([FromBody] SaveThirdPartyJWTClaimsRequest request)
         {
 
@@ -160,7 +149,6 @@ namespace Api.Controllers
 
         [HttpGet]
         [Authorize]
-        //[ProtectedEndPoint]
         public async Task<ThirdPartyJWTClaims?> GetThirdPartyJWTClaims([FromQuery] GetThirdPartyJWTClaimsRequest request)
         {
             return await _projectManagementService.GetThirdPartyJWTClaimsAsync(request);

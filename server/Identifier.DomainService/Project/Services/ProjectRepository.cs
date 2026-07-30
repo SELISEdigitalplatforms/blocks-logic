@@ -61,10 +61,7 @@ namespace DomainService.Projects
 
         public async Task<Tenant> GetByDomainAsync(string name)
         {
-            //var collection = _dbContextProvider.GetCollection<Tenant>(IdentifierConstants.TenantCollectionName);
 
-            //var filter = Builders<Tenant>.Filter.Eq(mc => mc.Applications.FirstOrDefault().Domain, name);
-            //return await collection.Find(filter).FirstOrDefaultAsync();
             var collection = _dbContextProvider.GetCollection<Tenant>(IdentifierConstants.TenantCollectionName);
             var listDomain = new List<string> { name };
             var filter = Builders<Tenant>.Filter.ElemMatch(x => x.Applications, app => listDomain.Contains(app.Domain));

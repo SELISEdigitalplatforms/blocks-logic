@@ -12,11 +12,6 @@ import { mockWorkflowEdge1 } from "../test-utils/__mocks__";
 
 vi.mock("../services/workflow.service", () => mockWorkflowServiceFactory());
 
-// ─── Zustand store mock ───────────────────────────────────────────────────────
-// vi.hoisted() ensures these variables are available when vi.mock() factories
-// are evaluated (vi.mock calls are hoisted to the top of the file by Vitest).
-// The hook reads `hasUnsavedChanges` via the selector-based useWorkflowStore and
-// pulls nodesMap/edgesMap off the raw store returned by useWorkflowStoreApi.
 const { mockGetState, mockUseWorkflowStore } = vi.hoisted(() => {
   const mockGetState = vi.fn();
   const mockUseWorkflowStore = vi.fn(
