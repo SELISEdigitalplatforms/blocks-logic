@@ -430,15 +430,7 @@ namespace DomainService.Projects
 
             var mainDomain = IdentifierHelper.ExtractMainDomain(request.ApplicationDomain);
 
-            //if (!string.Equals(request.ApplicationDomain, project.ApplicationDomain))
-            //{
-            //    project.IsDomainVerified = mainDomain == IdentifierConstants.BlocsDomain;
-            //}
 
-            //if (request.ApplicationDomain.Contains(IdentifierConstants.BlocsDomain, StringComparison.OrdinalIgnoreCase))
-            //{
-            //    project.IsDomainVerified = true;
-            //}
 
             project.LastUpdatedDate = DateTime.UtcNow;
             //project.ApplicationDomain = request.ApplicationDomain;
@@ -447,10 +439,6 @@ namespace DomainService.Projects
             //project.CustomDomain = !string.IsNullOrWhiteSpace(request.CustomDomain) ? request.CustomDomain : project.CustomDomain;
             project.JwtTokenParameters.Audiences = [request.ApplicationDomain];
 
-            //if (!string.IsNullOrWhiteSpace(request.CustomDomain) && !project.AllowedDomains.Contains(request.ApplicationDomain, StringComparer.OrdinalIgnoreCase))
-            //{
-            //    project.AllowedDomains.Add(request.ApplicationDomain);
-            //}   
 
             await Task.WhenAll(_projectRepository.UpdateProjectAsync(project),
                                 _projectRepository.UpdateIamConfiguration(project));
@@ -462,22 +450,9 @@ namespace DomainService.Projects
                 Tenant = project
             });
 
-            //var domian = IdentifierConstants.CookieDomainPrefix + project.CookieDomain;
 
-            //if (project.IsCookieEnable)
-            //{
 
-            //    if (applicationDomainBeforeUpdate != request.ApplicationDomain)
-            //    {
-            //        await _messageClient.SendToConsumerAsync(new ConsumerMessage<DisableDomainBindingRequest> { ConsumerName = IdentifierConstants.IdentifierName, Payload = new DisableDomainBindingRequest { ProjectId = project.ItemId, Domain = domian } });
-            //    }
 
-            //    await _messageClient.SendToConsumerAsync(new ConsumerMessage<ConfigureDomainRequest> { ConsumerName = IdentifierConstants.IdentifierName, Payload = new ConfigureDomainRequest { CookieDomain = domian, ProjectId = request.ProjectId } });
-            //}
-            //else
-            //{
-            //    await _messageClient.SendToConsumerAsync(new ConsumerMessage<DisableDomainBindingRequest> { ConsumerName = IdentifierConstants.IdentifierName, Payload = new DisableDomainBindingRequest { ProjectId = project.ItemId, Domain = domian } });
-            //}
 
             return new BaseResponse { IsSuccess = true };
         }

@@ -13,7 +13,6 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui-kits/collapsible/collapsible";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui-kits/popover/popover";
-// import { generateGraphQLPreview } from "@blocks-workflow/utils/generate-graphql-preview";
 import { buildEmptyFieldMapping } from "@blocks-workflow/utils/resolve-schema-fields";
 
 // ─── Flat dot-path helpers ────────────────────────────────────────────────────
@@ -417,13 +416,7 @@ export const SchemaFieldsField = ({
   const values = useMemo(() => (value && typeof value === "object" ? value : {}), [value]);
   const isDisabled = field.disabled as boolean;
 
-  // const schemaName = (data.schemaName as string) || "";
-  // const actionType = (data.actionType as string) || "getData";
 
-  // const previewCode = useMemo(
-  //   () => generateGraphQLPreview(schemaFields, values, schemaName, actionType),
-  //   [schemaFields, values, schemaName, actionType],
-  // );
 
   const handleValueChange = (dotPath: string, val: string) => {
     onChange({ ...values, [dotPath]: val });

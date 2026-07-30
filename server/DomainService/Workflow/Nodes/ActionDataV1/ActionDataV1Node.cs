@@ -65,10 +65,6 @@ namespace DomainService.Workflow.Nodes.ActionDataV1
                         _logger.LogWarning("ActionDataV1Node: ApiBaseUrl is empty. Set it in node parameters or configure 'ApiBaseUrl' in appsettings.");
                 }
 
-                // if (string.IsNullOrEmpty(parameters.ProjectShortKey))
-                // {
-                //     _logger.LogWarning("ActionDataV1Node: ProjectShortKey is empty. Please re-save the workflow node to auto-populate this value from the frontend.");
-                // }
 
                 List<NodeOutputItem> outputItems;
 
@@ -311,16 +307,6 @@ namespace DomainService.Workflow.Nodes.ActionDataV1
             if (parameters.AuthenticationType == "triggerNodeCookie")
             {
                 var blocksContext = BlocksContext.GetContext();
-                //if (blocksContext != null && !string.IsNullOrWhiteSpace(blocksContext.RefreshToken))
-                //{
-                //    var token = await GetTokenFromRefreshTokenAsync(blocksContext.RefreshToken, parameters.ProjectKey);
-                //    if (!string.IsNullOrEmpty(token))
-                //        request.Headers.Add("Authorization", $"Bearer {token}");
-                //}
-                //else
-                //{
-                //    _logger.LogWarning("ActionDataV1Node: Trigger Node Cookie selected but no RefreshToken available in BlocksContext");
-                //}
             }
             else if (parameters.AuthenticationType == "clientCredential"
                 && !string.IsNullOrWhiteSpace(parameters.ClientId) && !string.IsNullOrWhiteSpace(parameters.ClientSecret))

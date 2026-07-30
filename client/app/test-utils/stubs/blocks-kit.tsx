@@ -74,9 +74,6 @@ export const useTheme = () => ({
   setTheme: () => {},
 });
 
-// Project store stand-in. The real export is a zustand store, so it is both a
-// hook (callable) and carries `getState`/`setState`. Schema `transform` and
-// `onChange` handlers read `useProjectStore.getState().selectedProject`.
 type ProjectState = {
   selectedProject: {
     tenantId: string;
