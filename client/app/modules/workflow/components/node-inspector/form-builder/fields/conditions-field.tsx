@@ -236,4 +236,5 @@ export const ConditionsField = ({
   );
 };
 
-export default ConditionsField;
+// DEADCODE 2026-07-29: default export has no importers (all consumers use the named export); commented pending review
+// export default ConditionsField;
