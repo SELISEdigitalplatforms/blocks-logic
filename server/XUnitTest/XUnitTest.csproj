@@ -20,4 +20,21 @@
 	<ProjectReference Include="..\Worker\Worker.csproj" />
   </ItemGroup>
 
+  <!--
+    SeliseBlocks.MonitorDriver.OS (pulled in transitively through Api) ships
+    Alert.DomainService.dll, which declares types under the same fully-qualified
+    names as this solution's own DomainService, notably
+    DomainService.Shared.Services.IHttpHelperServices. Nothing in the tests uses the
+    vendored copies, but their presence makes the local names ambiguous and blocks
+    any test that needs to mock one. Putting the vendored assembly behind an extern
+    alias hides it unless a file asks for it by name. See issue #181.
+  -->
+  <Target Name="HideVendoredDomainServiceTypes" AfterTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <ReferencePath Condition="'%(FileName)' == 'Alert.DomainService'">
+        <Aliases>vendored</Aliases>
+      </ReferencePath>
+    </ItemGroup>
+  </Target>
+
 </Project>
