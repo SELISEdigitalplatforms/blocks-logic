@@ -118,7 +118,6 @@ namespace DomainService.Migration
 
         private async Task<bool> SendMfaCodeAsync(string email, string code, string language)
         {
-            // var configuration = await _configurationService.GetAsync();
             _logger.LogDebug("Preparing MFA email. Email: {Email}, Purpose: MfaViaEmail, Language: {Language}", email, language ?? "en-US");
 
             var sendMailCommand = new SendMail
@@ -274,10 +273,6 @@ namespace DomainService.Migration
             };
         }
 
-        // public async Task SendLanguageManagerMigrationEvent(MigrationRequest request)
-        // {
-        //     await SendMigrationEvent(request, MigrationServiceNames.Language, IdentifierConstants.LanguageDataMigrationQueue);
-        // }
 
         private async Task SendMigrationEvent(MigrationRequest request, MigrationServiceNames serviceName, string queueName, string? trackerId = null)
         {

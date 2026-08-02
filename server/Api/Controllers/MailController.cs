@@ -23,7 +23,6 @@ namespace BlocksTemplate.Api.Controllers
             }
 
         [HttpPost]
-        //[ProtectedEndPoint]
         [Authorize]
         public async Task<IActionResult> Save([FromBody] MailConfiguration request)
         {
@@ -38,7 +37,6 @@ namespace BlocksTemplate.Api.Controllers
         }
 
         [HttpGet]
-        //[ProtectedEndPoint]
         [Authorize]
         public async Task<MailConfiguration> Get([FromQuery] GetMailConfigurationRequest request)
         {
@@ -62,7 +60,6 @@ namespace BlocksTemplate.Api.Controllers
         }
 
         [HttpGet]
-        // [ProtectedEndPoint]
         [Authorize]
         public async Task<List<MailServerConfiguration>> Gets([FromQuery] GetAllMailConfigurationsRequest request)
         {
@@ -86,7 +83,6 @@ namespace BlocksTemplate.Api.Controllers
         }
 
         [HttpDelete]
-        //[ProtectedEndPoint]
         [Authorize]
         public async Task<IActionResult> Delete([FromQuery] DeleteMailConfigurationRequest request)
         {
@@ -108,7 +104,6 @@ namespace BlocksTemplate.Api.Controllers
         }
 
         [HttpPost]
-        //[ProtectedEndPoint]
         [Authorize]
         public async Task<IActionResult> Duplicate([FromBody] DuplicateMailConfigurationRequest request)
         {
@@ -132,7 +127,6 @@ namespace BlocksTemplate.Api.Controllers
         #region Mail Send
 
         [HttpPost]
-        // [ProtectedEndPoint("blocks-utilities::Mail::SendToAny")]
         [Authorize]
         public async Task<IActionResult> SendToAny ( [FromBody] SendMailToAny request )
         {
