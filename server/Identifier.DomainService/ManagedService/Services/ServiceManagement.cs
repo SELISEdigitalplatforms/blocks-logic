@@ -47,7 +47,6 @@ namespace DomainService.ManagedService.Services
             if (!isRabbitMq)
             {
                 _adminClient = new ServiceBusAdministrationClient(blocksSecret.LmtMessageConnectionString);
-                //var configuration = new ConfigurationBuilder().AddEnvironmentVariables().Build();
                 var azureTenantId = configuration["AZURE_TENANT_ID_LMT"];
                 var azureClientId = configuration["AZURE_CLIENT_ID_LMT"];
                 var azureClientSecret = configuration["AZURE_CLIENT_SECRET_LMT"];
