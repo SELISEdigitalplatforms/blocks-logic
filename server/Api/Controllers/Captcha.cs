@@ -43,7 +43,6 @@ namespace Api.Controllers
             return _captchaService.VerifyCaptchaAsync(query);
         }
         #region Cloud Configuration
-        //[ProtectedEndPoint]
         [HttpPost]
         [Authorize]
         public async Task<BaseMutationResponse> Save([FromBody] SaveCaptchaConfigurationRequest request)
@@ -51,7 +50,6 @@ namespace Api.Controllers
             return await _configurationService.SaveCaptchaConfigurationAsync(request);
         }
 
-        //[ProtectedEndPoint]
         [HttpPost]
         [Authorize]
         public async Task<BaseMutationResponse> UpdateStatus([FromBody] UpdateCaptchaConfigurationStatusRequest request)
@@ -59,7 +57,6 @@ namespace Api.Controllers
             return await _configurationService.UpdateCaptchaConfigurationStatusAsync(request);
         }
 
-        //[ProtectedEndPoint]
         [HttpGet]
         [Authorize]
         public async Task<BaseResponse> Get([FromQuery] GetCaptchaConfigurationRequest request)
@@ -67,7 +64,6 @@ namespace Api.Controllers
             return await _configurationService.GetCaptchaConfigurationAsync(request.ProviderName);
         }
 
-        //[ProtectedEndPoint]
         [HttpGet]
         [Authorize]
         public async Task<GetCaptchaConfigurationsResponse> Gets([FromQuery] GetCaptchaConfigurationsRequest request)

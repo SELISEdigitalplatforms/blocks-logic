@@ -119,8 +119,6 @@ namespace Mfa.DomainService.TOTP
                 AccessModifier = "Public"
             };
 
-            //var response = await SendAuthorizedRequestAsync(HttpMethod.Post, url, requestBody);
-            //return response.GetProperty("uploadUrl").GetString() ?? string.Empty;
 
             var presignedUrlResponse = await _storageDriverService.GetPerSignedUrlForUploadAsync(requestBody);
             return presignedUrlResponse.UploadUrl;
@@ -128,11 +126,6 @@ namespace Mfa.DomainService.TOTP
 
         private async Task<string> GetFileUriAsync(string fileId)
         {
-            //var projectKey = BlocksContext.GetContext()?.TenantId ?? "";
-            //projectKey = !string.IsNullOrWhiteSpace(projectKey) ? $"&ProjectKey={projectKey}" : "";
-            //var url = $"{_configuration["GetFileEnpPoint"]}{fileId}{projectKey}";
-            //var response = await SendAuthorizedRequestAsync(HttpMethod.Get, url);
-            //return response.GetProperty("url").GetString() ?? string.Empty;
 
             var fileUriResponse = await _storageDriverService.GetUrlForDownloadFileAsync(new GetFileRequest { FileId = fileId });
             return fileUriResponse.Url;

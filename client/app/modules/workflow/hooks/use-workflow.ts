@@ -99,26 +99,7 @@ export const useWorkflow = () => {
     [edges],
   );
 
-  // const exportWorkflow = useCallback(() => {
-  //   return {
-  //     id: workflowId,
-  //     name: workflowName,
-  //     isActive,
-  //     nodes,
-  //     edges,
-  //     metadata: {
-  //       version: "1.0",
-  //       exportedAt: new Date().toISOString(),
-  //     },
-  //   };
-  // }, [workflowId, workflowName, isActive, nodes, edges]);
 
-  // const importWorkflow = useCallback(
-  //   (data: Workflow) => {
-  //     setWorkflow(data);
-  //   },
-  //   [setWorkflow],
-  // );
 
   const validateWorkflow = useCallback(() => {}, []);
 

@@ -173,8 +173,6 @@ export const ExpressionInputField = ({
     const expressionStart = beforeCursor.lastIndexOf("{{nodes.");
     if (expressionStart === -1) return;
 
-    // Insert the STORED value (not the display label)
-    // suggestion.value already contains the internal format: node_{id}_{handle}
     const newValue = text.substring(0, expressionStart) + `{{${suggestion.value}}}` + afterCursor;
 
     onChange(newValue);
