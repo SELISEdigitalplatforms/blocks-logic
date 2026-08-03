@@ -14,7 +14,8 @@
     "lint": "eslint \"app/**/*.{ts,tsx}\"",
     "lint:fix": "eslint \"app/**/*.{ts,tsx}\" --fix",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@beefree.io/sdk": "^11.4.0",
@@ -43,7 +44,7 @@
     "@radix-ui/react-tabs": "^1.1.0",
     "@radix-ui/react-toast": "^1.2.2",
     "@radix-ui/react-tooltip": "^1.1.2",
-    "@seliseblocks/genesis-os": "^4.0.0",
+    "@seliseblocks/genesis-os": "^4.0.5",
     "@tanstack/react-query": "^5.62.11",
     "@tanstack/react-query-devtools": "^5.62.11",
     "@tanstack/react-table": "^8.20.5",

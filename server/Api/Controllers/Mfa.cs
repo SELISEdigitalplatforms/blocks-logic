@@ -30,7 +30,6 @@ namespace Api.Controllers
             _configurationService = configurationService;
         }
 
-        //[ProtectedEndPoint]
         [HttpPost]
         [Authorize]
         public async Task<OtpGenerationResponse> GenerateOTP([FromBody] OtpGenerationRequest request)
@@ -39,7 +38,6 @@ namespace Api.Controllers
             return await _mfaManagementService.GenerateOTPAsync(request);
         }
 
-        //[ProtectedEndPoint]
         [Authorize]
         [HttpPost]
         public async Task<OtpVerificationResponse> VerifyOTP([FromBody] VerifyOtpRequest request)
@@ -47,7 +45,6 @@ namespace Api.Controllers
             return await _mfaManagementService.VerifyOTPAsync(request);
         }
 
-        //[ProtectedEndPoint]
         [HttpPost]
         [Authorize]
         public async Task<BaseResponse> DisableUserMfa([FromBody] DisableUserMfaRequest request)
@@ -55,7 +52,6 @@ namespace Api.Controllers
             return await _mfaManagementService.DisableUserMfa(request);
         }
 
-        //[ProtectedEndPoint]
         [HttpGet]
         [Authorize]
         public async Task<SetUpUserTotpResponse> SetUpTotp([FromQuery] SetUpUserTotpRequest request)
@@ -67,7 +63,6 @@ namespace Api.Controllers
             return await _totpService.GenerateTotpImageByUserAsync(request.UserId);
         }
 
-        //[ProtectedEndPoint]
         [HttpPost]
         [Authorize]
         public async Task<OtpGenerationResponse> ResendOtp([FromBody] ResendOtpRequest request)
@@ -79,7 +74,6 @@ namespace Api.Controllers
         #region Cloud Configuration
         [HttpPost]
         [Authorize]
-        //[ProtectedEndPoint]
         public async Task<BaseResponse> Save(SaveMfaConfigurationRequest request)
         {
             return await _configurationService.SaveMfaConfigurationAsync(request);
@@ -87,7 +81,6 @@ namespace Api.Controllers
 
         [HttpGet]
         [Authorize]
-        //[ProtectedEndPoint]
         public async Task<GetMfaConfigurationResponse> Get()
         {
             return await _configurationService.GetMfaConfigurationAsync();
