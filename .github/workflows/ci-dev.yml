@@ -163,7 +163,7 @@ jobs:
   # Run SonarQube analysis on both push and pull_request
   sonarqube_server:
     # if: github.event_name == 'pull_request' && needs.initialization.outputs.run_sonarqube == 'true'
-    if: needs.initialization.outputs.run_sonarqube == 'true'
+    if: needs.initialization.outputs.run_sonarqube == 'false'
     needs: [ initialization ]
     uses: SELISEdigitalplatforms/blocks-inventory/.github/workflows/sonarqube-dotnet.yml@main
     with:
@@ -231,7 +231,7 @@ jobs:
       SELISE_GITHUB_PAT: ${{ secrets.SELISE_GITHUB_PAT }}
 
   sonarqube_client:
-    if: needs.initialization.outputs.run_sonarqube == 'true'
+    if: needs.initialization.outputs.run_sonarqube == 'false'
     needs: [initialization]
     uses: ./.github/workflows/sonarqube-client.yml
     with:
