@@ -10,6 +10,7 @@ import {
 	Database,
 	Clock,
 	DatabaseZap,
+	Code2,
 } from "lucide-react";
 
 export const NodeDefinitions: WorkflowNodeDefinition[] = [
@@ -155,6 +156,21 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		category: "transform",
 		version: "v1",
 		defaultName: "Set Field",
+		handleSpec: {
+			source: ["source"],
+			target: ["target"],
+		},
+	},
+	{
+		id: "transform-code-v1",
+		icon: <Code2 className="h-5 w-5 text-blue-500" />,
+		title: "Code",
+		description:
+			"Run custom JavaScript or Python to transform data or implement custom logic.",
+		type: "code",
+		category: "transform",
+		version: "v1",
+		defaultName: "Code",
 		handleSpec: {
 			source: ["source"],
 			target: ["target"],

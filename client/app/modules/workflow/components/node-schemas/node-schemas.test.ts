@@ -48,6 +48,7 @@ import { NodeSchemaActionSendMailV1 } from "./node-schema-action-sendMail-v1";
 import { NodeSchemaActionHttpRequestV1 } from "./node-schema-action-httpRequest-v1";
 import { NodeSchemaActionDataActionV1 } from "./node-schema-action-dataAction-v1";
 import { NodeSchemaTransformSetFieldV1 } from "./node-schema-transform-setfield-v1";
+import { NodeSchemaTransformCodeV1 } from "./node-schema-transform-code-v1";
 import { NodeSchemaLogicIfV1 } from "./node-schema-logic-if-v1";
 
 type AnyRec = Record<string, unknown>;
@@ -78,6 +79,7 @@ describe("NodeSchemasDefinition registry", () => {
         "triggerblockschedulev1",
         "actionagentv1",
         "transformsetfieldv1",
+        "transformcodev1",
         "actionsendMailv1",
         "actionhttpRequestv1",
         "actiondataActionv1",
@@ -442,5 +444,37 @@ describe("data action v1", () => {
     expect(params.projectKey).toBe("tenant-1");
     expect(params.projectShortKey).toBe("slug-1");
     expect("apiBaseUrl" in params).toBe(true);
+  });
+});
+
+describe("transform code v1", () => {
+  it("transform is a passthrough", () => {
+    const node = { id: "n", parameters: { mode: "runOnceForAllItems" } } as never;
+    expect(NodeSchemaTransformCodeV1.transform?.(node)).toEqual(node);
+  });
+
+  it("exposes a mode select with both modes and defaults to all-items", () => {
+    const mode = field(NodeSchemaTransformCodeV1, "mode");
+    expect(mode.type).toBe("select");
+    expect(mode.options).toEqual([
+      { label: "Run Once for All Items", value: "runOnceForAllItems" },
+      { label: "Run Once for Each Item", value: "runOnceForEachItem" },
+    ]);
+    expect(NodeSchemaTransformCodeV1.defaults.parameters.mode).toBe(
+      "runOnceForAllItems",
+    );
+  });
+
+  it("carries a single javascript code-editor field for jsCode", () => {
+    const js = field(NodeSchemaTransformCodeV1, "jsCode");
+    expect(js.type).toBe("code-editor");
+    expect(js.language).toBe("javascript");
+    expect(js.dependsOn).toBeUndefined();
+    expect(NodeSchemaTransformCodeV1.defaults.parameters.jsCode).toBe("");
+  });
+
+  it("carries a continue-on-error setting", () => {
+    expect(field(NodeSchemaTransformCodeV1, "settings.continueOnError"))
+      .toBeDefined();
   });
 });
