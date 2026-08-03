@@ -305,8 +305,8 @@ namespace XUnitTest.DomainService.OAuth.SocialServices
                     credential.TokenUrl,
                     It.IsAny<Dictionary<string, string>>(),
                     It.IsAny<CancellationToken>()))
-                .Callback<HttpMethod, Dictionary<string, string>, string, Dictionary<string, string>, CancellationToken>(
-                    (method, postData, url, headers, ct) => capturedPostData = postData)
+                .Callback<HttpMethod, Dictionary<string, string>, string, Dictionary<string, string>, CancellationToken, int?>(
+                    (method, postData, url, headers, ct, _) => capturedPostData = postData)
                 .ReturnsAsync((tokenResponse, string.Empty));
 
             // Act

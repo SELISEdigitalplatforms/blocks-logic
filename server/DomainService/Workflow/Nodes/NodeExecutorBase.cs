@@ -11,6 +11,8 @@ namespace DomainService.Workflow.Nodes
         public abstract string NodeType { get; }
         public abstract string Version { get; }
 
+        private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(2);
+
         protected abstract Task<NodeExecutionResult> ExecuteAsync(NodeExecutionContext context, TParameters? parameters);
 
         public async Task<NodeExecutionResult> RunAsync(NodeExecutionContext context)
@@ -32,7 +34,7 @@ namespace DomainService.Workflow.Nodes
             if (string.IsNullOrEmpty(text)) return default;
 
             var resolved = Regex.Replace(text, @"\{\{([^{}]+)\}\}", match =>
-                ResolveExpression(match.Groups[1].Value.Trim(), inputItem, context));
+                ResolveExpression(match.Groups[1].Value.Trim(), inputItem, context), RegexOptions.None, RegexTimeout);
 
             if (typeof(T) == typeof(string)) return (T)(object)resolved;
             if (typeof(T) == typeof(object))
@@ -68,7 +70,7 @@ namespace DomainService.Workflow.Nodes
 
         private static string ResolveNodeReference(string expr, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
         {
-            var nodeMatch = Regex.Match(expr, @"^\$node\[""(?<node>[^""]+)""\]\.json\.output\.(?<path>.+)$");
+            var nodeMatch = Regex.Match(expr, @"^\$node\[""(?<node>[^""]+)""\]\.json\.output\.(?<path>.+)$", RegexOptions.None, RegexTimeout);
             var nodeName = nodeMatch.Groups["node"].Value;
             var path = nodeMatch.Groups["path"].Value;
 
@@ -143,7 +145,7 @@ namespace DomainService.Workflow.Nodes
                     return string.IsNullOrEmpty(fieldPath)
                         ? $"{{{{$node[\"{nodeName}\"].json}}}}"
                         : $"{{{{$node[\"{nodeName}\"].json.{fieldPath}}}}}";
-                });
+                }, RegexOptions.None, RegexTimeout);
         }
 
         /// <summary>

@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui-kits/button/button";
 import { MoreVertical, Loader2, Info } from "lucide-react";
-import { useParams } from "react-router-dom";
+import { useParams } from "react-router";
 import { useGetWorkflowVersions } from "../../hooks/use-workflow-api";
 import { formatDate } from "@/lib/utils";
 import { WorkflowVersion } from "../../models/workflow.model";
@@ -14,7 +14,7 @@ import { WorkflowVersionActionDropdown } from "../workflow-version/workflow-vers
 
 interface VersionHistorySidebarProps {
   onClose?: () => void;
-  onSelectVersion: (version: any) => void;
+  onSelectVersion: (version: WorkflowVersion) => void;
   selectedVersionId?: string | null;
 }
 

@@ -2,7 +2,7 @@
 
 namespace DomainService.Projects
 {
-    public class SaveThirdPartyJWTClaimsRequest : IProjectKey
+    public class SaveThirdPartyJWTClaimsRequest 
     {
         public string? ItemId { get; set; }
         public string UserId { get; set; }
@@ -10,7 +10,7 @@ namespace DomainService.Projects
         public string Name { get; set; }
         public string UserName { get; set; }
         public string Roles { get; set; }
-        public string? ProjectKey { get ; set ; }
+     
     }
 
     public class SaveThirdPartyJWTClaimsResponse : BaseResponse

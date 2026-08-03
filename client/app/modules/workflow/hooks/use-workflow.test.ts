@@ -10,19 +10,19 @@ import {
 import type { EditorNode } from "@blocks-workflow/models/node.model";
 import type { Edge } from "@xyflow/react";
 
-// ─── Mock store state & actions ───────────────────────────────────────────────
+// ─── Mock store actions ───────────────────────────────────────────────────────
 const mockSelectNode = vi.fn();
 const mockOpenConfigModal = vi.fn();
 const mockSetWorkflow = vi.fn();
 const mockGetNodeById = vi.fn();
 const mockGetEdgeById = vi.fn();
-const mockResetWorkflow = vi.fn();
-const mockSetWorkflowActive = vi.fn();
 
 const mockEdge1 = mockWorkflowEdge1 as unknown as Edge;
 const mockEditorNode1 = mockWorkflowNode1 as unknown as EditorNode;
 const mockEditorNode2 = mockWorkflowNode2 as unknown as EditorNode;
 
+// A full store state matching the fields useWorkflow selects. Actions default
+// to spies; the few asserted below are shared references declared above.
 const buildStoreState = (overrides: Record<string, unknown> = {}) => ({
   nodesMap: {
     [mockEditorNode1.id]: mockEditorNode1,
@@ -30,12 +30,15 @@ const buildStoreState = (overrides: Record<string, unknown> = {}) => ({
   },
   edgesMap: { [mockEdge1.id]: mockEdge1 },
   selectedNode: null,
+  selectedHandle: null,
   isConfigModalOpen: false,
   isPanelOpen: false,
   workflowId: mockWorkflow1.itemId,
   workflowName: mockWorkflow1.name,
-  isActive: mockWorkflow1.isActive,
-  isDirty: false,
+  hasUnsavedChanges: false,
+  editorMode: "edit",
+  executionMode: "idle",
+  lastSuccessfulExecutionData: null,
   onNodesChange: vi.fn(),
   onEdgesChange: vi.fn(),
   onConnect: vi.fn(),
@@ -43,19 +46,38 @@ const buildStoreState = (overrides: Record<string, unknown> = {}) => ({
   updateNode: vi.fn(),
   deleteNode: vi.fn(),
   duplicateNode: vi.fn(),
+  copyNode: vi.fn(),
+  copySelectedNodes: vi.fn(),
+  pasteNodes: vi.fn(),
   createEdge: vi.fn(),
   deleteEdge: vi.fn(),
   selectNode: mockSelectNode,
   deselectNode: vi.fn(),
+  deselectAllEdges: vi.fn(),
+  selectHandle: vi.fn(),
+  deselectHandle: vi.fn(),
   openConfigModal: mockOpenConfigModal,
   closeConfigModal: vi.fn(),
   openNodeLibraryPanel: vi.fn(),
   closeNodeLibraryPanel: vi.fn(),
   setWorkflow: mockSetWorkflow,
-  setWorkflowActive: mockSetWorkflowActive,
-  resetWorkflow: mockResetWorkflow,
+  setEditorMode: vi.fn(),
+  setExecutionMode: vi.fn(),
+  resetWorkflow: vi.fn(),
+  tidyUpWorkflow: vi.fn(),
+  setLastSuccessfulExecutionData: vi.fn(),
   getNodeById: mockGetNodeById,
   getEdgeById: mockGetEdgeById,
+  executedItems: [],
+  executedNodes: [],
+  stepExecutionTraversedEdgeIds: [],
+  stepExecutionReachableNodeIds: [],
+  setStepExecutionData: vi.fn(),
+  isListening: false,
+  listeningNodeId: null,
+  setIsListening: vi.fn(),
+  nextExecutionId: null,
+  setNextExecutionId: vi.fn(),
   ...overrides,
 });
 
@@ -64,21 +86,23 @@ const { mockUseWorkflowStore } = vi.hoisted(() => {
   return { mockUseWorkflowStore };
 });
 
-vi.mock("../store/workflow-store", () => ({
+vi.mock("../store", () => ({
   useWorkflowStore: mockUseWorkflowStore,
 }));
 
 // ─── Mock useReactFlow ────────────────────────────────────────────────────────
-const mockSetCenter = vi.fn();
 const mockFitView = vi.fn();
+const mockZoomIn = vi.fn();
+const mockZoomOut = vi.fn();
 
 vi.mock("@xyflow/react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@xyflow/react")>();
   return {
     ...actual,
     useReactFlow: () => ({
-      setCenter: mockSetCenter,
       fitView: mockFitView,
+      zoomIn: mockZoomIn,
+      zoomOut: mockZoomOut,
     }),
   };
 });
@@ -107,16 +131,11 @@ describe("useWorkflow", () => {
       expect(result.current.edges).toEqual([mockEdge1]);
     });
 
-    it("should expose workflowId, workflowName and isActive from the store", () => {
+    it("should expose workflowId, workflowName and hasUnsavedChanges from the store", () => {
       const { result } = renderHook(() => useWorkflow());
       expect(result.current.workflowId).toBe(mockWorkflow1.itemId);
       expect(result.current.workflowName).toBe(mockWorkflow1.name);
-      expect(result.current.isActive).toBe(mockWorkflow1.isActive);
-    });
-
-    it("should expose isDirty from the store", () => {
-      const { result } = renderHook(() => useWorkflow());
-      expect(result.current.isDirty).toBe(false);
+      expect(result.current.hasUnsavedChanges).toBe(false);
     });
   });
 
@@ -154,30 +173,18 @@ describe("useWorkflow", () => {
     });
   });
 
-  describe("exportWorkflow", () => {
-    it("should return an object containing workflow state and metadata", () => {
+  describe("getNodeNextSource", () => {
+    it("should return the first unused source handle", () => {
       const { result } = renderHook(() => useWorkflow());
-      const exported = result.current.exportWorkflow();
-
-      expect(exported.id).toBe(mockWorkflow1.itemId);
-      expect(exported.name).toBe(mockWorkflow1.name);
-      expect(exported.isActive).toBe(mockWorkflow1.isActive);
-      expect(exported.nodes).toEqual([mockEditorNode1, mockEditorNode2]);
-      expect(exported.edges).toEqual([mockEdge1]);
-      expect(exported.metadata.version).toBe("1.0");
-      expect(exported.metadata.exportedAt).toBeDefined();
+      // mockEdge1 uses sourceHandle "output" on node1, so "alt" is free.
+      const next = result.current.getNodeNextSource(mockEditorNode1.id, ["output", "alt"]);
+      expect(next).toBe("alt");
     });
-  });
 
-  describe("importWorkflow", () => {
-    it("should call setWorkflow with the provided workflow data", () => {
+    it("should fall back to the first handle when all are used", () => {
       const { result } = renderHook(() => useWorkflow());
-
-      act(() => {
-        result.current.importWorkflow(mockWorkflow1);
-      });
-
-      expect(mockSetWorkflow).toHaveBeenCalledWith(mockWorkflow1);
+      const next = result.current.getNodeNextSource(mockEditorNode1.id, ["output"]);
+      expect(next).toBe("output");
     });
   });
 
@@ -188,47 +195,28 @@ describe("useWorkflow", () => {
       expect(result.current.getWorkflowStats.totalEdges).toBe(1);
     });
 
-    it("should reflect hasUnsavedChanges from isDirty", () => {
+    it("should reflect hasUnsavedChanges", () => {
       const { result } = renderHook(() => useWorkflow());
       expect(result.current.getWorkflowStats.hasUnsavedChanges).toBe(false);
     });
   });
 
-  describe("centerOnNode", () => {
-    it("should call reactFlowInstance.setCenter with node position", () => {
+  describe("isNodeNameUnique", () => {
+    it("should return false when another node already has the name", () => {
       const { result } = renderHook(() => useWorkflow());
-
-      act(() => {
-        result.current.centerOnNode(mockEditorNode1.id);
-      });
-
-      expect(mockSetCenter).toHaveBeenCalledWith(
-        mockEditorNode1.position.x,
-        mockEditorNode1.position.y,
-        expect.objectContaining({ zoom: 1.5 }),
-      );
+      expect(result.current.isNodeNameUnique(mockEditorNode2.name)).toBe(false);
     });
 
-    it("should do nothing when node is not found", () => {
+    it("should return true for a brand new name", () => {
       const { result } = renderHook(() => useWorkflow());
-
-      act(() => {
-        result.current.centerOnNode("nonexistent-id");
-      });
-
-      expect(mockSetCenter).not.toHaveBeenCalled();
+      expect(result.current.isNodeNameUnique("A totally new node")).toBe(true);
     });
-  });
 
-  describe("fitView", () => {
-    it("should call reactFlowInstance.fitView", () => {
+    it("should ignore the excluded node id", () => {
       const { result } = renderHook(() => useWorkflow());
-
-      act(() => {
-        result.current.fitView();
-      });
-
-      expect(mockFitView).toHaveBeenCalledWith(expect.objectContaining({ padding: 0.2 }));
+      expect(
+        result.current.isNodeNameUnique(mockEditorNode1.name, mockEditorNode1.id),
+      ).toBe(true);
     });
   });
 
@@ -273,6 +261,19 @@ describe("useWorkflow", () => {
       expect(mockOpenConfigModal).toHaveBeenCalled();
     });
 
+    it("should do nothing when a modifier key is held", () => {
+      const { result } = renderHook(() => useWorkflow());
+
+      act(() => {
+        result.current.onNodeClick(
+          { ctrlKey: true } as React.MouseEvent,
+          { id: mockEditorNode1.id } as never,
+        );
+      });
+
+      expect(mockSelectNode).not.toHaveBeenCalled();
+    });
+
     it("should do nothing when the clicked node is not found in the store", () => {
       const { result } = renderHook(() => useWorkflow());
 
@@ -286,6 +287,18 @@ describe("useWorkflow", () => {
       });
 
       expect(mockSelectNode).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("react flow passthroughs", () => {
+    it("should expose the react flow fitView method", () => {
+      const { result } = renderHook(() => useWorkflow());
+
+      act(() => {
+        result.current.fitView();
+      });
+
+      expect(mockFitView).toHaveBeenCalled();
     });
   });
 });

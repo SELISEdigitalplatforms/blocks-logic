@@ -20,22 +20,9 @@ using Mail.DomainService.Shared.Utilities;
 using SeliseBlocks.ConfigurationDriver;
 using Worker;
 using Worker.Configuration;
+using Worker.Consumers.Mail;
 using Worker.Consumers.Workflow;
 using Worker.Consumers;
-using Iam.DomainService.Dtos;
-using DomainService.Dtos;
-using DomainService.Worker;
-using Mfa.DomainService.Configuration;
-using Iam.DomainService.Accounts;
-using Iam.DomainService.Users;
-using Iam.DomainService.Shared.Dtos;
-using Worker.Consumers.Users;
-using DomainService.Utilities;
-using Worker.Consumers.Identifier;
-using DomainService.Shared.Entities;
-using DomainService.Projects;
-using DomainService.Migration;
-using DomainService.Shared.Dtos;
 
 const string _serviceName = "blocks-logic-worker";
 var vaultType = ApplicationConfigurations.ResolveVaultType();
@@ -61,48 +48,25 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             services.AddHttpClient();
 
             services.Configure<VerioSystemSettings>(services.BuildServiceProvider().GetRequiredService<IConfiguration>().GetSection("VerioSystemSettings"));
-
-            services.AddSingleton<IConsumer<RefreshTokenEvent>, RefreshTokenWorkerService>();
-            services.AddSingleton<IConsumer<UserAuthenticationTimelineEvent>, UserAuthenticationTimelineWorkerService>();
-            services.AddSingleton<IConsumer<MfaActionEvent>, UpdateMfaConfigurationService>();
-
-            services.AddSingleton<IConsumer<ResourceMutationEvent>, ResourceMutationConsumer>();
-            services.AddSingleton<IConsumer<ResourceSetToPermissionMutationEvent>, ResourceSetToPermissionMutationConsumer>();
-            services.AddSingleton<IConsumer<UserMutationEvent>, UserMutationConsumer>();
-            services.AddSingleton<IConsumer<AccountActivityEvent>, AccountActivityWorkerService>();
-            services.AddSingleton<IConsumer<CreateUserByEmailEvent>, CreateUserByEmailConsumer>();
-            services.AddSingleton<IConsumer<CreateUserRequest>, CreateUserConsumer>();
-            services.AddSingleton<IConsumer<CreateUserViaSsoEvent>, CreateUserViaSsoConsumer>();
-            services.AddSingleton<IConsumer<UserStatusChangedEvent>, UserStatusChangedConsumer>();
-
+            services.AddSingleton<IConsumer<SendEmailEvent>, SendEmailConsumer>();
+            services.AddSingleton<IConsumer<SendMail>, SendConsumer>();
             services.AddHostedService<PeriodicPingBackgroundService>();
 
-            services.RegisterAllServices();
-
-
-
- 
-            services.AddApplicationServices();
-            services.AddSingleton<IConsumer<Tenant>, ConfigureProjectConsumer>();
-            services.AddSingleton<IConsumer<DisableDomainBindingRequest>, DisableDomainBindingConsumer>();
-            services.AddSingleton<IConsumer<RestoreProjectRequest>, RestoreProjectConsumer>();
-            services.AddSingleton<IConsumer<CreateUserByEmailPostEvent_Identifier>, CreateUserByEmailPostConsumer>();
-            services.AddSingleton<IConsumer<ConfigureDomainRequest>, DomainConfigureConsumer>();
-            //services.AddSingleton<IConsumer<MigrationCompletionEvent>, MigrationCompletionConsumer>();
-            services.AddSingleton<IConsumer<EnvironmentDataMigrationEvent>, EnvironmentDataMigrationEventConsumer>();
-            services.AddSingleton<IConsumer<PublishScheduleCommand>, DataCleanupConsumer>();
-            services.AddSingleton<IConsumer<UpdateResourceUsageCommand_Identifier>, UpdateResourceUsageConsumer>();
-
-
+            //services.RegisterAllServices();
+            services.AddSingleton<ISendMailService, SendMailService>();
+            services.AddSingleton<SmtpClientProvider>();
+            services.AddSingleton<MicrosoftSmtpClient>();
+            services.AddSingleton<MailKitSmtpClient>();
+            services.RegisterAllMailApplicationServices();
 
             services.AddWorkflowExecutionEngine();
             services.AddSingleton<IConsumer<AddExcuationNodeEvent>, AddExcuationNodeConsumer>();
-           // services.AddSingleton<IConsumer<EmailTriggerEvent>, EmailTriggerConsumer>();
+            //services.AddSingleton<IConsumer<EmailTriggerEvent>, EmailTriggerConsumer>();
             services.AddSingleton<IConsumer<DataChangeEvent>, DataTriggerConsumer>();
             services.AddSingleton<IConsumer<Dtos.MigrationCompletionEvent>, MigrationCompletionConsumer>();
-             services.AddApplicationServices();
-             services.RegisterSharedServices();
+            services.AddApplicationServices();
+            services.RegisterSharedServices();
 
-             ApplicationConfigurations.ConfigureWorker(services, LogicConstants.GetMessageConfiguration(secret.MessageConnectionString));
+            ApplicationConfigurations.ConfigureWorker(services, LogicConstants.GetMessageConfiguration(secret.MessageConnectionString));
         });
 

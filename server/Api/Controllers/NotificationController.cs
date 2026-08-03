@@ -25,7 +25,6 @@ namespace BlocksTemplate.Api.Controllers
 
         [HttpPost]
         [Authorize]
-        //[ProtectedEndPoint]
         public async Task<BaseResponse> Save([FromBody] SaveNotificatonConfigurationRequest request)
         {
             return await _configurationService.SaveNotificationConfigurationAsync(request);
@@ -33,7 +32,6 @@ namespace BlocksTemplate.Api.Controllers
 
         [HttpGet]
         [Authorize]
-        //[ProtectedEndPoint]
         public async Task<GetNotificationConfigurationsResponse> Gets([FromQuery] GetNotificationConfigurationsRequest request)
         {
             return await _configurationService.GetNotificationConfigurationsAsync(request);
@@ -41,7 +39,6 @@ namespace BlocksTemplate.Api.Controllers
 
         [HttpGet]
         [Authorize]
-        //[ProtectedEndPoint]
         public async Task<NotificationConfiguration> Get([FromQuery] GetNotificationConfigurationRequest request)
         {
             return await _configurationService.GetNotificatoinConfigurationAsync(request);
@@ -49,7 +46,6 @@ namespace BlocksTemplate.Api.Controllers
 
         [HttpDelete]
         [Authorize]
-        //[ProtectedEndPoint]
         public async Task<BaseResponse> Delete([FromQuery] DeleteNotificatoinConfigurationRequest request)
         {
             return await _configurationService.DeleteNotificationConfigurationAsync(request);

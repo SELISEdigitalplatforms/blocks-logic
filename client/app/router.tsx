@@ -1,5 +1,4 @@
-import { createBrowserRouter, Navigate, Outlet } from "react-router-dom";
-// import { DashboardOverview } from "./pages/dashboard/dashboard-overview";
+import { createBrowserRouter, Navigate, Outlet } from "react-router";
 
 import WorkflowsPage from "./routes/private/workflows/workflows-page";
 import WorkflowDetailsPage from "./routes/private/workflow-details/workflow-details-page";
@@ -15,7 +14,7 @@ import {
   ProfilePage,
   DashboardOverview,
   DashboardRoute,
-} from "@seliseblocks/blocks-kit";
+} from "@seliseblocks/genesis-os";
 import { navigationMenus } from "./constants/navigation-menus";
 
 const redirectPaths: Record<string, string> = {

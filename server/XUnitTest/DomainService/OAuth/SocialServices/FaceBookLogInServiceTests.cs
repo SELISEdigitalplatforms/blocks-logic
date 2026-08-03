@@ -452,7 +452,7 @@ namespace XUnitTest.DomainService.OAuth.SocialServices
 
             _httpService
                 .Setup(x => x.Get<SocialOauthAccessToken>(It.IsAny<string>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<CancellationToken>()))
-                .Callback<string, Dictionary<string, string>, CancellationToken>((uri, headers, token) => capturedTokenUri = uri)
+                .Callback<string, Dictionary<string, string>, CancellationToken, int?>((uri, headers, token, _) => capturedTokenUri = uri)
                 .ReturnsAsync(((SocialOauthAccessToken)null, "error"));
 
             // Act
@@ -512,7 +512,7 @@ namespace XUnitTest.DomainService.OAuth.SocialServices
                     It.IsAny<string>(),
                     It.IsAny<Dictionary<string, string>>(),
                     It.IsAny<CancellationToken>()))
-                .Callback<string, Dictionary<string, string>, CancellationToken>((url, headers, token) => capturedHeaders = headers)
+                .Callback<string, Dictionary<string, string>, CancellationToken, int?>((url, headers, token, _) => capturedHeaders = headers)
                 .ReturnsAsync(((FaceBookUserData)null, "error"));
 
             // Act

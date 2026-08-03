@@ -1,8 +1,9 @@
-using Blocks.MailDriver;
+using Mail.DomainService;
 using System.Text.Json;
 using Blocks.Genesis;
 using MongoDB.Bson;
 using System.Diagnostics.CodeAnalysis;
+using Mail.DomainService.Mails;
 
 namespace DomainService.Workflow.Nodes.ActionSendMailV1
 {
@@ -16,9 +17,9 @@ namespace DomainService.Workflow.Nodes.ActionSendMailV1
         public override string NodeType => "sendMail";
         public override string Version => "1.0";
 
-        private readonly IMailDriverService _mailDriverService;
+        private readonly IMailService _mailDriverService;
 
-        public ActionSendMailV1Node(IMailDriverService mailDriverService)
+        public ActionSendMailV1Node( IMailService mailDriverService )
         {
             _mailDriverService = mailDriverService;
         }
@@ -99,7 +100,7 @@ namespace DomainService.Workflow.Nodes.ActionSendMailV1
                 ProjectKey = projectkey
             };
 
-            var response = await _mailDriverService.SendToAnyAsync(email);
+            var response = await _mailDriverService.ProcessMailToAnyAsync(email);
             return response;
         }
 

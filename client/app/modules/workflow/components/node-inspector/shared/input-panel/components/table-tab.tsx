@@ -66,16 +66,16 @@ export function TableTab({ rows, nodeName, hasSinglePredecessor, isDraggable = t
                         ? formatCellValue(row)
                         : ""
                       : isRowObj
-                        ? (typeof (row as any)[column] === "object" && (row as any)[column] !== null) ? (
+                        ? (typeof (row as Record<string, unknown>)[column] === "object" && (row as Record<string, unknown>)[column] !== null) ? (
                             <RecursiveSchemaViewer 
-                              data={(row as any)[column]} 
+                              data={(row as Record<string, unknown>)[column]} 
                               depth={0}
                               prefixPath={column}
                               nodeName={nodeName}
                               hasSinglePredecessor={hasSinglePredecessor}
                               isDraggable={isDraggable}
                             />
-                          ) : formatCellValue((row as any)[column])
+                          ) : formatCellValue((row as Record<string, unknown>)[column])
                         : ""}
                   </td>
                 ))}

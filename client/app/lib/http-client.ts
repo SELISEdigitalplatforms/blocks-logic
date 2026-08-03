@@ -1,5 +1,5 @@
-import { getRuntimeEnv } from "@seliseblocks/blocks-kit";
-import { HttpClient } from "@seliseblocks/blocks-kit";
+import { getRuntimeEnv } from "@seliseblocks/genesis-os";
+import { HttpClient } from "@seliseblocks/genesis-os";
 
 export const serviceInstances = {
   
