@@ -4,9 +4,7 @@ using System.Text;
 using DomainService.Workflow.Entities;
 using Jint;
 using Jint.Native;
-using Jint.Native.Object;
 using MongoDB.Bson;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace DomainService.Workflow.Nodes.TransformCodeV1
@@ -17,20 +15,24 @@ namespace DomainService.Workflow.Nodes.TransformCodeV1
         public override string NodeType => "code";
         public override string Version => "v1";
 
-
         private const int MaxScriptLengthBytes = 256 * 1024;
-        private const int MaxTotalDurationSeconds = 60;
+        private const int MaxTotalDurationSeconds = 120;
 
         private const int DefaultTimeoutSeconds = 30;
         private const long DefaultMemoryLimitBytes = 32 * 1024 * 1024;
         private const int MaxRecursionDepth = 64;
         private const int MaxStatements = 1_000_000;
 
-
         private const int MaxOutputItems = 10_000;
         private const long MaxSerializedOutputBytes = 16 * 1024 * 1024;
 
-        public TransformCodeV1Node() { }
+        public const string SourceIdKey = "__id";
+
+        private static readonly MongoDB.Bson.IO.JsonWriterSettings BsonJsonSettings = new()
+        {
+            OutputMode = MongoDB.Bson.IO.JsonOutputMode.RelaxedExtendedJson,
+        };
+
 
         protected override async Task<NodeExecutionResult> ExecuteAsync(NodeExecutionContext context, TransformCodeV1Parameters? nodeparameters)
         {
@@ -39,23 +41,18 @@ namespace DomainService.Workflow.Nodes.TransformCodeV1
                 var parameters = nodeparameters ?? new TransformCodeV1Parameters();
                 var script = parameters.Script ?? string.Empty;
 
-                var lang = parameters.Language?.Trim().ToLowerInvariant();
-                if (lang != "js" && lang != "javascript")
+                if (parameters.Language != "js")
                 {
-                    return NodeExecutionResult.Failed($"Language '{parameters.Language}' is not supported. Only 'javascript' is supported.");
+                    return NodeExecutionResult.Failed($"Language '{parameters.Language}' is not supported. Only JS is supported.");
                 }
-
                 if (Encoding.UTF8.GetByteCount(script) > MaxScriptLengthBytes)
                 {
                     return NodeExecutionResult.Failed("Script too large.");
                 }
 
-                var inputs = GenerateInputPayload(context);
-
-                if (parameters.Mode == "each")
-                    return RunPerItem(context, parameters, script, inputs);
-
-                return RunOnceForAllItems(context, parameters, script, inputs);
+                return parameters.Mode == "each"
+                    ? RunPerItem(context, parameters, script)
+                    : RunOnceForAllItems(context, parameters, script);
             }
             catch (Exception ex)
             {
@@ -63,81 +60,73 @@ namespace DomainService.Workflow.Nodes.TransformCodeV1
             }
         }
 
-        private NodeExecutionResult RunPerItem(NodeExecutionContext context, TransformCodeV1Parameters parameters, string script, List<JToken> inputs)
+        private NodeExecutionResult RunPerItem(NodeExecutionContext context, TransformCodeV1Parameters parameters, string script)
         {
-
             var stopwatch = Stopwatch.StartNew();
             var outputItems = new List<NodeOutputItem>();
             long serializedOutputBytes = 0;
 
-            for (var i = 0; i < inputs.Count; i++)
-            {
+            var inputItems = context.InputItems;
+            var ancestorsById = IndexAncestorsById(context);
 
+            for (var i = 0; i < inputItems.Count; i++)
+            {
                 if (stopwatch.Elapsed > TimeSpan.FromSeconds(MaxTotalDurationSeconds))
                 {
                     return NodeExecutionResult.Failed("Script execution exceeded max duration.");
                 }
+                var current = inputItems[i];
+                var item = ToJObject(current.Data.Output ?? new BsonDocument(), current.Id);
+                var node = GenerateAncestorPerItem(ancestorsById, current);
+                var engine = CreateEngine(context, node, item);
 
-                var item = inputs[i]!;
-                var engine = CreateEngine(context, inputs, item, i);
-
-                JsValue perItemResult;
+                JsValue result;
                 try
                 {
-                    perItemResult = engine.Evaluate(WrapPerItemScript(script));
+                    result = engine.Evaluate(WrapScript(script));
                 }
                 catch (Exception ex)
                 {
                     return NodeExecutionResult.Failed(FormatScriptError(ex));
                 }
 
-                var perItemPayloadResult = NormalizePerItemResult(perItemResult);
-                if (perItemPayloadResult.Error is not null)
-                {
-                    return NodeExecutionResult.Failed(perItemPayloadResult.Error);
-                }
-                var perItemPayload = perItemPayloadResult.Value!;
-                if (outputItems.Count + 1 > MaxOutputItems)
-                {
-                    return NodeExecutionResult.Failed("Too many output items.");
-                }
+                var normalized = NormalizeResult(result);
 
-                var (bsonValue, bytes) = JTokenToBsonValue(perItemPayload, serializedOutputBytes);
-                serializedOutputBytes = bytes;
-                if (serializedOutputBytes > MaxSerializedOutputBytes)
+                foreach (var token in normalized)
                 {
-                    return NodeExecutionResult.Failed("Output too large.");
-                }
-
-                var inputItem = i < context.InputItems.Count ? context.InputItems[i] : null;
-                outputItems.Add(new NodeOutputItem
-                {
-                    Data = new NodeOutputItemData
+                    if (outputItems.Count + 1 > MaxOutputItems)
                     {
-                        Input = inputItem?.Data.Output ?? new BsonDocument(),
-                        Output = bsonValue,
-                        Parameters = parameters.ToBsonDocument(),
-                    },
-                    Branch = "source",
-                    ParentItemIds = inputItem != null
-                        ? new List<string> { inputItem.Id }
-                        : new List<string>(),
-                });
+                        return NodeExecutionResult.Failed("Too many output items.");
+                    }
+
+                    var (outputToken, _) = ExtractOutputAndSourceId(token);
+
+                    var serializationError = SerializePayload(outputToken, ref serializedOutputBytes, out var bsonValue);
+                    if (serializationError is not null)
+                    {
+                        return NodeExecutionResult.Failed(serializationError);
+                    }
+
+                    outputItems.Add(new NodeOutputItem
+                    {
+                        Data = new NodeOutputItemData
+                        {
+                            Input = current.Data.Output,
+                            Output = bsonValue,
+                            Parameters = parameters.ToBsonDocument(),
+                        },
+                        Branch = "source",
+                        ParentItemIds = new List<string> { current.Id },
+                    });
+                }
             }
 
             return NodeExecutionResult.Successful(outputItems);
         }
 
-
-        private NodeExecutionResult RunOnceForAllItems(
-            NodeExecutionContext context,
-            TransformCodeV1Parameters parameters,
-            string script,
-            List<JToken> inputs)
+        private NodeExecutionResult RunOnceForAllItems(NodeExecutionContext context, TransformCodeV1Parameters parameters, string script)
         {
-
-
-            var engine = CreateEngine(context, inputs);
+            var engine = CreateEngine(context);
             JsValue result;
             try
             {
@@ -148,39 +137,62 @@ namespace DomainService.Workflow.Nodes.TransformCodeV1
                 return NodeExecutionResult.Failed(FormatScriptError(ex));
             }
 
-            if (!result.IsObject() || result.AsObject() is not JsArray)
-            {
-                return NodeExecutionResult.Failed("Code node in 'all' mode must return an array of items.");
-            }
-
-            var normalized = NormalizeAllItemsResult(result);
+            var normalized = NormalizeResult(result);
             if (normalized.Count > MaxOutputItems)
             {
                 return NodeExecutionResult.Failed("Too many output items.");
             }
 
             var outputItems = new List<NodeOutputItem>();
-            var parentIds = context.InputItems.Select(i => i.Id).ToList();
             long serializedOutputBytes = 0;
+
             foreach (var token in normalized)
             {
-                var (bsonValue, bytes) = JTokenToBsonValue(token, serializedOutputBytes);
-                serializedOutputBytes = bytes;
-                if (serializedOutputBytes > MaxSerializedOutputBytes)
+                if (outputItems.Count + 1 > MaxOutputItems)
                 {
-                    return NodeExecutionResult.Failed("Output too large.");
+                    return NodeExecutionResult.Failed("Too many output items.");
+                }
+
+                var (outputToken, sourceId) = ExtractOutputAndSourceId(token);
+
+                var serializationError = SerializePayload(outputToken, ref serializedOutputBytes, out var bsonValue);
+                if (serializationError is not null)
+                {
+                    return NodeExecutionResult.Failed(serializationError);
+                }
+
+                var parentItem = !string.IsNullOrEmpty(sourceId)
+                    ? context.InputItems.FirstOrDefault(i => i.Id == sourceId)
+                    : null;
+
+                List<string> parentIds;
+                string branch;
+                BsonValue input;
+                if (parentItem is not null)
+                {
+                    parentIds = new List<string> { parentItem.Id };
+                    branch = parentItem.Branch;
+                    input = parentItem.Data?.Output ?? new BsonDocument();
+                }
+                else
+                {
+                    parentIds = context.InputItems.Count > 0
+                        ? context.InputItems.Select(i => i.Id).ToList()
+                        : new List<string>();
+                    branch = "source";
+                    input = new BsonDocument();
                 }
 
                 outputItems.Add(new NodeOutputItem
                 {
                     Data = new NodeOutputItemData
                     {
-                        Input = new BsonDocument(),
+                        Input = input,
                         Output = bsonValue,
                         Parameters = parameters.ToBsonDocument(),
                     },
-                    Branch = "source",
-                    ParentItemIds = parentIds.Count > 0 ? new List<string>(parentIds) : null,
+                    Branch = branch,
+                    ParentItemIds = parentIds,
                 });
             }
 
@@ -188,126 +200,254 @@ namespace DomainService.Workflow.Nodes.TransformCodeV1
         }
 
 
-        private static Engine CreateEngine(
-            NodeExecutionContext context,
-            List<JToken> inputs,
-            JToken? perItem = null,
-            int perItemIndex = 0)
+
+        #region Engine
+        private Engine CreateEngine(NodeExecutionContext context, JObject node, JObject item)
         {
-            var engine = new Engine(options =>
-            {
-                options
-                    .TimeoutInterval(TimeSpan.FromSeconds(DefaultTimeoutSeconds))
-                    .LimitMemory(DefaultMemoryLimitBytes)
-                    .LimitRecursion(MaxRecursionDepth)
-                    .MaxStatements(MaxStatements)
-                    .CancellationToken(context.CancellationToken);
-            });
-
-            // Sandbox: no AllowClr() — Jint is locked out of System.* / CLR by default.
-            // Build $items as a real JS array by evaluating a JSON literal so the
-            // user can do `return $items;` and have it survive the round-trip as an
-            // array of objects. SetValue on List<JToken> would wrap it as a
-            // GenericListWrapper which is NOT a JsArray.
-            var itemsJson = JsonConvert.SerializeObject(inputs);
-            engine.Execute($"var $items = {itemsJson};");
-
-            var perItemValue = perItem ?? (inputs.Count > 0 ? inputs[0] : JValue.CreateNull());
-            var perItemJson = JsonConvert.SerializeObject(perItemValue);
-            engine.Execute($"var $input = {perItemJson};");
-            engine.Execute($"var $json = {perItemJson};");
-            engine.Execute($"var $item = {perItemJson};");
-
-            engine.SetValue("$itemIndex", perItemIndex);
-            engine.SetValue("$node", GenerateAncestor(context));
-            engine.SetValue("console", GenerateConsole());
+            var engine = NewEngine(context);
+            engine.Execute($"var $json = {item};");
+            engine.Execute($"var $item = {item};");
+            engine.SetValue("$node", node);
+            engine.SetValue("console", CodeNodeConsole);
             return engine;
         }
 
-        private static List<JToken> GenerateInputPayload(NodeExecutionContext context)
+        private Engine CreateEngine(NodeExecutionContext context)
         {
-            var list = new List<JToken>();
-            foreach (var item in context.InputItems)
-            {
-                var output = item.Data?.Output ?? new BsonDocument();
-                list.Add(BsonValueToJToken(output));
-            }
-            return list;
+            var engine = NewEngine(context);
+            var itemsArray = new JArray(
+                context.InputItems.Select(i => ToN8nItem(i.Data.Output ?? new BsonDocument(), i.Id)));
+            engine.Execute($"var $items = {itemsArray};");
+            engine.Execute(BuildNodeAccessors(context));
+            engine.SetValue("console", CodeNodeConsole);
+            return engine;
         }
 
-        private static JObject GenerateAncestor(NodeExecutionContext context)
+        /// <summary>
+        /// All-mode <c>$node</c>: each ancestor node name maps to an accessor with
+        /// <c>all()</c>/<c>first()</c>/<c>last()</c>/<c>item(i)</c> returning n8n-style
+        /// items <c>{ json, __id }</c>. Mirrors n8n's <c>$('&lt;Node&gt;').all()</c>.
+        /// </summary>
+        private static string BuildNodeAccessors(NodeExecutionContext context)
         {
-            var node = new JObject();
-            foreach (var entry in context.AncestorNodeOutputs)
+            var sb = new StringBuilder("var $node = {");
+            var any = false;
+            foreach (var (nodeName, items) in context.AncestorNodeOutputs)
             {
-                var items = entry.Value ?? new List<WorkflowItemExecutionEntity>();
-                var arr = new JArray();
+                if (items is null || items.Count == 0) continue;
+                if (any) sb.Append(',');
+                any = true;
+
+                var arr = new JArray(items.Select(AncestorEntry));
+                var key = Newtonsoft.Json.JsonConvert.ToString(nodeName);
+                sb.Append(key);
+                sb.Append(":(function(){var __i=");
+                sb.Append(arr);
+                sb.Append(";return{all:function(){return __i;},first:function(){return __i[0];},last:function(){return __i[__i.length-1];},item:function(i){return __i[i];}};})()");
+            }
+            sb.Append("};");
+            return any ? sb.ToString() : "var $node = {};";
+        }
+
+        private static readonly string[] BlockedGlobals =
+        {
+            "require", "process", "fetch", "XMLHttpRequest",
+            "http", "https", "fs", "child_process", "net", "dns",
+            "global", "GLOBAL", "root",
+        };
+
+        private static Engine NewEngine(NodeExecutionContext context)
+        {
+            var engine = new Engine(options => options
+                // No AllowClr(): scripts cannot reach System.* / CLR types.
+                .TimeoutInterval(TimeSpan.FromSeconds(DefaultTimeoutSeconds))
+                .LimitMemory(DefaultMemoryLimitBytes)
+                .LimitRecursion(MaxRecursionDepth)
+                .MaxStatements(MaxStatements)
+                .CancellationToken(context.CancellationToken));
+
+            // Defense-in-depth: neutralize the denylist on the global object.
+            foreach (var name in BlockedGlobals)
+            {
+                engine.Execute($"delete globalThis['{name}'];");
+            }
+
+            return engine;
+        }
+
+        private static readonly object CodeNodeConsole = new
+        {
+            log = (Action<object?>)(msg => Console.WriteLine($"[code-node] {msg}")),
+            warn = (Action<object?>)(msg => Console.WriteLine($"[code-node][warn] {msg}")),
+            error = (Action<object?>)(msg => Console.Error.WriteLine($"[code-node][error] {msg}")),
+        };
+
+
+        private static JObject ToJObject(BsonValue value, string itemId)
+        {
+            var token = BsonValueToJToken(value);
+            if (token is JObject obj)
+            {
+                obj[SourceIdKey] = itemId;
+                return obj;
+            }
+            return new JObject { ["json"] = token, [SourceIdKey] = itemId };
+        }
+
+        /// <summary>
+        /// Builds an n8n-style item: <c>{ json: { ...data, __id } }</c>. Scripts access
+        /// fields as <c>$items[i].json.&lt;field&gt;</c> and the source id as
+        /// <c>$items[i].json.__id</c>.
+        /// </summary>
+        private static JObject ToN8nItem(BsonValue output, string itemId)
+        {
+            var json = BsonValueToJToken(output);
+            if (json is not JObject payload)
+            {
+                payload = new JObject { ["value"] = json };
+            }
+            payload[SourceIdKey] = itemId;
+            return new JObject { ["json"] = payload };
+        }
+
+        private static Dictionary<string, WorkflowItemExecutionEntity> IndexAncestorsById(NodeExecutionContext context)
+        {
+            var byId = new Dictionary<string, WorkflowItemExecutionEntity>();
+            foreach (var items in context.AncestorNodeOutputs.Values)
+            {
+                if (items is null) continue;
                 foreach (var it in items)
                 {
-                    arr.Add(BsonValueToJToken(it.Data?.Output ?? new BsonDocument()));
+                    byId[it.Id] = it;
                 }
-                node[entry.Key] = arr;
+            }
+            return byId;
+        }
+
+        private static JObject AncestorEntry(WorkflowItemExecutionEntity ancestor)
+            => new()
+            {
+                ["json"] = BsonValueToJToken(ancestor.Data?.Output ?? new BsonDocument()),
+            };
+
+        private static JObject GenerateAncestorPerItem(IReadOnlyDictionary<string, WorkflowItemExecutionEntity> ancestorsById, WorkflowItemExecutionEntity item)
+        {
+            var node = new JObject();
+            var visited = new HashSet<string>();
+            var queue = new Queue<string>();
+            queue.Enqueue(item.Id);
+
+            while (queue.Count > 0)
+            {
+                var id = queue.Dequeue();
+                if (!visited.Add(id)) continue;
+                if (!ancestorsById.TryGetValue(id, out var ancestor)) continue;
+
+                node[ancestor.NodeName] = AncestorEntry(ancestor);
+
+                if (ancestor.ParentItemIds is null) continue;
+                foreach (var parentId in ancestor.ParentItemIds)
+                {
+                    if (!string.IsNullOrEmpty(parentId))
+                    {
+                        queue.Enqueue(parentId);
+                    }
+                }
             }
             return node;
         }
 
-        private static object GenerateConsole()
+        #endregion
+
+        #region Output extraction & lineage resolution
+
+        /// <summary>
+        /// Extracts the persistable output and source input id from a script-returned
+        /// value. Recognises the n8n item shape <c>{ json: { ...data, __id } }</c>
+        /// (unwrapping <c>json</c> and reading <c>__id</c> from inside it) and also
+        /// supports bare objects carrying a top-level <c>__id</c>.
+        /// </summary>
+        private static (JToken Output, string? SourceId) ExtractOutputAndSourceId(JToken token)
         {
-            return new
+            // n8n item wrapper: { json: { ...data, __id } }.
+            if (token is JObject outer && outer["json"] is JObject payload)
             {
-                log = new Action<object?>(msg => Console.WriteLine($"[code-node] {msg}")),
-                warn = new Action<object?>(msg => Console.WriteLine($"[code-node][warn] {msg}")),
-                error = new Action<object?>(msg => Console.Error.WriteLine($"[code-node][error] {msg}")),
-            };
+                var sourceId = payload.Value<string>(SourceIdKey);
+                var clone = (JObject)payload.DeepClone();
+                clone.Remove(SourceIdKey);
+                return (clone, sourceId);
+            }
+
+            // Bare object: { ...data, __id? }.
+            if (token is JObject obj)
+            {
+                var sourceId = obj.Value<string>(SourceIdKey);
+                var clone = (JObject)obj.DeepClone();
+                clone.Remove(SourceIdKey);
+                return (clone, sourceId);
+            }
+
+            // Non-object primitives/arrays wrap under { json: ... }.
+            return (new JObject { ["json"] = token.DeepClone() }, null);
         }
+
+        #endregion
+
+        #region Output assembly
+
+        private static string? SerializePayload(JToken payload, ref long accumulatedBytes, out BsonValue value)
+        {
+            if (payload == null || payload.Type == JTokenType.Null)
+            {
+                value = new BsonDocument();
+                return null;
+            }
+            var json = payload.ToString(Newtonsoft.Json.Formatting.None);
+            accumulatedBytes += Encoding.UTF8.GetByteCount(json);
+            value = BsonDocument.Parse(json);
+            return accumulatedBytes > MaxSerializedOutputBytes ? "Output too large." : null;
+        }
+
+        #endregion
+
+        #region Script wrappers & mode resolution
 
         private static string WrapScript(string script)
+            => string.IsNullOrWhiteSpace(script) ? "({})" : $"(() => {{ {script} }})()";
+
+        private static string FormatScriptError(Exception ex)
         {
-            if (string.IsNullOrWhiteSpace(script)) return "({})";
-            return $"(() => {{ {script} }})()";
+            var message = ex.Message ?? ex.GetType().Name;
+            var inner = ex.InnerException?.Message;
+            return string.IsNullOrEmpty(inner) ? message : $"{message} ({inner})";
         }
 
-        private static string WrapPerItemScript(string script) => WrapScript(script);
+        #endregion
 
-        private static List<JToken> NormalizeAllItemsResult(JsValue value)
+        #region Result normalization
+
+        private static List<JToken> NormalizeResult(JsValue value)
         {
-            if (value.IsObject() && value.AsObject() is JsArray)
+            var items = new List<JToken>();
+            if (value.IsNull() || value.IsUndefined())
             {
-                var items = new List<JToken>();
-                foreach (var element in EnumerateJsArray(value.AsObject()))
-                {
-                    items.Add(JsValueToJToken(element));
-                }
                 return items;
             }
-
-            if (value.IsObject())
+            var token = JsValueToJToken(value);
+            if (token is JArray jarr)
             {
-                return new List<JToken> { JsValueToJToken(value) };
+                items.AddRange(jarr);
             }
-
-            return new List<JToken> { new JObject { ["value"] = JsValueToJToken(value) } };
+            else
+            {
+                items.Add(token);
+            }
+            return items;
         }
 
-        private static (JToken? Value, string? Error) NormalizePerItemResult(JsValue value)
-        {
-            if (!value.IsObject() || value.AsObject() is JsArray)
-            {
-                return (null, "Code node in 'each' mode must return a single object.");
-            }
+        #endregion
 
-            return (JsValueToJToken(value), null);
-        }
-
-        private static IEnumerable<JsValue> EnumerateJsArray(ObjectInstance array)
-        {
-            var len = array.Get("length").AsNumber();
-            var engine = array.Engine;
-            for (var i = 0; i < len; i++)
-            {
-                yield return array.Get(JsValue.FromObject(engine, i));
-            }
-        }
+        #region Jint <-> JToken <-> Bson conversion
 
         private static JToken JsValueToJToken(JsValue value)
         {
@@ -318,12 +458,13 @@ namespace DomainService.Workflow.Nodes.TransformCodeV1
             if (value.IsObject())
             {
                 var obj = value.AsObject();
-                if (obj is JsArray)
+                if (obj is JsArray jsArray)
                 {
                     var arr = new JArray();
-                    foreach (var el in EnumerateJsArray(obj))
+                    var length = jsArray.Get("length").AsNumber();
+                    for (var i = 0; i < length; i++)
                     {
-                        arr.Add(JsValueToJToken(el));
+                        arr.Add(JsValueToJToken(jsArray.Get(JsValue.FromObject(jsArray.Engine, i))));
                     }
                     return arr;
                 }
@@ -344,26 +485,10 @@ namespace DomainService.Workflow.Nodes.TransformCodeV1
 
         private static JToken BsonValueToJToken(BsonValue value)
         {
-            var json = value.ToJson(new MongoDB.Bson.IO.JsonWriterSettings
-            {
-                OutputMode = MongoDB.Bson.IO.JsonOutputMode.RelaxedExtendedJson,
-            });
+            var json = value.ToJson(BsonJsonSettings);
             return string.IsNullOrEmpty(json) ? JValue.CreateNull() : JToken.Parse(json);
         }
 
-        private static (BsonValue value, long bytes) JTokenToBsonValue(JToken token, long accumulatedBytes)
-        {
-            if (token == null) return (new BsonDocument(), accumulatedBytes);
-            var json = token.ToString(Newtonsoft.Json.Formatting.None);
-            var bytes = accumulatedBytes + Encoding.UTF8.GetByteCount(json);
-            return (BsonDocument.Parse(json), bytes);
-        }
-
-        private static string FormatScriptError(Exception ex)
-        {
-            var message = ex.Message ?? ex.GetType().Name;
-            var inner = ex.InnerException?.Message;
-            return string.IsNullOrEmpty(inner) ? message : $"{message} ({inner})";
-        }
+        #endregion
     }
 }
