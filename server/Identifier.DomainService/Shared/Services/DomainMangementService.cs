@@ -50,7 +50,7 @@ namespace DomainService.Shared
             if (!verifySuccess)
             {
                 _logger.LogWarning($"Domain verification failed for domain {domain}: {verifyMessage}");
-                return new BaseResponse { IsSuccess = false, Errors = new Dictionary<string, string> { { "domain_verification_failed", $"{domain} - {verifyMessage}"}}};
+                return new BaseResponse { IsSuccess = false, Errors = new Dictionary<string, string> { { "domain_verification_failed", $"{domain} - {verifyMessage}" } } };
             }
 
             var (verifyBlocksDomainSuccess, verifyBlocksDomainMessage) = await VerifyDomainAsync(blocksApiDomain);
@@ -58,7 +58,7 @@ namespace DomainService.Shared
             if (!verifyBlocksDomainSuccess)
             {
                 _logger.LogWarning($"Domain verification failed for domain {blocksApiDomain}: {verifyMessage}");
-                return new BaseResponse { IsSuccess = false, Errors = new Dictionary<string, string> { { "domain_verification_failed", $"{blocksApiDomain} - {verifyBlocksDomainMessage}"}}};
+                return new BaseResponse { IsSuccess = false, Errors = new Dictionary<string, string> { { "domain_verification_failed", $"{blocksApiDomain} - {verifyBlocksDomainMessage}" } } };
             }
 
             var (nginxSuccess, nginxMessage) = await UpdateNginxConfigAndSetupSslRemoteAsync(domain, blocksApiDomain);
@@ -123,7 +123,7 @@ namespace DomainService.Shared
                 return (false, $"Domain verification error: {ex.Message}");
             }
         }
-        
+
 
         private async Task<(bool Success, string Message)> CheckPingBlocksApi(string domain)
         {
@@ -133,7 +133,7 @@ namespace DomainService.Shared
             try
             {
                 using var request = new HttpRequestMessage(HttpMethod.Get, url);
-                // If you want to ignore SSL cert errors like verify=False, you'd need a custom HttpClientHandler (not recommended in prod)
+
 
                 var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
                 _logger.LogInformation("Blocksapi ping response status code: {StatusCode}", (int)response.StatusCode);
@@ -192,12 +192,6 @@ namespace DomainService.Shared
 
 
 
-                    
-                //}
-
-
-                //}
-
                 var (checkPingSuccess, checkPingMessage) = await CheckPingBlocksApi(blocksApiDomain);
                 commands = UpdateNginxConfigCommands(domain, IdentifierConstants.RemoteFeTemplate, "fe-domain");
 
@@ -241,7 +235,7 @@ namespace DomainService.Shared
                     if (!result)
                     {
                         _logger.LogError($"Failed install SSL certification for domain {item}.");
-                        await ExecuteRemoteCommands(sshClient, CleanupNginxConfigCommands(new List<string> {item}));
+                        await ExecuteRemoteCommands(sshClient, CleanupNginxConfigCommands(new List<string> { item }));
                         return (false, $"Failed install SSL certification for domain {item}");
                     }
                     _logger.LogInformation($"SSL Crtification installed successfully for domain {item}.");
@@ -359,13 +353,13 @@ namespace DomainService.Shared
 
         private List<string> UpdateNginxConfigCommands(string domain, string path, string placeholder)
         {
-            return new List<string>  { 
+            return new List<string>  {
                 $"sudo cp {path} /etc/nginx/sites-available/{domain}",
                 $"sudo sed -i 's/{{{placeholder}}}/{domain}/g' /etc/nginx/sites-available/{domain}",
                 $"sudo ln -sf /etc/nginx/sites-available/{domain} /etc/nginx/sites-enabled/",
             };
         }
-        
+
         private List<string> ReloadNginxConfigCommands()
         {
             return new List<string>  {
@@ -373,7 +367,7 @@ namespace DomainService.Shared
                 $"sudo systemctl reload nginx",
             };
         }
-        
+
         private List<string> SSLCertificateInstallCommands(string domain)
         {
             return new List<string>  {
