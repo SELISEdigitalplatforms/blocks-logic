@@ -99,26 +99,7 @@ export const useWorkflow = () => {
     [edges],
   );
 
-  // const exportWorkflow = useCallback(() => {
-  //   return {
-  //     id: workflowId,
-  //     name: workflowName,
-  //     isActive,
-  //     nodes,
-  //     edges,
-  //     metadata: {
-  //       version: "1.0",
-  //       exportedAt: new Date().toISOString(),
-  //     },
-  //   };
-  // }, [workflowId, workflowName, isActive, nodes, edges]);
 
-  // const importWorkflow = useCallback(
-  //   (data: Workflow) => {
-  //     setWorkflow(data);
-  //   },
-  //   [setWorkflow],
-  // );
 
   const validateWorkflow = useCallback(() => {}, []);
 
@@ -188,8 +169,8 @@ export const useWorkflow = () => {
               TriggerId: listeningNodeId,
               EnableListener: false,
             });
-          } catch (error: any) {
-            showErrorToast({ errors: error.message || "Failed to disable trigger listener after timeout" });
+          } catch (error) {
+            showErrorToast({ errors: (error instanceof Error ? error.message : "") || "Failed to disable trigger listener after timeout" });
           }
         }
       }, 2 * 60 * 1000); // 3 minutes

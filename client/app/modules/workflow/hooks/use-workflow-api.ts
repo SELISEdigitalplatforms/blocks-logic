@@ -198,8 +198,8 @@ export const useStepExecutionHandler = () => {
       if (data) {
         setStepExecutionData(data);
       }
-    } catch (e: any) {
-      showErrorToast({ errors: e.message || "Failed to fetch step execution" });
+    } catch (e) {
+      showErrorToast({ errors: (e instanceof Error ? e.message : "") || "Failed to fetch step execution" });
     }
   };
 

@@ -1,4 +1,4 @@
-import { getRuntimeEnv } from "@seliseblocks/blocks-kit";
+import { getRuntimeEnv } from "@seliseblocks/genesis-os";
 
 const BLOCKS_IAM_BASE_URL = getRuntimeEnv("BLOCKS_IAM_BASE_URL");
 const AUTH_OIDC_SUBPATH = "/oidc";
@@ -25,6 +25,7 @@ export const API_BASES = {
 
 // ─── OIDC client endpoints (auth-clients-oidc.service) ──────────────────────
 
-export const AUTH_OIDC_ENDPOINTS = {
-  OIDC_TOKEN: `${BLOCKS_IAM_BASE_URL}/api${AUTH_OIDC_SUBPATH}/token`,
-} as const;
+// DEADCODE 2026-07-29: no references in client or e2e; commented pending review
+// export const AUTH_OIDC_ENDPOINTS = {
+//   OIDC_TOKEN: `${BLOCKS_IAM_BASE_URL}/api${AUTH_OIDC_SUBPATH}/token`,
+// } as const;

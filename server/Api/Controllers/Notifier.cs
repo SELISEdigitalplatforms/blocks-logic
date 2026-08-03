@@ -21,8 +21,6 @@ namespace Api.Controllers
         }
 
         [HttpPost]
-        //[Authorize]
-        //[ProtectedEndPoint]
         public async Task<BaseResponse> Notify([FromBody] NotifyRequest notifyRequest)
         {
             _logger.LogInformation("Received notification request: {@NotifyRequest}", notifyRequest);
@@ -32,9 +30,7 @@ namespace Api.Controllers
         }
 
         [ApiExplorerSettings(IgnoreApi = true)]
-        //[SecretEndPoint]
         [HttpPost]
-       //[Authorize]
         public async Task<BaseResponse> SendSecretNotification([FromBody] NotifyRequest notifyRequest)
         {
             _logger.LogInformation("Received notification request: {@NotifyRequest}", notifyRequest);
@@ -47,7 +43,6 @@ namespace Api.Controllers
 
         [HttpGet]
         [Authorize]
-        //[ProtectedEndPoint]
         public async Task<List<OfflineNotification>> GetUnreadNotificationsBySubscriptionFilter([FromBody] GetUnreadNotificationsRequestBySubscriptionFilter request)
         {
             return await _notificationService.GetUnreadNotificationsBySubscriptionFilter(request);
@@ -55,7 +50,6 @@ namespace Api.Controllers
 
         [HttpPost]
         [Authorize]
-        //[ProtectedEndPoint]
         public async Task<BaseResponse> MarkAllNotificationAsRead()
         {
             return await _notificationService.MarkAllNotificationAsRead();
@@ -63,7 +57,6 @@ namespace Api.Controllers
 
         [HttpPost]
         [Authorize]
-        // [ProtectedEndPoint]
         public async Task<BaseResponse> MarkNotificationAsRead([FromBody] MarkNotificationAsReadRequest request)
         {
             return await _notificationService.MarkNotificationAsRead(request);
@@ -71,7 +64,6 @@ namespace Api.Controllers
 
         [HttpGet]
         [Authorize]
-        // [ProtectedEndPoint]
         public async Task<GetNotificationsResponse> GetNotifications([FromQuery] GetNotificationsRequest request)
         {
             return await _notificationService.GetNotificationsAsync(request);

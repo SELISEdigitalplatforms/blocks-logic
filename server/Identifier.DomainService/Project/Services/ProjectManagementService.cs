@@ -216,8 +216,7 @@ namespace DomainService.Projects
                 Name = fileName,
                 Tags = "[\"File\"]",
                 ParentDirectoryId = string.Empty,
-                AccessModifier = "Public",
-                ProjectKey = BlocksContext.GetContext()?.TenantId
+                AccessModifier = "Public"
             };
 
             var presignedUrlResponse = await _storageDriverService.GetPerSignedUrlForUploadAsync(preSignedUriRequest);
@@ -383,6 +382,7 @@ namespace DomainService.Projects
             var tenantId = context.TenantId;
             var repoProject = await _projectRepository.GetByTenantIdAsync(tenantId);
 
+
             if (repoProject == null)
             {
                 return new GetProjectResponse { Errors = new Dictionary<string, string> { { "project_not_exist", $"project_with_id_{tenantId}_not_exist_into_our_system" } } };
@@ -421,24 +421,16 @@ namespace DomainService.Projects
 
         public async Task<BaseResponse> UpdateProjectAsync(UpdateProjectRequest request)
         {
-            var project = await _projectRepository.GetByTenantIdAsync(request.ProjectKey);
+            var project = await _projectRepository.GetByTenantIdAsync(BlocksContext.GetContext().TenantId);
 
             if (project == null)
             {
-                return new BaseResponse() { IsSuccess = false, Errors = new Dictionary<string, string> { { "project_not_found", $"No project found with id {request.ProjectKey}" } } };
+                return new BaseResponse() { IsSuccess = false, Errors = new Dictionary<string, string> { { "project_not_found", $"No project found with id {BlocksContext.GetContext().TenantId}" } } };
             }
 
             var mainDomain = IdentifierHelper.ExtractMainDomain(request.ApplicationDomain);
 
-            //if (!string.Equals(request.ApplicationDomain, project.ApplicationDomain))
-            //{
-            //    project.IsDomainVerified = mainDomain == IdentifierConstants.BlocsDomain;
-            //}
 
-            //if (request.ApplicationDomain.Contains(IdentifierConstants.BlocsDomain, StringComparison.OrdinalIgnoreCase))
-            //{
-            //    project.IsDomainVerified = true;
-            //}
 
             project.LastUpdatedDate = DateTime.UtcNow;
             //project.ApplicationDomain = request.ApplicationDomain;
@@ -447,10 +439,6 @@ namespace DomainService.Projects
             //project.CustomDomain = !string.IsNullOrWhiteSpace(request.CustomDomain) ? request.CustomDomain : project.CustomDomain;
             project.JwtTokenParameters.Audiences = [request.ApplicationDomain];
 
-            //if (!string.IsNullOrWhiteSpace(request.CustomDomain) && !project.AllowedDomains.Contains(request.ApplicationDomain, StringComparer.OrdinalIgnoreCase))
-            //{
-            //    project.AllowedDomains.Add(request.ApplicationDomain);
-            //}   
 
             await Task.WhenAll(_projectRepository.UpdateProjectAsync(project),
                                 _projectRepository.UpdateIamConfiguration(project));
@@ -462,22 +450,9 @@ namespace DomainService.Projects
                 Tenant = project
             });
 
-            //var domian = IdentifierConstants.CookieDomainPrefix + project.CookieDomain;
 
-            //if (project.IsCookieEnable)
-            //{
 
-            //    if (applicationDomainBeforeUpdate != request.ApplicationDomain)
-            //    {
-            //        await _messageClient.SendToConsumerAsync(new ConsumerMessage<DisableDomainBindingRequest> { ConsumerName = IdentifierConstants.IdentifierName, Payload = new DisableDomainBindingRequest { ProjectId = project.ItemId, Domain = domian } });
-            //    }
 
-            //    await _messageClient.SendToConsumerAsync(new ConsumerMessage<ConfigureDomainRequest> { ConsumerName = IdentifierConstants.IdentifierName, Payload = new ConfigureDomainRequest { CookieDomain = domian, ProjectId = request.ProjectId } });
-            //}
-            //else
-            //{
-            //    await _messageClient.SendToConsumerAsync(new ConsumerMessage<DisableDomainBindingRequest> { ConsumerName = IdentifierConstants.IdentifierName, Payload = new DisableDomainBindingRequest { ProjectId = project.ItemId, Domain = domian } });
-            //}
 
             return new BaseResponse { IsSuccess = true };
         }
@@ -544,11 +519,11 @@ namespace DomainService.Projects
         public async Task<BaseResponse> UpdateTokenValidationParametersAsync(UpdateTokenValidationParametersRequest request)
         {
 
-            var project = await _projectRepository.GetByTenantIdAsync(request.ProjectKey);
+            var project = await _projectRepository.GetByTenantIdAsync(BlocksContext.GetContext().TenantId);
 
             if (project == null)
             {
-                return new BaseResponse { IsSuccess = false, Errors = new Dictionary<string, string> { { "project_not_found", $"No project found with id {request.ProjectKey}" } } };
+                return new BaseResponse { IsSuccess = false, Errors = new Dictionary<string, string> { { "project_not_found", $"No project found with id {BlocksContext.GetContext().TenantId}" } } };
             }
 
             project.ThirdPartyJwtTokenParameters ??= new();
@@ -569,7 +544,7 @@ namespace DomainService.Projects
                 Action = "upsert",
                 TenantId = project.TenantId,
                 Tenant = project
-            }), _cacheClient.RemoveKeyAsync($"{_tenantTokenPublicCertificateCachePrefix}{request.ProjectKey}"));
+            }), _cacheClient.RemoveKeyAsync($"{_tenantTokenPublicCertificateCachePrefix}{BlocksContext.GetContext().TenantId}"));
 
             return new BaseResponse { IsSuccess = true };
         }

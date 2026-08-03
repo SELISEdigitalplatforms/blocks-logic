@@ -13,6 +13,7 @@ using DomainService.Workflow.Utils;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Path = System.IO.Path;
+using Mail.DomainService.Shared.Utilities;
 
 var serviceName = "blocks-logic";
 var vaultType = ApplicationConfigurations.ResolveVaultType();
@@ -58,8 +59,9 @@ services.AddCloudLmtServices();
 services.AddCloudConfigurationServices();
 services.AddWorkflowExecutionEngine();
 services.RegisterBlocksEurolmServices();
+services.RegisterAllMailApplicationServices();
+services.RegisterBlocksObservabilityServices();
 await services.RegisterBlocksDeploymentServicesAsync(vaultType);
-// services.RegisterBlocksObservabilityServices();
 
 var app = builder.Build();
 

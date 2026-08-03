@@ -20,7 +20,6 @@ namespace Api.Controllers
        
 
         [HttpGet]
-        //[ProtectedEndPoint]
         [Authorize]
         public async Task<GetAllTemplatesResponse> Gets([FromQuery] GetAllTemplates request)
         {

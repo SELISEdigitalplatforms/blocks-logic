@@ -1,5 +1,5 @@
 import React from "react";
-import { useProjectStore } from "@seliseblocks/blocks-kit";
+import { useProjectStore } from "@seliseblocks/genesis-os";
 import { dataService } from "../../services/data.service";
 import { NodeSchemaDefinition } from "./node-schema.type";
 
