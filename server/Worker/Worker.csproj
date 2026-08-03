@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Worker">
+﻿<Project Sdk="Microsoft.NET.Sdk.Worker">
 
   <PropertyGroup>
     <UserSecretsId>dotnet-Worker-d76f990a-b305-46d4-9d8a-6be392ee733f</UserSecretsId>
@@ -10,10 +10,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Authentication.DomainService\Authentication.DomainService.csproj" />
-    <ProjectReference Include="..\Iam.DomainService\Iam.DomainService.csproj" />
-    <ProjectReference Include="..\Identifier.DomainService\Identifier.DomainService.csproj" />
-    <ProjectReference Include="..\Mfa.DomainService\Mfa.DomainService.csproj" />
+    <ProjectReference Include="..\Mail.DomainService\Mail.DomainService.csproj" />
+    <!--<ProjectReference Include="..\Mfa.DomainService\Mfa.DomainService.csproj" />-->
     <ProjectReference Include="..\DomainService\DomainService.csproj" />
     <ProjectReference Include="..\Identifier.DomainService\Identifier.DomainService.csproj" />
   </ItemGroup>

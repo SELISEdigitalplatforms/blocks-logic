@@ -60,12 +60,12 @@ namespace XUnitTest.Accounts
                 .ToList();
 
             // Try 15-parameter version first (newer API with actualTentId + refreshToken)
-            var create15Method = createMethods.FirstOrDefault(m => m.GetParameters().Length == 15);
+            var create15Method = createMethods.FirstOrDefault(m => m.GetParameters().Length >= 15);
 
             if (create15Method != null)
             {
                 // Use 15 parameters
-                var context = (BlocksContext)create15Method.Invoke(null, new object[]
+                var context = (BlocksContext)create15Method.CreateContext(new object[]
                 {
                     tenantId, Array.Empty<string>(), userId, true, string.Empty, string.Empty,
                     DateTime.UtcNow.AddHours(1), "test@example.com", Array.Empty<string>(),

@@ -344,9 +344,9 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
     const { copiedNodes, copiedEdges, nodesMap, edgesMap } = get();
     if (!copiedNodes || copiedNodes.length === 0) return;
 
-    let newNodesMap = { ...nodesMap };
-    let newEdgesMap = { ...edgesMap };
-    let existingNames = new Set(Object.values(newNodesMap).map((n) => n.name));
+    const newNodesMap = { ...nodesMap };
+    const newEdgesMap = { ...edgesMap };
+    const existingNames = new Set(Object.values(newNodesMap).map((n) => n.name));
 
     const newPastedNodeIds = new Set<string>();
     const oldToNewId: Record<string, string> = {};
@@ -564,9 +564,6 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
     });
   },
 
-  // setWorkflowActive: (isActive: boolean) => {
-  //   set({ isActive, hasUnsavedChanges: true });
-  // },
 
   resetWorkflow: () => {
     set({
@@ -590,15 +587,22 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
 
   setStepExecutionData: (execution) => {
     const { nodesMap, edgesMap, clearStepExecutionData } = get();
-    
+    const win = window as unknown as {
+      executionAnimationInterval?: ReturnType<typeof setInterval> | null;
+    };
+
     // Clear any existing animation
-    if ((window as any).executionAnimationInterval) {
-      clearInterval((window as any).executionAnimationInterval);
+    if (win.executionAnimationInterval) {
+      clearInterval(win.executionAnimationInterval);
     }
-    
+
     // Create an array of workflow nodes to pass into buildExecutedSubgraph
-    const nodesArray = Object.values(nodesMap) as any[]; 
-    const edgesArray = Object.values(edgesMap) as any[];
+    const nodesArray = Object.values(nodesMap) as unknown as Parameters<
+      typeof buildExecutedSubgraph
+    >[0];
+    const edgesArray = Object.values(edgesMap) as unknown as Parameters<
+      typeof buildExecutedSubgraph
+    >[1];
 
     const { reachableNodeIds, traversedEdgeIds } = buildExecutedSubgraph(
       nodesArray,
@@ -630,10 +634,10 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
     let currentIndex = 0;
 
     // Use window to store interval to survive state re-creations just in case
-    (window as any).executionAnimationInterval = setInterval(() => {
+    win.executionAnimationInterval = setInterval(() => {
       if (currentIndex >= nodesToAnimate.length) {
-        clearInterval((window as any).executionAnimationInterval);
-        (window as any).executionAnimationInterval = null;
+        clearInterval(win.executionAnimationInterval ?? undefined);
+        win.executionAnimationInterval = null;
         
         // Final safety sync
         set({

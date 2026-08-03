@@ -52,16 +52,17 @@ export const FIELD_COMPONENTS_REGISTRY: Record<
   "callout-accordion-display": CalloutAccordionDisplayField,
 };
 
-/**
- * Register a custom field component for a specific field type.
- * This allows you to override default field components or add new ones.
- *
- * @param fieldType - The type of field to register
- * @param component - The React component to use for this field type
- */
-export const registerFieldComponent = (
-  fieldType: FormFieldType,
-  component: React.ComponentType<FieldComponentProps<unknown>>,
-) => {
-  FIELD_COMPONENTS_REGISTRY[fieldType] = component;
-};
+// DEADCODE 2026-07-29: extension hook with no callers in client, e2e or tests; commented pending review
+// /**
+//  * Register a custom field component for a specific field type.
+//  * This allows you to override default field components or add new ones.
+//  *
+//  * @param fieldType - The type of field to register
+//  * @param component - The React component to use for this field type
+//  */
+// export const registerFieldComponent = (
+//   fieldType: FormFieldType,
+//   component: React.ComponentType<FieldComponentProps<unknown>>,
+// ) => {
+//   FIELD_COMPONENTS_REGISTRY[fieldType] = component;
+// };

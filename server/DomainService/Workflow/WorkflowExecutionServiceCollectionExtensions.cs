@@ -65,7 +65,6 @@ namespace DomainService.Workflow
 
             services.RegisterAllNotificationApplicationServices();
 
-            //services.RegisterBlocksMailService();
             services.AddHttpClient();
             return services;
         }

@@ -78,6 +78,11 @@ const renderHighlightedText = (
 	});
 };
 
+type ChildProps = {
+	onScroll?: React.UIEventHandler<HTMLElement>;
+	className?: string;
+};
+
 export const ExpressionHighlighter = ({
 	children,
 	value,
@@ -85,17 +90,18 @@ export const ExpressionHighlighter = ({
 	fontClassName = "",
 	disableHighlighting = false,
 }: {
-	children: React.ReactElement;
+	children: React.ReactElement<ChildProps>;
 	value: string;
 	isMultiline?: boolean;
 	fontClassName?: string;
 	disableHighlighting?: boolean;
 }) => {
+	const { nodes } = useWorkflow();
+	const backdropRef = useRef<HTMLDivElement | null>(null);
+
 	if (disableHighlighting) {
 		return children;
 	}
-	const { nodes } = useWorkflow();
-	const backdropRef = useRef<HTMLDivElement>(null);
 
 	const handleScroll: React.UIEventHandler<HTMLElement> = (e) => {
 		if (backdropRef.current) {

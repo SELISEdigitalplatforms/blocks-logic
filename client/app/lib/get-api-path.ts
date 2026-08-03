@@ -1,4 +1,4 @@
-import { getRuntimeEnv } from "@seliseblocks/blocks-kit";
+import { getRuntimeEnv } from "@seliseblocks/genesis-os";
 
 export const getApiPath = (_servicePath: string): string => {
   return "/api";

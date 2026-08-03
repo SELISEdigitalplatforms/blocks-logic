@@ -8,12 +8,12 @@ import { showErrorToast } from "@/hooks/use-toast";
 export const useWorkflowNotification = () => {
   const { isListening, setIsListening, listeningNodeId, workflowId, setStepExecutionData,setNextExecutionId } = useWorkflow();
 
-  const handleNotification = useCallback(async (data: any) => {
+  const handleNotification = useCallback(async (data: unknown) => {
     if (!isListening) return;
     try {
       let cleanData = data;
       if (typeof data === "string") {
-        cleanData = data.replace(/\x1e$/, "");
+        cleanData = data.endsWith("\x1e") ? data.slice(0, -1) : data;
       }
       const denormalizedData = typeof cleanData === "string" ? JSON.parse(cleanData) : cleanData;
 
@@ -45,13 +45,13 @@ export const useWorkflowNotification = () => {
                 executionId: executionId,
               });
               if (executionData?.data) {
-                setStepExecutionData(executionData as any);
+                setStepExecutionData(executionData as Parameters<typeof setStepExecutionData>[0]);
               }
             }
           }
       }
-    } catch (error: any) {
-      showErrorToast({ errors: error.message || "Failed to parse WorkflowNotification" });
+    } catch (error) {
+      showErrorToast({ errors: (error instanceof Error ? error.message : "") || "Failed to parse WorkflowNotification" });
     }
   }, [isListening, setIsListening, listeningNodeId, workflowId, setStepExecutionData]);
 

@@ -3,9 +3,9 @@ using DomainService.Shared.Entities;
 
 namespace DomainService.ManagedService
 {
-    public class GetAllServiceRequest : BaseGetsRequest<GetAllServiceFilter>, IProjectKey
+    public class GetAllServiceRequest : BaseGetsRequest<GetAllServiceFilter>
     {
-        public string ProjectKey { get; set; } 
+       
     }
 
 

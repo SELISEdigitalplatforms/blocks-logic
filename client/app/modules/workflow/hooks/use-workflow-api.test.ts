@@ -83,7 +83,7 @@ describe("useCreateWorkflow", () => {
       await result.current.mutateAsync(payload);
     });
 
-    expect(workflowService.createWorkflow).toHaveBeenCalledWith(payload);
+    expect(workflowService.createWorkflow).toHaveBeenCalledWith(payload, expect.anything());
     await waitFor(() => expect(result.current.data).toEqual(mockCreateWorkflowResponse));
   });
 });
@@ -105,7 +105,7 @@ describe("useDuplicateWorkflow", () => {
       await result.current.mutateAsync(payload);
     });
 
-    expect(workflowService.duplicateWorkflow).toHaveBeenCalledWith(payload);
+    expect(workflowService.duplicateWorkflow).toHaveBeenCalledWith(payload, expect.anything());
     await waitFor(() => expect(result.current.data).toEqual(mockDuplicateWorkflowResponse));
   });
 });
@@ -123,7 +123,7 @@ describe("useUpdateWorkflow", () => {
       await result.current.mutateAsync(payload);
     });
 
-    expect(workflowService.updateWorkflow).toHaveBeenCalledWith(payload);
+    expect(workflowService.updateWorkflow).toHaveBeenCalledWith(payload, expect.anything());
     await waitFor(() => expect(result.current.data).toEqual(mockUpdateWorkflowResponse));
   });
 });
@@ -141,7 +141,7 @@ describe("useDeleteWorkflow", () => {
       await result.current.mutateAsync(payload);
     });
 
-    expect(workflowService.deleteWorkflow).toHaveBeenCalledWith(payload);
+    expect(workflowService.deleteWorkflow).toHaveBeenCalledWith(payload, expect.anything());
     await waitFor(() => expect(result.current.data).toEqual(mockDeleteWorkflowResponse));
   });
 });
@@ -164,9 +164,9 @@ describe("useGetWorkflowExecutions", () => {
     expect(result.current.data).toEqual(mockGetWorkflowExecutionsResponse);
   });
 
-  it("should not fetch when projectKey or workflowId is empty", () => {
+  it("should not fetch when workflowId is empty", () => {
     const { result } = renderHook(
-      () => useGetWorkflowExecutions({ projectKey: "", workflowId: MOCK_WORKFLOW_ID_1 }),
+      () => useGetWorkflowExecutions({ projectKey: TEST_PROJECT_KEY, workflowId: "" }),
       { wrapper: createWrapper() },
     );
 

@@ -1,5 +1,6 @@
-import { useProjectStore } from "@seliseblocks/blocks-kit";
+import { useProjectStore } from "@seliseblocks/genesis-os";
 import { NodeSchemaDefinition } from "./node-schema.type";
+import type { WorkflowStore } from "@blocks-workflow/store";
 
 // Removed useWorkflowStore
 import {
@@ -7,8 +8,7 @@ import {
   buildEmptyFieldMapping,
 } from "@blocks-workflow/utils/resolve-schema-fields";
 import { dataService } from "../../services/data.service";
-// import { API_BASES } from "@/constants/endpoint.constant";
-import { getRuntimeEnv } from "@seliseblocks/blocks-kit";
+import { getRuntimeEnv } from "@seliseblocks/genesis-os";
 import { authClientService } from "../../services/iam.service";
 
 export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
@@ -57,7 +57,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
               })),
             );
         },
-        onChange: (value: unknown, _data: unknown, config: any) => {
+        onChange: (value: unknown, _data: unknown, config: { store?: WorkflowStore }) => {
           const parts = (value as string).split(":::");
           const collectionName = parts[0] || "";
           const schemaName = parts[1] || "";
@@ -140,7 +140,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
                 })),
             );
         },
-        onChange: (value: unknown, _data: unknown, _config: any) => {
+        onChange: (value: unknown, _data: unknown, _config: unknown) => {
           const parts = (value as string).split(":::");
           const clientId = parts[0] || "";
           const clientSecret = parts[1] || "";

@@ -9,12 +9,12 @@ using System.Threading.Tasks;
 
 namespace CloudConfiguration.DomainService.MFA.RequestModel
 {
-    public class SaveMfaConfigurationRequest : IProjectKey
+    public class SaveMfaConfigurationRequest 
     {
         public bool EnableMfa { get; set; }
         public List<CloudConfigurationUserMfaType> UserMfaType { get; set; }
         public MfaTemplate? MfaTemplate { get; set; }
-        public string ProjectKey { get; set; }
+
     }
 
 }

@@ -73,7 +73,7 @@ namespace DomainService.Migration
 
                 if (userDetails == null || string.IsNullOrEmpty(userDetails.Email))
                 {
-                    _logger.LogWarning("User details not found or missing Email during migration. ProjectKey: {ProjectKey}, UserId: {UserId}",
+                    _logger.LogWarning("User details not found or missing email during migration. ProjectKey: {ProjectKey}, UserId: {UserId}",
                         request.ProjectKey, bc.UserId);
                     return new MigrationOtpGenerationResponse { IsSuccess = false, Errors = new Dictionary<string, string> { { "message", "user_details_not_found" } } };
                 }
@@ -118,7 +118,6 @@ namespace DomainService.Migration
 
         private async Task<bool> SendMfaCodeAsync(string email, string code, string language)
         {
-            // var configuration = await _configurationService.GetAsync();
             _logger.LogDebug("Preparing MFA email. Email: {Email}, Purpose: MfaViaEmail, Language: {Language}", email, language ?? "en-US");
 
             var sendMailCommand = new SendMail
@@ -274,10 +273,6 @@ namespace DomainService.Migration
             };
         }
 
-        // public async Task SendLanguageManagerMigrationEvent(MigrationRequest request)
-        // {
-        //     await SendMigrationEvent(request, MigrationServiceNames.Language, IdentifierConstants.LanguageDataMigrationQueue);
-        // }
 
         private async Task SendMigrationEvent(MigrationRequest request, MigrationServiceNames serviceName, string queueName, string? trackerId = null)
         {

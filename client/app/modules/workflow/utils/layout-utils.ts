@@ -64,7 +64,7 @@ export const getLayoutedElements = (
 
     // Center nodes vertically based on how many share this layer
     const totalHeight = nodeIds.length * NODE_HEIGHT + (nodeIds.length - 1) * VERTICAL_SPACING;
-    let startY = -totalHeight / 2;
+    const startY = -totalHeight / 2;
 
     nodeIds.forEach((nodeId, index) => {
       const y = startY + index * (NODE_HEIGHT + VERTICAL_SPACING);
