@@ -12,16 +12,19 @@ export const NodeInspectorHeader = () => {
   
   const { handleExecuteStep, executeStepModal } = useHandleExecuteStep();
     
-  if (!selectedNode) return null;
-
+  // Declared before the early return: React requires the same hooks in the same
+  // order on every render, and bailing out above them changes the count as soon
+  // as a node is selected.
   const [isRenaming, setIsRenaming] = useState(false);
   const [editName, setEditName] = useState(selectedNode?.name || "");
 
-    useEffect(() => {
-      if (!isRenaming && selectedNode?.name) {
-        setEditName(selectedNode.name);
-      }
-    }, [selectedNode?.name, isRenaming]);
+  useEffect(() => {
+    if (!isRenaming && selectedNode?.name) {
+      setEditName(selectedNode.name);
+    }
+  }, [selectedNode?.name, isRenaming]);
+
+  if (!selectedNode) return null;
   
     const handleRenameSubmit = () => {
       const newName = editName.trim();

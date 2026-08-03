@@ -790,23 +790,6 @@ namespace DomainService.Workflow.Services
             var sourceItems = await _workflowExecutionRepository.GetAllItemsByNodeExecutionIdAsync(
                 sourceNodeExec.Id, execution.TenantId);
 
-            // foreach (var si in sourceItems)
-            // {
-            //     if (si.ParentItemIds != null)
-            //     {
-            //         foreach (var pid in si.ParentItemIds)
-            //         {
-            //             if (!remap.ContainsKey(pid)) return false;
-            //         }
-            //     }
-            //     if (si.AncestorMap != null)
-            //     {
-            //         foreach (var kv in si.AncestorMap)
-            //         {
-            //             if (!remap.ContainsKey(kv.Value)) return false;
-            //         }
-            //     }
-            // }
 
             var now = DateTime.UtcNow;
             var newNodeExecution = new NodeExecutionEntity

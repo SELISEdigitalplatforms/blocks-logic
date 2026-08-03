@@ -38,7 +38,6 @@ namespace DomainService.Configuration.Services
 
         public async Task<NotificationConfiguration> GetByNameAsync(string name)
         {
-            //var collection = _notificationDb.GetCollection<NotificationConfiguration>(_collectionName);
             _notificationDb1 = ResolveNotificationDb();
             var collection = _notificationDb1.GetCollection<NotificationConfiguration>(_collectionName);
 

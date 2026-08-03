@@ -27,7 +27,6 @@ namespace BlocksTemplate.Api.Controllers
         }
 
         [HttpPost]
-        //[ProtectedEndPoint]
         [Authorize]
         public async Task<BaseMutationResponse> Save([FromBody] SaveStorageConfigurationRequest request)
         {
@@ -36,7 +35,6 @@ namespace BlocksTemplate.Api.Controllers
         }
 
         [HttpGet]
-        //[ProtectedEndPoint]
         [Authorize]
         public async Task<List<StorageConfiguration>> Gets([FromQuery] GetStorageConfigurationsRequest request)
         {
@@ -44,7 +42,6 @@ namespace BlocksTemplate.Api.Controllers
         }
 
         [HttpGet]
-        // [ProtectedEndPoint]
         [Authorize]
         public async Task<StorageConfiguration> Get([FromQuery] GetStorageConfigurationRequest request)
         {
@@ -52,7 +49,6 @@ namespace BlocksTemplate.Api.Controllers
         }
 
         [HttpPost]
-        //[ProtectedEndPoint]
         public async Task<BaseResponse> Delete([FromQuery] DeleteStorageConfigurationRequest request)
         {
 
@@ -60,7 +56,6 @@ namespace BlocksTemplate.Api.Controllers
         }
 
         [HttpPost]
-        //[ProtectedEndPoint]
         [Authorize]
         public async Task<GetPreSignedUrlForUploadResponse> GetPreSignedUrlForUpload([FromBody] GetPreSignedUrlForUploadRequest request)
         {
@@ -69,7 +64,6 @@ namespace BlocksTemplate.Api.Controllers
         }
 
         [HttpGet]
-        //[ProtectedEndPoint]
         [Authorize]
         public async Task<FileResponse?> GetFile([FromQuery] GetFileRequest request)
         {
@@ -78,7 +72,6 @@ namespace BlocksTemplate.Api.Controllers
         }
 
         [HttpPost]
-        //[ProtectedEndPoint]
         [Authorize]
         public async Task<List<FileResponse>?> GetFiles([FromBody] GetFilesRequest request)
         {
@@ -86,7 +79,6 @@ namespace BlocksTemplate.Api.Controllers
         }
 
         [HttpPost]
-        //[ProtectedEndPoint]
         [Authorize]
         public async Task<BaseResponse> DeleteFile([FromBody] DeleteFileRequest request)
         {
