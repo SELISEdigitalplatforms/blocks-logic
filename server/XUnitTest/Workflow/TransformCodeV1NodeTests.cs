@@ -9,7 +9,12 @@ namespace XUnitTest.Workflow
 {
     public class TransformCodeV1NodeTests
     {
-        private static WorkflowItemExecutionEntity Item(string id, BsonDocument output)
+        private static WorkflowItemExecutionEntity Item(
+            string id,
+            BsonDocument output,
+            string branch = "source",
+            int itemIndex = 0,
+            List<string>? parentItemIds = null)
             => new()
             {
                 Id = id,
@@ -18,7 +23,9 @@ namespace XUnitTest.Workflow
                 NodeId = "node-1",
                 NodeExecutionId = "ne-1",
                 NodeName = "Node1",
-                Branch = "source",
+                Branch = branch,
+                ItemIndex = itemIndex,
+                ParentItemIds = parentItemIds ?? new List<string>(),
                 AncestorMap = new Dictionary<string, string>(),
                 Data = new NodeOutputItemData { Output = output },
             };
@@ -60,33 +67,142 @@ namespace XUnitTest.Workflow
         {
             var items = new List<WorkflowItemExecutionEntity>
             {
-                Item("a", new BsonDocument { { "name", "abc" }, { "n", 1 } }),
-                Item("b", new BsonDocument { { "name", "xyz" }, { "n", 2 } }),
+                Item("a", new BsonDocument { { "name", "abc" }, { "n", 1 } }, itemIndex: 0),
+                Item("b", new BsonDocument { { "name", "xyz" }, { "n", 2 } }, itemIndex: 1),
             };
             var ctx = Context(items, mode: "runOnceForAllItems",
-                jsCode: "return $items.map(i => ({ json: { tag: i.name.toUpperCase() } }));");
+                jsCode: "return $items.map(i => ({ tag: i.json.name.toUpperCase() }));");
 
             var node = new TransformCodeV1Node();
             var result = await node.RunAsync(ctx);
 
             result.IsSuccess.Should().BeTrue(result.ErrorMessage);
             result.OutputItems.Should().HaveCount(2);
-            result.OutputItems[0].Data.Output["json"].AsBsonDocument["tag"].AsString.Should().Be("ABC");
-            result.OutputItems[1].Data.Output["json"].AsBsonDocument["tag"].AsString.Should().Be("XYZ");
+            result.OutputItems[0].Data.Output["tag"].AsString.Should().Be("ABC");
+            result.OutputItems[1].Data.Output["tag"].AsString.Should().Be("XYZ");
             result.OutputItems[0].Branch.Should().Be("source");
+            // No __id forwarded → fallback to all inputs.
             result.OutputItems[0].ParentItemIds.Should().BeEquivalentTo(new[] { "a", "b" });
+            result.OutputItems[1].ParentItemIds.Should().BeEquivalentTo(new[] { "a", "b" });
         }
 
         [Fact]
         public async Task RunAsync_AllItems_NoInputs_StillSucceeds()
         {
-            var ctx = Context(new List<WorkflowItemExecutionEntity>(), mode: "runOnceForAllItems", jsCode: "return [{ json: { ok: true } }];");
+            var ctx = Context(new List<WorkflowItemExecutionEntity>(), mode: "runOnceForAllItems", jsCode: "return [{ ok: true }];");
 
             var result = await new TransformCodeV1Node().RunAsync(ctx);
 
             result.IsSuccess.Should().BeTrue(result.ErrorMessage);
             result.OutputItems.Should().HaveCount(1);
-            result.OutputItems[0].Data.Output["json"].AsBsonDocument["ok"].AsBoolean.Should().BeTrue();
+            result.OutputItems[0].Data.Output["ok"].AsBoolean.Should().BeTrue();
+        }
+
+        [Fact]
+        public async Task RunAsync_AllItems_ForwardsSourceId_LinksEachOutputToCorrectSource()
+        {
+            var items = new List<WorkflowItemExecutionEntity>
+            {
+                Item("a", new BsonDocument { { "n", 1 } }, branch: "branchA", itemIndex: 0),
+                Item("b", new BsonDocument { { "n", 2 } }, branch: "branchB", itemIndex: 1),
+                Item("c", new BsonDocument { { "n", 3 } }, branch: "branchC", itemIndex: 2),
+            };
+            var ctx = Context(items, mode: "runOnceForAllItems", jsCode: """
+                return $items.map(it => ({ doubled: it.json.n * 2, __id: it.json.__id }));
+                """);
+
+            var result = await new TransformCodeV1Node().RunAsync(ctx);
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            result.OutputItems.Should().HaveCount(3);
+            result.OutputItems[0].Data.Output["doubled"].ToDouble().Should().Be(2);
+            result.OutputItems[1].Data.Output["doubled"].ToDouble().Should().Be(4);
+            result.OutputItems[2].Data.Output["doubled"].ToDouble().Should().Be(6);
+
+            // __id is stripped from persisted output but used for lineage.
+            result.OutputItems[0].Data.Output.AsBsonDocument.Contains("__id").Should().BeFalse();
+            result.OutputItems[0].ParentItemIds.Should().BeEquivalentTo(new[] { "a" });
+            result.OutputItems[0].Branch.Should().Be("branchA");
+            result.OutputItems[0].Data.Input["n"].ToInt32().Should().Be(1);
+
+            result.OutputItems[1].ParentItemIds.Should().BeEquivalentTo(new[] { "b" });
+            result.OutputItems[1].Branch.Should().Be("branchB");
+            result.OutputItems[1].Data.Input["n"].ToInt32().Should().Be(2);
+
+            result.OutputItems[2].ParentItemIds.Should().BeEquivalentTo(new[] { "c" });
+            result.OutputItems[2].Branch.Should().Be("branchC");
+            result.OutputItems[2].Data.Input["n"].ToInt32().Should().Be(3);
+        }
+
+        [Fact]
+        public async Task RunAsync_AllItems_NoSourceId_FallsBackToAllInputs()
+        {
+            var items = new List<WorkflowItemExecutionEntity>
+            {
+                Item("a", new BsonDocument { { "n", 1 } }, itemIndex: 0),
+                Item("b", new BsonDocument { { "n", 2 } }, itemIndex: 1),
+            };
+            var ctx = Context(items, mode: "runOnceForAllItems", jsCode: """
+                return $items.map(it => ({ n: it.json.n }));
+                """);
+
+            var result = await new TransformCodeV1Node().RunAsync(ctx);
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            result.OutputItems.Should().HaveCount(2);
+            foreach (var output in result.OutputItems)
+            {
+                output.ParentItemIds.Should().BeEquivalentTo(new[] { "a", "b" });
+                output.Branch.Should().Be("source");
+                output.Data.Input.AsBsonDocument.ElementCount.Should().Be(0);
+            }
+        }
+
+        [Fact]
+        public async Task RunAsync_PerItem_ForwardsSourceId_LinksToDifferentSource()
+        {
+            var items = new List<WorkflowItemExecutionEntity>
+            {
+                Item("a", new BsonDocument { { "n", 1 } }, branch: "sourceA", itemIndex: 0),
+                Item("b", new BsonDocument { { "n", 2 } }, branch: "sourceB", itemIndex: 1),
+                Item("c", new BsonDocument { { "n", 3 } }, branch: "sourceC", itemIndex: 2),
+            };
+            // Each iteration reparents its output to input[2] ("c") by forwarding that __id.
+            var ctx = Context(items, mode: "runOnceForEachItem", jsCode: """
+                return { tookFrom: 'index2', n: $json.n, __id: $items[2].json.__id };
+                """);
+
+            var result = await new TransformCodeV1Node().RunAsync(ctx);
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            result.OutputItems.Should().HaveCount(3);
+            result.OutputItems[0].Data.Output["n"].ToInt32().Should().Be(1);
+            result.OutputItems[1].Data.Output["n"].ToInt32().Should().Be(2);
+            result.OutputItems[2].Data.Output["n"].ToInt32().Should().Be(3);
+            foreach (var output in result.OutputItems)
+            {
+                output.ParentItemIds.Should().BeEquivalentTo(new[] { "c" });
+                output.Branch.Should().Be("sourceC");
+                output.Data.Input["n"].ToInt32().Should().Be(3);
+                output.Data.Output["tookFrom"].AsString.Should().Be("index2");
+            }
+        }
+
+        [Fact]
+        public async Task RunAsync_PerItem_DirectFieldAccess()
+        {
+            var items = new List<WorkflowItemExecutionEntity>
+            {
+                Item("a", new BsonDocument { { "name", "abc" } }, itemIndex: 0),
+            };
+            var ctx = Context(items, mode: "runOnceForEachItem", jsCode: """
+                return { seen: $item.name };
+                """);
+
+            var result = await new TransformCodeV1Node().RunAsync(ctx);
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            result.OutputItems[0].Data.Output["seen"].AsString.Should().Be("abc");
         }
 
         [Fact]
@@ -99,7 +215,7 @@ namespace XUnitTest.Workflow
                 Item("c", new BsonDocument { { "n", 3 } }),
             };
             var ctx = Context(items, mode: "runOnceForEachItem",
-                jsCode: "return { json: { doubled: $json.n * 2 } };");
+                jsCode: "return { doubled: $json.n * 2 };");
 
             var result = await new TransformCodeV1Node().RunAsync(ctx);
 
@@ -122,15 +238,10 @@ namespace XUnitTest.Workflow
             };
             var ancestor = Item("prev-1", new BsonDocument { { "answer", 42 } });
             var ctx = Context(items, jsCode: """
-                const out = {
-                    json: {
-                        answer: $node['Prev'][0].answer,
-                        fromJson: $json.value,
-                        idx: $itemIndex,
-                        viaInput: $input.value
-                    }
-                };
-                return [out];
+                return [{
+                    answer: $node['Prev'].first().json.answer,
+                    value: $items[0].json.value,
+                }];
                 """);
             ctx.AncestorNodeOutputs = new Dictionary<string, List<WorkflowItemExecutionEntity>>
             {
@@ -140,11 +251,8 @@ namespace XUnitTest.Workflow
             var result = await new TransformCodeV1Node().RunAsync(ctx);
 
             result.IsSuccess.Should().BeTrue(result.ErrorMessage);
-            var json = result.OutputItems[0].Data.Output["json"].AsBsonDocument;
-            json["answer"].ToInt32().Should().Be(42);
-            json["fromJson"].AsString.Should().Be("alpha");
-            json["idx"].ToInt32().Should().Be(0);
-            json["viaInput"].AsString.Should().Be("alpha");
+            result.OutputItems[0].Data.Output["answer"].ToInt32().Should().Be(42);
+            result.OutputItems[0].Data.Output["value"].AsString.Should().Be("alpha");
         }
 
         [Fact]
@@ -192,41 +300,56 @@ namespace XUnitTest.Workflow
         [Fact]
         public async Task RunAsync_ClrEscape_SystemIoFile_IsRejected()
         {
-            // Attempt to reach the host CLR — must not crash and must return Failed.
             var ctx = Context(new List<WorkflowItemExecutionEntity>(), jsCode: """
                 try {
                     const t = System.IO.File;
-                    return [{ json: { leaked: typeof t } }];
+                    return [{ leaked: typeof t }];
                 } catch (e) {
-                    return [{ json: { error: e.message } }];
+                    return [{ error: e.message }];
                 }
                 """);
 
             var result = await new TransformCodeV1Node().RunAsync(ctx);
 
-            // The script's catch arm produces a JSON item with an error message; either way no CLR escape.
             result.IsSuccess.Should().BeTrue(result.ErrorMessage);
-            var json = result.OutputItems[0].Data.Output["json"].AsBsonDocument;
-            json.Contains("error").Should().BeTrue(); // System.IO.File should not be reachable from script
+            result.OutputItems[0].Data.Output.AsBsonDocument.Contains("error").Should().BeTrue();
         }
 
         [Fact]
         public async Task RunAsync_NoNetworkImport_IsBlocked()
         {
-            // The user has no way to import or require anything; this just verifies
-            // the engine has no built-in fetch and that attempts are inert.
             var ctx = Context(new List<WorkflowItemExecutionEntity>(), jsCode: """
                 const fetched = typeof fetch;
                 const imported = (() => { try { return require('fs'); } catch (e) { return 'blocked:' + e.message; } })();
-                return [{ json: { fetched, imported } }];
+                return [{ fetched, imported }];
                 """);
 
             var result = await new TransformCodeV1Node().RunAsync(ctx);
 
             result.IsSuccess.Should().BeTrue(result.ErrorMessage);
-            var json = result.OutputItems[0].Data.Output["json"].AsBsonDocument;
-            json["fetched"].AsString.Should().Be("undefined");
-            json["imported"].AsString.Should().StartWith("blocked:");
+            result.OutputItems[0].Data.Output["fetched"].AsString.Should().Be("undefined");
+            result.OutputItems[0].Data.Output["imported"].AsString.Should().StartWith("blocked:");
+        }
+
+        [Fact]
+        public async Task RunAsync_DangerousGlobalsAreUndefined()
+        {
+            // Every network/filesystem/process identifier must be unreachable
+            // from user scripts (n8n-style sandbox).
+            var denylist = new[]
+            {
+                "require", "process", "fetch", "XMLHttpRequest",
+                "http", "https", "fs", "child_process", "net", "dns",
+            };
+            var types = string.Join(", ", denylist.Select(g => $"typeof {g}"));
+            var ctx = Context(new List<WorkflowItemExecutionEntity>(),
+                jsCode: $"return [{{ types: [{types}] }}];");
+
+            var result = await new TransformCodeV1Node().RunAsync(ctx);
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            var actualTypes = result.OutputItems[0].Data.Output["types"].AsBsonArray;
+            actualTypes.Select(t => t.AsString).Should().AllBe("undefined");
         }
 
         [Fact]
@@ -234,7 +357,6 @@ namespace XUnitTest.Workflow
         {
             var ctx = Context(new List<WorkflowItemExecutionEntity>(), jsCode: "while (true) {}");
 
-            // Cap test runtime so a hung engine doesn't deadlock CI.
             var run = Task.Run(() => new TransformCodeV1Node().RunAsync(ctx));
             var completed = await Task.WhenAny(run, Task.Delay(TimeSpan.FromSeconds(45)));
             completed.Should().BeSameAs(run, "Jint should enforce its statement/timeout limits");
@@ -262,7 +384,7 @@ namespace XUnitTest.Workflow
         {
             var ctx = Context(
                 new List<WorkflowItemExecutionEntity>(),
-                jsCode: "return new Array(10001).fill({ json: {} });");
+                jsCode: "return new Array(10001).fill({});");
 
             var result = await new TransformCodeV1Node().RunAsync(ctx);
 
@@ -285,7 +407,7 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
-        public async Task RunAsync_AllItems_ReturnItemsUnchanged_PreservesDataAndCount()
+        public async Task RunAsync_AllItems_ReturnItemsUnchanged_PreservesDataAndLineage()
         {
             var items = new List<WorkflowItemExecutionEntity>
             {
@@ -298,16 +420,19 @@ namespace XUnitTest.Workflow
 
             result.IsSuccess.Should().BeTrue(result.ErrorMessage);
             result.OutputItems.Should().HaveCount(2);
+            // __id is stripped from the persisted output.
+            result.OutputItems[0].Data.Output.AsBsonDocument.Contains("__id").Should().BeFalse();
             result.OutputItems[0].Data.Output["name"].AsString.Should().Be("abc");
             result.OutputItems[0].Data.Output["n"].ToInt32().Should().Be(1);
             result.OutputItems[1].Data.Output["name"].AsString.Should().Be("xyz");
             result.OutputItems[1].Data.Output["n"].ToInt32().Should().Be(2);
-            result.OutputItems[0].ParentItemIds.Should().BeEquivalentTo(new[] { "a", "b" });
-            result.OutputItems[1].ParentItemIds.Should().BeEquivalentTo(new[] { "a", "b" });
+            // Each output inherits __id from its source input → correct lineage.
+            result.OutputItems[0].ParentItemIds.Should().BeEquivalentTo(new[] { "a" });
+            result.OutputItems[1].ParentItemIds.Should().BeEquivalentTo(new[] { "b" });
         }
 
         [Fact]
-        public async Task RunAsync_AllItems_ReturnNonArray_ReturnsFailed()
+        public async Task RunAsync_AllItems_ReturnsSingleObject_ProducesOneItem()
         {
             var items = new List<WorkflowItemExecutionEntity>
             {
@@ -317,12 +442,13 @@ namespace XUnitTest.Workflow
 
             var result = await new TransformCodeV1Node().RunAsync(ctx);
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("must return an array");
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            result.OutputItems.Should().HaveCount(1);
+            result.OutputItems[0].Data.Output["name"].AsString.Should().Be("abc");
         }
 
         [Fact]
-        public async Task RunAsync_PerItem_ReturnNonObject_ReturnsFailed()
+        public async Task RunAsync_PerItem_ReturnsArray_ProducesMultipleItemsPerInput()
         {
             var items = new List<WorkflowItemExecutionEntity>
             {
@@ -332,8 +458,16 @@ namespace XUnitTest.Workflow
 
             var result = await new TransformCodeV1Node().RunAsync(ctx);
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("must return a single object");
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            result.OutputItems.Should().HaveCount(3);
+            result.OutputItems[0].Data.Output["json"].ToInt32().Should().Be(1);
+            result.OutputItems[1].Data.Output["json"].ToInt32().Should().Be(2);
+            result.OutputItems[2].Data.Output["json"].ToInt32().Should().Be(3);
+            // Each output is linked to the single input item.
+            foreach (var output in result.OutputItems)
+            {
+                output.ParentItemIds.Should().BeEquivalentTo(new[] { "a" });
+            }
         }
 
         [Fact]
