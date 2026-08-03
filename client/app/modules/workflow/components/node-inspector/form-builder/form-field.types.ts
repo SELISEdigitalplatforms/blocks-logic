@@ -27,6 +27,7 @@ export interface SelectOption {
   value: string;
   label: string;
   description?: string;
+  disabled?: boolean;
 }
 
 export interface FieldSchema<Whole = Record<string, unknown>> {
@@ -44,24 +45,47 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
 
   displayValue?: (
     data: Whole,
-    config: { projectKey: string; workflowId: string; nodeId: string; store: WorkflowStore; executionMode?: number },
+    config: {
+      projectKey: string;
+      workflowId: string;
+      nodeId: string;
+      store: WorkflowStore;
+      executionMode?: number;
+    },
   ) => unknown;
   onChange?: (
     value: unknown,
     data: Whole,
-    config: { projectKey: string; workflowId: string; nodeId: string; store: WorkflowStore; executionMode?: number },
+    config: {
+      projectKey: string;
+      workflowId: string;
+      nodeId: string;
+      store: WorkflowStore;
+      executionMode?: number;
+    },
   ) => Whole | void;
   options?:
     | SelectOption[]
     | ((
         data: Whole,
-        config: { projectKey: string; workflowId: string; store: WorkflowStore; executionMode?: number },
+        config: {
+          projectKey: string;
+          workflowId: string;
+          store: WorkflowStore;
+          executionMode?: number;
+        },
       ) => Promise<SelectOption[]>);
   fixedKeys?:
     | string[]
     | ((
         data: Whole,
-        config: { projectKey: string; workflowId: string; nodeId: string; store: WorkflowStore; executionMode?: number },
+        config: {
+          projectKey: string;
+          workflowId: string;
+          nodeId: string;
+          store: WorkflowStore;
+          executionMode?: number;
+        },
       ) => Promise<string[]>);
   fixedKeysDependencies?: string[];
   copyable?: boolean;
@@ -92,10 +116,16 @@ export interface FieldProps<T = unknown> {
   value: T;
   onChange: (value: T) => void;
   data: Record<string, unknown>;
-  config: { projectKey: string; workflowId: string; nodeId: string; store: WorkflowStore; executionMode?: number };
+  config: {
+    projectKey: string;
+    workflowId: string;
+    nodeId: string;
+    store: WorkflowStore;
+    executionMode?: number;
+  };
   readOnly?: boolean;
   className?: string;
-  placeholder?:string
+  placeholder?: string;
 }
 
 export type FormField = FieldSchema;

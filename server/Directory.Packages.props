@@ -10,6 +10,7 @@
     <PackageVersion Include="SeliseBlocks.EurolmDriver.OS" Version="4.0.0" />
     <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.9.0" />
     <PackageVersion Include="FluentValidation" Version="12.0.0" />
+    <PackageVersion Include="Jint" Version="4.15.3" />
     <PackageVersion Include="FluentValidation.AspNetCore" Version="11.3.0" />
     <PackageVersion Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageVersion Include="SixLabors.Fonts" Version="2.1.2" />
