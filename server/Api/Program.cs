@@ -2,9 +2,9 @@ using Blocks.Extensions.DependencyInjection;
 using Blocks.Genesis;
 using BlocksTemplate.Api;
 using SeliseBlocks.ConfigurationDriver;
-using Cloud.DomainService.Utilities;
-using Cloud.LmtService.Utilities;
-using CloudConfiguration.DomainService.Shared.Utilities;
+//using Cloud.DomainService.Utilities;
+
+//using CloudConfiguration.DomainService.Shared.Utilities;
 using DomainService.Notification;
 using DomainService.Shared;
 using DomainService.Utilities;
@@ -53,11 +53,9 @@ builder.Services.Configure<MvcOptions>(options =>
 var wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
 Directory.CreateDirectory(wwwrootPath);
 ApplyFrontendRuntimeSettings(builder.Configuration, wwwrootPath);
-services.RegisterAllServices();
 services.AddApplicationServices();
-services.AddCloudDomainServices();
-services.AddCloudLmtServices();
-services.AddCloudConfigurationServices();
+//services.AddCloudDomainServices();
+//services.AddCloudConfigurationServices();
 services.AddWorkflowExecutionEngine();
 services.RegisterBlocksEurolmServices();
 services.RegisterAllMailApplicationServices();
