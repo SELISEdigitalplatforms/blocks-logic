@@ -1,8 +1,8 @@
-﻿using Blocks.Genesis;
-using CloudConfiguration.DomainService.Authentication.RequestModel;
-using CloudConfiguration.DomainService.MFA.RequestModel;
-using CloudConfiguration.DomainService.MFA.ResponseModel;
-using CloudConfiguration.DomainService.Shared.Services;
+using Blocks.Genesis;
+//using CloudConfiguration.DomainService.Authentication.RequestModel;
+//using CloudConfiguration.DomainService.MFA.RequestModel;
+//using CloudConfiguration.DomainService.MFA.ResponseModel;
+//using CloudConfiguration.DomainService.Shared.Services;
 using Mfa.DomainService.Services;
 using Mfa.DomainService.Shared;
 using Mfa.DomainService.Shared.RequestModel;
@@ -19,15 +19,16 @@ namespace Api.Controllers
     {
         private readonly IMfaManagementService _mfaManagementService;
         private readonly TotpService _totpService;
-        private readonly IConfigurationService _configurationService;
+        //private readonly IConfigurationService _configurationService;
         public MfaController(IMfaManagementService mfaManagementService,
-                            TotpService totpService,
-                           IConfigurationService configurationService)
+                            TotpService totpService
+                           //IConfigurationService configurationService
+            )
         {
            
             _mfaManagementService = mfaManagementService;
             _totpService = totpService;
-            _configurationService = configurationService;
+            //_configurationService = configurationService;
         }
 
         [HttpPost]
@@ -71,20 +72,20 @@ namespace Api.Controllers
 
             return await _mfaManagementService.ResendOtpAsync(request.MfaId, request.SendPhoneNumberAsEmailDomain);
         }
-        #region Cloud Configuration
-        [HttpPost]
-        [Authorize]
-        public async Task<BaseResponse> Save(SaveMfaConfigurationRequest request)
-        {
-            return await _configurationService.SaveMfaConfigurationAsync(request);
-        }
+        //#region Cloud Configuration
+        //[HttpPost]
+        //[Authorize]
+        //public async Task<BaseResponse> Save(SaveMfaConfigurationRequest request)
+        //{
+        //    return await _configurationService.SaveMfaConfigurationAsync(request);
+        //}
 
-        [HttpGet]
-        [Authorize]
-        public async Task<GetMfaConfigurationResponse> Get()
-        {
-            return await _configurationService.GetMfaConfigurationAsync();
-        }
-        #endregion
+        //[HttpGet]
+        //[Authorize]
+        //public async Task<GetMfaConfigurationResponse> Get()
+        //{
+        //    return await _configurationService.GetMfaConfigurationAsync();
+        //}
+        //#endregion
     }
 }
