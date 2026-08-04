@@ -24,26 +24,26 @@ namespace Api.Controllers
 
         }
 
-        [Authorize]
-        [HttpPost]
-        public CreateCaptchaRequestResponse Create([FromBody] CreateCaptchaRequest command)
-        {
-            return _captchaService.CreateCaptcha(command);
-        }
+        //[Authorize]
+        //[HttpPost]
+        //public CreateCaptchaRequestResponse Create([FromBody] CreateCaptchaRequest command)
+        //{
+        //    return _captchaService.CreateCaptcha(command);
+        //}
 
-        [Authorize]
-        [HttpPost]
-        public Task<SubmitCaptchaRequestResponse> Submit([FromBody] SubmitCaptchaRequest command)
-        {
-            return _captchaService.SubmitCaptchaAsync(command);
-        }
+        //[Authorize]
+        //[HttpPost]
+        //public Task<SubmitCaptchaRequestResponse> Submit([FromBody] SubmitCaptchaRequest command)
+        //{
+        //    return _captchaService.SubmitCaptchaAsync(command);
+        //}
 
-        [Authorize]
-        [HttpGet]
-        public Task<VerifyCaptchaRequestResponse> Verify([FromQuery] VerifyCaptchaRequest query)
-        {
-            return _captchaService.VerifyCaptchaAsync(query);
-        }
+        //[Authorize]
+        //[HttpGet]
+        //public Task<VerifyCaptchaRequestResponse> Verify([FromQuery] VerifyCaptchaRequest query)
+        //{
+        //    return _captchaService.VerifyCaptchaAsync(query);
+        //}
         //#region Cloud Configuration
         //[HttpPost]
         //[Authorize]
