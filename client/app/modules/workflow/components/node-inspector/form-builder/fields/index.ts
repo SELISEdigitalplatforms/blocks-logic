@@ -7,6 +7,7 @@ export { CheckboxField } from "./checkbox-field";
 export { SwitchField } from "./switch-field";
 export { RadioField } from "./radio-field";
 export { CodeEditorField } from "./code-editor-field";
+export { CodeEditorFieldV2 } from "./code-editor-field-v2";
 export { KeyValueField } from "./key-value-field";
 export { KeyValuePairsField } from "./key-value-pairs-field";
 export { FixedKeyValuePairsField } from "./fixed-key-value-pairs-field";
