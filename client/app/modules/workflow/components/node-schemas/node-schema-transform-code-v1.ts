@@ -30,14 +30,12 @@ export const NodeSchemaTransformCodeV1: NodeSchemaDefinition = {
       },
       {
         id: "script",
-         type: "code-editor-v2",
+        type: "code-editor-v2",
         label: "Script",
         info: "Write your transformation script here. Use the provided variables to access input data.",
         key: "script",
         language: "javascript",
         height: 280,
-        placeholder:
-          "// All items: $items is an array; return an array of { json: {...} }\nreturn $items.map(item => ({ json: { tag: item.json.name } }));\n\n// Per item: $json holds the current item; return { json: {...} }\n// return { json: { ...$json.json, doubled: $json.json.n * 2 } };",
       },
     ],
     settings: [
