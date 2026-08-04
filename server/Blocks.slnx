@@ -1,5 +1,4 @@
 <Solution>
-  <Project Path="Mail.Driver/Mail.Driver.csproj" />
   <Project Path="Api/Api.csproj" />
   <Project Path="Captcha.DomainService/Captcha.DomainService.csproj" />
   <Project Path="ConfigurationDriver/SeliseBlocks.ConfigurationDriver.csproj" />
@@ -7,6 +6,8 @@
   <Project Path="Iam.DomainService/Iam.DomainService.csproj" />
   <Project Path="Identifier.DomainService/Identifier.DomainService.csproj" />
   <Project Path="Mail.DomainService/Mail.DomainService.csproj" />
+  <Project Path="Mail.Driver/Mail.Driver.csproj" />
+  <Project Path="Mfa.DomainService/Mfa.DomainService.csproj" />
   <Project Path="Notification.DomainService/Notification.DomainService.csproj" />
   <Project Path="Worker/Worker.csproj" />
   <Project Path="XUnitTest/XUnitTest.csproj" />
