@@ -1,6 +1,7 @@
 using Blocks.Extensions.DependencyInjection;
 using Blocks.Genesis;
 using BlocksTemplate.Api;
+using Iam.DomainService.Utilities;
 using SeliseBlocks.ConfigurationDriver;
 //using Cloud.DomainService.Utilities;
 
@@ -54,12 +55,11 @@ var wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
 Directory.CreateDirectory(wwwrootPath);
 ApplyFrontendRuntimeSettings(builder.Configuration, wwwrootPath);
 services.AddApplicationServices();
-//services.AddCloudDomainServices();
-//services.AddCloudConfigurationServices();
-services.AddWorkflowExecutionEngine();
+services.RegisterSharedServices();
 services.RegisterBlocksEurolmServices();
 services.RegisterAllMailApplicationServices();
 services.RegisterBlocksObservabilityServices();
+services.AddWorkflowExecutionEngine();
 await services.RegisterBlocksDeploymentServicesAsync(vaultType);
 
 var app = builder.Build();
