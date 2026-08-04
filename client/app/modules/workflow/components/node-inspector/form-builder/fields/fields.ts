@@ -2,6 +2,7 @@ import { FieldComponentProps, FormFieldType } from "../form-field.types";
 import { ArrayField } from "./array-field";
 import { CheckboxField } from "./checkbox-field";
 import { CodeEditorField } from "./code-editor-field";
+import { CodeEditorFieldV2 } from "./code-editor-field-v2";
 import { KeyValuePairsField } from "./key-value-pairs-field";
 import { KeyTypeValueField } from "./key-type-value-field";
 import { NumberField } from "./number-field";
@@ -39,6 +40,7 @@ export const FIELD_COMPONENTS_REGISTRY: Record<
   "select-with-description": SelectWithDescriptionField,
   multiselect: SelectField,
   "code-editor": CodeEditorField,
+  "code-editor-v2": CodeEditorFieldV2,
   "key-value-pairs": KeyValuePairsField,
   "fixed-key-value-pairs": FixedKeyValuePairsField,
   "key-type-value-pairs": KeyTypeValueField,
