@@ -30,7 +30,7 @@ export const NodeSchemaTransformCodeV1: NodeSchemaDefinition = {
       },
       {
         id: "script",
-        type: "code-editor",
+         type: "code-editor-v2",
         label: "Script",
         info: "Write your transformation script here. Use the provided variables to access input data.",
         key: "script",
