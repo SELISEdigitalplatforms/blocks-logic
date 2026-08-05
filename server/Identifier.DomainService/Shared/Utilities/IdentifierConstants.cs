@@ -17,16 +17,11 @@ namespace DomainService.Shared
         public const string TenantAssetCollectionName = "TenantAssets";
         public const string ProjectPeopleCollectionName = "ProjectPeoples";
         public const string ProjectStatusTracerCollectionName = "ProjectStatusTracers";
-        public const string MigrationTrackerCollectionName = "MigrationTrackers";
         public const string CookieDomainPrefix = "blocksapi.";
 
         public const string IdentifierQueueName = "blocks_identifier_listener";
-        public const string DataCleanupQueue = "blocks_data_cleanup_listener";
-        public const string LanguageDataMigrationQueue = "blocks_localization_environment_data_migration_listener";
         public const string IamQueue = "blocks_iam_listener";
         public const string MailQueue = "blocks_mail_listener";
-        public const string GenericMigrationQueue = "blocks_generic_migration_listener";
-        public const string MigrationCompletionTopic = "migration_topic";
         public const string ProjectPeopleInvitationMailPurpose = "project_invitation";
         public const string BlocsDomain = "seliseblocks.com";
 
@@ -71,9 +66,7 @@ namespace DomainService.Shared
             {
                 RabbitMqConfiguration = new RabbitMqConfiguration
                 {
-                    ConsumerSubscriptions = [ConsumerSubscription.BindToQueue(IdentifierQueueName),
-                                             ConsumerSubscription.BindToQueue(GenericMigrationQueue),
-                                             ConsumerSubscription.BindToQueue(DataCleanupQueue)],
+                    ConsumerSubscriptions = [ConsumerSubscription.BindToQueue(IdentifierQueueName)],
                 }
             };
         }
@@ -84,8 +77,7 @@ namespace DomainService.Shared
             {
                 AzureServiceBusConfiguration = new AzureServiceBusConfiguration
                 {
-                    Queues = [IdentifierQueueName, GenericMigrationQueue, DataCleanupQueue],
-                    Topics = [MigrationCompletionTopic]
+                    Queues = [IdentifierQueueName],
                 }
             };
         }
