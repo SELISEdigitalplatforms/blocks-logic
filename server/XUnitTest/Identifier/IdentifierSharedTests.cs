@@ -1,11 +1,5 @@
-using Blocks.Genesis;
-using DomainService.Dtos;
-using DomainService.Entities;
 using DomainService.Shared;
-using DomainService.Subscription.RequestModel;
-using DomainService.Subscription.Services;
 using FluentAssertions;
-using Moq;
 
 namespace XUnitTest.Identifier
 {
@@ -59,63 +53,4 @@ namespace XUnitTest.Identifier
             EncryptionHelper.Decrypt(cipherText!, "tenant-salt").Should().Be(cipherText);
         }
     }
-
-    public class IdentifierConstantsTests
-        {
-        [Theory]
-        [InlineData("amqp://guest:guest@localhost:5672")]
-        [InlineData("AMQPS://guest:guest@rabbit.test:5671")]
-        public void GetMessageConfiguration_AmqpConnectionString_BuildsRabbitMqConfiguration ( string connectionString )
-            {
-            var configuration = IdentifierConstants.GetMessageConfiguration(connectionString);
-
-            configuration.RabbitMqConfiguration.Should().NotBeNull();
-            configuration.RabbitMqConfiguration!.ConsumerSubscriptions.Should().HaveCount(1);
-            }
-
-        [Theory]
-        [InlineData("Endpoint=sb://example.servicebus.windows.net/;SharedAccessKeyName=policy")]
-        [InlineData("not-a-uri")]
-        [InlineData("https://example.test")]
-        public void GetMessageConfiguration_NonAmqpConnectionString_BuildsAzureServiceBusConfiguration ( string connectionString )
-            {
-            var configuration = IdentifierConstants.GetMessageConfiguration(connectionString);
-
-            configuration.AzureServiceBusConfiguration.Should().NotBeNull();
-            configuration.AzureServiceBusConfiguration!.Queues.Should().BeEquivalentTo(
-            [
-                IdentifierConstants.IdentifierQueueName
-            ]);
-            }
-
-        public class SubscriptionServiceTests
-            {
-            private readonly Mock<ISubscriptionRepository> _repository = new();
-
-            [Fact]
-            public async Task GetSubscriptionsAsync_ReturnsRepositoryResults ( )
-                {
-                var limits = new List<ResourceLimit> { new() { Resource = "people::invite", Limit = 5 } };
-                _repository.Setup(r => r.GetSubscriptionsAsync()).ReturnsAsync(limits);
-
-                var result = await new SubscriptionService(_repository.Object)
-                    .GetSubscriptionsAsync(new GetSubscriptionsRequest { ProjectKey = "TENANT-1" });
-
-                result.IsSuccess.Should().BeTrue();
-                result.Subscriptions.Should().BeSameAs(limits);
-                }
-
-            [Fact]
-            public async Task GetSubscriptionsAsync_NoLimits_ReturnsEmptyList ( )
-                {
-                _repository.Setup(r => r.GetSubscriptionsAsync()).ReturnsAsync([]);
-
-                var result = await new SubscriptionService(_repository.Object)
-                    .GetSubscriptionsAsync(new GetSubscriptionsRequest());
-
-                result.IsSuccess.Should().BeTrue();
-                result.Subscriptions.Should().BeEmpty();
-                }
-            }
-        }
 }

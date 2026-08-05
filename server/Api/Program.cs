@@ -3,9 +3,6 @@ using Blocks.Genesis;
 using BlocksTemplate.Api;
 using Iam.DomainService.Utilities;
 using SeliseBlocks.ConfigurationDriver;
-//using Cloud.DomainService.Utilities;
-
-//using CloudConfiguration.DomainService.Shared.Utilities;
 using DomainService.Notification;
 using DomainService.Shared;
 using DomainService.Utilities;
@@ -80,7 +77,6 @@ if (File.Exists(indexHtml))
     });
 }
 
-//ApplicationConfigurations.ConfigureMiddleware(app);
 ApplicationConfigurations.ConfigureMiddleware(app, tenantValidationPrefixes: new[] { "api/notificationHub" });
 app.MapHub<NotificationHub>("/api/notificationHub").WithDisplayName("Controller/notificationHub");
 await app.RunAsync();
