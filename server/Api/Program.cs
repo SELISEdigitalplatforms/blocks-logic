@@ -1,6 +1,7 @@
 using Blocks.Extensions.DependencyInjection;
 using Blocks.Genesis;
 using BlocksTemplate.Api;
+using Common.InternalService.Shared.Utilities;
 using SeliseBlocks.ConfigurationDriver;
 using DomainService.Notification;
 using DomainService.Shared;
@@ -52,6 +53,7 @@ Directory.CreateDirectory(wwwrootPath);
 ApplyFrontendRuntimeSettings(builder.Configuration, wwwrootPath);
 services.AddApplicationServices();
 //services.RegisterSharedServices();
+services.RegisterCommonInternalServices();
 services.RegisterBlocksEurolmServices();
 services.RegisterAllMailApplicationServices();
 services.RegisterBlocksObservabilityServices();
