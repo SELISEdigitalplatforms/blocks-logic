@@ -1,4 +1,4 @@
-﻿using Blocks.Genesis;
+using Blocks.Genesis;
 using Blocks.MailDriver;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -19,11 +19,11 @@ namespace Api.Controllers
 
        
 
-        [HttpGet]
-        [Authorize]
-        public async Task<GetAllTemplatesResponse> Gets([FromQuery] GetAllTemplates request)
-        {
-            return await _templateService.GetAllTemplatesAsync(request);
-        }
+        //[HttpGet]
+        //[Authorize]
+        //public async Task<GetAllTemplatesResponse> Gets([FromQuery] GetAllTemplates request)
+        //{
+        //    return await _templateService.GetAllTemplatesAsync(request);
+        //}
     }
 }
