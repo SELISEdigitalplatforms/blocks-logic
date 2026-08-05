@@ -3,7 +3,7 @@ using DomainService.Dtos;
 using DomainService.Entities;
 using DomainService.Projects;
 using DomainService.Shared;
-using Iam.DomainService.Entities;
+using Identifier.DomainService.Shared.Entities.Iam.DomainService.Entities;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
@@ -67,7 +67,7 @@ namespace DomainService.People
             var peopleCursor = await peopleCollection.FindAsync(projectPeopleFilter, options);
             var projectPeoples = await peopleCursor.ToListAsync();
 
-            var filter = Builders<User>.Filter.In(x => x.ItemId, projectPeoples.Select(x => x.UserId));
+            var filter = Builders<Identifier.DomainService.Shared.Entities.Iam.DomainService.Entities.User>.Filter.In(x => x.ItemId, projectPeoples.Select(x => x.UserId));
             var users = (await userCollection.Find(filter).ToListAsync()).ToDictionary(x => x.ItemId, x => x);
 
             var peoples = projectPeoples.Select(x =>
