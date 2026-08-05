@@ -1,17 +1,18 @@
 using Blocks.Extensions.DependencyInjection;
 using Blocks.Genesis;
 using BlocksTemplate.Api;
+using CloudConfiguration.DomainService.Shared.Utilities;
 using Common.InternalService.Shared.Utilities;
-using SeliseBlocks.ConfigurationDriver;
 using DomainService.Notification;
 using DomainService.Shared;
 using DomainService.Utilities;
 using DomainService.Workflow;
 using DomainService.Workflow.Utils;
+using Mail.DomainService.Shared.Utilities;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
+using SeliseBlocks.ConfigurationDriver;
 using Path = System.IO.Path;
-using Mail.DomainService.Shared.Utilities;
 
 var serviceName = "blocks-logic";
 var vaultType = ApplicationConfigurations.ResolveVaultType();
@@ -58,6 +59,7 @@ services.RegisterBlocksEurolmServices();
 services.RegisterAllMailApplicationServices();
 services.RegisterBlocksObservabilityServices();
 services.AddWorkflowExecutionEngine();
+services.AddCloudConfigurationServices();
 await services.RegisterBlocksDeploymentServicesAsync(vaultType);
 
 var app = builder.Build();
