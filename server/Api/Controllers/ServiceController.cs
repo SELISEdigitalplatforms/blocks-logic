@@ -17,19 +17,6 @@ namespace Api.Controllers
             _serviceManagement = serviceManagement;
         }
 
-        //[Authorize]
-        //[HttpPost]
-        //public async Task<IActionResult> Register([FromBody] RegisterServiceRequest request)
-        //{
-        //    var response = await _serviceManagement.RegisterServiceAsync(request);
-
-        //    if (response.IsSuccess)
-        //    {
-        //        return Ok(response);
-        //    }
-        //    return BadRequest(response);
-        //}
-
         [Authorize]
         [HttpPost]
         public async Task<GetAllServiceResponse> GetAll([FromBody] GetAllServiceRequest request)
