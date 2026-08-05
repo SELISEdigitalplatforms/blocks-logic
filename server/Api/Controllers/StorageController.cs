@@ -1,7 +1,7 @@
 using Blocks.Genesis;
-//using CloudConfiguration.DomainService.Shared.Services;
-//using CloudConfiguration.DomainService.Storage.Entities;
-//using CloudConfiguration.DomainService.Storage.RequestModel;
+using CloudConfiguration.DomainService.Shared.Services;
+using CloudConfiguration.DomainService.Storage.Entities;
+using CloudConfiguration.DomainService.Storage.RequestModel;
 using Common.InternalService.Storage;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -13,15 +13,15 @@ namespace BlocksTemplate.Api.Controllers
 
     public class StorageController : ControllerBase
     {
-        //private readonly IConfigurationService _configurationService;
+        private readonly IConfigurationService _configurationService;
 
         private readonly IFileManagementService _fileManagementService;
 
         public StorageController(
-            //IConfigurationService configurationService,
+            IConfigurationService configurationService,
                                  IFileManagementService fileManagementService)
         {
-            //_configurationService = configurationService;
+            _configurationService = configurationService;
             _fileManagementService = fileManagementService;
         }
 
@@ -33,19 +33,19 @@ namespace BlocksTemplate.Api.Controllers
         //    return await _configurationService.SaveStorageConfigurationAsync(request);
         //}
 
-        //[HttpGet]
-        //[Authorize]
-        //public async Task<List<StorageConfiguration>> Gets([FromQuery] GetStorageConfigurationsRequest request)
-        //{
-        //    return await _configurationService.GetStorageConfigurationsAsync();
-        //}
+        [HttpGet]
+        [Authorize]
+        public async Task<List<StorageConfiguration>> Gets ( [FromQuery] GetStorageConfigurationsRequest request )
+            {
+            return await _configurationService.GetStorageConfigurationsAsync();
+            }
 
-        //[HttpGet]
-        //[Authorize]
-        //public async Task<StorageConfiguration> Get([FromQuery] GetStorageConfigurationRequest request)
-        //{
-        //    return await _configurationService.GetStorageConfigurationAsync(request?.ConfigurationName ?? string.Empty);
-        //}
+        [HttpGet]
+        [Authorize]
+        public async Task<StorageConfiguration> Get ( [FromQuery] GetStorageConfigurationRequest request )
+            {
+            return await _configurationService.GetStorageConfigurationAsync(request?.ConfigurationName ?? string.Empty);
+            }
 
         //[HttpPost]
         //public async Task<BaseResponse> Delete([FromQuery] DeleteStorageConfigurationRequest request)
