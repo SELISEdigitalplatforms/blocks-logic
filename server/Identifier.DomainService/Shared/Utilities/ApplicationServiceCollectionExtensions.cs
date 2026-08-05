@@ -6,8 +6,6 @@ using DomainService.Certificate;
 using DomainService.ManagedService;
 using DomainService.ManagedService.Services;
 using DomainService.ManagedService.Validator;
-using DomainService.Migration;
-using DomainService.Migration.Services;
 using DomainService.People;
 using DomainService.Projects;
 using DomainService.Shared.Services;
@@ -32,7 +30,6 @@ namespace DomainService.Shared
             services.AddTransient<IValidator<UpdateProjectRequest>, UpdateProjectRequestValidator>();
             services.AddTransient<IValidator<SignupRequest>, SignupRequestValidator>();
             services.AddTransient<IValidator<TransferOwnershipRequest>, TransferOwnershipRequestValidator>();
-            services.AddTransient<IValidator<MigrationRequest>, MigrationRequestValidator>();
             services.AddTransient<IValidator<RegisterServiceRequest>, RegisterServiceRequestValidator>();
 
 
@@ -43,9 +40,6 @@ namespace DomainService.Shared
             services.AddSingleton<IPeopleService, PeopleService>();
             services.AddSingleton<IPeopleRepository, PeopleRepository>();
             services.AddSingleton<IDomainManagementService, DomainManagementService>();
-            services.AddSingleton<IMigrationService, MigrationService>();
-            services.AddSingleton<IMigrationRepository, MigrationRepository>();
-            services.AddSingleton<IMigrationNotificationService, MigrationNotificationService>();
             services.AddSingleton<ICertificateManager, CertificateManager>();
             services.AddSingleton<ICertificateStorageFactory, CertificateStorageFactory>();
             services.AddSingleton<IEncodingService, EncodingService>();

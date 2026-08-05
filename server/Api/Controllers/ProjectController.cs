@@ -105,32 +105,32 @@ namespace Api.Controllers
         //    return await _projectManagementService.DisableProjectAsync(BlocksContext.GetContext().TenantId);
         //}
 
-        [HttpGet]
-        [Authorize]
-        public async Task<GetAssetResponse> GetAsset([FromQuery] GetAssetRequest request)
-        {
-            return await _projectManagementService.GetAssetAsync(request);
-        }
+        //[HttpGet]
+        //[Authorize]
+        //public async Task<GetAssetResponse> GetAsset([FromQuery] GetAssetRequest request)
+        //{
+        //    return await _projectManagementService.GetAssetAsync(request);
+        //}
 
-        [HttpPost]
-        [Authorize]
-        public async Task<BaseResponse> AddAsset([FromBody] AddAssetRequest asset)
-        {
-            if (string.IsNullOrWhiteSpace(asset.TenantGroupId) || asset.Resource == null)
-            {
-                return new BaseResponse { IsSuccess = false, Errors = new Dictionary<string, string> { { "invalid_asset", "Asset or GroupId cannot be null or empty" } } };
-            }
+        //[HttpPost]
+        //[Authorize]
+        //public async Task<BaseResponse> AddAsset([FromBody] AddAssetRequest asset)
+        //{
+        //    if (string.IsNullOrWhiteSpace(asset.TenantGroupId) || asset.Resource == null)
+        //    {
+        //        return new BaseResponse { IsSuccess = false, Errors = new Dictionary<string, string> { { "invalid_asset", "Asset or GroupId cannot be null or empty" } } };
+        //    }
 
-            await _projectManagementService.AddAssetAsync(asset);
-            return new BaseResponse { IsSuccess = true };
-        }
+        //    await _projectManagementService.AddAssetAsync(asset);
+        //    return new BaseResponse { IsSuccess = true };
+        //}
 
-        [HttpPost]
-        [Authorize]
-        public async Task<BaseResponse> UpdateTokenValidationParameters([FromBody] UpdateTokenValidationParametersRequest request)
-        {
-            return await _projectManagementService.UpdateTokenValidationParametersAsync(request);
-        }
+        //[HttpPost]
+        //[Authorize]
+        //public async Task<BaseResponse> UpdateTokenValidationParameters([FromBody] UpdateTokenValidationParametersRequest request)
+        //{
+        //    return await _projectManagementService.UpdateTokenValidationParametersAsync(request);
+        //}
 
         //[HttpGet]
         //[Authorize]
