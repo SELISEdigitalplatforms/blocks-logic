@@ -1,4 +1,5 @@
 using Common.InternalService.Language;
+using Common.InternalService.Monitor;
 using Common.InternalService.Storage;
 using CloudConfiguration.DomainService.Shared.Services;
 using FluentValidation;
@@ -32,6 +33,19 @@ namespace Common.InternalService.Shared.Utilities
             serviceCollection.AddTransient<SftpStorageService>();
 
             serviceCollection.AddTransient<IValidator<GetPreSignedUrlForUploadRequest>, GetPreSignedUrlForUploadRequestValidator>();
+            #endregion
+
+            #region Monitor
+            serviceCollection.AddSingleton<IMonitorObservabilityService, MonitorObservabilityService>();
+            serviceCollection.AddSingleton<IMonitorConfigurationService, MonitorConfigurationService>();
+            serviceCollection.AddSingleton<IMonitorConfigurationRepoService, MonitorConfigurationRepoService>();
+            serviceCollection.AddSingleton<IMonitorIncidentService, MonitorIncidentService>();
+            serviceCollection.AddSingleton<IMonitorIncidentRepoService, MonitorIncidentRepoService>();
+            serviceCollection.AddSingleton<IMonitorPingService, MonitorPingService>();
+            serviceCollection.AddSingleton<IMonitorPingRepoService, MonitorPingRepoService>();
+
+            serviceCollection.AddTransient<IValidator<SaveMonitorConfigurationRequest>, SaveMonitorConfigurationRequestValidator>();
+            serviceCollection.AddTransient<IValidator<UpdateMonitorConfigurationRequest>, UpdateMonitorConfigurationRequestValidator>();
             #endregion
         }
     }
