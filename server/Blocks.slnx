@@ -2,6 +2,7 @@
   <Project Path="Api/Api.csproj" />
   <Project Path="Blocks.Driver/Blocks.Driver.csproj" />
   <Project Path="Captcha.DomainService/Captcha.DomainService.csproj" />
+  <Project Path="CloudConfiguration.DomainService/CloudConfiguration.DomainService.csproj" />
   <Project Path="Common.InternalService/Common.InternalService.csproj" Id="f97f15e9-9068-4f6a-aee7-11665eebfccc" />
   <Project Path="ConfigurationDriver/SeliseBlocks.ConfigurationDriver.csproj" />
   <Project Path="DomainService/DomainService.csproj" />
