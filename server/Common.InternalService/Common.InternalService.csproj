@@ -5,6 +5,13 @@
         <PackageReference Include="Newtonsoft.Json" />
         <PackageReference Include="SeliseBlocks.Genesis.OS" />
         <PackageReference Include="MongoDB.Driver" />
+        <PackageReference Include="Azure.Storage.Blobs" />
+        <PackageReference Include="AWSSDK.S3" />
+        <PackageReference Include="SSH.NET" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\CloudConfiguration.DomainService\CloudConfiguration.DomainService.csproj" />
     </ItemGroup>
 
 </Project>

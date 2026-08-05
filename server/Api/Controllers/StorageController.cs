@@ -2,11 +2,9 @@ using Blocks.Genesis;
 //using CloudConfiguration.DomainService.Shared.Services;
 //using CloudConfiguration.DomainService.Storage.Entities;
 //using CloudConfiguration.DomainService.Storage.RequestModel;
-using DomainService.Storage;
+using Common.InternalService.Storage;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Storage.DomainService.Services;
-using Storage.DomainService.Storage;
 
 namespace BlocksTemplate.Api.Controllers
 {
@@ -79,11 +77,11 @@ namespace BlocksTemplate.Api.Controllers
             return await _fileManagementService.GetMultipleUrlsForDownloadFilesAsync(request);
         }
 
-        [HttpPost]
-        [Authorize]
-        public async Task<BaseResponse> DeleteFile([FromBody] DeleteFileRequest request)
-        {
-            return await _fileManagementService.DeleteFileAsync(request);
-        }
+        //[HttpPost]
+        //[Authorize]
+        //public async Task<BaseResponse> DeleteFile([FromBody] DeleteFileRequest request)
+        //{
+        //    return await _fileManagementService.DeleteFileAsync(request);
+        //}
     }
 }
