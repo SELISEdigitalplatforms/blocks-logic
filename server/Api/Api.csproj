@@ -34,6 +34,7 @@
     <!--<ProjectReference Include="..\CloudConfiguration.DomainService\CloudConfiguration.DomainService.csproj" />-->
 
     <!--<ProjectReference Include="..\Iam.DomainService\Iam.DomainService.csproj" />-->
+    <ProjectReference Include="..\Common.InternalService\Common.InternalService.csproj" />
     <ProjectReference Include="..\Identifier.DomainService\Identifier.DomainService.csproj" />
     <ProjectReference Include="..\Mail.DomainService\Mail.DomainService.csproj" />
 

@@ -4,11 +4,11 @@
         <name>Api</name>
     </assembly>
     <members>
-        <member name="M:BlocksTemplate.Api.Controllers.LanguageController.Gets(Eurolm.DomainService.Services.GetLanguagesRequest)">
+        <member name="M:BlocksTemplate.Api.Controllers.LanguageController.Gets(Common.InternalService.Language.GetLanguagesRequest)">
             <summary>
             Retrieves all available languages.
             </summary>
-            <returns>A list of <see cref="T:Eurolm.DomainService.Services.Language"/> objects.</returns>
+            <returns>A list of <see cref="T:Common.InternalService.Language.Language"/> objects.</returns>
         </member>
         <member name="T:BlocksTemplate.Api.GlobalApiRoutePrefixConvention">
             <summary>Prepends a segment (e.g. <c>api</c>) to every controller’s attribute route template.</summary>
