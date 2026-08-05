@@ -1,7 +1,7 @@
-﻿using Blocks.Genesis;
-using CloudConfiguration.DomainService.Mail.Entities;
-using CloudConfiguration.DomainService.Mail.RequestModel;
-using CloudConfiguration.DomainService.Shared.Services;
+using Blocks.Genesis;
+//using CloudConfiguration.DomainService.Mail.Entities;
+//using CloudConfiguration.DomainService.Mail.RequestModel;
+//using CloudConfiguration.DomainService.Shared.Services;
 using Mail.DomainService.Mails;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -14,115 +14,117 @@ namespace BlocksTemplate.Api.Controllers
 
     public class MailController : ControllerBase
     {
-        private readonly IConfigurationService _configurationService;
+        //private readonly IConfigurationService _configurationService;
         private readonly IMailService _mailService;
-        public MailController(IConfigurationService configurationService,IMailService mailService )
+        public MailController(
+            //IConfigurationService configurationService,
+            IMailService mailService )
         {
-            _configurationService = configurationService;
+            //_configurationService = configurationService;
             _mailService = mailService;
             }
 
-        [HttpPost]
-        [Authorize]
-        public async Task<IActionResult> Save([FromBody] MailConfiguration request)
-        {
+        //[HttpPost]
+        //[Authorize]
+        //public async Task<IActionResult> Save([FromBody] MailConfiguration request)
+        //{
 
-            if (string.IsNullOrWhiteSpace(request.ConfigurationId))
-            {
-                request.ConfigurationId = Guid.NewGuid().ToString();
-            }
+        //    if (string.IsNullOrWhiteSpace(request.ConfigurationId))
+        //    {
+        //        request.ConfigurationId = Guid.NewGuid().ToString();
+        //    }
 
-            var result = await _configurationService.SaveMailConfigurationAsync(request);
-            return result.IsSuccess ? Ok(result) : BadRequest(result);
-        }
+        //    var result = await _configurationService.SaveMailConfigurationAsync(request);
+        //    return result.IsSuccess ? Ok(result) : BadRequest(result);
+        //}
 
-        [HttpGet]
-        [Authorize]
-        public async Task<MailConfiguration> Get([FromQuery] GetMailConfigurationRequest request)
-        {
-            var result = await _configurationService.GetMailConfigurationAsync(request);
+        //[HttpGet]
+        //[Authorize]
+        //public async Task<MailConfiguration> Get([FromQuery] GetMailConfigurationRequest request)
+        //{
+        //    var result = await _configurationService.GetMailConfigurationAsync(request);
 
-            if (result == null)
-            {
-                var response = new BaseMutationResponse
-                {
-                    IsSuccess = false,
-                    Errors = new Dictionary<string, string>
-                    {
-                        { "Configuration", "No configuration found" }
-                    }
-                };
+        //    if (result == null)
+        //    {
+        //        var response = new BaseMutationResponse
+        //        {
+        //            IsSuccess = false,
+        //            Errors = new Dictionary<string, string>
+        //            {
+        //                { "Configuration", "No configuration found" }
+        //            }
+        //        };
 
-                BadRequest(response);
-            }
+        //        BadRequest(response);
+        //    }
 
-            return result;
-        }
+        //    return result;
+        //}
 
-        [HttpGet]
-        [Authorize]
-        public async Task<List<MailServerConfiguration>> Gets([FromQuery] GetAllMailConfigurationsRequest request)
-        {
-            var result = await _configurationService.GetAllMailConfigurationsAsync();
+        //[HttpGet]
+        //[Authorize]
+        //public async Task<List<MailServerConfiguration>> Gets([FromQuery] GetAllMailConfigurationsRequest request)
+        //{
+        //    var result = await _configurationService.GetAllMailConfigurationsAsync();
 
-            if (result == null)
-            {
-                var response = new BaseMutationResponse
-                {
-                    IsSuccess = false,
-                    Errors = new Dictionary<string, string>
-                    {
-                        { "Configuration", "No configuration found" }
-                    }
-                };
+        //    if (result == null)
+        //    {
+        //        var response = new BaseMutationResponse
+        //        {
+        //            IsSuccess = false,
+        //            Errors = new Dictionary<string, string>
+        //            {
+        //                { "Configuration", "No configuration found" }
+        //            }
+        //        };
 
-                BadRequest(response);
-            }
+        //        BadRequest(response);
+        //    }
 
-            return result;
-        }
+        //    return result;
+        //}
 
-        [HttpDelete]
-        [Authorize]
-        public async Task<IActionResult> Delete([FromQuery] DeleteMailConfigurationRequest request)
-        {
+        //[HttpDelete]
+        //[Authorize]
+        //public async Task<IActionResult> Delete([FromQuery] DeleteMailConfigurationRequest request)
+        //{
 
-            if (string.IsNullOrWhiteSpace(request.ConfigurationId))
-            {
-                return BadRequest(new BaseMutationResponse
-                {
-                    IsSuccess = false,
-                    Errors = new Dictionary<string, string>
-                    {
-                        { "ConfigurationId", "Invalid or missing ConfigurationId" }
-                    }
-                });
-            }
+        //    if (string.IsNullOrWhiteSpace(request.ConfigurationId))
+        //    {
+        //        return BadRequest(new BaseMutationResponse
+        //        {
+        //            IsSuccess = false,
+        //            Errors = new Dictionary<string, string>
+        //            {
+        //                { "ConfigurationId", "Invalid or missing ConfigurationId" }
+        //            }
+        //        });
+        //    }
 
-            var result = await _configurationService.DeleteMailConfigurationAsync(request);
-            return result.IsSuccess ? Ok(result) : BadRequest(result);
-        }
+        //    var result = await _configurationService.DeleteMailConfigurationAsync(request);
+        //    return result.IsSuccess ? Ok(result) : BadRequest(result);
+        //}
 
-        [HttpPost]
-        [Authorize]
-        public async Task<IActionResult> Duplicate([FromBody] DuplicateMailConfigurationRequest request)
-        {
+        //[HttpPost]
+        //[Authorize]
+        //public async Task<IActionResult> Duplicate([FromBody] DuplicateMailConfigurationRequest request)
+        //{
 
-            if (string.IsNullOrWhiteSpace(request.ConfigurationId))
-            {
-                return BadRequest(new BaseMutationResponse
-                {
-                    IsSuccess = false,
-                    Errors = new Dictionary<string, string>
-                    {
-                        { "ConfigurationId", "Invalid or missing ConfigurationId" }
-                    }
-                });
-            }
+        //    if (string.IsNullOrWhiteSpace(request.ConfigurationId))
+        //    {
+        //        return BadRequest(new BaseMutationResponse
+        //        {
+        //            IsSuccess = false,
+        //            Errors = new Dictionary<string, string>
+        //            {
+        //                { "ConfigurationId", "Invalid or missing ConfigurationId" }
+        //            }
+        //        });
+        //    }
 
-            var result = await _configurationService.DuplicateMailConfigurationAsync(request);
-            return result.IsSuccess ? Ok(result) : BadRequest(result);
-        }
+        //    var result = await _configurationService.DuplicateMailConfigurationAsync(request);
+        //    return result.IsSuccess ? Ok(result) : BadRequest(result);
+        //}
 
         #region Mail Send
 

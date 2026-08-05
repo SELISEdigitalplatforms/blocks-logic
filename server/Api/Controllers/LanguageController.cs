@@ -1,6 +1,5 @@
-using Blocks.EurolmDriver;
-using Blocks.Genesis;
-using Eurolm.DomainService.Services;
+using Common.InternalService.Language;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BlocksTemplate.Api.Controllers
@@ -9,12 +8,12 @@ namespace BlocksTemplate.Api.Controllers
     [Route("[controller]/[action]")]
     public class LanguageController : ControllerBase
     {
-        private readonly IEurolmDriverService _eurolmDriverService;
+        private readonly ILanguageManagementService _languageManagementService;
 
         public LanguageController(
-            IEurolmDriverService eurolmDriverService)
+            ILanguageManagementService languageManagementService)
         {
-            _eurolmDriverService = eurolmDriverService;
+            _languageManagementService = languageManagementService;
         }
 
         /// <summary>
@@ -22,10 +21,11 @@ namespace BlocksTemplate.Api.Controllers
         /// </summary>
         /// <returns>A list of <see cref="Language"/> objects.</returns>
         [HttpGet]
+        [Authorize]
         public async Task<List<Language>> Gets([FromQuery] GetLanguagesRequest request)
         {
             if (request == null) BadRequest();
-            return await _eurolmDriverService.GetLanguagesAsync();
+            return await _languageManagementService.GetLanguagesAsync();
         }
     }
 }
