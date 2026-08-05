@@ -1,13 +1,11 @@
-﻿using Blocks.Genesis;
+using Blocks.Genesis;
 using DomainService.Dtos;
 using DomainService.Entities;
 using DomainService.Projects;
 using DomainService.Shared;
-using DomainService.Shared.Entities;
-using Iam.DomainService.Entities;
+using Identifier.DomainService.Shared.Entities.Iam.DomainService.Entities;
 using MongoDB.Bson;
 using MongoDB.Driver;
-using Pipelines.Sockets.Unofficial.Arenas;
 
 namespace DomainService.People
 {
@@ -67,9 +65,9 @@ namespace DomainService.People
             };
 
             var peopleCursor = await peopleCollection.FindAsync(projectPeopleFilter, options);
-            var projectPeoples = await peopleCursor.ToListAsync(); 
+            var projectPeoples = await peopleCursor.ToListAsync();
 
-            var filter = Builders<User>.Filter.In(x => x.ItemId, projectPeoples.Select(x => x.UserId));
+            var filter = Builders<Identifier.DomainService.Shared.Entities.Iam.DomainService.Entities.User>.Filter.In(x => x.ItemId, projectPeoples.Select(x => x.UserId));
             var users = (await userCollection.Find(filter).ToListAsync()).ToDictionary(x => x.ItemId, x => x);
 
             var peoples = projectPeoples.Select(x =>
@@ -101,74 +99,7 @@ namespace DomainService.People
             return (peoples.ToList(), totalCount, peoplesTotalCount.Count, isOwner);
         }
 
-
-        public async Task<Tenant> GetProjectByIdAsync(string projectKey)
-        {
-            var filter = Builders<Tenant>.Filter.Eq(mc => mc.TenantId, projectKey);
-            return await _dbContextProvider.GetCollection<Tenant>(IdentifierConstants.TenantCollectionName).Find(filter).FirstOrDefaultAsync();
-        }
-
-        public async Task<bool> IsPeoplesWithinLimit(InvitationDetails request, string resource)
-        {
-            var collection = _dbContextProvider.GetDatabase(request.ProjectKey).GetCollection<ResourceLimit>("ResourceLimits");
-            var filter = Builders<ResourceLimit>.Filter.Eq(r => r.Resource, resource);
-            var resourceLimit = await collection.Find(filter).FirstOrDefaultAsync();
-
-            if (resourceLimit is not null && resourceLimit.Limit >= request.Emails.Count())
-            {
-                return true;
-            }
-
-            return false;
-        }
-
-        public async Task<List<User>> GetUsersByEmailAsync(List<string> emails)
-        {
-            var filter = Builders<User>.Filter.In(x => x.Email, emails);
-            return await _dbContextProvider.GetCollection<User>(_userCollectionName).Find(filter).ToListAsync();
-        }
-
-        public async Task<User> GetUserByIdAsync(string userId)
-        {
-            var filter = Builders<User>.Filter.Eq(x => x.ItemId, userId);
-            return await _dbContextProvider.GetCollection<User>(_userCollectionName).Find(filter).FirstOrDefaultAsync();
-        }
-
-        public async Task<bool> InsertPeoplesAsync(List<ProjectPeople> projectPeoples)
-        {
-            await _dbContextProvider.GetCollection<ProjectPeople>(_peopleCollectionName).InsertManyAsync(projectPeoples);
-            return true;
-        }
-
-        public async Task<bool> RemovePeoplesAsync(string email, List<string> projectKeys)
-        {
-            var filter = Builders<ProjectPeople>.Filter.Eq(x => x.Email, email)
-                & Builders<ProjectPeople>.Filter.In(x => x.TenantId, projectKeys);
-            var result = await _dbContextProvider.GetCollection<ProjectPeople>(_peopleCollectionName).DeleteManyAsync(filter);
-            return result.IsAcknowledged;
-        }
-
-        public async Task<bool> UpdateProjectPeoples(List<string> ids)
-        {
-            var filter = Builders<ProjectPeople>.Filter.In(x => x.ItemId, ids);
-            var update = Builders<ProjectPeople>.Update.Set(x => x.IsInvitationConfirmed, true);
-            var result = await _dbContextProvider.GetCollection<ProjectPeople>(_peopleCollectionName).UpdateManyAsync(filter, update);
-            return result.IsAcknowledged;
-        }
-
-        public async Task<List<ProjectPeople>> GetProjectPeoplesAsync(string userId, List<string> projectKeys)
-        {
-            var filter = Builders<ProjectPeople>.Filter.Eq(x => x.UserId, userId) & Builders<ProjectPeople>.Filter.In(x => x.TenantId, projectKeys);
-            return await _dbContextProvider.GetCollection<ProjectPeople>(_peopleCollectionName).Find(filter).ToListAsync();
-        }
-
-        public async Task<ProjectPeople> GetProjectPeopleAsync(string id)
-        {
-            var filter = Builders<ProjectPeople>.Filter.Eq(x => x.ItemId, id);
-            return await _dbContextProvider.GetCollection<ProjectPeople>(_peopleCollectionName).Find(filter).FirstOrDefaultAsync();
-        }
-
-        public async Task<bool> IsOwner(string userId, List<string> projectKeys)
+        private async Task<bool> IsOwner(string userId, List<string> projectKeys)
         {
             var filter = Builders<ProjectPeople>.Filter.Eq(x => x.UserId, userId) & Builders<ProjectPeople>.Filter.In(x => x.TenantId, projectKeys)
                 & Builders<ProjectPeople>.Filter.Eq(x => x.IsCreator, true);
@@ -176,42 +107,6 @@ namespace DomainService.People
             var result = await _dbContextProvider.GetCollection<ProjectPeople>(_peopleCollectionName).CountDocumentsAsync(filter);
 
             return result > 0;
-        }
-
-        public async Task<bool> UpdateProjectPeopleOwnerShipAsync(List<string> ids, bool ownerShipStatus)
-        {
-            var filter = Builders<ProjectPeople>.Filter.In(x => x.ItemId, ids);
-            var update = Builders<ProjectPeople>.Update.Set(x => x.IsCreator, ownerShipStatus)
-                                                       .Set(x=>x.IsInvitationConfirmed, true)
-                                                       .Set(x=>x.IsInvitationSent, true);
-            var result = await _dbContextProvider.GetCollection<ProjectPeople>(_peopleCollectionName).UpdateManyAsync(filter, update);
-            return result.IsAcknowledged;
-        }
-
-        public async Task<bool> UpdateProjectOwnerShipAsync(List<string> tenantIds, string userId)
-        {
-            var filter = Builders<Tenant>.Filter.In(x => x.TenantId, tenantIds);
-            var update = Builders<Tenant>.Update.Set(x => x.CreatedBy, userId)
-                                                       .Set(x => x.LastUpdatedBy, BlocksContext.GetContext()?.UserId)
-                                                       .Set(x => x.LastUpdatedDate, DateTime.UtcNow);
-
-            var result = await _dbContextProvider.GetCollection<Tenant>(IdentifierConstants.TenantCollectionName).UpdateManyAsync(filter, update);
-            return result.IsAcknowledged;
-        }
-
-
-
-        public async Task<ProjectPeople> GetProjectPeopleByTenantIdAndUserIdAsync(string tenantId, string userId)
-        {
-            var filter = Builders<ProjectPeople>.Filter.Eq(x => x.TenantId, tenantId) & Builders<ProjectPeople>.Filter.Eq(x => x.UserId, userId);
-            return await _dbContextProvider.GetCollection<ProjectPeople>(_peopleCollectionName).Find(filter).FirstOrDefaultAsync();
-
-        }
-
-        public async Task<SignUpSetting> GetSignUpSettingAsync()
-        {
-            var collection = _dbContextProvider.GetCollection<SignUpSetting>($"{nameof(SignUpSetting)}s");
-            return await collection.Find(_ => true).FirstOrDefaultAsync();
         }
     }
 }
