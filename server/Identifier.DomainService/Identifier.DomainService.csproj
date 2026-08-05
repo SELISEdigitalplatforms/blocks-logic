@@ -10,8 +10,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Captcha.DomainService\Captcha.DomainService.csproj" />
-    <ProjectReference Include="..\Iam.DomainService\Iam.DomainService.csproj" />
+    <!--<ProjectReference Include="..\Captcha.DomainService\Captcha.DomainService.csproj" />
+    <ProjectReference Include="..\Iam.DomainService\Iam.DomainService.csproj" />-->
   </ItemGroup>
 
   

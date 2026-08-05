@@ -5,7 +5,7 @@ using DomainService.Workflow.Events;
 using DomainService.Workflow.Nodes.TriggerDataV1;
 using DomainService.Workflow.Utils;
 using DomainService.Shared;
-using Iam.DomainService.Utilities;
+//using Iam.DomainService.Utilities;
 using Mail.DomainService.Dtos;
 using Mail.DomainService.Mails;
 using Mail.DomainService.Shared.Utilities;
@@ -54,7 +54,7 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             services.AddSingleton<IConsumer<AddExcuationNodeEvent>, AddExcuationNodeConsumer>();
             services.AddSingleton<IConsumer<DataChangeEvent>, DataTriggerConsumer>();
             services.AddApplicationServices();
-            services.RegisterSharedServices();
+            //services.RegisterSharedServices();
 
             ApplicationConfigurations.ConfigureWorker(services, LogicConstants.GetMessageConfiguration(secret.MessageConnectionString));
         });

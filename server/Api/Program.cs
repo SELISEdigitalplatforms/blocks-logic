@@ -1,7 +1,6 @@
 using Blocks.Extensions.DependencyInjection;
 using Blocks.Genesis;
 using BlocksTemplate.Api;
-using Iam.DomainService.Utilities;
 using SeliseBlocks.ConfigurationDriver;
 using DomainService.Notification;
 using DomainService.Shared;
@@ -52,7 +51,7 @@ var wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
 Directory.CreateDirectory(wwwrootPath);
 ApplyFrontendRuntimeSettings(builder.Configuration, wwwrootPath);
 services.AddApplicationServices();
-services.RegisterSharedServices();
+//services.RegisterSharedServices();
 services.RegisterBlocksEurolmServices();
 services.RegisterAllMailApplicationServices();
 services.RegisterBlocksObservabilityServices();

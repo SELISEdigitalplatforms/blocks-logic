@@ -3,7 +3,7 @@ using DomainService.Entities;
 using DomainService.People;
 using DomainService.Projects;
 using FluentAssertions;
-using Iam.DomainService.Entities;
+using Identifier.DomainService.Shared.Entities.Iam.DomainService.Entities;
 using MongoDB.Driver;
 using Moq;
 using XUnitTest.TestHelpers;
