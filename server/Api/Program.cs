@@ -1,10 +1,8 @@
 using Blocks.Extensions.DependencyInjection;
 using Blocks.Genesis;
 using BlocksTemplate.Api;
+using Common.InternalService.Shared.Utilities;
 using SeliseBlocks.ConfigurationDriver;
-using Cloud.DomainService.Utilities;
-using Cloud.LmtService.Utilities;
-using CloudConfiguration.DomainService.Shared.Utilities;
 using DomainService.Notification;
 using DomainService.Shared;
 using DomainService.Utilities;
@@ -53,15 +51,13 @@ builder.Services.Configure<MvcOptions>(options =>
 var wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
 Directory.CreateDirectory(wwwrootPath);
 ApplyFrontendRuntimeSettings(builder.Configuration, wwwrootPath);
-services.RegisterAllServices();
 services.AddApplicationServices();
-services.AddCloudDomainServices();
-services.AddCloudLmtServices();
-services.AddCloudConfigurationServices();
-services.AddWorkflowExecutionEngine();
+//services.RegisterSharedServices();
+services.RegisterCommonInternalServices();
 services.RegisterBlocksEurolmServices();
 services.RegisterAllMailApplicationServices();
 services.RegisterBlocksObservabilityServices();
+services.AddWorkflowExecutionEngine();
 await services.RegisterBlocksDeploymentServicesAsync(vaultType);
 
 var app = builder.Build();
@@ -82,7 +78,6 @@ if (File.Exists(indexHtml))
     });
 }
 
-//ApplicationConfigurations.ConfigureMiddleware(app);
 ApplicationConfigurations.ConfigureMiddleware(app, tenantValidationPrefixes: new[] { "api/notificationHub" });
 app.MapHub<NotificationHub>("/api/notificationHub").WithDisplayName("Controller/notificationHub");
 await app.RunAsync();
