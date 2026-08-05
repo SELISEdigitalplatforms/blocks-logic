@@ -1,4 +1,7 @@
 using Common.InternalService.Language;
+using Common.InternalService.Storage;
+using CloudConfiguration.DomainService.Shared.Services;
+using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Common.InternalService.Shared.Utilities
@@ -10,6 +13,25 @@ namespace Common.InternalService.Shared.Utilities
             #region Language
             serviceCollection.AddSingleton<ILanguageManagementService, LanguageManagementService>();
             serviceCollection.AddSingleton<ILanguageRepository, LanguageRepository>();
+            #endregion
+
+            #region Storage
+            serviceCollection.AddSingleton<IConfigurationRepository, ConfigurationRepository>();
+
+            serviceCollection.AddSingleton<IFileManagementService, FileManagementService>();
+            serviceCollection.AddSingleton<IFileRepository, FileRepository>();
+            serviceCollection.AddSingleton<IFileVersionRepository, FileVersionRepository>();
+            serviceCollection.AddSingleton<IDirectoryRepository, DirectoryRepository>();
+            serviceCollection.AddSingleton<IContentAccessRepository, ContentAccessRepository>();
+            serviceCollection.AddSingleton<IContentAccessResolver, ContentAccessResolver>();
+            serviceCollection.AddSingleton<IStorageServiceFactory, StorageServiceFactory>();
+
+            serviceCollection.AddTransient<AzureBlobStorageService>();
+            serviceCollection.AddTransient<AwsS3StorageService>();
+            serviceCollection.AddTransient<AwsS3CompatibleStorageService>();
+            serviceCollection.AddTransient<SftpStorageService>();
+
+            serviceCollection.AddTransient<IValidator<GetPreSignedUrlForUploadRequest>, GetPreSignedUrlForUploadRequestValidator>();
             #endregion
         }
     }
