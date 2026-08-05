@@ -1,4 +1,4 @@
-﻿using DomainService.ManagedService;
+using DomainService.ManagedService;
 using DomainService.ManagedService.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
@@ -15,19 +15,6 @@ namespace Api.Controllers
         public ServiceController(IServiceManagement serviceManagement)
         {
             _serviceManagement = serviceManagement;
-        }
-
-        [Authorize]
-        [HttpPost]
-        public async Task<IActionResult> Register([FromBody] RegisterServiceRequest request)
-        {
-            var response = await _serviceManagement.RegisterServiceAsync(request);
-
-            if (response.IsSuccess)
-            {
-                return Ok(response);
-            }
-            return BadRequest(response);
         }
 
         [Authorize]

@@ -4,9 +4,6 @@ using DomainService.ManagedService.Services;
 using DomainService.Shared;
 using DomainService.Shared.Entities;
 using FluentAssertions;
-using FluentValidation;
-using FluentValidation.Results;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using Moq;
@@ -17,32 +14,21 @@ namespace XUnitTest.Identifier
     public class ServiceManagementTests : IDisposable
     {
         private readonly Mock<IServiceManagementRepository> _repository = new();
-        private readonly Mock<IValidator<RegisterServiceRequest>> _validator = new();
         private readonly Mock<IBlocksSecret> _blocksSecret = new();
-        private readonly Mock<ICacheClient> _cacheClient = new();
         private readonly Mock<ITenants> _tenants = new();
-        private readonly Mock<IConfiguration> _configuration = new();
         private readonly Mock<ILogger<ServiceManagement>> _logger = new();
 
         public ServiceManagementTests()
         {
             TestBlocksContext.Set();
-            // A RabbitMq connection string keeps the constructor away from the Azure Service Bus clients.
-            _blocksSecret.SetupGet(s => s.LmtMessageConnectionString).Returns("amqp://guest:guest@localhost:5672");
-            _blocksSecret.SetupGet(s => s.LogConnectionString).Returns("mongodb://localhost:27017");
-            _validator.Setup(v => v.ValidateAsync(It.IsAny<RegisterServiceRequest>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new ValidationResult());
         }
 
         public void Dispose() => TestBlocksContext.Clear();
 
         private ServiceManagement CreateService() => new(
             _repository.Object,
-            _validator.Object,
             _blocksSecret.Object,
-            _cacheClient.Object,
             _tenants.Object,
-            _configuration.Object,
             _logger.Object);
 
         private static Tenant Tenant(string salt) => new()
@@ -52,64 +38,6 @@ namespace XUnitTest.Identifier
             DbConnectionString = "mongodb://localhost",
             JwtTokenParameters = new JwtTokenParameters { PrivateCertificatePassword = "pw", IssueDate = DateTime.UtcNow }
         };
-
-        [Fact]
-        public void Map_BuildsAManagedServiceFromTheRequestAndContext()
-        {
-            var request = new RegisterServiceRequest
-            {
-                ServiceName = "logs-collector",
-                Description = "collects logs",
-                ServiceType = "backend",
-                Tags = ["logs"],
-                Metadata = new Dictionary<string, object> { { "team", "platform" } }
-            };
-
-            var service = CreateService().Map(request);
-
-            service.Name.Should().Be("logs-collector");
-            service.Description.Should().Be("collects logs");
-            service.ServiceType.Should().Be("backend");
-            service.Tags.Should().BeEquivalentTo(["logs"]);
-            service.Metadata.Should().ContainKey("team");
-            service.TenantId.Should().Be("tenant-123");
-            service.CreatedBy.Should().Be("user-123");
-            service.LastUpdatedBy.Should().Be("user-123");
-            service.ItemId.Should().NotBeNullOrWhiteSpace();
-            service.ServiceId.Should().StartWith("SB-");
-        }
-
-        [Fact]
-        public void Map_WithoutDescription_UsesEmptyString()
-        {
-            var service = CreateService().Map(new RegisterServiceRequest { ServiceName = "svc", ServiceType = "frontend" });
-
-            service.Description.Should().BeEmpty();
-        }
-
-        [Fact]
-        public async Task RegisterServiceAsync_InvalidRequest_ReturnsValidationErrors()
-        {
-            _validator.Setup(v => v.ValidateAsync(It.IsAny<RegisterServiceRequest>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new ValidationResult([new ValidationFailure("ServiceName", "ServiceName is required.")]));
-
-            var result = await CreateService().RegisterServiceAsync(new RegisterServiceRequest());
-
-            result.IsSuccess.Should().BeFalse();
-            result.Errors!["ServiceName"].Should().Be("ServiceName is required.");
-            _repository.Verify(r => r.SaveAsync(It.IsAny<BlocksManagedService>()), Times.Never);
-        }
-
-        [Fact]
-        public async Task RegisterServiceAsync_ValidationFailureWithoutPropertyName_UsesGenericKey()
-        {
-            _validator.Setup(v => v.ValidateAsync(It.IsAny<RegisterServiceRequest>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new ValidationResult([new ValidationFailure(string.Empty, "something is wrong")]));
-
-            var result = await CreateService().RegisterServiceAsync(new RegisterServiceRequest());
-
-            result.Errors!["validation_error"].Should().Be("something is wrong");
-        }
 
         [Fact]
         public async Task GetAllServicesAsync_DecryptsConnectionStringsWithTheTenantSalt()
@@ -232,16 +160,6 @@ namespace XUnitTest.Identifier
             services.Should().BeEmpty();
             count.Should().Be(0);
             _dbContextProvider.Verify(p => p.GetCollection<BlocksManagedService>(CollectionName), Times.Once);
-        }
-
-        [Fact]
-        public async Task SaveAsync_InsertsTheService()
-        {
-            var service = new BlocksManagedService { ItemId = "svc-1", ServiceId = "SB-1", Name = "logs" };
-
-            await CreateRepository().SaveAsync(service);
-
-            _collection.Verify(c => c.InsertOneAsync(service, It.IsAny<InsertOneOptions>(), It.IsAny<CancellationToken>()), Times.Once);
         }
     }
 }
