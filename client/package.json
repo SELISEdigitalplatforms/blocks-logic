@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.1",
   "type": "module",
+  "overrides": {
+    "dompurify": "^3.4.12"
+  },
   "scripts": {
     "dev": "vite --port 4000 --host dev-logic.blocksdevelopers.com",
     "local": "vite",
@@ -60,7 +63,6 @@
     "input-otp": "^1.4.2",
     "jwt-decode": "^4.0.0",
     "lucide-react": "^0.445.0",
-    "monaco-editor": "^0.56.0",
     "nuqs": "^2.9.0",
     "react": "^19.2.8",
     "react-day-picker": "8.10.2",
