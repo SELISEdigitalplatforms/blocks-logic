@@ -204,3 +204,6 @@ AGENTS.md
 .mcp.json
 copilot-instructions.md
 scripts/scan.sh
+
+# local scan and coverage output, never committed
+results/
