@@ -449,7 +449,7 @@ describe("data action v1", () => {
 
 describe("transform code v1", () => {
   it("transform is a passthrough", () => {
-    const node = { id: "n", parameters: { mode: "runOnceForAllItems" } } as never;
+    const node = { id: "n", parameters: { mode: "all" } } as never;
     expect(NodeSchemaTransformCodeV1.transform?.(node)).toEqual(node);
   });
 
@@ -457,20 +457,28 @@ describe("transform code v1", () => {
     const mode = field(NodeSchemaTransformCodeV1, "mode");
     expect(mode.type).toBe("select");
     expect(mode.options).toEqual([
-      { label: "Run Once for All Items", value: "runOnceForAllItems" },
-      { label: "Run Once for Each Item", value: "runOnceForEachItem" },
+      { label: "Run Once for All Items", value: "all" },
+      { label: "Run Once for Each Item", value: "each" },
     ]);
-    expect(NodeSchemaTransformCodeV1.defaults.parameters.mode).toBe(
-      "runOnceForAllItems",
-    );
+    expect(NodeSchemaTransformCodeV1.defaults.parameters.mode).toBe("all");
   });
 
-  it("carries a single javascript code-editor field for jsCode", () => {
-    const js = field(NodeSchemaTransformCodeV1, "jsCode");
-    expect(js.type).toBe("code-editor");
-    expect(js.language).toBe("javascript");
-    expect(js.dependsOn).toBeUndefined();
-    expect(NodeSchemaTransformCodeV1.defaults.parameters.jsCode).toBe("");
+  it("offers javascript and holds python back", () => {
+    const language = field(NodeSchemaTransformCodeV1, "language");
+    expect(language.type).toBe("select");
+    expect(language.options).toEqual([
+      { label: "JavaScript", value: "js" },
+      { label: "Python", value: "py", disabled: true },
+    ]);
+    expect(NodeSchemaTransformCodeV1.defaults.parameters.language).toBe("js");
+  });
+
+  it("carries a single javascript code-editor field for the script", () => {
+    const script = field(NodeSchemaTransformCodeV1, "script");
+    expect(script.type).toBe("code-editor-v2");
+    expect(script.language).toBe("javascript");
+    expect(script.dependsOn).toBeUndefined();
+    expect(NodeSchemaTransformCodeV1.defaults.parameters.script).toBe("");
   });
 
   it("carries a continue-on-error setting", () => {
