@@ -77,10 +77,10 @@ export default defineConfig({
       ),
     },
     coverage: {
-      reporter: ["text", "lcov"],
       all: true,
       provider: "v8",
-      reporter: ["text", "json-summary", "json", "clover"],
+      // lcov is what the client SonarQube workflow imports; the rest are used locally.
+      reporter: ["text", "lcov", "json-summary", "json", "clover"],
       include: ["app/**/*.{ts,tsx}"],
       exclude: [
         "app/**/*.test.*",

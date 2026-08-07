@@ -50,21 +50,28 @@ export const WorkflowEditorControls = ({ readonly = false }: WorkflowEditorContr
     {
       label: "Fit View",
       icon: Maximize,
-      action: () =>
-        fitView({
+      action: () => {
+        // fitView, zoomIn and zoomOut all return a promise, and action is typed void.
+        // Discarding it explicitly keeps a rejection from becoming an unhandled one.
+        void fitView({
           duration: 800,
           maxZoom: EditorFitConfig.fitViewOptions.maxZoom,
-        }),
+        });
+      },
     },
     {
       label: "Zoom in",
       icon: ZoomIn,
-      action: zoomIn,
+      action: () => {
+        void zoomIn();
+      },
     },
     {
       label: "Zoom out",
       icon: ZoomOut,
-      action: zoomOut,
+      action: () => {
+        void zoomOut();
+      },
     },
     {
       label: "Organize",
