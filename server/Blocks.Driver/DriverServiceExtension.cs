@@ -1,6 +1,5 @@
 using Blocks.Driver.Captcha;
 using Blocks.Driver.Iam;
-using Blocks.Driver.Identifier;
 using Blocks.Driver.Language;
 using Blocks.Driver.Mfa;
 using Blocks.Driver.Monitor;
@@ -11,7 +10,7 @@ using Captcha.DomainService.Utilities;
 using Common.InternalService.Shared.Utilities;
 using DomainService.ManagedService;
 using DomainService.ManagedService.Services;
-using DomainService.People;
+//using DomainService.People;
 using DomainService.Projects;
 using FluentValidation;
 using Iam.DomainService.Utilities;
@@ -39,13 +38,13 @@ public static class DriverServiceExtension
         services.AddSingleton<IIamDriverService, IamDriverService>();
 
         // Identifier has no existing driver package, so its services are registered directly.
-        services.AddSingleton<IPeopleService, PeopleService>();
-        services.AddSingleton<IPeopleRepository, PeopleRepository>();
+       // services.AddSingleton<IPeopleService, PeopleService>();
+       // services.AddSingleton<IPeopleRepository, PeopleRepository>();
         services.AddSingleton<IProjectManagementService, ProjectManagementService>();
         services.AddSingleton<IProjectRepository, ProjectRepository>();
         services.AddSingleton<IServiceManagement, ServiceManagement>();
         services.AddSingleton<IServiceManagementRepository, ServiceManagementRepository>();
-        services.AddSingleton<IIdentifierDriverService, IdentifierDriverService>();
+       // services.AddSingleton<IIdentifierDriverService, IdentifierDriverService>();
 
         // Storage, Language and Monitor come from Common.InternalService.
         services.RegisterCommonInternalServices();

@@ -4,7 +4,7 @@ using Blocks.Extension.DependencyInjection;
 //using Captcha.DomainService.Utilities;
 using DomainService.ManagedService;
 using DomainService.ManagedService.Services;
-using DomainService.People;
+//using DomainService.People;
 using DomainService.Projects;
 using DomainService.Storage;
 using FluentValidation;
@@ -23,8 +23,8 @@ namespace DomainService.Shared
             services.AddSingleton<IProjectManagementService, ProjectManagementService>();
             services.AddSingleton<IProjectRepository, ProjectRepository>();
 
-            services.AddSingleton<IPeopleService, PeopleService>();
-            services.AddSingleton<IPeopleRepository, PeopleRepository>();
+           // services.AddSingleton<IPeopleService, PeopleService>();
+           // services.AddSingleton<IPeopleRepository, PeopleRepository>();
             services.AddSingleton<IServiceManagement, ServiceManagement>();
             services.AddSingleton<IServiceManagementRepository, ServiceManagementRepository>();
 
