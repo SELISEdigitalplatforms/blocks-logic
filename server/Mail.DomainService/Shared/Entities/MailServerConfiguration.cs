@@ -1,4 +1,4 @@
-﻿using Blocks.Genesis;
+using Blocks.Genesis;
 using MongoDB.Bson.Serialization.Attributes;
 
 namespace Mail.DomainService.Entities
@@ -17,6 +17,7 @@ namespace Mail.DomainService.Entities
         public SmtpClient SmtpClient { get; set; } = SmtpClient.Default;
         public bool IsDefault { get; set; }
         public bool IsInbound { get; set; }
+        public bool IsEnableSnsConfiguration { get; set; } = true;
     }
 
     public enum SmtpClient
