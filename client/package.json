@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.1",
   "type": "module",
+  "overrides": {
+    "dompurify": "^3.4.12"
+  },
   "scripts": {
     "dev": "vite --port 4000 --host dev-logic.blocksdevelopers.com",
     "local": "vite",
@@ -23,6 +26,7 @@
     "@hcaptcha/react-hcaptcha": "^1.12.0",
     "@hookform/resolvers": "^3.9.0",
     "@mailupinc/bee-plugin": "^2.3.0",
+    "@monaco-editor/react": "^4.7.0",
     "@radix-ui/react-accordion": "^1.2.0",
     "@radix-ui/react-alert-dialog": "^1.0.5",
     "@radix-ui/react-checkbox": "^1.1.1",
@@ -44,7 +48,7 @@
     "@radix-ui/react-tabs": "^1.1.0",
     "@radix-ui/react-toast": "^1.2.2",
     "@radix-ui/react-tooltip": "^1.1.2",
-    "@seliseblocks/genesis-os": "^4.0.5",
+    "@seliseblocks/genesis-os": "^4.1.0",
     "@tanstack/react-query": "^5.62.11",
     "@tanstack/react-query-devtools": "^5.62.11",
     "@tanstack/react-table": "^8.20.5",

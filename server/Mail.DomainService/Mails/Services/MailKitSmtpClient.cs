@@ -1,4 +1,4 @@
-﻿using Blocks.Genesis;
+using Blocks.Genesis;
 using Mail.DomainService.Entities;
 using Mail.DomainService.Utilities;
 using Microsoft.Extensions.Configuration;
@@ -100,10 +100,16 @@ namespace Mail.DomainService.Mails
                     mailToBeSent.MailServerConfiguration.AccountPassword);
 
                 _logger.LogInformation("SMTP server authentication successful.");
+                _logger.LogInformation("Sns configuration enabled: {IsEnableSnsConfiguration}", mailToBeSent.MailServerConfiguration.IsEnableSnsConfiguration);
+                if (mailToBeSent.MailServerConfiguration.IsEnableSnsConfiguration)
+                {
 
-                message.Headers.Add("X-SES-CONFIGURATION-SET", _configuration["SnsConfigurationName"]);
-                message.Headers.Add("X-Tenant-Id", BlocksContext.GetContext()?.TenantId);
-                message.Headers.Add("X-Mail-Body", mailBody.Body);
+                    message.Headers.Add("X-SES-CONFIGURATION-SET", _configuration["SnsConfigurationName"]);
+                    message.Headers.Add("X-Tenant-Id", BlocksContext.GetContext()?.TenantId);
+                    message.Headers.Add("X-Mail-Body", mailBody.Body);
+
+                }
+
                 await client.SendAsync(message);
                 await client.DisconnectAsync(true);
 

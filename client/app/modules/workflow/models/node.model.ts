@@ -3,6 +3,7 @@ import { Node } from "@xyflow/react";
 export type NodeType =
   | "if"
   | "setfield"
+  | "code"
   | "webhookResponse"
   | "manual"
   | "event"

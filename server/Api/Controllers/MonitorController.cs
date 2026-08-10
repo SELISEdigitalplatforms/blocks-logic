@@ -1,16 +1,12 @@
-using DomainService.Health.Models;
-using DomainService.Monitor.Entity;
-using DomainService.Monitor.Models;
-using DomainService.Shared.Models;
+using Common.InternalService.Monitor;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using ObservabilityDriver;
 
 namespace BlocksTemplate.Api.Controllers
 {
     [ApiController]
     [Route("[controller]/[action]")]
-    public class MonitorController(IObservabilityDriverService observability) : ControllerBase
+    public class MonitorController(IMonitorObservabilityService observability) : ControllerBase
     {
         [HttpGet, Authorize]
         public Task<PaginatedResponse> GetMonitorList(
@@ -29,17 +25,17 @@ namespace BlocksTemplate.Api.Controllers
         public Task<BaseApiResponse> GetMonitorById([FromQuery] string monitorId)
             => observability.GetMonitorByIdAsync(monitorId);
 
-        [HttpPost, Authorize]
-        public Task<BaseApiResponse> SaveMonitor([FromBody] SaveMonitorConfigurationRequest request)
-            => observability.SaveMonitorAsync(request);
+        //[HttpPost, Authorize]
+        //public Task<BaseApiResponse> SaveMonitor([FromBody] SaveMonitorConfigurationRequest request)
+        //    => observability.SaveMonitorAsync(request);
 
-        [HttpPost, Authorize]
-        public Task<BaseApiResponse> UpdateMonitor([FromBody] UpdateMonitorConfigurationRequest request)
-            => observability.UpdateMonitorAsync(request);
+        //[HttpPost, Authorize]
+        //public Task<BaseApiResponse> UpdateMonitor([FromBody] UpdateMonitorConfigurationRequest request)
+        //    => observability.UpdateMonitorAsync(request);
 
-        [HttpDelete, Authorize]
-        public Task<BaseApiResponse> DeleteMonitor([FromQuery] string itemId)
-            => observability.DeleteMonitorAsync(itemId);
+        //[HttpDelete, Authorize]
+        //public Task<BaseApiResponse> DeleteMonitor([FromQuery] string itemId)
+        //    => observability.DeleteMonitorAsync(itemId);
 
         [HttpGet, Authorize]
         public Task<PaginatedResponse> GetIncidentList(

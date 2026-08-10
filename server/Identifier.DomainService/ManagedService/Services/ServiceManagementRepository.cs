@@ -1,4 +1,3 @@
-﻿using Amazon.S3.Model;
 using Blocks.Genesis;
 using DomainService.Shared;
 using DomainService.Shared.Entities;
@@ -38,12 +37,6 @@ namespace DomainService.ManagedService.Services
             var count = await collection.CountDocumentsAsync(filter);
 
             return (cursor.AsQueryable(), count);
-        }
-
-        public async Task SaveAsync(BlocksManagedService service)
-        {
-            var collection = _dbContextProvider.GetCollection<BlocksManagedService>("BlocksManagedServices");
-            await collection.InsertOneAsync(service);
         }
     }
 }
