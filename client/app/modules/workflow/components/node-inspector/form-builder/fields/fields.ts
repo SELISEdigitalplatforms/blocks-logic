@@ -9,6 +9,8 @@ import { NumberField } from "./number-field";
 import { RadioField } from "./radio-field";
 import { SelectField } from "./select-field";
 import { SelectWithDescriptionField } from "./select-with-description-field";
+import { MultiselectField } from "./multiselect-field";
+import { ConditionalMultiselectField } from "./conditional-multiselect-field";
 import { SwitchField } from "./switch-field";
 import { TextField } from "./text-field";
 import { TextareaField } from "./textarea-field";
@@ -38,7 +40,8 @@ export const FIELD_COMPONENTS_REGISTRY: Record<
   radio: RadioField,
   select: SelectField,
   "select-with-description": SelectWithDescriptionField,
-  multiselect: SelectField,
+  multiselect: MultiselectField,
+  "conditional-multiselect": ConditionalMultiselectField,
   "code-editor": CodeEditorField,
   "code-editor-v2": CodeEditorFieldV2,
   "key-value-pairs": KeyValuePairsField,

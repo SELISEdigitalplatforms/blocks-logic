@@ -1,6 +1,41 @@
 import { API_BASES } from "@/constants/endpoint.constant";
 import { NodeSchemaDefinition } from "./node-schema.type";
 import { WorkflowExecutionMode } from "../../models/workflow.model";
+import { iamService } from "../../services/iam.service";
+import { ConditionalMultiselectValue } from "../node-inspector/form-builder/form-field.types";
+
+const AUTHORIZATION_DEPENDENCY = {
+  key: "authType",
+  value: "blocksAuthorization",
+} as const;
+
+type AuthBlock = {
+  organizationId?: string;
+  roles?: { operator?: "all" | "any"; items?: string[] };
+  permissions?: { operator?: "all" | "any"; items?: string[] };
+  isRolePermission?: boolean;
+};
+
+const getAuth = (data: Record<string, unknown>): AuthBlock =>
+  (data.authorization as AuthBlock | undefined) ?? {};
+
+const rolesAsFieldValue = (data: Record<string, unknown>): ConditionalMultiselectValue => {
+  const roles = getAuth(data).roles ?? {};
+  return {
+    mode: roles.operator === "any" ? "or" : "and",
+    values: roles.items ?? [],
+  };
+};
+
+const permissionsAsFieldValue = (
+  data: Record<string, unknown>,
+): ConditionalMultiselectValue => {
+  const permissions = getAuth(data).permissions ?? {};
+  return {
+    mode: permissions.operator === "any" ? "or" : "and",
+    values: permissions.items ?? [],
+  };
+};
 
 export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
   schema: {
@@ -17,10 +52,11 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         transient: true,
         options: [
           { label: "Test", value: String(WorkflowExecutionMode.Test) },
-          { label: "Production", value: String(WorkflowExecutionMode.Production) }
+          { label: "Production", value: String(WorkflowExecutionMode.Production) },
         ],
         displayValue: (data: Record<string, unknown>, config) => {
-          const currentMode = data.executionMode !== undefined ? Number(data.executionMode) : config.executionMode;
+          const currentMode =
+            data.executionMode !== undefined ? Number(data.executionMode) : config.executionMode;
           if (currentMode === WorkflowExecutionMode.Production) {
             return `${API_BASES.LOGIC}/Workflow/webhook/${config.projectKey}/${config.workflowId}/${config.nodeId}`;
           }
@@ -52,9 +88,72 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         key: "authType",
         options: [
           { label: "None", value: "none" },
-          { label: "Blocks Authentication", value: "blocksAccessToken" },
+          { label: "Blocks Authentication", value: "blocksAuthentication" },
+          { label: "Blocks Authorization", value: "blocksAuthorization" },
         ],
         defaultValue: "none",
+      },
+      {
+        id: "organization",
+        type: "select",
+        label: "Organization",
+        info: "",
+        key: "organizationId",
+        defaultValue: "default",
+        placeholder: "default (from JWT)",
+        dependsOn: AUTHORIZATION_DEPENDENCY,
+        options: () =>
+          iamService.getOrganizations({ page: 0, pageSize: 50 }).then((response) => [
+            ...response.organizations.map((org) => ({
+              label: org.name,
+              value: org.organizationId,
+            })),
+          ]),
+      },
+      {
+        id: "roles",
+        type: "conditional-multiselect",
+        label: "Roles",
+        info: "Roles the caller must hold. AND = all listed roles required, OR = at least one.",
+        key: "roles",
+        placeholder: "Search roles...",
+        dependsOn: AUTHORIZATION_DEPENDENCY,
+        defaultValue: (data: Record<string, unknown>) => rolesAsFieldValue(data),
+        options: () => {
+          return iamService
+            .getRoles()
+            .then((roles) => roles.map((role) => ({ label: role.name, value: role.slug })));
+        },
+      },
+      {
+        id: "permissions",
+        type: "conditional-multiselect",
+        label: "Permissions",
+        info: "Permissions the caller must hold. Constrained by the selected roles. AND = all listed permissions required, OR = at least one.",
+        key: "permissions",
+        placeholder: "Search permissions...",
+        dependsOn: AUTHORIZATION_DEPENDENCY,
+        defaultValue: (data: Record<string, unknown>) => permissionsAsFieldValue(data),
+        options: (data) => {
+          return iamService
+            .getPermissions({  })
+            .then((permissions) =>
+              permissions.map((permission) => ({
+                label: permission.name,
+                value: permission.resource,
+              })),
+            );
+        },
+      },
+      {
+        id: "authorization-rule-relation",
+        type: "checkbox",
+        label: "",
+        placeholder: "Require both Roles AND Permissions",
+        info: "Checked: the caller must satisfy both the Roles and Permissions rules. Unchecked: either one is enough.",
+        key: "isCheckBothRolesAndPermissions",
+        dependsOn: AUTHORIZATION_DEPENDENCY,
+        defaultValue: true,
       },
       {
         id: "http-response-mode",
@@ -95,14 +194,26 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
       authType: "none",
       httpResponseMode: "immediate",
       httpResponseData: "all",
+      organizationId: "default",
+      roles: { operator: "all", values: [] },
+      permissions: { operator: "any", values: [] },
+      isCheckBothRolesAndPermissions: false,
     },
     settings: {},
   },
-  transform: (node) => ({
-    ...node,
-    parameters: {
-      ...(node.parameters as Record<string, unknown>),
-      path: node.id,
-    },
-  }),
+  transform: (node) => {
+    const params = (node.parameters as Record<string, unknown>) ?? {};
+  
+
+    return {
+      ...node,
+      parameters: {
+        ...params,
+        path: node.id,
+        // Echo the Roles<->Permissions relation explicitly for the backend:
+        // isRolePermission true => both blocks must pass ("all"),
+        // false => either block is enough ("any").
+      },
+    };
+  },
 };

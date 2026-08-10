@@ -179,14 +179,20 @@ namespace DomainService.Workflow.Services
                         Status = "Workflow not found",
                     };
                 }
-                var authType = triggerNode.Parameters.GetValue("authType");
+                var authType = triggerNode.Parameters.GetValue("authType")?.ToString();
 
-                if (authType != null && authType.ToString().ToLower() == "blocksAccessToken".ToLower())
+                if (string.Equals(authType, "blocksAuthentication", StringComparison.OrdinalIgnoreCase))
                 {
-                    var blocksContext = BlocksContext.GetContext();
-                    var isAuthenticatedUser = await _workflowAuthService.IsAuthenticated(_httpContextAccessor.HttpContext.Request, BlocksContext.GetContext()?.TenantId ?? "");
+                    var isAuthenticatedUser = await _workflowAuthService.IsAuthenticated(_httpContextAccessor.HttpContext.Request, workflow.TenantId);
                     if (!isAuthenticatedUser) throw new UnauthorizedAccessException();
-
+                }
+                else if (string.Equals(authType, "blocksAuthorization", StringComparison.OrdinalIgnoreCase))
+                {
+                    var authConfig = ParseAuthorizationConfig(triggerNode.Parameters);
+                    if (authConfig is null) throw new UnauthorizedAccessException();
+                    var isAuthorizedUser = await _workflowAuthService.IsAuthorized(
+                        _httpContextAccessor.HttpContext.Request, workflow.TenantId, authConfig);
+                    if (!isAuthorizedUser) throw new UnauthorizedAccessException();
                 }
 
                 var normalizedInput = new BsonArray();
@@ -785,6 +791,61 @@ namespace DomainService.Workflow.Services
                 doc[kv.Key] = ObjectToBsonValue(kv.Value);
             }
             return doc;
+        }
+
+        /// <summary>
+        /// Parses the workflow-layer BSON representation of a webhook trigger's authorization block
+        /// (as written by the frontend transform; see node-schema-trigger-webhook-v1.ts) into the
+        /// storage-agnostic <see cref="WorkflowAuthService.AuthorizationConfig"/> consumed by
+        /// <see cref="IWorkflowAuthService.IsAuthorized"/>.
+        /// <para>Returns <c>null</c> when the block is missing or malformed (e.g. an operator that
+        /// isn't <c>"all"</c>/<c>"any"</c>). Legacy schemas that wrote <c>isRolePermission</c>
+        /// instead of <c>isCheckBothRolesAndPermissions</c> are honoured.</para>
+        /// </summary>
+        private static WorkflowAuthService.AuthorizationConfig? ParseAuthorizationConfig(BsonDocument? doc)
+        {
+            if (doc is null) return null;
+
+            var organizationId = doc.Contains("organizationId") && doc["organizationId"].IsString
+                ? doc["organizationId"].AsString
+                : "default";
+
+            var roles = ParseAuthDoc(doc.Contains("roles") && doc["roles"].IsBsonDocument ? doc["roles"].AsBsonDocument : null);
+            var permissions = ParseAuthDoc(doc.Contains("permissions") && doc["permissions"].IsBsonDocument ? doc["permissions"].AsBsonDocument : null);
+
+            if (roles is null || permissions is null) return null;
+
+            var isCheckBothRolesAndPermissions = doc.Contains("isCheckBothRolesAndPermissions") && doc["isCheckBothRolesAndPermissions"].IsBoolean
+                ? doc["isCheckBothRolesAndPermissions"].AsBoolean
+                // Legacy fallback: older schemas stored this as "isRolePermission".
+                : doc.Contains("isRolePermission") && doc["isRolePermission"].IsBoolean && doc["isRolePermission"].AsBoolean;
+
+            return new WorkflowAuthService.AuthorizationConfig(organizationId, roles, permissions, isCheckBothRolesAndPermissions);
+        }
+
+        private static WorkflowAuthService.AuthRule? ParseAuthDoc(BsonDocument? doc)
+        {
+            if (doc is null) return new WorkflowAuthService.AuthRule("all", Array.Empty<string>());
+
+            var op = doc.Contains("mode") && doc["mode"].IsString
+                ? doc["mode"].AsString
+                : "all";
+
+            if (!WorkflowAuthService.AuthorizationConfig.AllowedOperators.Contains(op))
+            {
+                return null;
+            }
+
+            var items = new List<string>();
+            if (doc.Contains("values") && doc["values"].IsBsonArray)
+            {
+                foreach (var item in doc["values"].AsBsonArray)
+                {
+                    if (item.IsString) items.Add(item.AsString);
+                }
+            }
+
+            return new WorkflowAuthService.AuthRule(op, items);
         }
 
         private static BsonValue ObjectToBsonValue(object? value)
