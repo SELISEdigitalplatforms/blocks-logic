@@ -1,8 +1,9 @@
-﻿namespace DomainService.ManagedService.Services
+﻿using DomainService.ManagedService.Services;
+
+namespace DomainService.ManagedService
 {
     public interface IServiceManagement
     {
-        Task<RegisterServiceResponse> RegisterServiceAsync(RegisterServiceRequest request);
         Task<GetAllServiceResponse> GetAllServicesAsync(GetAllServiceRequest request);
     }
 }
