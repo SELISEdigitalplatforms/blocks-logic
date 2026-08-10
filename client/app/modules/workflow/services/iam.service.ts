@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { serviceInstances } from "@/lib/http-client";
 import { getRuntimeEnv } from "@seliseblocks/genesis-os";
-import { IClientConfigResponse, IGetClientsPayload, IGetOrganizationsResponse } from "../models/iam";
+import { IClientConfigResponse, IGetClientsPayload, IGetOrganizationsResponse, IGetPermissionsResponse, IGetRolesResponse } from "../models/iam";
 import { AUTH_CLIENT_ENDPOINTS, IAM_AUTHORIZATION_ENDPOINTS } from "../constants/iam.endpoint.constant";
 import {
   IGetOrganizationsPayload,
@@ -26,20 +26,6 @@ export class AuthClientsService {
   }
 }
 
-interface ListResponse<T> {
-  items?: T[];
-  data?: T[];
-  results?: T[];
-}
-
-const extractList = <T>(response: unknown): T[] => {
-  if (Array.isArray(response)) return response as T[];
-  const r = response as ListResponse<T>;
-  if (Array.isArray(r.items)) return r.items;
-  if (Array.isArray(r.data)) return r.data;
-  if (Array.isArray(r.results)) return r.results;
-  return [];
-};
 
 export class IamService {
   private readonly IamHttpClient = serviceInstances.iamService;
@@ -57,7 +43,7 @@ export class IamService {
       );
   }
 
-  getRoles(): Promise<IRole[]> {
+  getRoles(): Promise<IGetRolesResponse> {
     const body = {
       page: 0,
       pageSize: 100,
@@ -73,7 +59,7 @@ export class IamService {
       );
   }
 
-  getPermissions(payload: IGetPermissionsPayload): Promise<IPermission[]> {
+  getPermissions(payload: IGetPermissionsPayload): Promise<IGetPermissionsResponse> {
     const body = {
       page: payload.page ?? 0,
       pageSize: payload.pageSize ?? 500,

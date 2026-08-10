@@ -26,7 +26,7 @@ export type FormFieldType =
   | "tab-with-text";
 
 export interface SelectOption {
-  value: string;
+  value: string | number | boolean;
   label: string;
   description?: string;
   disabled?: boolean;

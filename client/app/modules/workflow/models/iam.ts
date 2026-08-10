@@ -30,6 +30,7 @@ export interface IRole {
   itemId: string;
   name: string;
   description?: string;
+  slug: string;
   [key: string]: unknown;
 }
 
@@ -37,6 +38,7 @@ export interface IPermission {
   itemId: string;
   name: string;
   description?: string;
+  resource:string;
   [key: string]: unknown;
 }
 
@@ -62,6 +64,17 @@ export interface IGetOrganizationsResponse {
   errors:unknown
 }
 
+export interface IGetRolesResponse {
+  data: IRole[];
+  totalCount: number;
+  errors: unknown;
+}
+
+export interface IGetPermissionsResponse {
+  data: IPermission[];
+  totalCount: number;
+  errors: unknown;
+}
 export interface IGetRolesPayload extends IListPagePayload {
   organizationId?: string;
   search?: string;

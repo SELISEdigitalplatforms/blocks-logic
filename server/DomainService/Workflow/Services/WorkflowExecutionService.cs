@@ -795,12 +795,10 @@ namespace DomainService.Workflow.Services
 
         /// <summary>
         /// Parses the workflow-layer BSON representation of a webhook trigger's authorization block
-        /// (as written by the frontend transform; see node-schema-trigger-webhook-v1.ts) into the
-        /// storage-agnostic <see cref="WorkflowAuthService.AuthorizationConfig"/> consumed by
+        /// into the storage-agnostic <see cref="WorkflowAuthService.AuthorizationConfig"/> consumed by
         /// <see cref="IWorkflowAuthService.IsAuthorized"/>.
-        /// <para>Returns <c>null</c> when the block is missing or malformed (e.g. an operator that
-        /// isn't <c>"all"</c>/<c>"any"</c>). Legacy schemas that wrote <c>isRolePermission</c>
-        /// instead of <c>isCheckBothRolesAndPermissions</c> are honoured.</para>
+        /// <para>Returns <c>null</c> when the block is missing or malformed, or when
+        /// <c>authorizationMode</c> isn't one of the C# enum names.</para>
         /// </summary>
         private static WorkflowAuthService.AuthorizationConfig? ParseAuthorizationConfig(BsonDocument? doc)
         {
@@ -808,44 +806,52 @@ namespace DomainService.Workflow.Services
 
             var organizationId = doc.Contains("organizationId") && doc["organizationId"].IsString
                 ? doc["organizationId"].AsString
-                : "default";
+                : "";
 
-            var roles = ParseAuthDoc(doc.Contains("roles") && doc["roles"].IsBsonDocument ? doc["roles"].AsBsonDocument : null);
-            var permissions = ParseAuthDoc(doc.Contains("permissions") && doc["permissions"].IsBsonDocument ? doc["permissions"].AsBsonDocument : null);
+            var roles = ParseRule(doc.Contains("roles") && doc["roles"].IsBsonDocument ? doc["roles"].AsBsonDocument : null);
+            var permissions = ParseRule(doc.Contains("permissions") && doc["permissions"].IsBsonDocument ? doc["permissions"].AsBsonDocument : null);
 
-            if (roles is null || permissions is null) return null;
+            var mode = doc.Contains("authorizationMode") && doc["authorizationMode"].IsString
+                ? WorkflowAuthService.AuthorizationConfig.TryParseAuthorizationMode(doc["authorizationMode"].AsString)
+                : null;
 
-            var isCheckBothRolesAndPermissions = doc.Contains("isCheckBothRolesAndPermissions") && doc["isCheckBothRolesAndPermissions"].IsBoolean
-                ? doc["isCheckBothRolesAndPermissions"].AsBoolean
-                // Legacy fallback: older schemas stored this as "isRolePermission".
-                : doc.Contains("isRolePermission") && doc["isRolePermission"].IsBoolean && doc["isRolePermission"].AsBoolean;
+            if (mode is null) return null;
 
-            return new WorkflowAuthService.AuthorizationConfig(organizationId, roles, permissions, isCheckBothRolesAndPermissions);
+            return new WorkflowAuthService.AuthorizationConfig(organizationId, roles, permissions, mode.Value);
         }
 
-        private static WorkflowAuthService.AuthRule? ParseAuthDoc(BsonDocument? doc)
+        /// <summary>
+        /// Resolves a <c>{ mode: "all"|"any", values: string[] }</c> BSON doc into a <see cref="Rule"/>.
+        /// Accepts both the canonical wire keys (<c>mode</c>/<c>values</c>) and the legacy
+        /// (<c>operator</c>/<c>items</c>) shape. Empty or missing values -> <c>null</c> (no rule).
+        /// </summary>
+        private static WorkflowAuthService.Rule? ParseRule(BsonDocument? doc)
         {
-            if (doc is null) return new WorkflowAuthService.AuthRule("all", Array.Empty<string>());
+            if (doc is null) return null;
 
-            var op = doc.Contains("mode") && doc["mode"].IsString
+            var mode = doc.Contains("mode") && doc["mode"].IsString
                 ? doc["mode"].AsString
-                : "all";
+                : doc.Contains("operator") && doc["operator"].IsString
+                    ? doc["operator"].AsString
+                    : null;
 
-            if (!WorkflowAuthService.AuthorizationConfig.AllowedOperators.Contains(op))
-            {
-                return null;
-            }
-
-            var items = new List<string>();
+            var values = new List<string>();
             if (doc.Contains("values") && doc["values"].IsBsonArray)
             {
                 foreach (var item in doc["values"].AsBsonArray)
                 {
-                    if (item.IsString) items.Add(item.AsString);
+                    if (item.IsString) values.Add(item.AsString);
+                }
+            }
+            else if (doc.Contains("items") && doc["items"].IsBsonArray)
+            {
+                foreach (var item in doc["items"].AsBsonArray)
+                {
+                    if (item.IsString) values.Add(item.AsString);
                 }
             }
 
-            return new WorkflowAuthService.AuthRule(op, items);
+            return values.Count == 0 ? null : new WorkflowAuthService.Rule { Mode = mode, Values = values };
         }
 
         private static BsonValue ObjectToBsonValue(object? value)
