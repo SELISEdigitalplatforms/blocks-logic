@@ -18,7 +18,6 @@ var serviceName = "blocks-logic";
 var vaultType = ApplicationConfigurations.ResolveVaultType();
 Console.WriteLine($"Using Genesis vault type: {vaultType}");
 var secret = await ApplicationConfigurations.ConfigureLogAndSecretsAsync(serviceName, vaultType);
-
 var builder = WebApplication.CreateBuilder(args);
 ApplicationConfigurations.ConfigureApiEnv(builder, args);
 

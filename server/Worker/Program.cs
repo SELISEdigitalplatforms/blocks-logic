@@ -58,3 +58,4 @@ IHostBuilder CreateHostBuilder(string[] args) =>
 
             ApplicationConfigurations.ConfigureWorker(services, LogicConstants.GetMessageConfiguration(secret.MessageConnectionString));
         });
+
