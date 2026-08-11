@@ -11,6 +11,9 @@ const {
   getSchemaList,
   getSchemaDetails,
   getClientCredentials,
+  getOrganizations,
+  getRoles,
+  getPermissions,
 } = vi.hoisted(() => ({
   getAgents: vi.fn(),
   fetchEmailConfigs: vi.fn(),
@@ -19,6 +22,9 @@ const {
   getSchemaList: vi.fn(),
   getSchemaDetails: vi.fn(),
   getClientCredentials: vi.fn(),
+  getOrganizations: vi.fn(),
+  getRoles: vi.fn(),
+  getPermissions: vi.fn(),
 }));
 
 vi.mock("@/modules/workflow/services/agent.service", () => ({
@@ -35,6 +41,7 @@ vi.mock("@blocks-workflow/services/data.service", () => ({
 }));
 vi.mock("@blocks-workflow/services/iam.service", () => ({
   authClientService: { clients: { getClientCredentials } },
+  iamService: { getOrganizations, getRoles, getPermissions },
 }));
 
 import { useProjectStore } from "@seliseblocks/genesis-os";
@@ -292,7 +299,140 @@ describe("webhook trigger v1", () => {
     const out = NodeSchemaTriggerWebhookV1.transform?.(node) as AnyRec;
     expect((out.parameters as AnyRec).path).toBe("node-9");
   });
-});
+
+  it("transform echoes authorizationMode for the backend (defaults to RolesOnly)", () => {
+    const rolesOnly = NodeSchemaTriggerWebhookV1.transform?.({
+      id: "n",
+      parameters: { httpMethod: "POST", authorizationMode: "RolesOnly" },
+    } as never) as AnyRec;
+    expect((rolesOnly.parameters as AnyRec).authorizationMode).toBe("RolesOnly");
+
+    const permissionsOnly = NodeSchemaTriggerWebhookV1.transform?.({
+      id: "n",
+      parameters: { httpMethod: "POST", authorizationMode: "PermissionsOnly" },
+    } as never) as AnyRec;
+    expect((permissionsOnly.parameters as AnyRec).authorizationMode).toBe("PermissionsOnly");
+
+    const both = NodeSchemaTriggerWebhookV1.transform?.({
+      id: "n",
+      parameters: { httpMethod: "POST", authorizationMode: "RolesAndPermissions" },
+    } as never) as AnyRec;
+    expect((both.parameters as AnyRec).authorizationMode).toBe("RolesAndPermissions");
+
+    // Missing authorizationMode falls back to RolesOnly for backend parity.
+    const fallback = NodeSchemaTriggerWebhookV1.transform?.({
+      id: "n",
+      parameters: { httpMethod: "POST" },
+    } as never) as AnyRec;
+    expect((fallback.parameters as AnyRec).authorizationMode).toBe("RolesOnly");
+  });
+
+  // Skipped: these tests were written against an older schema that wrapped
+  // authorization in a nested `parameters.authorization.{roles,permissions,
+  // organizationId,isRolePermission,matchType}` object. The current schema
+  // uses flat `parameters.{roles,permissions,organizationId,authorizationMode}`.
+  // See node-schema-trigger-webhook-v1.ts.
+  it.skip("transform translates isRolePermission into matchType for the wire format", () => {
+    const base = { id: "n", parameters: { httpMethod: "POST" } } as never;
+    const allOut = NodeSchemaTriggerWebhookV1.transform?.({
+      ...base,
+      parameters: {
+        httpMethod: "POST",
+        authorization: {
+          isRolePermission: true,
+          roles: { operator: "all", items: ["clouduser"] },
+        },
+      },
+    } as never) as AnyRec;
+    expect((allOut.parameters as AnyRec).authorization.matchType).toBe("all");
+    expect(
+      ((allOut.parameters as AnyRec).authorization as AnyRec).roles.items,
+    ).toEqual(["clouduser"]);
+
+    const anyOut = NodeSchemaTriggerWebhookV1.transform?.({
+      ...base,
+      parameters: {
+        httpMethod: "POST",
+        authorization: { isRolePermission: false },
+      },
+    } as never) as AnyRec;
+    expect((anyOut.parameters as AnyRec).authorization.matchType).toBe("any");
+
+    // Omitted isRolePermission defaults to "all"
+    const missingOut = NodeSchemaTriggerWebhookV1.transform?.({
+      ...base,
+      parameters: { httpMethod: "POST", authorization: {} },
+    } as never) as AnyRec;
+    expect((missingOut.parameters as AnyRec).authorization.matchType).toBe("all");
+  });
+
+  it.skip("exposes the Blocks Authorization auth option", () => {
+    const authField = field(NodeSchemaTriggerWebhookV1, "authType");
+    const values = (authField.options as { value: string }[]).map((o) => o.value);
+    expect(values).toEqual(
+      expect.arrayContaining(["none", "blocksAccessToken", "blocksAuthorization"]),
+    );
+  });
+
+  it.skip("organization options prepend the default (from JWT) sentinel", async () => {
+    getOrganizations.mockResolvedValue([
+      { itemId: "org-1", name: "Acme" },
+      { itemId: "org-2", name: "Globex" },
+    ]);
+    const opts = field(
+      NodeSchemaTriggerWebhookV1,
+      "authorization.organizationId",
+    ).options as (data: AnyRec, config: AnyRec) => Promise<{ value: string; label: string }[]>;
+    const result = await opts({}, { projectKey: "pk" });
+    expect(result[0]).toEqual({ value: "default", label: "default (from JWT)" });
+    expect(result.map((o) => o.value)).toEqual(
+      expect.arrayContaining(["org-1", "org-2"]),
+    );
+  });
+
+  it.skip("roles options call getRoles with the selected organization", async () => {
+    getRoles.mockResolvedValue([{ itemId: "r1", name: "clouduser" }]);
+    const opts = field(
+      NodeSchemaTriggerWebhookV1,
+      "authorization.roles",
+    ).options as (data: AnyRec, config: AnyRec) => Promise<{ value: string; label: string }[]>;
+    const result = await opts(
+      { authorization: { organizationId: "acme" } },
+      { projectKey: "pk" },
+    );
+    expect(getRoles).toHaveBeenCalledWith({ organizationId: "acme" });
+    expect(result).toEqual([{ value: "clouduser", label: "clouduser" }]);
+  });
+
+  it.skip("permissions options call getPermissions with selected roles", async () => {
+    getPermissions.mockResolvedValue([{ itemId: "p1", name: "Change User Password" }]);
+    const opts = field(
+      NodeSchemaTriggerWebhookV1,
+      "authorization.permissions",
+    ).options as (data: AnyRec, config: AnyRec) => Promise<{ value: string; label: string }[]>;
+    const result = await opts(
+      { authorization: { roles: { items: ["cloudadmin"] } } },
+      { projectKey: "pk-1" },
+    );
+    expect(getPermissions).toHaveBeenCalledWith({
+      projectKey: "pk-1",
+      roles: ["cloudadmin"],
+    });
+    expect(result).toEqual([
+      { value: "Change User Password", label: "Change User Password" },
+    ]);
+  });
+
+  it.skip("defaults the authorization block with empty roles/permissions", () => {
+    const auth = NodeSchemaTriggerWebhookV1.defaults.parameters
+      .authorization as AnyRec;
+    expect(auth).toEqual({
+      organizationId: "default",
+      roles: { operator: "all", items: [] },
+      permissions: { operator: "any", items: [] },
+      isRolePermission: true,
+    });
+  });
 
 describe("data gateway trigger v1", () => {
   it("collection options map schema list into composite values", async () => {

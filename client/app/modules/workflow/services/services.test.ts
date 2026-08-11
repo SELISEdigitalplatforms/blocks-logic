@@ -23,7 +23,7 @@ import { emailService } from "./email.services";
 import { agentService } from "./agent.service";
 import { dataService } from "./data.service";
 import { languageManagerService } from "./language.manager.service";
-import { authClientService } from "./iam.service";
+import { authClientService, iamService } from "./iam.service";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -183,6 +183,48 @@ describe("authClientService", () => {
     await authClientService.clients.getClientCredentials({ projectKey: "pk" });
     expect(http.iamService.get).toHaveBeenCalledWith(
       expect.stringContaining("ProjectKey=pk"),
+      undefined,
+      { absoluteUrl: true },
+    );
+  });
+});
+
+describe("iamService", () => {
+  it("lists organizations via GET with paging", async () => {
+    await iamService.getOrganizations({ page: 0, pageSize: 20 });
+    expect(http.iamService.get).toHaveBeenCalledWith(
+      expect.stringContaining("/api/iam/organizations?Page=0&PageSize=20"),
+      undefined,
+      { absoluteUrl: true },
+    );
+  });
+
+  it("lists roles via POST with body containing organizationId", async () => {
+    await iamService.getRoles({ organizationId: "default", search: "adm" });
+    expect(http.iamService.post).toHaveBeenCalledWith(
+      expect.stringContaining("/api/iam/roles"),
+      expect.objectContaining({
+        organizationId: "default",
+        filter: { search: "adm" },
+      }),
+      undefined,
+      { absoluteUrl: true },
+    );
+  });
+
+  it("lists permissions via POST with projectKey and roles", async () => {
+    await iamService.getPermissions({
+      projectKey: "pk1",
+      roles: ["cloudadmin"],
+      search: "user",
+    });
+    expect(http.iamService.post).toHaveBeenCalledWith(
+      expect.stringContaining("/api/iam/permissions"),
+      expect.objectContaining({
+        projectKey: "pk1",
+        roles: ["cloudadmin"],
+        filter: expect.objectContaining({ search: "user" }),
+      }),
       undefined,
       { absoluteUrl: true },
     );

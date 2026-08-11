@@ -7,6 +7,7 @@ export type FormFieldType =
   | "select"
   | "select-with-description"
   | "multiselect"
+  | "conditional-multiselect"
   | "checkbox"
   | "switch"
   | "radio"
@@ -25,7 +26,7 @@ export type FormFieldType =
   | "tab-with-text";
 
 export interface SelectOption {
-  value: string;
+  value: string | number | boolean;
   label: string;
   description?: string;
   disabled?: boolean;
@@ -131,3 +132,13 @@ export interface FieldProps<T = unknown> {
 
 export type FormField = FieldSchema;
 export type FieldComponentProps<T = unknown> = FieldProps<T>;
+
+/**
+ * Value shape stored by the `conditional-multiselect` field type.
+ * Combines the selected values with an AND/OR match mode so the field can
+ * persist both pieces of state through a single key write.
+ */
+export interface ConditionalMultiselectValue {
+  mode: "and" | "or";
+  values: string[];
+}
