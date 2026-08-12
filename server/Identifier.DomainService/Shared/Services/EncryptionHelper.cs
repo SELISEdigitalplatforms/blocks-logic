@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace DomainService.Shared
@@ -52,6 +52,19 @@ namespace DomainService.Shared
             var plainBytes = decryptor.TransformFinalBlock(cipher, 0, cipher.Length);
 
             return Encoding.UTF8.GetString(plainBytes);
+        }
+        public static bool TryDecrypt ( string cipherText, string key, out string plainText )
+        {
+            try
+            {
+                plainText = Decrypt(cipherText, key);
+                return true;
+            }
+            catch (Exception ex) when (ex is CryptographicException or FormatException or ArgumentException)
+            {
+                plainText = string.Empty;
+                return false;
+            }
         }
     }
 }
