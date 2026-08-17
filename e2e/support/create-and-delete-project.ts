@@ -178,7 +178,7 @@ export async function createProject(page: Page) {
   });
 
   await test.step("Stay on the console page for 30 seconds", async () => {
-    await page.goto("https://dev-logic.blocksdevelopers.com/app/console");
+    await page.goto(`${process.env.E2E_BASE_URL}/app/console`);
     await page.waitForTimeout(10_000);
   });
 
