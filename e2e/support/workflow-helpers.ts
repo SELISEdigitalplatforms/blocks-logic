@@ -1,6 +1,5 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 import { loginFresh } from "./login-helper";
-import { createProject } from "./create-and-delete-project";
 
 export async function rowHasWorkflow(row: Locator): Promise<boolean> {
   const isVisible = await row.isVisible().catch(() => false);
