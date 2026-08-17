@@ -9,6 +9,7 @@ using DomainService.Shared;
 using Mail.DomainService.Dtos;
 using Mail.DomainService.Mails;
 using Mail.DomainService.Shared.Utilities;
+using Scheduler.DomainService.Utils;
 using SeliseBlocks.ConfigurationDriver;
 using Worker;
 using Worker.Configuration;
@@ -54,6 +55,8 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             services.AddSingleton<IConsumer<AddExcuationNodeEvent>, AddExcuationNodeConsumer>();
             services.AddSingleton<IConsumer<DataChangeEvent>, DataTriggerConsumer>();
             services.AddApplicationServices();
+            services.AddSchedulerServices();
+            services.AddSchedulerWorkerServices();
             //services.RegisterSharedServices();
 
             ApplicationConfigurations.ConfigureWorker(services, LogicConstants.GetMessageConfiguration(secret.MessageConnectionString));
