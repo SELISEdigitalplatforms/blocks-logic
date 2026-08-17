@@ -10,7 +10,9 @@ const baseURL = process.env.E2E_BASE_URL;
 // No localhost fallback on purpose: the app is served on a named domain, so a
 // missing value should fail loudly instead of silently hitting the wrong host.
 if (!baseURL) {
-  throw new Error("E2E_BASE_URL is not set. Copy e2e/.env.e2e.example to e2e/.env.e2e and set E2E_BASE_URL to your named domain.");
+  throw new Error(
+    "E2E_BASE_URL is not set. Copy e2e/.env.e2e.example to e2e/.env.e2e and set E2E_BASE_URL to your named domain.",
+  );
 }
 
 // Set E2E_NO_WEBSERVER=1 to skip auto-start (e.g. when testing the remote dev
@@ -70,9 +72,23 @@ export default defineConfig({
       }
     : {}),
   projects: [
+    // Setup: performs the real login once and saves the session to
+    // fixtures/auth.json (see login.spec.ts).
+    {
+      name: "setup",
+      testMatch: /auth[\\/]login\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"] },
+    },
+    // All other tests run authenticated by reusing that saved session, and
+    // only after "setup" (login) has succeeded.
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      testIgnore: /auth[\\/]login\.spec\.ts/,
+      dependencies: ["setup"],
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: "fixtures/auth.json",
+      },
     },
   ],
 });
