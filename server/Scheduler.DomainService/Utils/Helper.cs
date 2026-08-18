@@ -9,10 +9,10 @@ namespace Scheduler.DomainService.Utils
             if (string.IsNullOrWhiteSpace(cronExpression))
                 return false;
 
-            if (!CronExpression.TryParse(cronExpression, CronFormat.Standard, out var cron))
-                return false;
-
-            return true;
+            // Accept both 5-field (standard) and 6-field (with leading seconds)
+            // expressions; the workflow schedule node generates 6-field crons.
+            return CronExpression.TryParse(cronExpression, CronFormat.Standard, out _) ||
+                   CronExpression.TryParse(cronExpression, CronFormat.IncludeSeconds, out _);
         }
     }
 }

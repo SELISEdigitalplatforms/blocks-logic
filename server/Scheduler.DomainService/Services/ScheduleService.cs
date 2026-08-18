@@ -5,6 +5,7 @@ using Scheduler.DomainService.Dtos.Responses;
 using Scheduler.DomainService.Entities;
 using Scheduler.DomainService.Enums;
 using Scheduler.DomainService.Events;
+using Scheduler.DomainService.Models;
 using Scheduler.DomainService.Repositories;
 using Scheduler.DomainService.Utils;
 
@@ -25,12 +26,12 @@ namespace Scheduler.DomainService.Services
             _logger = logger;
         }
 
-        public async Task<BaseResponse> CreateScheduleAsync(CreateScheduleRequestDto request)
+        public async Task<BaseMutationResponse> CreateScheduleAsync(CreateScheduleRequestDto request)
         {
             var isValidCronExp = Helper.IsValidCronExpression(request.CronExpression);
             if (!isValidCronExp)
             {
-                return CreateErrorResponse("validation_failed", "Cron expression is not valid");
+                return CreateMutationErrorResponse("validation_failed", "Cron expression is not valid");
             }
             var schedule = new Schedule
             {
@@ -58,40 +59,40 @@ namespace Scheduler.DomainService.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to create schedule in the repository.");
-                return CreateErrorResponse("create_failed", "Failed to create schedule");
+                return CreateMutationErrorResponse("create_failed", "Failed to create schedule");
             }
             try
             {
                 await EnqueueScheduleJobUpsertedAsync(schedule.ItemId);
 
-                return CreateSuccessResponse();
+                return CreateMutationSuccessResponse(schedule.ItemId);
             }
             catch (Exception ex)
             {
                 // Todo
                 // remove schedule from repository if enqueue fails
                 _logger.LogError(ex, "Failed to enqueue schedule {ItemId} for registration.", schedule.ItemId);
-                return CreateErrorResponse("enqueue_failed", "Failed to register schedule");
+                return CreateMutationErrorResponse("enqueue_failed", "Failed to register schedule");
             }
 
         }
 
-        public async Task<BaseResponse> UpdateScheduleAsync(UpdateScheduleRequestDto request)
+        public async Task<BaseMutationResponse> UpdateScheduleAsync(UpdateScheduleRequestDto request)
         {
             var isValidCronExp = Helper.IsValidCronExpression(request.CronExpression);
             if (!isValidCronExp)
             {
-                return CreateErrorResponse("validation_failed", "Cron expression is not valid");
+                return CreateMutationErrorResponse("validation_failed", "Cron expression is not valid");
             }
             var schedule = await _scheduleRepository.GetByIdAsync(request.ItemId);
             if (schedule is null)
             {
-                return CreateErrorResponse("schedule_not_found", $"Schedule {request.ItemId} was not found");
+                return CreateMutationErrorResponse("schedule_not_found", $"Schedule {request.ItemId} was not found");
             }
 
             if (schedule.Kind == ScheduleKind.Internal)
             {
-                return CreateErrorResponse("internal_schedule", "Internal schedules cannot be modified via API");
+                return CreateMutationErrorResponse("internal_schedule", "Internal schedules cannot be modified via API");
             }
 
             schedule.Name = request.Name.Trim();
@@ -114,7 +115,7 @@ namespace Scheduler.DomainService.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to update schedule {ItemId} in the repository.", schedule.ItemId);
-                return CreateErrorResponse("update_failed", "Failed to update schedule");
+                return CreateMutationErrorResponse("update_failed", "Failed to update schedule");
             }
             try
             {
@@ -125,10 +126,10 @@ namespace Scheduler.DomainService.Services
                 // Todo
                 // rollback repository update if enqueue fails
                 _logger.LogError(ex, "Failed to enqueue schedule {ItemId} for registration.", schedule.ItemId);
-                return CreateErrorResponse("enqueue_failed", "Failed to register schedule");
+                return CreateMutationErrorResponse("enqueue_failed", "Failed to register schedule");
             }
 
-            return CreateSuccessResponse();
+            return CreateMutationSuccessResponse(schedule.ItemId);
         }
 
         public async Task<BaseResponse> DeleteScheduleAsync(DeleteScheduleRequestDto request)
@@ -166,6 +167,109 @@ namespace Scheduler.DomainService.Services
             {
                 _logger.LogError(ex, "Failed to enqueue schedule {ItemId} for unregistration.", request.ItemId);
                 return CreateErrorResponse("enqueue_failed", "Failed to unregister schedule");
+            }
+
+            return CreateSuccessResponse();
+        }
+
+        public async Task<BaseMutationResponse> CreateWorkflowScheduleAsync(CreateWorkflowScheduleRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(request.WorkflowId) || string.IsNullOrWhiteSpace(request.NodeId))
+            {
+                return CreateMutationErrorResponse("validation_failed", "WorkflowId and NodeId are required");
+            }
+
+            var tenantId = string.IsNullOrWhiteSpace(request.TenantId)
+                ? BlocksContext.GetContext()?.TenantId ?? string.Empty
+                : request.TenantId;
+
+            if (!Helper.IsValidCronExpression(request.CronExpression))
+            {
+                return CreateMutationErrorResponse("validation_failed", "Cron expression is not valid");
+            }
+
+            var payload = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                workflowId = request.WorkflowId,
+                triggerId = request.NodeId,
+                tenantId,
+                cronExpression = request.CronExpression
+            });
+
+            var schedule = new Schedule
+            {
+                ItemId = Guid.NewGuid().ToString(),
+                Name = $"wf-{tenantId}-{request.WorkflowId}-{request.NodeId}",
+                Description = "Workflow schedule trigger (managed by workflow publish)",
+                Payload = payload,
+                CronExpression = request.CronExpression,
+                StartDate = request.StartDate,
+                EndDate = request.EndDate,
+                IsActive = true,
+                Kind = ScheduleKind.Internal,
+                TriggerType = ScheduleTriggerType.Queue,
+                Webhook = null,
+                Queue = new QueueConfiguration { QueueName = SchedulerConstants.WorkflowSchedulerTriggerQueue },
+                CreatedBy = BlocksContext.GetContext()?.UserId ?? "",
+                CreatedDate = DateTime.UtcNow,
+            };
+
+            try
+            {
+                await _scheduleRepository.CreateAsync(schedule);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to create workflow schedule in the repository.");
+                return CreateMutationErrorResponse("create_failed", "Failed to create workflow schedule");
+            }
+
+            try
+            {
+                await EnqueueScheduleJobUpsertedWithTenantAsync(schedule.ItemId, tenantId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to enqueue workflow schedule {ItemId} for registration.", schedule.ItemId);
+                return CreateMutationErrorResponse("enqueue_failed", "Failed to register workflow schedule");
+            }
+
+            return CreateMutationSuccessResponse(schedule.ItemId);
+        }
+
+        public async Task<BaseResponse> DeleteWorkflowSchedulesAsync(IEnumerable<string> itemIds)
+        {
+            foreach (var itemId in itemIds)
+            {
+                if (string.IsNullOrWhiteSpace(itemId))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    var schedule = await _scheduleRepository.GetByIdAsync(itemId);
+                    if (schedule is null)
+                    {
+                        // Tolerate missing ids — republish/unpublish retries must not fail.
+                        continue;
+                    }
+
+                    var tenantId = BlocksContext.GetContext()?.TenantId ?? string.Empty;
+
+                    var deleted = await _scheduleRepository.DeleteAsync(itemId);
+                    if (!deleted)
+                    {
+                        return CreateErrorResponse("delete_failed", $"Failed to delete schedule {itemId}");
+                    }
+
+                    await EnqueueScheduleJobDeletedWithTenantAsync(itemId, tenantId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to delete workflow schedule {ItemId}.", itemId);
+                    return CreateErrorResponse("delete_failed", $"Failed to delete schedule {itemId}");
+                }
             }
 
             return CreateSuccessResponse();
@@ -223,11 +327,53 @@ namespace Scheduler.DomainService.Services
             return new BaseResponse { IsSuccess = true };
         }
 
+        private static BaseMutationResponse CreateMutationSuccessResponse(string itemId)
+        {
+            return new BaseMutationResponse { IsSuccess = true, ItemId = itemId };
+        }
+
+        private static BaseMutationResponse CreateMutationErrorResponse(string errorKey, string errorMessage)
+        {
+            return new BaseMutationResponse
+            {
+                IsSuccess = false,
+                Errors = new Dictionary<string, string> { { errorKey, errorMessage } }
+            };
+        }
+
+        private Task EnqueueScheduleJobUpsertedWithTenantAsync(string itemId, string tenantId)
+        {
+            if (string.IsNullOrEmpty(tenantId))
+            {
+                _logger.LogWarning("Schedule {ItemId} enqueued with an empty TenantId; recurring-job id will not match reseed ids.", itemId);
+            }
+
+            return _messageClient.SendToConsumerAsync(new ConsumerMessage<ScheduleJobUpsertedEvent>
+            {
+                ConsumerName = SchedulerConstants.ScheduleJobRegistryQueueName,
+                Payload = new ScheduleJobUpsertedEvent { ItemId = itemId, TenantId = tenantId }
+            });
+        }
+
+        private Task EnqueueScheduleJobDeletedWithTenantAsync(string itemId, string tenantId)
+        {
+            if (string.IsNullOrEmpty(tenantId))
+            {
+                _logger.LogWarning("Schedule {ItemId} delete event enqueued with an empty TenantId; recurring-job id will not match reseed ids.", itemId);
+            }
+
+            return _messageClient.SendToConsumerAsync(new ConsumerMessage<ScheduleJobDeletedEvent>
+            {
+                ConsumerName = SchedulerConstants.ScheduleJobRegistryQueueName,
+                Payload = new ScheduleJobDeletedEvent { ItemId = itemId, TenantId = tenantId }
+            });
+        }
+
         public async Task<GetSchedulesResponseDto> GetSchedulesAsync(GetSchedulesRequestDto request)
         {
             try
             {
-                var result = await _scheduleRepository.GetAllAsync(request.SearchKey, request.PageNumber, request.PageSize);
+                var result = await _scheduleRepository.GetAllAsync(request.SearchKey, request.PageNumber, request.PageSize, ScheduleKind.Application);
                 _logger.LogInformation($"Schedules count {result.TotalCount}");
                 return new GetSchedulesResponseDto
                 {
@@ -239,6 +385,7 @@ namespace Scheduler.DomainService.Services
                         Description = item.Description,
                         CronExpression = item.CronExpression,
                         IsActive = item.IsActive,
+                        Kind = item.Kind,
                         Webhook = item.Webhook,
                         StartDate = item.StartDate,
                         EndDate = item.EndDate,

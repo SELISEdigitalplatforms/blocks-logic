@@ -5,9 +5,11 @@ using Moq;
 using Scheduler.DomainService.Dtos.Requests;
 using Scheduler.DomainService.Entities;
 using Scheduler.DomainService.Enums;
+using Scheduler.DomainService.Events;
 using Scheduler.DomainService.Models;
 using Scheduler.DomainService.Repositories;
 using Scheduler.DomainService.Services;
+using SchedulerConstants = Scheduler.DomainService.Utils.SchedulerConstants;
 using XUnitTest.TestHelpers;
 
 namespace XUnitTest.Scheduler
@@ -215,6 +217,164 @@ namespace XUnitTest.Scheduler
             result.IsSuccess.Should().BeFalse();
             result.Errors.Should().ContainKey("internal_schedule");
             _scheduleRepository.Verify(r => r.DeleteAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+        }
+
+        // ---------- CreateWorkflowScheduleAsync ----------
+
+        [Fact]
+        public async Task CreateWorkflowSchedule_PersistsInternalQueueSchedule()
+        {
+            var result = await _service.CreateWorkflowScheduleAsync(new CreateWorkflowScheduleRequest
+            {
+                WorkflowId = "wf-1",
+                NodeId = "node-1",
+                TenantId = "tenant-sched",
+                CronExpression = "30 */10 * * * *",
+                StartDate = DateTime.UtcNow.AddDays(-1),
+                EndDate = DateTime.UtcNow.AddDays(30),
+            });
+
+            result.IsSuccess.Should().BeTrue();
+            _scheduleRepository.Verify(r => r.CreateAsync(It.Is<Schedule>(s =>
+                s.Kind == ScheduleKind.Internal &&
+                s.TriggerType == ScheduleTriggerType.Queue &&
+                s.Queue != null &&
+                s.Queue.QueueName == SchedulerConstants.WorkflowSchedulerTriggerQueue &&
+                s.Name == "wf-tenant-sched-wf-1-node-1" &&
+                s.IsActive)), Times.Once);
+        }
+
+        [Fact]
+        public async Task CreateWorkflowSchedule_PayloadContainsWorkflowTriggerTenantAndCron()
+        {
+            var result = await _service.CreateWorkflowScheduleAsync(new CreateWorkflowScheduleRequest
+            {
+                WorkflowId = "wf-1",
+                NodeId = "node-1",
+                TenantId = "tenant-sched",
+                CronExpression = "*/15 * * * * *",
+                StartDate = DateTime.UtcNow.AddDays(-1),
+                EndDate = DateTime.UtcNow.AddDays(30),
+            });
+
+            result.IsSuccess.Should().BeTrue();
+            _scheduleRepository.Verify(r => r.CreateAsync(It.Is<Schedule>(s =>
+                s.Payload.Contains("\"workflowId\":\"wf-1\"") &&
+                s.Payload.Contains("\"triggerId\":\"node-1\"") &&
+                s.Payload.Contains("\"tenantId\":\"tenant-sched\"") &&
+                s.Payload.Contains("\"cronExpression\":\"*/15 * * * * *\""))), Times.Once);
+        }
+
+        [Fact]
+        public async Task CreateWorkflowSchedule_GeneratesGuidItemId_ReturnsItInResponse()
+        {
+            var result = await _service.CreateWorkflowScheduleAsync(new CreateWorkflowScheduleRequest
+            {
+                WorkflowId = "wf-1",
+                NodeId = "node-1",
+                TenantId = "tenant-sched",
+                CronExpression = "0 9 * * *",
+            });
+
+            result.IsSuccess.Should().BeTrue();
+            Guid.TryParse(result.ItemId, out _).Should().BeTrue();
+            _scheduleRepository.Verify(r => r.CreateAsync(It.Is<Schedule>(s => s.ItemId == result.ItemId)), Times.Once);
+        }
+
+        [Fact]
+        public async Task CreateWorkflowSchedule_InvalidCron_ReturnsValidationError()
+        {
+            var result = await _service.CreateWorkflowScheduleAsync(new CreateWorkflowScheduleRequest
+            {
+                WorkflowId = "wf-1",
+                NodeId = "node-1",
+                TenantId = "tenant-sched",
+                CronExpression = "not-a-cron",
+            });
+
+            result.IsSuccess.Should().BeFalse();
+            result.Errors.Should().ContainKey("validation_failed");
+            _scheduleRepository.Verify(r => r.CreateAsync(It.IsAny<Schedule>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task CreateWorkflowSchedule_EnqueuesUpsertedEventWithTenantId()
+        {
+            var result = await _service.CreateWorkflowScheduleAsync(new CreateWorkflowScheduleRequest
+            {
+                WorkflowId = "wf-1",
+                NodeId = "node-1",
+                TenantId = "tenant-sched",
+                CronExpression = "0 9 * * *",
+            });
+
+            result.IsSuccess.Should().BeTrue();
+            _messageClient.Verify(m => m.SendToConsumerAsync(It.Is<ConsumerMessage<ScheduleJobUpsertedEvent>>(msg =>
+                msg.ConsumerName == SchedulerConstants.ScheduleJobRegistryQueueName &&
+                msg.Payload.ItemId == result.ItemId &&
+                msg.Payload.TenantId == "tenant-sched")), Times.Once);
+        }
+
+        [Fact]
+        public async Task CreateWorkflowSchedule_MissingWorkflowId_ReturnsValidationError()
+        {
+            var result = await _service.CreateWorkflowScheduleAsync(new CreateWorkflowScheduleRequest
+            {
+                NodeId = "node-1",
+                TenantId = "tenant-sched",
+                CronExpression = "0 9 * * *",
+            });
+
+            result.IsSuccess.Should().BeFalse();
+            result.Errors.Should().ContainKey("validation_failed");
+        }
+
+        // ---------- DeleteWorkflowSchedulesAsync ----------
+
+        [Fact]
+        public async Task DeleteWorkflowSchedules_DeletesEachAndEnqueuesDeletedEvents()
+        {
+            _scheduleRepository.Setup(r => r.GetByIdAsync("sched-a", It.IsAny<string>()))
+                .ReturnsAsync(new Schedule { ItemId = "sched-a", Kind = ScheduleKind.Internal });
+            _scheduleRepository.Setup(r => r.GetByIdAsync("sched-b", It.IsAny<string>()))
+                .ReturnsAsync(new Schedule { ItemId = "sched-b", Kind = ScheduleKind.Internal });
+            _scheduleRepository.Setup(r => r.DeleteAsync(It.IsAny<string>(), It.IsAny<string>()))
+                .ReturnsAsync(true);
+
+            var result = await _service.DeleteWorkflowSchedulesAsync(["sched-a", "sched-b"]);
+
+            result.IsSuccess.Should().BeTrue();
+            _scheduleRepository.Verify(r => r.DeleteAsync("sched-a", It.IsAny<string>()), Times.Once);
+            _scheduleRepository.Verify(r => r.DeleteAsync("sched-b", It.IsAny<string>()), Times.Once);
+            _messageClient.Verify(m => m.SendToConsumerAsync(It.Is<ConsumerMessage<ScheduleJobDeletedEvent>>(msg =>
+                msg.Payload.ItemId == "sched-a" || msg.Payload.ItemId == "sched-b")), Times.Exactly(2));
+        }
+
+        [Fact]
+        public async Task DeleteWorkflowSchedules_ToleratesMissingIds()
+        {
+            _scheduleRepository.Setup(r => r.GetByIdAsync("gone", It.IsAny<string>()))
+                .ReturnsAsync((Schedule?)null);
+
+            var result = await _service.DeleteWorkflowSchedulesAsync(["gone"]);
+
+            result.IsSuccess.Should().BeTrue();
+            _scheduleRepository.Verify(r => r.DeleteAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+            _messageClient.Verify(m => m.SendToConsumerAsync(It.IsAny<ConsumerMessage<ScheduleJobDeletedEvent>>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task DeleteWorkflowSchedules_DeleteFailure_ReturnsError()
+        {
+            _scheduleRepository.Setup(r => r.GetByIdAsync("sched-a", It.IsAny<string>()))
+                .ReturnsAsync(new Schedule { ItemId = "sched-a", Kind = ScheduleKind.Internal });
+            _scheduleRepository.Setup(r => r.DeleteAsync("sched-a", It.IsAny<string>()))
+                .ReturnsAsync(false);
+
+            var result = await _service.DeleteWorkflowSchedulesAsync(["sched-a"]);
+
+            result.IsSuccess.Should().BeFalse();
+            result.Errors.Should().ContainKey("delete_failed");
         }
 
     }

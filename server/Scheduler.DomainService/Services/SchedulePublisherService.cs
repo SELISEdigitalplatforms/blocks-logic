@@ -68,9 +68,9 @@ namespace Scheduler.DomainService.Services
 
         private bool ShouldPublishSchedule(Schedule schedule, DateTime today)
         {
-            return schedule.StartDate.IsValid() &&
-                   schedule.EndDate.IsValid() &&
-                   today.IsInRange(schedule.StartDate.Value, schedule.EndDate.Value);
+            var startDate = schedule.StartDate ?? DateTime.UtcNow;
+            return today >= startDate &&
+                   (schedule.EndDate is null || today <= schedule.EndDate.Value);
         }
 
         private async Task PublishToWebhookAsync(Schedule schedule)

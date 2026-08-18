@@ -23,7 +23,7 @@ namespace BlocksTemplate.Api.Controllers
         /// </summary>
         [HttpPost]
         [Authorize]
-        public async Task<BaseResponse> CreateSchedule([FromBody] CreateScheduleRequestDto request)
+        public async Task<BaseMutationResponse> CreateSchedule([FromBody] CreateScheduleRequestDto request)
         {
             return await _scheduleService.CreateScheduleAsync(request);
         }
@@ -33,7 +33,7 @@ namespace BlocksTemplate.Api.Controllers
         /// </summary>
         [HttpPost]
         [Authorize]
-        public async Task<BaseResponse> UpdateSchedule([FromBody] UpdateScheduleRequestDto request)
+        public async Task<BaseMutationResponse> UpdateSchedule([FromBody] UpdateScheduleRequestDto request)
         {
             return await _scheduleService.UpdateScheduleAsync(request);
         }

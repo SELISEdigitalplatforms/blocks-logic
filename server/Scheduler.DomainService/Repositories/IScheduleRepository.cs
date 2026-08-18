@@ -1,6 +1,7 @@
 using Scheduler.DomainService.Dtos;
 using Scheduler.DomainService.Dtos.Responses;
 using Scheduler.DomainService.Entities;
+using Scheduler.DomainService.Enums;
 
 namespace Scheduler.DomainService.Repositories
 {
@@ -11,6 +12,6 @@ namespace Scheduler.DomainService.Repositories
         Task UpdateAsync(Schedule schedule);
         Task<bool> DeleteAsync(string itemId, string tenantId = "");
         Task<List<SchedularDto>> GetSchedulesFromAllTenantsAsync();
-        Task<(List<Schedule>? Items, long TotalCount)> GetAllAsync(string searchKey, int pageNumber, int pageSize);
+        Task<(List<Schedule>? Items, long TotalCount)> GetAllAsync(string searchKey, int pageNumber, int pageSize, ScheduleKind? scheduleKind = null);
     }
 }

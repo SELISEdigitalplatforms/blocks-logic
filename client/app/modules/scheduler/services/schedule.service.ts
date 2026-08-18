@@ -1,6 +1,7 @@
 import { serviceInstances } from "@/lib/http-client";
 import { SCHEDULER_ENDPOINTS } from "../constants/endpoint.constant";
 import {
+  IBaseMutationResponse,
   IBaseResponse,
   ICreateSchedulePayload,
   IDeleteSchedulePayload,
@@ -16,11 +17,11 @@ export class ScheduleService {
     return this.logicHttpClient.post(SCHEDULER_ENDPOINTS.GET_ALL, payload);
   };
 
-  createSchedule = (payload: ICreateSchedulePayload): Promise<IBaseResponse> => {
+  createSchedule = (payload: ICreateSchedulePayload): Promise<IBaseMutationResponse> => {
     return this.logicHttpClient.post(SCHEDULER_ENDPOINTS.CREATE, payload);
   };
 
-  updateSchedule = (payload: IUpdateSchedulePayload): Promise<IBaseResponse> => {
+  updateSchedule = (payload: IUpdateSchedulePayload): Promise<IBaseMutationResponse> => {
     return this.logicHttpClient.post(SCHEDULER_ENDPOINTS.UPDATE, payload);
   };
 

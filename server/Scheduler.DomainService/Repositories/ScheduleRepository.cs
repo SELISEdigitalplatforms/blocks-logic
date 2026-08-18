@@ -33,13 +33,17 @@ namespace Scheduler.DomainService.Repositories
                 ? GetCollection()
                 : _dbContextProvider.GetCollection<Schedule>(tenantId, CollectionName);
 
-        public async Task<(List<Schedule>? Items, long TotalCount)> GetAllAsync(string searchKey, int pageNumber, int pageSize)
+        public async Task<(List<Schedule>? Items, long TotalCount)> GetAllAsync(string searchKey, int pageNumber, int pageSize, ScheduleKind? scheduleKind = null)
         {
             FilterDefinition<Schedule> filter = string.IsNullOrEmpty(searchKey)
                 ? Builders<Schedule>.Filter.Empty
                 : Builders<Schedule>.Filter.Regex(x => x.Name, new MongoDB.Bson.BsonRegularExpression(searchKey, "i"));
-
-            filter &= Builders<Schedule>.Filter.Ne(x => x.Kind, ScheduleKind.Internal);
+            if (scheduleKind.HasValue)
+            {
+                filter &= Builders<Schedule>.Filter.Eq(
+                    x => x.Kind,
+                    scheduleKind.Value);
+            }
 
             long totalCount = await GetCollection().CountDocumentsAsync(filter);
 
@@ -95,29 +99,40 @@ namespace Scheduler.DomainService.Repositories
 
         public async Task<List<SchedularDto>> GetSchedulesFromAllTenantsAsync()
         {
-            List<SchedularDto> schedularDtos = [];
             var tenants = _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, "BlocksRootDb")
                     .GetCollection<Tenant>("Tenants")
                     .Find(FilterDefinition<Tenant>.Empty)
                     .ToList();
 
-            foreach (var tenant in tenants)
+            const int batchSize = 10;
+            List<SchedularDto> schedularDtos = [];
+
+            for (var i = 0; i < tenants.Count; i += batchSize)
             {
-                var schedulesCollection = _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, tenant.DBName)
-                                          .GetCollection<Schedule>(CollectionName);
-
-                var filter = Builders<Schedule>.Filter.Ne(x => x.IsActive, false);
-                var schedules = await schedulesCollection.Find(filter).ToListAsync();
-
-                if (schedules.Count > 0)
+                var batch = tenants.Skip(i).Take(batchSize);
+                var tasks = batch.Select(async tenant =>
                 {
-                    schedularDtos.Add(new SchedularDto
+                    try
                     {
-                        TenantId = tenant.TenantId,
-                        Schedules = schedules
-                    });
+                        var schedulesCollection = _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, tenant.DBName)
+                                                  .GetCollection<Schedule>(CollectionName);
 
-                }
+                        var filter = Builders<Schedule>.Filter.Ne(x => x.IsActive, false);
+                        var schedules = await schedulesCollection.Find(filter).ToListAsync();
+
+                        return schedules.Count > 0
+                            ? new SchedularDto { TenantId = tenant.TenantId, Schedules = schedules }
+                            : null;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to load schedules for tenant {TenantId}", tenant.TenantId);
+                        return null;
+                    }
+                });
+
+                var results = await Task.WhenAll(tasks);
+                schedularDtos.AddRange(results.Where(x => x is not null)!);
             }
 
             return schedularDtos;

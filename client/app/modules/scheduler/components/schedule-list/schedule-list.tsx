@@ -31,10 +31,7 @@ import { parseDateString } from "@/lib/utils";
 import { isErrorWithErrors } from "@/lib/error";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { useUpdateSchedule } from "../../hooks/use-schedule-api";
-import {
-  ISchedule,
-  ScheduleTriggerType,
-} from "../../types/schedule.service.type";
+import { ISchedule, ScheduleKind } from "../../types/schedule.service.type";
 import { DeleteScheduleDialog } from "../delete-schedule";
 import { ScheduleFormDialog } from "../schedule-form-dialog";
 
@@ -105,6 +102,11 @@ export const ScheduleList = ({ schedules, isLoading }: ScheduleListProps) => {
           title={info.row.original.description ?? undefined}
         >
           {info.row.original.name?.trim() || "-"}
+          {info.row.original.kind === ScheduleKind.Internal && (
+            <Badge variant="secondary" className="ml-2 rounded-full">
+              Workflow
+            </Badge>
+          )}
           {info.row.original.description && (
             <p className="truncate text-xs text-muted-foreground">
               {info.row.original.description}
@@ -161,41 +163,44 @@ export const ScheduleList = ({ schedules, isLoading }: ScheduleListProps) => {
     {
       id: "action",
       header: () => <div className="font-bold text-medium-emphasis"></div>,
-      cell: (info) => (
-        <div className="ml-2 flex items-center gap-4 sm:ml-0">
-          <Switch
-            size="md"
-            checked={info.row.original.isActive}
-            disabled={isUpdating}
-            onCheckedChange={(next) => handleToggleActive(info.row.original, next)}
-          />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-5 w-5 p-0">
-                <EllipsisVertical width={20} height={20} />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                className="cursor-pointer"
-                onClick={() => setModal({ type: "edit", schedule: info.row.original })}
-              >
-                <Pen className="mr-2 h-4 w-4" />
-                <span>Edit</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="cursor-pointer text-error"
-                onClick={() =>
-                  setModal({ type: "delete", schedule: info.row.original })
-                }
-              >
-                <Trash className="mr-2 h-4 w-4" />
-                <span>Delete</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      ),
+      cell: (info) => {
+        const isInternal = info.row.original.kind === ScheduleKind.Internal;
+        return (
+          <div className="ml-2 flex items-center gap-4 sm:ml-0">
+            <Switch
+              size="md"
+              checked={info.row.original.isActive}
+              disabled={isUpdating || isInternal}
+              onCheckedChange={(next) => handleToggleActive(info.row.original, next)}
+            />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="h-5 w-5 p-0" disabled={isInternal}>
+                  <EllipsisVertical width={20} height={20} />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onClick={() => setModal({ type: "edit", schedule: info.row.original })}
+                >
+                  <Pen className="mr-2 h-4 w-4" />
+                  <span>Edit</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="cursor-pointer text-error"
+                  onClick={() =>
+                    setModal({ type: "delete", schedule: info.row.original })
+                  }
+                >
+                  <Trash className="mr-2 h-4 w-4" />
+                  <span>Delete</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        );
+      },
     },
   ];
 

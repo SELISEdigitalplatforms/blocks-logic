@@ -6,9 +6,10 @@ namespace DomainService.Workflow.Utils
 {
     public static class LogicConstants
     {
-        public const string NodeExecutionQueue = "blocks_logic_workflow_node_execute_listener";
+        public const string NodeExecutionQueue = "blocks_logic_workflow_node_execute_listener_local";
         public const string EmailTriggerQueue = "blocks_logic_workflow_email_trigger_listener";
         public const string DataTriggerQueue = "blocks_logic_workflow_data_trigger_listener";
+        public const string SchedulerTriggerQueue = SchedulerConstants.WorkflowSchedulerTriggerQueue;
         public const string LogicMailQueueName = "blocks_email_listener";
         public const string MigrationCompletionTopic = "blocks_migration_topic1";
         public const string AccessTokenCookieName = "access_token";
@@ -51,6 +52,7 @@ namespace DomainService.Workflow.Utils
                     ConsumerSubscriptions = [ConsumerSubscription.BindToQueue(NodeExecutionQueue),
                                              ConsumerSubscription.BindToQueue(EmailTriggerQueue),
                                              ConsumerSubscription.BindToQueue(DataTriggerQueue),
+                                             ConsumerSubscription.BindToQueue(SchedulerTriggerQueue),
                                              ConsumerSubscription.BindToQueue(LogicMailQueueName),
                                              ConsumerSubscription.BindToQueue(MigrationCompletionTopic),
                                              ConsumerSubscription.BindToQueue(SchedulerConstants.ScheduleJobRegistryQueueName)],
@@ -65,7 +67,7 @@ namespace DomainService.Workflow.Utils
             {
                 AzureServiceBusConfiguration = new AzureServiceBusConfiguration
                 {
-                    Queues = [NodeExecutionQueue, EmailTriggerQueue, DataTriggerQueue, LogicMailQueueName, SchedulerConstants.ScheduleJobRegistryQueueName],
+                    Queues = [NodeExecutionQueue, EmailTriggerQueue, DataTriggerQueue, SchedulerTriggerQueue, LogicMailQueueName, SchedulerConstants.ScheduleJobRegistryQueueName],
                     Topics = [MigrationCompletionTopic]
                 }
             };

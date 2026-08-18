@@ -1,13 +1,10 @@
-import { useProjectStore } from "@seliseblocks/genesis-os";
 import { NodeSchemaDefinition } from "./node-schema.type";
 
 const TRIGGER_INTERVAL_OPTIONS = [
-  { label: "Seconds", value: "seconds" },
   { label: "Minutes", value: "minutes" },
   { label: "Hours", value: "hours" },
   { label: "Days", value: "days" },
   { label: "Weeks", value: "weeks" },
-  { label: "Months", value: "months" },
   { label: "Custom (Cron)", value: "custom" },
 ];
 
@@ -81,17 +78,23 @@ const readStepOrValue = (
   return clamp(directValue, min, max);
 };
 
-const deriveScheduleFields = (
-  data: Record<string, unknown>,
-): Record<string, unknown> => {
+const readWeekdays = (token: string | undefined): string[] => {
+  if (!token || token === "*") return ["1"];
+
+  return token
+    .split(",")
+    .map((day) => day.trim())
+    .filter((day) => /^\d$/.test(day))
+    .map((day) => clamp(Number(day), 0, 6).toString());
+};
+
+export const deriveScheduleFields = (data: Record<string, unknown>): Record<string, unknown> => {
   const fallback = {
     secondsBetweenTriggers: 30,
-    daysBetweenTriggers: 1,
-    weeksBetweenTriggers: 1,
     monthsBetweenTriggers: 1,
     hoursBetweenTriggers: 1,
     minutesBetweenTriggers: 5,
-    triggerAtWeek: "1",
+    triggerAtWeekdays: ["1"],
     triggerAtDayOfMonth: 1,
     triggerAtHour: "1",
     triggerAtMinute: 0,
@@ -102,75 +105,61 @@ const deriveScheduleFields = (
 
   if (!cronExpression) return fallback;
 
-  const [cronPart, commentPart = ""] = cronExpression.split("#");
-  const cronTokens = cronPart.trim().split(/\s+/).filter(Boolean);
+  const allTokens = cronExpression.split(/\s+/).filter(Boolean);
+
+  // Support both 5-field (minute-based, Hangfire-compatible) and legacy
+  // 6-field (leading seconds) expressions; normalize to the 5 trailing fields.
+  const isSixField = allTokens.length >= 6;
+  const t = isSixField ? allTokens.slice(1) : allTokens;
+  if (t.length < 5) return fallback;
 
   switch (triggerInterval) {
     case "seconds": {
-      if (cronTokens.length < 6) return fallback;
-
       return {
         ...fallback,
-        secondsBetweenTriggers: readStepOrValue(cronTokens[0], 30, 1, 59),
+        secondsBetweenTriggers: isSixField ? readStepOrValue(allTokens[0], 30, 1, 59) : 30,
       };
     }
 
     case "minutes": {
-      if (cronTokens.length < 6) return fallback;
-
       return {
         ...fallback,
-        minutesBetweenTriggers: readStepOrValue(cronTokens[1], 5, 1, 59),
+        minutesBetweenTriggers: readStepOrValue(t[0], 5, 1, 59),
       };
     }
 
     case "hours": {
-      if (cronTokens.length < 6) return fallback;
-
       return {
         ...fallback,
-        triggerAtMinute: readStepOrValue(cronTokens[1], 0, 0, 59),
-        hoursBetweenTriggers: readStepOrValue(cronTokens[2], 1, 1, 23),
+        triggerAtMinute: readStepOrValue(t[0], 0, 0, 59),
+        hoursBetweenTriggers: readStepOrValue(t[1], 1, 1, 23),
       };
     }
 
     case "days": {
-      if (cronTokens.length < 6) return fallback;
-
       return {
         ...fallback,
-        triggerAtMinute: readStepOrValue(cronTokens[1], 0, 0, 59),
-        triggerAtHour: String(readStepOrValue(cronTokens[2], 1, 0, 23)),
-        daysBetweenTriggers: readStepOrValue(cronTokens[3], 1, 1, 31),
+        triggerAtMinute: readStepOrValue(t[0], 0, 0, 59),
+        triggerAtHour: String(readStepOrValue(t[1], 1, 0, 23)),
       };
     }
 
     case "weeks": {
-      if (cronTokens.length < 6) return fallback;
-
-      const weeksMatch = commentPart.match(/every\s+(\d+)\s+weeks/i);
-
       return {
         ...fallback,
-        triggerAtMinute: readStepOrValue(cronTokens[1], 0, 0, 59),
-        triggerAtHour: String(readStepOrValue(cronTokens[2], 1, 0, 23)),
-        triggerAtWeek: String(readStepOrValue(cronTokens[5], 1, 0, 6)),
-        weeksBetweenTriggers: weeksMatch?.[1]
-          ? Math.max(1, Number(weeksMatch[1]))
-          : fallback.weeksBetweenTriggers,
+        triggerAtMinute: readStepOrValue(t[0], 0, 0, 59),
+        triggerAtHour: String(readStepOrValue(t[1], 1, 0, 23)),
+        triggerAtWeekdays: readWeekdays(t[4]),
       };
     }
 
     case "months": {
-      if (cronTokens.length < 6) return fallback;
-
       return {
         ...fallback,
-        triggerAtMinute: readStepOrValue(cronTokens[1], 0, 0, 59),
-        triggerAtHour: String(readStepOrValue(cronTokens[2], 1, 0, 23)),
-        triggerAtDayOfMonth: readStepOrValue(cronTokens[3], 1, 1, 31),
-        monthsBetweenTriggers:
-          cronTokens[4] === "*" ? 1 : readStepOrValue(cronTokens[4], 1, 1, 12),
+        triggerAtMinute: readStepOrValue(t[0], 0, 0, 59),
+        triggerAtHour: String(readStepOrValue(t[1], 1, 0, 23)),
+        triggerAtDayOfMonth: readStepOrValue(t[2], 1, 1, 31),
+        monthsBetweenTriggers: t[3] === "*" ? 1 : readStepOrValue(t[3], 1, 1, 12),
       };
     }
 
@@ -185,47 +174,79 @@ const generateCronExpression = (data: Record<string, unknown>): string => {
     return String(data.cronExpression || "");
   }
 
-  const minute = clamp(Number(data.triggerAtMinute ?? 0), 0, 59);
-  const hour = clamp(Number(data.triggerAtHour ?? 0), 0, 23);
-  const weekday = clamp(Number(data.triggerAtWeek ?? 1), 0, 6);
-  const dayOfMonth = clamp(Number(data.triggerAtDayOfMonth ?? 1), 1, 31);
-  const seconds = clamp(Number(data.secondsBetweenTriggers ?? 30), 1, 59);
-  const minutes = clamp(Number(data.minutesBetweenTriggers ?? 5), 1, 59);
-  const hours = clamp(Number(data.hoursBetweenTriggers ?? 1), 1, 23);
-  const days = clamp(Number(data.daysBetweenTriggers ?? 1), 1, 31);
-  const months = clamp(Number(data.monthsBetweenTriggers ?? 1), 1, 12);
-  const weeksStep = Math.max(1, Number(data.weeksBetweenTriggers ?? 1));
-
+  // Hangfire recurring jobs only support 5-field (minute-based) cron
+  // expressions, so no seconds field is emitted.
   switch (triggerInterval) {
-    case "seconds":
-      return `*/${seconds} * * * * *`;
-    case "minutes":
-      return `0 */${minutes} * * * *`;
+    case "seconds": {
+      // 5-field cron cannot express sub-minute intervals; the smallest
+      // supported interval is every minute.
+      return "* * * * *";
+    }
 
-    case "hours":
-      return `0 ${minute} */${hours} * * *`;
+    case "minutes": {
+      const minutes = clamp(Number(data.minutesBetweenTriggers ?? 5), 1, 59);
+      return `*/${minutes} * * * *`;
+    }
 
-    case "days":
-      return `0 ${minute} ${hour} */${days} * *`;
+    case "hours": {
+      const minute = clamp(Number(data.triggerAtMinute ?? 0), 0, 59);
+      const hours = clamp(Number(data.hoursBetweenTriggers ?? 1), 1, 23);
+      // `*/n` only spaces evenly when n divides 24; otherwise it still fires
+      // at clock hours divisible by n (cron stepping) — acceptable here since
+      // there is no runtime recurrence filtering.
+      return `${minute} */${hours} * * *`;
+    }
 
-    case "weeks":
-      return weeksStep === 1
-        ? `0 ${minute} ${hour} * * ${weekday}`
-        : `0 ${minute} ${hour} * * ${weekday} # every ${weeksStep} weeks`;
+    case "days": {
+      const minute = clamp(Number(data.triggerAtMinute ?? 0), 0, 59);
+      const hour = clamp(Number(data.triggerAtHour ?? 0), 0, 23);
+      return `${minute} ${hour} * * *`;
+    }
 
-    case "months":
-      return months === 1
-        ? `0 ${minute} ${hour} ${dayOfMonth} * *`
-        : `0 ${minute} ${hour} ${dayOfMonth} */${months} *`;
+    case "weeks": {
+      const minute = clamp(Number(data.triggerAtMinute ?? 0), 0, 59);
+      const hour = clamp(Number(data.triggerAtHour ?? 0), 0, 23);
+      const weekdays = Array.isArray(data.triggerAtWeekdays)
+        ? (data.triggerAtWeekdays as unknown[])
+            .map((d) => clamp(Number(d), 0, 6))
+            .filter((d) => Number.isFinite(d))
+            .sort((a, b) => a - b)
+        : [1];
+      const daysOfWeek = weekdays.length === 0 ? "*" : weekdays.join(",");
+      return `${minute} ${hour} * * ${daysOfWeek}`;
+    }
 
-    default:
-      return `0 ${minute} ${hour} */${days} * *`;
+    case "months": {
+      const minute = clamp(Number(data.triggerAtMinute ?? 0), 0, 59);
+      const hour = clamp(Number(data.triggerAtHour ?? 0), 0, 23);
+      // Cap at 28 so the day exists in every month (day 30 would skip February).
+      const dayOfMonth = clamp(Number(data.triggerAtDayOfMonth ?? 1), 1, 28);
+      const months = clamp(Number(data.monthsBetweenTriggers ?? 1), 1, 12);
+      // `*/n` only spaces evenly when n divides 12; prefer restricting n to
+      // divisors of 12 (1, 2, 3, 4, 6, 12) — non-divisors still emit `*/n`
+      // with cron-stepping semantics.
+      return 12 % months === 0
+        ? `${minute} ${hour} ${dayOfMonth} */${months} *`
+        : `${minute} ${hour} ${dayOfMonth} * *`;
+    }
+
+    default: {
+      const minute = clamp(Number(data.triggerAtMinute ?? 0), 0, 59);
+      const hour = clamp(Number(data.triggerAtHour ?? 0), 0, 23);
+      return `${minute} ${hour} * * *`;
+    }
   }
 };
 
-export const NodeSchemaTriggerBlockscheduleV1: NodeSchemaDefinition = {
+// Sub-fields are transient (only `cronExpression` is persisted), so sibling
+// values are missing from `data` on every change. Rebuild them from the
+// stored cron before regenerating so one edit does not reset the others.
+const regenerateCronExpression = (data: Record<string, unknown>): string =>
+  generateCronExpression({ ...deriveScheduleFields(data), ...data });
+
+export const NodeSchemaTriggerScheduleV1: NodeSchemaDefinition = {
   schema: {
-    type: "blockschedule",
+    type: "schedule",
     category: "trigger",
     version: "v1",
     parameters: [
@@ -238,29 +259,8 @@ export const NodeSchemaTriggerBlockscheduleV1: NodeSchemaDefinition = {
         required: true,
         options: TRIGGER_INTERVAL_OPTIONS,
         onChange: (_value: unknown, data: Record<string, unknown>) => ({
-          cronExpression: generateCronExpression(data),
+          cronExpression: regenerateCronExpression(data),
         }),
-      },
-      {
-        id: "secondsBetweenTriggers",
-        type: "number",
-        label: "Seconds Between Triggers",
-        info: "Must be in range 1-59",
-        key: "secondsBetweenTriggers",
-        min: 1,
-        max: 59,
-        required: true,
-        transient: true,
-        dependsOn: {
-          key: "triggerInterval",
-          value: "seconds",
-          operator: "equals",
-        },
-        onChange: (_value: unknown, data: Record<string, unknown>) => ({
-          cronExpression: generateCronExpression(data),
-        }),
-        defaultValue: (data: Record<string, unknown>) =>
-          deriveScheduleFields(data).secondsBetweenTriggers,
       },
       {
         id: "minutesBetweenTriggers",
@@ -278,7 +278,7 @@ export const NodeSchemaTriggerBlockscheduleV1: NodeSchemaDefinition = {
           operator: "equals",
         },
         onChange: (_value: unknown, data: Record<string, unknown>) => ({
-          cronExpression: generateCronExpression(data),
+          cronExpression: regenerateCronExpression(data),
         }),
         defaultValue: (data: Record<string, unknown>) =>
           deriveScheduleFields(data).minutesBetweenTriggers,
@@ -287,7 +287,7 @@ export const NodeSchemaTriggerBlockscheduleV1: NodeSchemaDefinition = {
         id: "hoursBetweenTriggers",
         type: "number",
         label: "Hours Between Triggers",
-        info: "Must be in range 1-23",
+        info: "Must be in range 1-23. Note: cron stepping fires at clock hours divisible by the interval when it does not divide 24 evenly.",
         key: "hoursBetweenTriggers",
         min: 1,
         max: 23,
@@ -299,59 +299,19 @@ export const NodeSchemaTriggerBlockscheduleV1: NodeSchemaDefinition = {
           operator: "equals",
         },
         onChange: (_value: unknown, data: Record<string, unknown>) => ({
-          cronExpression: generateCronExpression(data),
+          cronExpression: regenerateCronExpression(data),
         }),
         defaultValue: (data: Record<string, unknown>) =>
           deriveScheduleFields(data).hoursBetweenTriggers,
       },
       {
-        id: "daysBetweenTriggers",
-        type: "number",
-        label: "Days Between Triggers",
-        info: "Must be in range 1-31",
-        key: "daysBetweenTriggers",
-        min: 1,
-        max: 31,
-        required: true,
-        transient: true,
-        dependsOn: {
-          key: "triggerInterval",
-          value: "days",
-          operator: "equals",
-        },
-        onChange: (_value: unknown, data: Record<string, unknown>) => ({
-          cronExpression: generateCronExpression(data),
-        }),
-        defaultValue: (data: Record<string, unknown>) =>
-          deriveScheduleFields(data).daysBetweenTriggers,
-      },
-      {
-        id: "weeksBetweenTriggers",
-        type: "number",
-        label: "Weeks Between Triggers",
-        info: "Would run every week unless specified otherwise",
-        key: "weeksBetweenTriggers",
-        min: 1,
-        required: true,
-        transient: true,
-        dependsOn: {
-          key: "triggerInterval",
-          value: "weeks",
-          operator: "equals",
-        },
-        onChange: (_value: unknown, data: Record<string, unknown>) => ({
-          cronExpression: generateCronExpression(data),
-        }),
-        defaultValue: (data: Record<string, unknown>) =>
-          deriveScheduleFields(data).weeksBetweenTriggers,
-      },
-      {
         id: "monthsBetweenTriggers",
         type: "number",
         label: "Months Between Triggers",
-        info: "Would run every month unless specified otherwise",
+        info: "Prefer divisors of 12 (1, 2, 3, 4, 6, 12) — other values fire every month.",
         key: "monthsBetweenTriggers",
         min: 1,
+        max: 12,
         required: true,
         transient: true,
         dependsOn: {
@@ -360,7 +320,7 @@ export const NodeSchemaTriggerBlockscheduleV1: NodeSchemaDefinition = {
           operator: "equals",
         },
         onChange: (_value: unknown, data: Record<string, unknown>) => ({
-          cronExpression: generateCronExpression(data),
+          cronExpression: regenerateCronExpression(data),
         }),
         defaultValue: (data: Record<string, unknown>) =>
           deriveScheduleFields(data).monthsBetweenTriggers,
@@ -369,7 +329,7 @@ export const NodeSchemaTriggerBlockscheduleV1: NodeSchemaDefinition = {
         id: "cronExpression",
         type: "text",
         label: "Cron Expression",
-        info: "Generated from trigger interval and timing fields.",
+        info: "5-field cron expression (minute-based), e.g. */10 * * * *",
         key: "cronExpression",
         required: true,
         dependsOn: {
@@ -377,17 +337,16 @@ export const NodeSchemaTriggerBlockscheduleV1: NodeSchemaDefinition = {
           value: "custom",
           operator: "equals",
         },
-        disabled: (data: Record<string, unknown>) =>
-          data.triggerInterval !== "custom",
+        disabled: (data: Record<string, unknown>) => data.triggerInterval !== "custom",
       },
       {
         id: "triggerAtDayOfMonth",
         type: "number",
         label: "Trigger at Day of Month",
-        info: "Day of the month.",
+        info: "Day of the month (1-28 so it exists in every month).",
         key: "triggerAtDayOfMonth",
         min: 1,
-        max: 31,
+        max: 28,
         required: true,
         transient: true,
         dependsOn: {
@@ -396,17 +355,17 @@ export const NodeSchemaTriggerBlockscheduleV1: NodeSchemaDefinition = {
           operator: "equals",
         },
         onChange: (_value: unknown, data: Record<string, unknown>) => ({
-          cronExpression: generateCronExpression(data),
+          cronExpression: regenerateCronExpression(data),
         }),
         defaultValue: (data: Record<string, unknown>) =>
           deriveScheduleFields(data).triggerAtDayOfMonth,
       },
       {
-        id: "triggerAtWeek",
-        type: "select",
-        label: "Trigger at Weekday",
-        info: "Day of the week.",
-        key: "triggerAtWeek",
+        id: "triggerAtWeekdays",
+        type: "multiselect",
+        label: "Trigger at Weekdays",
+        info: "Days of the week to trigger on.",
+        key: "triggerAtWeekdays",
         required: true,
         options: WEEKDAY_OPTIONS,
         transient: true,
@@ -416,16 +375,16 @@ export const NodeSchemaTriggerBlockscheduleV1: NodeSchemaDefinition = {
           operator: "equals",
         },
         onChange: (_value: unknown, data: Record<string, unknown>) => ({
-          cronExpression: generateCronExpression(data),
+          cronExpression: regenerateCronExpression(data),
         }),
         defaultValue: (data: Record<string, unknown>) =>
-          deriveScheduleFields(data).triggerAtWeek,
+          deriveScheduleFields(data).triggerAtWeekdays,
       },
       {
         id: "triggerAtHour",
         type: "select",
         label: "Trigger at Hour",
-        info: "Hour of day in 12-hour format.",
+        info: "Hour of the day.",
         key: "triggerAtHour",
         required: true,
         options: HOUR_OPTIONS,
@@ -436,10 +395,9 @@ export const NodeSchemaTriggerBlockscheduleV1: NodeSchemaDefinition = {
           operator: "in",
         },
         onChange: (_value: unknown, data: Record<string, unknown>) => ({
-          cronExpression: generateCronExpression(data),
+          cronExpression: regenerateCronExpression(data),
         }),
-        defaultValue: (data: Record<string, unknown>) =>
-          deriveScheduleFields(data).triggerAtHour,
+        defaultValue: (data: Record<string, unknown>) => deriveScheduleFields(data).triggerAtHour,
       },
       {
         id: "triggerAtMinute",
@@ -457,40 +415,14 @@ export const NodeSchemaTriggerBlockscheduleV1: NodeSchemaDefinition = {
           operator: "in",
         },
         onChange: (_value: unknown, data: Record<string, unknown>) => ({
-          cronExpression: generateCronExpression(data),
+          cronExpression: regenerateCronExpression(data),
         }),
-        defaultValue: (data: Record<string, unknown>) =>
-          deriveScheduleFields(data).triggerAtMinute,
-      },
-      {
-        id: "startDate",
-        type: "text",
-        label: "Start Date",
-        info: "ISO date-time, e.g. 2026-04-29T21:28:29.215Z",
-        key: "startDate",
-        required: true,
-      },
-      {
-        id: "endDate",
-        type: "text",
-        label: "End Date",
-        info: "ISO date-time, e.g. 2026-04-29T21:28:29.215Z",
-        key: "endDate",
-        required: true,
-      },
-      {
-        id: "payload",
-        type: "textarea",
-        label: "Payload",
-        info: "Payload body passed to scheduler.",
-        key: "payload",
-        required: true,
-        placeholder: "{}",
+        defaultValue: (data: Record<string, unknown>) => deriveScheduleFields(data).triggerAtMinute,
       },
       {
         id: "output",
         type: "display",
-        label: "Payload Preview",
+        label: "Cron Preview",
         key: "output",
         displayValue: (data) => `${String(data.cronExpression || "")}`,
       },
@@ -499,23 +431,16 @@ export const NodeSchemaTriggerBlockscheduleV1: NodeSchemaDefinition = {
   },
   defaults: {
     parameters: {
-      payload: "",
       triggerInterval: "days",
-      cronExpression: "0 0 1 */1 * *",
-      startDate: "",
-      endDate: "",
-      projectKey: "",
+      cronExpression: "",
     },
     settings: {},
   },
   transform: (node) => {
-    const selectedProject = useProjectStore.getState().selectedProject;
     const normalizedTriggerInterval = String(
       node.parameters?.triggerInterval || "days",
     ).toLowerCase();
-    const storedCronExpression = String(
-      node.parameters?.cronExpression || "",
-    ).trim();
+    const storedCronExpression = String(node.parameters?.cronExpression || "").trim();
     const normalizedCronExpression =
       normalizedTriggerInterval === "custom"
         ? storedCronExpression
@@ -524,15 +449,8 @@ export const NodeSchemaTriggerBlockscheduleV1: NodeSchemaDefinition = {
     return {
       ...node,
       parameters: {
-        payload: node.parameters?.payload ?? "",
         triggerInterval: normalizedTriggerInterval,
         cronExpression: normalizedCronExpression,
-        startDate: node.parameters?.startDate ?? "",
-        endDate: node.parameters?.endDate ?? "",
-        scheduleEventOperation: Number(
-          node.parameters?.scheduleEventOperation ?? 0,
-        ),
-        projectKey: selectedProject?.tenantId ?? "",
       },
     };
   },

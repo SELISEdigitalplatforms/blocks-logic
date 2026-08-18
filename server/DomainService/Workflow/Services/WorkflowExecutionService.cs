@@ -10,6 +10,7 @@ using DomainService.Workflow.Utils;
 using Microsoft.Extensions.Logging;
 using DomainService.Workflow.Nodes.TriggerEmailV1;
 using DomainService.Workflow.Nodes.TriggerDataV1;
+using DomainService.Workflow.Nodes.TriggerScheduleV1;
 using MongoDB.Bson;
 using System.Diagnostics.CodeAnalysis;
 using DotLiquid.Util;
@@ -778,6 +779,101 @@ namespace DomainService.Workflow.Services
             {
                 _logger.LogError(ex, "Failed to create execution for WorkflowId: {WorkflowId} (Data Trigger)",
                     workflow.ItemId);
+            }
+        }
+
+        public async Task SchedulerTriggerStartAsync(SchedulerTriggerPayload payload)
+        {
+            _logger.LogInformation("Starting SchedulerTriggerStartAsync for WorkflowId: {WorkflowId}, TriggerId: {TriggerId}",
+                payload.WorkflowId, payload.TriggerId);
+
+            var tenantId = payload.TenantId;
+            if (string.IsNullOrEmpty(tenantId))
+            {
+                _logger.LogError("TenantId is null or empty in scheduler trigger payload for WorkflowId: {WorkflowId}", payload.WorkflowId);
+                return;
+            }
+
+            var workflow = await _workflowRepository.GetWorkflowAsync(tenantId, payload.WorkflowId);
+            if (workflow == null)
+            {
+                _logger.LogError("Workflow not found: {WorkflowId}, {TenantId}", payload.WorkflowId, tenantId);
+                return;
+            }
+
+            if (!workflow.IsPublished || string.IsNullOrWhiteSpace(workflow.PublishedVersionId))
+            {
+                _logger.LogWarning("Workflow is not published: {WorkflowId}, {TenantId}; skipping scheduler trigger", payload.WorkflowId, tenantId);
+                return;
+            }
+
+            var publishedVersion = await _workflowVersionRepository.GetWorkflowVersionAsync(tenantId, workflow.PublishedVersionId);
+            var workflowSnapshot = publishedVersion?.Snapshot;
+            if (workflowSnapshot == null)
+            {
+                _logger.LogError("Published version snapshot not found for WorkflowId: {WorkflowId}, Version: {VersionId}",
+                    payload.WorkflowId, workflow.PublishedVersionId);
+                return;
+            }
+
+            var triggerNode = workflowSnapshot.Nodes.FirstOrDefault(n =>
+                n.Id == payload.TriggerId &&
+                n.Type == "schedule" &&
+                n.Category == "trigger");
+
+            if (triggerNode == null)
+            {
+                _logger.LogWarning("No schedule trigger node {TriggerId} found in published snapshot for WorkflowId: {WorkflowId}",
+                    payload.TriggerId, payload.WorkflowId);
+                return;
+            }
+
+            var triggerData = new BsonArray
+            {
+                new BsonDocument
+                {
+                    { "WorkflowId", payload.WorkflowId },
+                    { "TriggerId", payload.TriggerId },
+                    { "TenantId", payload.TenantId },
+                    { "CronExpression", payload.CronExpression },
+                    { "FiredAt", (payload.FiredAt ?? DateTime.UtcNow).ToString("o") }
+                }
+            };
+
+            try
+            {
+                var triggerMetadata = new TriggerMetadata
+                {
+                    TriggerNodeId = triggerNode.Id,
+                    TriggerType = triggerNode.Type,
+                    TriggerData = triggerData
+                };
+                var execution = await CreateExecutionAsync(workflowSnapshot, triggerMetadata, WorkflowExecutionMode.Production);
+                execution.Context["Input"] = triggerData;
+                execution.Status = WorkflowExecutionStatus.Queued;
+                execution.ActiveNodeIds.Add(triggerNode.Id);
+
+                await _executionRepository.UpdateAsync(execution);
+                await NotifyWorkflowStartedAsync(execution);
+                await _messageClient.SendToConsumerAsync(new ConsumerMessage<AddExcuationNodeEvent>
+                {
+                    ConsumerName = LogicConstants.NodeExecutionQueue,
+                    Payload = new AddExcuationNodeEvent
+                    {
+                        WorkflowId = workflowSnapshot.ItemId,
+                        WorkflowExecutionId = execution.Id!,
+                        NodeId = triggerNode.Id,
+                        ProjectKey = tenantId
+                    }
+                });
+
+                _logger.LogInformation("Queued execution {ExecutionId} for WorkflowId: {WorkflowId} (Scheduler Trigger)",
+                    execution.Id, workflowSnapshot.ItemId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to create execution for WorkflowId: {WorkflowId} (Scheduler Trigger)",
+                    workflowSnapshot.ItemId);
             }
         }
 

@@ -528,6 +528,9 @@ export const ScheduleFormDialog = ({ open, onOpenChange, schedule }: ScheduleFor
                             onChange={field.onChange}
                             placeholder="Pick a start date"
                           />
+                          <p className="text-xs text-muted-foreground">
+                            Optional — empty means active from now.
+                          </p>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -543,6 +546,9 @@ export const ScheduleFormDialog = ({ open, onOpenChange, schedule }: ScheduleFor
                             onChange={field.onChange}
                             placeholder="Pick an end date"
                           />
+                          <p className="text-xs text-muted-foreground">
+                            Optional — empty means no end date.
+                          </p>
                           <FormMessage />
                         </FormItem>
                       )}

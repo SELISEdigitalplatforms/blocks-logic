@@ -8,6 +8,8 @@ using DomainService.Workflow.Utils;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using Newtonsoft.Json;
+using Scheduler.DomainService.Dtos.Requests;
+using Scheduler.DomainService.Services;
 
 namespace DomainService.Workflow.Services
 {
@@ -16,14 +18,16 @@ namespace DomainService.Workflow.Services
     {
         private readonly IWorkflowRepository _workflowRepository;
         private readonly IWorkflowVersionRepository _workflowVersionRepository;
+        private readonly IScheduleService _scheduleService;
         private readonly ILogger<WorkflowService> _logger;
 
 
 
-        public WorkflowService(IWorkflowRepository workflowRepository, IWorkflowVersionRepository workflowVersionRepository, ILogger<WorkflowService> logger)
+        public WorkflowService(IWorkflowRepository workflowRepository, IWorkflowVersionRepository workflowVersionRepository, IScheduleService scheduleService, ILogger<WorkflowService> logger)
         {
             _workflowRepository = workflowRepository;
             _workflowVersionRepository = workflowVersionRepository;
+            _scheduleService = scheduleService;
             _logger = logger;
         }
 
@@ -73,6 +77,135 @@ namespace DomainService.Workflow.Services
             {
                 return (null, CreateGeneralError($"while {context}", ex));
             }
+        }
+
+
+
+        /// <summary>
+        /// Deletes schedules recorded in the workflow's current PublishedMeta.
+        /// Returns null on success, or a failed response the caller should propagate.
+        /// </summary>
+        private async Task<BaseMutationResponse?> DeletePublishedSchedulesAsync(WorkflowEntity workflow)
+        {
+            var scheduleIds = GetSchedulerNodes(workflow.PublishedMeta?.TriggerNodes ?? Enumerable.Empty<NodeEntity>())
+                .Select(n => n.Parameters?.Contains("scheduleItemId") == true ? n.Parameters["scheduleItemId"].ToString() : null)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .ToList();
+
+            if (scheduleIds == null || scheduleIds.Count == 0)
+            {
+                return null;
+            }
+
+            try
+            {
+                var result = await _scheduleService.DeleteWorkflowSchedulesAsync(scheduleIds);
+                if (!result.IsSuccess)
+                {
+                    return new BaseMutationResponse
+                    {
+                        IsSuccess = false,
+                        ItemId = null,
+                        Errors = result.Errors ?? new Dictionary<string, string> { { "Message", "Failed to delete workflow schedules" } }
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to delete workflow schedules for WorkflowId: {WorkflowId}", workflow.ItemId);
+                return new BaseMutationResponse
+                {
+                    IsSuccess = false,
+                    ItemId = null,
+                    Errors = new Dictionary<string, string> { { "Message", "Failed to delete workflow schedules" } }
+                };
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Creates schedules for all schedule trigger nodes in the given trigger-node snapshots,
+        /// writing the created scheduleItemId into each snapshot's Parameters.
+        /// Returns (nodes, null) on success or (null, error) on failure.
+        /// </summary>
+        private async Task<(List<NodeEntity>? nodes, BaseMutationResponse? error)> CreateSchedulesForNodesAsync(string tenantId, WorkflowEntity workflow, List<NodeEntity> triggerNodeSnapshots)
+        {
+            var schedulerNodes = GetSchedulerNodes(triggerNodeSnapshots).ToList();
+
+            foreach (var node in schedulerNodes)
+            {
+                var cronExpression = node.Parameters?.Contains("cronExpression") == true
+                    ? node.Parameters["cronExpression"].ToString()
+                    : null;
+                if (string.IsNullOrWhiteSpace(cronExpression))
+                {
+                    _logger.LogError("Schedule trigger node {NodeId} in WorkflowId: {WorkflowId} has no cronExpression.", node.Id, workflow.ItemId);
+                    return (null, new BaseMutationResponse
+                    {
+                        IsSuccess = false,
+                        ItemId = null,
+                        Errors = new Dictionary<string, string> { { "Message", $"Schedule trigger node {node.Id} has no cron expression" } }
+                    });
+                }
+
+                try
+                {
+                    var result = await _scheduleService.CreateWorkflowScheduleAsync(new CreateWorkflowScheduleRequest
+                    {
+                        WorkflowId = workflow.ItemId,
+                        NodeId = node.Id,
+                        TenantId = tenantId,
+                        CronExpression = cronExpression,
+                        StartDate = DateTime.UtcNow
+                    });
+
+                    if (!result.IsSuccess || string.IsNullOrWhiteSpace(result.ItemId))
+                    {
+                        return (null, new BaseMutationResponse
+                        {
+                            IsSuccess = false,
+                            ItemId = null,
+                            Errors = result.Errors ?? new Dictionary<string, string> { { "Message", "Failed to create workflow schedule" } }
+                        });
+                    }
+
+                    node.Parameters["scheduleItemId"] = result.ItemId;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to create workflow schedule for node {NodeId} in WorkflowId: {WorkflowId}", node.Id, workflow.ItemId);
+                    return (null, new BaseMutationResponse
+                    {
+                        IsSuccess = false,
+                        ItemId = null,
+                        Errors = new Dictionary<string, string> { { "Message", "Failed to create workflow schedule" } }
+                    });
+                }
+            }
+
+            return (triggerNodeSnapshots, null);
+        }
+
+        /// <summary>
+        /// Creates deep-copied snapshots of the trigger nodes so PublishedMeta
+        /// never aliases (or mutates) the live workflow nodes.
+        /// </summary>
+        private static List<NodeEntity> CloneTriggerNodes(IEnumerable<NodeEntity> nodes)
+        {
+            return nodes.Where(n => n.Category == "trigger").Select(n => new NodeEntity
+            {
+                Id = n.Id,
+                Name = n.Name,
+                Category = n.Category,
+                Type = n.Type,
+                Version = n.Version,
+                Position = new Position { X = n.Position.X, Y = n.Position.Y },
+                Handle = n.Handle == null ? null : new Handle { Sources = new List<string>(n.Handle.Sources), Targets = new List<string>(n.Handle.Targets) },
+                Parameters = new BsonDocument(n.Parameters),
+                Settings = new BsonDocument(n.Settings),
+                PinData = n.PinData == null ? null : new BsonArray(n.PinData),
+            }).ToList();
         }
 
         public async Task<BaseMutationResponse> CreateAsync(string tenantId, WorkflowCreateRequestDto dto)
@@ -375,6 +508,14 @@ namespace DomainService.Workflow.Services
                         Errors = new Dictionary<string, string> { { "Message", "Workflow not found" } }
                     };
                 }
+                // Scheduler orchestration: best-effort cleanup — the workflow is being removed,
+                // so a cleanup failure is logged but must not block the delete.
+                var scheduleError = await DeletePublishedSchedulesAsync(existingWorkflow);
+                if (scheduleError != null)
+                {
+                    _logger.LogWarning("Failed to delete schedules for workflow {WorkflowId} during delete; orphaned schedules may exist.", dto.Id);
+                }
+
                 await _workflowRepository.DeleteWorkflowAsync(tenantId, dto.Id);
                 await _workflowVersionRepository.DeleteWorkflowVersionsByWorkflowIdAsync(tenantId, dto.Id);
                 _logger.LogInformation($"Deleted Workflow successfully, workflowId = ${dto.Id}");
@@ -428,6 +569,24 @@ namespace DomainService.Workflow.Services
                 LastUpdatedBy = BlocksContext.GetContext().UserId ?? "system",
             };
 
+            // Scheduler orchestration: delete schedules from the previous publish (if any)
+            // before flipping publish state; failure leaves the workflow untouched.
+            var deleteError = await DeletePublishedSchedulesAsync(workflow);
+            if (deleteError != null)
+            {
+                return deleteError;
+            }
+
+            var triggerNodeSnapshots = CloneTriggerNodes(workflow.Nodes);
+            var (scheduledNodes, scheduleError) = await CreateSchedulesForNodesAsync(tenantId, workflow, triggerNodeSnapshots);
+            if (scheduleError != null)
+            {
+                // Schedules for some nodes may already exist without meta references;
+                // reconciliation is out of scope — log and fail the publish.
+                _logger.LogWarning("Publish failed after schedule creation for WorkflowId: {WorkflowId}; orphaned schedules may exist.", dto.WorkflowId);
+                return scheduleError;
+            }
+
             try
             {
                 await _workflowVersionRepository.CreateWorkflowVersionAsync(version);
@@ -451,7 +610,7 @@ namespace DomainService.Workflow.Services
                 workflow.LastPublishedVersionId = workflow.PublishedVersionId; // Store the previous published version ID
                 workflow.PublishedMeta = new PublishedWorkflowMeta
                 {
-                    TriggerNodes = workflow.Nodes.Where(n => n.Category == "trigger").ToList()
+                    TriggerNodes = scheduledNodes
                 };
                 await _workflowRepository.UpdateWorkflowAsync(workflow);
                 return new BaseMutationResponse
@@ -516,13 +675,29 @@ namespace DomainService.Workflow.Services
                 };
             }
 
+            // Scheduler orchestration: delete schedules from the previous publish (if any)
+            // before flipping publish state; failure leaves the workflow untouched.
+            var deleteError = await DeletePublishedSchedulesAsync(workflow);
+            if (deleteError != null)
+            {
+                return deleteError;
+            }
+
+            var triggerNodeSnapshots = CloneTriggerNodes(version.Snapshot.Nodes);
+            var (scheduledNodes, scheduleError) = await CreateSchedulesForNodesAsync(tenantId, workflow, triggerNodeSnapshots);
+            if (scheduleError != null)
+            {
+                _logger.LogWarning("Publish failed after schedule creation for WorkflowId: {WorkflowId}; orphaned schedules may exist.", dto.WorkflowId);
+                return scheduleError;
+            }
+
             workflow.IsDirty = false;
             workflow.IsPublished = true;
             workflow.LastPublishedVersionId = workflow.PublishedVersionId; // Store the previous published version ID
             workflow.PublishedVersionId = version.ItemId;
             workflow.PublishedMeta = new PublishedWorkflowMeta
             {
-                TriggerNodes = version.Snapshot.Nodes.Where(n => n.Category == "trigger").ToList()
+                TriggerNodes = scheduledNodes
             };
             await _workflowRepository.UpdateWorkflowAsync(workflow);
 
@@ -593,6 +768,13 @@ namespace DomainService.Workflow.Services
                         Errors = new Dictionary<string, string> { { "Message", "Workflow not found" } },
                         ItemId = null
                     };
+                }
+
+                // Scheduler orchestration: remove previously upserted schedules before clearing meta.
+                var scheduleError = await DeletePublishedSchedulesAsync(workflow);
+                if (scheduleError != null)
+                {
+                    return scheduleError;
                 }
 
                 workflow.IsPublished = false;
@@ -743,6 +925,27 @@ namespace DomainService.Workflow.Services
                 ItemId = workflow.ItemId,
                 Errors = null
             };
+
+        }
+
+
+        private static List<NodeEntity> GetSchedulerNodes(IEnumerable<NodeEntity> nodes)
+        {
+            return nodes.Where(n => n.Category == "trigger" && n.Type == "schedule").ToList();
+        }
+        private static List<string> GetPublishedSchedulesId(WorkflowEntity workflow)
+        {
+            if (!workflow.IsPublished) return [];
+
+            var scheduleNodes = GetSchedulerNodes(workflow.PublishedMeta?.TriggerNodes ?? Enumerable.Empty<NodeEntity>());
+
+            var ids = scheduleNodes
+              .Select(n => n.Parameters?.Contains("ScheduleItemId") == true ? n.Parameters["ScheduleItemId"].ToString() : null)
+              .Where(id => !string.IsNullOrWhiteSpace(id))
+              .ToList();
+            if (ids.Count == 0) return [];
+
+            return ids;
 
         }
     }

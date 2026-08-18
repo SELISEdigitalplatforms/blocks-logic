@@ -70,3 +70,7 @@ export interface IBaseResponse {
   isSuccess: boolean;
   errors?: Record<string, string> | null;
 }
+
+export interface IBaseMutationResponse extends IBaseResponse {
+  itemId?: string | null;
+}
