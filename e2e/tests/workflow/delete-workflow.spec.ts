@@ -1,10 +1,10 @@
 import { test, expect } from "@playwright/test";
-import { loginAndOpenWorkflowList, pollRowHasWorkflow } from "../../support/workflow-helpers";
+import { openWorkflowList, pollRowHasWorkflow } from "../../support/workflow-helpers";
 
 test.describe("delete workflow", () => {
   test("Delete confirmation dialog and successful deletion", async ({ page }) => {
-    await test.step("Login and navigate to Workflow list", async () => {
-      await loginAndOpenWorkflowList(page);
+    await test.step("Open Workflow list in shared project", async () => {
+      await openWorkflowList(page)
     });
 
     await test.step("[Security] Delete opens a confirmation dialog with the exact copy", async () => {
@@ -19,7 +19,7 @@ test.describe("delete workflow", () => {
         ).toBeVisible();
         await page.keyboard.press("Escape");
       }
-    });
+    })
 
     await test.step("[Security] Confirming delete removes the workflow and shows a success toast", async () => {
       const firstRow = page.getByRole("row").nth(1);
@@ -32,6 +32,6 @@ test.describe("delete workflow", () => {
           timeout: 15000,
         });
       }
-    });
+    })
   });
 });

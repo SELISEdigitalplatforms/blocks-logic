@@ -1,10 +1,10 @@
 import { test, expect } from "@playwright/test";
-import { loginAndOpenWorkflowList, pollRowHasWorkflow } from "../../support/workflow-helpers";
+import { openWorkflowList, pollRowHasWorkflow } from "../../support/workflow-helpers";
 
 test.describe("rename workflow", () => {
   test("Rename dialog: pre-filled name, validation and success", async ({ page }) => {
-    await test.step("Login and navigate to Workflow list", async () => {
-      await loginAndOpenWorkflowList(page);
+    await test.step("Open Workflow list in shared project", async () => {
+      await openWorkflowList(page)
     });
 
     await test.step("[Positive] Rename opens pre-filled with the workflow's current name", async () => {
@@ -19,7 +19,7 @@ test.describe("rename workflow", () => {
           await expect(page.getByLabel("Workflow Name")).toHaveValue(workflowName);
         }
       }
-    });
+    })
 
     await test.step("[Negative] Rename validation: name is required", async () => {
       const firstRow = page.getByRole("row").nth(1);
@@ -31,7 +31,7 @@ test.describe("rename workflow", () => {
         await page.getByRole("button", { name: "Rename" }).click();
         await expect(page.getByText("Workflow name is required")).toBeVisible();
       }
-    });
+    })
 
     await test.step("[Positive] Rename success shows a confirmation toast and updates the list", async () => {
       const firstRow = page.getByRole("row").nth(1);
@@ -48,6 +48,6 @@ test.describe("rename workflow", () => {
         });
         await expect(page.getByRole("row").nth(1)).toContainText(newName);
       }
-    });
+    })
   });
 });

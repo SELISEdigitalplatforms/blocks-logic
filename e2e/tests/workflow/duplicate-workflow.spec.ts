@@ -1,10 +1,10 @@
 import { test, expect } from "@playwright/test";
-import { loginAndOpenWorkflowList, pollRowHasWorkflow } from "../../support/workflow-helpers";
+import { openWorkflowList, pollRowHasWorkflow } from "../../support/workflow-helpers";
 
 test.describe("duplicate workflow", () => {
   test("Duplicate dialog: pre-filled copy name and creation success", async ({ page }) => {
-    await test.step("Login and navigate to Workflow list", async () => {
-      await loginAndOpenWorkflowList(page);
+    await test.step("Open Workflow list in shared project", async () => {
+      await openWorkflowList(page)
     });
 
     await test.step("[Positive] Duplicate opens pre-filled with a suggested copy name", async () => {
@@ -19,7 +19,7 @@ test.describe("duplicate workflow", () => {
         ).toBeVisible();
         await expect(page.getByLabel("Workflow Name")).not.toHaveValue("");
       }
-    });
+    })
 
     await test.step("[Positive] Duplicate creation success adds a new row without leaving the list", async () => {
       const firstRow = page.getByRole("row").nth(1);
@@ -38,6 +38,6 @@ test.describe("duplicate workflow", () => {
         });
         await expect(page.getByRole("heading", { name: "Workflow" })).toBeVisible();
       }
-    });
+    })
   });
 });

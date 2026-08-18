@@ -79,15 +79,29 @@ export default defineConfig({
       testMatch: /auth[\\/]login\.spec\.ts/,
       use: { ...devices["Desktop Chrome"] },
     },
-    // All other tests run authenticated by reusing that saved session, and
-    // only after "setup" (login) has succeeded.
+    // Workflow suite uses one shared project for all specs.
     {
-      name: "chromium",
-      testIgnore: /auth[\\/]login\.spec\.ts/,
-      dependencies: ["setup"],
+      name: "workflow-setup",
+      testMatch: /workflow[\\/]workflow\.setup\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "workflow",
+      testMatch: /workflow[\\/].*\.spec\.ts/,
+      testIgnore: /workflow[\\/]workflow\.(setup|teardown)\.spec\.ts/,
+      dependencies: ["workflow-setup"],
       use: {
         ...devices["Desktop Chrome"],
-        storageState: "fixtures/auth.json",
+        storageState: "fixtures/workflow-session.json",
+      },
+    },
+    {
+      name: "workflow-teardown",
+      testMatch: /workflow[\\/]workflow\.teardown\.spec\.ts/,
+      dependencies: ["workflow"],
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: "fixtures/workflow-session.json",
       },
     },
   ],

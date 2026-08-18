@@ -1,12 +1,12 @@
 import { test, expect } from "@playwright/test";
-import { loginAndOpenWorkflowList, pollRowHasWorkflow } from "../../support/workflow-helpers";
+import { openWorkflowList, pollRowHasWorkflow } from "../../support/workflow-helpers";
 
 test.describe("workflow list", () => {
   test("Workflow list page: rendering, filters, pagination, navigation and publish state", async ({
     page,
   }) => {
-    await test.step("Login and navigate to Workflow list", async () => {
-      await loginAndOpenWorkflowList(page);
+    await test.step("Open Workflow list in shared project", async () => {
+      await openWorkflowList(page)
     });
 
     await test.step("[Positive] Workflow list page renders with heading, filters and Add Workflow action", async () => {

@@ -1,15 +1,15 @@
 import { test, expect } from "@playwright/test";
 import {
   ensureOnWorkflowEditor,
-  loginAndOpenWorkflowList,
   openFirstWorkflow,
   openNodeLibraryButton,
+  openWorkflowList,
 } from "../../support/workflow-helpers";
 
 test.describe("workflow editor", () => {
   test("Editor tab: details shell, canvas and node library", async ({ page }) => {
-    await test.step("Login and navigate to Workflow list", async () => {
-      await loginAndOpenWorkflowList(page);
+    await test.step("Open Workflow list in shared project", async () => {
+      await openWorkflowList(page)
     });
 
     await test.step("Open the first workflow (lands on Editor tab)", async () => {
