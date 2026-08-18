@@ -1,4 +1,4 @@
-﻿using DomainService.Configuration.Services;
+using DomainService.Configuration.Services;
 using DomainService.Entities;
 using DomainService.Shared;
 using FluentValidation;
@@ -28,7 +28,7 @@ namespace DomainService.Notification
             RuleFor(p => p)
                 .Cascade(CascadeMode.Stop)
                 .Must(UserOrRoleShouldExist)
-                .When(p => _config?.NotificationType == NotificationReceiverTypes.UserSpecificReceiverType).WithMessage("UserIds or Roles cannot be empty");
+                .When(p => _config?.NotificationType == NotificationReceiverTypes.UserSpecificReceiverType).WithMessage("UserIds, Roles, and OrganizationIds cannot all be empty");
         }
 
         private async Task<bool> IsConfigurationExist(string configurationName, CancellationToken cancellationToken)
@@ -39,10 +39,10 @@ namespace DomainService.Notification
 
         private bool UserOrRoleShouldExist(NotifyRequest notifyRequest)
         {
-            bool hasUserIds = notifyRequest.UserIds != null
-                              && notifyRequest.UserIds.Any(id => !string.IsNullOrWhiteSpace(id));
-            bool hasRoles = notifyRequest.Roles != null;
-            return hasUserIds || hasRoles;
+            bool hasUserIds = notifyRequest.UserIds != null && notifyRequest.UserIds.Count != 0;
+            bool hasRoles = notifyRequest.Roles != null && notifyRequest.Roles.Count != 0;
+            bool hasOrg = notifyRequest.OrganizationIds != null && notifyRequest.OrganizationIds.Count != 0;
+            return hasUserIds || hasRoles || hasOrg ;
         }
     }
 }
