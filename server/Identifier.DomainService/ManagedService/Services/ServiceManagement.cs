@@ -1,57 +1,112 @@
-﻿using Blocks.Genesis;
+using Azure.Identity;
+using Azure.Messaging.ServiceBus.Administration;
+using Azure.ResourceManager;
+using Azure.ResourceManager.ServiceBus;
+using Blocks.Genesis;
 using DomainService.Shared;
+using DomainService.Shared.Entities;
+using FluentValidation;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using SeliseBlocks.LMT.Client;
+using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
 
 namespace DomainService.ManagedService.Services
 {
     public class ServiceManagement : IServiceManagement
     {
-        private readonly IServiceManagementRepository _serviceManagementRepository;
-        private readonly IBlocksSecret _blocksSecret;
-        private readonly ITenants _tenants;
+        private const string FallbackEncryptionKey = "LMT";
+
         private readonly ILogger<ServiceManagement> _logger;
+        private readonly IServiceManagementRepository _serviceManagementRepository;
+        private readonly ITenants _tenants;
+       
 
-        public ServiceManagement(IServiceManagementRepository serviceManagementRepository,
+        [ExcludeFromCodeCoverage]
+        public ServiceManagement ( ILogger<ServiceManagement> logger,
+                                 IServiceManagementRepository serviceManagementRepository,
                                  IBlocksSecret blocksSecret,
+                                 ICacheClient cacheClient,
                                  ITenants tenants,
-                                 ILogger<ServiceManagement> logger)
+                                 IConfiguration configuration )
         {
-            _serviceManagementRepository = serviceManagementRepository;
-            _blocksSecret = blocksSecret;
-            _tenants = tenants;
             _logger = logger;
+            _serviceManagementRepository = serviceManagementRepository;
+            _tenants = tenants;
         }
-
-        public async Task<GetAllServiceResponse> GetAllServicesAsync(GetAllServiceRequest request)
+        public async Task<GetAllServiceResponse> GetAllServicesAsync ( GetAllServiceRequest request )
         {
-            try
+            var (data, count) = await _serviceManagementRepository.GetAllServicesAsync(request);
+
+            var tenantId = ResolveEncryptionTenantId();
+            var tenant = _tenants.GetTenantByID(tenantId);
+
+            var serviceList = data.ToList();
+
+            if (tenant is null && serviceList.Count > 0)
             {
-                var (data, count) = await _serviceManagementRepository.GetAllServicesAsync(request);
-                var tenantId = BlocksContext.GetContext().TenantId;
-                var tenant = _tenants.GetTenantByID(tenantId ?? string.Empty);
+                _logger.LogWarning(
+                    "Tenant {TenantId} did not resolve; decrypting {Count} service(s) with the fallback key",
+                    tenantId, serviceList.Count);
+            }
 
-                var serviceList = data.ToList();
+            foreach (var item in serviceList)
+            {
+                var plainText = DecryptConnectionString(
+                    item.ServiceBusConnectionString,
+                    tenant?.TenantSalt ?? FallbackEncryptionKey
+                );
 
-                foreach (var item in serviceList)
+                if (plainText.Length == 0 && !string.IsNullOrEmpty(item.ServiceBusConnectionString))
                 {
-                    item.ServiceBusConnectionString = EncryptionHelper.Decrypt(
-                        item.ServiceBusConnectionString,
-                        tenant?.TenantSalt ?? "LMT"
-                    );
-                    item.ServiceType = item.ServiceType ?? "backend";
+                    _logger.LogError(
+                        "Connection string for service {ServiceId} (tenant {TenantId}) could not be decrypted with " +
+                        "the {KeySource} key; returning it empty",
+                        item.ServiceId, tenantId, tenant is null ? "fallback" : "tenant salt");
                 }
 
-                return new GetAllServiceResponse
-                {
-                    Data = serviceList.AsQueryable(),
-                    TotalCount = count
-                };
+                item.ServiceBusConnectionString = plainText;
+                item.ServiceType = item.ServiceType ?? "backend";
             }
-            catch (Exception ex)
+
+            return new GetAllServiceResponse
             {
-                _logger.LogError(ex.ToString(), "Error occurred while fetching services");
-                throw;
+                Data = serviceList.AsQueryable(),
+                TotalCount = count
+            };
+        }
+
+        
+        private static string ResolveEncryptionTenantId ( )
+        {
+            var context = BlocksContext.GetContext();
+
+            if (context is null)
+            {
+                return string.Empty;
             }
+
+            return context.Impersonated && !string.IsNullOrEmpty(context.OriginalTenantId)
+                ? context.OriginalTenantId
+                : context.TenantId;
+        }
+
+       
+        private static string DecryptConnectionString ( string cipherText, string salt )
+        {
+            if (EncryptionHelper.TryDecrypt(cipherText, salt, out var plainText))
+            {
+                return plainText;
+            }
+
+            if (salt != FallbackEncryptionKey &&
+                EncryptionHelper.TryDecrypt(cipherText, FallbackEncryptionKey, out plainText))
+            {
+                return plainText;
+            }
+
+            return string.Empty;
         }
     }
 }

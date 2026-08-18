@@ -129,7 +129,7 @@ namespace DomainService.Notification
             if (request.IsUnreadOnly)
                 filter = builder.Where(n => !n.ReadByUserIds.Contains(userId));
 
-            filter = filter & builder.Where(n => string.IsNullOrWhiteSpace(n.Payload.UserId) || n.Payload.UserId == userId);
+            filter = filter & builder.Where(n => !string.IsNullOrWhiteSpace(n.Payload.UserId) && n.Payload.UserId == userId);
 
             var options = new FindOptions<OfflineNotification>
             {

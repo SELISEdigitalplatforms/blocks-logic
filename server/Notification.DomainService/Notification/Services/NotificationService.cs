@@ -142,7 +142,7 @@ namespace DomainService.Notification
 
         private async Task<List<OfflineNotification>> GetUnReadNotificationsByUserIdOrderByReadStatus(string userId, SubscriptionFilter subscriptionFilterData)
         {
-            var offlineNotifications = (await _notificationRepository.GetItemsAsync<OfflineNotification>(p => (p.Payload.UserId == userId || p.Payload.NotificationType == NotificationReceiverTypes.BroadcastReceiverType.ToString())
+            var offlineNotifications = (await _notificationRepository.GetItemsAsync<OfflineNotification>(p => ((!string.IsNullOrWhiteSpace(p.Payload.UserId) && p.Payload.UserId == userId) || p.Payload.NotificationType == NotificationReceiverTypes.BroadcastReceiverType.ToString())
                                        && p.Payload.SubscriptionFilters.Contains(subscriptionFilterData))).ToList();
 
             if (offlineNotifications.Any())
@@ -193,7 +193,7 @@ namespace DomainService.Notification
 
             var statList = statusList.ToList();
             var notificationList = (await _notificationRepository.GetItemsAsync<OfflineNotification>(p =>
-                                              (p.Payload.UserId == userId || p.Payload.NotificationType == NotificationReceiverTypes.BroadcastReceiverType.ToString()) &&
+                                              ((!string.IsNullOrWhiteSpace(p.Payload.UserId) && p.Payload.UserId == userId) || p.Payload.NotificationType == NotificationReceiverTypes.BroadcastReceiverType.ToString()) &&
                                                p.Payload.SubscriptionFilters.Any(sf =>
                                                statList.Contains(sf.Context) &&
                                                sf.ActionName == subscriptionFilterData.ActionName && sf.Value == subscriptionFilterData.Value))).OrderByDescending(f => f.CreatedTime);
@@ -207,7 +207,7 @@ namespace DomainService.Notification
                 return [];
 
             var notificationList = (await _notificationRepository.GetItemsAsync<OfflineNotification>(p =>
-                                                    (p.Payload.UserId == userId || p.Payload.NotificationType == NotificationReceiverTypes.BroadcastReceiverType.ToString()) &&
+                                                    ((!string.IsNullOrWhiteSpace(p.Payload.UserId) && p.Payload.UserId == userId) || p.Payload.NotificationType == NotificationReceiverTypes.BroadcastReceiverType.ToString()) &&
                                                     p.Payload.SubscriptionFilters.Any(sf =>
                                                     sf.ActionName == subscriptionFilterData.ActionName && sf.Value == subscriptionFilterData.Value))).OrderByDescending(p => p.CreatedTime);
 

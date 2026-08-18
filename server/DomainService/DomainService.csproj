@@ -19,5 +19,6 @@
 	<!--<PackageReference Include="SeliseBlocks.MailDriver" />-->
 	<ProjectReference Include="..\Mail.DomainService\Mail.DomainService.csproj" />
 	<ProjectReference Include="..\Notification.DomainService\Notification.DomainService.csproj" />
+	<ProjectReference Include="..\Scheduler.DomainService\Scheduler.DomainService.csproj" />
   </ItemGroup>
 </Project>

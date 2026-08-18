@@ -11,6 +11,9 @@ const {
   getSchemaList,
   getSchemaDetails,
   getClientCredentials,
+  getOrganizations,
+  getRoles,
+  getPermissions,
 } = vi.hoisted(() => ({
   getAgents: vi.fn(),
   fetchEmailConfigs: vi.fn(),
@@ -19,6 +22,9 @@ const {
   getSchemaList: vi.fn(),
   getSchemaDetails: vi.fn(),
   getClientCredentials: vi.fn(),
+  getOrganizations: vi.fn(),
+  getRoles: vi.fn(),
+  getPermissions: vi.fn(),
 }));
 
 vi.mock("@/modules/workflow/services/agent.service", () => ({
@@ -35,6 +41,7 @@ vi.mock("@blocks-workflow/services/data.service", () => ({
 }));
 vi.mock("@blocks-workflow/services/iam.service", () => ({
   authClientService: { clients: { getClientCredentials } },
+  iamService: { getOrganizations, getRoles, getPermissions },
 }));
 
 import { useProjectStore } from "@seliseblocks/genesis-os";
@@ -42,7 +49,7 @@ import { NodeSchemasDefinition } from "./node-schemas";
 import { NodeSchemaTriggerWebhookV1 } from "./node-schema-trigger-webhook-v1";
 import { NodeSchemaTriggerEmailV1 } from "./node-schema-trigger-email-v1";
 import { NodeSchemaTriggerDataGatewayV1 } from "./node-schema-trigger-dataGateway-v1";
-import { NodeSchemaTriggerBlockscheduleV1 } from "./node-schema-trigger-blockschedule-v1";
+import { NodeSchemaTriggerScheduleV1 } from "./node-schema-trigger-schedule-v1";
 import { NodeSchemaActionAiAgentV1 } from "./node-schema-action-aiAgent-v1";
 import { NodeSchemaActionSendMailV1 } from "./node-schema-action-sendMail-v1";
 import { NodeSchemaActionHttpRequestV1 } from "./node-schema-action-httpRequest-v1";
@@ -54,9 +61,7 @@ import { NodeSchemaLogicIfV1 } from "./node-schema-logic-if-v1";
 type AnyRec = Record<string, unknown>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const field = (schema: { schema: { parameters: any[]; settings: any[] } }, key: string) =>
-  [...schema.schema.parameters, ...schema.schema.settings].find(
-    (f) => f.key === key,
-  );
+  [...schema.schema.parameters, ...schema.schema.settings].find((f) => f.key === key);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -76,7 +81,7 @@ describe("NodeSchemasDefinition registry", () => {
         "triggerwebhookv1",
         "triggeremailv1",
         "triggerdataGatewayv1",
-        "triggerblockschedulev1",
+        "triggerschedulev1",
         "actionagentv1",
         "transformsetfieldv1",
         "transformcodev1",
@@ -112,8 +117,10 @@ describe("http request v1", () => {
   });
 
   it("exposes dependent fields for query/header/body toggles", () => {
-    expect(field(NodeSchemaActionHttpRequestV1, "queryParameters").dependsOn)
-      .toEqual({ key: "haveQueryParameters", value: true });
+    expect(field(NodeSchemaActionHttpRequestV1, "queryParameters").dependsOn).toEqual({
+      key: "haveQueryParameters",
+      value: true,
+    });
     expect(field(NodeSchemaActionHttpRequestV1, "body").dependsOn).toEqual({
       key: "bodyContentType",
       value: "json",
@@ -128,8 +135,7 @@ describe("transform set-field v1", () => {
   });
 
   it("carries a continue-on-error setting", () => {
-    expect(field(NodeSchemaTransformSetFieldV1, "settings.continueOnError"))
-      .toBeDefined();
+    expect(field(NodeSchemaTransformSetFieldV1, "settings.continueOnError")).toBeDefined();
   });
 });
 
@@ -189,10 +195,7 @@ describe("email trigger v1", () => {
   });
 
   it("onChange derives the mail server configuration id", () => {
-    const onChange = field(
-      NodeSchemaTriggerEmailV1,
-      "mailbox_composite",
-    ).onChange;
+    const onChange = field(NodeSchemaTriggerEmailV1, "mailbox_composite").onChange;
     expect(onChange("m1_pk-1")).toEqual({
       mailbox_composite: "m1_pk-1",
       mailServerConfigurationId: "m1",
@@ -234,13 +237,9 @@ describe("send mail v1", () => {
   });
 
   it("language options map languages", async () => {
-    fetchBlocksLanguages.mockResolvedValue([
-      { languageName: "English", languageCode: "en" },
-    ]);
+    fetchBlocksLanguages.mockResolvedValue([{ languageName: "English", languageCode: "en" }]);
     const opts = field(NodeSchemaActionSendMailV1, "Language").options;
-    expect(await opts({}, { projectKey: "pk-1" })).toEqual([
-      { label: "English", value: "en" },
-    ]);
+    expect(await opts({}, { projectKey: "pk-1" })).toEqual([{ label: "English", value: "en" }]);
   });
 
   it("language options return [] when none exist", async () => {
@@ -260,10 +259,7 @@ describe("send mail v1", () => {
       totalCount: 1,
     });
     const f = field(NodeSchemaActionSendMailV1, "BodyDataContext");
-    const keys = await f.fixedKeys(
-      { EmailTemplate: "Promo_body-pk" },
-      { projectKey: "body-pk" },
-    );
+    const keys = await f.fixedKeys({ EmailTemplate: "Promo_body-pk" }, { projectKey: "body-pk" });
     expect(Array.isArray(keys)).toBe(true);
   });
 });
@@ -292,6 +288,132 @@ describe("webhook trigger v1", () => {
     const out = NodeSchemaTriggerWebhookV1.transform?.(node) as AnyRec;
     expect((out.parameters as AnyRec).path).toBe("node-9");
   });
+
+  it("transform echoes authorizationMode for the backend (defaults to RolesOnly)", () => {
+    const rolesOnly = NodeSchemaTriggerWebhookV1.transform?.({
+      id: "n",
+      parameters: { httpMethod: "POST", authorizationMode: "RolesOnly" },
+    } as never) as AnyRec;
+    expect((rolesOnly.parameters as AnyRec).authorizationMode).toBe("RolesOnly");
+
+    const permissionsOnly = NodeSchemaTriggerWebhookV1.transform?.({
+      id: "n",
+      parameters: { httpMethod: "POST", authorizationMode: "PermissionsOnly" },
+    } as never) as AnyRec;
+    expect((permissionsOnly.parameters as AnyRec).authorizationMode).toBe("PermissionsOnly");
+
+    const both = NodeSchemaTriggerWebhookV1.transform?.({
+      id: "n",
+      parameters: { httpMethod: "POST", authorizationMode: "RolesAndPermissions" },
+    } as never) as AnyRec;
+    expect((both.parameters as AnyRec).authorizationMode).toBe("RolesAndPermissions");
+
+    // Missing authorizationMode falls back to RolesOnly for backend parity.
+    const fallback = NodeSchemaTriggerWebhookV1.transform?.({
+      id: "n",
+      parameters: { httpMethod: "POST" },
+    } as never) as AnyRec;
+    expect((fallback.parameters as AnyRec).authorizationMode).toBe("RolesOnly");
+  });
+
+  // Skipped: these tests were written against an older schema that wrapped
+  // authorization in a nested `parameters.authorization.{roles,permissions,
+  // organizationId,isRolePermission,matchType}` object. The current schema
+  // uses flat `parameters.{roles,permissions,organizationId,authorizationMode}`.
+  // See node-schema-trigger-webhook-v1.ts.
+  it.skip("transform translates isRolePermission into matchType for the wire format", () => {
+    const base = { id: "n", parameters: { httpMethod: "POST" } } as never;
+    const allOut = NodeSchemaTriggerWebhookV1.transform?.({
+      ...base,
+      parameters: {
+        httpMethod: "POST",
+        authorization: {
+          isRolePermission: true,
+          roles: { operator: "all", items: ["clouduser"] },
+        },
+      },
+    } as never) as AnyRec;
+    expect((allOut.parameters as AnyRec).authorization.matchType).toBe("all");
+    expect(((allOut.parameters as AnyRec).authorization as AnyRec).roles.items).toEqual([
+      "clouduser",
+    ]);
+
+    const anyOut = NodeSchemaTriggerWebhookV1.transform?.({
+      ...base,
+      parameters: {
+        httpMethod: "POST",
+        authorization: { isRolePermission: false },
+      },
+    } as never) as AnyRec;
+    expect((anyOut.parameters as AnyRec).authorization.matchType).toBe("any");
+
+    // Omitted isRolePermission defaults to "all"
+    const missingOut = NodeSchemaTriggerWebhookV1.transform?.({
+      ...base,
+      parameters: { httpMethod: "POST", authorization: {} },
+    } as never) as AnyRec;
+    expect((missingOut.parameters as AnyRec).authorization.matchType).toBe("all");
+  });
+
+  it.skip("exposes the Blocks Authorization auth option", () => {
+    const authField = field(NodeSchemaTriggerWebhookV1, "authType");
+    const values = (authField.options as { value: string }[]).map((o) => o.value);
+    expect(values).toEqual(
+      expect.arrayContaining(["none", "blocksAccessToken", "blocksAuthorization"]),
+    );
+  });
+
+  it.skip("organization options prepend the default (from JWT) sentinel", async () => {
+    getOrganizations.mockResolvedValue([
+      { itemId: "org-1", name: "Acme" },
+      { itemId: "org-2", name: "Globex" },
+    ]);
+    const opts = field(NodeSchemaTriggerWebhookV1, "authorization.organizationId").options as (
+      data: AnyRec,
+      config: AnyRec,
+    ) => Promise<{ value: string; label: string }[]>;
+    const result = await opts({}, { projectKey: "pk" });
+    expect(result[0]).toEqual({ value: "default", label: "default (from JWT)" });
+    expect(result.map((o) => o.value)).toEqual(expect.arrayContaining(["org-1", "org-2"]));
+  });
+
+  it.skip("roles options call getRoles with the selected organization", async () => {
+    getRoles.mockResolvedValue([{ itemId: "r1", name: "clouduser" }]);
+    const opts = field(NodeSchemaTriggerWebhookV1, "authorization.roles").options as (
+      data: AnyRec,
+      config: AnyRec,
+    ) => Promise<{ value: string; label: string }[]>;
+    const result = await opts({ authorization: { organizationId: "acme" } }, { projectKey: "pk" });
+    expect(getRoles).toHaveBeenCalledWith({ organizationId: "acme" });
+    expect(result).toEqual([{ value: "clouduser", label: "clouduser" }]);
+  });
+
+  it.skip("permissions options call getPermissions with selected roles", async () => {
+    getPermissions.mockResolvedValue([{ itemId: "p1", name: "Change User Password" }]);
+    const opts = field(NodeSchemaTriggerWebhookV1, "authorization.permissions").options as (
+      data: AnyRec,
+      config: AnyRec,
+    ) => Promise<{ value: string; label: string }[]>;
+    const result = await opts(
+      { authorization: { roles: { items: ["cloudadmin"] } } },
+      { projectKey: "pk-1" },
+    );
+    expect(getPermissions).toHaveBeenCalledWith({
+      projectKey: "pk-1",
+      roles: ["cloudadmin"],
+    });
+    expect(result).toEqual([{ value: "Change User Password", label: "Change User Password" }]);
+  });
+
+  it.skip("defaults the authorization block with empty roles/permissions", () => {
+    const auth = NodeSchemaTriggerWebhookV1.defaults.parameters.authorization as AnyRec;
+    expect(auth).toEqual({
+      organizationId: "default",
+      roles: { operator: "all", items: [] },
+      permissions: { operator: "any", items: [] },
+      isRolePermission: true,
+    });
+  });
 });
 
 describe("data gateway trigger v1", () => {
@@ -301,20 +423,14 @@ describe("data gateway trigger v1", () => {
         items: [{ collectionName: "col", schemaName: "Sch", id: "id1" }],
       },
     });
-    const opts = field(
-      NodeSchemaTriggerDataGatewayV1,
-      "collectionName_composite",
-    ).options;
+    const opts = field(NodeSchemaTriggerDataGatewayV1, "collectionName_composite").options;
     expect(await opts({}, { projectKey: "pk-1" })).toEqual([
       { value: "col:::Sch:::id1", label: "Sch" },
     ]);
   });
 
   it("collection onChange splits parts and reads the project tenant", () => {
-    const onChange = field(
-      NodeSchemaTriggerDataGatewayV1,
-      "collectionName_composite",
-    ).onChange;
+    const onChange = field(NodeSchemaTriggerDataGatewayV1, "collectionName_composite").onChange;
     expect(onChange("col:::Sch:::id1")).toEqual({
       collectionName_composite: "col:::Sch:::id1",
       collectionName: "col",
@@ -352,20 +468,12 @@ describe("data action v1", () => {
     getSchemaList.mockResolvedValue({
       data: { items: [{ collectionName: "c", schemaName: "S", id: "i" }] },
     });
-    const opts = field(
-      NodeSchemaActionDataActionV1,
-      "collectionName_composite",
-    ).options;
-    expect(await opts({}, { projectKey: "pk-1" })).toEqual([
-      { value: "c:::S:::i", label: "S" },
-    ]);
+    const opts = field(NodeSchemaActionDataActionV1, "collectionName_composite").options;
+    expect(await opts({}, { projectKey: "pk-1" })).toEqual([{ value: "c:::S:::i", label: "S" }]);
   });
 
   it("collection onChange returns base fields without a store", () => {
-    const onChange = field(
-      NodeSchemaActionDataActionV1,
-      "collectionName_composite",
-    ).onChange;
+    const onChange = field(NodeSchemaActionDataActionV1, "collectionName_composite").onChange;
     const result = onChange("c:::S:::", {}, {});
     expect(result).toMatchObject({
       collectionName: "c",
@@ -384,10 +492,7 @@ describe("data action v1", () => {
     const store = {
       getState: () => ({ selectedNode, updateNode }),
     };
-    const onChange = field(
-      NodeSchemaActionDataActionV1,
-      "collectionName_composite",
-    ).onChange;
+    const onChange = field(NodeSchemaActionDataActionV1, "collectionName_composite").onChange;
     onChange("c:::S:::schema-1", {}, { store });
     await vi.waitFor(() => expect(getSchemaDetails).toHaveBeenCalled());
     await vi.waitFor(() => expect(updateNode).toHaveBeenCalledWith("sn", expect.any(Object)));
@@ -396,10 +501,7 @@ describe("data action v1", () => {
   it("collection onChange swallows schema detail errors", async () => {
     getSchemaDetails.mockRejectedValue(new Error("fail"));
     const store = { getState: () => ({ selectedNode: null, updateNode: vi.fn() }) };
-    const onChange = field(
-      NodeSchemaActionDataActionV1,
-      "collectionName_composite",
-    ).onChange;
+    const onChange = field(NodeSchemaActionDataActionV1, "collectionName_composite").onChange;
     expect(() => onChange("c:::S:::schema-1", {}, { store })).not.toThrow();
     await vi.waitFor(() => expect(getSchemaDetails).toHaveBeenCalled());
   });
@@ -409,20 +511,14 @@ describe("data action v1", () => {
       { itemId: "cc1", clientSecret: "s1", name: "Active", isActive: true },
       { itemId: "cc2", clientSecret: "s2", name: "Inactive", isActive: false },
     ]);
-    const opts = field(
-      NodeSchemaActionDataActionV1,
-      "clientCredential_composite",
-    ).options;
+    const opts = field(NodeSchemaActionDataActionV1, "clientCredential_composite").options;
     expect(await opts({}, { projectKey: "pk-1" })).toEqual([
       { value: "cc1:::s1", label: "Active" },
     ]);
   });
 
   it("client credential onChange splits id and secret", () => {
-    const onChange = field(
-      NodeSchemaActionDataActionV1,
-      "clientCredential_composite",
-    ).onChange;
+    const onChange = field(NodeSchemaActionDataActionV1, "clientCredential_composite").onChange;
     expect(onChange("cc1:::s1", {}, {})).toEqual({
       clientCredential_composite: "cc1:::s1",
       clientId: "cc1",
@@ -475,14 +571,13 @@ describe("transform code v1", () => {
 
   it("carries a single javascript code-editor field for the script", () => {
     const script = field(NodeSchemaTransformCodeV1, "script");
-    expect(script.type).toBe("code-editor-v2");
+    expect(script.type).toBe("code-editor");
     expect(script.language).toBe("javascript");
     expect(script.dependsOn).toBeUndefined();
     expect(NodeSchemaTransformCodeV1.defaults.parameters.script).toBe("");
   });
 
   it("carries a continue-on-error setting", () => {
-    expect(field(NodeSchemaTransformCodeV1, "settings.continueOnError"))
-      .toBeDefined();
+    expect(field(NodeSchemaTransformCodeV1, "settings.continueOnError")).toBeDefined();
   });
 });

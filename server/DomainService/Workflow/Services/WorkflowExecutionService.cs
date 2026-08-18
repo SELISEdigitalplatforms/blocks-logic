@@ -10,6 +10,7 @@ using DomainService.Workflow.Utils;
 using Microsoft.Extensions.Logging;
 using DomainService.Workflow.Nodes.TriggerEmailV1;
 using DomainService.Workflow.Nodes.TriggerDataV1;
+using DomainService.Workflow.Nodes.TriggerScheduleV1;
 using MongoDB.Bson;
 using System.Diagnostics.CodeAnalysis;
 using DotLiquid.Util;
@@ -179,14 +180,20 @@ namespace DomainService.Workflow.Services
                         Status = "Workflow not found",
                     };
                 }
-                var authType = triggerNode.Parameters.GetValue("authType");
+                var authType = triggerNode.Parameters.GetValue("authType")?.ToString();
 
-                if (authType != null && authType.ToString().ToLower() == "blocksAccessToken".ToLower())
+                if (string.Equals(authType, "blocksAuthentication", StringComparison.OrdinalIgnoreCase))
                 {
-                    var blocksContext = BlocksContext.GetContext();
-                    var isAuthenticatedUser = await _workflowAuthService.IsAuthenticated(_httpContextAccessor.HttpContext.Request, BlocksContext.GetContext()?.TenantId ?? "");
+                    var isAuthenticatedUser = await _workflowAuthService.IsAuthenticated(_httpContextAccessor.HttpContext.Request, workflow.TenantId);
                     if (!isAuthenticatedUser) throw new UnauthorizedAccessException();
-
+                }
+                else if (string.Equals(authType, "blocksAuthorization", StringComparison.OrdinalIgnoreCase))
+                {
+                    var authConfig = ParseAuthorizationConfig(triggerNode.Parameters);
+                    if (authConfig is null) throw new UnauthorizedAccessException();
+                    var isAuthorizedUser = await _workflowAuthService.IsAuthorized(
+                        _httpContextAccessor.HttpContext.Request, workflow.TenantId, authConfig);
+                    if (!isAuthorizedUser) throw new UnauthorizedAccessException();
                 }
 
                 var normalizedInput = new BsonArray();
@@ -775,6 +782,101 @@ namespace DomainService.Workflow.Services
             }
         }
 
+        public async Task SchedulerTriggerStartAsync(SchedulerTriggerPayload payload)
+        {
+            _logger.LogInformation("Starting SchedulerTriggerStartAsync for WorkflowId: {WorkflowId}, TriggerId: {TriggerId}",
+                payload.WorkflowId, payload.TriggerId);
+
+            var tenantId = payload.TenantId;
+            if (string.IsNullOrEmpty(tenantId))
+            {
+                _logger.LogError("TenantId is null or empty in scheduler trigger payload for WorkflowId: {WorkflowId}", payload.WorkflowId);
+                return;
+            }
+
+            var workflow = await _workflowRepository.GetWorkflowAsync(tenantId, payload.WorkflowId);
+            if (workflow == null)
+            {
+                _logger.LogError("Workflow not found: {WorkflowId}, {TenantId}", payload.WorkflowId, tenantId);
+                return;
+            }
+
+            if (!workflow.IsPublished || string.IsNullOrWhiteSpace(workflow.PublishedVersionId))
+            {
+                _logger.LogWarning("Workflow is not published: {WorkflowId}, {TenantId}; skipping scheduler trigger", payload.WorkflowId, tenantId);
+                return;
+            }
+
+            var publishedVersion = await _workflowVersionRepository.GetWorkflowVersionAsync(tenantId, workflow.PublishedVersionId);
+            var workflowSnapshot = publishedVersion?.Snapshot;
+            if (workflowSnapshot == null)
+            {
+                _logger.LogError("Published version snapshot not found for WorkflowId: {WorkflowId}, Version: {VersionId}",
+                    payload.WorkflowId, workflow.PublishedVersionId);
+                return;
+            }
+
+            var triggerNode = workflowSnapshot.Nodes.FirstOrDefault(n =>
+                n.Id == payload.TriggerId &&
+                n.Type == "schedule" &&
+                n.Category == "trigger");
+
+            if (triggerNode == null)
+            {
+                _logger.LogWarning("No schedule trigger node {TriggerId} found in published snapshot for WorkflowId: {WorkflowId}",
+                    payload.TriggerId, payload.WorkflowId);
+                return;
+            }
+
+            var triggerData = new BsonArray
+            {
+                new BsonDocument
+                {
+                    { "WorkflowId", payload.WorkflowId },
+                    { "TriggerId", payload.TriggerId },
+                    { "TenantId", payload.TenantId },
+                    { "CronExpression", payload.CronExpression },
+                    { "FiredAt", (payload.FiredAt ?? DateTime.UtcNow).ToString("o") }
+                }
+            };
+
+            try
+            {
+                var triggerMetadata = new TriggerMetadata
+                {
+                    TriggerNodeId = triggerNode.Id,
+                    TriggerType = triggerNode.Type,
+                    TriggerData = triggerData
+                };
+                var execution = await CreateExecutionAsync(workflowSnapshot, triggerMetadata, WorkflowExecutionMode.Production);
+                execution.Context["Input"] = triggerData;
+                execution.Status = WorkflowExecutionStatus.Queued;
+                execution.ActiveNodeIds.Add(triggerNode.Id);
+
+                await _executionRepository.UpdateAsync(execution);
+                await NotifyWorkflowStartedAsync(execution);
+                await _messageClient.SendToConsumerAsync(new ConsumerMessage<AddExcuationNodeEvent>
+                {
+                    ConsumerName = LogicConstants.NodeExecutionQueue,
+                    Payload = new AddExcuationNodeEvent
+                    {
+                        WorkflowId = workflowSnapshot.ItemId,
+                        WorkflowExecutionId = execution.Id!,
+                        NodeId = triggerNode.Id,
+                        ProjectKey = tenantId
+                    }
+                });
+
+                _logger.LogInformation("Queued execution {ExecutionId} for WorkflowId: {WorkflowId} (Scheduler Trigger)",
+                    execution.Id, workflowSnapshot.ItemId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to create execution for WorkflowId: {WorkflowId} (Scheduler Trigger)",
+                    workflowSnapshot.ItemId);
+            }
+        }
+
 
 
         private static BsonDocument DictionaryToBsonDocument(Dictionary<string, object?> dict)
@@ -785,6 +887,67 @@ namespace DomainService.Workflow.Services
                 doc[kv.Key] = ObjectToBsonValue(kv.Value);
             }
             return doc;
+        }
+
+        /// <summary>
+        /// Parses the workflow-layer BSON representation of a webhook trigger's authorization block
+        /// into the storage-agnostic <see cref="WorkflowAuthService.AuthorizationConfig"/> consumed by
+        /// <see cref="IWorkflowAuthService.IsAuthorized"/>.
+        /// <para>Returns <c>null</c> when the block is missing or malformed, or when
+        /// <c>authorizationMode</c> isn't one of the C# enum names.</para>
+        /// </summary>
+        private static WorkflowAuthService.AuthorizationConfig? ParseAuthorizationConfig(BsonDocument? doc)
+        {
+            if (doc is null) return null;
+
+            var organizationId = doc.Contains("organizationId") && doc["organizationId"].IsString
+                ? doc["organizationId"].AsString
+                : "";
+
+            var roles = ParseRule(doc.Contains("roles") && doc["roles"].IsBsonDocument ? doc["roles"].AsBsonDocument : null);
+            var permissions = ParseRule(doc.Contains("permissions") && doc["permissions"].IsBsonDocument ? doc["permissions"].AsBsonDocument : null);
+
+            var mode = doc.Contains("authorizationMode") && doc["authorizationMode"].IsString
+                ? WorkflowAuthService.AuthorizationConfig.TryParseAuthorizationMode(doc["authorizationMode"].AsString)
+                : null;
+
+            if (mode is null) return null;
+
+            return new WorkflowAuthService.AuthorizationConfig(organizationId, roles, permissions, mode.Value);
+        }
+
+        /// <summary>
+        /// Resolves a <c>{ mode: "all"|"any", values: string[] }</c> BSON doc into a <see cref="Rule"/>.
+        /// Accepts both the canonical wire keys (<c>mode</c>/<c>values</c>) and the legacy
+        /// (<c>operator</c>/<c>items</c>) shape. Empty or missing values -> <c>null</c> (no rule).
+        /// </summary>
+        private static WorkflowAuthService.Rule? ParseRule(BsonDocument? doc)
+        {
+            if (doc is null) return null;
+
+            var mode = doc.Contains("mode") && doc["mode"].IsString
+                ? doc["mode"].AsString
+                : doc.Contains("operator") && doc["operator"].IsString
+                    ? doc["operator"].AsString
+                    : null;
+
+            var values = new List<string>();
+            if (doc.Contains("values") && doc["values"].IsBsonArray)
+            {
+                foreach (var item in doc["values"].AsBsonArray)
+                {
+                    if (item.IsString) values.Add(item.AsString);
+                }
+            }
+            else if (doc.Contains("items") && doc["items"].IsBsonArray)
+            {
+                foreach (var item in doc["items"].AsBsonArray)
+                {
+                    if (item.IsString) values.Add(item.AsString);
+                }
+            }
+
+            return values.Count == 0 ? null : new WorkflowAuthService.Rule { Mode = mode, Values = values };
         }
 
         private static BsonValue ObjectToBsonValue(object? value)

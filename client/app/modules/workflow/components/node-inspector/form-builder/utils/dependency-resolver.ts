@@ -1,5 +1,5 @@
 import { FieldSchema } from "../form-field.types";
-import { getValueByPath } from "./path-utils";
+import { getValueByPath, setValueByPath } from "./path-utils";
 
 export const isDependencySatisfied = (
   field: FieldSchema,
@@ -39,10 +39,7 @@ export const cascadeFieldResets = (
 
   for (const field of fields) {
     if (field.dependsOn?.key === changedKey && !skippedKeys.includes(field.key)) {
-      updated = {
-        ...updated,
-        [field.key]: resolveDefaultValue(field, updated),
-      };
+      updated = setValueByPath(updated, field.key, resolveDefaultValue(field, updated));
       updated = cascadeFieldResets(fields, field.key, updated, skippedKeys);
     }
   }

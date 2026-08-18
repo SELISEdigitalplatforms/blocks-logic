@@ -40,6 +40,7 @@
 
     <ProjectReference Include="..\DomainService\DomainService.csproj" />
     <ProjectReference Include="..\Notification.DomainService\Notification.DomainService.csproj" />
+    <ProjectReference Include="..\Scheduler.DomainService\Scheduler.DomainService.csproj" />
     <!--<ProjectReference Include="..\ConfigurationDriver\SeliseBlocks.ConfigurationDriver.csproj" />-->
   </ItemGroup>
 </Project>
