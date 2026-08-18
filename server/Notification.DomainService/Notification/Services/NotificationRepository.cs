@@ -1,4 +1,4 @@
-﻿using Blocks.Genesis;
+using Blocks.Genesis;
 using DomainService.Shared;
 using MongoDB.Driver;
 using System.Linq.Expressions;
@@ -18,7 +18,6 @@ namespace DomainService.Notification
         {
             _dbContextProvider = dbContextProvider;
             _blocksSecret = blocksSecret;
-            _clientDb = ResolvedClientDb();
         }
 
         private IMongoDatabase ResolvedClientDb()
@@ -35,12 +34,14 @@ namespace DomainService.Notification
 
         public void Save<T>(T data, string collectionName = "")
         {
+            _clientDb = ResolvedClientDb();
             IMongoCollection<T> collection = _clientDb.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? (typeof(T).Name + "s") : collectionName);
             collection.InsertOne(data);
         }
 
         public async Task<T> GetItemAsync<T>(Expression<Func<T, bool>> filterExpression, string collectionName = "")
         {
+            _clientDb = ResolvedClientDb();
             var collection = _clientDb.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? typeof(T).Name + "s" : collectionName);
             var filterBuilder = Builders<T>.Filter;
             var filter = filterBuilder.Where(filterExpression);
@@ -51,6 +52,7 @@ namespace DomainService.Notification
 
         public async Task<List<T>> GetItemsAsync<T>(Expression<Func<T, bool>> filterExpression, string collectionName = "")
         {
+            _clientDb = ResolvedClientDb();
             var collection = _clientDb.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? typeof(T).Name + "s" : collectionName);
             var filterBuilder = Builders<T>.Filter;
             var filter = filterBuilder.Where(filterExpression);
@@ -61,29 +63,34 @@ namespace DomainService.Notification
 
         public async Task SaveAsync<T>(T data, string collectionName = "")
         {
+            _clientDb = ResolvedClientDb();
             IMongoCollection<T> collection = _clientDb.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? (typeof(T).Name + "s") : collectionName);
             await collection.InsertOneAsync(data);
         }
 
         public async Task SaveAsync<T>(List<T> listOfData)
         {
+            _clientDb = ResolvedClientDb();
             IMongoCollection<T> collection = _clientDb.GetCollection<T>(typeof(T).Name + "s");
            await collection.InsertManyAsync(listOfData);
         }
 
         public async Task DeleteAsync<T>(Expression<Func<T, bool>> dataFilters)
         {
+            _clientDb = ResolvedClientDb();
             IMongoCollection<T> collection = _clientDb.GetCollection<T>(typeof(T).Name + "s");
             await collection.DeleteManyAsync(dataFilters);
         }
 
         public IQueryable<T> GetItems<T>()
         {
-           return _clientDb.GetCollection<T>(typeof(T).Name + "s").AsQueryable();
+            _clientDb = ResolvedClientDb();
+            return _clientDb.GetCollection<T>(typeof(T).Name + "s").AsQueryable();
         }
 
         public async Task UpdateNotificationAsReadByUserIdAsync(string userId)
         {
+            _clientDb = ResolvedClientDb();
             var builder = Builders<OfflineNotification>.Filter;
             var collection = _clientDb.GetCollection<OfflineNotification>(_notificationCollection);
 
@@ -110,6 +117,7 @@ namespace DomainService.Notification
 
         public async Task UpdateNotificationAsReadByUserIdAsync(string userId, string notificationId)
         {
+            _clientDb = ResolvedClientDb();
             var builder = Builders<OfflineNotification>.Filter;
             var filter = builder.Where(p => p.Id == notificationId);
 
@@ -121,6 +129,7 @@ namespace DomainService.Notification
 
         public async Task<GetNotificationsResponse> GetNotificationsAsync(GetNotificationsRequest request)
         {
+            _clientDb = ResolvedClientDb();
             var collection = _clientDb.GetCollection<OfflineNotification>("OfflineNotifications");
             var builder = Builders<OfflineNotification>.Filter;
             var filter = FilterDefinition<OfflineNotification>.Empty;
