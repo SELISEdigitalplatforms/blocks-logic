@@ -2,6 +2,7 @@ using DomainService.Workflow.Entities;
 using DomainService.Workflow.Dtos;
 using DomainService.Workflow.Events;
 using DomainService.Workflow.Nodes.TriggerDataV1;
+using DomainService.Workflow.Nodes.TriggerScheduleV1;
 using DomainService.Workflow.Enums;
 using System.Text.Json;
 
@@ -20,6 +21,7 @@ namespace DomainService.Workflow.Services
         Task<WorkflowExecutionGetResponseDto> LastSuccessfullExecutionAsync(string projectKey, LastSuccessfullExecutionRequestDto dto);
         Task EmailTriggerStartAsync(EmailTriggerEvent emailEvent);
         Task DataTriggerStartAsync(DataChangeEvent dataEvent);
+        Task SchedulerTriggerStartAsync(SchedulerTriggerPayload payload);
         Task<StepExecuteResponseDto> StepExecuteAsync(string tenantId, StepExecuteRequestDto dto);
     }
 }

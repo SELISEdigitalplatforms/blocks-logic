@@ -12,6 +12,7 @@
   <Project Path="Mail.Driver/Mail.Driver.csproj" />
   <Project Path="Mfa.DomainService/Mfa.DomainService.csproj" />
   <Project Path="Notification.DomainService/Notification.DomainService.csproj" />
+  <Project Path="Scheduler.DomainService/Scheduler.DomainService.csproj" />
   <Project Path="Worker/Worker.csproj" />
   <Project Path="XUnitTest/XUnitTest.csproj" />
 </Solution>

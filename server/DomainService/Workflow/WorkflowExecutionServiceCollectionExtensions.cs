@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Blocks.Extension.DependencyInjection;
 using DomainService.Workflow.Nodes.TriggerEmailV1;
 using DomainService.Workflow.Nodes.TriggerDataV1;
+using DomainService.Workflow.Nodes.TriggerScheduleV1;
 using DomainService.Workflow.Nodes.LogicIFV1;
 using DomainService.Workflow.Nodes.TriggerWebhookV1;
 using DomainService.Workflow.Nodes.TransformSetFieldV1;
@@ -45,6 +46,7 @@ namespace DomainService.Workflow
             services.AddSingleton<INodeExecutor, TriggerWebhookV1Node>();
             services.AddSingleton<INodeExecutor, TriggerEmailV1Node>();
             services.AddSingleton<INodeExecutor, TriggerDataV1Node>();
+            services.AddSingleton<INodeExecutor, TriggerScheduleV1Node>();
 
             // Logic nodes
             services.AddSingleton<INodeExecutor, LogicIfV1Node>();

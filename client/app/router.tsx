@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate, Outlet } from "react-router";
 
 import WorkflowsPage from "./routes/private/workflows/workflows-page";
+import SchedulesPage from "./routes/private/schedules/schedules-page";
 import WorkflowDetailsPage from "./routes/private/workflow-details/workflow-details-page";
 
 import {
@@ -80,6 +81,7 @@ export const router = createBrowserRouter([
               { path: "dashboard", element: <DashboardOverview /> },
               { path: "workflow/:id", element: <WorkflowDetailsPage /> },
               { path: "workflow", element: <WorkflowsPage /> },
+              { path: "schedules", element: <SchedulesPage /> },
               { path: "profile", element: <ProfilePage /> },
             ],
           },

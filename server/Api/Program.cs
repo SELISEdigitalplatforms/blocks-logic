@@ -11,6 +11,7 @@ using DomainService.Workflow.Utils;
 using Mail.DomainService.Shared.Utilities;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
+using Scheduler.DomainService.Utils;
 using SeliseBlocks.ConfigurationDriver;
 using Path = System.IO.Path;
 
@@ -59,6 +60,7 @@ services.RegisterAllMailApplicationServices();
 services.RegisterBlocksObservabilityServices();
 services.AddWorkflowExecutionEngine();
 services.AddCloudConfigurationServices();
+services.AddSchedulerServices();
 await services.RegisterBlocksDeploymentServicesAsync(vaultType);
 
 var app = builder.Build();
