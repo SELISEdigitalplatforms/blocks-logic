@@ -7,7 +7,7 @@ import { NodeSchemaActionSendMailV1 } from "./node-schema-action-sendMail-v1";
 import { NodeSchemaActionHttpRequestV1 } from "./node-schema-action-httpRequest-v1";
 import { NodeSchemaTriggerEmailV1 } from "./node-schema-trigger-email-v1";
 import { NodeSchemaTriggerDataGatewayV1 } from "./node-schema-trigger-dataGateway-v1";
-import { NodeSchemaTriggerBlockscheduleV1 } from "./node-schema-trigger-blockschedule-v1";
+import { NodeSchemaTriggerScheduleV1 } from "./node-schema-trigger-schedule-v1";
 import { NodeSchemaActionDataActionV1 } from "./node-schema-action-dataAction-v1";
 import { NodeSchemaLogicIfV1 } from "./node-schema-logic-if-v1";
 
@@ -15,7 +15,7 @@ export const NodeSchemasDefinition: Record<string, NodeSchemaDefinition> = {
   triggerwebhookv1: NodeSchemaTriggerWebhookV1,
   triggeremailv1: NodeSchemaTriggerEmailV1,
   triggerdataGatewayv1: NodeSchemaTriggerDataGatewayV1,
-  triggerblockschedulev1: NodeSchemaTriggerBlockscheduleV1,
+  triggerschedulev1: NodeSchemaTriggerScheduleV1,
   actionagentv1: NodeSchemaActionAiAgentV1,
   transformsetfieldv1: NodeSchemaTransformSetFieldV1,
   transformcodev1: NodeSchemaTransformCodeV1,

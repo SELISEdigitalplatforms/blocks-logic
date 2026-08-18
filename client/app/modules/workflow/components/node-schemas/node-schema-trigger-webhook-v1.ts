@@ -121,7 +121,6 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
           { label: "Permissions only", value: "PermissionsOnly" },
           { label: "Roles and Permissions", value: "RolesAndPermissions" },
         ],
-        
       },
       {
         id: "roles",
@@ -132,7 +131,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         placeholder: "Search roles...",
         dependsOn: {
           key: "authorizationMode",
-          value: ["RolesOnly","RolesAndPermissions"],
+          value: ["RolesOnly", "RolesAndPermissions"],
           operator: "in",
         },
         defaultValue: (data: Record<string, unknown>) => rolesAsFieldValue(data),
@@ -151,7 +150,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         placeholder: "Search permissions...",
         dependsOn: {
           key: "authorizationMode",
-          value: ["PermissionsOnly","RolesAndPermissions"],
+          value: ["PermissionsOnly", "RolesAndPermissions"],
           operator: "in",
         },
         defaultValue: (data: Record<string, unknown>) => permissionsAsFieldValue(data),
@@ -206,23 +205,17 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
       organizationId: "default",
       roles: { operator: "all", values: [] },
       permissions: { operator: "any", values: [] },
-      authorizationMode: "RolesOnly",
+      authorizationMode: "",
     },
     settings: {},
   },
   transform: (node) => {
     const params = (node.parameters as Record<string, unknown>) ?? {};
-
-    // Echo authorizationMode verbatim for the backend. Defaults to "RolesOnly"
-    // (the C# AuthorizationMode enum name) if the inspector hasn't set it.
-    const authorizationMode = (params.authorizationMode as string | undefined) ?? "RolesOnly";
-
     return {
       ...node,
       parameters: {
         ...params,
         path: node.id,
-        authorizationMode,
       },
     };
   },

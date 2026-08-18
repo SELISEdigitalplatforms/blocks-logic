@@ -14,7 +14,7 @@ export type NodeType =
   | "email"
   | "dataGateway"
   | "dataAction"
-  | "blockschedule";
+  | "schedule";
 
 export type NodeCategory = "trigger" | "action" | "logic" | "transform";
 export type NodeVersion = "v1" | "v2" | "v3";
