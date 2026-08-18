@@ -39,7 +39,10 @@ namespace DomainService.Notification
 
         private bool UserOrRoleShouldExist(NotifyRequest notifyRequest)
         {
-            return notifyRequest.UserIds?.Count > 0 || notifyRequest.Roles != null;
+            bool hasUserIds = notifyRequest.UserIds != null
+                              && notifyRequest.UserIds.Any(id => !string.IsNullOrWhiteSpace(id));
+            bool hasRoles = notifyRequest.Roles != null;
+            return hasUserIds || hasRoles;
         }
     }
 }
