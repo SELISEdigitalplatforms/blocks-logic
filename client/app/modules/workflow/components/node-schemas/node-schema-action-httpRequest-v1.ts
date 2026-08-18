@@ -84,7 +84,7 @@ export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
       },
       {
         id: "body",
-        type: "code-editor",
+        type: "json-code-editor",
         dependsOn: {
           key: "bodyContentType",
           value: "json",

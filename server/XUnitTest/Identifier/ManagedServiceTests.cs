@@ -4,6 +4,7 @@ using DomainService.ManagedService.Services;
 using DomainService.Shared;
 using DomainService.Shared.Entities;
 using FluentAssertions;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using Moq;
@@ -15,7 +16,9 @@ namespace XUnitTest.Identifier
     {
         private readonly Mock<IServiceManagementRepository> _repository = new();
         private readonly Mock<IBlocksSecret> _blocksSecret = new();
+        private readonly Mock<ICacheClient> _cacheClient = new();
         private readonly Mock<ITenants> _tenants = new();
+        private readonly Mock<IConfiguration> _configuration = new();
         private readonly Mock<ILogger<ServiceManagement>> _logger = new();
 
         public ServiceManagementTests()
@@ -26,10 +29,12 @@ namespace XUnitTest.Identifier
         public void Dispose() => TestBlocksContext.Clear();
 
         private ServiceManagement CreateService() => new(
+            _logger.Object,
             _repository.Object,
             _blocksSecret.Object,
+            _cacheClient.Object,
             _tenants.Object,
-            _logger.Object);
+            _configuration.Object);
 
         private static Tenant Tenant(string salt) => new()
         {
@@ -101,17 +106,20 @@ namespace XUnitTest.Identifier
         private const string CollectionName = "BlocksManagedServices";
 
         private readonly Mock<IDbContextProvider> _dbContextProvider = new();
+        private readonly Mock<IBlocksSecret> _blocksSecret = new();
+        private readonly Mock<IMongoDatabase> _clientDb = new();
         private readonly Mock<IMongoCollection<BlocksManagedService>> _collection = new();
 
         public ServiceManagementRepositoryTests()
         {
             TestBlocksContext.Set();
-            _dbContextProvider.Setup(p => p.GetCollection<BlocksManagedService>(CollectionName)).Returns(_collection.Object);
+            _dbContextProvider.Setup(p => p.GetDatabase("tenant-123")).Returns(_clientDb.Object);
+            _clientDb.Setup(d => d.GetCollection<BlocksManagedService>(CollectionName, null)).Returns(_collection.Object);
         }
 
         public void Dispose() => TestBlocksContext.Clear();
 
-        private ServiceManagementRepository CreateRepository() => new(_dbContextProvider.Object);
+        private ServiceManagementRepository CreateRepository() => new(_dbContextProvider.Object, _blocksSecret.Object);
 
         private void SetupFind(List<BlocksManagedService> services, long count)
         {
@@ -159,7 +167,7 @@ namespace XUnitTest.Identifier
 
             services.Should().BeEmpty();
             count.Should().Be(0);
-            _dbContextProvider.Verify(p => p.GetCollection<BlocksManagedService>(CollectionName), Times.Once);
+            _dbContextProvider.Verify(p => p.GetDatabase("tenant-123"), Times.Once);
         }
     }
 }

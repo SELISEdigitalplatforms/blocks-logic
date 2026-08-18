@@ -30,7 +30,7 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
       },
       {
         id: "json-code",
-        type: "code-editor",
+        type: "json-code-editor",
         dependsOn: {
           key: "mode",
           value: "json",
