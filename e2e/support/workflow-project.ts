@@ -4,6 +4,7 @@ import path from "path"
 export type WorkflowProjectFixture = {
   projectName: string
   itemId: string
+  dashboardUrl: string
   workflowUrl: string
 }
 
@@ -22,5 +23,12 @@ export function writeWorkflowProject(fixture: WorkflowProjectFixture) {
 
 export function clearWorkflowProject() {
   if (fs.existsSync(FIXTURE_PATH)) fs.unlinkSync(FIXTURE_PATH)
+}
+
+export function clearWorkflowSession() {
   if (fs.existsSync(WORKFLOW_SESSION_PATH)) fs.unlinkSync(WORKFLOW_SESSION_PATH)
+}
+
+export function workflowSessionExists(): boolean {
+  return fs.existsSync(WORKFLOW_SESSION_PATH)
 }

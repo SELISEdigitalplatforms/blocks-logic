@@ -1,11 +1,12 @@
-import { test, expect } from "@playwright/test";
-import { openWorkflowList, pollRowHasWorkflow } from "../../support/workflow-helpers";
+import { test, expect } from "../../support/test-base"
+import { openWorkflowList, pollRowHasWorkflow } from "../../support/workflow-helpers"
 
 test.describe("duplicate workflow", () => {
+  test.beforeEach(async ({ page }) => {
+    await openWorkflowList(page)
+  })
+
   test("Duplicate dialog: pre-filled copy name and creation success", async ({ page }) => {
-    await test.step("Open Workflow list in shared project", async () => {
-      await openWorkflowList(page)
-    });
 
     await test.step("[Positive] Duplicate opens pre-filled with a suggested copy name", async () => {
       const firstRow = page.getByRole("row").nth(1);
