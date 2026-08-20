@@ -6,6 +6,17 @@
     <PackageReference Include="JUnitLogger" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="Moq" />
+    <PackageReference Include="SeliseBlocks.Genesis.OS" />
+    <!--
+      SeliseBlocks.EurolmDriver.OS (transitive, via Api) still depends on the legacy
+      "SeliseBlocks.Genesis" package (not yet migrated to "SeliseBlocks.Genesis.OS"). Both
+      ship an assembly named Blocks.Genesis.dll; MSBuild's reference conflict resolution
+      picks the higher assembly version (10.1.7.0) over the newer, actively-developed
+      SeliseBlocks.Genesis.OS 4.0.8 assembly (4.0.8.0), which silently hides newer APIs
+      (e.g. the Delegation feature) from every test here. Exclude its compile/runtime
+      assets so SeliseBlocks.Genesis.OS's assembly is the only one on the reference list.
+    -->
+    <PackageReference Include="SeliseBlocks.Genesis" VersionOverride="10.1.7" ExcludeAssets="compile;runtime" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
   </ItemGroup>

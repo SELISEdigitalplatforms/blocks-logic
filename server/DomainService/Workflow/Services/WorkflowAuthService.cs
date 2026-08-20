@@ -13,13 +13,19 @@ namespace DomainService.Workflow.Services
         private readonly ITenants _tenants;
         private readonly ICacheClient _cacheClient;
         private readonly ILogger<WorkflowAuthService> _logger;
+        private readonly IDelegatedTokenProvider _delegatedTokenProvider;
         private const string PublicCertCachePrefix = "tetocertpublic::";
 
-        public WorkflowAuthService(ITenants tenants, ICacheClient cacheClient, ILogger<WorkflowAuthService> logger)
+        public WorkflowAuthService(
+            ITenants tenants,
+            ICacheClient cacheClient,
+            ILogger<WorkflowAuthService> logger,
+            IDelegatedTokenProvider delegatedTokenProvider)
         {
             _tenants = tenants;
             _cacheClient = cacheClient;
             _logger = logger;
+            _delegatedTokenProvider = delegatedTokenProvider;
         }
 
         public static string GetAudience(Tenant? tenant)
@@ -37,7 +43,7 @@ namespace DomainService.Workflow.Services
 
         public async Task<bool> IsAuthenticated(HttpRequest request, string tenantId)
         {
-            var principal = await ValidateTokenAsync(request, tenantId);
+            var (principal, _) = await ValidateTokenAsync(request, tenantId);
             if (principal is null)
             {
                 _logger.LogWarning("Workflow webhook authentication failed. TenantId={TenantId}", tenantId);
@@ -49,7 +55,7 @@ namespace DomainService.Workflow.Services
         public async Task<bool> IsAuthorized(HttpRequest request, string tenantId, AuthorizationConfig config)
         {
             // Step 1 — authenticate first. Strict ordering: RBAC never runs for an unauthenticated caller.
-            var principal = await ValidateTokenAsync(request, tenantId);
+            var (principal, rawToken) = await ValidateTokenAsync(request, tenantId);
             if (principal is null)
             {
                 _logger.LogWarning("Workflow webhook authorization failed (unauthenticated). TenantId={TenantId}", tenantId);
@@ -65,22 +71,58 @@ namespace DomainService.Workflow.Services
                 return false;
             }
 
+            // Create a security context for _blocksContext, populated from the validated caller's claims
+            // so downstream nodes (e.g. HTTP Action's "Use Blocks Authorization") see the real caller.
+            var tenant = _tenants.GetTenantByID(tenantId);
+            var applicationDomain = tenant.Applications?.FirstOrDefault()?.Domain ?? string.Empty;
+            var securityData = BlocksContext.Create(
+                tenantId: tenant.TenantId,
+                roles: GetRoles(principal),
+                userId: GetUserId(principal),
+                isAuthenticated: true,
+                requestUri: request.Path.Value ?? string.Empty,
+                organizationId: GetOrganization(principal),
+                expireOn: GetExpireOn(principal),
+                email: GetClaimValue(principal, BlocksContext.EMAIL_CLAIM),
+                permissions: GetPermissions(principal),
+                userName: GetClaimValue(principal, BlocksContext.USER_NAME_CLAIM),
+                phoneNumber: GetClaimValue(principal, BlocksContext.PHONE_NUMBER_CLAIM),
+                displayName: GetClaimValue(principal, BlocksContext.DISPLAY_NAME_CLAIM),
+                oauthToken: rawToken ?? string.Empty,
+                originalTenantId: tenant.TenantId,
+                applicationDomain: applicationDomain,
+                impersonated: GetImpersonated(principal),
+                impersonationSessionId: GetClaimValue(principal, BlocksContext.IMPERSONATION_SESSION_ID_CLAIM));
+            BlocksContext.SetContext(securityData, false);
+
             return true;
         }
 
         /// <summary>
-        /// Validates the bearer token of a webhook request against the tenant's public cert
-        /// and returns the resulting <see cref="ClaimsPrincipal"/>. Returns <c>null</c> on any
-        /// failure (missing token, unknown tenant, invalid signature, expired, etc.).
-        /// Validation runs exactly once per request; both IsAuthenticated and IsAuthorized reuse this.
+        /// Best-effort: returns a Blocks-delegated bearer token for the current ambient context, or
+        /// <c>null</c> when no delegation grant is available. <see cref="IDelegatedTokenProvider.GetTokenAsync"/>
+        /// only <b>redeems</b> an existing delegation grant (<c>DelegatedTokenContext.Current</c>) — it does not
+        /// mint one from scratch. Today's trigger flows (webhook/schedule/data-gateway) do not populate that
+        /// grant, so this will commonly return <c>null</c>. Callers must treat <c>null</c> as "omit the
+        /// Authorization header", not as an error.
         /// </summary>
-        private async Task<ClaimsPrincipal?> ValidateTokenAsync(HttpRequest request, string tenantId)
+        public Task<string?> CreateBlocksAuthorizationTokenAsync(CancellationToken ct = default)
+            => _delegatedTokenProvider.GetTokenAsync(ct);
+
+        /// <summary>
+        /// Validates the bearer token of a webhook request against the tenant's public cert
+        /// and returns the resulting <see cref="ClaimsPrincipal"/> plus the raw token string.
+        /// Returns <c>(null, null)</c> on any failure (missing token, unknown tenant, invalid
+        /// signature, expired, etc.). Validation runs exactly once per request; both
+        /// IsAuthenticated and IsAuthorized reuse this.
+        /// </summary>
+        private async Task<(ClaimsPrincipal? Principal, string? RawToken)> ValidateTokenAsync(HttpRequest request, string tenantId)
         {
             var tenant = _tenants.GetTenantByID(tenantId);
-            if (tenant == null) return null;
+            if (tenant == null) return (null, null);
 
             var (token, _) = TokenHelper.GetToken(request, _tenants);
-            if (string.IsNullOrEmpty(token)) return null;
+            if (string.IsNullOrEmpty(token)) return (null, null);
 
             try
             {
@@ -99,12 +141,13 @@ namespace DomainService.Workflow.Services
                     ValidateAudience = false,
                     SaveSigninToken = true
                 };
-                return tokenHandler.ValidateToken(token, tokenValidationParameters, out _);
+                var principal = tokenHandler.ValidateToken(token, tokenValidationParameters, out _);
+                return (principal, token);
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Workflow webhook token validation threw. TenantId={TenantId}", tenantId);
-                return null;
+                return (null, null);
             }
         }
 
@@ -139,7 +182,7 @@ namespace DomainService.Workflow.Services
 
         /// <summary>
         /// True if <paramref name="rule"/> is null/empty (no rule configured)
-        /// or the caller satisfies the rule. <see cref="Rule.Mode"/> = <c>"all"</c>
+        /// or the caller satisfies the rule. <see cref="Rule.Mode"/> = <c>"and"</c>
         /// requires the caller to hold every value; any other value (including <c>null</c>)
         /// requires at least one.
         /// </summary>
@@ -183,6 +226,23 @@ namespace DomainService.Workflow.Services
 
         public static IReadOnlySet<string> GetPermissions(ClaimsPrincipal principal)
             => principal.FindAll(BlocksContext.PERMISSION_CLAIM).Select(c => c.Value).ToHashSet(StringComparer.Ordinal);
+
+        /// <summary>Reads a single-value claim by type, or <see cref="string.Empty"/> when absent.</summary>
+        private static string GetClaimValue(ClaimsPrincipal principal, string claimType)
+            => principal.FindFirst(claimType)?.Value ?? string.Empty;
+
+        /// <summary>Reads the standard JWT "exp" claim as a <see cref="DateTime"/>, or <see cref="DateTime.MinValue"/> when absent/unparsable.</summary>
+        private static DateTime GetExpireOn(ClaimsPrincipal principal)
+        {
+            var expireOnValue = principal.FindFirst(BlocksContext.EXPIRE_ON_CLAIM)?.Value;
+            return DateTime.TryParse(expireOnValue, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var expireOn)
+                ? expireOn
+                : DateTime.MinValue;
+        }
+
+        /// <summary>Reads the impersonation flag claim; treats anything other than the literal "true" as <c>false</c>.</summary>
+        private static bool GetImpersonated(ClaimsPrincipal principal)
+            => principal.FindFirst(BlocksContext.IMPERSONATED_CLAIM)?.Value == "true";
 
         /// <summary>
         /// How the Roles and Permissions rules combine to authorize the caller.
@@ -239,12 +299,12 @@ namespace DomainService.Workflow.Services
         }
 
         /// <summary>
-        /// On-wire shape for one role/permission rule: <c>{ mode: "all"|"any", values: string[] }</c>.
+        /// On-wire shape for one role/permission rule: <c>{ mode: "and"|"or", values: string[] }</c>.
         /// Empty or null <see cref="Values"/> means "no rule configured" (treated as a pass).
         /// </summary>
         public sealed class Rule
         {
-            /// <summary><c>"all"</c> = every value required; <c>"any"</c> = at least one.</summary>
+            /// <summary><c>"and"</c> = every value required; anything else (e.g. <c>"or"</c>) = at least one.</summary>
             public string? Mode { get; set; }
 
             /// <summary>Role slugs or permission resource keys. Empty or null = no rule.</summary>

@@ -1,5 +1,6 @@
 
 using System.Text.Json;
+using DomainService.Workflow.Services;
 using DomainService.Workflow.Utils;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
@@ -14,12 +15,19 @@ namespace DomainService.Workflow.Nodes.ActionHttpRequestV1
         public override string NodeType => "httpRequest";
         public override string Version => "v1";
 
+        private const string AuthorizationHeaderName = "Authorization";
+
         private readonly IHttpClientFactory _httpClientFactory;
+        private readonly IWorkflowAuthService _workflowAuthService;
         private readonly ILogger<ActionHttpRequestV1Node> _logger;
 
-        public ActionHttpRequestV1Node(IHttpClientFactory httpClientFactory, ILogger<ActionHttpRequestV1Node> logger)
+        public ActionHttpRequestV1Node(
+            IHttpClientFactory httpClientFactory,
+            IWorkflowAuthService workflowAuthService,
+            ILogger<ActionHttpRequestV1Node> logger)
         {
             _httpClientFactory = httpClientFactory;
+            _workflowAuthService = workflowAuthService;
             _logger = logger;
         }
 
@@ -36,6 +44,8 @@ namespace DomainService.Workflow.Nodes.ActionHttpRequestV1
                     if (url == null)
                         return NodeExecutionResult.Failed(bodyContent);
 
+                    await ApplyBlocksAuthorizationAsync(parameters, headers);
+
                     var responseBody = await SendHttpRequestAsync(httpMethod, url, headers, bodyContent, contentType);
                     BuildOutputItems(outputItems, responseBody, context, parameters, i);
                 }
@@ -45,6 +55,22 @@ namespace DomainService.Workflow.Nodes.ActionHttpRequestV1
             {
                 return NodeExecutionResult.Failed(ex.Message);
             }
+        }
+
+        /// <summary>
+        /// Adds a Blocks-delegated bearer token to the Authorization header when the node opted in
+        /// and no Authorization header was already set manually (manual value always wins). Best
+        /// effort: silently leaves headers untouched when no delegation grant is available.
+        /// </summary>
+        private async Task ApplyBlocksAuthorizationAsync(ActionHttpRequestV1Parameters parameters, Dictionary<string, string> headers)
+        {
+            if (!parameters.UseBlocksAuthorization) return;
+            if (headers.Keys.Any(key => string.Equals(key, AuthorizationHeaderName, StringComparison.OrdinalIgnoreCase))) return;
+
+            var token = await _workflowAuthService.CreateBlocksAuthorizationTokenAsync();
+            if (string.IsNullOrWhiteSpace(token)) return;
+
+            headers[AuthorizationHeaderName] = $"Bearer {token}";
         }
 
         private (string? url, string httpMethod, Dictionary<string, string> headers, string bodyContent, string contentType) PrepareRequest(

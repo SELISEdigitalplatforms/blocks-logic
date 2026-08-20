@@ -12,5 +12,12 @@ namespace DomainService.Workflow.Services
         /// the caller is not authenticated or any rule fails.
         /// </summary>
         public Task<bool> IsAuthorized(HttpRequest request, string tenantId, WorkflowAuthService.AuthorizationConfig config);
+
+        /// <summary>
+        /// Best-effort: returns a Blocks-delegated bearer token for the current ambient context, or
+        /// <c>null</c> when no delegation grant is available (e.g. most trigger-originated workflow
+        /// runs today). Callers must treat <c>null</c> as "omit the Authorization header", not as an error.
+        /// </summary>
+        public Task<string?> CreateBlocksAuthorizationTokenAsync(CancellationToken ct = default);
     }
 }
