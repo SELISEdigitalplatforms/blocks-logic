@@ -9,7 +9,6 @@ using DomainService.Projects;
 using DomainService.Storage;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
-using Storage.DomainService.Shared.Services;
 using Storage.DomainService.Storage;
 using Storage.DomainService.Storage.Validators;
 
@@ -29,11 +28,8 @@ namespace DomainService.Shared
             services.AddSingleton<IServiceManagementRepository, ServiceManagementRepository>();
 
             // Drivers
-            services.AddSingleton<DmsArtifactBuilderFactory>();
             services.AddTransient<IValidator<UpdateFileRequest>, UpdateFileRequestValidator>(); 
             services.AddTransient<AwsS3CompatibleStorageService>();
-            services.AddSingleton<FileArtifactBuilder>();
-            services.AddSingleton<FolderArtifactBuilder>();
 
             services.RegisterBlocksStorageServices();
             services.RegisterBlocksMailService();
