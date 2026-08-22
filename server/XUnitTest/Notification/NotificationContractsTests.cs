@@ -3,9 +3,6 @@ using DomainService.Notification;
 using DomainService.Shared;
 using FluentAssertions;
 using FirebaseConfiguration = DomainService.Configuration.FirebaseConfiguration;
-using GetConfigurationsRequest = DomainService.Configuration.GetConfigurationsRequest;
-using GetConfigurationsResponse = DomainService.Configuration.GetConfigurationsResponse;
-using SaveConfigurationRequest = DomainService.Configuration.SaveConfigurationRequest;
 
 namespace XUnitTest.Notification
 {
@@ -185,50 +182,6 @@ namespace XUnitTest.Notification
             configuration.NotificationType.Should().Be(NotificationReceiverTypes.FilterSpecificReceiverType);
             configuration.NotifyMethod.Should().Be("ReceiveNotification");
             configuration.EnablePersistence.Should().BeTrue();
-        }
-
-        [Fact]
-        public void SaveConfigurationRequest_MarksWhetherItUpdatesAnExistingConfiguration()
-        {
-            var request = new SaveConfigurationRequest
-            {
-                Name = "welcome",
-                ChannelToNotify = NotifierTypes.SignalR,
-                NotificationType = NotificationReceiverTypes.BroadcastReceiverType,
-                NotifyMethod = "ReceiveNotification",
-                EnablePersistence = false,
-                ProjectKey = "project-1",
-                IsUpdateRequest = true,
-            };
-
-            request.IsUpdateRequest.Should().BeTrue();
-            request.ProjectKey.Should().Be("project-1");
-            request.EnablePersistence.Should().BeFalse();
-        }
-
-        [Fact]
-        public void GetConfigurationsRequest_CarriesTheProjectItBelongsTo()
-        {
-            var request = new GetConfigurationsRequest { ProjectKey = "project-1", Page = 1, PageSize = 10 };
-
-            request.ProjectKey.Should().Be("project-1");
-            request.Page.Should().Be(1);
-            request.PageSize.Should().Be(10);
-        }
-
-        [Fact]
-        public void GetConfigurationsResponse_CarriesThePageAndTheTotal()
-        {
-            var response = new GetConfigurationsResponse
-            {
-                Configurations = [new NotificationConfiguration { ItemId = "cfg-1" }],
-                TotalCount = 5,
-                IsSuccess = true,
-            };
-
-            response.Configurations.Should().ContainSingle();
-            response.TotalCount.Should().Be(5);
-            response.IsSuccess.Should().BeTrue();
         }
 
         [Fact]

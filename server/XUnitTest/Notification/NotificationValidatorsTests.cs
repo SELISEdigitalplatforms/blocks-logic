@@ -1,11 +1,9 @@
-using DomainService.Configuration.Validators;
 using DomainService.Entities;
 using DomainService.Notification;
 using DomainService.Shared;
 using FluentAssertions;
 using Moq;
 using IConfigurationRepository = DomainService.Configuration.Services.IConfigurationRepository;
-using SaveConfigurationRequest = DomainService.Configuration.SaveConfigurationRequest;
 
 namespace XUnitTest.Notification
 {
@@ -145,117 +143,5 @@ namespace XUnitTest.Notification
             withOrg.IsValid.Should().BeTrue();
         }
 
-        [Fact]
-        public async Task ConfigurationValidator_AcceptsACompleteConfiguration()
-        {
-            SetupConfiguration(null);
-
-            var result = await new ConfigurationValidator(_configurationRepository.Object)
-                .ValidateAsync(ValidConfiguration());
-
-            result.IsValid.Should().BeTrue();
-        }
-
-        [Fact]
-        public async Task ConfigurationValidator_RejectsAMissingName()
-        {
-            SetupConfiguration(null);
-            var request = ValidConfiguration();
-            request.Name = string.Empty;
-
-            var result = await new ConfigurationValidator(_configurationRepository.Object).ValidateAsync(request);
-
-            result.IsValid.Should().BeFalse();
-            result.Errors.Should().Contain(e => e.ErrorMessage == "Name is required.");
-        }
-
-        [Fact]
-        public async Task ConfigurationValidator_RejectsANameThatIsAlreadyTaken()
-        {
-            SetupConfiguration(new NotificationConfiguration { Name = "welcome" });
-            var request = ValidConfiguration();
-            request.IsUpdateRequest = false;
-
-            var result = await new ConfigurationValidator(_configurationRepository.Object).ValidateAsync(request);
-
-            result.IsValid.Should().BeFalse();
-            result.Errors.Should().Contain(e => e.ErrorMessage == "Name must be unique");
-        }
-
-        [Fact]
-        public async Task ConfigurationValidator_AllowsAnUpdateToKeepItsOwnName()
-        {
-            SetupConfiguration(new NotificationConfiguration { Name = "welcome" });
-            var request = ValidConfiguration();
-            request.IsUpdateRequest = true;
-
-            var result = await new ConfigurationValidator(_configurationRepository.Object).ValidateAsync(request);
-
-            result.IsValid.Should().BeTrue();
-            _configurationRepository.Verify(r => r.GetByNameAsync(It.IsAny<string>()), Times.Never);
-        }
-
-        [Fact]
-        public async Task ConfigurationValidator_RejectsANameLongerThanTheColumnAllows()
-        {
-            SetupConfiguration(null);
-            var request = ValidConfiguration();
-            request.Name = new string('n', 101);
-
-            var result = await new ConfigurationValidator(_configurationRepository.Object).ValidateAsync(request);
-
-            result.IsValid.Should().BeFalse();
-            result.Errors.Should().Contain(e => e.ErrorMessage == "Name must not exceed 100 characters.");
-        }
-
-        [Fact]
-        public async Task ConfigurationValidator_RejectsAMissingNotifyMethod()
-        {
-            SetupConfiguration(null);
-            var request = ValidConfiguration();
-            request.NotifyMethod = string.Empty;
-
-            var result = await new ConfigurationValidator(_configurationRepository.Object).ValidateAsync(request);
-
-            result.IsValid.Should().BeFalse();
-            result.Errors.Should().Contain(e => e.ErrorMessage == "NotifyMethod is required.");
-        }
-
-        [Fact]
-        public async Task ConfigurationValidator_RejectsANotifyMethodLongerThanTheColumnAllows()
-        {
-            SetupConfiguration(null);
-            var request = ValidConfiguration();
-            request.NotifyMethod = new string('m', 51);
-
-            var result = await new ConfigurationValidator(_configurationRepository.Object).ValidateAsync(request);
-
-            result.IsValid.Should().BeFalse();
-            result.Errors.Should().Contain(e => e.ErrorMessage == "NotifyMethod must not exceed 50 characters.");
-        }
-
-        [Fact]
-        public async Task ConfigurationValidator_RejectsChannelsAndReceiverTypesOutsideTheEnums()
-        {
-            SetupConfiguration(null);
-            var request = ValidConfiguration();
-            request.ChannelToNotify = (NotifierTypes)42;
-            request.NotificationType = (NotificationReceiverTypes)42;
-
-            var result = await new ConfigurationValidator(_configurationRepository.Object).ValidateAsync(request);
-
-            result.IsValid.Should().BeFalse();
-            result.Errors.Should().Contain(e => e.ErrorMessage == "Invalid channel type.");
-            result.Errors.Should().Contain(e => e.ErrorMessage == "Invalid notification type.");
-        }
-
-        private static SaveConfigurationRequest ValidConfiguration() => new()
-        {
-            Name = "welcome",
-            ChannelToNotify = NotifierTypes.SignalR,
-            NotificationType = NotificationReceiverTypes.BroadcastReceiverType,
-            NotifyMethod = "ReceiveNotification",
-            EnablePersistence = true,
-        };
     }
 }

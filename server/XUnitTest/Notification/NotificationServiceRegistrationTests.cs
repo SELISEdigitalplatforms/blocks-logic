@@ -1,4 +1,3 @@
-using DomainService.Configuration.Validators;
 using DomainService.Notification;
 using DomainService.Shared;
 using DomainService.Utilities;
@@ -6,10 +5,7 @@ using FluentAssertions;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using ConfigurationRepository = DomainService.Configuration.Services.ConfigurationRepository;
-using ConfigurationService = DomainService.Configuration.Services.ConfigurationService;
 using IConfigurationRepository = DomainService.Configuration.Services.IConfigurationRepository;
-using IConfigurationService = DomainService.Configuration.Services.IConfigurationService;
-using SaveConfigurationRequest = DomainService.Configuration.SaveConfigurationRequest;
 
 namespace XUnitTest.Notification
 {
@@ -34,7 +30,6 @@ namespace XUnitTest.Notification
         [InlineData(typeof(INotificationRepository), typeof(NotificationRepository))]
         [InlineData(typeof(INotifierServiceFactory), typeof(NotifierServiceFactory))]
         [InlineData(typeof(IStrategicClientProviderFactory), typeof(StrategicClientProviderFactory))]
-        [InlineData(typeof(IConfigurationService), typeof(ConfigurationService))]
         [InlineData(typeof(IConfigurationRepository), typeof(ConfigurationRepository))]
         public void RegisterAllNotificationApplicationServices_RegistersTheServicesAsSingletons(
             Type service, Type implementation)
@@ -65,8 +60,6 @@ namespace XUnitTest.Notification
                 .Should().Be(typeof(AddSubscriptionRequestValidator));
             Descriptor<IValidator<NotifyRequest>>().ImplementationType
                 .Should().Be(typeof(NotifyRequestValidator));
-            Descriptor<IValidator<SaveConfigurationRequest>>().ImplementationType
-                .Should().Be(typeof(ConfigurationValidator));
 
             _services.Where(d => d.ServiceType.IsGenericType
                                  && d.ServiceType.GetGenericTypeDefinition() == typeof(IValidator<>))

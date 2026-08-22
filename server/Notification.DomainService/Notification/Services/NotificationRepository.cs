@@ -32,13 +32,6 @@ namespace DomainService.Notification
         return _dbContextProvider.GetDatabase(blocksContext.TenantId);
     }
 
-        public void Save<T>(T data, string collectionName = "")
-        {
-            _clientDb = ResolvedClientDb();
-            IMongoCollection<T> collection = _clientDb.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? (typeof(T).Name + "s") : collectionName);
-            collection.InsertOne(data);
-        }
-
         public async Task<T> GetItemAsync<T>(Expression<Func<T, bool>> filterExpression, string collectionName = "")
         {
             _clientDb = ResolvedClientDb();
@@ -80,12 +73,6 @@ namespace DomainService.Notification
             _clientDb = ResolvedClientDb();
             IMongoCollection<T> collection = _clientDb.GetCollection<T>(typeof(T).Name + "s");
             await collection.DeleteManyAsync(dataFilters);
-        }
-
-        public IQueryable<T> GetItems<T>()
-        {
-            _clientDb = ResolvedClientDb();
-            return _clientDb.GetCollection<T>(typeof(T).Name + "s").AsQueryable();
         }
 
         public async Task UpdateNotificationAsReadByUserIdAsync(string userId)

@@ -1,5 +1,4 @@
 ﻿using DomainService.Configuration.Services;
-using DomainService.Configuration.Validators;
 using DomainService.Notification;
 using DomainService.Shared;
 using FluentValidation;
@@ -18,7 +17,6 @@ namespace DomainService.Utilities
             serviceCollection.AddSingleton<INotificationRepository, NotificationRepository>();
             serviceCollection.AddSingleton<INotifierServiceFactory, NotifierServiceFactory>();
             serviceCollection.AddSingleton<IStrategicClientProviderFactory, StrategicClientProviderFactory>();
-            serviceCollection.AddSingleton<IConfigurationService, ConfigurationService>();
             serviceCollection.AddSingleton<IConfigurationRepository, ConfigurationRepository>();
 
             serviceCollection.AddSingleton<FirebaseNotificationServiceProvider>();
@@ -32,7 +30,6 @@ namespace DomainService.Utilities
             #region Validators
             serviceCollection.AddTransient<IValidator<Subscription>, AddSubscriptionRequestValidator>();
             serviceCollection.AddTransient<IValidator<NotifyRequest>, NotifyRequestValidator>();
-            serviceCollection.AddTransient<IValidator<Configuration.SaveConfigurationRequest>, ConfigurationValidator>();
             #endregion
         }
     }
