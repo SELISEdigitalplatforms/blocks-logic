@@ -1,4 +1,4 @@
-﻿using DomainService.Shared;
+using DomainService.Shared;
 using Microsoft.AspNetCore.SignalR;
 using MongoDB.Bson.Serialization;
 using MongoDB.Bson;
@@ -12,8 +12,8 @@ namespace DomainService.Notification
     {
         private readonly IStrategicClientProviderFactory _clientFactoryProvider;
         private readonly INotificationRepository _notificationRepository;
-        private readonly ILogger<SignalRNotificationServiceProvider> _logger;   
-
+        private readonly ILogger<SignalRNotificationServiceProvider> _logger;
+        private const string _usersCollection = "Users";
         public SignalRNotificationServiceProvider(IStrategicClientProviderFactory clientFactoryProvider, 
                                                   INotificationRepository notificationRepository,
                                                   ILogger<SignalRNotificationServiceProvider> logger)
@@ -37,7 +37,7 @@ namespace DomainService.Notification
         private async Task PersistNotificationAsync(NotifyRequest notifyRequest, NotificationConfiguration configuration)
         {
             await InjectUserIdsFromSubscriptionFilter(notifyRequest, configuration);
-            var offlineNotifications = BuildOfflineNotification(notifyRequest, configuration);
+            var offlineNotifications = await BuildOfflineNotification(notifyRequest, configuration);
             //TODO: ToBeDetermined
             //AppendDenormalizedPayloadIfAny(notifyRequest, offlineNotifications);
 
@@ -88,9 +88,27 @@ namespace DomainService.Notification
             return subscriptions.ToList();
         }
 
-        private static List<OfflineNotification> BuildOfflineNotification(NotifyRequest saveNotification, NotificationConfiguration configuration, List<string>? userIds = null)
+        private async Task<List<OfflineNotification>> BuildOfflineNotification(NotifyRequest saveNotification, NotificationConfiguration configuration, List<string>? userIds = null)
         {
-
+            var hasUserIds = saveNotification.UserIds != null && saveNotification.UserIds.Count != 0;
+            var hasRoles = saveNotification.Roles != null && saveNotification.Roles.Count != 0;
+            var hasOrganizationIds = saveNotification.OrganizationIds != null && saveNotification.OrganizationIds.Count != 0;
+            if (hasRoles)
+            {
+                var roleUserIds = await GetUserIdsByRolesAsync(saveNotification.Roles, saveNotification.OrganizationIds);
+                if (roleUserIds.Count != 0)
+                {
+                    saveNotification.UserIds = roleUserIds;
+                }
+            }
+            else if (!hasUserIds && hasOrganizationIds)
+            {
+                var organizationUserIds = await GetUserIdsByOrganizationsAsync(saveNotification.OrganizationIds);
+                if (organizationUserIds.Count != 0)
+                {
+                    saveNotification.UserIds = organizationUserIds;
+                }
+            }
             object? payloadAsObject = null;
             userIds = saveNotification.UserIds ?? [];
 
@@ -119,6 +137,33 @@ namespace DomainService.Notification
                     },
                     DenormalizedPayload = payloadAsObject ?? saveNotification.DenormalizedPayload
                 }).ToList();
+        }
+        private async Task<List<string>> GetUserIdsByRolesAsync ( List<string> roles, List<string> organizationIds )
+        {
+            var hasOrganizationFilter = organizationIds != null && organizationIds.Count != 0;
+            var users = await GetUsersByOrganizationsAsync(organizationIds);
+
+            return users
+                .Where(u => u.Roles != null && u.Roles.Any(orgRoles =>
+                    ( !hasOrganizationFilter || organizationIds.Contains(orgRoles.Key) ) &&
+                    orgRoles.Value != null && orgRoles.Value.Any(role => roles.Contains(role))))
+                .Select(u => u.ItemId)
+                .Distinct()
+                .ToList();
+        }
+
+        private async Task<List<string>> GetUserIdsByOrganizationsAsync ( List<string> organizationIds )
+        {
+            var users = await GetUsersByOrganizationsAsync(organizationIds);
+            return users.Select(u => u.ItemId).Distinct().ToList();
+        }
+        private async Task<List<NotificationUser>> GetUsersByOrganizationsAsync ( List<string> organizationIds )
+        {
+            var hasOrganizationFilter = organizationIds != null && organizationIds.Count != 0;
+
+            return await _notificationRepository.GetItemsAsync<NotificationUser>(
+                u => !hasOrganizationFilter || u.OrganizationIds.Any(organizationId => organizationIds.Contains(organizationId)),
+                _usersCollection);
         }
 
     }
