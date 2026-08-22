@@ -4,7 +4,6 @@ using DomainService.ManagedService.Services;
 using DomainService.Shared;
 using DomainService.Shared.Entities;
 using FluentAssertions;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using Moq;
@@ -15,10 +14,7 @@ namespace XUnitTest.Identifier
     public class ServiceManagementTests : IDisposable
     {
         private readonly Mock<IServiceManagementRepository> _repository = new();
-        private readonly Mock<IBlocksSecret> _blocksSecret = new();
-        private readonly Mock<ICacheClient> _cacheClient = new();
         private readonly Mock<ITenants> _tenants = new();
-        private readonly Mock<IConfiguration> _configuration = new();
         private readonly Mock<ILogger<ServiceManagement>> _logger = new();
 
         public ServiceManagementTests()
@@ -31,10 +27,7 @@ namespace XUnitTest.Identifier
         private ServiceManagement CreateService() => new(
             _logger.Object,
             _repository.Object,
-            _blocksSecret.Object,
-            _cacheClient.Object,
-            _tenants.Object,
-            _configuration.Object);
+            _tenants.Object);
 
         private static Tenant Tenant(string salt) => new()
         {

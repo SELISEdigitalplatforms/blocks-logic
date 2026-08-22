@@ -8,10 +8,8 @@
         <PackageReference Include="Azure.Storage.Blobs" />
         <PackageReference Include="AWSSDK.S3" />
         <PackageReference Include="SSH.NET" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <ProjectReference Include="..\CloudConfiguration.DomainService\CloudConfiguration.DomainService.csproj" />
+        <PackageReference Include="SeliseBlocks.StorageDriver.OS" />
+        <PackageReference Include="SeliseBlocks.MailDriver.OS" />
     </ItemGroup>
 
 </Project>

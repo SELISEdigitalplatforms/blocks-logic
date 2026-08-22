@@ -1,10 +1,12 @@
 using Blocks.Genesis;
-using CloudConfiguration.DomainService.Shared.Services;
-using CloudConfiguration.DomainService.Storage.Entities;
-using CloudConfiguration.DomainService.Storage.RequestModel;
-using Common.InternalService.Storage;
+using Common.InternalService.Shared.Services;
+using Common.InternalService.Storage.Entities;
+using Common.InternalService.Storage.RequestModel;
+using DomainService.Storage;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Storage.DomainService.Services;
+
 
 namespace BlocksTemplate.Api.Controllers
 {

@@ -56,7 +56,6 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             services.AddSingleton<IConsumer<AddExcuationNodeEvent>, AddExcuationNodeConsumer>();
             services.AddSingleton<IConsumer<DataChangeEvent>, DataTriggerConsumer>();
             services.AddSingleton<IConsumer<PublishScheduleCommand>, SchedulerTriggerConsumer>();
-            services.AddApplicationServices();
             services.AddSchedulerServices();
             services.AddSchedulerWorkerServices();
             //services.RegisterSharedServices();

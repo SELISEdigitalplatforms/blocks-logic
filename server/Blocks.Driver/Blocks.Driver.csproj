@@ -20,15 +20,10 @@
 		     versions and are excluded from Blocks.slnx, so they don't build against this net10.0
 		     solution. Blocks.Driver wraps the same DomainService projects they wrap instead, so
 		     the existing driver packages are left untouched. -->
-		<ProjectReference Include="../Captcha.DomainService/Captcha.DomainService.csproj" PrivateAssets="All" />
-		<ProjectReference Include="../Iam.DomainService/Iam.DomainService.csproj" PrivateAssets="All" />
-		<ProjectReference Include="../Mfa.DomainService/Mfa.DomainService.csproj" PrivateAssets="All" />
-		<ProjectReference Include="../Identifier.DomainService/Identifier.DomainService.csproj" PrivateAssets="All" />
 		<ProjectReference Include="../Common.InternalService/Common.InternalService.csproj" PrivateAssets="All" />
 		<None Include="$(OutputPath)Captcha.DomainService.dll" Pack="true" PackagePath="lib/$(TargetFramework)/" />
 		<None Include="$(OutputPath)Iam.DomainService.dll" Pack="true" PackagePath="lib/$(TargetFramework)/" />
 		<None Include="$(OutputPath)Mfa.DomainService.dll" Pack="true" PackagePath="lib/$(TargetFramework)/" />
-		<None Include="$(OutputPath)Identifier.DomainService.dll" Pack="true" PackagePath="lib/$(TargetFramework)/" />
 		<None Include="$(OutputPath)Common.InternalService.dll" Pack="true" PackagePath="lib/$(TargetFramework)/" />
 	</ItemGroup>
 

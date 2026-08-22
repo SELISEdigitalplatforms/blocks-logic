@@ -12,7 +12,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Mail.DomainService\Mail.DomainService.csproj" />
     <ProjectReference Include="..\DomainService\DomainService.csproj" />
-    <ProjectReference Include="..\Identifier.DomainService\Identifier.DomainService.csproj" />
+    <ProjectReference Include="..\Common.InternalService\Common.InternalService.csproj" />
     <ProjectReference Include="..\Scheduler.DomainService\Scheduler.DomainService.csproj" />
   </ItemGroup>
 </Project>

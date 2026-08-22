@@ -1,7 +1,11 @@
+using Blocks.Extension.DependencyInjection;
 using Common.InternalService.Language;
 using Common.InternalService.Monitor;
-using Common.InternalService.Storage;
-using CloudConfiguration.DomainService.Shared.Services;
+using Common.InternalService.Shared.Services;
+using DomainService.ManagedService;
+using DomainService.ManagedService.Services;
+using DomainService.People;
+using DomainService.Projects;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -9,30 +13,16 @@ namespace Common.InternalService.Shared.Utilities
 {
     public static class ApplicationServiceCollectionExtensions
     {
-        public static void RegisterCommonInternalServices(this IServiceCollection serviceCollection)
+        public static void RegisterCommonInternalServices ( this IServiceCollection serviceCollection )
         {
             #region Language
             serviceCollection.AddSingleton<ILanguageManagementService, LanguageManagementService>();
             serviceCollection.AddSingleton<ILanguageRepository, LanguageRepository>();
             #endregion
 
-            #region Storage
+            #region Configuration
+            serviceCollection.AddSingleton<IConfigurationService, ConfigurationService>();
             serviceCollection.AddSingleton<IConfigurationRepository, ConfigurationRepository>();
-
-            serviceCollection.AddSingleton<IFileManagementService, FileManagementService>();
-            serviceCollection.AddSingleton<IFileRepository, FileRepository>();
-            serviceCollection.AddSingleton<IFileVersionRepository, FileVersionRepository>();
-            serviceCollection.AddSingleton<IDirectoryRepository, DirectoryRepository>();
-            serviceCollection.AddSingleton<IContentAccessRepository, ContentAccessRepository>();
-            serviceCollection.AddSingleton<IContentAccessResolver, ContentAccessResolver>();
-            serviceCollection.AddSingleton<IStorageServiceFactory, StorageServiceFactory>();
-
-            serviceCollection.AddTransient<AzureBlobStorageService>();
-            serviceCollection.AddTransient<AwsS3StorageService>();
-            serviceCollection.AddTransient<AwsS3CompatibleStorageService>();
-            serviceCollection.AddTransient<SftpStorageService>();
-
-            serviceCollection.AddTransient<IValidator<GetPreSignedUrlForUploadRequest>, GetPreSignedUrlForUploadRequestValidator>();
             #endregion
 
             #region Monitor
@@ -47,6 +37,18 @@ namespace Common.InternalService.Shared.Utilities
             serviceCollection.AddTransient<IValidator<SaveMonitorConfigurationRequest>, SaveMonitorConfigurationRequestValidator>();
             serviceCollection.AddTransient<IValidator<UpdateMonitorConfigurationRequest>, UpdateMonitorConfigurationRequestValidator>();
             #endregion
+
+            #region Identifier
+            // Register services
+            serviceCollection.AddSingleton<IProjectManagementService, ProjectManagementService>();
+            serviceCollection.AddSingleton<IProjectRepository, ProjectRepository>();
+
+            serviceCollection.AddSingleton<IPeopleService, PeopleService>();
+            serviceCollection.AddSingleton<IPeopleRepository, PeopleRepository>();
+            serviceCollection.AddSingleton<IServiceManagement, ServiceManagement>();
+            serviceCollection.AddSingleton<IServiceManagementRepository, ServiceManagementRepository>();
+            #endregion
+      
         }
     }
 }

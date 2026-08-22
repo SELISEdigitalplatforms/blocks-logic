@@ -1,7 +1,7 @@
-using CloudConfiguration.DomainService.Notification.Entities;
-using CloudConfiguration.DomainService.Notification.RequestModel;
-using CloudConfiguration.DomainService.Notification.ResponseModel;
-using CloudConfiguration.DomainService.Shared.Services;
+using Common.InternalService.Notification.Entities;
+using Common.InternalService.Notification.RequestModel;
+using Common.InternalService.Notification.ResponseModel;
+using Common.InternalService.Shared.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 

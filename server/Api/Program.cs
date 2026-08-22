@@ -1,7 +1,7 @@
+using Blocks.Extension.DependencyInjection;
 using Blocks.Extensions.DependencyInjection;
 using Blocks.Genesis;
 using BlocksTemplate.Api;
-using CloudConfiguration.DomainService.Shared.Utilities;
 using Common.InternalService.Shared.Utilities;
 using DomainService.Notification;
 using DomainService.Shared;
@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Scheduler.DomainService.Utils;
 using SeliseBlocks.ConfigurationDriver;
+using Storage.DomainService.Utilities;
 using Path = System.IO.Path;
 
 var serviceName = "blocks-logic";
@@ -52,15 +53,15 @@ builder.Services.Configure<MvcOptions>(options =>
 var wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
 Directory.CreateDirectory(wwwrootPath);
 ApplyFrontendRuntimeSettings(builder.Configuration, wwwrootPath);
-services.AddApplicationServices();
+
 //services.RegisterSharedServices();
 services.RegisterCommonInternalServices();
-services.RegisterBlocksEurolmServices();
 services.RegisterAllMailApplicationServices();
 services.RegisterBlocksObservabilityServices();
 services.AddWorkflowExecutionEngine();
-services.AddCloudConfigurationServices();
 services.AddSchedulerServices();
+services.AddStorageDomainServices();
+services.RegisterBlocksStorageServices();
 await services.RegisterBlocksDeploymentServicesAsync(vaultType);
 
 var app = builder.Build();

@@ -1,7 +1,4 @@
 using Blocks.Genesis;
-//using CloudConfiguration.DomainService.Mail.Entities;
-//using CloudConfiguration.DomainService.Mail.RequestModel;
-//using CloudConfiguration.DomainService.Shared.Services;
 using Mail.DomainService.Mails;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
