@@ -1,11 +1,12 @@
-import { test, expect } from "@playwright/test";
-import { openWorkflowList, pollRowHasWorkflow } from "../../support/workflow-helpers";
+import { test, expect } from "../../support/test-base"
+import { openWorkflowList, pollRowHasWorkflow } from "../../support/workflow-helpers"
 
 test.describe("delete workflow", () => {
+  test.beforeEach(async ({ page }) => {
+    await openWorkflowList(page)
+  })
+
   test("Delete confirmation dialog and successful deletion", async ({ page }) => {
-    await test.step("Open Workflow list in shared project", async () => {
-      await openWorkflowList(page)
-    });
 
     await test.step("[Security] Delete opens a confirmation dialog with the exact copy", async () => {
       const firstRow = page.getByRole("row").nth(1);

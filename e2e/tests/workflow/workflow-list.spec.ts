@@ -1,13 +1,14 @@
-import { test, expect } from "@playwright/test";
-import { openWorkflowList, pollRowHasWorkflow } from "../../support/workflow-helpers";
+import { test, expect } from "../../support/test-base"
+import { openWorkflowList, pollRowHasWorkflow } from "../../support/workflow-helpers"
 
 test.describe("workflow list", () => {
+  test.beforeEach(async ({ page }) => {
+    await openWorkflowList(page)
+  })
+
   test("Workflow list page: rendering, filters, pagination, navigation and publish state", async ({
     page,
   }) => {
-    await test.step("Open Workflow list in shared project", async () => {
-      await openWorkflowList(page)
-    });
 
     await test.step("[Positive] Workflow list page renders with heading, filters and Add Workflow action", async () => {
       await expect(page.getByRole("heading", { name: "Workflow" })).toBeVisible();

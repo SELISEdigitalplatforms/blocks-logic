@@ -10,6 +10,27 @@ export function e2eBaseUrl(): string {
   return requireEnv("E2E_BASE_URL")
 }
 
+export function e2eProjectId(): string | undefined {
+  const value = process.env.E2E_PROJECT_ID?.trim()
+  return value || undefined
+}
+
+/** Blocks OS — project delete only (Logic has no project Delete UI). */
+export function e2eOsBaseUrl(): string {
+  const explicit = process.env.E2E_OS_BASE_URL
+  if (explicit) return explicit.replace(/\/$/, "")
+
+  const logic = e2eBaseUrl()
+  if (/dev-logic/i.test(logic)) {
+    return logic.replace(/dev-logic/i, "dev-os")
+  }
+
+  throw new Error(
+    "E2E_OS_BASE_URL is not set and could not be derived from E2E_BASE_URL. " +
+      "Set E2E_OS_BASE_URL in e2e/.env.e2e (e.g. https://dev-os.blocksdevelopers.com).",
+  )
+}
+
 export function e2eCredentials(): { email: string; password: string } {
   return {
     email: requireEnv("E2E_USERNAME"),

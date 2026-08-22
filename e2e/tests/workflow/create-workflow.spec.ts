@@ -1,11 +1,12 @@
-import { test, expect } from "@playwright/test";
-import { openWorkflowList } from "../../support/workflow-helpers";
+import { test, expect } from "../../support/test-base"
+import { openWorkflowList } from "../../support/workflow-helpers"
 
 test.describe("create workflow", () => {
+  test.beforeEach(async ({ page }) => {
+    await openWorkflowList(page)
+  })
+
   test("Add Workflow dialog: validation, success and failure handling", async ({ page }) => {
-    await test.step("Open Workflow list in shared project", async () => {
-      await openWorkflowList(page)
-    })
 
       await test.step("[Positive] 'Add Workflow' opens the create-workflow dialog", async () => {
         await page.getByRole("button", { name: "Add Workflow" }).click();

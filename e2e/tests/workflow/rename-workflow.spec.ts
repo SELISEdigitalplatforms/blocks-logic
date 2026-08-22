@@ -1,11 +1,12 @@
-import { test, expect } from "@playwright/test";
-import { openWorkflowList, pollRowHasWorkflow } from "../../support/workflow-helpers";
+import { test, expect } from "../../support/test-base"
+import { openWorkflowList, pollRowHasWorkflow } from "../../support/workflow-helpers"
 
 test.describe("rename workflow", () => {
+  test.beforeEach(async ({ page }) => {
+    await openWorkflowList(page)
+  })
+
   test("Rename dialog: pre-filled name, validation and success", async ({ page }) => {
-    await test.step("Open Workflow list in shared project", async () => {
-      await openWorkflowList(page)
-    });
 
     await test.step("[Positive] Rename opens pre-filled with the workflow's current name", async () => {
       const firstRow = page.getByRole("row").nth(1);
