@@ -49,18 +49,19 @@ namespace DomainService.Workflow.Services
                 _logger.LogWarning("Workflow webhook authentication failed. TenantId={TenantId}", tenantId);
                 return false;
             }
+
+            AttachUser(request, principal);
             return true;
         }
 
-        public async Task<(bool isAuthorized, BlocksContext? context)> IsAuthorized(HttpRequest request, string tenantId, AuthorizationConfig config)
+        public async Task<bool> IsAuthorized(HttpRequest request, string tenantId, AuthorizationConfig config)
         {
             // Step 1 — authenticate first. Strict ordering: RBAC never runs for an unauthenticated caller.
-            BlocksContext context = null;
-            var (principal, rawToken) = await ValidateTokenAsync(request, tenantId);
+            var (principal, _) = await ValidateTokenAsync(request, tenantId);
             if (principal is null)
             {
                 _logger.LogWarning("Workflow webhook authorization failed (unauthenticated). TenantId={TenantId}", tenantId);
-                return (false, context);
+                return false;
             }
 
             // Step 2 — authorize org + roles + permissions combined by matchType.
@@ -69,43 +70,20 @@ namespace DomainService.Workflow.Services
             {
                 _logger.LogWarning("Workflow webhook authorization failed. TenantId={TenantId}, UserId={UserId}",
                     tenantId, GetUserId(principal));
-                return (false, context);
+                return false;
             }
 
-            // Create a security context for _blocksContext, populated from the validated caller's claims
-            // so downstream nodes (e.g. HTTP Action's "Use Blocks Authorization") see the real caller.
-            var tenant = _tenants.GetTenantByID(tenantId);
-            var applicationDomain = tenant.Applications?.FirstOrDefault()?.Domain ?? string.Empty;
-            context = BlocksContext.Create(
-               tenantId: tenant.TenantId,
-               roles: GetRoles(principal),
-               userId: GetUserId(principal),
-               isAuthenticated: true,
-               requestUri: request.Path.Value ?? string.Empty,
-               organizationId: GetOrganization(principal),
-               expireOn: GetExpireOn(principal),
-               email: GetClaimValue(principal, BlocksContext.EMAIL_CLAIM),
-               permissions: GetPermissions(principal),
-               userName: GetClaimValue(principal, BlocksContext.USER_NAME_CLAIM),
-               phoneNumber: GetClaimValue(principal, BlocksContext.PHONE_NUMBER_CLAIM),
-               displayName: GetClaimValue(principal, BlocksContext.DISPLAY_NAME_CLAIM),
-               oauthToken: rawToken ?? string.Empty,
-               originalTenantId: tenant.TenantId,
-               applicationDomain: applicationDomain,
-               impersonated: GetImpersonated(principal),
-               impersonationSessionId: GetClaimValue(principal, BlocksContext.IMPERSONATION_SESSION_ID_CLAIM));
-
-
-            return (true, context);
+            AttachUser(request, principal);
+            return true;
         }
 
         /// <summary>
         /// Best-effort: returns a Blocks-delegated bearer token for the current ambient context, or
         /// <c>null</c> when no delegation grant is available. <see cref="IDelegatedTokenProvider.GetTokenAsync"/>
         /// only <b>redeems</b> an existing delegation grant (<c>DelegatedTokenContext.Current</c>) — it does not
-        /// mint one from scratch. Today's trigger flows (webhook/schedule/data-gateway) do not populate that
-        /// grant, so this will commonly return <c>null</c>. Callers must treat <c>null</c> as "omit the
-        /// Authorization header", not as an error.
+        /// mint one from scratch. After a successful webhook auth the validated principal is assigned to
+        /// <c>HttpContext.User</c> so Genesis can mint a grant on send (or the in-process hop). Callers
+        /// must treat <c>null</c> as "omit the Authorization header", not as an error.
         /// </summary>
         public Task<string?> CreateBlocksAuthorizationTokenAsync(CancellationToken ct = default)
             => _delegatedTokenProvider.GetTokenAsync(ct);
@@ -228,22 +206,18 @@ namespace DomainService.Workflow.Services
         public static IReadOnlySet<string> GetPermissions(ClaimsPrincipal principal)
             => principal.FindAll(BlocksContext.PERMISSION_CLAIM).Select(c => c.Value).ToHashSet(StringComparer.Ordinal);
 
-        /// <summary>Reads a single-value claim by type, or <see cref="string.Empty"/> when absent.</summary>
-        private static string GetClaimValue(ClaimsPrincipal principal, string claimType)
-            => principal.FindFirst(claimType)?.Value ?? string.Empty;
-
-        /// <summary>Reads the standard JWT "exp" claim as a <see cref="DateTime"/>, or <see cref="DateTime.MinValue"/> when absent/unparsable.</summary>
-        private static DateTime GetExpireOn(ClaimsPrincipal principal)
+        /// <summary>
+        /// Puts the validated caller on the request so Genesis <c>BlocksContext.GetContext()</c>
+        /// and <c>IDelegationGrantFactory.CreateForSendAsync</c> see an authenticated user
+        /// (webhooks are anonymous, so JWT middleware never populated <c>HttpContext.User</c>).
+        /// </summary>
+        private static void AttachUser(HttpRequest request, ClaimsPrincipal principal)
         {
-            var expireOnValue = principal.FindFirst(BlocksContext.EXPIRE_ON_CLAIM)?.Value;
-            return DateTime.TryParse(expireOnValue, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var expireOn)
-                ? expireOn
-                : DateTime.MinValue;
+            if (request.HttpContext is not null)
+            {
+                request.HttpContext.User = principal;
+            }
         }
-
-        /// <summary>Reads the impersonation flag claim; treats anything other than the literal "true" as <c>false</c>.</summary>
-        private static bool GetImpersonated(ClaimsPrincipal principal)
-            => principal.FindFirst(BlocksContext.IMPERSONATED_CLAIM)?.Value == "true";
 
         /// <summary>
         /// How the Roles and Permissions rules combine to authorize the caller.

@@ -197,15 +197,37 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
+        public async Task IsAuthenticated_ValidToken_AssignsHttpContextUser()
+        {
+            var tenant = TenantWithCert(out var cert, out var certBytes);
+            _tenants.Setup(t => t.GetTenantByID(TenantId)).Returns(tenant);
+            _cacheDatabase.Setup(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
+                .ReturnsAsync((RedisValue)certBytes);
+
+            var request = RequestWithBearerToken(cert, orgId: "org-a", userId: "user-1");
+
+            var result = await _service.IsAuthenticated(request, TenantId);
+
+            result.Should().BeTrue();
+            request.HttpContext.User.Identity!.IsAuthenticated.Should().BeTrue();
+            request.HttpContext.User.FindFirst(BlocksContext.USER_ID_CLAIM)!.Value.Should().Be("user-1");
+            request.HttpContext.User.FindFirst(DelegationGrantFactory.TokenVersionClaim)!.Value.Should().Be("1");
+            request.HttpContext.User.FindFirst(DelegationGrantFactory.SecurityStampClaim)!.Value.Should().Be("stamp-1");
+        }
+
+        [Fact]
         public async Task IsAuthorized_UnauthenticatedCaller_ReturnsFalse()
         {
             var tenant = TenantWithCert(out _, out _);
             _tenants.Setup(t => t.GetTenantByID(TenantId)).Returns(tenant);
             var config = new AuthorizationConfig("org-a", null, null, AuthorizationMode.RolesOnly);
+            var httpContext = new DefaultHttpContext();
+            var originalUser = httpContext.User;
 
-            var result = await _service.IsAuthorized(new DefaultHttpContext().Request, TenantId, config);
+            var result = await _service.IsAuthorized(httpContext.Request, TenantId, config);
 
             result.Should().BeFalse();
+            httpContext.User.Should().BeSameAs(originalUser);
         }
 
         [Fact]
@@ -217,23 +239,17 @@ namespace XUnitTest.Workflow
                 .ReturnsAsync((RedisValue)certBytes);
 
             var request = RequestWithBearerToken(cert, orgId: "org-a", userId: "user-1");
+            var originalUser = request.HttpContext.User;
             var config = new AuthorizationConfig("org-b", null, null, AuthorizationMode.RolesOnly);
 
             var result = await _service.IsAuthorized(request, TenantId, config);
 
             result.Should().BeFalse();
+            request.HttpContext.User.Should().BeSameAs(originalUser);
         }
 
-        // Note: BlocksContext.SetContext's effect is intentionally not asserted here via
-        // BlocksContext.GetContext() after the await. AsyncLocal mutations made inside an awaited
-        // async method (IsAuthorized always awaits the cache lookup in ValidateTokenAsync first)
-        // are not visible to the caller once that method returns -- this is standard .NET
-        // ExecutionContext/AsyncLocal behavior, not a bug. The individual claim readers that feed
-        // BlocksContext.Create(...) are covered directly by the ClaimReaders_* tests above; this
-        // test instead exercises the full happy-path pipeline (cert validation, claim parsing,
-        // org + role rule evaluation) end-to-end.
         [Fact]
-        public async Task IsAuthorized_ValidTokenAndMatchingRules_ReturnsTrue()
+        public async Task IsAuthorized_ValidTokenAndMatchingRules_AssignsHttpContextUser()
         {
             var tenant = TenantWithCert(out var cert, out var certBytes);
             _tenants.Setup(t => t.GetTenantByID(TenantId)).Returns(tenant);
@@ -253,6 +269,10 @@ namespace XUnitTest.Workflow
             var result = await _service.IsAuthorized(request, TenantId, config);
 
             result.Should().BeTrue();
+            request.HttpContext.User.Identity!.IsAuthenticated.Should().BeTrue();
+            request.HttpContext.User.FindFirst(BlocksContext.USER_ID_CLAIM)!.Value.Should().Be("user-1");
+            request.HttpContext.User.FindFirst(DelegationGrantFactory.TokenVersionClaim)!.Value.Should().Be("1");
+            request.HttpContext.User.FindFirst(DelegationGrantFactory.SecurityStampClaim)!.Value.Should().Be("stamp-1");
         }
 
         // ---------- CreateBlocksAuthorizationTokenAsync ----------
@@ -327,6 +347,9 @@ namespace XUnitTest.Workflow
             {
                 new(BlocksContext.USER_ID_CLAIM, userId),
                 new(BlocksContext.ORGANIZATION_ID_CLAIM, orgId),
+                new(BlocksContext.TENANT_ID_CLAIM, TenantId),
+                new(DelegationGrantFactory.TokenVersionClaim, "1"),
+                new(DelegationGrantFactory.SecurityStampClaim, "stamp-1"),
             };
             claims.AddRange((roles ?? []).Select(r => new Claim(BlocksContext.ROLES_CLAIM, r)));
             if (email is not null) claims.Add(new Claim(BlocksContext.EMAIL_CLAIM, email));
