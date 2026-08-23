@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Scheduler.DomainService.Utils;
 using SeliseBlocks.ConfigurationDriver;
+using Storage.DomainService.Utilities;
 using Path = System.IO.Path;
 
 var serviceName = "blocks-logic";
@@ -61,6 +62,7 @@ services.RegisterBlocksObservabilityServices();
 services.AddWorkflowExecutionEngine();
 services.AddCloudConfigurationServices();
 services.AddSchedulerServices();
+services.AddStorageDomainServices();
 await services.RegisterBlocksDeploymentServicesAsync(vaultType);
 
 var app = builder.Build();
