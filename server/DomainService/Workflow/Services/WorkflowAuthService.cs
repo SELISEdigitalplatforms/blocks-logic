@@ -52,14 +52,15 @@ namespace DomainService.Workflow.Services
             return true;
         }
 
-        public async Task<bool> IsAuthorized(HttpRequest request, string tenantId, AuthorizationConfig config)
+        public async Task<(bool isAuthorized, BlocksContext? context)> IsAuthorized(HttpRequest request, string tenantId, AuthorizationConfig config)
         {
             // Step 1 — authenticate first. Strict ordering: RBAC never runs for an unauthenticated caller.
+            BlocksContext context = null;
             var (principal, rawToken) = await ValidateTokenAsync(request, tenantId);
             if (principal is null)
             {
                 _logger.LogWarning("Workflow webhook authorization failed (unauthenticated). TenantId={TenantId}", tenantId);
-                return false;
+                return (false, context);
             }
 
             // Step 2 — authorize org + roles + permissions combined by matchType.
@@ -68,34 +69,34 @@ namespace DomainService.Workflow.Services
             {
                 _logger.LogWarning("Workflow webhook authorization failed. TenantId={TenantId}, UserId={UserId}",
                     tenantId, GetUserId(principal));
-                return false;
+                return (false, context);
             }
 
             // Create a security context for _blocksContext, populated from the validated caller's claims
             // so downstream nodes (e.g. HTTP Action's "Use Blocks Authorization") see the real caller.
             var tenant = _tenants.GetTenantByID(tenantId);
             var applicationDomain = tenant.Applications?.FirstOrDefault()?.Domain ?? string.Empty;
-            var securityData = BlocksContext.Create(
-                tenantId: tenant.TenantId,
-                roles: GetRoles(principal),
-                userId: GetUserId(principal),
-                isAuthenticated: true,
-                requestUri: request.Path.Value ?? string.Empty,
-                organizationId: GetOrganization(principal),
-                expireOn: GetExpireOn(principal),
-                email: GetClaimValue(principal, BlocksContext.EMAIL_CLAIM),
-                permissions: GetPermissions(principal),
-                userName: GetClaimValue(principal, BlocksContext.USER_NAME_CLAIM),
-                phoneNumber: GetClaimValue(principal, BlocksContext.PHONE_NUMBER_CLAIM),
-                displayName: GetClaimValue(principal, BlocksContext.DISPLAY_NAME_CLAIM),
-                oauthToken: rawToken ?? string.Empty,
-                originalTenantId: tenant.TenantId,
-                applicationDomain: applicationDomain,
-                impersonated: GetImpersonated(principal),
-                impersonationSessionId: GetClaimValue(principal, BlocksContext.IMPERSONATION_SESSION_ID_CLAIM));
-            BlocksContext.SetContext(securityData, false);
+            context = BlocksContext.Create(
+               tenantId: tenant.TenantId,
+               roles: GetRoles(principal),
+               userId: GetUserId(principal),
+               isAuthenticated: true,
+               requestUri: request.Path.Value ?? string.Empty,
+               organizationId: GetOrganization(principal),
+               expireOn: GetExpireOn(principal),
+               email: GetClaimValue(principal, BlocksContext.EMAIL_CLAIM),
+               permissions: GetPermissions(principal),
+               userName: GetClaimValue(principal, BlocksContext.USER_NAME_CLAIM),
+               phoneNumber: GetClaimValue(principal, BlocksContext.PHONE_NUMBER_CLAIM),
+               displayName: GetClaimValue(principal, BlocksContext.DISPLAY_NAME_CLAIM),
+               oauthToken: rawToken ?? string.Empty,
+               originalTenantId: tenant.TenantId,
+               applicationDomain: applicationDomain,
+               impersonated: GetImpersonated(principal),
+               impersonationSessionId: GetClaimValue(principal, BlocksContext.IMPERSONATION_SESSION_ID_CLAIM));
 
-            return true;
+
+            return (true, context);
         }
 
         /// <summary>
