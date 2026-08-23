@@ -1,3 +1,4 @@
+using Blocks.Extension.DependencyInjection;
 using Blocks.Extensions.DependencyInjection;
 using Blocks.Genesis;
 using BlocksTemplate.Api;
@@ -63,6 +64,7 @@ services.AddWorkflowExecutionEngine();
 services.AddCloudConfigurationServices();
 services.AddSchedulerServices();
 services.AddStorageDomainServices();
+services.RegisterBlocksStorageServices();
 await services.RegisterBlocksDeploymentServicesAsync(vaultType);
 
 var app = builder.Build();
