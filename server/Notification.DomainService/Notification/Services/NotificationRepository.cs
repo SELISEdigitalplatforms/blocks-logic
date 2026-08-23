@@ -24,10 +24,10 @@ namespace DomainService.Notification
     {
         var blocksContext = BlocksContext.GetContext();
 
-        if(blocksContext.Impersonated)
-        {
-            return _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, "BlocksRootDb");
-        }
+        //if(blocksContext.Impersonated)
+        //{
+        //    return _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, "BlocksRootDb");
+        //}
 
         return _dbContextProvider.GetDatabase(blocksContext.TenantId);
     }
