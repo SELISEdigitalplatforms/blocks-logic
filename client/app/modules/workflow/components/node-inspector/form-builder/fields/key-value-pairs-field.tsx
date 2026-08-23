@@ -14,7 +14,23 @@ interface KeyValuePair {
   value: string;
 }
 
-function DroppableKeyInput({ id, value, onChange, placeholder, disabled, readOnly, isMultiline }: { id: string; value: string; onChange: (v: string) => void; placeholder: string; disabled?: boolean; readOnly?: boolean; isMultiline: boolean }) {
+function DroppableKeyInput({
+  id,
+  value,
+  onChange,
+  placeholder,
+  disabled,
+  readOnly,
+  isMultiline,
+}: {
+  id: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  disabled?: boolean;
+  readOnly?: boolean;
+  isMultiline: boolean;
+}) {
   return (
     <div className={cn("relative flex-1")}>
       <ExpressionHighlighter value={value || ""} isMultiline={isMultiline}>
@@ -102,7 +118,10 @@ export const KeyValuePairsField = ({
         <div key={index} className="group flex items-center gap-1">
           <Button
             variant="ghost"
-            className={cn("invisible h-fit w-fit p-1 hover:visible group-hover:visible",field.disabled && "hidden")}
+            className={cn(
+              "invisible h-fit w-fit p-1 hover:visible group-hover:visible",
+              field.disabled && "hidden",
+            )}
             onClick={() => handleRemovePair(index)}
           >
             <Trash2 className="h-4 w-4" />
@@ -119,7 +138,7 @@ export const KeyValuePairsField = ({
             />
 
             <ExpressionInputField
-              placeholder={field.keyLabel || "Value"}
+              placeholder={field.valueLabel || "Value"}
               value={pair.value}
               onChange={(value) => handleValueChange(index, value)}
               readOnly={readOnly}
@@ -127,14 +146,16 @@ export const KeyValuePairsField = ({
               config={config}
               field={{ ...field, id: `${field.id}-val-${index}` }}
               className="rounded-t-none border-t-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-              
             />
           </div>
         </div>
       ))}
       <Button
         variant="ghost"
-        className={cn("h-14 w-full rounded border border-dashed text-primary", field.disabled && "hidden")}
+        className={cn(
+          "h-14 w-full rounded border border-dashed text-primary",
+          field.disabled && "hidden",
+        )}
         onClick={() => handleAddPair()}
         disabled={field.disabled as boolean}
       >

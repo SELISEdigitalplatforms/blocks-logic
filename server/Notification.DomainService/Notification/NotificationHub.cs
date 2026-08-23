@@ -1,4 +1,4 @@
-﻿using Blocks.Genesis;
+using Blocks.Genesis;
 using DomainService.Shared;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
@@ -115,7 +115,13 @@ namespace DomainService.Notification
             if (Activity.Current == null) return;
 
             var tenantId = Context.User?.FindFirst("tenant_id")?.Value;
+            var originaltenantId = Context.User?.FindFirst("original_tenant_id")?.Value;
             var userId = Context.User?.FindFirst("user_id")?.Value;
+
+            // Compared the same way Genesis reads the claim when it builds a context from an HTTP
+            // request, so an impersonated connection and an impersonated request agree on which
+            // database the repository resolves.
+            var impersonated = Context.User?.FindFirst("impersonated")?.Value == "true";
 
             BlocksContext.SetContext(BlocksContext.Create(
                 tenantId: tenantId ?? string.Empty,
@@ -132,7 +138,8 @@ namespace DomainService.Notification
                 displayName: string.Empty,
                 oauthToken: string.Empty,
                 //refreshToken: string.Empty,
-                originalTenantId: tenantId
+                originalTenantId: originaltenantId,
+                impersonated: impersonated
             ));
 
         }
