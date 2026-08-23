@@ -21,16 +21,16 @@ namespace DomainService.Notification
         }
 
         private IMongoDatabase ResolvedClientDb()
-    {
-        var blocksContext = BlocksContext.GetContext();
-
-        if(blocksContext.Impersonated)
         {
-            return _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, "BlocksRootDb");
-        }
+            var blocksContext = BlocksContext.GetContext();
 
-        return _dbContextProvider.GetDatabase(blocksContext.TenantId);
-    }
+                if (blocksContext.Impersonated)
+                {
+                    return _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, "BlocksRootDb");
+                }
+
+                return _dbContextProvider.GetDatabase(blocksContext.TenantId);
+        }
 
         public void Save<T>(T data, string collectionName = "")
         {
