@@ -3,6 +3,7 @@ using DomainService.Entities;
 using DomainService.Notification;
 using DomainService.Shared;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using Moq;
 
@@ -21,13 +22,15 @@ namespace XUnitTest.Notifications
         private readonly Mock<IDbContextProvider> _provider = new();
         private readonly Mock<IMongoDatabase> _db = new();
         private readonly Mock<IBlocksSecret> _secret = new();
-
+        private readonly Mock<ILogger<NotificationRepository>> _logger = new();
         public NotificationRepositoryTests()
         {
             BlocksContext.IsTestMode = true;
             _secret.SetupGet(s => s.DatabaseConnectionString).Returns("conn");
             _provider.Setup(p => p.GetDatabase(It.IsAny<string>())).Returns(_db.Object);
             _provider.Setup(p => p.GetDatabase(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>())).Returns(_db.Object);
+            _logger.Setup(l => l.Log(It.IsAny<LogLevel>(), It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), It.IsAny<Exception>(), It.IsAny<Func<It.IsAnyType, Exception, string>>()));
+
         }
 
         public void Dispose()
@@ -75,7 +78,7 @@ namespace XUnitTest.Notifications
             return cursor.Object;
         }
 
-        private NotificationRepository Build() => new(_provider.Object, _secret.Object);
+        private NotificationRepository Build() => new(_provider.Object, _secret.Object, _logger.Object);
 
         private static OfflineNotification Notification(string id, string? forUser = null, params string[] readBy) => new()
         {

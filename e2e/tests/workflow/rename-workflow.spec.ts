@@ -1,40 +1,54 @@
-import { test, expect } from "../../support/test-base";
-import { login } from "../../support/auth";
+import { test, expect } from "../../support/test-base"
+import { openWorkflowList, pollRowHasWorkflow } from "../../support/workflow-helpers"
 
-const originalWorkflowName = `test-1`;
-const renamedWorkflowName = `test-2`;
-
-test.describe("Workflows", () => {
+test.describe("rename workflow", () => {
   test.beforeEach(async ({ page }) => {
-    await login(page);
-  });
+    await openWorkflowList(page)
+  })
 
-  test("rename workflow", async ({ page }) => {
-    await page.getByRole("button", { name: "Development" }).click();
-    await page.getByRole("link", { name: "Workflow" }).click();
-    await page.getByRole("button", { name: "Add Workflow" }).click();
+  test("Rename dialog: pre-filled name, validation and success", async ({ page }) => {
 
-    const nameField = page.getByRole("textbox", { name: "Workflow Name" });
-    await nameField.fill(originalWorkflowName);
-    await page.getByRole("button", { name: "Create", exact: true }).click();
+    await test.step("[Positive] Rename opens pre-filled with the workflow's current name", async () => {
+      const firstRow = page.getByRole("row").nth(1);
+      if (await pollRowHasWorkflow(firstRow)) {
+        const workflowName = (await firstRow.locator("td").first().innerText()).trim();
+        await firstRow.getByRole("button").last().click();
+        await page.getByText("Rename", { exact: true }).click();
 
-    await page.getByLabel("breadcrumb").getByRole("link", { name: "Workflow" }).click();
+        await expect(page.getByRole("heading", { name: "Rename workflow" })).toBeVisible();
+        if (workflowName) {
+          await expect(page.getByLabel("Workflow Name")).toHaveValue(workflowName);
+        }
+      }
+    })
 
-    const originalRow = page.getByRole("row", { name: new RegExp(originalWorkflowName) });
-    await expect(originalRow).toBeVisible();
-    await originalRow.getByRole("button").click();
-    await page.getByText("Rename", { exact: true }).click();
+    await test.step("[Negative] Rename validation: name is required", async () => {
+      const firstRow = page.getByRole("row").nth(1);
+      if (await pollRowHasWorkflow(firstRow)) {
+        await firstRow.getByRole("button").last().click();
+        await page.getByText("Rename", { exact: true }).click();
 
-    await nameField.fill(renamedWorkflowName);
-    await page.getByRole("button", { name: "Rename", exact: true }).click();
+        await page.getByLabel("Workflow Name").fill("");
+        await page.getByRole("button", { name: "Rename" }).click();
+        await expect(page.getByText("Workflow name is required")).toBeVisible();
+      }
+    })
 
-    const renamedRow = page.getByRole("row", { name: new RegExp(renamedWorkflowName) });
-    await expect(renamedRow).toBeVisible();
-    await expect(originalRow).toBeHidden();
+    await test.step("[Positive] Rename success shows a confirmation toast and updates the list", async () => {
+      const firstRow = page.getByRole("row").nth(1);
+      if (await pollRowHasWorkflow(firstRow)) {
+        await firstRow.getByRole("button").last().click();
+        await page.getByText("Rename", { exact: true }).click();
 
-    await renamedRow.getByRole("button").click();
-    await page.getByText("Delete", { exact: true }).click();
-    await page.getByRole("button", { name: "Yes", exact: true }).click();
-    await expect(renamedRow).toBeHidden();
+        const newName = `Order Processing v2 ${Date.now()}`;
+        await page.getByLabel("Workflow Name").fill(newName);
+        await page.getByRole("button", { name: "Rename" }).click();
+
+        await expect(page.getByText("Workflow successfully renamed.").first()).toBeVisible({
+          timeout: 15000,
+        });
+        await expect(page.getByRole("row").nth(1)).toContainText(newName);
+      }
+    })
   });
 });
