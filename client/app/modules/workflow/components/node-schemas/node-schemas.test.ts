@@ -464,6 +464,84 @@ describe("data gateway trigger v1", () => {
 });
 
 describe("data action v1", () => {
+  it("puts raw query mode first and defaults new nodes to raw mode", () => {
+    expect(NodeSchemaActionDataActionV1.schema.parameters.map((param) => param.key)).toEqual([
+      "rawQueryMode",
+      "authenticationType",
+      "clientCredential_composite",
+      "rawQuery",
+      "collectionName_composite",
+      "actionType",
+      "filter",
+      "fieldMapping",
+      "getFields",
+    ]);
+    expect(NodeSchemaActionDataActionV1.defaults.parameters.rawQueryMode).toBe(true);
+    expect(NodeSchemaActionDataActionV1.defaults.parameters.rawQuery).toBe("");
+  });
+
+  it("shows the raw query editor only in raw query mode", () => {
+    const rawQuery = field(NodeSchemaActionDataActionV1, "rawQuery");
+    expect(rawQuery.type).toBe("graphql-code-editor");
+    expect(rawQuery.dependsOn).toEqual({
+      key: "rawQueryMode",
+      value: true,
+      operator: "equals",
+    });
+  });
+
+  it("hides collection and action fields in raw query mode", () => {
+    expect(
+      field(NodeSchemaActionDataActionV1, "collectionName_composite").hidden({
+        rawQueryMode: true,
+      }),
+    ).toBe(true);
+    expect(
+      field(NodeSchemaActionDataActionV1, "actionType").hidden({
+        rawQueryMode: true,
+      }),
+    ).toBe(true);
+    expect(
+      field(NodeSchemaActionDataActionV1, "filter").hidden({
+        rawQueryMode: true,
+      }),
+    ).toBe(true);
+    expect(
+      field(NodeSchemaActionDataActionV1, "fieldMapping").hidden({
+        rawQueryMode: true,
+        actionType: "updateData",
+      }),
+    ).toBe(true);
+    expect(
+      field(NodeSchemaActionDataActionV1, "getFields").hidden({
+        rawQueryMode: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("keeps collection and action fields available in legacy mode", () => {
+    expect(
+      field(NodeSchemaActionDataActionV1, "collectionName_composite").hidden({
+        rawQueryMode: false,
+      }),
+    ).toBe(false);
+    expect(
+      field(NodeSchemaActionDataActionV1, "actionType").hidden({
+        rawQueryMode: false,
+      }),
+    ).toBe(false);
+    expect(
+      field(NodeSchemaActionDataActionV1, "filter").hidden({
+        rawQueryMode: false,
+      }),
+    ).toBe(false);
+    expect(
+      field(NodeSchemaActionDataActionV1, "getFields").hidden({
+        rawQueryMode: false,
+      }),
+    ).toBe(false);
+  });
+
   it("collection options map schema list", async () => {
     getSchemaList.mockResolvedValue({
       data: { items: [{ collectionName: "c", schemaName: "S", id: "i" }] },

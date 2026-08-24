@@ -9,6 +9,7 @@ export { CheckboxField } from "./checkbox-field";
 export { SwitchField } from "./switch-field";
 export { RadioField } from "./radio-field";
 export { JsonCodeEditor } from "./json-code-editor-field";
+export { GraphqlCodeEditor } from "./graphql-code-editor-field";
 export { CodeEditorField } from "./code-editor-field";
 export { KeyValueField } from "./key-value-field";
 export { KeyValuePairsField } from "./key-value-pairs-field";
