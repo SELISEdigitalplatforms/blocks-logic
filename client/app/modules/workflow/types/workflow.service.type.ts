@@ -88,7 +88,7 @@ export interface WorkflowExecution {
   finishedAt: string;
   duration: number;
   triggeredBy: string;
-  errorMessage: string;
+  errorMessage: string | null;
 }
 
 export interface IGetWorkflowExecutionsResponse {
@@ -113,6 +113,7 @@ export interface IGetWorkflowExecutionById {
   items: ExecutedItem[];
   executionMode: WorkflowExecutionMode;
   id: string;
+  errorMessage: string | null;
 }
 
 export interface ICreateWorkflowVersionPayload {

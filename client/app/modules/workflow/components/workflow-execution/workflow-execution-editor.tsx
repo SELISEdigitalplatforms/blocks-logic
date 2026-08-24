@@ -1,10 +1,7 @@
-import {
-  useGetWorkflowExecutionById,
-  useWorkflow,
-} from "@blocks-workflow/hooks";
+import { useGetWorkflowExecutionById, useWorkflow } from "@blocks-workflow/hooks";
 import { Background, BackgroundVariant, ReactFlow } from "@xyflow/react";
 import { useEffect } from "react";
-import { Loader2 } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import {
   WorkflowEditorDefaultEdgeOptions,
   WorkflowEditorNodeTypes,
@@ -16,23 +13,29 @@ import {
 } from "@blocks-workflow/utils/workflow-execution-editor.util";
 import { NodeInspector } from "../node-inspector";
 import { EditorFitConfig, WorkflowEditorControls } from "../workflow-editor-controls";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui-kits/hover-card/hover-card";
 
 import { getStatusConfig } from "../../utils/workflow-execution-list.util";
 import { WorkflowExecution } from "@blocks-workflow/types/workflow.service.type";
 import { cn } from "@/lib/utils";
 
-export const WorkflowExecutionEditor = ({
-  execution,
-}: {
-  execution?: WorkflowExecution;
-}) => {
+export const WorkflowExecutionEditor = ({ execution }: { execution?: WorkflowExecution }) => {
   const id = execution?.id || "";
   const { setWorkflow, onNodeClick, selectedNode, setEditorMode, setExecutionMode } = useWorkflow();
-  const { data: responseData, isFetched, isLoading } = useGetWorkflowExecutionById({
+  const {
+    data: responseData,
+    isFetched,
+    isLoading,
+  } = useGetWorkflowExecutionById({
     executionId: id,
   });
 
   const data = responseData?.data;
+  const errorMessage = data?.errorMessage?.trim();
 
   useEffect(() => {
     setEditorMode("execution");
@@ -53,9 +56,7 @@ export const WorkflowExecutionEditor = ({
         data.items,
       );
 
-      const nodeExecutionMap = new Map(
-        data.nodeExecutions.map((ne) => [ne.nodeId, ne]),
-      );
+      const nodeExecutionMap = new Map(data.nodeExecutions.map((ne) => [ne.nodeId, ne]));
 
       // Style nodes — only colour nodes on the executed path
       workflowData.nodes.forEach((node) => {
@@ -138,27 +139,40 @@ export const WorkflowExecutionEditor = ({
         <WorkflowEditorControls readonly />
       </ReactFlow>
       {execution && (
-        <div className="absolute left-4 top-4 z-50">
-          <div className="flex items-center gap-2 rounded-md border bg-background/95 px-3 py-2 shadow-sm backdrop-blur-sm">
+        <div className="absolute left-4 top-4 z-50 inline-flex flex-col items-start">
+          <div className="inline-flex w-auto items-center gap-2 rounded-md border bg-background/95 px-3 py-2 shadow-sm backdrop-blur-sm">
             <span className="text-sm font-medium">Status:</span>
             <div className="flex items-center gap-1.5">
               <div
-                className={cn(
-                  "h-2 w-2 rounded-full",
-                  getStatusConfig(execution.status).color,
-                )}
+                className={cn("h-2 w-2 rounded-full", getStatusConfig(execution.status).color)}
               ></div>
               <span
-                className={cn(
-                  "text-sm font-medium",
-                  getStatusConfig(execution.status).textClass,
-                )}
+                className={cn("text-sm font-medium", getStatusConfig(execution.status).textClass)}
               >
                 {getStatusConfig(execution.status).label}
               </span>
             </div>
+            {errorMessage && (
+              <HoverCard openDelay={100} closeDelay={100}>
+                <HoverCardTrigger asChild>
+                  <button
+                    type="button"
+                    className="ml-1 inline-flex w-auto items-center gap-1.5 border-l pl-3 text-sm font-medium text-error outline-none"
+                  >
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    Error
+                  </button>
+                </HoverCardTrigger>
+                <HoverCardContent
+                  align="start"
+                  side="bottom"
+                  className="w-auto max-w-xl border-error/30 bg-popover p-3 text-sm"
+                >
+                  <p className="whitespace-pre-wrap break-words leading-5">{errorMessage}</p>
+                </HoverCardContent>
+              </HoverCard>
+            )}
           </div>
-          
         </div>
       )}
       {selectedNode && <NodeInspector key={selectedNode.id} />}

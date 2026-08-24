@@ -87,6 +87,7 @@ describe("WorkflowExecutionEditor", () => {
           { nodeId: "n1", status: 4, inputItemCount: 1, outputItemCount: 1 },
         ],
         items: [{ nodeId: "n1", itemIndex: 0, data: {} }],
+        errorMessage: null,
       },
     });
     renderWithProviders(
@@ -97,6 +98,26 @@ describe("WorkflowExecutionEditor", () => {
       expect(svc.getWorkflowExecutionById).toHaveBeenCalledWith({ executionId: "e1" }),
     );
     await waitFor(() => expect(screen.getByText("Status:")).toBeTruthy());
+  });
+
+  it("shows the execution error trigger when an error message is present", async () => {
+    svc.getWorkflowExecutionById.mockResolvedValue({
+      data: {
+        workflowSnapshot: {
+          nodes: [],
+          edges: [],
+        },
+        nodeExecutions: [],
+        items: [],
+        errorMessage: "Node execution failed",
+      },
+    });
+    renderWithProviders(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      <WorkflowExecutionEditor execution={{ id: "e1", status: 5, executionMode: 1 } as any} />,
+    );
+
+    await waitFor(() => expect(screen.getByText("Error")).toBeTruthy());
   });
 });
 
