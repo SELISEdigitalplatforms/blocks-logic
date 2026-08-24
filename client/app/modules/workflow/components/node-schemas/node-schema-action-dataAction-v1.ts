@@ -18,95 +18,11 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
     version: "v1",
     parameters: [
       {
-        id: "actionType",
-        type: "select",
-        label: "Action Type",
-        info: "The type of data operation to perform",
-        key: "actionType",
-        required: true,
-        options: [
-          { label: "Get Data", value: "getData" },
-          { label: "Insert Data", value: "insertData" },
-          { label: "Update Data", value: "updateData" },
-          { label: "Delete Data", value: "deleteData" },
-        ],
-      },
-      {
-        id: "collection",
-        type: "select",
-        label: "Collection",
-        info: "Select the data collection to operate on",
-        key: "collectionName_composite",
-        required: true,
-        searchable: true,
-        options: (_data, config) => {
-          return dataService
-            .getSchemaList({
-              projectKey: config.projectKey,
-              pageNo: 1,
-              pageSize: 200,
-              sortDescending: true,
-              sortBy: "CreatedDate",
-              keyword: "",
-              schemaType: "",
-            })
-            .then((res) =>
-              res.data.items.map((item) => ({
-                value: `${item.collectionName}:::${item.schemaName}:::${item.id}`,
-                label: item.schemaName,
-              })),
-            );
-        },
-        onChange: (value: unknown, _data: unknown, config: { store?: WorkflowStore }) => {
-          const parts = (value as string).split(":::");
-          const collectionName = parts[0] || "";
-          const schemaName = parts[1] || "";
-          const schemaId = parts[2] || "";
-          const selectedProject = useProjectStore.getState().selectedProject;
-          const projectKey = selectedProject?.tenantId ?? "";
-
-          // Auto-populate schemaFields from collection schema
-          if (schemaId && projectKey) {
-            dataService
-              .getSchemaDetails(schemaId, projectKey)
-              .then(async (res) => {
-                const fields = res.data.fields ?? [];
-                const schemaFields = await resolveSchemaFields(
-                  fields,
-                  projectKey,
-                );
-                const fieldMapping = buildEmptyFieldMapping(schemaFields);
-
-                const store = config?.store;
-                if (!store) return;
-                const selectedNode = store.getState().selectedNode;
-                if (selectedNode) {
-                  store.getState().updateNode(selectedNode.id, {
-                    parameters: {
-                      ...(selectedNode.parameters as Record<string, unknown>),
-                      schemaFields,
-                      getFields: [],
-                      fieldMapping,
-                    },
-                  });
-                }
-              })
-              .catch(() => {
-                /* keep existing */
-              });
-          }
-
-          return {
-            collectionName_composite: value,
-            collectionName,
-            schemaName,
-            projectKey,
-            projectShortKey: selectedProject?.tenantSlug ?? "",
-            filter: {},
-            fieldMapping: {},
-            getFields: [],
-          };
-        },
+        id: "rawQueryMode",
+        type: "switch",
+        label: "Raw Query Mode",
+        info: "Enter a raw GraphQL query instead of building one from collection fields",
+        key: "rawQueryMode",
       },
       {
         id: "authenticationType",
@@ -157,6 +73,108 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
         },
       },
       {
+        id: "rawQuery",
+        type: "graphql-code-editor",
+        label: "Raw Query",
+        info: "Enter the raw GraphQL query to send to the Data Gateway API",
+        key: "rawQuery",
+        dependsOn: {
+          key: "rawQueryMode",
+          value: true,
+          operator: "equals",
+        },
+      },
+      {
+        id: "collection",
+        type: "select",
+        label: "Collection",
+        info: "Select the data collection to operate on",
+        key: "collectionName_composite",
+        required: true,
+        searchable: true,
+        options: (_data, config) => {
+          return dataService
+            .getSchemaList({
+              projectKey: config.projectKey,
+              pageNo: 1,
+              pageSize: 200,
+              sortDescending: true,
+              sortBy: "CreatedDate",
+              keyword: "",
+              schemaType: "",
+            })
+            .then((res) =>
+              res.data.items.map((item) => ({
+                value: `${item.collectionName}:::${item.schemaName}:::${item.id}`,
+                label: item.schemaName,
+              })),
+            );
+        },
+        onChange: (value: unknown, _data: unknown, config: { store?: WorkflowStore }) => {
+          const parts = (value as string).split(":::");
+          const collectionName = parts[0] || "";
+          const schemaName = parts[1] || "";
+          const schemaId = parts[2] || "";
+          const selectedProject = useProjectStore.getState().selectedProject;
+          const projectKey = selectedProject?.tenantId ?? "";
+
+          // Auto-populate schemaFields from collection schema
+          if (schemaId && projectKey) {
+            dataService
+              .getSchemaDetails(schemaId, projectKey)
+              .then(async (res) => {
+                const fields = res.data.fields ?? [];
+                const schemaFields = await resolveSchemaFields(fields, projectKey);
+                const fieldMapping = buildEmptyFieldMapping(schemaFields);
+
+                const store = config?.store;
+                if (!store) return;
+                const selectedNode = store.getState().selectedNode;
+                if (selectedNode) {
+                  store.getState().updateNode(selectedNode.id, {
+                    parameters: {
+                      ...(selectedNode.parameters as Record<string, unknown>),
+                      schemaFields,
+                      getFields: [],
+                      fieldMapping,
+                    },
+                  });
+                }
+              })
+              .catch(() => {
+                /* keep existing */
+              });
+          }
+
+          return {
+            collectionName_composite: value,
+            collectionName,
+            schemaName,
+            projectKey,
+            projectShortKey: selectedProject?.tenantSlug ?? "",
+            filter: {},
+            fieldMapping: {},
+            getFields: [],
+          };
+        },
+        hidden: (data: Record<string, unknown>) => data.rawQueryMode === true,
+      },
+      {
+        id: "actionType",
+        type: "select",
+        label: "Action Type",
+        info: "The type of data operation to perform",
+        key: "actionType",
+        required: true,
+        options: [
+          { label: "Get Data", value: "getData" },
+          { label: "Insert Data", value: "insertData" },
+          { label: "Update Data", value: "updateData" },
+          { label: "Delete Data", value: "deleteData" },
+        ],
+        hidden: (data: Record<string, unknown>) => data.rawQueryMode === true,
+      },
+      {
         id: "filter",
         type: "key-value-pairs",
         label: "Filter",
@@ -170,6 +188,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
           value: "insertData",
           operator: "notEquals",
         },
+        hidden: (data: Record<string, unknown>) => data.rawQueryMode === true,
       },
       {
         id: "fieldMapping",
@@ -179,7 +198,10 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
         key: "fieldMapping",
         hidden: (data: Record<string, unknown>) => {
           const actionType = data.actionType as string;
-          return actionType !== "insertData" && actionType !== "updateData";
+          return (
+            data.rawQueryMode === true ||
+            (actionType !== "insertData" && actionType !== "updateData")
+          );
         },
       },
       {
@@ -193,12 +215,15 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
           value: "getData",
           operator: "equals",
         },
+        hidden: (data: Record<string, unknown>) => data.rawQueryMode === true,
       },
     ],
     settings: [],
   },
   defaults: {
     parameters: {
+      rawQueryMode: true,
+      rawQuery: "",
       actionType: "getData",
       collectionName_composite: "",
       collectionName: "",

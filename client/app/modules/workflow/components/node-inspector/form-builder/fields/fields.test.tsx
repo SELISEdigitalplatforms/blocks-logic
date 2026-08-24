@@ -9,6 +9,8 @@ import { KeyTypeValueField } from "./key-type-value-field";
 import { TabWithTextField } from "./tab-with-text-field";
 import { ConditionsField } from "./conditions-field";
 import { SelectWithDescriptionField } from "./select-with-description-field";
+import { FIELD_COMPONENTS_REGISTRY } from "./fields";
+import { GraphqlCodeEditor } from "./graphql-code-editor-field";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const cfg: any = { projectKey: "pk", workflowId: "wf", nodeId: "n1" };
@@ -55,6 +57,63 @@ describe("KeyValueField", () => {
       target: { value: "not json" },
     });
     expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("GraphqlCodeEditor", () => {
+  it("accepts GraphQL text without JSON validation", () => {
+    const onChange = vi.fn();
+    renderWithProviders(
+      <GraphqlCodeEditor
+        field={field({
+          id: "graphql",
+          key: "rawQuery",
+          type: "graphql-code-editor",
+        })}
+        value=""
+        onChange={onChange}
+        data={{}}
+        config={cfg}
+        readOnly={false}
+      />,
+    );
+
+    const textarea = document.getElementById("graphql") as HTMLTextAreaElement;
+    fireEvent.change(textarea, {
+      target: { value: "query { users { items { name } } }" },
+    });
+
+    expect(onChange).toHaveBeenCalledWith("query { users { items { name } } }");
+    expect(document.querySelector(".text-destructive")).toBeNull();
+  });
+
+  it("does not emit changes while read-only", () => {
+    const onChange = vi.fn();
+    renderWithProviders(
+      <GraphqlCodeEditor
+        field={field({
+          id: "graphql",
+          key: "rawQuery",
+          type: "graphql-code-editor",
+        })}
+        value="query { users { items { name } } }"
+        onChange={onChange}
+        data={{}}
+        config={cfg}
+        readOnly={true}
+      />,
+    );
+
+    const textarea = document.getElementById("graphql") as HTMLTextAreaElement;
+    fireEvent.change(textarea, {
+      target: { value: "mutation { saveUser { itemId } }" },
+    });
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("is registered as a form-builder field type", () => {
+    expect(FIELD_COMPONENTS_REGISTRY["graphql-code-editor"]).toBe(GraphqlCodeEditor);
   });
 });
 
@@ -140,9 +199,7 @@ describe("FixedKeyValuePairsField", () => {
     );
     const val = document.getElementById("fk2-val-first") as HTMLTextAreaElement;
     fireEvent.change(val, { target: { value: "changed" } });
-    expect(onChange).toHaveBeenCalledWith(
-      expect.objectContaining({ first: "changed" }),
-    );
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ first: "changed" }));
   });
 
   it("resolves keys from an async fixedKeys function", async () => {
@@ -158,9 +215,7 @@ describe("FixedKeyValuePairsField", () => {
       />,
     );
     await waitFor(() => expect(fixedKeys).toHaveBeenCalled());
-    await waitFor(() =>
-      expect(document.getElementById("fk3-val-dynamicKey")).toBeTruthy(),
-    );
+    await waitFor(() => expect(document.getElementById("fk3-val-dynamicKey")).toBeTruthy());
   });
 });
 
@@ -195,9 +250,7 @@ describe("KeyTypeValueField", () => {
     );
     const input = screen.getByDisplayValue("k");
     fireEvent.change(input, { target: { value: "k2" } });
-    expect(onChange).toHaveBeenCalledWith([
-      expect.objectContaining({ key: "k2" }),
-    ]);
+    expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ key: "k2" })]);
   });
 });
 
@@ -215,8 +268,7 @@ describe("TabWithTextField", () => {
             { label: "Test", value: "0" },
             { label: "Prod", value: "1" },
           ],
-          displayValue: (d: Record<string, unknown>) =>
-            `url-${d.executionMode}`,
+          displayValue: (d: Record<string, unknown>) => `url-${d.executionMode}`,
         })}
         value=""
         onChange={onChange}
@@ -289,9 +341,7 @@ describe("ConditionsField", () => {
     );
     const left = document.getElementById("cond2-left-0") as HTMLInputElement;
     fireEvent.change(left, { target: { value: "json.a" } });
-    expect(onChange).toHaveBeenCalledWith([
-      expect.objectContaining({ left: "json.a" }),
-    ]);
+    expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ left: "json.a" })]);
   });
 
   it("removes a condition and keeps at least one row", () => {
@@ -337,9 +387,7 @@ describe("SelectWithDescriptionField", () => {
   });
 
   it("loads async options", async () => {
-    const options = vi
-      .fn()
-      .mockResolvedValue([{ value: "x", label: "Xray", description: "d" }]);
+    const options = vi.fn().mockResolvedValue([{ value: "x", label: "Xray", description: "d" }]);
     renderWithProviders(
       <SelectWithDescriptionField
         field={field({ id: "swd2", type: "select-with-description", options })}
