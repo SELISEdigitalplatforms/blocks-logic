@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { NuqsTestingAdapter } from "nuqs/adapters/testing";
@@ -81,5 +81,27 @@ describe("WorkflowDetails page", () => {
     await waitFor(() => expect(screen.getByText("Editor")).toBeTruthy());
     expect(screen.getByText("Executions")).toBeTruthy();
     expect(screen.getByText("Versions")).toBeTruthy();
+  });
+
+  it("dismisses the unadapted changes banner", async () => {
+    svc.getWorkflowById.mockResolvedValue({
+      data: {
+        itemId: "w1",
+        name: "My Flow",
+        isPublished: false,
+        isDirty: true,
+        nodes: [],
+        edges: [],
+        lastUpdatedDate: "2023-01-01T00:00:00Z",
+      },
+    });
+    providers(<WorkflowDetails />, "/workflow/w1");
+
+    await waitFor(() =>
+      expect(screen.getByText(/You have unadapted changes/)).toBeTruthy(),
+    );
+    fireEvent.click(screen.getByLabelText("Dismiss unadapted changes warning"));
+
+    expect(screen.queryByText(/You have unadapted changes/)).toBeNull();
   });
 });
