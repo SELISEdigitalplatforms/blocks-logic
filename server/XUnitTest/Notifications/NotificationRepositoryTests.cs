@@ -10,10 +10,10 @@ using Moq;
 namespace XUnitTest.Notifications
 {
     /// <summary>
-    /// Unit tests for <see cref="NotificationRepository"/>. The database is resolved once in the
-    /// constructor from the ambient <see cref="BlocksContext"/>, so the context is set before the
-    /// repository is built. Collection names are derived from the type name, which is what most of
-    /// these assertions pin.
+    /// Unit tests for <see cref="NotificationRepository"/>. The database is resolved lazily from the
+    /// ambient <see cref="BlocksContext"/> on every data-access call, so the context must be set
+    /// before invoking a repository method. Collection names are derived from the type name, which
+    /// is what most of these assertions pin.
     /// </summary>
     public class NotificationRepositoryTests : IDisposable
     {
@@ -89,21 +89,25 @@ namespace XUnitTest.Notifications
         };
 
         [Fact]
-        public void Constructor_ResolvesTheTenantDatabaseForANormalRequest()
+        public async Task DataAccess_ResolvesTheTenantDatabaseForANormalRequest()
         {
             SetContext();
+            Collection<NotificationConnection>("NotificationConnections");
+            var sut = Build();
 
-            Build();
+            await sut.GetItemsAsync<NotificationConnection>(c => true);
 
             _provider.Verify(p => p.GetDatabase("tenant-1"), Times.Once);
         }
 
         [Fact]
-        public void Constructor_ResolvesTheRootDatabaseWhileImpersonating()
+        public async Task DataAccess_ResolvesTheRootDatabaseWhileImpersonating()
         {
             SetContext(impersonated: true);
+            Collection<NotificationConnection>("NotificationConnections");
+            var sut = Build();
 
-            Build();
+            await sut.GetItemsAsync<NotificationConnection>(c => true);
 
             _provider.Verify(p => p.GetDatabase("conn", "BlocksRootDb", It.IsAny<bool>()), Times.Once);
             _provider.Verify(p => p.GetDatabase(It.IsAny<string>()), Times.Never);

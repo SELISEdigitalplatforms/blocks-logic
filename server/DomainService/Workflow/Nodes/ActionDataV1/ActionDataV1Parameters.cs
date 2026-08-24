@@ -6,6 +6,10 @@ namespace DomainService.Workflow.Nodes.ActionDataV1
     /// </summary>
     public class ActionDataV1Parameters
     {
+
+        public bool RawQueryMode { get; set; } = false;
+
+        public string RawQuery { get; set; } = string.Empty;
         /// <summary>
         /// The collection/schema name to operate on (e.g., "Tasks")
         /// </summary>
