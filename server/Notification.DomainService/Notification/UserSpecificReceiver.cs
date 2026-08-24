@@ -22,10 +22,11 @@ namespace DomainService.Notification
         }
         public async Task<IClientProxy> GetClientAsync(NotifierPayload notifierPayload)
         {
+            _logger.LogInformation("UserSpecificReceiver: GetClientAsync called with notifierPayload: {@notifierPayload}", notifierPayload);
             var hasUserIds = notifierPayload.UserIds != null && notifierPayload.UserIds.Count != 0;
             var hasRoles = notifierPayload.Roles != null && notifierPayload.Roles.Count != 0;
             var hasOrganizationIds = notifierPayload.OrganizationIds != null && notifierPayload.OrganizationIds.Count != 0;
-
+            _logger.LogInformation("UserSpecificReceiver: hasUserIds={hasUserIds}, hasRoles={hasRoles}, hasOrganizationIds={hasOrganizationIds}", hasUserIds, hasRoles, hasOrganizationIds);
             if (hasRoles)
             {
                 var roleUserIds = await GetUserIdsByRolesAsync(notifierPayload.Roles, notifierPayload.OrganizationIds);

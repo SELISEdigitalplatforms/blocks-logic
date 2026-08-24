@@ -1,10 +1,10 @@
+using Blocks.Extension.DependencyInjection;
 using Blocks.Genesis;
-using Dtos = DomainService.Dtos;
+using DomainService.Shared;
 using DomainService.Workflow;
 using DomainService.Workflow.Events;
 using DomainService.Workflow.Nodes.TriggerDataV1;
 using DomainService.Workflow.Utils;
-using DomainService.Shared;
 //using Iam.DomainService.Utilities;
 using Mail.DomainService.Dtos;
 using Mail.DomainService.Mails;
@@ -12,11 +12,13 @@ using Mail.DomainService.Shared.Utilities;
 using Scheduler.DomainService.Models;
 using Scheduler.DomainService.Utils;
 using SeliseBlocks.ConfigurationDriver;
+using Storage.DomainService.Utilities;
 using Worker;
 using Worker.Configuration;
+using Worker.Consumers;
 using Worker.Consumers.Mail;
 using Worker.Consumers.Workflow;
-using Worker.Consumers;
+using Dtos = DomainService.Dtos;
 
 const string _serviceName = "blocks-logic-worker";
 var vaultType = ApplicationConfigurations.ResolveVaultType();
@@ -59,6 +61,8 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             services.AddApplicationServices();
             services.AddSchedulerServices();
             services.AddSchedulerWorkerServices();
+            services.AddStorageDomainServices();
+            services.RegisterBlocksStorageServices();
             //services.RegisterSharedServices();
 
             ApplicationConfigurations.ConfigureWorker(services, LogicConstants.GetMessageConfiguration(secret.MessageConnectionString));

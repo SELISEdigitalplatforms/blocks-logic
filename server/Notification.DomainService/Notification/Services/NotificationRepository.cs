@@ -1,5 +1,6 @@
 using Blocks.Genesis;
 using DomainService.Shared;
+using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using System.Linq.Expressions;
 
@@ -12,25 +13,27 @@ namespace DomainService.Notification
         private IMongoDatabase _clientDb;
 
         private const string _notificationCollection = "OfflineNotifications";
+        private readonly ILogger<NotificationRepository> _logger;
 
-        public NotificationRepository(IDbContextProvider dbContextProvider, IBlocksSecret blocksSecret)
+        public NotificationRepository(IDbContextProvider dbContextProvider, IBlocksSecret blocksSecret, ILogger<NotificationRepository> logger)
 
         {
             _dbContextProvider = dbContextProvider;
             _blocksSecret = blocksSecret;
+            _logger = logger;
         }
 
         private IMongoDatabase ResolvedClientDb()
-    {
-        var blocksContext = BlocksContext.GetContext();
-
-        if(blocksContext.Impersonated)
         {
-            return _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, "BlocksRootDb");
-        }
+            var blocksContext = BlocksContext.GetContext();
+                _logger.LogInformation($"Blocks Context {blocksContext.ToString()}");
+            if (blocksContext.Impersonated)
+                {
+                    return _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, "BlocksRootDb");
+                }
 
-        return _dbContextProvider.GetDatabase(blocksContext.TenantId);
-    }
+                return _dbContextProvider.GetDatabase(blocksContext.TenantId);
+        }
 
         public void Save<T>(T data, string collectionName = "")
         {

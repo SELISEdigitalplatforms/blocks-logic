@@ -12,6 +12,7 @@
 
     <ItemGroup>
       <ProjectReference Include="..\CloudConfiguration.DomainService\CloudConfiguration.DomainService.csproj" />
+      <PackageReference Include="SeliseBlocks.StorageDriver.OS" />
     </ItemGroup>
 
 </Project>

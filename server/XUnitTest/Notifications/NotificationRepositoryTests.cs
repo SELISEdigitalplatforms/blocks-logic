@@ -3,16 +3,17 @@ using DomainService.Entities;
 using DomainService.Notification;
 using DomainService.Shared;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using Moq;
 
 namespace XUnitTest.Notifications
 {
     /// <summary>
-    /// Unit tests for <see cref="NotificationRepository"/>. The database is resolved once in the
-    /// constructor from the ambient <see cref="BlocksContext"/>, so the context is set before the
-    /// repository is built. Collection names are derived from the type name, which is what most of
-    /// these assertions pin.
+    /// Unit tests for <see cref="NotificationRepository"/>. The database is resolved lazily from the
+    /// ambient <see cref="BlocksContext"/> on every data-access call, so the context must be set
+    /// before invoking a repository method. Collection names are derived from the type name, which
+    /// is what most of these assertions pin.
     /// </summary>
     public class NotificationRepositoryTests : IDisposable
     {
@@ -21,13 +22,15 @@ namespace XUnitTest.Notifications
         private readonly Mock<IDbContextProvider> _provider = new();
         private readonly Mock<IMongoDatabase> _db = new();
         private readonly Mock<IBlocksSecret> _secret = new();
-
+        private readonly Mock<ILogger<NotificationRepository>> _logger = new();
         public NotificationRepositoryTests()
         {
             BlocksContext.IsTestMode = true;
             _secret.SetupGet(s => s.DatabaseConnectionString).Returns("conn");
             _provider.Setup(p => p.GetDatabase(It.IsAny<string>())).Returns(_db.Object);
             _provider.Setup(p => p.GetDatabase(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>())).Returns(_db.Object);
+            _logger.Setup(l => l.Log(It.IsAny<LogLevel>(), It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), It.IsAny<Exception>(), It.IsAny<Func<It.IsAnyType, Exception, string>>()));
+
         }
 
         public void Dispose()
@@ -75,7 +78,7 @@ namespace XUnitTest.Notifications
             return cursor.Object;
         }
 
-        private NotificationRepository Build() => new(_provider.Object, _secret.Object);
+        private NotificationRepository Build() => new(_provider.Object, _secret.Object, _logger.Object);
 
         private static OfflineNotification Notification(string id, string? forUser = null, params string[] readBy) => new()
         {
@@ -86,21 +89,25 @@ namespace XUnitTest.Notifications
         };
 
         [Fact]
-        public void Constructor_ResolvesTheTenantDatabaseForANormalRequest()
+        public async Task DataAccess_ResolvesTheTenantDatabaseForANormalRequest()
         {
             SetContext();
+            Collection<NotificationConnection>("NotificationConnections");
+            var sut = Build();
 
-            Build();
+            await sut.GetItemsAsync<NotificationConnection>(c => true);
 
             _provider.Verify(p => p.GetDatabase("tenant-1"), Times.Once);
         }
 
         [Fact]
-        public void Constructor_ResolvesTheRootDatabaseWhileImpersonating()
+        public async Task DataAccess_ResolvesTheRootDatabaseWhileImpersonating()
         {
             SetContext(impersonated: true);
+            Collection<NotificationConnection>("NotificationConnections");
+            var sut = Build();
 
-            Build();
+            await sut.GetItemsAsync<NotificationConnection>(c => true);
 
             _provider.Verify(p => p.GetDatabase("conn", "BlocksRootDb", It.IsAny<bool>()), Times.Once);
             _provider.Verify(p => p.GetDatabase(It.IsAny<string>()), Times.Never);

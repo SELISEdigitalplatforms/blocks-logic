@@ -2,6 +2,7 @@ import { FieldComponentProps, FormFieldType } from "../form-field.types";
 import { ArrayField } from "./array-field";
 import { CheckboxField } from "./checkbox-field";
 import { JsonCodeEditor } from "./json-code-editor-field";
+import { GraphqlCodeEditor } from "./graphql-code-editor-field";
 import { CodeEditorField } from "./code-editor-field";
 import { KeyValuePairsField } from "./key-value-pairs-field";
 import { KeyTypeValueField } from "./key-type-value-field";
@@ -43,6 +44,7 @@ export const FIELD_COMPONENTS_REGISTRY: Record<
   multiselect: MultiselectField,
   "conditional-multiselect": ConditionalMultiselectField,
   "json-code-editor": JsonCodeEditor,
+  "graphql-code-editor": GraphqlCodeEditor,
   "code-editor": CodeEditorField,
   "key-value-pairs": KeyValuePairsField,
   "fixed-key-value-pairs": FixedKeyValuePairsField,
