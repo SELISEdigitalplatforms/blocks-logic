@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using System.Diagnostics.CodeAnalysis;
 using DomainService.Workflow.Entities;
+using Blocks.Genesis;
 
 namespace DomainService.Workflow.Nodes.ActionHttpRequestV1
 {
@@ -64,11 +65,22 @@ namespace DomainService.Workflow.Nodes.ActionHttpRequestV1
         /// </summary>
         private async Task ApplyBlocksAuthorizationAsync(ActionHttpRequestV1Parameters parameters, Dictionary<string, string> headers)
         {
+            var context = BlocksContext.GetContext();
             if (!parameters.UseBlocksAuthorization) return;
             if (headers.Keys.Any(key => string.Equals(key, AuthorizationHeaderName, StringComparison.OrdinalIgnoreCase))) return;
 
             var token = await _workflowAuthService.CreateBlocksAuthorizationTokenAsync();
-            if (string.IsNullOrWhiteSpace(token)) return;
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                if(context != null && !string.IsNullOrWhiteSpace(context.OAuthToken))
+                {
+                    token = context.OAuthToken;
+                }
+                else
+                {
+                    return;
+                }
+            }
 
             headers[AuthorizationHeaderName] = $"Bearer {token}";
         }

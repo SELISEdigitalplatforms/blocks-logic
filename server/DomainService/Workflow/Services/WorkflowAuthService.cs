@@ -54,14 +54,15 @@ namespace DomainService.Workflow.Services
             return true;
         }
 
-        public async Task<bool> IsAuthorized(HttpRequest request, string tenantId, AuthorizationConfig config)
+        public async Task<(bool isAuthorized, BlocksContext? context)> IsAuthorized(HttpRequest request, string tenantId, AuthorizationConfig config)
         {
             // Step 1 — authenticate first. Strict ordering: RBAC never runs for an unauthenticated caller.
-            var (principal, _) = await ValidateTokenAsync(request, tenantId);
+            BlocksContext? context = null;
+            var (principal, rawToken) = await ValidateTokenAsync(request, tenantId);
             if (principal is null)
             {
                 _logger.LogWarning("Workflow webhook authorization failed (unauthenticated). TenantId={TenantId}", tenantId);
-                return false;
+                return (false, context);
             }
 
             // Step 2 — authorize org + roles + permissions combined by matchType.
@@ -70,11 +71,32 @@ namespace DomainService.Workflow.Services
             {
                 _logger.LogWarning("Workflow webhook authorization failed. TenantId={TenantId}, UserId={UserId}",
                     tenantId, GetUserId(principal));
-                return false;
+                return (false, context);
             }
 
+            var tenant = _tenants.GetTenantByID(tenantId);
+            var applicationDomain = tenant.Applications?.FirstOrDefault()?.Domain ?? string.Empty;
+            context = BlocksContext.Create(
+               tenantId: tenant.TenantId,
+               roles: GetRoles(principal),
+               userId: GetUserId(principal),
+               isAuthenticated: true,
+               requestUri: request.Path.Value ?? string.Empty,
+               organizationId: GetOrganization(principal),
+               expireOn: GetExpireOn(principal),
+               email: GetClaimValue(principal, BlocksContext.EMAIL_CLAIM),
+               permissions: GetPermissions(principal),
+               userName: GetClaimValue(principal, BlocksContext.USER_NAME_CLAIM),
+               phoneNumber: GetClaimValue(principal, BlocksContext.PHONE_NUMBER_CLAIM),
+               displayName: GetClaimValue(principal, BlocksContext.DISPLAY_NAME_CLAIM),
+               oauthToken: rawToken ?? string.Empty,
+               originalTenantId: tenant.TenantId,
+               applicationDomain: applicationDomain,
+               impersonated: GetImpersonated(principal),
+               impersonationSessionId: GetClaimValue(principal, BlocksContext.IMPERSONATION_SESSION_ID_CLAIM));
+
             AttachUser(request, principal);
-            return true;
+            return (true, context);
         }
 
         /// <summary>
@@ -205,6 +227,23 @@ namespace DomainService.Workflow.Services
 
         public static IReadOnlySet<string> GetPermissions(ClaimsPrincipal principal)
             => principal.FindAll(BlocksContext.PERMISSION_CLAIM).Select(c => c.Value).ToHashSet(StringComparer.Ordinal);
+
+        /// <summary>Reads a single-value claim by type, or <see cref="string.Empty"/> when absent.</summary>
+        private static string GetClaimValue(ClaimsPrincipal principal, string claimType)
+            => principal.FindFirst(claimType)?.Value ?? string.Empty;
+
+        /// <summary>Reads the standard JWT "exp" claim as a <see cref="DateTime"/>, or <see cref="DateTime.MinValue"/> when absent/unparsable.</summary>
+        private static DateTime GetExpireOn(ClaimsPrincipal principal)
+        {
+            var expireOnValue = principal.FindFirst(BlocksContext.EXPIRE_ON_CLAIM)?.Value;
+            return DateTime.TryParse(expireOnValue, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var expireOn)
+                ? expireOn
+                : DateTime.MinValue;
+        }
+
+        /// <summary>Reads the impersonation flag claim; treats anything other than the literal "true" as <c>false</c>.</summary>
+        private static bool GetImpersonated(ClaimsPrincipal principal)
+            => principal.FindFirst(BlocksContext.IMPERSONATED_CLAIM)?.Value == "true";
 
         /// <summary>
         /// Puts the validated caller on the request so Genesis <c>BlocksContext.GetContext()</c>

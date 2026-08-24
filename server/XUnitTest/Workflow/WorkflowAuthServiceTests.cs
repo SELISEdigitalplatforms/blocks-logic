@@ -226,7 +226,8 @@ namespace XUnitTest.Workflow
 
             var result = await _service.IsAuthorized(httpContext.Request, TenantId, config);
 
-            result.Should().BeFalse();
+            result.isAuthorized.Should().BeFalse();
+            result.context.Should().BeNull();
             httpContext.User.Should().BeSameAs(originalUser);
         }
 
@@ -244,7 +245,8 @@ namespace XUnitTest.Workflow
 
             var result = await _service.IsAuthorized(request, TenantId, config);
 
-            result.Should().BeFalse();
+            result.isAuthorized.Should().BeFalse();
+            result.context.Should().BeNull();
             request.HttpContext.User.Should().BeSameAs(originalUser);
         }
 
@@ -268,7 +270,10 @@ namespace XUnitTest.Workflow
 
             var result = await _service.IsAuthorized(request, TenantId, config);
 
-            result.Should().BeTrue();
+            result.isAuthorized.Should().BeTrue();
+            result.context.Should().NotBeNull();
+            result.context!.UserId.Should().Be("user-1");
+            result.context.IsAuthenticated.Should().BeTrue();
             request.HttpContext.User.Identity!.IsAuthenticated.Should().BeTrue();
             request.HttpContext.User.FindFirst(BlocksContext.USER_ID_CLAIM)!.Value.Should().Be("user-1");
             request.HttpContext.User.FindFirst(DelegationGrantFactory.TokenVersionClaim)!.Value.Should().Be("1");

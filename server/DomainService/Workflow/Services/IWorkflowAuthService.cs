@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http;
+using Blocks.Genesis;
 
 namespace DomainService.Workflow.Services
 {
@@ -10,10 +11,10 @@ namespace DomainService.Workflow.Services
         /// Authenticates the caller first (same as <see cref="IsAuthenticated"/>), then enforces the
         /// webhook's configured organization + roles + permissions rules. Returns <c>false</c> if either
         /// the caller is not authenticated or any rule fails.
-        /// On success, assigns the validated principal to <c>request.HttpContext.User</c> so Genesis
-        /// can mint a delegation grant on the subsequent send (or in-process hop).
+        /// On success, also returns a <see cref="BlocksContext"/> built from the validated JWT
+        /// and assigns the principal to <c>request.HttpContext.User</c>.
         /// </summary>
-        public Task<bool> IsAuthorized(HttpRequest request, string tenantId, WorkflowAuthService.AuthorizationConfig config);
+        public Task<(bool isAuthorized, BlocksContext? context)> IsAuthorized(HttpRequest request, string tenantId, WorkflowAuthService.AuthorizationConfig config);
 
         /// <summary>
         /// Best-effort: returns a Blocks-delegated bearer token for the current ambient context, or

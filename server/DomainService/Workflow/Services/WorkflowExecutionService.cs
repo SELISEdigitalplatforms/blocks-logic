@@ -194,9 +194,10 @@ namespace DomainService.Workflow.Services
                 {
                     var authConfig = ParseAuthorizationConfig(triggerNode.Parameters);
                     if (authConfig is null) throw new UnauthorizedAccessException();
-                    var isAuthorizedUser = await _workflowAuthService.IsAuthorized(
+                    var (isAuthorizedUser, context) = await _workflowAuthService.IsAuthorized(
                         _httpContextAccessor.HttpContext.Request, workflow.TenantId, authConfig);
                     if (!isAuthorizedUser) throw new UnauthorizedAccessException();
+                    BlocksContext.SetContext(context);
                 }
 
                 var normalizedInput = new BsonArray();
@@ -241,6 +242,7 @@ namespace DomainService.Workflow.Services
                 if (responseMode != null && responseMode.ToString().ToLower() == "last")
                 {
                     await AttachDelegationGrantAsync();
+
                     var response = await _workflowEngineService.RunNodeInProcessAsync(payload);
                     var responseModeData = triggerNode.Parameters.GetValue("httpResponseData");
                     if (responseModeData == null)
