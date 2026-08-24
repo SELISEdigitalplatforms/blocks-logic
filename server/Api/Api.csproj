@@ -20,21 +20,12 @@
     <PackageReference Include="FluentValidation.AspNetCore" />
     <!--<PackageReference Include="SeliseBlocks.DataGateway.Driver" />-->
     <PackageReference Include="HotChocolate.AspNetCore" />
-    <PackageReference Include="SeliseBlocks.EurolmDriver.OS" />
+    <PackageReference Include="SeliseBlocks.Localization.OS" />
     <PackageReference Include="SeliseBlocks.ReleaseDriver.OS" />
     <PackageReference Include="SeliseBlocks.MonitorDriver.OS" />
     <!--<PackageReference Include="SeliseBlocks.StorageDriver.OS" />-->
     <PackageReference Include="SeliseBlocks.ConfigurationDriver" />
     <PackageReference Include="SeliseBlocks.Genesis.OS" />
-    <!--
-      SeliseBlocks.EurolmDriver.OS still depends on the legacy "SeliseBlocks.Genesis"
-      package (not yet migrated to "SeliseBlocks.Genesis.OS"). Both ship an assembly
-      named Blocks.Genesis.dll; the host copies the higher assembly version (10.1.7.0)
-      over the newer SeliseBlocks.Genesis.OS 4.0.8 assembly (4.0.8.0), which then hides
-      Delegation types (IDelegatedTokenProvider) at runtime. Exclude its compile/runtime
-      assets so the OS assembly is the one loaded by the API host.
-    -->
-    <PackageReference Include="SeliseBlocks.Genesis" VersionOverride="10.1.7" ExcludeAssets="compile;runtime" />
   </ItemGroup>
   <ItemGroup>
     <!--<ProjectReference Include="..\Authentication.DomainService\Authentication.DomainService.csproj" />-->
