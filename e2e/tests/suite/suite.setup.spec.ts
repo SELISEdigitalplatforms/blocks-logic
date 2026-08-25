@@ -16,9 +16,6 @@ test.describe("logic suite setup", () => {
       page.getByRole("heading", { name: /Your Blocks Projects|Welcome to SELISE Blocks/ }),
     ).toBeVisible({ timeout: 30_000 })
 
-    fs.mkdirSync(path.dirname(LOGIC_SESSION_PATH), { recursive: true })
-    await page.context().storageState({ path: LOGIC_SESSION_PATH })
-
     const { projectName, dashboardUrl, itemId } = await reuseOrCreateSharedProject(page)
     if (!itemId) {
       throw new Error(`Could not resolve itemId from dashboard URL: ${dashboardUrl}`)
@@ -29,5 +26,11 @@ test.describe("logic suite setup", () => {
       itemId,
       dashboardUrl: dashboardUrl.replace(/\?.*$/, ""),
     })
+
+    // Persist AFTER the shared project is open so localStorage keeps the selected
+    // project/environment. Saving only post-login makes /app/{id}/dashboard bounce
+    // back to /app/console in feature tests.
+    fs.mkdirSync(path.dirname(LOGIC_SESSION_PATH), { recursive: true })
+    await page.context().storageState({ path: LOGIC_SESSION_PATH })
   })
 })

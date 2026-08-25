@@ -94,9 +94,10 @@ E2E_FEATURES=create npm run test:features
 
 Playwright projects: **`logic-setup` → `logic` → `logic-teardown`**
 
-1. **Suite setup** (`tests/suite/suite.setup.spec.ts`) — OIDC login, save `logic-session.json`, reuse or create one shared project, write `logic-project.json`. Does **not** open Workflow.
-2. **Features** (`tests/workflow/*.spec.ts`, …) — use session; open shared dashboard then feature area via helpers (`openWorkflowList` seeds Workflow if empty). Failures keep the project.
-3. **Suite teardown** (`tests/suite/suite.teardown.spec.ts`) — delete project on **Blocks OS** only when every `logic` test passed (unless `E2E_KEEP_PROJECT=1`).
+1. **Suite setup** (`tests/suite/suite.setup.spec.ts`) — OIDC login, reuse or create one shared project, write `logic-project.json`, then save `logic-session.json` **after** the dashboard is open (so localStorage keeps project/env). Does **not** open Workflow.
+2. **Features** (`tests/workflow/*.spec.ts`, …) — use session; direct `goto` to `/app/{itemId}/dashboard`, then feature area via helpers (`openWorkflowList` seeds Workflow if empty). Failures keep the project.
+3. **Session / context recovery** — login gate or console bounce → re-auth if needed, one env-chip open to reseed localStorage, persist session (never create a new project).
+4. **Suite teardown** (`tests/suite/suite.teardown.spec.ts`) — delete project on **Blocks OS** only when every `logic` test passed (unless `E2E_KEEP_PROJECT=1`).
 
 ## Layout
 
