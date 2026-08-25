@@ -168,16 +168,6 @@ async function deleteProjectOnOs(page: Page, projectName: string): Promise<boole
   return true
 }
 
-async function clickAppSwitcherAndNavigate(page: Page, appNamePattern: RegExp) {
-  const appSwitcher = page.getByRole("button", { name: "SELISE Blocks apps" })
-  await expect(appSwitcher).toBeVisible({ timeout: 10_000 })
-  await appSwitcher.click()
-
-  const appLink = page.getByText(appNamePattern).first()
-  await expect(appLink).toBeVisible({ timeout: 5_000 })
-  await appLink.click()
-}
-
 async function freeProjectSlotIfNeeded(page: Page) {
   await ensureConsole(page, "logic")
 
@@ -208,9 +198,8 @@ async function freeProjectSlotIfNeeded(page: Page) {
  *
  * Flow:
  *   Logic console → "Add Project" → redirected to OS create-project wizard →
- *   fill wizard → project created on OS environments page →
- *   app switcher → click Logic → Logic console → click the new project →
- *   Logic dashboard (with Workflow sidebar link visible)
+ *   fill wizard → project created on OS (environments or console) →
+ *   navigate to Logic console → open the new project → Logic dashboard
  */
 export async function createProject(page: Page) {
   await test.step("Start a new project (redirects to OS)", async () => {
@@ -232,7 +221,8 @@ export async function createProject(page: Page) {
     await expect(page).toHaveURL(/\/app\/create-project$/, { timeout: 15_000 })
   })
 
-  const projectName = `Test Project ${Date.now()}`
+  const baseProjectName = process.env.PROJECT_NAME?.trim() || "Test Project"
+  const projectName = `${baseProjectName} ${Date.now()}`
   await test.step("Name the project and accept the agreements", async () => {
     await expect(page.getByRole("heading", { name: "Name your project" })).toBeVisible({
       timeout: 30_000,
@@ -270,14 +260,18 @@ export async function createProject(page: Page) {
     await expect(page.getByText("Your project has been created.", { exact: true })).toBeVisible({
       timeout: 30_000,
     })
-    await expect(page).toHaveURL(/\/app\/project\/[^/]+\/environments$/, {
+    // Dev often lands on /project/{id}/environments; prod OS may send you
+    // straight back to /app/console after the success toast.
+    await expect(page).toHaveURL(/\/app\/(console|project\/[^/]+\/environments)\/?$/, {
       timeout: 20_000,
     })
   })
 
-  await test.step("Switch back to Logic via app switcher", async () => {
-    await clickAppSwitcherAndNavigate(page, /Logic/i)
-    await page.waitForURL(/dev-logic|localhost/i, { timeout: 30_000 })
+  await test.step("Return to Logic console", async () => {
+    // Prefer direct navigation over the app switcher: known destination,
+    // no ambiguous text matches, no OIDC initiate race after create.
+    await page.goto(`${e2eBaseUrl()}/app/console`, { waitUntil: "domcontentloaded" })
+    await ensureAuthenticated(page)
     await ensureConsole(page, "logic")
   })
 
