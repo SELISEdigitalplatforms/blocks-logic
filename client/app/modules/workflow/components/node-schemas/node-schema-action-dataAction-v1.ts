@@ -1,3 +1,4 @@
+import React from "react";
 import { useProjectStore } from "@seliseblocks/genesis-os";
 import { NodeSchemaDefinition } from "./node-schema.type";
 import type { WorkflowStore } from "@blocks-workflow/store";
@@ -17,6 +18,25 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
     category: "action",
     version: "v1",
     parameters: [
+      {
+        id: "query-mode-notes",
+        type: "callout-accordion-display",
+        key: "queryModeNotes",
+        displayValue: () => ({
+          title: "Notes on query fields",
+          description: React.createElement(
+            "span",
+            null,
+            "Guided query fields are being phased out and will be removed soon. Please use ",
+            React.createElement(
+              "code",
+              { className: "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold" },
+              "Raw Query"
+            ),
+            " for new data action configurations."
+          ),
+        }),
+      },
       {
         id: "rawQueryMode",
         type: "switch",
