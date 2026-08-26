@@ -17,6 +17,9 @@ export const Schedules = () => {
     pageNumber: Number(queryParams.page),
     pageSize: Number(queryParams.pageSize),
   });
+  const schedules = data?.data || [];
+  const isListLoading = isLoading || isFetching;
+  const isEmpty = !isListLoading && schedules.length === 0;
 
   return (
     <section className="flex flex-col gap-6 p-4">
@@ -26,20 +29,26 @@ export const Schedules = () => {
         </div>
       </div>
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <ScheduleFilterToolBar />
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-primary hover:text-primary"
-            onClick={() => setIsCreateOpen(true)}
-          >
-            <Plus className="h-4 w-4" />
-            <span className="sr-only sm:not-sr-only sm:ml-2.5">Add Schedule</span>
-          </Button>
-        </CardHeader>
-        <CardContent className="mt-5">
-          <ScheduleList schedules={data?.data || []} isLoading={isLoading || isFetching} />
+        {!isEmpty && (
+          <CardHeader className="flex flex-row items-center justify-between mb-0">
+            <ScheduleFilterToolBar />
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-primary hover:text-primary"
+              onClick={() => setIsCreateOpen(true)}
+            >
+              <Plus className="h-4 w-4" />
+              <span className="sr-only sm:not-sr-only sm:ml-2.5">Add Schedule</span>
+            </Button>
+          </CardHeader>
+        )}
+        <CardContent>
+          <ScheduleList
+            schedules={schedules}
+            isLoading={isListLoading}
+            onCreateSchedule={() => setIsCreateOpen(true)}
+          />
 
           {!!data?.totalCount && (
             <div className="mt-5 flex justify-end">
