@@ -4,11 +4,14 @@ import { useWorkflow } from "../../hooks";
 import { LayoutWithIO, LayoutWithListener } from "./layouts";
 import { NodeSchemasDefinition } from "../node-schemas/node-schemas";
 import { NodeSchema } from "../node-schemas/node-schema.type";
+import type { ComponentType } from "react";
 
-export const NodeInspectorLayouts: Record<
-  string,
-  React.ComponentType<{ schema: NodeSchema | null }>
-> = {
+export type NodeInspectorLayoutProps = {
+  schema: NodeSchema | null;
+  guide?: ComponentType | null;
+};
+
+export const NodeInspectorLayouts: Record<string, React.ComponentType<NodeInspectorLayoutProps>> = {
   webhook: LayoutWithListener,
 };
 
@@ -43,7 +46,10 @@ export const NodeInspector = () => {
           e.preventDefault();
         }}
       >
-        <NodeInspectorLayout schema={nodeSchemaDefinition?.schema || null} />
+        <NodeInspectorLayout
+          schema={nodeSchemaDefinition?.schema || null}
+          guide={nodeSchemaDefinition?.guide || null}
+        />
       </SheetContent>
     </Sheet>
   );

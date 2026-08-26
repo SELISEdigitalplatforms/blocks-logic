@@ -1,8 +1,10 @@
 import { API_BASES } from "@/constants/endpoint.constant";
 import { agentService } from "@/modules/workflow/services/agent.service";
+import { NodeGuideActionAiAgentV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
 
 export const NodeSchemaActionAiAgentV1: NodeSchemaDefinition = {
+  guide: NodeGuideActionAiAgentV1,
   schema: {
     type: "agent",
     category: "action",

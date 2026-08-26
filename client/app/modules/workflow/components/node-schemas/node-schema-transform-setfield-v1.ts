@@ -1,6 +1,8 @@
+import { NodeGuideTransformSetFieldV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
 
 export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
+  guide: NodeGuideTransformSetFieldV1,
   schema: {
     type: "setfield",
     category: "transform",

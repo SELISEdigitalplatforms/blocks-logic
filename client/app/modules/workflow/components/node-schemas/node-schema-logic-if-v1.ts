@@ -1,6 +1,8 @@
+import { NodeGuideLogicIfV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
 
 export const NodeSchemaLogicIfV1: NodeSchemaDefinition = {
+  guide: NodeGuideLogicIfV1,
   schema: {
     type: "if",
     category: "logic",

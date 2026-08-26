@@ -1,4 +1,5 @@
 import { languageManagerService } from "@blocks-workflow/services/language.manager.service";
+import { NodeGuideActionSendMailV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
 import { emailService } from "@blocks-workflow/services/email.services";
 import { IEmailTemplate } from "../../models/email";
@@ -35,6 +36,7 @@ function findTemplate(
 // ── Schema ─────────────────────────────────────────────────────────────
 
 export const NodeSchemaActionSendMailV1: NodeSchemaDefinition = {
+  guide: NodeGuideActionSendMailV1,
   schema: {
     type: "sendMail",
     category: "action",
