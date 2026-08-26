@@ -1,17 +1,28 @@
 import { Button } from "@/components/ui-kits/button/button";
 import { SheetHeader, SheetTitle } from "@/components/ui-kits/sheet/sheet";
 import { useWorkflow, useStepExecute, useHandleExecuteStep } from "@blocks-workflow/hooks";
-import { Pen, Rocket, X } from "lucide-react";
+import { BookOpen, Pen, Rocket, X } from "lucide-react";
 import { getNodeDefinition } from "../node-library-panel";
 import { useEffect, useState } from "react";
 import { showErrorToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@radix-ui/react-tooltip";
 
-export const NodeInspectorHeader = () => {
-  const { selectedNode, updateNode, isNodeNameUnique, closeConfigModal, editorMode } = useWorkflow();
-  
+type NodeInspectorHeaderProps = {
+  hasGuide?: boolean;
+  isGuideOpen?: boolean;
+  onToggleGuide?: () => void;
+};
+
+export const NodeInspectorHeader = ({
+  hasGuide = false,
+  isGuideOpen = false,
+  onToggleGuide,
+}: NodeInspectorHeaderProps) => {
+  const { selectedNode, updateNode, isNodeNameUnique, closeConfigModal, editorMode } =
+    useWorkflow();
+
   const { handleExecuteStep, executeStepModal } = useHandleExecuteStep();
-    
+
   // Declared before the early return: React requires the same hooks in the same
   // order on every render, and bailing out above them changes the count as soon
   // as a node is selected.
@@ -25,31 +36,31 @@ export const NodeInspectorHeader = () => {
   }, [selectedNode?.name, isRenaming]);
 
   if (!selectedNode) return null;
-  
-    const handleRenameSubmit = () => {
-      const newName = editName.trim();
-      if (newName && newName !== selectedNode?.name) {
-        if (!isNodeNameUnique(newName, selectedNode?.id)) {
-          showErrorToast({
-            title: "Validation Error",
-            errors: "A node with this name already exists.",
-          });
-          return;
-        }
-        updateNode(selectedNode?.id, { name: newName });
+
+  const handleRenameSubmit = () => {
+    const newName = editName.trim();
+    if (newName && newName !== selectedNode?.name) {
+      if (!isNodeNameUnique(newName, selectedNode?.id)) {
+        showErrorToast({
+          title: "Validation Error",
+          errors: "A node with this name already exists.",
+        });
+        return;
       }
+      updateNode(selectedNode?.id, { name: newName });
+    }
+    setIsRenaming(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      handleRenameSubmit();
+    } else if (e.key === "Escape") {
       setIsRenaming(false);
-    };
-  
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === "Enter") {
-        handleRenameSubmit();
-      } else if (e.key === "Escape") {
-        setIsRenaming(false);
-        setEditName(selectedNode?.name || "");
-      }
-    };
-  
+      setEditName(selectedNode?.name || "");
+    }
+  };
+
   const editorNode = getNodeDefinition(
     selectedNode.category,
     selectedNode.type,
@@ -75,27 +86,53 @@ export const NodeInspectorHeader = () => {
           ) : (
             <span className="font-semibold">{selectedNode?.name}</span>
           )}
-          {!isRenaming && editorMode === "editor" && (<Button variant="ghost" size="icon" className="h-fit w-fit p-1" onClick={() => setIsRenaming(true)}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Pen className="size-4 cursor-pointer" />
-              </TooltipTrigger>
-            <TooltipContent>
-              <p className="border border-border rounded-md px-2 py-1 font-normal">Rename Node</p>
-            </TooltipContent>
-            </Tooltip>
-          </Button>)}
-          
+          {!isRenaming && editorMode === "editor" && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-fit w-fit p-1"
+              onClick={() => setIsRenaming(true)}
+            >
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Pen className="size-4 cursor-pointer" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="border border-border rounded-md px-2 py-1 font-normal">
+                    Rename Node
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </Button>
+          )}
         </SheetTitle>
         <div className="flex items-center gap-2">
           {/* <Button variant="outline" size="sm" className="gap-2">
             <Eye className="h-4 w-4" />
             Focused View
           </Button> */}
-          {editorMode === "editor" && (<Button size="sm" className="gap-2" onClick={() => handleExecuteStep(selectedNode?.id, true)}>
-            <Rocket className="h-4 w-4" />
-            Execute Step
-          </Button>)}
+          {hasGuide && (
+            <Button
+              variant={isGuideOpen ? "secondary" : "outline"}
+              size="sm"
+              className="gap-2"
+              onClick={onToggleGuide}
+            >
+              <BookOpen className="h-4 w-4" />
+              Guide
+            </Button>
+          )}
+          {editorMode === "editor" && (
+            <Button
+              size="sm"
+              className="gap-2"
+              onClick={() => handleExecuteStep(selectedNode?.id, true)}
+            >
+              <Rocket className="h-4 w-4" />
+              Execute Step
+            </Button>
+          )}
+          
 
           <Button
             variant="ghost"

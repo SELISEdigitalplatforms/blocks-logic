@@ -1,21 +1,25 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui-kits/tabs/tabs";
 import { NodeInspectorHeader } from "../node-inspector-header";
 import { useState } from "react";
+import type { ComponentType } from "react";
 import { NodeSchema } from "../../node-schemas/node-schema.type";
 import { FormBuilder } from "../form-builder/form-builder";
 import { useWorkflow } from "@blocks-workflow/hooks";
 import { InputPanel } from "../shared/input-panel/input-panel";
 import { OutputPanel } from "../shared/output-panel/output-panel";
+import { NodeGuidePanel } from "../shared";
 
 type LayoutWithIOProps = {
   schema: NodeSchema | null;
+  guide?: ComponentType | null;
 };
 
-export const LayoutWithIO = ({ schema }: LayoutWithIOProps) => {
+export const LayoutWithIO = ({ schema, guide }: LayoutWithIOProps) => {
   const { selectedNode, updateNode } = useWorkflow();
   const [activeTab, setActiveTab] = useState<"parameters" | "settings">("parameters");
   const [isInputCollapsed, setIsInputCollapsed] = useState(false);
   const [isOutputCollapsed, setIsOutputCollapsed] = useState(false);
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
 
   const toggleInput = () => {
     if (!isInputCollapsed && isOutputCollapsed) {
@@ -34,10 +38,14 @@ export const LayoutWithIO = ({ schema }: LayoutWithIOProps) => {
   if (!selectedNode || !schema) return null;
 
   return (
-      <div className="flex h-full flex-col">
-        <NodeInspectorHeader />
+    <div className="flex h-full flex-col">
+      <NodeInspectorHeader
+        hasGuide={Boolean(guide)}
+        isGuideOpen={isGuideOpen}
+        onToggleGuide={() => setIsGuideOpen((value) => !value)}
+      />
 
-        <div className="mt-6 flex flex-1 overflow-hidden">
+      <div className="mt-6 flex flex-1 overflow-hidden">
         <div className="flex w-5/12 flex-col overflow-hidden">
           <Tabs
             value={activeTab}
@@ -74,9 +82,15 @@ export const LayoutWithIO = ({ schema }: LayoutWithIOProps) => {
           </Tabs>
         </div>
 
-        <div className="flex w-7/12 flex-col gap-4 overflow-hidden rounded border p-3">
-          <InputPanel isCollapsed={isInputCollapsed} onToggleCollapse={toggleInput} />
-          <OutputPanel isCollapsed={isOutputCollapsed} onToggleCollapse={toggleOutput} />
+        <div className="w-7/12 overflow-hidden">
+          {guide && isGuideOpen ? (
+            <NodeGuidePanel guide={guide} onClose={() => setIsGuideOpen(false)} />
+          ) : (
+            <div className="flex h-full flex-col gap-4 overflow-hidden rounded border p-3">
+              <InputPanel isCollapsed={isInputCollapsed} onToggleCollapse={toggleInput} />
+              <OutputPanel isCollapsed={isOutputCollapsed} onToggleCollapse={toggleOutput} />
+            </div>
+          )}
         </div>
       </div>
     </div>

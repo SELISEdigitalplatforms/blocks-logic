@@ -25,9 +25,10 @@ const webhookHeadersSchema = z.array(
 
 export const scheduleFormSchema = z
   .object({
-    name: z.string().min(1, "Name is required"),
-    description: z.string(),
+    name: z.string().trim().min(1, "Name is required").max(100, "Name cannot exceed 100 characters"),
+    description: z.string().max(500, "Description cannot exceed 500 characters"),
     webhook: z.object({
+
       url: z.string().min(1, "Webhook URL is required").url("Enter a valid URL"),
       method: z.string().default("POST"),
       headers: webhookHeadersSchema,

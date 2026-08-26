@@ -1,6 +1,8 @@
+import { NodeGuideActionHttpRequestV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
 
 export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
+  guide: NodeGuideActionHttpRequestV1,
   schema: {
     type: "httpRequest",
     category: "action",

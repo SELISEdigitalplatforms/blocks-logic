@@ -1,4 +1,5 @@
 import { API_BASES } from "@/constants/endpoint.constant";
+import { NodeGuideTriggerWebhookV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
 import { WorkflowExecutionMode } from "../../models/workflow.model";
 import { authClientService, iamService } from "../../services/iam.service";
@@ -36,6 +37,7 @@ const permissionsAsFieldValue = (data: Record<string, unknown>): ConditionalMult
 };
 
 export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
+  guide: NodeGuideTriggerWebhookV1,
   schema: {
     type: "webhook",
     category: "trigger",

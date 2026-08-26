@@ -1,26 +1,33 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui-kits/tabs/tabs";
 import { NodeInspectorHeader } from "../node-inspector-header";
 import { useState } from "react";
+import type { ComponentType } from "react";
 import { NodeSchema } from "../../node-schemas/node-schema.type";
 import { FormBuilder } from "../form-builder/form-builder";
 import { useWorkflow } from "@blocks-workflow/hooks";
-import { ListenEventPanel } from "../shared";
+import { ListenEventPanel, NodeGuidePanel } from "../shared";
 import { OutputPanel } from "../shared/output-panel/output-panel";
 
 type LayoutWithListenerProps = {
   schema: NodeSchema | null;
+  guide?: ComponentType | null;
 };
 
-export const LayoutWithListener = ({ schema }: LayoutWithListenerProps) => {
+export const LayoutWithListener = ({ schema, guide }: LayoutWithListenerProps) => {
   const { selectedNode, updateNode, isListening, listeningNodeId, editorMode } = useWorkflow();
   const [activeTab, setActiveTab] = useState("parameters");
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
   if (!selectedNode || !schema) return null;
 
   const isThisNodeListening = isListening && listeningNodeId === selectedNode.id;
 
   return (
     <div className="relative flex h-full flex-col">
-      <NodeInspectorHeader />
+      <NodeInspectorHeader
+        hasGuide={Boolean(guide)}
+        isGuideOpen={isGuideOpen}
+        onToggleGuide={() => setIsGuideOpen((value) => !value)}
+      />
       <div className="mt-6 flex flex-1 gap-6">
         <div className="w-5/12">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full">
@@ -51,13 +58,20 @@ export const LayoutWithListener = ({ schema }: LayoutWithListenerProps) => {
           </Tabs>
         </div>
 
-        <div className="grid min-w-0 w-7/12 grid-rows-3 gap-4 overflow-hidden border p-3">
-          {editorMode === "editor" && <ListenEventPanel />}
-          <div className={`row-span-2 min-w-0 w-full overflow-hidden ${editorMode!=="editor" && "row-span-3"}`}>
-            <OutputPanel />
-          </div>
+        <div className="min-w-0 w-7/12 overflow-hidden">
+          {guide && isGuideOpen ? (
+            <NodeGuidePanel guide={guide} onClose={() => setIsGuideOpen(false)} />
+          ) : (
+            <div className="grid h-full min-w-0 grid-rows-3 gap-4 overflow-hidden border p-3">
+              {editorMode === "editor" && <ListenEventPanel />}
+              <div
+                className={`row-span-2 min-w-0 w-full overflow-hidden ${editorMode !== "editor" && "row-span-3"}`}
+              >
+                <OutputPanel />
+              </div>
+            </div>
+          )}
         </div>
-        
       </div>
     </div>
   );

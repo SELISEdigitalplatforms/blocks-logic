@@ -61,7 +61,8 @@ describe("WorkflowList", () => {
 
   it("shows the empty state", () => {
     wrap(<WorkflowList workflow={[]} isLoading={false} />);
-    expect(screen.getByText("No results found.")).toBeTruthy();
+    expect(screen.getByText("Create your first workflow")).toBeTruthy();
+    expect(screen.getByText("Create workflow")).toBeTruthy();
   });
 
   it("renders workflow rows with name and status", () => {
