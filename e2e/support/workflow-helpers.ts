@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page } from "@playwright/test"
-import { readWorkflowProject } from "./workflow-project"
+import { readLogicProject } from "./logic-project"
+import { openSharedProjectDashboard } from "./suite-helpers"
 
 export async function waitForRowsLoaded(page: Page) {
   await expect(page.locator('[class*="skeleton"]').first())
@@ -83,8 +84,7 @@ export async function ensureWorkflowExists(page: Page) {
 
   try {
     await page.waitForURL(/\/workflow\/[^/]+$/, { timeout: 15_000 })
-    const fixture = readWorkflowProject()
-    const listUrl = fixture?.workflowUrl ?? page.url().replace(/\/workflow\/[^/]+$/, "/workflow")
+    const listUrl = page.url().replace(/\/workflow\/[^/]+$/, "/workflow").replace(/\?.*$/, "")
     await page.goto(listUrl)
     await waitForRowsLoaded(page)
   } catch {
@@ -95,32 +95,17 @@ export async function ensureWorkflowExists(page: Page) {
   }
 }
 
+/** Open Workflow list for the shared suite project (seeds one workflow if empty). */
 export async function openWorkflowList(page: Page) {
-  const fixture = readWorkflowProject()
+  const fixture = readLogicProject()
   if (!fixture) {
-    throw new Error("Workflow project fixture not found. Did workflow-setup run?")
+    throw new Error(
+      "Missing fixtures/logic-project.json — run the logic-setup project first " +
+        "(suite.setup.spec.ts).",
+    )
   }
 
-  if (fixture.workflowUrl) {
-    await page.goto(fixture.workflowUrl)
-    await expect(page.getByRole("heading", { name: "Workflow" })).toBeVisible({ timeout: 30_000 })
-    await ensureWorkflowExists(page)
-    return { projectName: fixture.projectName }
-  }
-
-  if (fixture.dashboardUrl) {
-    await page.goto(fixture.dashboardUrl)
-  } else {
-    await page.goto("/app/console")
-    await expect(page.getByRole("heading", { name: "Your Blocks Projects" })).toBeVisible({
-      timeout: 30_000,
-    })
-    const envButton = page.getByRole("button", { name: /Development|UAT|Testing/ }).first()
-    await envButton.waitFor({ state: "visible", timeout: 30_000 })
-    await envButton.click()
-  }
-
-  await expect(page.getByRole("link", { name: "Workflow" })).toBeVisible({ timeout: 30_000 })
+  await openSharedProjectDashboard(page)
 
   const workflowLink = page.getByRole("link", { name: "Workflow" })
   await workflowLink.click()

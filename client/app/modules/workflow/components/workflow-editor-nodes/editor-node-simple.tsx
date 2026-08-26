@@ -1,7 +1,7 @@
 import { EditorNodeBase } from "./editor-node-base";
 import { Position, Node } from "@xyflow/react";
 import { EditorNodeTitle } from "./editor-node-title";
-import { useWorkflow } from "../../hooks";
+import { useWorkflowStore } from "../../store";
 import { EditorNodeHandle, EditorNodeHandleArrow } from "./editor-node-handle";
 import { getNodeDefinition } from "../node-library-panel";
 import { useMemo } from "react";
@@ -10,15 +10,22 @@ import { WorkflowExecutionStatus, getStatusConfig } from "../../utils/workflow-e
 import { cn } from "@/lib/utils";
 
 export const EditorNodeSimple = ({ id }: Node) => {
-  const { getNodeById, editorMode, getNodeEdges } = useWorkflow();
-  const node = getNodeById(id);
+  const node = useWorkflowStore((state) => state.nodesMap[id]);
+  const editorMode = useWorkflowStore((state) => state.editorMode);
+  const edgesMap = useWorkflowStore((state) => state.edgesMap);
 
   const nodeDefinition = useMemo(() => {
     if (!node) return null;
     return getNodeDefinition(node.category, node.type, node.version);
   }, [node]);
 
-  const { incoming, outgoing } = useMemo(() => getNodeEdges(id), [getNodeEdges, id]);
+  const { incoming, outgoing } = useMemo(() => {
+    const edges = Object.values(edgesMap);
+    return {
+      incoming: edges.filter((edge) => edge.target === id),
+      outgoing: edges.filter((edge) => edge.source === id),
+    };
+  }, [edgesMap, id]);
 
   if (!node) return null;
   if (!nodeDefinition) return null;
