@@ -1,5 +1,7 @@
 "use client";
 import { useCallback, useState } from "react";
+import { Link, useNavigate } from "react-router";
+import { useScopedPath } from "@seliseblocks/genesis-os";
 import {
   ColumnDef,
   flexRender,
@@ -7,7 +9,7 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { CalendarClock, EllipsisVertical, Pen, Trash } from "lucide-react";
+import { CalendarClock, EllipsisVertical, ArrowRightFromLine, Pen, Trash } from "lucide-react";
 import { Skeleton } from "@/components/ui-kits/skeleton/skeleton";
 import {
   Table,
@@ -32,7 +34,6 @@ import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { useUpdateSchedule } from "../../hooks/use-schedule-api";
 import { ISchedule, ScheduleKind } from "../../types/schedule.service.type";
 import { DeleteScheduleDialog } from "../delete-schedule";
-import { ScheduleFormDialog } from "../schedule-form-dialog";
 
 const ScheduleListSkeleton = ({ length }: { length: number }) => {
   return (
@@ -52,7 +53,7 @@ const ScheduleListSkeleton = ({ length }: { length: number }) => {
 };
 
 type ModalState = {
-  type: "edit" | "delete" | null;
+  type: "delete" | null;
   schedule: ISchedule | null;
 };
 
@@ -84,13 +85,14 @@ export const ScheduleList = ({
   isLoading,
   onCreateSchedule,
 }: ScheduleListProps) => {
+  const navigate = useNavigate();
+  const scoped = useScopedPath();
   const [modal, setModal] = useState<ModalState>({ type: null, schedule: null });
   const { mutateAsync: updateScheduleAsync, isPending: isUpdating } =
     useUpdateSchedule();
 
   const handleToggleActive = useCallback(
     async (schedule: ISchedule, next: boolean) => {
-
       try {
         const res = await updateScheduleAsync({
           itemId: schedule.itemId,
@@ -101,7 +103,7 @@ export const ScheduleList = ({
           startDate: schedule.startDate ?? null,
           endDate: schedule.endDate ?? null,
           isActive: next,
-          webhook: schedule.webhook ,
+          webhook: schedule.webhook,
         });
         if (!res.isSuccess) return showErrorToast({ errors: res.errors });
         showSuccessToast({
@@ -125,14 +127,20 @@ export const ScheduleList = ({
           className="w-[200px] truncate font-semibold md:w-[240px]"
           title={info.row.original.description ?? undefined}
         >
-          {info.row.original.name?.trim() || "-"}
+          <Link
+            to={scoped(`schedule/${info.row.original.itemId}`)}
+            className="hover:underline hover:text-primary transition-colors"
+          >
+            {info.row.original.name?.trim() || "-"}
+          </Link>
+
           {info.row.original.kind === ScheduleKind.Internal && (
             <Badge variant="info" className="ml-2 inline-flex rounded-md px-2 py-0.5">
               Workflow
             </Badge>
           )}
           {info.row.original.description && (
-            <p className="truncate text-xs text-muted-foreground">
+            <p className="truncate text-xs text-muted-foreground font-normal">
               {info.row.original.description}
             </p>
           )}
@@ -190,13 +198,16 @@ export const ScheduleList = ({
       cell: (info) => {
         const isInternal = info.row.original.kind === ScheduleKind.Internal;
         return (
-          <div className="flex items-center gap-4">
-            <Switch
+          <div
+            className="flex items-center gap-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* <Switch
               size="md"
               checked={info.row.original.isActive}
               disabled={isUpdating || isInternal}
               onCheckedChange={(next) => handleToggleActive(info.row.original, next)}
-            />
+            /> */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="h-5 w-5 p-0" disabled={isInternal}>
@@ -206,7 +217,14 @@ export const ScheduleList = ({
               <DropdownMenuContent align="end">
                 <DropdownMenuItem
                   className="cursor-pointer"
-                  onClick={() => setModal({ type: "edit", schedule: info.row.original })}
+                  onClick={() => navigate(scoped(`schedule/${info.row.original.itemId}`))}
+                >
+                  <ArrowRightFromLine className="mr-2 h-4 w-4" />
+                  <span>Open</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onClick={() => navigate(scoped(`schedule/${info.row.original.itemId}/edit`))}
                 >
                   <Pen className="mr-2 h-4 w-4" />
                   <span>Edit</span>
@@ -221,6 +239,7 @@ export const ScheduleList = ({
                   <span>Delete</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
+
             </DropdownMenu>
           </div>
         );
@@ -263,7 +282,11 @@ export const ScheduleList = ({
             {isLoading && <ScheduleListSkeleton length={columns.length} />}
             {!isLoading &&
               table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id} className="group border-0">
+                <TableRow
+                  key={row.id}
+                  className="group border-0 cursor-pointer transition-colors"
+                  onClick={() => navigate(scoped(`schedule/${row.original.itemId}`))}
+                >
                   {row.getVisibleCells().map((cell, index, cells) => (
                     <TableCell
                       key={cell.id}
@@ -281,13 +304,7 @@ export const ScheduleList = ({
           </TableBody>
         </Table>
       )}
-      <ScheduleFormDialog
-        open={modal.type === "edit"}
-        onOpenChange={(value) => {
-          if (!value) setModal({ type: null, schedule: null });
-        }}
-        schedule={modal.schedule ?? undefined}
-      />
+
       <DeleteScheduleDialog
         open={modal.type === "delete"}
         onOpenChange={(value) => {

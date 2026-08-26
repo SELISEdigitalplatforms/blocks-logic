@@ -2,6 +2,9 @@ import { createBrowserRouter, Navigate, Outlet } from "react-router";
 
 import WorkflowsPage from "./routes/private/workflows/workflows-page";
 import SchedulesPage from "./routes/private/schedules/schedules-page";
+import ScheduleCreatePage from "./routes/private/schedules/schedule-create-page";
+import ScheduleEditPage from "./routes/private/schedules/schedule-edit-page";
+import ScheduleDetailsPage from "./routes/private/schedules/schedule-details-page";
 import WorkflowDetailsPage from "./routes/private/workflow-details/workflow-details-page";
 
 import {
@@ -20,7 +23,11 @@ import { navigationMenus } from "./constants/navigation-menus";
 
 const redirectPaths: Record<string, string> = {
   "/workflow/*": "/app/workflow",
+  "/schedules/*": "/app/schedule",
+  "/schedule/*": "/app/schedule",
 };
+
+
 
 export const router = createBrowserRouter([
   {
@@ -81,9 +88,16 @@ export const router = createBrowserRouter([
               { path: "dashboard", element: <DashboardOverview /> },
               { path: "workflow/:id", element: <WorkflowDetailsPage /> },
               { path: "workflow", element: <WorkflowsPage /> },
-              { path: "schedules", element: <SchedulesPage /> },
+              { path: "schedule", element: <SchedulesPage /> },
+              { path: "schedule/new", element: <ScheduleCreatePage /> },
+              { path: "schedule/:scheduleId/edit", element: <ScheduleEditPage /> },
+              { path: "schedule/:scheduleId", element: <ScheduleDetailsPage /> },
               { path: "profile", element: <ProfilePage /> },
+
+
             ],
+
+
           },
         ],
       },

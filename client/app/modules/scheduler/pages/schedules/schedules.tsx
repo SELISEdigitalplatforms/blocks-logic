@@ -1,16 +1,16 @@
-"use client";
-import { useState } from "react";
+import { useNavigate } from "react-router";
+import { useScopedPath } from "@seliseblocks/genesis-os";
 import { Card, CardContent, CardHeader } from "@/components/ui-kits/card/card";
 import { Pagination } from "@/components/ui-kits/pagination/pagination";
 import { Button } from "@/components/ui-kits/button/button";
 import { Plus } from "lucide-react";
 import { ScheduleList } from "../../components/schedule-list";
-import { ScheduleFormDialog } from "../../components/schedule-form-dialog";
 import { ScheduleFilterToolBar } from "../../components/schedule-filter-toolbar";
 import { useGetSchedules, useScheduleFilterQueryParams } from "../../hooks";
 
 export const Schedules = () => {
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const navigate = useNavigate();
+  const scoped = useScopedPath();
   const { queryParams, setQueryParams } = useScheduleFilterQueryParams();
   const { data, isLoading, isFetching } = useGetSchedules({
     searchKey: queryParams.search || "",
@@ -20,6 +20,11 @@ export const Schedules = () => {
   const schedules = data?.data || [];
   const isListLoading = isLoading || isFetching;
   const isEmpty = !isListLoading && schedules.length === 0;
+
+  const handleCreateSchedule = () => {
+    navigate(scoped("schedule/new"));
+  };
+
 
   return (
     <section className="flex flex-col gap-6 p-4">
@@ -36,7 +41,7 @@ export const Schedules = () => {
               size="sm"
               variant="ghost"
               className="text-primary hover:text-primary"
-              onClick={() => setIsCreateOpen(true)}
+              onClick={handleCreateSchedule}
             >
               <Plus className="h-4 w-4" />
               <span className="sr-only sm:not-sr-only sm:ml-2.5">Add Schedule</span>
@@ -47,7 +52,7 @@ export const Schedules = () => {
           <ScheduleList
             schedules={schedules}
             isLoading={isListLoading}
-            onCreateSchedule={() => setIsCreateOpen(true)}
+            onCreateSchedule={handleCreateSchedule}
           />
 
           {!!data?.totalCount && (
@@ -70,7 +75,7 @@ export const Schedules = () => {
           )}
         </CardContent>
       </Card>
-      <ScheduleFormDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} />
     </section>
   );
 };
+
