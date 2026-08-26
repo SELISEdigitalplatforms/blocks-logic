@@ -11,6 +11,13 @@ namespace DomainService.Workflow.Nodes.ActionHttpRequestV1
         public bool HaveHeaders { get; set; } = false;
         public Dictionary<string, string> Headers { get; set; } = new();
 
+        /// <summary>
+        /// When <c>true</c>, a Blocks-delegated bearer token is added to the Authorization header
+        /// (best-effort; omitted when no delegation grant is available). A manually-set Authorization
+        /// header always takes precedence over this.
+        /// </summary>
+        public bool UseBlocksAuthorization { get; set; } = false;
+
         public bool HaveBody { get; set; } = false;
 
         public string BodyContentType { get; set; } = "json";
