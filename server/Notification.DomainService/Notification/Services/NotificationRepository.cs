@@ -1,4 +1,4 @@
-using Blocks.Genesis;
+﻿using Blocks.Genesis;
 using DomainService.Shared;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
@@ -13,6 +13,7 @@ namespace DomainService.Notification
         private IMongoDatabase _clientDb;
 
         private const string _notificationCollection = "OfflineNotifications";
+        private const string _rootDatabaseName = "BlocksRootDb";
         private readonly ILogger<NotificationRepository> _logger;
 
         public NotificationRepository(IDbContextProvider dbContextProvider, IBlocksSecret blocksSecret, ILogger<NotificationRepository> logger)
@@ -29,11 +30,69 @@ namespace DomainService.Notification
                 _logger.LogInformation($"Blocks Context {blocksContext.ToString()}");
             if (blocksContext.Impersonated)
                 {
-                    return _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, "BlocksRootDb");
+                    return _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, _rootDatabaseName);
                 }
 
                 return _dbContextProvider.GetDatabase(blocksContext.TenantId);
         }
+
+        private IMongoDatabase? TryGetDatabase(Func<IMongoDatabase> resolve, string source)
+        {
+            try
+            {
+                return resolve();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Notifications: the {Source} database could not be resolved and was skipped", source);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Every database a notification for the current user could live in.
+        ///
+        /// <see cref="ResolvedClientDb"/> picks a single database for writes, so a notification lands in
+        /// the root database when its producer was impersonating and in the tenant database otherwise.
+        /// One user's notifications are therefore split across both, and reads have to look in both.
+        ///
+        /// The two dedupe passes collapse the list back to one entry when the tenant already is the root
+        /// database, so a single-database tenant behaves exactly as it did before.
+        /// </summary>
+        private List<IMongoDatabase> ResolvedClientDbs()
+        {
+            var tenantId = BlocksContext.GetContext()?.TenantId;
+
+            var candidates = new List<IMongoDatabase?>
+            {
+                string.IsNullOrWhiteSpace(tenantId)
+                    ? null
+                    : TryGetDatabase(() => _dbContextProvider.GetDatabase(tenantId), "tenant"),
+                TryGetDatabase(() => _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, _rootDatabaseName), "root"),
+            };
+
+            var seenDatabases = new HashSet<IMongoDatabase>();
+            var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var databases = new List<IMongoDatabase>();
+
+            foreach (var database in candidates)
+            {
+                if (database is null || !seenDatabases.Add(database)) continue;
+
+                var name = database.DatabaseNamespace?.DatabaseName;
+                if (name is not null && !seenNames.Add(name)) continue;
+
+                databases.Add(database);
+            }
+
+            if (databases.Count == 0)
+                throw new InvalidOperationException("No notification database could be resolved for the current context.");
+
+            return databases;
+        }
+
+        private List<IMongoCollection<OfflineNotification>> NotificationCollections() =>
+            [.. ResolvedClientDbs().Select(database => database.GetCollection<OfflineNotification>(_notificationCollection))];
 
         public void Save<T>(T data, string collectionName = "")
         {
@@ -132,8 +191,6 @@ namespace DomainService.Notification
 
         public async Task<GetNotificationsResponse> GetNotificationsAsync(GetNotificationsRequest request)
         {
-            _clientDb = ResolvedClientDb();
-            var collection = _clientDb.GetCollection<OfflineNotification>("OfflineNotifications");
             var builder = Builders<OfflineNotification>.Filter;
             var filter = FilterDefinition<OfflineNotification>.Empty;
             var userId = BlocksContext.GetContext()?.UserId;
@@ -143,16 +200,29 @@ namespace DomainService.Notification
 
             filter = filter & builder.Where(n => !string.IsNullOrWhiteSpace(n.Payload.UserId) && n.Payload.UserId == userId);
 
+            var unreadFilter = filter & builder.Where(n => !n.ReadByUserIds.Contains(userId));
+            var skip = request.PageSize * request.Page;
+
+            // Each source is asked for skip + limit rows from the top so that the merged, re-sorted
+            // sequence still contains every candidate for the requested page.
             var options = new FindOptions<OfflineNotification>
             {
-                Skip = request.PageSize * request.Page,
-                Limit = request.PageSize,
+                Skip = 0,
+                Limit = skip + request.PageSize,
                 Sort = Builders<OfflineNotification>.Sort.Descending(n => n.CreatedTime)
             };
 
-            var notifications = await (await collection.FindAsync(filter, options)).ToListAsync();
-            var unReadNotificationsCount = await collection.CountDocumentsAsync(filter & builder.Where(n => !n.ReadByUserIds.Contains(userId)));
-            var totalNotificationCount =  await collection.CountDocumentsAsync(filter);
+            var sources = await Task.WhenAll(NotificationCollections()
+                .Select(collection => ReadNotificationPageAsync(collection, filter, unreadFilter, options)));
+
+            var notifications = sources
+                .SelectMany(source => source.Items)
+                .GroupBy(n => n.Id)
+                .Select(duplicates => duplicates.First())
+                .OrderByDescending(n => n.CreatedTime)
+                .Skip(skip)
+                .Take(request.PageSize)
+                .ToList();
 
             if (!request.IsUnreadOnly)
             {
@@ -165,9 +235,22 @@ namespace DomainService.Notification
             return new GetNotificationsResponse
             {
                 Notifications = notifications,
-                UnReadNotificationsCount = unReadNotificationsCount,
-                TotalNotificationsCount = totalNotificationCount
+                UnReadNotificationsCount = sources.Sum(source => source.Unread),
+                TotalNotificationsCount = sources.Sum(source => source.Total)
             };
+        }
+
+        private static async Task<(List<OfflineNotification> Items, long Unread, long Total)> ReadNotificationPageAsync(
+            IMongoCollection<OfflineNotification> collection,
+            FilterDefinition<OfflineNotification> filter,
+            FilterDefinition<OfflineNotification> unreadFilter,
+            FindOptions<OfflineNotification> options)
+        {
+            var items = await (await collection.FindAsync(filter, options)).ToListAsync();
+            var unread = await collection.CountDocumentsAsync(unreadFilter);
+            var total = await collection.CountDocumentsAsync(filter);
+
+            return (items, unread, total);
         }
     }
 }
