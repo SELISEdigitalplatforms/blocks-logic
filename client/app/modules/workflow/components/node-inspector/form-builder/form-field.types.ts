@@ -12,6 +12,7 @@ export type FormFieldType =
   | "switch"
   | "radio"
   | "json-code-editor"
+  | "graphql-code-editor"
   | "code-editor"
   | "key-value-pairs"
   | "fixed-key-value-pairs"

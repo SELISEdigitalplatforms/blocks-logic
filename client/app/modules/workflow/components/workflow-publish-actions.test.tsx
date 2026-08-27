@@ -15,11 +15,12 @@ const svc = vi.hoisted(() => ({
 vi.mock("@/modules/workflow/services/workflow.service", () => ({
   workflowService: svc,
 }));
-vi.mock("@/hooks/use-toast", () => ({
+const toasts = vi.hoisted(() => ({
   showErrorToast: vi.fn(),
   showSuccessToast: vi.fn(),
   showInfoToast: vi.fn(),
 }));
+vi.mock("@/hooks/use-toast", () => toasts);
 
 import { PublishWorkflowAction } from "./publish-workflow-action/publish-workflow-action";
 import { WorkflowVersionActionDropdown } from "./workflow-version/workflow-version-action-dropdown";
@@ -131,7 +132,7 @@ describe("WorkflowVersionActionDropdown", () => {
     await waitFor(() => expect(svc.unpublishWorkflow).toHaveBeenCalled());
   });
 
-  it("restores a version", async () => {
+  it("restores a version and shows success toast", async () => {
     const user = userEvent.setup();
     wrap(
       <WorkflowVersionActionDropdown version={version}>
@@ -141,6 +142,24 @@ describe("WorkflowVersionActionDropdown", () => {
     await user.click(screen.getByText("Menu"));
     await user.click(await screen.findByText("Restore version"));
     await waitFor(() => expect(svc.restoreWorkflow).toHaveBeenCalled());
+    await waitFor(() => expect(toasts.showSuccessToast).toHaveBeenCalledWith({
+      description: "Workflow version successfully restored.",
+    }));
+  });
+
+  it("shows error toast when restoring a version fails", async () => {
+    svc.restoreWorkflow.mockRejectedValueOnce(new Error("Restore failed"));
+    const user = userEvent.setup();
+    wrap(
+      <WorkflowVersionActionDropdown version={version}>
+        <button>Menu</button>
+      </WorkflowVersionActionDropdown>,
+    );
+    await user.click(screen.getByText("Menu"));
+    await user.click(await screen.findByText("Restore version"));
+    await waitFor(() => expect(toasts.showErrorToast).toHaveBeenCalledWith({
+      errors: "Restore failed",
+    }));
   });
 
   it("opens the publish confirmation for an unpublished version", async () => {

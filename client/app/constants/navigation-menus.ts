@@ -22,9 +22,10 @@ export const navigationMenus: Menu[] = [
     id: "service-schedule",
     type: "menu",
     name: "Schedules",
-    path: "/app/schedules",
+    path: "/app/schedule",
     icon: CalendarClock,
   },
+
   {
     id: "service-workflow",
     type: "menu",

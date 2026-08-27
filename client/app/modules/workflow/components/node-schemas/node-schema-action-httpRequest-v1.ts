@@ -1,6 +1,8 @@
+import { NodeGuideActionHttpRequestV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
 
 export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
+  guide: NodeGuideActionHttpRequestV1,
   schema: {
     type: "httpRequest",
     category: "action",
@@ -64,6 +66,13 @@ export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
         key: "headers",
       },
       {
+        id: "useBlocksAuthorization",
+        type: "switch",
+        label: "Use Blocks Authorization",
+        info: "Attaches a Blocks-issued bearer token to the Authorization header when one is available for this run",
+        key: "useBlocksAuthorization",
+      },
+      {
         id: "haveBody",
         type: "switch",
         label: "Send Body",
@@ -104,6 +113,7 @@ export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
       queryParameters: {},
       haveHeaders: false,
       headers: {},
+      useBlocksAuthorization: false,
       haveBody: false,
       bodyContentType: "",
       body: "",

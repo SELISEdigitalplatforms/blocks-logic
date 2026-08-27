@@ -1,6 +1,8 @@
+import { NodeGuideTransformCodeV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
 
 export const NodeSchemaTransformCodeV1: NodeSchemaDefinition = {
+  guide: NodeGuideTransformCodeV1,
   schema: {
     type: "code",
     category: "transform",

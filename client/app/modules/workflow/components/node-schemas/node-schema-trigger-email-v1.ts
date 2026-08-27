@@ -1,7 +1,9 @@
+import { NodeGuideTriggerEmailV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
 import { emailService } from "@blocks-workflow/services/email.services";
 
 export const NodeSchemaTriggerEmailV1: NodeSchemaDefinition = {
+  guide: NodeGuideTriggerEmailV1,
   schema: {
     type: "email",
     category: "trigger",

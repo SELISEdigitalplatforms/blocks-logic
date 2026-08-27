@@ -18,7 +18,11 @@ export type RuntimeKey = string;
  */
 export const getRuntimeEnv = (_key?: RuntimeKey): string => "";
 
-type HttpClientOptions = { baseURL?: string; blocksKey?: string };
+type HttpClientOptions = {
+  baseURL?: string;
+  blocksKey?: string;
+  onError?: (...args: unknown[]) => unknown;
+};
 
 /**
  * Minimal HttpClient stand-in. Service tests mock `@/lib/http-client` or the
@@ -104,3 +108,15 @@ const passthrough = (label: string) => {
 
 // Layout component rendered as a transparent passthrough.
 export const BlocksAppLayout = passthrough("BlocksAppLayout");
+export const RollbarProvider = passthrough("RollbarProvider");
+
+export const getRollbar = (_options?: { service?: string }) => ({});
+
+export const createHttpFailureReporter =
+  (_rollbar?: unknown) =>
+  (..._args: unknown[]) => {};
+
+export const attachQueryErrorReporting = (
+  _queryClient?: unknown,
+  _rollbar?: unknown,
+) => {};

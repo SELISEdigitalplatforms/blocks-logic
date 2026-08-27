@@ -68,6 +68,12 @@ namespace DomainService.Workflow.Nodes.ActionDataV1
 
                 List<NodeOutputItem> outputItems;
 
+                if (parameters.RawQueryMode)
+                {
+                    outputItems = await ExecuteRawQueryAsync(context, parameters);
+                    return NodeExecutionResult.Successful(outputItems);
+                }
+
                 switch (parameters.ActionType.ToLower())
                 {
                     case "getdata":
@@ -95,6 +101,7 @@ namespace DomainService.Workflow.Nodes.ActionDataV1
                 return NodeExecutionResult.Failed(ex.Message);
             }
         }
+
 
         /// <summary>
         /// Get Data: HTTP query to UDS GraphQL gateway
@@ -281,6 +288,55 @@ namespace DomainService.Workflow.Nodes.ActionDataV1
                             { "itemId", responseJson.ItemId ?? string.Empty },
                             { "message", responseJson.Message ?? string.Empty },
                         },
+                        Parameters = parameters.ToBsonDocument(),
+                    },
+                    Branch = SourceBranch,
+                    ParentItemIds = new List<string> { context.InputItems[i].Id }
+                });
+            }
+
+            return outputItems;
+        }
+
+        /// <summary>
+        /// Raw Query mode: sends a user-authored GraphQL query/mutation to the UDS GraphQL gateway.
+        /// Runs once per input item, resolving {{$json...}}/{{$node...}}/{{$context...}} placeholders
+        /// embedded in RawQuery against that item before sending.
+        /// </summary>
+        private async Task<List<NodeOutputItem>> ExecuteRawQueryAsync(
+            NodeExecutionContext context, ActionDataV1Parameters parameters)
+        {
+            var outputItems = new List<NodeOutputItem>();
+
+            for (int i = 0; i < context.IterationCount; i++)
+            {
+                var resolvedQuery = parseExpression<string>(parameters.RawQuery, context.InputItems[i], context)
+                    ?? parameters.RawQuery;
+
+                var response = await SendGraphQLRequestAsync(parameters, resolvedQuery);
+                response.EnsureSuccessStatusCode();
+                var responseString = await response.Content.ReadAsStringAsync();
+                var responseJson = JsonDocument.Parse(responseString).RootElement;
+
+                if (responseJson.TryGetProperty("errors", out var errors) &&
+                    errors.ValueKind == JsonValueKind.Array && errors.GetArrayLength() > 0)
+                {
+                    var messages = errors.EnumerateArray()
+                        .Select(e => e.TryGetProperty("message", out var m) ? m.GetString() : null)
+                        .Where(m => !string.IsNullOrEmpty(m));
+                    throw new InvalidOperationException($"GraphQL error: {string.Join("; ", messages)}");
+                }
+
+                var outputDoc = responseJson.TryGetProperty("data", out var data)
+                    ? BsonDocument.Parse(data.GetRawText())
+                    : BsonDocument.Parse(responseString);
+
+                outputItems.Add(new NodeOutputItem
+                {
+                    Data = new NodeOutputItemData
+                    {
+                        Input = context.InputItems[i].Data.Input,
+                        Output = outputDoc,
                         Parameters = parameters.ToBsonDocument(),
                     },
                     Branch = SourceBranch,
