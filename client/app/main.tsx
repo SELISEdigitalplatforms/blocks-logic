@@ -9,28 +9,41 @@ import "./styles/globals.css";
 import { TooltipProvider } from "./components/ui-kits/tooltip/tooltip";
 import { BlocksAppLayout } from "@seliseblocks/genesis-os";
 import { ThemeProvider } from "./hooks/use-theme";
+import {
+  attachQueryErrorReporting,
+  getRollbar,
+  RollbarProvider,
+} from "@seliseblocks/genesis-os/observability";
+import { SERVICE_NAME } from "./constants/service.constant";
+import { getQueryClient } from "./providers/query-provider";
 
+attachQueryErrorReporting(
+  getQueryClient(),
+  getRollbar({ service: SERVICE_NAME }),
+);
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <QueryProvider>
-      <ThemeProvider>
-        <NuqsAdapter>
-          <TooltipProvider>
-            <BlocksAppLayout
-              config={{
-                name: "blocks-logic",
-                appLogoUrl: {
-                  dark: "/Logo_White.svg",
-                  light: "/Logo.svg",
-                },
-              }}>
-              <RouterProvider router={router} />
-            </BlocksAppLayout>
-            <Toaster />
-          </TooltipProvider>
-        </NuqsAdapter>
-      </ThemeProvider>
-    </QueryProvider>
+    <RollbarProvider service={SERVICE_NAME}>
+      <QueryProvider>
+        <ThemeProvider>
+          <NuqsAdapter>
+            <TooltipProvider>
+              <BlocksAppLayout
+                config={{
+                  name: SERVICE_NAME,
+                  appLogoUrl: {
+                    dark: "/Logo_White.svg",
+                    light: "/Logo.svg",
+                  },
+                }}>
+                <RouterProvider router={router} />
+              </BlocksAppLayout>
+              <Toaster />
+            </TooltipProvider>
+          </NuqsAdapter>
+        </ThemeProvider>
+      </QueryProvider>
+    </RollbarProvider>
   </StrictMode>,
 );

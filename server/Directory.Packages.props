@@ -7,7 +7,7 @@
     <PackageVersion Include="Handlebars.Net" Version="2.1.6" />
     <!-- <PackageVersion Include="SeliseBlocks.DataGateway.Driver" Version="10.0.0-preview.3" /> -->
     <PackageVersion Include="HotChocolate.AspNetCore" Version="15.1.17" />
-    <PackageVersion Include="SeliseBlocks.EurolmDriver.OS" Version="4.0.0" />
+    <PackageVersion Include="SeliseBlocks.Localization.OS" Version="4.0.2" />
     <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.9.0" />
     <PackageVersion Include="FluentValidation" Version="12.0.0" />
     <PackageVersion Include="Jint" Version="4.15.3" />
@@ -18,7 +18,7 @@
     <PackageVersion Include="SixLabors.ImageSharp.Drawing" Version="2.1.5" />
     <PackageVersion Include="System.Drawing.Common" Version="8.0.13" />
     <PackageVersion Include="MongoDB.Driver" Version="3.10.0" />
-    <PackageVersion Include="SeliseBlocks.Genesis.OS" Version="4.0.8" />
+    <PackageVersion Include="SeliseBlocks.Genesis.OS" Version="4.1.4" />
     <PackageVersion Include="Hangfire.AspNetCore" Version="1.8.24" />
     <PackageVersion Include="Hangfire.MemoryStorage" Version="1.8.1.2" />
     <PackageVersion Include="Cronos" Version="0.13.0" />

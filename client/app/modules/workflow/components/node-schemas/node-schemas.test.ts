@@ -126,6 +126,13 @@ describe("http request v1", () => {
       value: "json",
     });
   });
+
+  it("exposes a Use Blocks Authorization switch defaulting to false", () => {
+    const useBlocksAuthorizationField = field(NodeSchemaActionHttpRequestV1, "useBlocksAuthorization");
+    expect(useBlocksAuthorizationField).toBeDefined();
+    expect(useBlocksAuthorizationField.type).toBe("switch");
+    expect(NodeSchemaActionHttpRequestV1.defaults?.parameters?.useBlocksAuthorization).toBe(false);
+  });
 });
 
 describe("transform set-field v1", () => {

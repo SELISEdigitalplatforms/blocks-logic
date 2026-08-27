@@ -19,20 +19,31 @@ import { Button } from "@/components/ui-kits/button/button";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
-import { useState } from "react";
+import { type ComponentProps, useState } from "react";
 import { Input } from "@/components/ui-kits/input/input";
 import { Plus } from "lucide-react";
-import {
-  addWorkflowDefaultValues,
-  AddWorkflowFormValues,
-  addWorkflowSchema,
-} from "./utils";
+import { addWorkflowDefaultValues, AddWorkflowFormValues, addWorkflowSchema } from "./utils";
 import { isErrorWithErrors } from "@/lib/error";
 import { useCreateWorkflow } from "@blocks-workflow/hooks/use-workflow-api";
 import { useNavigate } from "react-router";
 import { useScopedPath } from "@seliseblocks/genesis-os";
+import { cn } from "@/lib/utils";
 
-export const AddWorkflow = () => {
+type AddWorkflowProps = {
+  buttonClassName?: string;
+  hideLabelOnMobile?: boolean;
+  label?: string;
+  showIcon?: boolean;
+  variant?: ComponentProps<typeof Button>["variant"];
+};
+
+export const AddWorkflow = ({
+  buttonClassName,
+  hideLabelOnMobile = true,
+  label = "Add Workflow",
+  showIcon = true,
+  variant = "ghost",
+}: AddWorkflowProps) => {
   const [open, onOpenChange] = useState(false);
   const { isPending, mutateAsync } = useCreateWorkflow();
   const scoped = useScopedPath();
@@ -45,7 +56,7 @@ export const AddWorkflow = () => {
 
   const handleSubmit = async (values: AddWorkflowFormValues) => {
     try {
-      const payload = {name: values.name};
+      const payload = { name: values.name };
 
       const res = await mutateAsync(payload);
       if (!res.isSuccess) return showErrorToast({ errors: res.errors });
@@ -54,8 +65,7 @@ export const AddWorkflow = () => {
       navigate(scoped(`workflow/${res.itemId}`));
       onOpenChange(false);
     } catch (error) {
-      if (isErrorWithErrors(error))
-        return showErrorToast({ errors: error.errors });
+      if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
       return showErrorToast({ errors: "Failed to create workflow" });
     }
   };
@@ -72,11 +82,16 @@ export const AddWorkflow = () => {
       <DialogTrigger asChild>
         <Button
           size="sm"
-          variant="ghost"
-          className="text-primary hover:text-primary"
+          variant={variant}
+          className={cn(
+            variant === "ghost" && "text-primary hover:text-primary",
+            buttonClassName,
+          )}
         >
-          <Plus className="h-4 w-4" />
-          <span className="sr-only sm:not-sr-only sm:ml-2.5">Add Workflow</span>
+          {showIcon && <Plus className="h-4 w-4" />}
+          <span className={cn(hideLabelOnMobile && "sr-only sm:not-sr-only", showIcon && "ml-2.5")}>
+            {label}
+          </span>
         </Button>
       </DialogTrigger>
 
@@ -89,10 +104,7 @@ export const AddWorkflow = () => {
         </DialogHeader>
 
         <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(handleSubmit)}
-            className="space-y-6"
-          >
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
             <FormField
               control={form.control}
               name="name"

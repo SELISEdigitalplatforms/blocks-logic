@@ -1,3 +1,4 @@
+import { NodeGuideTriggerScheduleV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
 
 const TRIGGER_INTERVAL_OPTIONS = [
@@ -245,6 +246,7 @@ const regenerateCronExpression = (data: Record<string, unknown>): string =>
   generateCronExpression({ ...deriveScheduleFields(data), ...data });
 
 export const NodeSchemaTriggerScheduleV1: NodeSchemaDefinition = {
+  guide: NodeGuideTriggerScheduleV1,
   schema: {
     type: "schedule",
     category: "trigger",
