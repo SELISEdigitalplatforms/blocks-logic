@@ -18,7 +18,7 @@
     <PackageVersion Include="SixLabors.ImageSharp.Drawing" Version="2.1.5" />
     <PackageVersion Include="System.Drawing.Common" Version="8.0.13" />
     <PackageVersion Include="MongoDB.Driver" Version="3.10.0" />
-    <PackageVersion Include="SeliseBlocks.Genesis.OS" Version="4.1.2" />
+    <PackageVersion Include="SeliseBlocks.Genesis.OS" Version="4.1.4" />
     <PackageVersion Include="Hangfire.AspNetCore" Version="1.8.24" />
     <PackageVersion Include="Hangfire.MemoryStorage" Version="1.8.1.2" />
     <PackageVersion Include="Cronos" Version="0.13.0" />
