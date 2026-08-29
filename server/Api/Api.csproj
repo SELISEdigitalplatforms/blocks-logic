@@ -20,11 +20,12 @@
     <PackageReference Include="FluentValidation.AspNetCore" />
     <!--<PackageReference Include="SeliseBlocks.DataGateway.Driver" />-->
     <PackageReference Include="HotChocolate.AspNetCore" />
-    <PackageReference Include="SeliseBlocks.EurolmDriver.OS" />
+    <PackageReference Include="SeliseBlocks.Localization.OS" />
     <PackageReference Include="SeliseBlocks.ReleaseDriver.OS" />
     <PackageReference Include="SeliseBlocks.MonitorDriver.OS" />
     <!--<PackageReference Include="SeliseBlocks.StorageDriver.OS" />-->
     <PackageReference Include="SeliseBlocks.ConfigurationDriver" />
+    <PackageReference Include="SeliseBlocks.Genesis.OS" />
   </ItemGroup>
   <ItemGroup>
     <!--<ProjectReference Include="..\Authentication.DomainService\Authentication.DomainService.csproj" />-->

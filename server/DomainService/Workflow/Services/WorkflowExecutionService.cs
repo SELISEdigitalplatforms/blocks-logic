@@ -34,6 +34,7 @@ namespace DomainService.Workflow.Services
         private readonly IWorkflowNotificationService _workflowNotificationService;
         private readonly IWorkflowAuthService _workflowAuthService;
         private readonly IHttpContextAccessor _httpContextAccessor;
+        private readonly IDelegationGrantFactory _delegationGrantFactory;
 
         public WorkflowExecutionService(
             IWorkflowRepository workflowRepository,
@@ -44,7 +45,8 @@ namespace DomainService.Workflow.Services
             IWorkflowVersionRepository workflowVersionRepository,
             IWorkflowNotificationService workflowNotificationService,
             IWorkflowAuthService workflowAuthService,
-            IHttpContextAccessor httpContextAccessor
+            IHttpContextAccessor httpContextAccessor,
+            IDelegationGrantFactory delegationGrantFactory
             )
         {
             _workflowRepository = workflowRepository;
@@ -56,6 +58,7 @@ namespace DomainService.Workflow.Services
             _workflowNotificationService = workflowNotificationService;
             _workflowAuthService = workflowAuthService;
             _httpContextAccessor = httpContextAccessor;
+            _delegationGrantFactory = delegationGrantFactory;
         }
 
         private async Task NotifyWorkflowStartedAsync(WorkflowExecutionEntity execution)
@@ -191,9 +194,10 @@ namespace DomainService.Workflow.Services
                 {
                     var authConfig = ParseAuthorizationConfig(triggerNode.Parameters);
                     if (authConfig is null) throw new UnauthorizedAccessException();
-                    var isAuthorizedUser = await _workflowAuthService.IsAuthorized(
+                    var (isAuthorizedUser, context) = await _workflowAuthService.IsAuthorized(
                         _httpContextAccessor.HttpContext.Request, workflow.TenantId, authConfig);
                     if (!isAuthorizedUser) throw new UnauthorizedAccessException();
+                    BlocksContext.SetContext(context);
                 }
 
                 var normalizedInput = new BsonArray();
@@ -237,6 +241,8 @@ namespace DomainService.Workflow.Services
 
                 if (responseMode != null && responseMode.ToString().ToLower() == "last")
                 {
+                    await AttachDelegationGrantAsync();
+
                     var response = await _workflowEngineService.RunNodeInProcessAsync(payload);
                     var responseModeData = triggerNode.Parameters.GetValue("httpResponseData");
                     if (responseModeData == null)
@@ -887,6 +893,17 @@ namespace DomainService.Workflow.Services
                 doc[kv.Key] = ObjectToBsonValue(kv.Value);
             }
             return doc;
+        }
+
+        /// <summary>
+        /// Mints an ambient delegation grant for in-process ("last") webhook execution, where
+        /// Genesis never sees a bus send and therefore would not attach a grant header.
+        /// No-op when the factory returns null (no authenticated user / missing stamp claims).
+        /// </summary>
+        private async Task AttachDelegationGrantAsync()
+        {
+            var grantId = await _delegationGrantFactory.CreateForSendAsync();
+            DelegatedTokenContext.Set(grantId);
         }
 
         /// <summary>

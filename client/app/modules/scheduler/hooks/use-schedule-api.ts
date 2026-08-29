@@ -41,3 +41,47 @@ export const useDeleteSchedule = () => {
     },
   });
 };
+
+export interface IGetScheduleByIdOptions {
+  scheduleId?: string;
+  enabled?: boolean;
+}
+
+/**
+ * Hook to retrieve a single schedule by ID.
+ *
+ * Current implementation:
+ * Fetches the schedules list via `scheduleService.getSchedules` (cached by TanStack Query)
+ * and finds the matching item with `itemId === scheduleId`.
+ *
+ * Future replacement:
+ * When the backend `GetScheduleById` endpoint is available, swap the `queryFn` with:
+ * queryFn: () => scheduleService.getScheduleById({ itemId: scheduleId! })
+ */
+export const useGetScheduleById = ({ scheduleId, enabled = true }: IGetScheduleByIdOptions) => {
+  return useQuery({
+    queryKey: ["schedules", "detail", scheduleId],
+    queryFn: async () => {
+      if (!scheduleId) return null;
+      // =========================================================================
+      // CURRENT: Fetches via GetSchedules list and filters by scheduleId
+      // =========================================================================
+      const response = await scheduleService.getSchedules({
+        searchKey: "",
+        pageNumber: 0,
+        pageSize: 100,
+      });
+      const schedules = response?.data || [];
+      const item = schedules.find((s) => s.itemId === scheduleId) ?? null;
+      return item;
+
+      // =========================================================================
+      // FUTURE: Replace with direct endpoint when ready:
+      // const response = await scheduleService.getScheduleById({ itemId: scheduleId });
+      // return response?.data ?? null;
+      // =========================================================================
+    },
+    enabled: enabled && !!scheduleId,
+  });
+};
+

@@ -14,7 +14,7 @@ if (!baseURL) {
 }
 
 const autoStartServer = process.env.E2E_NO_WEBSERVER !== "1"
-const workflowSessionPath = path.resolve(__dirname, "fixtures/workflow-session.json")
+const logicSessionPath = path.resolve(__dirname, "fixtures/logic-session.json")
 
 export default defineConfig({
   testDir: "./tests",
@@ -59,30 +59,33 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
     {
-      name: "workflow-setup",
-      testMatch: /workflow\.setup\.spec\.ts/,
+      name: "logic-setup",
+      testMatch: /suite\.setup\.spec\.ts/,
       use: { ...devices["Desktop Chrome"] },
     },
     {
-      name: "workflow",
-      testMatch: /workflow[\\/].*\.spec\.ts/,
-      testIgnore: /workflow\.(setup|teardown)\.spec\.ts/,
-      dependencies: ["workflow-setup"],
+      name: "logic",
+      testMatch: /.*\.spec\.ts/,
+      testIgnore: [
+        /auth[\\/]login\.spec\.ts/,
+        /suite\.(setup|teardown)\.spec\.ts/,
+      ],
+      dependencies: ["logic-setup"],
       use: {
         ...devices["Desktop Chrome"],
-        ...(fs.existsSync(workflowSessionPath)
-          ? { storageState: "fixtures/workflow-session.json" }
+        ...(fs.existsSync(logicSessionPath)
+          ? { storageState: "fixtures/logic-session.json" }
           : {}),
       },
     },
     {
-      name: "workflow-teardown",
-      testMatch: /workflow\.teardown\.spec\.ts/,
-      dependencies: ["workflow"],
+      name: "logic-teardown",
+      testMatch: /suite\.teardown\.spec\.ts/,
+      dependencies: ["logic"],
       use: {
         ...devices["Desktop Chrome"],
-        ...(fs.existsSync(workflowSessionPath)
-          ? { storageState: "fixtures/workflow-session.json" }
+        ...(fs.existsSync(logicSessionPath)
+          ? { storageState: "fixtures/logic-session.json" }
           : {}),
       },
     },

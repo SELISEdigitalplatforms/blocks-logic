@@ -1,9 +1,11 @@
 import React from "react";
 import { useProjectStore } from "@seliseblocks/genesis-os";
+import { NodeGuideTriggerDataGatewayV1 } from "../node-guides";
 import { dataService } from "../../services/data.service";
 import { NodeSchemaDefinition } from "./node-schema.type";
 
 export const NodeSchemaTriggerDataGatewayV1: NodeSchemaDefinition = {
+  guide: NodeGuideTriggerDataGatewayV1,
   schema: {
     type: "dataGateway",
     category: "trigger",
@@ -21,16 +23,22 @@ export const NodeSchemaTriggerDataGatewayV1: NodeSchemaDefinition = {
             "Editor test mode will only pickup data triggers on records that have the ",
             React.createElement(
               "code",
-              { className: "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold" },
-              "Tags"
+              {
+                className:
+                  "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold",
+              },
+              "Tags",
             ),
             " property value of ",
             React.createElement(
               "code",
-              { className: "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold" },
-              "mock-data"
+              {
+                className:
+                  "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold",
+              },
+              "mock-data",
             ),
-            ". Whenever a data has mock data value it will be ignored in the published workflow data trigger."
+            ". Whenever a data has mock data value it will be ignored in the published workflow data trigger.",
           ),
         }),
       },

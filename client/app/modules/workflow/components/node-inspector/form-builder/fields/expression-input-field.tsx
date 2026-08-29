@@ -39,6 +39,13 @@ const getAncestorNodes = (
   const ancestors: AncestorNode[] = [];
   const visited = new Set<string>();
   const queue: string[] = [nodeId];
+  const incomingEdgesByTarget = new Map<string, Edge[]>();
+
+  for (const edge of Object.values(edgesMap)) {
+    const edges = incomingEdgesByTarget.get(edge.target) || [];
+    edges.push(edge);
+    incomingEdgesByTarget.set(edge.target, edges);
+  }
 
   while (queue.length > 0) {
     const currentNodeId = queue.shift()!;
@@ -49,7 +56,7 @@ const getAncestorNodes = (
     visited.add(currentNodeId);
 
     // Find all incoming edges (parent connections)
-    const parentEdges = Object.values(edgesMap).filter((edge) => edge.target === currentNodeId);
+    const parentEdges = incomingEdgesByTarget.get(currentNodeId) || [];
 
     for (const edge of parentEdges) {
       const parentId = edge.source;
@@ -87,7 +94,8 @@ export const ExpressionInputField = ({
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
 
-  const { nodesMap, edgesMap } = useWorkflowStore();
+  const nodesMap = useWorkflowStore((state) => state.nodesMap);
+  const edgesMap = useWorkflowStore((state) => state.edgesMap);
 
   const ancestorNodes = useMemo(() => {
     if (!config?.nodeId) return [];

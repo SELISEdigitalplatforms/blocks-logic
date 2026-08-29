@@ -8,7 +8,7 @@ import {
   TabsTrigger,
 } from "@/components/ui-kits/tabs/tabs";
 import { Button } from "@/components/ui-kits/button/button";
-import { ScrollText, Save, Loader2, AlertCircle } from "lucide-react";
+import { ScrollText, Save, Loader2, AlertCircle, X } from "lucide-react";
 import PageBreadcrumb from "@/components/breadcrumb/breadcrumb";
 import { WorkflowEditor } from "../../components/workflow-editor";
 import { ReactFlowProvider } from "@xyflow/react";
@@ -37,6 +37,7 @@ export const WorkflowDetailsContent = ({
   const scoped = useScopedPath();
 
   const [activeTab, setActiveTab] = useState<string>("editor");
+  const [isDirtyBannerDismissed, setIsDirtyBannerDismissed] = useState(false);
 
   const { hasUnsavedChanges, setWorkflow, setLastSuccessfulExecutionData } = useWorkflow();
 
@@ -70,6 +71,14 @@ export const WorkflowDetailsContent = ({
   });
 
   const handleManualSave = () => saveNow();
+  const showDirtyBanner = !isLoading
+    && isFetchedAfterMount
+    && data?.data?.isDirty
+    && !isDirtyBannerDismissed;
+
+  useEffect(() => {
+    setIsDirtyBannerDismissed(false);
+  }, [workflowId, data?.data?.isDirty]);
 
   BREADCRUMB_CUSTOM_TITLES[`/workflow/${workflowId}`] =
     data?.data?.name || "Workflow Details";
@@ -80,11 +89,21 @@ export const WorkflowDetailsContent = ({
           <PageBreadcrumb breadcrumbIndex={3}/>
         </div>
 
-        {!isLoading && isFetchedAfterMount && data?.data?.isDirty && (
+        {showDirtyBanner && (
           <div className="rounded-lg mx-4 mt-4 bg-yellow-50 border border-yellow-500 text-yellow-700 dark:bg-yellow-950/60 dark:text-yellow-300 dark:border dark:border-yellow-700 p-2.5">
-            <div className="flex items-center gap-3">
-              <AlertCircle className="h-5 w-5 text-amber-500" />
-              <p className="text-sm font-medium">You have unadapted changes. Please click on the Publish button to adapt them.</p>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="h-5 w-5 text-amber-500" />
+                <p className="text-sm font-medium">You have unadapted changes. Please click on the Publish button to adapt them.</p>
+              </div>
+              <button
+                type="button"
+                aria-label="Dismiss unadapted changes warning"
+                onClick={() => setIsDirtyBannerDismissed(true)}
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-yellow-700 transition-colors hover:bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-yellow-500 dark:text-yellow-300 dark:hover:bg-yellow-900/70"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
           </div>
         )}

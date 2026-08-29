@@ -2,17 +2,17 @@ import { test } from "@playwright/test"
 import { deleteCreatedProject } from "../../support/create-and-delete-project"
 import { ensureAuthenticated } from "../../support/login-helper"
 import {
-  clearWorkflowProject,
-  clearWorkflowSession,
-  readWorkflowProject,
-} from "../../support/workflow-project"
+  clearLogicProject,
+  clearLogicSession,
+  readLogicProject,
+} from "../../support/logic-project"
 import { shouldDeleteSharedProject } from "../../support/run-outcome"
 
-test.describe("workflow teardown", () => {
-  test("delete shared project when all workflow tests passed", async ({ page }) => {
+test.describe("logic suite teardown", () => {
+  test("delete shared project when all suite tests passed", async ({ page }) => {
     test.setTimeout(120_000)
 
-    const fixture = readWorkflowProject()
+    const fixture = readLogicProject()
     if (!fixture) return
 
     if (!shouldDeleteSharedProject()) {
@@ -28,8 +28,8 @@ test.describe("workflow teardown", () => {
       itemId: fixture.itemId,
     })
 
-    clearWorkflowProject()
-    clearWorkflowSession()
+    clearLogicProject()
+    clearLogicSession()
 
     if (!deleted) {
       console.log(

@@ -21,8 +21,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { WorkflowSummary } from "../../models/workflow.model";
-import { parseDateString } from "@/lib/utils";
-import { formatDate } from "date-fns";
+import { cn, formatDate, parseDateString } from "@/lib/utils";
 import { Badge } from "@/components/ui-kits/badge/badge";
 import { Switch } from "@/components/ui-kits/switch/switch";
 import {
@@ -32,7 +31,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui-kits/dropdown-menu/dropdown-menu";
 import { Button } from "@/components/ui-kits/button/button";
-import { Copy, EllipsisVertical, ArrowRightFromLine, Ban, Trash, Check } from "lucide-react";
+import {
+  ArrowRightFromLine,
+  Ban,
+  Check,
+  Copy,
+  EllipsisVertical,
+  Trash,
+  Workflow,
+} from "lucide-react";
 import { DeleteWorkflow } from "../delete-workflow";
 import { DuplicateWorkflow } from "../duplicate-workflow";
 import { Link, useNavigate } from "react-router";
@@ -43,21 +50,47 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/to
 import { useScopedPath } from "@seliseblocks/genesis-os";
 import { RenameWorkflow } from "../rename-workflow/rename-workflow";
 import { Pen } from "lucide-react";
+import { AddWorkflow } from "../add-workflow";
 
 
 const WorkflowListSkeleton = ({ length }: { length: number }) => {
   return (
     <>
       {Array.from({ length: 10 }).map((_, index) => (
-        <TableRow key={index} className="w-full border-b">
-          <TableCell colSpan={length} className="py-4">
-            <Skeleton className="aspect-square h-8 w-full" />
+        <TableRow key={index} className="border-0">
+          <TableCell
+            colSpan={length}
+            className="rounded-lg border border-border bg-background p-4"
+          >
+            <Skeleton className="h-12 w-full" />
           </TableCell>
         </TableRow>
       ))}
     </>
   );
 };
+
+const WorkflowEmptyState = () => (
+  <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-12 text-center">
+    <div className="flex h-14 w-14 items-center justify-center rounded-md bg-primary/10 text-primary">
+      <Workflow className="h-7 w-7" />
+    </div>
+    <h4 className="mt-5 text-lg font-semibold text-high-emphasis">
+      Create your first workflow
+    </h4>
+    <p className="mt-2 max-w-md text-sm text-muted-foreground">
+      Start building an automation flow with triggers, actions, and publish controls.
+    </p>
+    <div className="mt-6">
+      <AddWorkflow
+        variant="default"
+        label="Create workflow"
+        hideLabelOnMobile={false}
+        showIcon={false}
+      />
+    </div>
+  </div>
+);
 
 type WorkflowListProps = {
   workflow: WorkflowSummary[];
@@ -116,17 +149,17 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
         id: "name",
         header: () => <div className="font-bold text-medium-emphasis">Name</div>,
         cell: (info) => (
-          <div className="ml-2 w-[180px] truncate sm:ml-0 md:w-[240px]">
+          <div className="w-[180px] truncate font-semibold md:w-[240px]">
             {`${info.row.original.name || ""}`.trim() || "-"}
           </div>
         ),
       },
       {
         id: "createdDate",
-        header: () => <div className="font-bold text-medium-emphasis">Creation date</div>,
+        header: () => <div className="font-bold text-medium-emphasis">Created on</div>,
         cell: (info) => (
-          <div className="ml-2 sm:ml-0">
-            {formatDate(parseDateString(info.row.original.createdDate), "dd/MM/yyyy")}
+          <div className="whitespace-nowrap text-muted-foreground">
+            {formatDate(parseDateString(info.row.original.createdDate))}
           </div>
         ),
       },
@@ -134,8 +167,8 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
         id: "lastUpdatedDate",
         header: () => <div className="font-bold text-medium-emphasis">Last updated</div>,
         cell: (info) => (
-          <div className="ml-2 sm:ml-0">
-            {formatDate(parseDateString(info.row.original.lastUpdatedDate), "dd/MM/yyyy")}
+          <div className="whitespace-nowrap text-muted-foreground">
+            {formatDate(parseDateString(info.row.original.lastUpdatedDate))}
           </div>
         ),
       },
@@ -143,10 +176,10 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
         id: "isPublished",
         header: () => <div className="font-bold text-medium-emphasis">Status</div>,
         cell: (info) => (
-          <div className="ml-2 sm:ml-0">
+          <div>
             <Badge
-              variant={info.row.original.isPublished ? "success" : "secondary"}
-              className="w-fit rounded-full"
+              variant={info.row.original.isPublished ? "success" : "error"}
+              className="w-fit rounded-md px-3 py-1 text-sm"
             >
               {info.row.original.isPublished ? "Published" : "Unpublished"}
             </Badge>
@@ -157,7 +190,7 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
         id: "action",
         header: () => <div className="font-bold text-medium-emphasis"></div>,
         cell: (info) => (
-          <div className="ml-2 flex items-center gap-4 sm:ml-0">
+          <div className="flex items-center gap-4">
             <Tooltip>
               <TooltipTrigger asChild>
                 <div>
@@ -296,14 +329,21 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
         ),
       },
     ],
-    [],
+    [
+      publishDescription,
+      publishNew,
+      publishVersionName,
+      publishUnversioned,
+      scoped,
+      unpublish,
+    ],
   );
 
   const handleRowClick = useCallback(
     (itemId: number | string) => {
       navigate(scoped(`workflow/${itemId}`));
     },
-    [navigate],
+    [navigate, scoped],
   );
 
   const table = useReactTable({
@@ -320,54 +360,52 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
 
   return (
     <>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            {table
-              .getHeaderGroups()
-              .map((headerGroup) =>
-                headerGroup.headers.map((header) => (
-                  <TableHead key={header.id}>
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(header.column.columnDef.header, header.getContext())}
-                  </TableHead>
-                )),
-              )}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {isLoading && <WorkflowListSkeleton length={columns.length} />}
-          {!isLoading && (
-            <>
-              {!workflow.length ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={columns.length}
-                    className="h-24 text-center text-muted-foreground"
-                  >
-                    No results found.
-                  </TableCell>
+      {!isLoading && !workflow.length ? (
+        <WorkflowEmptyState />
+      ) : (
+        <Table className="border-separate border-spacing-y-4">
+          <TableHeader className="[&_tr]:border-0">
+            <TableRow className="border-0">
+              {table
+                .getHeaderGroups()
+                .map((headerGroup) =>
+                  headerGroup.headers.map((header) => (
+                    <TableHead key={header.id} className="px-6 pb-0 pt-2 text-base">
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(header.column.columnDef.header, header.getContext())}
+                    </TableHead>
+                  )),
+                )}
+            </TableRow>
+          </TableHeader>
+          <TableBody className="[&_tr:last-child]:border-0">
+            {isLoading && <WorkflowListSkeleton length={columns.length} />}
+            {!isLoading &&
+              table.getRowModel().rows.map((row) => (
+                <TableRow
+                  key={row.id}
+                  isHoverable
+                  className="group border-0"
+                  onClick={() => handleRowClick(row.original.itemId)}
+                >
+                  {row.getVisibleCells().map((cell, index, cells) => (
+                    <TableCell
+                      key={cell.id}
+                      className={cn(
+                        "border-y border-border bg-background px-6 py-5 text-base transition-colors group-hover:bg-muted/50",
+                        index === 0 && "rounded-l-lg border-l",
+                        index === cells.length - 1 && "rounded-r-lg border-r",
+                      )}
+                    >
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </TableCell>
+                  ))}
                 </TableRow>
-              ) : (
-                table.getRowModel().rows.map((row) => (
-                  <TableRow
-                    key={row.id}
-                    isHoverable
-                    onClick={() => handleRowClick(row.original.itemId)}
-                  >
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id}>
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))
-              )}
-            </>
-          )}
-        </TableBody>
-      </Table>
+              ))}
+          </TableBody>
+        </Table>
+      )}
       <DeleteWorkflow
         open={modal.type === "delete"}
         onOpenChange={(value) => {
