@@ -31,7 +31,7 @@ namespace DomainService.Workflow.Nodes.ActionDataV1
         public string ProjectShortKey { get; set; } = string.Empty;
 
         /// <summary>
-        /// Authentication type: "clientCredential" or "triggerNodeCookie"
+        /// Authentication type: "clientCredential" or "blocksAuthentication"
         /// </summary>
         public string AuthenticationType { get; set; } = string.Empty;
 
