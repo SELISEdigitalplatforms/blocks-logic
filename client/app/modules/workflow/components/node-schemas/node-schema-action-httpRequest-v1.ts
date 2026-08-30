@@ -1,5 +1,6 @@
 import { NodeGuideActionHttpRequestV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
+import { authClientService } from "../../services/iam.service";
 
 export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
   guide: NodeGuideActionHttpRequestV1,
@@ -66,11 +67,52 @@ export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
         key: "headers",
       },
       {
-        id: "useBlocksAuthorization",
-        type: "switch",
-        label: "Use Blocks Authorization",
-        info: "Attaches a Blocks-issued bearer token to the Authorization header when one is available for this run",
-        key: "useBlocksAuthorization",
+        id: "authenticationType",
+        type: "select",
+        label: "Authentication",
+        info: "Attaches a bearer token to the Authorization header. Blocks Authentication uses the run's delegated token; Client Credential exchanges an IAM credential.",
+        key: "authenticationType",
+        required: false,
+        options: [
+          { label: "Blocks Authentication", value: "blocksAuthentication" },
+          { label: "Client Credential", value: "clientCredential" },
+        ],
+      },
+      {
+        id: "clientCredential",
+        type: "select",
+        label: "Client Credential",
+        info: "Select a client credential for authenticating the outbound request",
+        key: "clientCredential_composite",
+        required: false,
+        searchable: true,
+        options: (_data, config) => {
+          return authClientService.clients
+            .getClientCredentials({ projectKey: config.projectKey })
+            .then((res) =>
+              res
+                .filter((item) => item.isActive)
+                .map((item) => ({
+                  value: `${item.itemId}:::${item.clientSecret}`,
+                  label: item.name,
+                })),
+            );
+        },
+        onChange: (value: unknown, _data: unknown, _config: unknown) => {
+          const parts = (value as string).split(":::");
+          const clientId = parts[0] || "";
+          const clientSecret = parts[1] || "";
+          return {
+            clientCredential_composite: value,
+            clientId,
+            clientSecret,
+          };
+        },
+        dependsOn: {
+          key: "authenticationType",
+          value: "clientCredential",
+          operator: "equals",
+        },
       },
       {
         id: "haveBody",
@@ -113,14 +155,21 @@ export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
       queryParameters: {},
       haveHeaders: false,
       headers: {},
-      useBlocksAuthorization: false,
+      authenticationType: "",
+      clientCredential_composite: "",
+      clientId: "",
+      clientSecret: "",
       haveBody: false,
       bodyContentType: "",
       body: "",
     },
     settings: {},
   },
-  transform: (node) => ({
-    ...node,
-  }),
+  transform: (node) => {
+    const parameters = { ...(node.parameters ?? {}) };
+    if (!parameters.authenticationType && parameters.useBlocksAuthorization === true) {
+      parameters.authenticationType = "blocksAuthentication";
+    }
+    return { ...node, parameters };
+  },
 };
