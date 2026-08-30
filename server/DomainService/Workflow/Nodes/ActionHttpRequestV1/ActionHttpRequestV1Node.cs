@@ -1,5 +1,7 @@
 
 using System.Text.Json;
+using DomainService.MagicLink.Models;
+using DomainService.MagicLink.Service;
 using DomainService.Workflow.Services;
 using DomainService.Workflow.Utils;
 using Microsoft.Extensions.Logging;
@@ -20,15 +22,18 @@ namespace DomainService.Workflow.Nodes.ActionHttpRequestV1
 
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IWorkflowAuthService _workflowAuthService;
+        private readonly IClientCredentialTokenService _clientCredentialTokenService;
         private readonly ILogger<ActionHttpRequestV1Node> _logger;
 
         public ActionHttpRequestV1Node(
             IHttpClientFactory httpClientFactory,
             IWorkflowAuthService workflowAuthService,
+            IClientCredentialTokenService clientCredentialTokenService,
             ILogger<ActionHttpRequestV1Node> logger)
         {
             _httpClientFactory = httpClientFactory;
             _workflowAuthService = workflowAuthService;
+            _clientCredentialTokenService = clientCredentialTokenService;
             _logger = logger;
         }
 
@@ -45,7 +50,7 @@ namespace DomainService.Workflow.Nodes.ActionHttpRequestV1
                     if (url == null)
                         return NodeExecutionResult.Failed(bodyContent);
 
-                    await ApplyBlocksAuthorizationAsync(parameters, headers);
+                    await ApplyAuthenticationAsync(parameters, headers, context.TenantId);
 
                     var responseBody = await SendHttpRequestAsync(httpMethod, url, headers, bodyContent, contentType);
                     BuildOutputItems(outputItems, responseBody, context, parameters, i);
@@ -59,29 +64,39 @@ namespace DomainService.Workflow.Nodes.ActionHttpRequestV1
         }
 
         /// <summary>
-        /// Adds a Blocks-delegated bearer token to the Authorization header when the node opted in
-        /// and no Authorization header was already set manually (manual value always wins). Best
-        /// effort: silently leaves headers untouched when no delegation grant is available.
+        /// Adds a bearer token when Authentication is Blocks Authentication or Client Credential
+        /// and no Authorization header was already set manually (manual value always wins).
+        /// Best effort: silently leaves headers untouched when no token is available.
         /// </summary>
-        private async Task ApplyBlocksAuthorizationAsync(ActionHttpRequestV1Parameters parameters, Dictionary<string, string> headers)
+        private async Task ApplyAuthenticationAsync(
+            ActionHttpRequestV1Parameters parameters,
+            Dictionary<string, string> headers,
+            string tenantId)
         {
-            var context = BlocksContext.GetContext();
-            if (!parameters.UseBlocksAuthorization) return;
-            if (headers.Keys.Any(key => string.Equals(key, AuthorizationHeaderName, StringComparison.OrdinalIgnoreCase))) return;
+            if (headers.Keys.Any(key => string.Equals(key, AuthorizationHeaderName, StringComparison.OrdinalIgnoreCase)))
+                return;
 
-            var token = await _workflowAuthService.CreateBlocksAuthorizationTokenAsync();
-            if (string.IsNullOrWhiteSpace(token))
+            var mode = parameters.AuthenticationType;
+            if (string.IsNullOrWhiteSpace(mode) && parameters.UseBlocksAuthorization)
+                mode = "blocksAuthentication";
+
+            string? token = null;
+            if (string.Equals(mode, "blocksAuthentication", StringComparison.OrdinalIgnoreCase))
             {
-                if(context != null && !string.IsNullOrWhiteSpace(context.OAuthToken))
-                {
-                    token = context.OAuthToken;
-                }
-                else
-                {
-                    return;
-                }
+                token = await _workflowAuthService.CreateBlocksAuthorizationTokenAsync();
+                if (string.IsNullOrWhiteSpace(token))
+                    token = BlocksContext.GetContext()?.OAuthToken;
+            }
+            else if (string.Equals(mode, "clientCredential", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(parameters.ClientId)
+                && !string.IsNullOrWhiteSpace(parameters.ClientSecret))
+            {
+                token = await _clientCredentialTokenService.GetTokenAsync(
+                    new ClientCredential { ItemId = parameters.ClientId, ClientSecret = parameters.ClientSecret },
+                    tenantId);
             }
 
+            if (string.IsNullOrWhiteSpace(token)) return;
             headers[AuthorizationHeaderName] = $"Bearer {token}";
         }
 
