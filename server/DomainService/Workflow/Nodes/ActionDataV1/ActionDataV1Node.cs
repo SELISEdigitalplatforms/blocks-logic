@@ -1,6 +1,7 @@
 using Blocks.Genesis;
 using DomainService.MagicLink.Models;
 using DomainService.MagicLink.Service;
+using DomainService.Workflow.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
@@ -26,17 +27,20 @@ namespace DomainService.Workflow.Nodes.ActionDataV1
 
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IClientCredentialTokenService _clientCredentialTokenService;
+        private readonly IWorkflowAuthService _workflowAuthService;
         private readonly IConfiguration _configuration;
         private readonly ILogger<ActionDataV1Node> _logger;
 
         public ActionDataV1Node(
             IHttpClientFactory httpClientFactory,
             IClientCredentialTokenService clientCredentialTokenService,
+            IWorkflowAuthService workflowAuthService,
             IConfiguration configuration,
             ILogger<ActionDataV1Node> logger)
         {
             _httpClientFactory = httpClientFactory;
             _clientCredentialTokenService = clientCredentialTokenService;
+            _workflowAuthService = workflowAuthService;
             _configuration = configuration;
             _logger = logger;
         }
@@ -350,8 +354,8 @@ namespace DomainService.Workflow.Nodes.ActionDataV1
         #region Helpers
 
         /// <summary>
-        /// Sends a GraphQL request to UDS gateway with optional client credential authentication.
-        /// Shared by all action types (Get/Insert/Update/Delete).
+        /// Sends a GraphQL request to UDS gateway with optional authentication
+        /// (client credentials or Blocks delegated token). Shared by all action types.
         /// </summary>
         private async Task<HttpResponseMessage> SendGraphQLRequestAsync(
             ActionDataV1Parameters parameters, string graphqlQuery)
@@ -360,9 +364,13 @@ namespace DomainService.Workflow.Nodes.ActionDataV1
             var requestUrl = $"{parameters.ApiBaseUrl}/api/gateway";
             var request = new HttpRequestMessage(HttpMethod.Post, requestUrl);
             // Authenticate based on selected authentication type
-            if (parameters.AuthenticationType == "triggerNodeCookie")
+            if (string.Equals(parameters.AuthenticationType, "blocksAuthentication", StringComparison.OrdinalIgnoreCase))
             {
-                var blocksContext = BlocksContext.GetContext();
+                var token = await _workflowAuthService.CreateBlocksAuthorizationTokenAsync();
+                if (string.IsNullOrWhiteSpace(token))
+                    token = BlocksContext.GetContext()?.OAuthToken;
+                if (!string.IsNullOrWhiteSpace(token))
+                    request.Headers.Add("Authorization", $"Bearer {token}");
             }
             else if (parameters.AuthenticationType == "clientCredential"
                 && !string.IsNullOrWhiteSpace(parameters.ClientId) && !string.IsNullOrWhiteSpace(parameters.ClientSecret))
