@@ -7,11 +7,16 @@ export async function waitForRowsLoaded(page: Page) {
     .toBeHidden({ timeout: 30_000 })
     .catch(() => null)
   await expect(async () => {
+    const emptyHeading = page.getByRole("heading", { name: "Create your first workflow" })
+    const isEmpty = await emptyHeading.isVisible({ timeout: 500 }).catch(() => false)
+    if (isEmpty) return
+
     const rows = page.getByRole("row")
     const count = await rows.count()
     if (count <= 1) {
-      await expect(page.getByText("No results found.")).toBeVisible({ timeout: 500 })
-      return
+      // No data rows yet; let toPass retry on the next tick instead of
+      // asserting against a literal that this page never renders.
+      throw new Error("no data rows yet")
     }
     await expect(rows.nth(1)).toContainText(/[^\s]/, { timeout: 500 })
   }).toPass({ timeout: 30_000 })
@@ -21,7 +26,8 @@ export async function rowHasWorkflow(row: Locator): Promise<boolean> {
   const isVisible = await row.isVisible().catch(() => false)
   if (!isVisible) return false
   const isEmptyPlaceholder = await row
-    .getByText("No results found.")
+    .page()
+    .getByRole("heading", { name: "Create your first workflow" })
     .isVisible()
     .catch(() => false)
   if (isEmptyPlaceholder) return false
@@ -70,14 +76,24 @@ export async function ensureWorkflowExists(page: Page) {
   await waitForRowsLoaded(page)
   if (
     !(await page
-      .getByText("No results found.")
+      .getByRole("heading", { name: "Create your first workflow" })
       .isVisible()
       .catch(() => false))
   ) {
     return
   }
 
-  await resilientClick(page.getByRole("button", { name: "Add Workflow" }))
+  // The empty state renders an <AddWorkflow label="Create workflow" /> button
+  // (see workflow-list.tsx WorkflowEmptyState). The toolbar's "Add Workflow"
+  // button only appears once at least one workflow exists. Click whichever
+  // button is currently rendered, fall back to the other one if needed.
+  const emptyStateButton = page.getByRole("button", { name: "Create workflow" })
+  const toolbarButton = page.getByRole("button", { name: "Add Workflow" })
+  if (await emptyStateButton.isVisible().catch(() => false)) {
+    await resilientClick(emptyStateButton)
+  } else {
+    await resilientClick(toolbarButton)
+  }
   await expect(page.getByRole("heading", { name: "Create workflow" })).toBeVisible()
   await page.getByLabel("Workflow Name").fill(`e2e-shared-${Date.now()}`)
   await page.getByRole("button", { name: "Create" }).click()
@@ -142,7 +158,9 @@ export async function openFirstWorkflow(page: Page) {
   await page.reload({ waitUntil: "domcontentloaded" })
   await waitForRowsLoaded(page)
 
-  const emptyMessage = page.getByText("No results found.").first()
+  const emptyMessage = page
+    .getByRole("heading", { name: "Create your first workflow" })
+    .first()
   const firstRow = page.getByRole("row").nth(1)
 
   await Promise.race([
@@ -151,7 +169,14 @@ export async function openFirstWorkflow(page: Page) {
   ])
 
   if (!(await pollRowHasWorkflow(firstRow))) {
-    await resilientClick(page.getByRole("button", { name: "Add Workflow" }))
+    // Empty state shows "Create workflow"; populated state shows "Add Workflow"
+    const emptyStateButton = page.getByRole("button", { name: "Create workflow" })
+    const toolbarButton = page.getByRole("button", { name: "Add Workflow" })
+    if (await emptyStateButton.isVisible().catch(() => false)) {
+      await resilientClick(emptyStateButton)
+    } else {
+      await resilientClick(toolbarButton)
+    }
     await page.getByLabel("Workflow Name").fill(`Order Processing ${Date.now()}`)
     await page.getByRole("button", { name: "Create" }).click()
     await expect(page).toHaveURL(/\/workflow\/[^/]+$/, { timeout: 15_000 })
