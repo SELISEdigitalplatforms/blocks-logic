@@ -45,9 +45,9 @@ export const SelectField = ({
       disabled={(field.disabled as boolean) || isLoading}
     >
       <SelectTrigger id={field.id}>
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden [&>span]:truncate">
           <SelectValue placeholder={field.placeholder || "Select an option"} />
-          {isLoading && <Loader2 className="h-4 w-4 animate-spin opacity-50" />}
+          {isLoading && <Loader2 className="h-4 w-4 shrink-0 animate-spin opacity-50" />}
         </div>
       </SelectTrigger>
       <SelectContent className="max-h-60">
