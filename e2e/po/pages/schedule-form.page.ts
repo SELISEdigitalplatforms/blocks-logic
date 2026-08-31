@@ -9,7 +9,7 @@ import { e2eBaseUrl } from "../../support/env";
  * `/app/:itemId/schedule/:id/edit`  — heading "Edit Schedule", submit "Save Changes"
  *
  * Field placeholders (the only stable locator across the Radix <Input>s):
- *   - Job Name         → "e.g. nightly-user-sync"
+ *   - Name         → "Schedule name"
  *   - Description      → "Brief summary of the scheduled task" (Textarea)
  *   - Cron Expression  → "0 0 * * *"
  *   - Webhook URL      → "https://api.example.com/webhook"
@@ -66,7 +66,7 @@ export class ScheduleFormPage {
   // ---- Field inputs (by stable placeholder) --------------------------------
 
   get nameInput(): Locator {
-    return this.page.getByPlaceholder("e.g. nightly-user-sync").first();
+    return this.page.getByPlaceholder("Schedule name").first();
   }
 
   get descriptionInput(): Locator {
