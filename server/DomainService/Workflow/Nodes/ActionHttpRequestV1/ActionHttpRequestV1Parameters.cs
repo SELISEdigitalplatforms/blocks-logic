@@ -12,9 +12,24 @@ namespace DomainService.Workflow.Nodes.ActionHttpRequestV1
         public Dictionary<string, string> Headers { get; set; } = new();
 
         /// <summary>
-        /// When <c>true</c>, a Blocks-delegated bearer token is added to the Authorization header
-        /// (best-effort; omitted when no delegation grant is available). A manually-set Authorization
-        /// header always takes precedence over this.
+        /// Authentication mode: <c>blocksAuthentication</c> (delegated token) or
+        /// <c>clientCredential</c>. Empty means do not add an Authorization header.
+        /// </summary>
+        public string AuthenticationType { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Client ID when <see cref="AuthenticationType"/> is <c>clientCredential</c>.
+        /// </summary>
+        public string ClientId { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Client secret when <see cref="AuthenticationType"/> is <c>clientCredential</c>.
+        /// </summary>
+        public string ClientSecret { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Legacy switch from saved workflows. Treated as <c>blocksAuthentication</c>
+        /// when <see cref="AuthenticationType"/> is empty.
         /// </summary>
         public bool UseBlocksAuthorization { get; set; } = false;
 

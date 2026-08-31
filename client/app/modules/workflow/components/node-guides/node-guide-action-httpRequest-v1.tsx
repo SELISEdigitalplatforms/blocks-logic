@@ -7,7 +7,8 @@ export const NodeGuideActionHttpRequestV1 = () => (
     steps={[
       "Choose the request Method and enter the target URL. Expressions in the URL are resolved for each input item.",
       "Turn on Send Query Parameters if the endpoint expects URL query values, then add the key-value pairs. Keys and values can use expressions.",
-      "Turn on Send Headers for authentication, content negotiation, or other request headers. Header names and values can use expressions.",
+      "Turn on Send Headers for authentication, content negotiation, or other request headers. Header names and values can use expressions. A manually set Authorization header is not overwritten.",
+      "Optionally pick Authentication: Blocks Authentication reuses the run's delegated token from an earlier Blocks-authorized trigger, or Client Credential to exchange an IAM credential.",
       "Turn on Send Body for methods that need a JSON payload, choose JSON, and enter a valid body.",
       "Test the request and confirm the response shape before mapping it into later nodes.",
     ]}
