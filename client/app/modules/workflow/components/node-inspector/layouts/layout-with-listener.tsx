@@ -14,29 +14,31 @@ type LayoutWithListenerProps = {
 };
 
 export const LayoutWithListener = ({ schema, guide }: LayoutWithListenerProps) => {
-  const { selectedNode, updateNode, isListening, listeningNodeId, editorMode } = useWorkflow();
-  const [activeTab, setActiveTab] = useState("parameters");
+  const { selectedNode, updateNode, editorMode } = useWorkflow();
+  const [activeTab, setActiveTab] = useState<"parameters" | "settings">("parameters");
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   if (!selectedNode || !schema) return null;
 
-  const isThisNodeListening = isListening && listeningNodeId === selectedNode.id;
-
   return (
-    <div className="relative flex h-full flex-col">
+    <div className="flex h-full flex-col">
       <NodeInspectorHeader
         hasGuide={Boolean(guide)}
         isGuideOpen={isGuideOpen}
         onToggleGuide={() => setIsGuideOpen((value) => !value)}
       />
-      <div className="mt-6 flex flex-1 gap-6">
-        <div className="w-5/12">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full">
-            <TabsList className="mb-5">
+      <div className="mt-6 flex flex-1 gap-6 overflow-hidden">
+        <div className="flex min-w-0 w-5/12 flex-col overflow-hidden">
+          <Tabs
+            value={activeTab}
+            onValueChange={(value) => setActiveTab(value as "parameters" | "settings")}
+            className="flex flex-1 flex-col overflow-hidden"
+          >
+            <TabsList className="mb-4 w-fit shrink-0">
               <TabsTrigger value="parameters">Parameters</TabsTrigger>
               <TabsTrigger value="settings">Settings</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="parameters">
+            <TabsContent value="parameters" className="flex-1 overflow-y-auto p-1 pr-6">
               <FormBuilder
                 fields={schema.parameters}
                 data={selectedNode.parameters || {}}
@@ -46,7 +48,7 @@ export const LayoutWithListener = ({ schema, guide }: LayoutWithListenerProps) =
               />
             </TabsContent>
 
-            <TabsContent value="settings" className="m-0 p-6">
+            <TabsContent value="settings" className="flex-1 overflow-y-auto pr-2">
               <FormBuilder
                 fields={schema.settings}
                 data={selectedNode.settings || {}}
@@ -62,10 +64,10 @@ export const LayoutWithListener = ({ schema, guide }: LayoutWithListenerProps) =
           {guide && isGuideOpen ? (
             <NodeGuidePanel guide={guide} onClose={() => setIsGuideOpen(false)} />
           ) : (
-            <div className="grid h-full min-w-0 grid-rows-3 gap-4 overflow-hidden border p-3">
+            <div className="grid h-full min-w-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-4 overflow-hidden rounded border p-3">
               {editorMode === "editor" && <ListenEventPanel />}
               <div
-                className={`row-span-2 min-w-0 w-full overflow-hidden ${editorMode !== "editor" && "row-span-3"}`}
+                className={`min-w-0 w-full overflow-hidden ${editorMode === "editor" ? "row-span-2" : "row-span-3"}`}
               >
                 <OutputPanel />
               </div>
