@@ -127,11 +127,42 @@ describe("http request v1", () => {
     });
   });
 
-  it("exposes a Use Blocks Authorization switch defaulting to false", () => {
-    const useBlocksAuthorizationField = field(NodeSchemaActionHttpRequestV1, "useBlocksAuthorization");
-    expect(useBlocksAuthorizationField).toBeDefined();
-    expect(useBlocksAuthorizationField.type).toBe("switch");
-    expect(NodeSchemaActionHttpRequestV1.defaults?.parameters?.useBlocksAuthorization).toBe(false);
+  it("offers Blocks Authentication and Client Credential, defaulting to no extra auth", () => {
+    const authType = field(NodeSchemaActionHttpRequestV1, "authenticationType");
+    const values = (authType.options as { value: string }[]).map((option) => option.value);
+    expect(values).toEqual(
+      expect.arrayContaining(["blocksAuthentication", "clientCredential"]),
+    );
+    expect(NodeSchemaActionHttpRequestV1.defaults?.parameters?.authenticationType).toBe("");
+    expect(field(NodeSchemaActionHttpRequestV1, "clientCredential_composite").dependsOn).toEqual({
+      key: "authenticationType",
+      value: "clientCredential",
+      operator: "equals",
+    });
+  });
+
+  it("transform maps legacy useBlocksAuthorization true to blocksAuthentication", () => {
+    const node = { id: "n1", parameters: { useBlocksAuthorization: true } } as never;
+    const out = NodeSchemaActionHttpRequestV1.transform?.(node) as AnyRec;
+    expect((out.parameters as AnyRec).authenticationType).toBe("blocksAuthentication");
+  });
+
+  it("transform does not overwrite an existing authenticationType", () => {
+    const node = {
+      id: "n1",
+      parameters: { authenticationType: "clientCredential", useBlocksAuthorization: true },
+    } as never;
+    const out = NodeSchemaActionHttpRequestV1.transform?.(node) as AnyRec;
+    expect((out.parameters as AnyRec).authenticationType).toBe("clientCredential");
+  });
+
+  it("client credential onChange splits id and secret", () => {
+    const onChange = field(NodeSchemaActionHttpRequestV1, "clientCredential_composite").onChange;
+    expect(onChange("cc1:::s1", {}, {})).toEqual({
+      clientCredential_composite: "cc1:::s1",
+      clientId: "cc1",
+      clientSecret: "s1",
+    });
   });
 });
 

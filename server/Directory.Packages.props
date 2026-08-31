@@ -25,7 +25,7 @@
     <PackageVersion Include="Grpc.AspNetCore" Version="2.80.0" />
     <PackageVersion Include="Azure.Identity" Version="1.21.0" />
     <PackageVersion Include="Azure.ResourceManager.ServiceBus" Version="1.1.0" />
-    <PackageVersion Include="SeliseBlocks.StorageDriver.OS" Version="4.0.1" />
+    <PackageVersion Include="SeliseBlocks.StorageDriver.OS" Version="4.0.2" />
     <PackageVersion Include="SSH.NET" Version="2024.2.0" />
     <PackageVersion Include="AWSSDK.S3" Version="3.7.410.6" />
     <PackageVersion Include="Azure.Storage.Blobs" Version="12.22.2" />
