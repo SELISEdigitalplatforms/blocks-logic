@@ -5,14 +5,7 @@ import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
 import Editor, { type OnMount } from "@monaco-editor/react";
-import {
-  CalendarClock,
-  Plus,
-  Trash2,
-  X,
-  Loader2,
-  Save,
-} from "lucide-react";
+import { CalendarClock, Plus, Trash2, X, Loader2, Save } from "lucide-react";
 import { useTheme } from "@seliseblocks/genesis-os/hooks";
 import {
   Form,
@@ -163,9 +156,7 @@ export const ScheduleForm = ({
         startDate: schedule.startDate
           ? format(parseDateString(schedule.startDate), "yyyy-MM-dd")
           : "",
-        endDate: schedule.endDate
-          ? format(parseDateString(schedule.endDate), "yyyy-MM-dd")
-          : "",
+        endDate: schedule.endDate ? format(parseDateString(schedule.endDate), "yyyy-MM-dd") : "",
         isActive: schedule.isActive,
       });
     } else if (!isEdit) {
@@ -261,11 +252,7 @@ export const ScheduleForm = ({
                 render={({ field }) => (
                   <FormItem className="flex items-center space-y-0">
                     <FormControl>
-                      <Switch
-                        size="md"
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
+                      <Switch size="md" checked={field.value} onCheckedChange={field.onChange} />
                     </FormControl>
                   </FormItem>
                 )}
@@ -274,12 +261,7 @@ export const ScheduleForm = ({
             </div>
 
             {onCancel && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onCancel}
-                disabled={isPending}
-              >
+              <Button type="button" variant="outline" onClick={onCancel} disabled={isPending}>
                 <X className="h-4 w-4 mr-2" />
                 Cancel
               </Button>
@@ -309,8 +291,6 @@ export const ScheduleForm = ({
         {/* Card Body */}
         <Card className="w-full border shadow-sm">
           <CardContent className="p-2">
-
-
             {/* 2-Column Form Body */}
             <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
               {/* LEFT COLUMN: GENERAL + TIMING & RECURRENCE */}
@@ -326,13 +306,9 @@ export const ScheduleForm = ({
                     name="name"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Job Name</FormLabel>
+                        <FormLabel>Name</FormLabel>
                         <FormControl>
-                          <Input
-                            placeholder="e.g. nightly-user-sync"
-                            maxLength={100}
-                            {...field}
-                          />
+                          <Input placeholder="Schedule name" maxLength={100} {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -372,11 +348,7 @@ export const ScheduleForm = ({
                       <FormItem>
                         <FormLabel>Cron Expression</FormLabel>
                         <FormControl>
-                          <Input
-                            placeholder="0 0 * * *"
-                            className="font-mono"
-                            {...field}
-                          />
+                          <Input placeholder="0 0 * * *" className="font-mono" {...field} />
                         </FormControl>
                         <div className="flex flex-wrap gap-1.5 pt-1">
                           {CRON_PRESETS.map((preset) => (
@@ -497,11 +469,7 @@ export const ScheduleForm = ({
                       <FormItem>
                         <FormLabel>Signing Secret</FormLabel>
                         <FormControl>
-                          <Input
-                            type="password"
-                            placeholder="Enter secret"
-                            {...field}
-                          />
+                          <Input type="password" placeholder="Enter secret" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -616,4 +584,3 @@ export const ScheduleForm = ({
     </Form>
   );
 };
-

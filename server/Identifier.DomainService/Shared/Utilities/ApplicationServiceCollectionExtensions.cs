@@ -8,6 +8,7 @@ using DomainService.People;
 using DomainService.Projects;
 using DomainService.Storage;
 using FluentValidation;
+using Mail.DomainService.Shared.Utilities;
 using Microsoft.Extensions.DependencyInjection;
 using Storage.DomainService.Storage;
 using Storage.DomainService.Storage.Validators;
@@ -32,7 +33,7 @@ namespace DomainService.Shared
             services.AddTransient<AwsS3CompatibleStorageService>();
 
             services.RegisterBlocksStorageServices();
-            services.RegisterBlocksMailService();
+            services.RegisterAllMailApplicationServices();
 
             // Captcha
             //services.AddTransient<IValidator<CreateCaptchaRequest>, CreateCaptchaCommandValidator>();

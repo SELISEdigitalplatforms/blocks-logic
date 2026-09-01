@@ -1,6 +1,7 @@
-﻿using Blocks.Extension.DependencyInjection;
+using Blocks.Extension.DependencyInjection;
 using Blocks.Genesis;
 using FluentValidation;
+using Mail.DomainService.Shared.Utilities;
 using Mfa.DomainService.Configuration;
 using Mfa.DomainService.OTP.Services;
 using Mfa.DomainService.Services;
@@ -29,7 +30,7 @@ namespace Mfa.DomainService.Utilities
             serviceCollection.AddTransient<IValidator<VerifyOtpRequest>, VerifyOtpRequestValidator>();
             #endregion
 
-            serviceCollection.RegisterBlocksMailService();
+            serviceCollection.RegisterAllMailApplicationServices();
         }
     }
 }

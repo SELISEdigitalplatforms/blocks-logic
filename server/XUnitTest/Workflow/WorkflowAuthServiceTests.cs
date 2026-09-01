@@ -58,6 +58,42 @@ namespace XUnitTest.Workflow
             EvaluateAuthorization(principal, config).Should().BeFalse();
         }
 
+        [Fact]
+        public void EvaluateAuthorization_EmptyOrganizationId_SkipsOrgCheck()
+        {
+            var principal = PrincipalWith(orgId: "org-a");
+            var config = new AuthorizationConfig("", null, null, AuthorizationMode.RolesOnly);
+
+            EvaluateAuthorization(principal, config).Should().BeTrue();
+        }
+
+        [Fact]
+        public void EvaluateAuthorization_EmptyOrganizationId_AllowsCallerWithNoOrgClaim()
+        {
+            var principal = new ClaimsPrincipal(new ClaimsIdentity());
+            var config = new AuthorizationConfig("", null, null, AuthorizationMode.RolesOnly);
+
+            EvaluateAuthorization(principal, config).Should().BeTrue();
+        }
+
+        [Fact]
+        public void EvaluateAuthorization_DefaultOrganization_AcceptsEmptyOrgClaim()
+        {
+            var principal = new ClaimsPrincipal(new ClaimsIdentity());
+            var config = new AuthorizationConfig("default", null, null, AuthorizationMode.RolesOnly);
+
+            EvaluateAuthorization(principal, config).Should().BeTrue();
+        }
+
+        [Fact]
+        public void EvaluateAuthorization_DefaultOrganization_RejectsOtherOrg()
+        {
+            var principal = PrincipalWith(orgId: "org-a");
+            var config = new AuthorizationConfig("default", null, null, AuthorizationMode.RolesOnly);
+
+            EvaluateAuthorization(principal, config).Should().BeFalse();
+        }
+
         [Theory]
         [InlineData("or", new[] { "editor" }, true)]
         [InlineData("or", new[] { "viewer" }, false)]
