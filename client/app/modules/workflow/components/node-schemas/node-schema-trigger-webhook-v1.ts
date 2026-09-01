@@ -104,9 +104,11 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         dependsOn: AUTHORIZATION_DEPENDENCY,
         options: () =>
           iamService.getOrganizations({ page: 0, pageSize: 50 }).then((response) => [
+            { label: "None", value: "" },
+            { label: "Default", value: "default" },
             ...response.organizations.map((org) => ({
               label: org.name,
-              value: org.organizationId,
+              value: org.itemId,
             })),
           ]),
       },
@@ -204,7 +206,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
       authType: "none",
       httpResponseMode: "immediate",
       httpResponseData: "all",
-      organizationId: "default",
+      organizationId: "",
       roles: { operator: "all", values: [] },
       permissions: { operator: "any", values: [] },
       authorizationMode: "",

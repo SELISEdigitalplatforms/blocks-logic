@@ -23,7 +23,6 @@ export interface IOrganization {
   name: string;
   description?: string;
   [key: string]: unknown;
-  organizationId:string;
 }
 
 export interface IRole {

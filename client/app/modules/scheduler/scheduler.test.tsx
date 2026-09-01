@@ -10,13 +10,7 @@ import { scheduleService } from "./services/schedule.service";
 import { ISchedule, ScheduleKind, ScheduleTriggerType } from "./types/schedule.service.type";
 
 vi.mock("@monaco-editor/react", () => ({
-  default: ({
-    value,
-    onChange,
-  }: {
-    value?: string;
-    onChange?: (val: string) => void;
-  }) => (
+  default: ({ value, onChange }: { value?: string; onChange?: (val: string) => void }) => (
     <textarea
       data-testid="mock-monaco-editor"
       value={value || ""}
@@ -67,8 +61,10 @@ describe("Scheduler Feature", () => {
       );
 
       expect(screen.getByRole("heading", { name: "Schedule Job" })).toBeTruthy();
-      expect((screen.getByPlaceholderText("e.g. nightly-user-sync") as HTMLInputElement).value).toBe("");
-      expect((screen.getByPlaceholderText("https://api.example.com/webhook") as HTMLInputElement).value).toBe("");
+      expect((screen.getByPlaceholderText("Schedule name") as HTMLInputElement).value).toBe("");
+      expect(
+        (screen.getByPlaceholderText("https://api.example.com/webhook") as HTMLInputElement).value,
+      ).toBe("");
       expect(screen.getByRole("button", { name: /save job/i })).toBeTruthy();
     });
 
@@ -80,13 +76,16 @@ describe("Scheduler Feature", () => {
       );
 
       expect(screen.getByRole("heading", { name: "Edit Schedule" })).toBeTruthy();
-      expect((screen.getByPlaceholderText("e.g. nightly-user-sync") as HTMLInputElement).value).toBe("Daily Report");
-      expect((screen.getByPlaceholderText("Brief summary of the scheduled task") as HTMLTextAreaElement).value).toBe(
-        "Runs every day at 9 AM",
+      expect((screen.getByPlaceholderText("Schedule name") as HTMLInputElement).value).toBe(
+        "Daily Report",
       );
-      expect((screen.getByPlaceholderText("https://api.example.com/webhook") as HTMLInputElement).value).toBe(
-        "https://example.com/api/webhook",
-      );
+      expect(
+        (screen.getByPlaceholderText("Brief summary of the scheduled task") as HTMLTextAreaElement)
+          .value,
+      ).toBe("Runs every day at 9 AM");
+      expect(
+        (screen.getByPlaceholderText("https://api.example.com/webhook") as HTMLInputElement).value,
+      ).toBe("https://example.com/api/webhook");
       expect(screen.getByDisplayValue("0 9 * * *")).toBeTruthy();
       expect(screen.getByRole("button", { name: /save job/i })).toBeTruthy();
     });
@@ -169,9 +168,7 @@ describe("Scheduler Feature", () => {
       await user.click(executionsTab);
 
       expect(screen.getByText("Execution History Coming Soon")).toBeTruthy();
-      expect(
-        screen.getByText(/detailed execution logs, delivery attempts/i),
-      ).toBeTruthy();
+      expect(screen.getByText(/detailed execution logs, delivery attempts/i)).toBeTruthy();
     });
 
     it("opens delete confirmation modal when Delete button is clicked", async () => {
@@ -231,4 +228,3 @@ describe("Scheduler Feature", () => {
     });
   });
 });
-

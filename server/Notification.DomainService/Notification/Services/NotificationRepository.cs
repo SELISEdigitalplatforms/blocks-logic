@@ -1,4 +1,4 @@
-﻿using Blocks.Genesis;
+using Blocks.Genesis;
 using DomainService.Shared;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
@@ -189,56 +189,56 @@ namespace DomainService.Notification
             await _clientDb.GetCollection<OfflineNotification>(_notificationCollection).UpdateOneAsync(filter, updateDefinition);
         }
 
-        public async Task<GetNotificationsResponse> GetNotificationsAsync(GetNotificationsRequest request)
-        {
-            var builder = Builders<OfflineNotification>.Filter;
-            var filter = FilterDefinition<OfflineNotification>.Empty;
-            var userId = BlocksContext.GetContext()?.UserId;
+        //public async Task<GetNotificationsResponse> GetNotificationsAsync(GetNotificationsRequest request)
+        //{
+        //    var builder = Builders<OfflineNotification>.Filter;
+        //    var filter = FilterDefinition<OfflineNotification>.Empty;
+        //    var userId = BlocksContext.GetContext()?.UserId;
 
-            if (request.IsUnreadOnly)
-                filter = builder.Where(n => !n.ReadByUserIds.Contains(userId));
+        //    if (request.IsUnreadOnly)
+        //        filter = builder.Where(n => !n.ReadByUserIds.Contains(userId));
 
-            filter = filter & builder.Where(n => !string.IsNullOrWhiteSpace(n.Payload.UserId) && n.Payload.UserId == userId);
+        //    filter = filter & builder.Where(n => !string.IsNullOrWhiteSpace(n.Payload.UserId) && n.Payload.UserId == userId);
 
-            var unreadFilter = filter & builder.Where(n => !n.ReadByUserIds.Contains(userId));
-            var skip = request.PageSize * request.Page;
+        //    var unreadFilter = filter & builder.Where(n => !n.ReadByUserIds.Contains(userId));
+        //    var skip = request.PageSize * request.Page;
 
-            // Each source is asked for skip + limit rows from the top so that the merged, re-sorted
-            // sequence still contains every candidate for the requested page.
-            var options = new FindOptions<OfflineNotification>
-            {
-                Skip = 0,
-                Limit = skip + request.PageSize,
-                Sort = Builders<OfflineNotification>.Sort.Descending(n => n.CreatedTime)
-            };
+        //    // Each source is asked for skip + limit rows from the top so that the merged, re-sorted
+        //    // sequence still contains every candidate for the requested page.
+        //    var options = new FindOptions<OfflineNotification>
+        //    {
+        //        Skip = 0,
+        //        Limit = skip + request.PageSize,
+        //        Sort = Builders<OfflineNotification>.Sort.Descending(n => n.CreatedTime)
+        //    };
 
-            var sources = await Task.WhenAll(NotificationCollections()
-                .Select(collection => ReadNotificationPageAsync(collection, filter, unreadFilter, options)));
+        //    var sources = await Task.WhenAll(NotificationCollections()
+        //        .Select(collection => ReadNotificationPageAsync(collection, filter, unreadFilter, options)));
 
-            var notifications = sources
-                .SelectMany(source => source.Items)
-                .GroupBy(n => n.Id)
-                .Select(duplicates => duplicates.First())
-                .OrderByDescending(n => n.CreatedTime)
-                .Skip(skip)
-                .Take(request.PageSize)
-                .ToList();
+        //    var notifications = sources
+        //        .SelectMany(source => source.Items)
+        //        .GroupBy(n => n.Id)
+        //        .Select(duplicates => duplicates.First())
+        //        .OrderByDescending(n => n.CreatedTime)
+        //        .Skip(skip)
+        //        .Take(request.PageSize)
+        //        .ToList();
 
-            if (!request.IsUnreadOnly)
-            {
-                foreach (var notification in notifications)
-                {
-                    notification.IsRead = notification.ReadByUserIds != null && notification.ReadByUserIds.Contains(userId);
-                }
-            }
+        //    if (!request.IsUnreadOnly)
+        //    {
+        //        foreach (var notification in notifications)
+        //        {
+        //            notification.IsRead = notification.ReadByUserIds != null && notification.ReadByUserIds.Contains(userId);
+        //        }
+        //    }
 
-            return new GetNotificationsResponse
-            {
-                Notifications = notifications,
-                UnReadNotificationsCount = sources.Sum(source => source.Unread),
-                TotalNotificationsCount = sources.Sum(source => source.Total)
-            };
-        }
+        //    return new GetNotificationsResponse
+        //    {
+        //        Notifications = notifications,
+        //        UnReadNotificationsCount = sources.Sum(source => source.Unread),
+        //        TotalNotificationsCount = sources.Sum(source => source.Total)
+        //    };
+        //}
 
         private static async Task<(List<OfflineNotification> Items, long Unread, long Total)> ReadNotificationPageAsync(
             IMongoCollection<OfflineNotification> collection,
@@ -251,6 +251,44 @@ namespace DomainService.Notification
             var total = await collection.CountDocumentsAsync(filter);
 
             return (items, unread, total);
+        }
+        public async Task<GetNotificationsResponse> GetNotificationsAsync ( GetNotificationsRequest request )
+        {
+            var collection = _clientDb.GetCollection<OfflineNotification>("OfflineNotifications");
+            var builder = Builders<OfflineNotification>.Filter;
+            var filter = FilterDefinition<OfflineNotification>.Empty;
+            var userId = BlocksContext.GetContext()?.UserId;
+
+            if (request.IsUnreadOnly)
+                filter = builder.Where(n => !n.ReadByUserIds.Contains(userId));
+
+            filter = filter & builder.Where(n => !string.IsNullOrWhiteSpace(n.Payload.UserId) && n.Payload.UserId == userId);
+
+            var options = new FindOptions<OfflineNotification>
+            {
+                Skip = request.PageSize * request.Page,
+                Limit = request.PageSize,
+                Sort = Builders<OfflineNotification>.Sort.Descending(n => n.CreatedTime)
+            };
+
+            var notifications = await ( await collection.FindAsync(filter, options) ).ToListAsync();
+            var unReadNotificationsCount = await collection.CountDocumentsAsync(filter & builder.Where(n => !n.ReadByUserIds.Contains(userId)));
+            var totalNotificationCount = await collection.CountDocumentsAsync(filter);
+
+            if (!request.IsUnreadOnly)
+            {
+                foreach (var notification in notifications)
+                {
+                    notification.IsRead = notification.ReadByUserIds != null && notification.ReadByUserIds.Contains(userId);
+                }
+            }
+
+            return new GetNotificationsResponse
+            {
+                Notifications = notifications,
+                UnReadNotificationsCount = unReadNotificationsCount,
+                TotalNotificationsCount = totalNotificationCount
+            };
         }
     }
 }
