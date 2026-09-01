@@ -161,12 +161,20 @@ namespace DomainService.Workflow.Services
         /// </summary>
         public static bool EvaluateAuthorization(ClaimsPrincipal principal, AuthorizationConfig config)
         {
-            var callerOrg = GetOrganization(principal);
-
-            // Organization: "default" sentinel = caller's own org (from JWT) is always accepted.
-            if (!string.Equals(callerOrg, config.OrganizationId, StringComparison.Ordinal))
+            // Empty OrganizationId ("None" in the UI) = no organization restriction.
+            if (!string.IsNullOrEmpty(config.OrganizationId))
             {
-                return false;
+                var callerOrg = GetOrganization(principal);
+                // Missing/empty org claim on the token = caller's org is the tenant's default org.
+                if (string.IsNullOrEmpty(callerOrg))
+                {
+                    callerOrg = "default";
+                }
+
+                if (!string.Equals(callerOrg, config.OrganizationId, StringComparison.Ordinal))
+                {
+                    return false;
+                }
             }
 
             // Mode decides which rule(s) the caller must satisfy.

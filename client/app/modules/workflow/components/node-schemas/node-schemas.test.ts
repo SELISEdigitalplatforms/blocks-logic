@@ -401,18 +401,24 @@ describe("webhook trigger v1", () => {
     );
   });
 
-  it.skip("organization options prepend the default (from JWT) sentinel", async () => {
-    getOrganizations.mockResolvedValue([
-      { itemId: "org-1", name: "Acme" },
-      { itemId: "org-2", name: "Globex" },
-    ]);
-    const opts = field(NodeSchemaTriggerWebhookV1, "authorization.organizationId").options as (
+  it("organization options prepend None and Default, then map itemId", async () => {
+    getOrganizations.mockResolvedValue({
+      organizations: [
+        { itemId: "org-1", name: "Acme" },
+        { itemId: "org-2", name: "Globex" },
+      ],
+    });
+    const opts = field(NodeSchemaTriggerWebhookV1, "organizationId").options as (
       data: AnyRec,
       config: AnyRec,
     ) => Promise<{ value: string; label: string }[]>;
     const result = await opts({}, { projectKey: "pk" });
-    expect(result[0]).toEqual({ value: "default", label: "default (from JWT)" });
-    expect(result.map((o) => o.value)).toEqual(expect.arrayContaining(["org-1", "org-2"]));
+    expect(result).toEqual([
+      { value: "", label: "None" },
+      { value: "default", label: "Default" },
+      { value: "org-1", label: "Acme" },
+      { value: "org-2", label: "Globex" },
+    ]);
   });
 
   it.skip("roles options call getRoles with the selected organization", async () => {
@@ -443,14 +449,8 @@ describe("webhook trigger v1", () => {
     expect(result).toEqual([{ value: "Change User Password", label: "Change User Password" }]);
   });
 
-  it.skip("defaults the authorization block with empty roles/permissions", () => {
-    const auth = NodeSchemaTriggerWebhookV1.defaults.parameters.authorization as AnyRec;
-    expect(auth).toEqual({
-      organizationId: "default",
-      roles: { operator: "all", items: [] },
-      permissions: { operator: "any", items: [] },
-      isRolePermission: true,
-    });
+  it("defaults organizationId to empty (None)", () => {
+    expect(NodeSchemaTriggerWebhookV1.defaults.parameters.organizationId).toBe("");
   });
 });
 
