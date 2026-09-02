@@ -26,6 +26,15 @@ namespace Mail.DomainService.Shared.Utilities
             services.AddTransient<MailKitSmtpClient>();
             services.AddTransient<MicrosoftSmtpClient>();
             services.AddSingleton<ISendMailService, SendMailService>();
+
+            // Registered unconditionally rather than via TryAdd: RegisterAllMailApplicationServices
+            // has five call sites and runs twice inside the Api, so any presence-detection scheme
+            // here would resolve differently depending on which host registered first. The resolver
+            // takes IStorageDriverService as an optional dependency and reports its absence itself.
+            services.AddOptions<MailAttachmentOptions>().BindConfiguration(MailAttachmentOptions.SectionName);
+            services.AddOptions<MailStatusEventOptions>().BindConfiguration(MailStatusEventOptions.SectionName);
+            services.AddHttpClient();
+            services.AddSingleton<IMailAttachmentResolver, StorageMailAttachmentResolver>();
             services.AddSingleton<IMailService, MailService>();
 
             services.AddTransient<IValidator<MailToBeSent>, EmailValidator>();

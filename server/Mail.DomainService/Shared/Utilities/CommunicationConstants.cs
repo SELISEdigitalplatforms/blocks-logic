@@ -9,6 +9,9 @@ public static class CommunicationConstants
     public const string NotificationQueueName = "blocks_notification_listener";
     public const string EmailTriggerQueueName = "blocks_workflow_email_trigger_listener";
 
+    /// <summary>Where <see cref="Dtos.MailSentEvent"/> is published after every send attempt.</summary>
+    public const string MailStatusQueueName = "blocks_mail_status_listener";
+
     public static readonly MailStatus[] AllowedFilterStatuses = { 
         MailStatus.Sent, 
         MailStatus.Delivered, 
