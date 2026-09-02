@@ -57,7 +57,7 @@ export interface IListPagePayload {
 export interface IGetOrganizationsPayload extends IListPagePayload {}
 
 export interface IGetOrganizationsResponse {
-  organizations: IOrganization[];
+  organizations: IOrganization[] | null;
   isSuccess: boolean;
   totalCount: number;
   errors:unknown
