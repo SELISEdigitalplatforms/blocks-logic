@@ -1,11 +1,12 @@
 ﻿using Mail.DomainService.Entities;
 using FluentValidation;
+using Microsoft.Extensions.Options;
 
 namespace Mail.DomainService.Mails
 {
     public class EmailValidator : AbstractValidator<MailToBeSent>
     {
-        public EmailValidator(CommonEmailValidator commonEmailValidator)
+        public EmailValidator(CommonEmailValidator commonEmailValidator, IOptions<MailAttachmentOptions> attachmentOptions)
         {
             RuleFor(r => r.To)
                 .Cascade(CascadeMode.Stop)
@@ -48,6 +49,18 @@ namespace Mail.DomainService.Mails
             RuleFor(r => r.ReplyTo).Must(commonEmailValidator.BeValidMailArrayParameters).WithMessage("Empty item found in ReplyTo");
 
             RuleFor(r => r.Attachments).Must(commonEmailValidator.BeValidMailArrayParameters).WithMessage("Empty item found in Attachments");
+
+            RuleFor(r => r.Attachments)
+                .Must(attachments => attachments == null || attachments.Count() <= attachmentOptions.Value.MaxAttachmentCount)
+                .WithMessage($"No more than {attachmentOptions.Value.MaxAttachmentCount} attachments are allowed");
+
+            // BeAnExistingFile was written but never wired, so an unknown id used to send a mail
+            // with the attachment silently missing. Opt out for one release if live callers are
+            // known to pass stale ids - see MailAttachmentOptions.ValidateAttachmentsExist.
+            RuleForEach(r => r.Attachments)
+                .MustAsync(commonEmailValidator.BeAnExistingFile)
+                .WithMessage("Attachment '{PropertyValue}' does not exist")
+                .When(_ => attachmentOptions.Value.ValidateAttachmentsExist);
         }
     }
 }

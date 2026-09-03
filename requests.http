@@ -1,0 +1,16 @@
+### ping
+GET https://dev-logic.blocksdevelopers.com:5000/api/health/ping
+
+### Trigger workflow webhook on dev
+POST https://dev-logic.blocksdevelopers.com:5000/api/Workflow/webhook-test/Df93daec9215a407799f0370924c15876/cbcfd6d969eb4cfa829bb88f2d677c89/945c1372d48d4f45be225df9017058ba
+Content-Type: application/json
+
+{}
+
+### Trigger workflow webhook locally
+# Change the port if your debug console shows a different localhost URL.
+POST http://localhost:5000/api/Workflow/webhook/Df93daec9215a407799f0370924c15876/cbcfd6d969eb4cfa829bb88f2d677c89/945c1372d48d4f45be225df9017058ba
+Content-Type: application/json
+x-blocks-key: Df93daec9215a407799f0370924c15876
+
+{}
