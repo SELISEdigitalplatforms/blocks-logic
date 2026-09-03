@@ -54,6 +54,7 @@ namespace DomainService.Workflow.Utils
                                              ConsumerSubscription.BindToQueue(DataTriggerQueue),
                                              ConsumerSubscription.BindToQueue(SchedulerTriggerQueue),
                                              ConsumerSubscription.BindToQueue(LogicMailQueueName),
+                                             ConsumerSubscription.BindToQueue(CommunicationConstants.MailStatusQueueName),
                                              ConsumerSubscription.BindToQueue(MigrationCompletionTopic),
                                              ConsumerSubscription.BindToQueue(SchedulerConstants.ScheduleJobRegistryQueueName)],
 
@@ -67,7 +68,7 @@ namespace DomainService.Workflow.Utils
             {
                 AzureServiceBusConfiguration = new AzureServiceBusConfiguration
                 {
-                    Queues = [NodeExecutionQueue, EmailTriggerQueue, DataTriggerQueue, SchedulerTriggerQueue, LogicMailQueueName, SchedulerConstants.ScheduleJobRegistryQueueName],
+                    Queues = [NodeExecutionQueue, EmailTriggerQueue, DataTriggerQueue, SchedulerTriggerQueue, LogicMailQueueName, CommunicationConstants.MailStatusQueueName, SchedulerConstants.ScheduleJobRegistryQueueName],
                     Topics = [MigrationCompletionTopic]
                 }
             };

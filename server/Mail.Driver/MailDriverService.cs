@@ -25,7 +25,8 @@ public class MailDriverService : IMailDriverService
             ReplyTo = request.ReplyTo,
             Attachments = request.Attachments,
             BodyDataContext = request.BodyDataContext,
-            SendPhoneNumberAsEmail = request.SendPhoneNumberAsEmail
+            SendPhoneNumberAsEmail = request.SendPhoneNumberAsEmail,
+            CorrelationId = request.CorrelationId
         };
         return await _mailService.ProcessMailAsync(mailRequest);
     }
@@ -44,7 +45,8 @@ public class MailDriverService : IMailDriverService
             ReplyTo = request.ReplyTo,
             Attachments = request.Attachments,
             BodyDataContext = request.BodyDataContext,
-            IsTestMail = request.IsTestMail
+            IsTestMail = request.IsTestMail,
+            CorrelationId = request.CorrelationId
         };
         return await _mailService.ProcessMailToAnyAsync(mailRequest);
     }

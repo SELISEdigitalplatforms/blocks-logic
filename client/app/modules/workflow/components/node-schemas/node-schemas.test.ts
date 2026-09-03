@@ -421,6 +421,42 @@ describe("webhook trigger v1", () => {
     ]);
   });
 
+  it("organization options are None only when organizations is null", async () => {
+    getOrganizations.mockResolvedValue({
+      organizations: null,
+      totalCount: 0,
+      isSuccess: false,
+      errors: { multi_org_disabled: "Multi-organization mode is disabled." },
+    });
+    const opts = field(NodeSchemaTriggerWebhookV1, "organizationId").options as (
+      data: AnyRec,
+      config: AnyRec,
+    ) => Promise<{ value: string; label: string }[]>;
+    expect(await opts({}, { projectKey: "pk" })).toEqual([{ value: "", label: "None" }]);
+  });
+
+  it("organization options are None only when organizations is empty", async () => {
+    getOrganizations.mockResolvedValue({
+      organizations: [],
+      totalCount: 0,
+      isSuccess: true,
+    });
+    const opts = field(NodeSchemaTriggerWebhookV1, "organizationId").options as (
+      data: AnyRec,
+      config: AnyRec,
+    ) => Promise<{ value: string; label: string }[]>;
+    expect(await opts({}, { projectKey: "pk" })).toEqual([{ value: "", label: "None" }]);
+  });
+
+  it("organization options are None only when getOrganizations rejects", async () => {
+    getOrganizations.mockRejectedValue(new Error("network"));
+    const opts = field(NodeSchemaTriggerWebhookV1, "organizationId").options as (
+      data: AnyRec,
+      config: AnyRec,
+    ) => Promise<{ value: string; label: string }[]>;
+    expect(await opts({}, { projectKey: "pk" })).toEqual([{ value: "", label: "None" }]);
+  });
+
   it.skip("roles options call getRoles with the selected organization", async () => {
     getRoles.mockResolvedValue([{ itemId: "r1", name: "clouduser" }]);
     const opts = field(NodeSchemaTriggerWebhookV1, "authorization.roles").options as (

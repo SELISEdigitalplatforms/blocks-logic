@@ -385,6 +385,75 @@ namespace XUnitTest.Workflow
             result.OutputItems[0].Data.Output["answer"].ToInt32().Should().Be(42);
         }
 
+        [Fact]
+        public async Task RunAsync_PerItem_NodeReference_PreservesNestedArraysAndIsoDates()
+        {
+            var input = Item("a", new BsonDocument { { "totalCount", 35 } },
+                nodeName: "HTTP Request3", parentItemIds: new List<string> { "prev-1" });
+            var ancestor = Item("prev-1", new BsonDocument
+            {
+                { "success", true },
+                { "data", new BsonDocument
+                    {
+                        { "quantities", new BsonArray
+                            {
+                                new BsonDocument
+                                {
+                                    { "itemKey", "User" },
+                                    { "unitLabel", "user" },
+                                    { "quantity", 1 },
+                                },
+                            }
+                        },
+                        { "currentPeriodStartUtc", "2026-09-03T09:48:17.913Z" },
+                        { "meters", new BsonArray
+                            {
+                                new BsonDocument
+                                {
+                                    { "meterKey", "screening" },
+                                    { "includedQuantity", 450 },
+                                },
+                            }
+                        },
+                    }
+                },
+            }, nodeName: "HTTP Request2");
+
+            var ctx = Context(new List<WorkflowItemExecutionEntity> { input }, EachMode,
+                """
+                const quantities = $node["HTTP Request2"]?.json ?? {};
+                return {
+                    allowedUserCount: quantities,
+                    userCount: $json.totalCount
+                };
+                """);
+            ctx.AncestorNodeOutputs = new Dictionary<string, List<WorkflowItemExecutionEntity>>
+            {
+                { "HTTP Request3", new List<WorkflowItemExecutionEntity> { input } },
+                { "HTTP Request2", new List<WorkflowItemExecutionEntity> { ancestor } },
+            };
+
+            var result = await new TransformCodeV1Node().RunAsync(ctx);
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            var output = result.OutputItems[0].Data.Output.AsBsonDocument;
+            output["userCount"].ToInt32().Should().Be(35);
+
+            var data = output["allowedUserCount"]["data"].AsBsonDocument;
+            var quantities = data["quantities"].AsBsonArray;
+            quantities.Should().HaveCount(1);
+            quantities[0]["itemKey"].AsString.Should().Be("User");
+            quantities[0]["unitLabel"].AsString.Should().Be("user");
+            quantities[0]["quantity"].ToInt32().Should().Be(1);
+
+            data["currentPeriodStartUtc"].AsString.Should().Be("2026-09-03T09:48:17.913Z");
+
+            var meters = data["meters"].AsBsonArray;
+            meters.Should().HaveCount(1);
+            meters[0]["meterKey"].AsString.Should().Be("screening");
+            meters[0]["includedQuantity"].ToInt32().Should().Be(450);
+        }
+
         // ----- Sandbox / security -----------------------------------------------
 
         [Fact]
