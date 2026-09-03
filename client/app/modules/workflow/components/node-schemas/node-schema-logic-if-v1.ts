@@ -16,7 +16,7 @@ export const NodeSchemaLogicIfV1: NodeSchemaDefinition = {
         key: "conditionType",
         options: [
           { value: "all", label: "All conditions (AND)" },
-          { value: "or", label: "Any condition (OR)" },
+          { value: "any", label: "Any condition (OR)" },
         ],
         defaultValue: "all",
       },

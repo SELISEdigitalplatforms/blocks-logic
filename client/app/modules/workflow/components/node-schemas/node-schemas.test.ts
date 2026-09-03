@@ -105,7 +105,7 @@ describe("NodeSchemasDefinition registry", () => {
 
 describe("logic/if v1", () => {
   it("transform returns a shallow clone", () => {
-    const node = { id: "n1", parameters: { conditionType: "or" } } as never;
+    const node = { id: "n1", parameters: { conditionType: "any" } } as never;
     expect(NodeSchemaLogicIfV1.transform?.(node)).toEqual(node);
   });
 });
