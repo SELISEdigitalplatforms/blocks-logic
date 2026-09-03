@@ -254,6 +254,7 @@ namespace DomainService.Notification
         }
         public async Task<GetNotificationsResponse> GetNotificationsAsync ( GetNotificationsRequest request )
         {
+            _clientDb = ResolvedClientDb();
             var collection = _clientDb.GetCollection<OfflineNotification>("OfflineNotifications");
             var builder = Builders<OfflineNotification>.Filter;
             var filter = FilterDefinition<OfflineNotification>.Empty;
