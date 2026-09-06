@@ -205,4 +205,30 @@ export class DashboardPage {
     expect(text).toContain("curl");
     return text;
   }
+
+  // ---- Project metadata (Last updated, Created Date) ----------------------
+
+  get lastUpdatedLabel(): Locator {
+    return this.main.getByText(/Last updated/i).first();
+  }
+
+  get createdLabel(): Locator {
+    return this.main.getByText(/Created/i).first();
+  }
+
+  async expectDatesVisible(): Promise<void> {
+    await expect(this.lastUpdatedLabel).toBeVisible();
+    await expect(this.createdLabel).toBeVisible();
+  }
+
+  // ---- Environment chip ---------------------------------------------------
+
+  /**
+   * Click the Environment button on the Project Details card. The chip is
+   * disabled in this build (project/env switch is a separate flow in OS),
+   * so callers should verify it remains disabled after the click attempt.
+   */
+  async clickEnvironmentChip(): Promise<void> {
+    await this.environmentButton().click({ trial: false, timeout: 5_000 }).catch(() => {});
+  }
 }

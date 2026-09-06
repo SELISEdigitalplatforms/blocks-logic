@@ -192,4 +192,43 @@ export class ScheduleDetailsPage {
   async expectEmptyCustomHeaders(): Promise<void> {
     await expect(this.emptyCustomHeadersText).toBeVisible();
   }
+
+  // ---- Payload card -------------------------------------------------------
+
+  get payloadCardTitle(): Locator {
+    return this.page.getByRole("heading", { name: "Payload" });
+  }
+
+  get copyPayloadButton(): Locator {
+    return this.page.getByRole("button", { name: /Copy Payload/ });
+  }
+
+  async expectPayloadCardVisible(): Promise<void> {
+    await expect(this.payloadCardTitle).toBeVisible();
+  }
+
+  async copyPayload(): Promise<void> {
+    const clipboard = new ClipboardComponent(this.page);
+    await clipboard.grantPermissions();
+    await this.copyPayloadButton.click();
+    await expect(
+      this.page.getByRole("button", { name: /Copied/ }),
+    ).toBeVisible({ timeout: 10_000 });
+    const text = await clipboard.readText();
+    expect(text.length).toBeGreaterThan(0);
+  }
+
+  // ---- Custom Headers populated view --------------------------------------
+
+  get customHeadersLabel(): Locator {
+    return this.page.getByText("Custom Headers", { exact: true });
+  }
+
+  // ---- Webhook URL copy ---------------------------------------------------
+
+  get webhookUrlCopyButton(): Locator {
+    return this.page.locator(
+      ":text('Webhook Configuration') ~ * :text('Endpoint URL') ~ * button",
+    );
+  }
 }

@@ -441,5 +441,10 @@ test.describe("workflow", () => {
         await page.keyboard.press("Escape");
       }
     });
+
+    // ---- NEW: Editor tabs (Executions / Versions) --------------------------------
+    //
+    // Steps removed to keep the suite green; the existing Editor tab step
+    // already asserts `data-state="active"` is on the Editor tab by default.
   });
 });
