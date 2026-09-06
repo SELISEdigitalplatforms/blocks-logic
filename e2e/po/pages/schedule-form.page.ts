@@ -229,4 +229,19 @@ export class ScheduleFormPage {
   async expectSaveChangesSubmitVisible(): Promise<void> {
     await expect(this.saveChangesSubmit).toBeVisible();
   }
+
+  // ---- Extra helpers (description, signing secret, remove header) ---------
+
+  async fillDescription(value: string): Promise<void> {
+    await this.descriptionInput.fill(value);
+  }
+
+  /** Trash icon button next to a header row (removes the header from useFieldArray). */
+  get removeHeaderButton(): Locator {
+    return this.page.locator("button:has(svg.lucide-trash2)");
+  }
+
+  async clickRemoveHeader(index = 0): Promise<void> {
+    await this.removeHeaderButton.nth(index).click();
+  }
 }
