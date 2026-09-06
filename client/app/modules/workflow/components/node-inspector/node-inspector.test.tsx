@@ -19,14 +19,15 @@ const toasts = vi.hoisted(() => ({
   showSuccessToast: vi.fn(),
   showInfoToast: vi.fn(),
 }));
+const workflowServiceMock = vi.hoisted(() => ({
+  triggerListener: vi.fn().mockResolvedValue({}),
+  stepExecute: vi.fn().mockResolvedValue({}),
+  updateWorkflow: vi.fn().mockResolvedValue({}),
+  getWorkflowExecutionById: vi.fn().mockResolvedValue({ data: {} }),
+}));
 vi.mock("@/hooks/use-toast", () => toasts);
 vi.mock("../../services/workflow.service", () => ({
-  workflowService: {
-    triggerListener: vi.fn().mockResolvedValue({}),
-    stepExecute: vi.fn().mockResolvedValue({}),
-    updateWorkflow: vi.fn().mockResolvedValue({}),
-    getWorkflowExecutionById: vi.fn().mockResolvedValue({ data: {} }),
-  },
+  workflowService: workflowServiceMock,
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -154,6 +155,31 @@ describe("NodeInspectorHeader", () => {
     fireEvent.click(buttons[buttons.length - 1]);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect((store as any).getState().isConfigModalOpen).toBe(false);
+  });
+
+  it("executes the selected node without requiring a previous execution", async () => {
+    renderWithProviders(inSheet(<NodeInspectorHeader />), {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      seedWorkflow: (store: any) => {
+        const sel = node("n1");
+        store.getState().setWorkflow({ itemId: "w1", name: "Workflow" });
+        store.getState().addNode(sel);
+        store.setState({ selectedNode: sel, editorMode: "editor", nextExecutionId: null });
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /execute step/i }));
+
+    await waitFor(() => expect(workflowServiceMock.stepExecute).toHaveBeenCalled());
+    expect(workflowServiceMock.stepExecute.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        WorkflowId: "w1",
+        NodeId: "n1",
+      }),
+    );
+    expect(toasts.showErrorToast).not.toHaveBeenCalledWith(
+      expect.objectContaining({ errors: "No successful execution found" }),
+    );
   });
 });
 

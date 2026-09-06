@@ -66,16 +66,62 @@ export class WorkflowEditorPage {
     );
   }
 
-  get saveButton(): Locator {
-    return this.page.getByRole("button", { name: "Save" });
-  }
-
   get addFirstStepButton(): Locator {
     return this.page.getByRole("button", { name: "Add first step" });
   }
 
   get startYourWorkflowHeading(): Locator {
     return this.page.getByRole("heading", { name: "Start your workflow" });
+  }
+
+  // ---- Header actions (in-editor Publish + Save) ---------------------------
+
+  /** Publish dropdown trigger on the editor header — shows "Publish" + chevron. */
+  get publishTrigger(): Locator {
+    return this.page
+      .locator("main, body")
+      .getByRole("button", { name: /^Publish/ })
+      .first();
+  }
+
+  get saveButton(): Locator {
+    return this.page.getByRole("button", { name: "Save", exact: true });
+  }
+
+  // ---- Node library side panel (Sheet) -------------------------------------
+
+  get nodeLibraryHeading(): Locator {
+    return this.page.getByRole("heading", { name: "Start your workflow" });
+  }
+
+  get nodeLibrarySearch(): Locator {
+    return this.page.getByPlaceholder("Search");
+  }
+
+  /** A node option row in the library — by its visible title. */
+  nodeLibraryOption(title: string): Locator {
+    return this.page
+      .locator('[role="dialog"], [data-state="open"]')
+      .getByText(title, { exact: true })
+      .first();
+  }
+
+  // ---- Executions tab content ----------------------------------------------
+
+  get executionsList(): Locator {
+    return this.page.getByText("No executions found.", { exact: true });
+  }
+
+  // ---- Versions tab content ------------------------------------------------
+
+  get versionsSidebar(): Locator {
+    return this.page.locator(
+      ":text('No versions found.'), :text('Unnamed Version'), :text('(Published)')",
+    );
+  }
+
+  get noVersionsText(): Locator {
+    return this.page.getByText("No versions found.", { exact: true });
   }
 
   async expectStatusBadgeVisible(): Promise<void> {

@@ -103,4 +103,38 @@ export class ConsolePage {
     await popup.waitForLoadState("domcontentloaded", { timeout: 15_000 }).catch(() => {});
     return { popup, href: expectedHref ?? "" };
   }
+
+  // ---- Project count badge -----------------------------------------------
+
+  get projectCountBadge(): Locator {
+    return this.page.locator(":text-matches('^\\\\d+$', 'i')").first();
+  }
+
+  // ---- Multiple project grid assertions -----------------------------------
+
+  /**
+   * Returns all visible project names on the console grid. Scoped to <main>
+   * to avoid picking up sidebar text.
+   */
+  async listProjectNames(): Promise<string[]> {
+    const envButtons = this.page
+      .getByRole("main")
+      .getByRole("button", { name: ENV_BUTTON });
+    const count = await envButtons.count();
+    if (count === 0) return [];
+    // Each project card contains an env button; traverse the DOM to find the
+    // project name text node in the same card by walking up to the parent.
+    return this.page.evaluate(() => {
+      const main = document.querySelector("main");
+      if (!main) return [];
+      const names = new Set<string>();
+      main.querySelectorAll("button").forEach((btn) => {
+        const card = btn.closest("div");
+        if (!card) return;
+        const txt = card.querySelector("p, h3, h2")?.textContent?.trim();
+        if (txt) names.add(txt);
+      });
+      return [...names];
+    });
+  }
 }
