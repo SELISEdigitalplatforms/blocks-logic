@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui-kits/button/button";
 import { SheetHeader, SheetTitle } from "@/components/ui-kits/sheet/sheet";
-import { useWorkflow, useStepExecute, useHandleExecuteStep } from "@blocks-workflow/hooks";
+import { useWorkflow, useHandleExecuteStep } from "@blocks-workflow/hooks";
 import { BookOpen, Pen, Rocket, X } from "lucide-react";
 import { getNodeDefinition } from "../node-library-panel";
 import { useEffect, useState } from "react";
@@ -126,7 +126,7 @@ export const NodeInspectorHeader = ({
             <Button
               size="sm"
               className="gap-2"
-              onClick={() => handleExecuteStep(selectedNode?.id, true)}
+              onClick={() => handleExecuteStep(selectedNode?.id)}
             >
               <Rocket className="h-4 w-4" />
               Execute Step
