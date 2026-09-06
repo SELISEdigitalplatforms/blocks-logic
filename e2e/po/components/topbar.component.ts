@@ -135,4 +135,28 @@ export class TopbarComponent {
   async clickMyProfile(): Promise<void> {
     await this.myProfileMenuItem.click();
   }
+
+  // ---- Apps menu items ----------------------------------------------------
+
+  /**
+   * Apps menu opens as a Radix popover listing the SELISE Blocks apps.
+   * Items use "button" or "menuitem" semantics depending on the trigger.
+   * This matcher covers both, and the caller decides which one to assert.
+   */
+  appMenuItem(name: string | RegExp): Locator {
+    return this.page.getByRole("menuitem", { name }).or(
+      this.page.getByRole("link", { name }),
+    );
+  }
+
+  async clickAppMenuItem(name: string | RegExp): Promise<void> {
+    await this.appMenuItem(name).first().click();
+  }
+
+  // ---- Log out navigation -------------------------------------------------
+
+  async logOut(): Promise<void> {
+    await this.openUserMenu();
+    await this.logOutMenuItem.click();
+  }
 }
