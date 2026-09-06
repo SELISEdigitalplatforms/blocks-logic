@@ -105,7 +105,7 @@ describe("NodeSchemasDefinition registry", () => {
 
 describe("logic/if v1", () => {
   it("transform returns a shallow clone", () => {
-    const node = { id: "n1", parameters: { conditionType: "any" } } as never;
+    const node = { id: "n1", parameters: { conditionType: "or" } } as never;
     expect(NodeSchemaLogicIfV1.transform?.(node)).toEqual(node);
   });
 });
@@ -419,6 +419,42 @@ describe("webhook trigger v1", () => {
       { value: "org-1", label: "Acme" },
       { value: "org-2", label: "Globex" },
     ]);
+  });
+
+  it("organization options are None only when organizations is null", async () => {
+    getOrganizations.mockResolvedValue({
+      organizations: null,
+      totalCount: 0,
+      isSuccess: false,
+      errors: { multi_org_disabled: "Multi-organization mode is disabled." },
+    });
+    const opts = field(NodeSchemaTriggerWebhookV1, "organizationId").options as (
+      data: AnyRec,
+      config: AnyRec,
+    ) => Promise<{ value: string; label: string }[]>;
+    expect(await opts({}, { projectKey: "pk" })).toEqual([{ value: "", label: "None" }]);
+  });
+
+  it("organization options are None only when organizations is empty", async () => {
+    getOrganizations.mockResolvedValue({
+      organizations: [],
+      totalCount: 0,
+      isSuccess: true,
+    });
+    const opts = field(NodeSchemaTriggerWebhookV1, "organizationId").options as (
+      data: AnyRec,
+      config: AnyRec,
+    ) => Promise<{ value: string; label: string }[]>;
+    expect(await opts({}, { projectKey: "pk" })).toEqual([{ value: "", label: "None" }]);
+  });
+
+  it("organization options are None only when getOrganizations rejects", async () => {
+    getOrganizations.mockRejectedValue(new Error("network"));
+    const opts = field(NodeSchemaTriggerWebhookV1, "organizationId").options as (
+      data: AnyRec,
+      config: AnyRec,
+    ) => Promise<{ value: string; label: string }[]>;
+    expect(await opts({}, { projectKey: "pk" })).toEqual([{ value: "", label: "None" }]);
   });
 
   it.skip("roles options call getRoles with the selected organization", async () => {

@@ -1,10 +1,12 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.IO;
 using System.Text;
 using DomainService.Workflow.Entities;
 using Jint;
 using Jint.Native;
 using MongoDB.Bson;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace DomainService.Workflow.Nodes.TransformCodeV1
@@ -207,7 +209,10 @@ namespace DomainService.Workflow.Nodes.TransformCodeV1
             var engine = NewEngine(context);
             engine.Execute($"var $json = {item};");
             engine.Execute($"var $item = {item};");
-            engine.SetValue("$node", node);
+            // Inject as JSON (same as $json/$items) so arrays stay arrays and ISO dates
+            // stay strings. SetValue(JObject) wraps CLR tokens; returning them
+            // converts arrays to { "0": ... } and Date values to {}.
+            engine.Execute($"var $node = {node};");
             engine.SetValue("console", CodeNodeConsole);
             return engine;
         }
@@ -455,6 +460,10 @@ namespace DomainService.Workflow.Nodes.TransformCodeV1
             if (value.IsBoolean()) return new JValue(value.AsBoolean());
             if (value.IsNumber()) return new JValue(value.AsNumber());
             if (value.IsString()) return new JValue(value.AsString());
+            if (value.IsDate())
+            {
+                return new JValue(value.AsDate().ToDateTime().ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ"));
+            }
             if (value.IsObject())
             {
                 var obj = value.AsObject();
@@ -486,7 +495,12 @@ namespace DomainService.Workflow.Nodes.TransformCodeV1
         private static JToken BsonValueToJToken(BsonValue value)
         {
             var json = value.ToJson(BsonJsonSettings);
-            return string.IsNullOrEmpty(json) ? JValue.CreateNull() : JToken.Parse(json);
+            if (string.IsNullOrEmpty(json)) return JValue.CreateNull();
+            using var reader = new JsonTextReader(new StringReader(json))
+            {
+                DateParseHandling = DateParseHandling.None,
+            };
+            return JToken.Load(reader);
         }
 
         #endregion

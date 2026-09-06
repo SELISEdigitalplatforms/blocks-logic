@@ -13,4 +13,7 @@ public class SendMail
     public IEnumerable<string> Attachments { get; set; } = [];
     public Dictionary<string, string> BodyDataContext { get; set; } = [];
     public bool SendPhoneNumberAsEmail { get; set; } = false;
+
+    /// <summary>Echoed back on the MailSentEvent so the caller can correlate the outcome.</summary>
+    public string? CorrelationId { get; set; }
 }

@@ -1,4 +1,4 @@
-using Blocks.Genesis;
+﻿using Blocks.Genesis;
 using Mail.DomainService.Entities;
 using Mail.DomainService.Utilities;
 using Microsoft.Extensions.Configuration;
@@ -43,6 +43,16 @@ namespace Mail.DomainService.Mails
             return new MailKitSmtpClientAdapter();
         }
 
+        private static ContentType ParseContentType(string? contentType)
+        {
+            if (!string.IsNullOrWhiteSpace(contentType) && ContentType.TryParse(contentType, out var parsed))
+            {
+                return parsed;
+            }
+
+            return new ContentType("application", "octet-stream");
+        }
+
         public async Task<bool> SendAsync(MailToBeSent mailToBeSent, MailBody mailBody)
         {
             var message = new MimeMessage
@@ -55,6 +65,12 @@ namespace Mail.DomainService.Mails
                 HtmlBody = mailBody.Body
             };
 
+            foreach (var attachment in mailBody.Attachments)
+            {
+                bodyBuilder.Attachments.Add(attachment.FileName, attachment.Content, ParseContentType(attachment.ContentType));
+            }
+
+            // ToMessageBody() snapshots the builder, so this has to stay below the attachment loop.
             message.Body = bodyBuilder.ToMessageBody();
             message.From.Add(new MailboxAddress(mailToBeSent.MailServerConfiguration.SenderName, mailToBeSent.MailServerConfiguration.SenderAddress));
 
@@ -91,7 +107,13 @@ namespace Mail.DomainService.Mails
             {
                 using var client = CreateSmtpClient();
 
-                _logger.LogInformation("Attempting to connect to SMTP server: {Host}:{Port} ", mailToBeSent.MailServerConfiguration.Host, mailToBeSent.MailServerConfiguration.Port);
+                _logger.LogInformation(
+                    "SMTP (MailKit): connecting to {Host}:{Port} ssl={EnableSsl} for itemId={ItemId} with {AttachmentCount} attachment(s)",
+                    mailToBeSent.MailServerConfiguration.Host,
+                    mailToBeSent.MailServerConfiguration.Port,
+                    mailToBeSent.MailServerConfiguration.EnableSSL,
+                    mailToBeSent.ItemId,
+                    mailBody.Attachments.Count);
 
                 await client.ConnectAsync(mailToBeSent.MailServerConfiguration.Host,
                     mailToBeSent.MailServerConfiguration.Port, mailToBeSent.MailServerConfiguration.EnableSSL);
@@ -99,7 +121,7 @@ namespace Mail.DomainService.Mails
                 await client.AuthenticateAsync(mailToBeSent.MailServerConfiguration.SenderUserName,
                     mailToBeSent.MailServerConfiguration.AccountPassword);
 
-                _logger.LogInformation("SMTP server authentication successful.");
+                _logger.LogInformation("SMTP (MailKit): authenticated as {UserName} for itemId={ItemId}", mailToBeSent.MailServerConfiguration.SenderUserName, mailToBeSent.ItemId);
                 _logger.LogInformation("Sns configuration enabled: {IsEnableSnsConfiguration}", mailToBeSent.MailServerConfiguration.IsEnableSnsConfiguration);
                 if (mailToBeSent.MailServerConfiguration.IsEnableSnsConfiguration)
                 {
@@ -117,7 +139,16 @@ namespace Mail.DomainService.Mails
             }
             catch (Exception e)
             {
-                _logger.LogError(e, "Error sending email: {Message}", e.Message);
+                // The exception type is the useful bit here: authentication, TLS, size limit and
+                // "recipient rejected" all surface as different MailKit exceptions.
+                _logger.LogError(
+                    e,
+                    "SMTP (MailKit) FAILED for itemId={ItemId} host={Host}:{Port}: {ExceptionType}: {Message}",
+                    mailToBeSent.ItemId,
+                    mailToBeSent.MailServerConfiguration.Host,
+                    mailToBeSent.MailServerConfiguration.Port,
+                    e.GetType().Name,
+                    e.Message);
                 return false;
             }
         }

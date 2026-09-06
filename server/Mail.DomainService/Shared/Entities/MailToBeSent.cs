@@ -32,5 +32,8 @@ namespace Mail.DomainService.Entities
         public MailServerConfiguration MailServerConfiguration { get; set; }
 
         public bool IsTestMail { get; set; }
+
+        /// <summary>Carried through so the status event can be correlated after the read-back.</summary>
+        public string? CorrelationId { get; set; }
     }
 }

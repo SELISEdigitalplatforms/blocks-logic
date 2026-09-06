@@ -99,21 +99,60 @@ namespace Mail.DomainService.Mails
                         }
                     }
 
+                    // MailMessage.Dispose() disposes its attachments, and the enclosing using block
+                    // owns the message - so these streams must not be wrapped in a using of their own.
+                    foreach (var attachment in mailBody.Attachments)
+                    {
+                        mail.Attachments.Add(new System.Net.Mail.Attachment(
+                            new MemoryStream(attachment.Content),
+                            attachment.FileName,
+                            attachment.ContentType));
+                    }
+
                     try
                     {
-                        mail.Headers.Add("X-SES-CONFIGURATION-SET", _configuration["SnsConfigurationName"]);
-                        mail.Headers.Add("X-Tenant-Id", BlocksContext.GetContext()?.TenantId);
-                        mail.Headers.Add("X-Mail-Body", mailBody.Body);
+                        _logger.LogInformation(
+                            "SMTP (System.Net.Mail): sending itemId={ItemId} via {Host}:{Port} with {AttachmentCount} attachment(s)",
+                            mailToBeSent.ItemId,
+                            mailToBeSent.MailServerConfiguration.Host,
+                            mailToBeSent.MailServerConfiguration.Port,
+                            mailBody.Attachments.Count);
+
+                        if (mailToBeSent.MailServerConfiguration.IsEnableSnsConfiguration)
+                        {
+                            mail.Headers.Add("X-SES-CONFIGURATION-SET", _configuration["SnsConfigurationName"]);
+                            mail.Headers.Add("X-Tenant-Id", BlocksContext.GetContext()?.TenantId);
+
+                            // System.Net.Mail rejects CR/LF inside a header value, and every HTML
+                            // template has newlines - so unfolded this threw for the whole message,
+                            // was swallowed below, and surfaced only as a bare FAILED log.
+                            mail.Headers.Add("X-Mail-Body", SingleLine(mailBody.Body));
+                        }
+
                         await client.SendMailAsync(mail);
                         return true;
                     }
                     catch (Exception e)
                     {
-                        _logger.LogError(e, "Exception occurred while processing.");
+                        _logger.LogError(
+                            e,
+                            "SMTP (System.Net.Mail) FAILED for itemId={ItemId} host={Host}:{Port}: {ExceptionType}: {Message}",
+                            mailToBeSent.ItemId,
+                            mailToBeSent.MailServerConfiguration.Host,
+                            mailToBeSent.MailServerConfiguration.Port,
+                            e.GetType().Name,
+                            e.Message);
                     }
                 }
                 return false;
             }
+        }
+
+        private static string SingleLine(string? value)
+        {
+            return string.IsNullOrEmpty(value)
+                ? string.Empty
+                : value.Replace("\r", " ", StringComparison.Ordinal).Replace("\n", " ", StringComparison.Ordinal);
         }
 
         private bool AddMessageFrom(MailToBeSent mailToBeSent, MailMessage message)
