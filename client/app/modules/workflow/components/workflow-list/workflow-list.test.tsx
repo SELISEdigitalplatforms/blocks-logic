@@ -89,6 +89,7 @@ describe("WorkflowList", () => {
     await user.click(await screen.findByText("Export"));
     await waitFor(() => expect(svc.getWorkflowById).toHaveBeenCalledWith({ id: "42" }));
     await waitFor(() => expect(downloadJson).toHaveBeenCalled());
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it("renders workflow rows with name and status", () => {

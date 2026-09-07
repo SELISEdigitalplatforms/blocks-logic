@@ -200,7 +200,10 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
         id: "action",
         header: () => <div className="font-bold text-medium-emphasis"></div>,
         cell: (info) => (
-          <div className="flex items-center gap-4">
+          <div
+            className="flex items-center gap-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <Tooltip>
               <TooltipTrigger asChild>
                 <div>
@@ -242,12 +245,21 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
             </Tooltip>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-5 w-5 p-0">
+                <Button
+                  variant="ghost"
+                  className="h-5 w-5 p-0"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <EllipsisVertical width={20} height={20} />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem className="cursor-pointer">
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
+                >
                   <Link
                     to={scoped(`workflow/${info.row.original.itemId}`)}
                     className="flex w-full items-center"
@@ -285,8 +297,8 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
                 <DropdownMenuItem
                   className="cursor-pointer"
                   disabled={isExporting}
-                  onSelect={(e) => {
-                    e.preventDefault();
+                  onClick={(e) => {
+                    e.stopPropagation();
                     void exportWorkflow(info.row.original.itemId);
                   }}
                 >

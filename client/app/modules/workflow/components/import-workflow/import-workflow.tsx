@@ -50,7 +50,7 @@ export const ImportWorkflow = ({
         disabled={isImporting}
         onClick={() => inputRef.current?.click()}
         className={cn(
-          variant === "ghost" && "text-primary hover:text-primary",
+          variant === "ghost" && "text-primary hover:text-primary gap-1",
           buttonClassName,
         )}
       >
