@@ -19,7 +19,6 @@ describe("useExportWorkflow", () => {
       isSuccess: true,
       data: {
         name: "My WF",
-        description: "",
         settings: {},
         itemId: "src-1",
         isPublished: true,

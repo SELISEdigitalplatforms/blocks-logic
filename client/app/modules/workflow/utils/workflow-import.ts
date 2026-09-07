@@ -29,7 +29,6 @@ export const importSuccessMessage = (issues: number): string =>
 
 export interface WorkflowImportRoot {
   name: string;
-  description?: string;
   settings: Record<string, unknown>;
   nodes: unknown[];
   edges: unknown[];
@@ -78,7 +77,6 @@ export const preflightWorkflowFile = (input: { text: string; size: number }): Pr
     ok: true,
     root: {
       name,
-      description: typeof parsed.description === "string" ? parsed.description : "",
       settings,
       nodes,
       edges,

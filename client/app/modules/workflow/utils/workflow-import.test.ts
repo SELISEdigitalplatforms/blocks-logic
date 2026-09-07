@@ -24,7 +24,6 @@ const validNode = (id: string, extra: Record<string, unknown> = {}) => ({
 
 const rootOf = (over: Partial<Record<string, unknown>> = {}) => ({
   name: "wf",
-  description: "",
   settings: {},
   nodes: [],
   edges: [],
@@ -77,10 +76,9 @@ describe("preflightWorkflowFile", () => {
     });
   });
 
-  it("passes a well-formed file and defaults description to '' (Example 4)", () => {
+  it("passes a well-formed file and defaults to '' (Example 4)", () => {
     const res = preflight({ name: "Blank", settings: {}, nodes: [], edges: [] });
     expect(res.ok).toBe(true);
-    if (res.ok) expect(res.root.description).toBe("");
   });
 });
 

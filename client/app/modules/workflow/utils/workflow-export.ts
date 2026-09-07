@@ -29,7 +29,6 @@ export interface WorkflowExportEdge {
 
 export interface WorkflowExportFile {
   name: string;
-  description: string;
   settings: Record<string, string>;
   nodes: WorkflowExportNode[];
   edges: WorkflowExportEdge[];
@@ -76,7 +75,7 @@ const pickEdge = (edge: Record<string, unknown>): WorkflowExportEdge => ({
 
 /**
  * Build the export file payload from a `Workflow/Get` response entity. Only
- * `name`, `description`, `settings`, `nodes` and `edges` survive; every
+ * `name`, `settings`, `nodes` and `edges` survive; every
  * itemId / tenantId / publish / audit / execution field is dropped.
  */
 export const buildWorkflowExport = (workflow: Workflow): WorkflowExportFile => {
@@ -85,10 +84,6 @@ export const buildWorkflowExport = (workflow: Workflow): WorkflowExportFile => {
 
   return {
     name: typeof workflow.name === "string" ? workflow.name : "",
-    description:
-      typeof (workflow as { description?: unknown }).description === "string"
-        ? (workflow as { description: string }).description
-        : "",
     settings: isPlainObject(workflow.settings)
       ? (workflow.settings as Record<string, string>)
       : {},

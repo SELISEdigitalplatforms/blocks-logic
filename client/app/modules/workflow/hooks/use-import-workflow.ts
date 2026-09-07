@@ -41,7 +41,6 @@ export const useImportWorkflow = () => {
         try {
           const created = await createWorkflow({
             name: root.name,
-            description: root.description ?? "",
           });
           if (created?.isSuccess && created.itemId) {
             newWorkflowId = created.itemId;

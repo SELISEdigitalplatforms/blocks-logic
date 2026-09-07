@@ -27,7 +27,6 @@ const fileOf = (obj: unknown, opts: { size?: number } = {}) => {
 
 const goodRoot = {
   name: "wf",
-  description: "",
   settings: {},
   nodes: [
     {
@@ -80,7 +79,7 @@ describe("useImportWorkflow", () => {
   it("calls Create then Update with the right payloads and navigates (H5, H8, Example 2)", async () => {
     await run(fileOf(goodRoot));
 
-    expect(mutations.create).toHaveBeenCalledWith({ name: "wf", description: "" });
+    expect(mutations.create).toHaveBeenCalledWith({ name: "wf" });
     expect(mutations.update).toHaveBeenCalledTimes(1);
     const payload = mutations.update.mock.calls[0][0];
     expect(payload.itemId).toBe("NEW1");
@@ -102,19 +101,21 @@ describe("useImportWorkflow", () => {
   it("reports skipped entities in the success toast (H7, Example 5)", async () => {
     const root = {
       ...goodRoot,
-      nodes: [
-        goodRoot.nodes[0],
-        { ...goodRoot.nodes[0], name: "dup" },
-        goodRoot.nodes[1],
-      ],
+      nodes: [goodRoot.nodes[0], { ...goodRoot.nodes[0], name: "dup" }, goodRoot.nodes[1]],
       edges: [
         goodRoot.edges[0],
-        { source: "bcc3fabc012345678901234567890abc", target: "does-not-exist", sourceHandle: "s", targetHandle: "t" },
+        {
+          source: "bcc3fabc012345678901234567890abc",
+          target: "does-not-exist",
+          sourceHandle: "s",
+          targetHandle: "t",
+        },
       ],
     };
     await run(fileOf(root));
     expect(toasts.showSuccessToast).toHaveBeenCalledWith({
-      description: "Workflow imported. 2 item(s) were skipped because they were invalid or disconnected.",
+      description:
+        "Workflow imported. 2 item(s) were skipped because they were invalid or disconnected.",
     });
   });
 
@@ -136,8 +137,7 @@ describe("useImportWorkflow", () => {
     await run(fileOf({ foo: 1 }));
     expect(mutations.create).not.toHaveBeenCalled();
     expect(toasts.showErrorToast).toHaveBeenCalledWith({
-      errors:
-        "This file is not a valid workflow export (missing name, nodes, edges or settings).",
+      errors: "This file is not a valid workflow export (missing name, nodes, edges or settings).",
     });
   });
 

@@ -9,7 +9,6 @@ import { Workflow } from "../models/workflow.model";
 const sourceWorkflow = (): Workflow =>
   ({
     name: "wf",
-    description: "",
     settings: {},
     // audit / publish / execution fields that must never be exported
     itemId: "c17be424",
@@ -66,10 +65,10 @@ const sourceWorkflow = (): Workflow =>
   }) as unknown as Workflow;
 
 describe("buildWorkflowExport", () => {
-  it("keeps only name, description, settings, nodes, edges", () => {
+  it("keeps only name, settings, nodes, edges", () => {
     const out = buildWorkflowExport(sourceWorkflow());
     expect(Object.keys(out).sort()).toEqual(
-      ["description", "edges", "name", "nodes", "settings"].sort(),
+      ["edges", "name", "nodes", "settings"].sort(),
     );
   });
 
@@ -94,9 +93,8 @@ describe("buildWorkflowExport", () => {
     }
   });
 
-  it("defaults description to '' and settings to {} when absent", () => {
+  it("defaults to '' and settings to {} when absent", () => {
     const out = buildWorkflowExport({ name: "x", nodes: [], edges: [] } as unknown as Workflow);
-    expect(out.description).toBe("");
     expect(out.settings).toEqual({});
   });
 
