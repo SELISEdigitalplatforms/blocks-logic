@@ -1,5 +1,5 @@
 import { Menu } from "@/models/menu-models";
-import { CalendarClock, Home, Workflow } from "lucide-react";
+import { CalendarClock, Home, Route, Workflow } from "lucide-react";
 
 export const navigationMenus: Menu[] = [
   {
@@ -24,6 +24,14 @@ export const navigationMenus: Menu[] = [
     name: "Schedules",
     path: "/app/schedule",
     icon: CalendarClock,
+  },
+  {
+    id: "service-proxy",
+    type: "menu",
+    name: "Proxy",
+    path: "/app/proxy",
+    icon: Route,
+    badge: "new",
   },
 
   {
