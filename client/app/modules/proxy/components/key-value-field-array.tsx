@@ -84,6 +84,7 @@ export const KeyValueFieldArray = ({ control, name, label, addLabel }: Props) =>
                   type="button"
                   variant="ghost"
                   size="icon"
+                  aria-label={`Remove ${label.toLowerCase()} row`}
                   className="h-10 w-10 text-muted-foreground hover:text-destructive"
                   onClick={() => remove(index)}
                 >
@@ -99,4 +100,3 @@ export const KeyValueFieldArray = ({ control, name, label, addLabel }: Props) =>
     />
   );
 };
-

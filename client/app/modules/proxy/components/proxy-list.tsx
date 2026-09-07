@@ -52,13 +52,12 @@ export const ProxyList = ({ proxies, isLoading }: Props) => {
     <div className="grid gap-3">
       {proxies.map((proxy) => (
         <Card key={proxy.id} className="p-0">
-          <CardContent className="p-4">
+          <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
             <button
               type="button"
-              className="w-full text-left"
+              className="min-w-0 flex-1 text-left"
               onClick={() => navigate(scoped(`proxy/${proxy.id}`))}
             >
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0 space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="text-base font-semibold">{proxy.name}</h3>
@@ -70,26 +69,22 @@ export const ProxyList = ({ proxies, isLoading }: Props) => {
                   <p className="truncate text-sm text-muted-foreground">{proxy.upstreamMasked}</p>
                   <ProxyMethodChips methods={proxy.methods} />
                 </div>
-                <div className="flex items-center justify-between gap-5 lg:justify-end">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Activity className="h-4 w-4" />
-                    <span>{proxy.calls24h.toLocaleString()} calls 24h</span>
-                  </div>
-                  <span onClick={(event) => event.stopPropagation()}>
-                    <Switch
-                      aria-label={`${proxy.name} enabled`}
-                      checked={proxy.enabled}
-                      disabled={toggleProxy.isPending}
-                      onCheckedChange={(checked) => handleToggle(proxy, checked)}
-                    />
-                  </span>
-                </div>
-              </div>
             </button>
+            <div className="flex items-center justify-between gap-5 lg:justify-end">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Activity className="h-4 w-4" />
+                <span>{proxy.calls24h.toLocaleString()} calls 24h</span>
+              </div>
+              <Switch
+                aria-label={`${proxy.name} enabled`}
+                checked={proxy.enabled}
+                disabled={toggleProxy.isPending}
+                onCheckedChange={(checked) => handleToggle(proxy, checked)}
+              />
+            </div>
           </CardContent>
         </Card>
       ))}
     </div>
   );
 };
-

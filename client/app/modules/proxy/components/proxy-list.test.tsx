@@ -1,0 +1,76 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter, Route, Routes } from "react-router";
+import { renderWithProviders } from "@/test-utils/test-providers/render";
+import { PROXY_MOCK_DATA } from "../constants";
+import { proxyService } from "../services";
+import { ProxyList } from "./proxy-list";
+
+const toasts = vi.hoisted(() => ({
+  showErrorToast: vi.fn(),
+  showSuccessToast: vi.fn(),
+}));
+
+vi.mock("@/hooks/use-toast", () => toasts);
+
+vi.mock("@seliseblocks/genesis-os", async () => {
+  const actual = await vi.importActual("@seliseblocks/genesis-os");
+  return {
+    ...actual,
+    useScopedPath: () => (path: string) => `/app/item-123/${path.replace(/^\//, "")}`,
+  };
+});
+
+describe("ProxyList", () => {
+  beforeEach(() => {
+    proxyService.resetMockStore();
+    vi.clearAllMocks();
+  });
+
+  it("shows loading and empty states", () => {
+    const { rerender } = renderWithProviders(
+      <MemoryRouter>
+        <ProxyList proxies={[]} isLoading={true} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Loading proxies...")).toBeTruthy();
+
+    rerender(
+      <MemoryRouter>
+        <ProxyList proxies={[]} isLoading={false} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText("No proxies yet")).toBeTruthy();
+  });
+
+  it("navigates to detail", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <MemoryRouter initialEntries={["/proxy"]}>
+        <Routes>
+          <Route path="/proxy" element={<ProxyList proxies={PROXY_MOCK_DATA} isLoading={false} />} />
+          <Route path="/app/item-123/proxy/p1" element={<div>Stripe detail</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByText("Stripe Payments"));
+    expect(screen.getByText("Stripe detail")).toBeTruthy();
+  });
+
+  it("toggles proxy status", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <MemoryRouter>
+        <ProxyList proxies={PROXY_MOCK_DATA} isLoading={false} />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByLabelText("Weather Lookup enabled"));
+    await waitFor(() =>
+      expect(toasts.showSuccessToast).toHaveBeenCalledWith({ description: "Proxy enabled." }),
+    );
+  });
+});
