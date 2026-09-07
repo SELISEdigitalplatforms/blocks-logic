@@ -30,7 +30,7 @@ describe("Proxy feature", () => {
     proxyService.resetMockStore();
   });
 
-  it("renders the mock-backed list with the expected count and summaries", async () => {
+  it("renders the mock-backed list with the expected summaries", async () => {
     renderWithProviders(
       <MemoryRouter>
         <Proxies />
@@ -38,7 +38,7 @@ describe("Proxy feature", () => {
     );
 
     expect(await screen.findByText("Stripe Payments")).toBeTruthy();
-    expect(screen.getByText("3")).toBeTruthy();
+    expect(screen.getByText(/Your client calls Blocks/i)).toBeTruthy();
     expect(screen.getByText("SendGrid Mail")).toBeTruthy();
     expect(screen.getByText("Weather Lookup")).toBeTruthy();
     expect(screen.getByText(/1,248 calls 24h/i)).toBeTruthy();
@@ -54,12 +54,14 @@ describe("Proxy feature", () => {
       </MemoryRouter>,
     );
 
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Stripe Payments" })).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Stripe Payments" })).toBeTruthy(),
+    );
 
     expect(screen.getByText("Live")).toBeTruthy();
-    expect(screen.getAllByText("/api/proxy/gateway/stripe-payments/*").length).toBeGreaterThan(0);
+    expect(screen.getByText("/api/proxy/stripe-payments/*")).toBeTruthy();
     expect(screen.getByText("Authorization")).toBeTruthy();
-    expect(screen.getByText("Vault")).toBeTruthy();
+    expect(screen.getAllByText("vault").length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole("button", { name: /reveal/i }));
     expect(screen.getByText("https://api.stripe.com/v1/charges")).toBeTruthy();
@@ -122,7 +124,9 @@ describe("Proxy feature", () => {
       </MemoryRouter>,
     );
 
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Stripe Payments" })).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Stripe Payments" })).toBeTruthy(),
+    );
     await user.click(screen.getByRole("tab", { name: /request logs/i }));
 
     expect(await screen.findByText("3 of 3 requests")).toBeTruthy();
@@ -145,7 +149,9 @@ describe("Proxy feature", () => {
       </MemoryRouter>,
     );
 
-    await waitFor(() => expect(screen.getByRole("heading", { name: "SendGrid Mail" })).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "SendGrid Mail" })).toBeTruthy(),
+    );
     await user.click(screen.getByRole("tab", { name: /request logs/i }));
     await user.click(await screen.findByRole("button", { name: "5xx" }));
     await user.click(screen.getByRole("button", { name: /export csv/i }));
@@ -168,10 +174,12 @@ describe("Proxy feature", () => {
       </MemoryRouter>,
     );
 
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Stripe Payments" })).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Stripe Payments" })).toBeTruthy(),
+    );
     await user.click(screen.getByRole("tab", { name: /change history/i }));
 
-    expect(await screen.findByText("Added payment intent expansion query.")).toBeTruthy();
+    expect(await screen.findByText("Added payment intent expansion query")).toBeTruthy();
     await user.click(screen.getAllByRole("button", { name: /revert/i })[0]);
     await waitFor(() =>
       expect(toasts.showSuccessToast).toHaveBeenCalledWith({

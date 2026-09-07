@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
@@ -28,11 +28,12 @@ describe("ProxyForm", () => {
       </MemoryRouter>,
     );
 
-    await user.type(screen.getByPlaceholderText("Stripe Payments"), "Docs Proxy");
-    await user.type(
-      screen.getByPlaceholderText("https://api.example.com/v1/resource"),
-      "https://api.example.com/docs",
-    );
+    fireEvent.change(screen.getByPlaceholderText("Stripe Payments"), {
+      target: { value: "Docs Proxy" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("https://api.example.com/v1/resource"), {
+      target: { value: "https://api.example.com/docs" },
+    });
     await user.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalled());
@@ -59,4 +60,3 @@ describe("ProxyForm", () => {
     await waitFor(() => expect(onDelete).toHaveBeenCalled());
   });
 });
-

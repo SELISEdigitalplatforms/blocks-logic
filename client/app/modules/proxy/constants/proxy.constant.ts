@@ -18,4 +18,4 @@ export const PROXY_METHODS: ProxyMethod[] = ["GET", "POST", "PUT", "PATCH", "DEL
 
 export const PROXY_QUERY_KEY = ["proxies"] as const;
 
-export const getProxyClientPath = (slug: string) => `/api/proxy/gateway/${slug || "proxy-name"}/*`;
+export const getProxyClientPath = (slug: string) => `/api/proxy/${slug || "proxy-name"}/*`;

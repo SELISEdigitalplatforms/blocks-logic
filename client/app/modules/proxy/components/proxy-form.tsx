@@ -16,7 +16,12 @@ import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { getProxyClientPath } from "../constants";
 import { useCreateProxy, useDeleteProxy, useUpdateProxy } from "../hooks";
 import { Proxy, ProxyFormValues, ProxyMethod } from "../types";
-import { compactKeyValues, proxyFormDefaultValues, proxyFormSchema, slugifyProxyName } from "../utils";
+import {
+  compactKeyValues,
+  proxyFormDefaultValues,
+  proxyFormSchema,
+  slugifyProxyName,
+} from "../utils";
 import { KeyValueFieldArray } from "./key-value-field-array";
 import { ProxyFormHeader } from "./proxy-form-header";
 import { ProxyMethodSelector } from "./proxy-method-selector";
@@ -31,7 +36,14 @@ type Props = {
   onDelete?: () => void;
 };
 
-export const ProxyForm = ({ mode, proxy, isLoadingProxy, onSuccess, onCancel, onDelete }: Props) => {
+export const ProxyForm = ({
+  mode,
+  proxy,
+  isLoadingProxy,
+  onSuccess,
+  onCancel,
+  onDelete,
+}: Props) => {
   const isEdit = mode === "edit";
   const createProxy = useCreateProxy();
   const updateProxy = useUpdateProxy();
@@ -51,16 +63,18 @@ export const ProxyForm = ({ mode, proxy, isLoadingProxy, onSuccess, onCancel, on
     name: draft.name ?? "",
     upstreamUrl: draft.upstreamUrl ?? "",
     methods: draft.methods ?? ["GET"],
-    headers: draft.headers?.map((row) => ({
-      key: row.key ?? "",
-      value: row.value ?? "",
-      isSecretRef: row.isSecretRef,
-    })) ?? [],
-    query: draft.query?.map((row) => ({
-      key: row.key ?? "",
-      value: row.value ?? "",
-      isSecretRef: row.isSecretRef,
-    })) ?? [],
+    headers:
+      draft.headers?.map((row) => ({
+        key: row.key ?? "",
+        value: row.value ?? "",
+        isSecretRef: row.isSecretRef,
+      })) ?? [],
+    query:
+      draft.query?.map((row) => ({
+        key: row.key ?? "",
+        value: row.value ?? "",
+        isSecretRef: row.isSecretRef,
+      })) ?? [],
   };
 
   useEffect(() => {
@@ -136,9 +150,9 @@ export const ProxyForm = ({ mode, proxy, isLoadingProxy, onSuccess, onCancel, on
           onDelete={handleDelete}
         />
 
-        <Card>
-          <CardContent className="grid gap-8 p-0 lg:grid-cols-[minmax(0,1fr)_minmax(300px,420px)]">
-            <div className="space-y-6">
+        <Card className="rounded-xl">
+          <CardContent className="space-y-6 p-0">
+            <div className="grid gap-5 lg:grid-cols-[minmax(260px,0.8fr)_minmax(320px,1.2fr)]">
               <FormField
                 control={form.control}
                 name="name"
@@ -159,49 +173,62 @@ export const ProxyForm = ({ mode, proxy, isLoadingProxy, onSuccess, onCancel, on
                   <FormItem>
                     <FormLabel>Third-party endpoint</FormLabel>
                     <FormControl>
-                      <Input type="url" placeholder="https://api.example.com/v1/resource" {...field} />
+                      <Input
+                        type="url"
+                        placeholder="https://api.example.com/v1/resource"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <ProxyMethodSelector
-                control={form.control}
-                selectedMethods={selectedMethods}
-                onToggle={toggleMethod}
-              />
             </div>
-            <div className="space-y-2 rounded-sm border bg-muted/20 p-4">
-              <span className="text-xs font-medium uppercase text-muted-foreground">Client route preview</span>
-              <p className="break-all font-mono text-sm">{clientPath}</p>
+            <ProxyMethodSelector
+              control={form.control}
+              selectedMethods={selectedMethods}
+              onToggle={toggleMethod}
+            />
+            <div className="space-y-2 rounded-lg border border-primary/25 bg-primary/5 p-4 text-primary">
+              <span className="text-xs font-semibold uppercase tracking-wide">
+                Your client calls this
+              </span>
+              <p className="break-all font-mono text-sm">
+                {selectedMethods[0] ?? "GET"} https://api.blocks.dev{clientPath}
+              </p>
+              <p className="text-sm text-primary/80">
+                Send X-Blocks-Key. Path, body and extra query string pass straight through.
+              </p>
             </div>
           </CardContent>
         </Card>
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Card>
-              <CardContent className="p-0">
-                <KeyValueFieldArray
-                  control={form.control}
-                  name="headers"
-                  label="Header rows"
-                  addLabel="Add header"
-                />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-0">
-                <KeyValueFieldArray
-                  control={form.control}
-                  name="query"
-                  label="Query parameter rows"
-                  addLabel="Add query"
-                />
-              </CardContent>
-            </Card>
-          </div>
-          <ProxyTestPanel proxyId={proxy?.id} draft={draftValues} method={selectedMethods[0] ?? "GET"} />
+        <div className="grid gap-6">
+          <Card className="rounded-xl">
+            <CardContent className="p-0">
+              <KeyValueFieldArray
+                control={form.control}
+                name="headers"
+                label="Header rows"
+                addLabel="Add header"
+              />
+            </CardContent>
+          </Card>
+          <Card className="rounded-xl">
+            <CardContent className="p-0">
+              <KeyValueFieldArray
+                control={form.control}
+                name="query"
+                label="Query parameter rows"
+                addLabel="Add query"
+              />
+            </CardContent>
+          </Card>
+          <ProxyTestPanel
+            proxyId={proxy?.id}
+            draft={draftValues}
+            method={selectedMethods[0] ?? "GET"}
+          />
         </div>
       </form>
     </Form>

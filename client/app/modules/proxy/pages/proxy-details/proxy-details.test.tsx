@@ -37,8 +37,8 @@ describe("ProxyDetails page", () => {
 
     expect(await screen.findByRole("heading", { name: "Stripe Payments" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Overview" })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: "Request logs" })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: "Change history" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /Request logs/i })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /Change history/i })).toBeTruthy();
   });
 
   it("redirects unknown proxies back to the list", async () => {
@@ -54,7 +54,6 @@ describe("ProxyDetails page", () => {
     await waitFor(() =>
       expect(toasts.showErrorToast).toHaveBeenCalledWith({ errors: "Proxy not found" }),
     );
-    expect(screen.getByText("Proxy list route")).toBeTruthy();
+    expect(await screen.findByText("Proxy list route")).toBeTruthy();
   });
 });
-

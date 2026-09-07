@@ -10,7 +10,7 @@ describe("Proxies page", () => {
     proxyService.resetMockStore();
   });
 
-  it("renders the page title, count, and proxy list", async () => {
+  it("renders the page title, updated copy, and proxy list", async () => {
     renderWithProviders(
       <MemoryRouter>
         <Proxies />
@@ -18,8 +18,8 @@ describe("Proxies page", () => {
     );
 
     expect(await screen.findByRole("heading", { name: "Proxy" })).toBeTruthy();
+    expect(screen.getByText(/The vendor URL and secret never reach the browser/i)).toBeTruthy();
     expect(await screen.findByText("Stripe Payments")).toBeTruthy();
     expect(screen.getByRole("button", { name: /add proxy/i })).toBeTruthy();
   });
 });
-

@@ -22,8 +22,8 @@ describe("ProxyHistoryTab", () => {
     const user = userEvent.setup();
     renderWithProviders(<ProxyHistoryTab proxyId="p1" active={true} />);
 
-    expect(await screen.findByText("Added payment intent expansion query.")).toBeTruthy();
-    expect(screen.getByText("query: []")).toBeTruthy();
+    expect(await screen.findByText("Added payment intent expansion query")).toBeTruthy();
+    expect(screen.getByText(/- query: \[\]/)).toBeTruthy();
 
     await user.click(screen.getAllByRole("button", { name: /revert/i })[0]);
     await waitFor(() =>
@@ -39,4 +39,3 @@ describe("ProxyHistoryTab", () => {
     expect(await screen.findByText("No change history yet.")).toBeTruthy();
   });
 });
-

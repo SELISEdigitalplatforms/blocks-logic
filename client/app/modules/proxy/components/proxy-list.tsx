@@ -28,7 +28,9 @@ export const ProxyList = ({ proxies, isLoading }: Props) => {
   };
 
   if (isLoading) {
-    return <div className="py-16 text-center text-sm text-muted-foreground">Loading proxies...</div>;
+    return (
+      <div className="py-16 text-center text-sm text-muted-foreground">Loading proxies...</div>
+    );
   }
 
   if (!proxies.length) {
@@ -51,24 +53,28 @@ export const ProxyList = ({ proxies, isLoading }: Props) => {
   return (
     <div className="grid gap-3">
       {proxies.map((proxy) => (
-        <Card key={proxy.id} className="p-0">
+        <Card key={proxy.id} className="rounded-xl p-0">
           <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
             <button
               type="button"
               className="min-w-0 flex-1 text-left"
               onClick={() => navigate(scoped(`proxy/${proxy.id}`))}
             >
-                <div className="min-w-0 space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-base font-semibold">{proxy.name}</h3>
-                    <ProxyStatusBadge proxy={proxy} />
-                  </div>
-                  <p className="truncate font-mono text-xs text-muted-foreground">
-                    {getProxyClientPath(proxy.slug)}
-                  </p>
-                  <p className="truncate text-sm text-muted-foreground">{proxy.upstreamMasked}</p>
-                  <ProxyMethodChips methods={proxy.methods} />
+              <div className="min-w-0 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-base font-semibold">{proxy.name}</h3>
+                  <ProxyStatusBadge proxy={proxy} />
                 </div>
+                <p className="truncate font-mono text-xs text-muted-foreground">
+                  {getProxyClientPath(proxy.slug)}
+                </p>
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <ProxyMethodChips methods={proxy.methods} />
+                  <p className="min-w-0 truncate text-sm text-muted-foreground">
+                    {proxy.upstreamMasked}
+                  </p>
+                </div>
+              </div>
             </button>
             <div className="flex items-center justify-between gap-5 lg:justify-end">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
