@@ -245,6 +245,15 @@ describe("email trigger v1", () => {
     const node = { id: "n", parameters: {} } as never;
     expect(NodeSchemaTriggerEmailV1.transform?.(node)).toBe(node);
   });
+
+  it("exposes a testSubject parameter for test-mode matching", () => {
+    expect(field(NodeSchemaTriggerEmailV1, "testSubject")).toMatchObject({
+      key: "testSubject",
+      type: "text",
+      required: false,
+    });
+    expect(NodeSchemaTriggerEmailV1.defaults.parameters.testSubject).toBe("");
+  });
 });
 
 describe("send mail v1", () => {

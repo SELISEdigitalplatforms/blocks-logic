@@ -67,6 +67,7 @@ jobs:
       version: ${{ steps.config.outputs.version }} # Version suffix based on environment
       client_dockerfile_path: ${{ steps.config.outputs.client_dockerfile_path }} # Path to Dockerfile
       worker_dockerfile_path: ${{ steps.config.outputs.worker_dockerfile_path }} # Path to Window/Console service Dockerfile
+      mailboxsync_dockerfile_path: ${{ steps.config.outputs.mailboxsync_dockerfile_path }}
       dependency_track_host: ${{ steps.config.outputs.dependency_track_host }} # e.g., api-dt.seliseblocks.com
       dependency_track_frontend_url: ${{ steps.config.outputs.dependency_track_frontend_url }} # e.g., sca.seliseblocks.com
       dotnet_version: ${{ steps.config.outputs.dotnet_version }}
@@ -96,6 +97,7 @@ jobs:
           # From vars.env (if loaded) or fallback to defaults
           echo "client_dockerfile_path=${DOCKERFILE_CLIENT:-./Dockerfile}" >> $GITHUB_OUTPUT
           echo "worker_dockerfile_path=${DOCKERFILE_WORKER:-./Dockerfile.worker}" >> $GITHUB_OUTPUT
+          echo "mailboxsync_dockerfile_path=${DOCKERFILE_MAILBOXSYNC:-./Dockerfile.mailboxsync}" >> $GITHUB_OUTPUT
 
           # From vars.env (if loaded) or fallback to defaults
           echo "service_name=${SERVICE_NAME:-github.event.repository.name}" >> $GITHUB_OUTPUT
@@ -369,6 +371,50 @@ jobs:
       TAG_STRATEGY: ${{ needs.initialization.outputs.tag_strategy }} # Options: "commit" (default), "semantic", or "primary"
       CLUSTER_NAME: ${{ needs.initialization.outputs.cluster_name }}
       # GITOPS_BRANCH: "main"
+    secrets:
+      SELISE_GITHUB_PAT: ${{ secrets.SELISE_GITHUB_PAT }}
+      AZURE_CONTAINER_REGISTRY: ${{ secrets.AZURE_BLOCKS_CONTAINER_REGISTRY }}
+
+  build-mailboxsync:
+    needs: [ initialization, sonarqube_server, sonarqube_client ]
+    if: |
+      github.event_name == 'push' &&
+      always() &&
+      needs.initialization.result == 'success' &&
+      (needs.sonarqube_server.result == 'success' || needs.sonarqube_server.result == 'skipped') &&
+      (needs.sonarqube_client.result == 'success' || needs.sonarqube_client.result == 'skipped')
+    uses: SELISEdigitalplatforms/blocks-inventory/.github/workflows/build-push.yml@main
+    with:
+      SERVICE_NAME: ${{ needs.initialization.outputs.service_name }}
+      SERVICE_TYPE: "mailboxsync"
+      ENVIRONMENT: ${{ needs.initialization.outputs.environment }}
+      TAG_STRATEGY: ${{ needs.initialization.outputs.tag_strategy }}
+      DOCKERFILE_PATH: ${{ needs.initialization.outputs.mailboxsync_dockerfile_path }}
+      BUILD_ARGS: |
+        BUILD_VERSION=${{ github.sha }}
+    secrets:
+      AZURE_CREDENTIALS: ${{ secrets.AZURE_AKS_BLOCKS_CREDENTIALS }}
+      AZURE_CONTAINER_REGISTRY: ${{ secrets.AZURE_BLOCKS_CONTAINER_REGISTRY }}
+      ACR_RESOURCE_GROUP: ${{ secrets.ClUSTER_AKS_BLOCKS_RESOURCE_GROUP }}
+      SELISE_GITHUB_PAT: ${{ secrets.SELISE_GITHUB_PAT }}
+
+  update-gitops-mailboxsync:
+    needs: [ initialization, build-mailboxsync ]
+    if: |
+      github.event_name == 'push' &&
+      always() &&
+      needs.initialization.result == 'success' &&
+      needs.build-mailboxsync.result == 'success'
+    uses: SELISEdigitalplatforms/blocks-inventory/.github/workflows/update-gitops-central.yml@main
+    with:
+      SERVICE_NAME: ${{ needs.initialization.outputs.service_name }}
+      SERVICE_TYPE: "mailboxsync"
+      ENVIRONMENT: ${{ needs.initialization.outputs.environment }}
+      IMAGE_TAG: ${{ needs.build-mailboxsync.outputs.image_tag }}
+      COMMIT_TAG: ${{ needs.build-mailboxsync.outputs.commit_tag }}
+      SEMANTIC_TAG: ${{ needs.build-mailboxsync.outputs.semantic_tag }}
+      TAG_STRATEGY: ${{ needs.initialization.outputs.tag_strategy }}
+      CLUSTER_NAME: ${{ needs.initialization.outputs.cluster_name }}
     secrets:
       SELISE_GITHUB_PAT: ${{ secrets.SELISE_GITHUB_PAT }}
       AZURE_CONTAINER_REGISTRY: ${{ secrets.AZURE_BLOCKS_CONTAINER_REGISTRY }}
