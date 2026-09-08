@@ -43,7 +43,7 @@ namespace DomainService.Workflow.Nodes.TriggerEmailV1
             try
             {
                 var config = JsonSerializer.Deserialize<TriggerEmailV1Parameters>(parameters);
-                return Task.FromResult(config != null);
+                return Task.FromResult(config != null && !string.IsNullOrWhiteSpace(config.MailServerConfigurationId));
             }
             catch
             {
