@@ -52,7 +52,7 @@ describe("use-proxy-api hooks", () => {
     const testRequest = renderHook(() => useSendProxyTestRequest(), { wrapper });
     const exportCsv = renderHook(() => useExportProxyExecutionCsv(), { wrapper });
 
-    await waitFor(() => expect(logs.result.current.data?.[0].status).toBe(404));
+    await waitFor(() => expect(logs.result.current.data?.rows[0].status).toBe(404));
 
     await expect(
       revert.result.current.mutateAsync({ proxyId: "p1", versionId: "v2" }),

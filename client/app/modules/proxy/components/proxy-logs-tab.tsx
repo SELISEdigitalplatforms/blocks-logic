@@ -3,14 +3,12 @@ import { Activity, Download, Loader2, Pause, Play } from "lucide-react";
 import { Badge } from "@/components/ui-kits/badge/badge";
 import { Button } from "@/components/ui-kits/button/button";
 import { Card, CardContent } from "@/components/ui-kits/card/card";
+import { Pagination } from "@/components/ui-kits/pagination/pagination";
 import { Skeleton } from "@/components/ui-kits/skeleton/skeleton";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import {
-  useExportProxyExecutionCsv,
-  useGetProxyExecution,
-  useGetProxyExecutions,
-} from "../hooks";
+import { PROXY_LOG_PAGE_SIZE, PROXY_LOG_PAGE_SIZE_OPTIONS } from "../constants";
+import { useExportProxyExecutionCsv, useGetProxyExecution, useGetProxyExecutions } from "../hooks";
 import { Proxy, ProxyExecutionLog, ProxyLogFilter } from "../types";
 
 const FILTERS: { value: ProxyLogFilter; label: string }[] = [
@@ -111,24 +109,37 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
   const [filter, setFilter] = useState<ProxyLogFilter>("all");
   const [live, setLive] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState<number>(PROXY_LOG_PAGE_SIZE);
   const {
-    data = [],
+    data: logPage,
     isFetching,
     isLoading,
   } = useGetProxyExecutions(proxy.id, filter, {
     live: active && live && proxy.enabled,
     enabled: active,
+    page,
+    pageSize,
   });
+  const data = logPage?.rows ?? [];
+  const totalCount = logPage?.totalCount ?? 0;
   const {
-    data: allRows = [],
+    data: allRowsPage,
     isFetched: hasFetchedAllRows,
     isLoading: isLoadingAllRows,
-  } = useGetProxyExecutions(proxy.id, "all", { enabled: active });
+  } = useGetProxyExecutions(proxy.id, "all", { enabled: active, pageSize: 1 });
+  const totalAllCount = allRowsPage?.totalCount ?? 0;
   const exportCsv = useExportProxyExecutionCsv();
 
   const handleFilter = (next: ProxyLogFilter) => {
     setFilter(next);
     setExpandedId(null);
+    setPage(0);
+  };
+
+  const handlePageSizeChange = (next: number) => {
+    setPageSize(next);
+    setPage(0);
   };
 
   const handleExport = async () => {
@@ -151,7 +162,7 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
     return <ProxyLogsSkeleton />;
   }
 
-  if (active && hasFetchedAllRows && !allRows.length) {
+  if (active && hasFetchedAllRows && totalAllCount === 0) {
     return (
       <Card className="p-0">
         <CardContent className="flex min-h-[260px] flex-col items-center justify-center px-6 py-12 text-center">
@@ -185,7 +196,7 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
         </div>
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">
-            {data.length} of {allRows.length} requests
+            {data.length} of {totalAllCount} requests
           </span>
           <Button
             variant="outline"
@@ -202,7 +213,7 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
           </Button>
         </div>
       </div>
-      <div className="overflow-hidden rounded-sm border">
+      <div className="overflow-hidden rounded-sm border bg-card">
         <table className="w-full text-sm">
           <thead className="bg-muted/40 text-xs text-muted-foreground">
             <tr>
@@ -237,9 +248,7 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
                       </Badge>
                       <span>{log.latencyMs}ms</span>
                     </button>
-                    {expandedId === log.id ? (
-                      <LogDetails proxyId={proxy.id} log={log} />
-                    ) : null}
+                    {expandedId === log.id ? <LogDetails proxyId={proxy.id} log={log} /> : null}
                   </td>
                 </tr>
               ))
@@ -247,6 +256,18 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
           </tbody>
         </table>
       </div>
+      {totalCount > 0 ? (
+        <div className="flex justify-end">
+          <Pagination
+            totalCount={totalCount}
+            page={page}
+            pageSize={pageSize}
+            pageSizeOptions={[...PROXY_LOG_PAGE_SIZE_OPTIONS]}
+            onChange={setPage}
+            onPageSizeChange={handlePageSizeChange}
+          />
+        </div>
+      ) : null}
       {isFetching ? <p className="text-xs text-muted-foreground">Refreshing logs...</p> : null}
     </div>
   );

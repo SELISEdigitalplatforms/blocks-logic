@@ -149,8 +149,21 @@ describe("ProxyService HTTP wiring", () => {
     await proxyService.getExecutions("p1", "server", {});
     expect(logicService.post).toHaveBeenCalledWith(
       "/api/Proxy/GetExecutions",
-      expect.objectContaining({ proxyId: "p1", statusClass: "5xx" }),
+      expect.objectContaining({ proxyId: "p1", statusClass: "5xx", pageSize: 10, pageNumber: 0 }),
     );
+  });
+
+  it("forwards the requested page and page size on GetExecutions", async () => {
+    logicService.post.mockResolvedValueOnce({
+      data: [],
+      totalCount: 42,
+    });
+    const result = await proxyService.getExecutions("p1", "all", { page: 2, pageSize: 20 });
+    expect(logicService.post).toHaveBeenCalledWith(
+      "/api/Proxy/GetExecutions",
+      expect.objectContaining({ pageSize: 20, pageNumber: 2 }),
+    );
+    expect(result).toEqual({ rows: [], totalCount: 42 });
   });
 
   it("returns a typed test response and degrades a 400 to a rendered result", async () => {

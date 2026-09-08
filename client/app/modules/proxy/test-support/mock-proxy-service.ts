@@ -12,6 +12,7 @@ import {
   Proxy,
   ProxyCsvExport,
   ProxyExecutionLog,
+  ProxyExecutionPage,
   ProxyFieldChange,
   ProxyFormValues,
   ProxyListParams,
@@ -239,11 +240,21 @@ export const mockProxyService = {
     return { isSuccess: true, itemId: id, errors: null };
   },
 
-  getExecutions: async (proxyId: string, filter: ProxyLogFilter): Promise<ProxyExecutionLog[]> => {
+  getExecutions: async (
+    proxyId: string,
+    filter: ProxyLogFilter,
+    options: { page?: number; pageSize?: number } = {},
+  ): Promise<ProxyExecutionPage> => {
     await waitForMock();
-    return proxyLogs.filter(
+    const matched = proxyLogs.filter(
       (log) => log.proxyId === proxyId && matchesLogFilter(log.status, filter),
     );
+    const pageSize = options.pageSize ?? 10;
+    const page = options.page ?? 0;
+    return {
+      rows: matched.slice(page * pageSize, page * pageSize + pageSize),
+      totalCount: matched.length,
+    };
   },
 
   getExecution: async (

@@ -266,6 +266,12 @@ export type ProxyExecutionLog = {
   responseContentType?: string;
 };
 
+/** One page of the Request logs list: the mapped rows plus the unpaged 24h match count. */
+export type ProxyExecutionPage = {
+  rows: ProxyExecutionLog[];
+  totalCount: number;
+};
+
 export type ProxyVersionHistory = {
   id: string;
   proxyId: string;

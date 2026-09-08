@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PROXY_QUERY_KEY } from "../constants";
 import { proxyService } from "../services";
 import { ProxyFormValues, ProxyListParams, ProxyLogFilter, ProxyTestRequest } from "../types";
@@ -57,13 +57,28 @@ export const useDeleteProxy = () => {
 export const useGetProxyExecutions = (
   proxyId?: string,
   filter: ProxyLogFilter = "all",
-  options: { live?: boolean; enabled?: boolean } = {},
+  options: { live?: boolean; enabled?: boolean; page?: number; pageSize?: number } = {},
 ) =>
   useQuery({
-    queryKey: [...PROXY_QUERY_KEY, "executions", proxyId, filter, options.live],
-    queryFn: () => proxyService.getExecutions(proxyId!, filter, { live: options.live }),
+    queryKey: [
+      ...PROXY_QUERY_KEY,
+      "executions",
+      proxyId,
+      filter,
+      options.page ?? 0,
+      options.pageSize ?? null,
+      options.live,
+    ],
+    queryFn: () =>
+      proxyService.getExecutions(proxyId!, filter, {
+        live: options.live,
+        page: options.page,
+        pageSize: options.pageSize,
+      }),
     enabled: Boolean(proxyId) && (options.enabled ?? true),
     refetchInterval: options.live ? 3000 : false,
+    // Keep the current page visible while the next one loads instead of flashing the skeleton.
+    placeholderData: keepPreviousData,
   });
 
 export const useGetProxyExecution = (

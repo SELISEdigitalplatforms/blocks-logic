@@ -1,6 +1,6 @@
 import { HttpError } from "@seliseblocks/genesis-os";
 import { serviceInstances } from "@/lib/http-client";
-import { PROXY_ENDPOINTS } from "../constants";
+import { PROXY_ENDPOINTS, PROXY_LOG_PAGE_SIZE } from "../constants";
 import {
   mapLogFilterToStatusClass,
   mapMutationResponse,
@@ -25,6 +25,7 @@ import {
   ProxyExecutionDetailDto,
   ProxyExecutionListItemDto,
   ProxyExecutionLog,
+  ProxyExecutionPage,
   ProxyFormValues,
   ProxyListItemDto,
   ProxyListParams,
@@ -171,18 +172,21 @@ export class ProxyService {
   getExecutions = async (
     proxyId: string,
     filter: ProxyLogFilter,
-    options: { live?: boolean; afterId?: string } = {},
-  ): Promise<ProxyExecutionLog[]> => {
+    options: { live?: boolean; afterId?: string; page?: number; pageSize?: number } = {},
+  ): Promise<ProxyExecutionPage> => {
     const response = await this.logicHttpClient.post<
       BaseQueryListResponse<ProxyExecutionListItemDto[]>
     >(PROXY_ENDPOINTS.GET_EXECUTIONS, {
       proxyId,
       statusClass: mapLogFilterToStatusClass(filter),
       afterId: options.afterId,
-      pageSize: 2,
-      pageNumber: 0,
+      pageSize: options.pageSize ?? PROXY_LOG_PAGE_SIZE,
+      pageNumber: options.page ?? 0,
     });
-    return (response.data ?? []).map((row) => mapProxyExecutionListItemDtoToLog(row, proxyId));
+    return {
+      rows: (response.data ?? []).map((row) => mapProxyExecutionListItemDtoToLog(row, proxyId)),
+      totalCount: response.totalCount ?? 0,
+    };
   };
 
   getExecution = async (
