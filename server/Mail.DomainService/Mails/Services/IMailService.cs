@@ -8,5 +8,6 @@ namespace Mail.DomainService.Mails
         Task<BaseMutationResponse> ProcessMailAsync(SendMail request);
         Task<GetMailBoxMailsResponse> GetMailBoxMailsAsync(GetMailBoxMails request);
         Task<GetMailBoxMailResponse> GetMailBoxMailAsync(GetMailBoxMail request);
+        Task<List<MailServerConfigurationSummary>> GetMailServerConfigurationSummariesAsync();
     }
 }

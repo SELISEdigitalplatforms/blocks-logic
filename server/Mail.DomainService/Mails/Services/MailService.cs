@@ -252,5 +252,10 @@ namespace Mail.DomainService.Mails
                 Mail = mail
             };
         }
+
+        public Task<List<MailServerConfigurationSummary>> GetMailServerConfigurationSummariesAsync()
+        {
+            return _mailRepository.GetMailServerConfigurationSummariesAsync();
+        }
     }
 }
