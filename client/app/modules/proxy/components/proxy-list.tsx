@@ -11,6 +11,7 @@ import { useToggleProxy } from "../hooks";
 import { getProxyClientPath } from "../constants";
 import { ProxyMethodChips } from "./proxy-method-chips";
 import { ProxyStatusBadge } from "./proxy-status-badge";
+import { VariablesButton } from "./variables-button";
 
 type Props = {
   proxies: Proxy[];
@@ -70,10 +71,13 @@ export const ProxyList = ({ proxies, isLoading }: Props) => {
             Create your first proxy configuration to keep client traffic stable while upstream
             services stay behind a managed route.
           </p>
-          <Button className="mt-5 gap-2" onClick={() => navigate(scoped("proxy/new"))}>
-            <Plus className="h-4 w-4" />
-            Add proxy
-          </Button>
+          <div className="mt-5 flex flex-col items-center gap-2 sm:flex-row">
+            <VariablesButton />
+            <Button className="gap-2" onClick={() => navigate(scoped("proxy/new"))}>
+              <Plus className="h-4 w-4" />
+              Add proxy
+            </Button>
+          </div>
         </CardContent>
       </Card>
     );

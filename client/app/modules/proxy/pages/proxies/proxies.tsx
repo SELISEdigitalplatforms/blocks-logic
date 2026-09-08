@@ -4,6 +4,7 @@ import { Plus } from "lucide-react";
 import { Button } from "@/components/ui-kits/button/button";
 import { useGetProxies } from "../../hooks";
 import { ProxyList } from "../../components/proxy-list";
+import { VariablesButton } from "../../components/variables-button";
 
 export const Proxies = () => {
   const navigate = useNavigate();
@@ -24,10 +25,13 @@ export const Proxies = () => {
           </p>
         </div>
         {shouldShowAddProxyButton && (
-          <Button className="gap-2" onClick={() => navigate(scoped("proxy/new"))}>
-            <Plus className="h-4 w-4" />
-            Add proxy
-          </Button>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <VariablesButton />
+            <Button className="gap-2" onClick={() => navigate(scoped("proxy/new"))}>
+              <Plus className="h-4 w-4" />
+              Add proxy
+            </Button>
+          </div>
         )}
       </div>
       <div>
