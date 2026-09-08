@@ -49,28 +49,26 @@ export const NodeSchemaTriggerEmailV1: NodeSchemaDefinition = {
         key: "mailbox_composite",
         required: true,
         options: (_data, config) => {
-          return new Promise((resolve, reject) => {
-            emailService
-              .fetchEmailConfigs(config.projectKey, 0, 200)
-              .then((res) =>
-                resolve(
-                  res
-                    .filter((item) => item.isInbound)
-                    .map((item) => ({
-                      value: `${item.itemId}_${config.projectKey}`,
-                      label: item.name,
-                    })),
-                ),
-              )
-              .catch(reject);
-          });
+          return emailService
+            .fetchEmailConfigs(config.projectKey, 0, 200)
+            .then((res) =>
+              res
+                .filter((item) => Boolean(item.isInbound) && Boolean(item.itemId))
+                .map((item) => ({
+                  value: `${item.itemId}_${config.projectKey}`,
+                  label: item.name || item.itemId,
+                })),
+            );
         },
-        onChange: (value: unknown) => {
-          const [mailbox, projectKey] = (value as string).split("_");
+        onChange: (value: unknown, _data, config) => {
+          const composite = String(value ?? "");
+          const separator = composite.indexOf("_");
+          const mailbox =
+            separator === -1 ? composite : composite.slice(0, separator);
           return {
             mailbox_composite: value,
             mailServerConfigurationId: mailbox,
-            projectKey,
+            projectKey: config.projectKey,
           };
         },
       },

@@ -158,6 +158,15 @@ namespace BlocksTemplate.Api.Controllers
             var result = await _mailService.GetMailBoxMailAsync(request);
             return result.IsSuccess ? Ok(result) : BadRequest(result);
         }
+
+        [HttpGet]
+        [Authorize]
+        public async Task<IActionResult> Gets([FromQuery] GetMailConfigurationsRequest request)
+        {
+            _ = request;
+            var result = await _mailService.GetMailServerConfigurationSummariesAsync();
+            return Ok(result);
+        }
         #endregion
         }
     }
