@@ -19,6 +19,7 @@
 	<ProjectReference Include="..\Iam.DomainService\Iam.DomainService.csproj" />
 	<ProjectReference Include="..\Proxy.DomainService\Proxy.DomainService.csproj" />
 	<ProjectReference Include="..\Mfa.DomainService\Mfa.DomainService.csproj" />
+	<ProjectReference Include="..\MailBoxSyncService\MailBoxSyncService.csproj" />
 	<ProjectReference Include="..\Worker\Worker.csproj" />
   </ItemGroup>
 
