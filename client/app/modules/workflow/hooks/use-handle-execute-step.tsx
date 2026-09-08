@@ -36,13 +36,8 @@ export const useHandleExecuteStep = () => {
     setTriggerSelectionCompletionNodeId(null);
   };
 
-  const handleExecuteStep = async (nodeId?: string, requireExecutionId = false) => {
+  const handleExecuteStep = async (nodeId?: string) => {
     if ( !workflowId || !nodeId) return;
-
-    if (requireExecutionId && !nextExecutionId) {
-      showErrorToast({ title: "Error", errors: "No successful execution found" });
-      return;
-    }
 
     try {
       await updateWorkflow({
