@@ -1,0 +1,22 @@
+namespace Proxy.DomainService.Dtos
+{
+    /// <summary>Body of <c>POST /api/Proxy/Create</c>.</summary>
+    public sealed class ProxyCreateRequestDto
+    {
+        public string? Name { get; set; }
+
+        public string? Upstream { get; set; }
+
+        public List<string>? Methods { get; set; }
+
+        public List<ProxyKeyValueInputDto>? Headers { get; set; }
+
+        public List<ProxyKeyValueInputDto>? Query { get; set; }
+
+        /// <summary>Per-method overrides. Reserved for Phase D-feature; a non-empty value is rejected today.</summary>
+        public List<ProxyMethodConfigInputDto>? MethodConfigs { get; set; }
+
+        /// <summary>Defaults to <c>true</c> when omitted.</summary>
+        public bool Enabled { get; set; } = true;
+    }
+}

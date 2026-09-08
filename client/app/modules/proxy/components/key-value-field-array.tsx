@@ -3,12 +3,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui-kits/button/button";
 import { Input } from "@/components/ui-kits/input/input";
 import { Checkbox } from "@/components/ui-kits/checkbox/checkbox";
-import {
-  FormControl,
-  FormField,
-  FormItem,
-  FormMessage,
-} from "@/components/ui-kits/form/form";
+import { FormControl, FormField, FormItem, FormMessage } from "@/components/ui-kits/form/form";
 import { ProxyFormValues } from "../types";
 
 type Props = {
@@ -49,7 +44,11 @@ export const KeyValueFieldArray = ({ control, name, label, addLabel }: Props) =>
                   render={({ field: keyField }) => (
                     <FormItem>
                       <FormControl>
-                        <Input placeholder="Key" className="font-mono text-xs" {...keyField} />
+                        <Input
+                          placeholder="Enter key"
+                          className="font-mono text-xs"
+                          {...keyField}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -61,7 +60,11 @@ export const KeyValueFieldArray = ({ control, name, label, addLabel }: Props) =>
                   render={({ field: valueField }) => (
                     <FormItem>
                       <FormControl>
-                        <Input placeholder="Value" className="font-mono text-xs" {...valueField} />
+                        <Input
+                          placeholder="Enter value"
+                          className="font-mono text-xs"
+                          {...valueField}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -92,7 +95,9 @@ export const KeyValueFieldArray = ({ control, name, label, addLabel }: Props) =>
                 </Button>
               </div>
             ))}
-            {!fields.length ? <p className="text-xs text-muted-foreground">No injected values.</p> : null}
+            {!fields.length ? (
+              <p className="text-xs text-muted-foreground">No injected values.</p>
+            ) : null}
           </div>
           <FormMessage />
         </FormItem>

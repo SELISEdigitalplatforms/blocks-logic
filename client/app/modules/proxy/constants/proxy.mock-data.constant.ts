@@ -11,6 +11,14 @@ export const PROXY_MOCK_DATA: Proxy[] = [
     enabled: true,
     headers: [{ key: "Authorization", value: "${SECRET.STRIPE_API_KEY}", isSecretRef: true }],
     query: [{ key: "expand[]", value: "payment_intent" }],
+    methodConfigs: [
+      {
+        method: "POST",
+        upstream: "https://api.stripe.com/v2/charges",
+        headers: [{ key: "X-Trace", value: "on", isSecretRef: false }],
+        query: null,
+      },
+    ],
     calls24h: 1248,
     createdAt: "2026-04-12T09:15:00.000Z",
     updatedAt: "2026-09-01T11:30:00.000Z",
@@ -25,6 +33,7 @@ export const PROXY_MOCK_DATA: Proxy[] = [
     enabled: true,
     headers: [{ key: "Authorization", value: "${SECRET.SENDGRID_API_KEY}", isSecretRef: true }],
     query: [],
+    methodConfigs: [],
     calls24h: 382,
     createdAt: "2026-05-02T14:00:00.000Z",
     updatedAt: "2026-08-27T08:45:00.000Z",
@@ -39,6 +48,7 @@ export const PROXY_MOCK_DATA: Proxy[] = [
     enabled: false,
     headers: [],
     query: [{ key: "key", value: "${SECRET.WEATHER_API_KEY}", isSecretRef: true }],
+    methodConfigs: [],
     calls24h: 74,
     createdAt: "2026-06-18T10:20:00.000Z",
     updatedAt: "2026-08-30T16:10:00.000Z",
@@ -130,6 +140,24 @@ export const PROXY_MOCK_EXECUTION_LOGS: ProxyExecutionLog[] = [
 
 export const PROXY_MOCK_VERSION_HISTORY: ProxyVersionHistory[] = [
   {
+    id: "v4",
+    proxyId: "p1",
+    versionLabel: "v4",
+    versionNumber: 4,
+    kind: "edit",
+    summary: "POST header X-Trace overridden.",
+    actor: "Avery Stone",
+    whenUtc: "2026-09-02T09:00:00.000Z",
+    changes: [
+      {
+        field: "method:POST:header:X-Trace",
+        label: "POST header X-Trace",
+        before: null,
+        after: "on",
+      },
+    ],
+  },
+  {
     id: "v3",
     proxyId: "p1",
     versionLabel: "v3",
@@ -138,8 +166,14 @@ export const PROXY_MOCK_VERSION_HISTORY: ProxyVersionHistory[] = [
     summary: "Added payment intent expansion query.",
     actor: "Avery Stone",
     whenUtc: "2026-09-01T11:30:00.000Z",
-    before: "query: []",
-    after: "query: expand[]=payment_intent",
+    changes: [
+      {
+        field: "query:expand[]",
+        label: "query expand[]",
+        before: null,
+        after: "payment_intent",
+      },
+    ],
   },
   {
     id: "v2",
@@ -150,8 +184,9 @@ export const PROXY_MOCK_VERSION_HISTORY: ProxyVersionHistory[] = [
     summary: "Enabled proxy traffic.",
     actor: "Mina Patel",
     whenUtc: "2026-08-22T10:00:00.000Z",
-    before: "status: paused",
-    after: "status: live",
+    changes: [
+      { field: "enabled", label: "status", before: "disabled", after: "enabled" },
+    ],
   },
   {
     id: "v1",
@@ -162,7 +197,6 @@ export const PROXY_MOCK_VERSION_HISTORY: ProxyVersionHistory[] = [
     summary: "Created proxy configuration.",
     actor: "Avery Stone",
     whenUtc: "2026-04-12T09:15:00.000Z",
-    before: null,
-    after: "Stripe Payments -> https://api.stripe.com/v1/charges",
+    changes: [],
   },
 ];

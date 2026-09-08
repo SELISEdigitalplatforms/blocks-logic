@@ -6,6 +6,17 @@ export type ProxyKeyValue = {
   isSecretRef?: boolean;
 };
 
+/**
+ * A per-method override of the shared config. A `null` member inherits the shared
+ * value; a non-null member (including an empty list) replaces it for that method.
+ */
+export type ProxyMethodOverride = {
+  method: ProxyMethod;
+  upstream: string | null;
+  headers: ProxyKeyValue[] | null;
+  query: ProxyKeyValue[] | null;
+};
+
 export type ProxyStatus = "live" | "paused";
 
 export type Proxy = {
@@ -18,6 +29,7 @@ export type Proxy = {
   enabled: boolean;
   headers: ProxyKeyValue[];
   query: ProxyKeyValue[];
+  methodConfigs: ProxyMethodOverride[];
   calls24h: number;
   createdAt?: string;
   updatedAt?: string;
@@ -25,20 +37,206 @@ export type Proxy = {
 
 export type ProxyFormValues = Pick<
   Proxy,
-  "name" | "upstreamUrl" | "methods" | "headers" | "query"
+  "name" | "upstreamUrl" | "methods" | "headers" | "query" | "methodConfigs"
 >;
 
 export type ProxyBackendDto = Record<string, unknown>;
 
 export type ProxyError =
   | { code: "PROXY_VALIDATION"; message: string; errors?: Record<string, string> }
-  | { code: "PROXY_NOT_FOUND"; message: string };
+  | { code: "PROXY_NOT_FOUND"; message: string }
+  | { code: "PROXY_REVERT_CONFLICT"; message: string; errors?: Record<string, string> };
+
+/**
+ * One field's `- before` / `+ after` pair in a change-history row. Values arrive
+ * already masked from the server; `before == null` means the field/row did not
+ * exist before, `after == null` means it was removed.
+ */
+export type ProxyFieldChange = {
+  field: string;
+  label: string;
+  before?: string | null;
+  after?: string | null;
+};
 
 export type ProxyListParams = {
   searchKey?: string;
+  enabled?: boolean;
+  pageNumber?: number;
+  pageSize?: number;
 };
 
 export type ProxyLogFilter = "all" | "ok" | "client" | "server";
+
+/** The `statusClass` values the server accepts on the execution endpoints. */
+export type ProxyStatusClass = "all" | "2xx" | "4xx" | "5xx";
+
+// ---------------------------------------------------------------------------
+// Backend DTOs — mirror server/Proxy.DomainService/Dtos/*. The mapper is the
+// only place these are turned into the frontend models above.
+// ---------------------------------------------------------------------------
+
+/** Blocks.Genesis BaseQueryListResponse<T>. */
+export type BaseQueryListResponse<T> = {
+  data: T | null;
+  totalCount: number;
+  errors?: Record<string, string> | null;
+};
+
+/** Blocks.Genesis BaseQueryResponse<T>. */
+export type BaseQueryResponse<T> = {
+  data: T | null;
+  errors?: Record<string, string> | null;
+};
+
+/** Blocks.Genesis BaseMutationResponse (+ the SPEC §3.4 code/message). */
+export type BaseMutationResponseDto = {
+  isSuccess: boolean;
+  itemId?: string | null;
+  errors?: Record<string, string> | null;
+  code?: string | null;
+  message?: string | null;
+};
+
+export type ProxyKeyValueDto = {
+  key: string;
+  value: string;
+  isSecretRef: boolean;
+};
+
+export type ProxyKeyValueInputDto = {
+  key: string;
+  value: string;
+};
+
+export type ProxyIamUserDto = {
+  itemId: string;
+  firstName?: string | null;
+  lastName?: string | null;
+};
+
+/** Mirrors server `ProxyMethodConfigDto` / `ProxyMethodConfigInputDto`. */
+export type ProxyMethodConfigDto = {
+  method: string;
+  upstream?: string | null;
+  headers?: ProxyKeyValueDto[] | null;
+  query?: ProxyKeyValueDto[] | null;
+};
+
+export type ProxyListItemDto = {
+  itemId: string;
+  name: string;
+  slug: string;
+  upstreamMasked: string;
+  methods: string[];
+  enabled: boolean;
+  injectedCredential: boolean;
+  headerCount: number;
+  queryCount: number;
+  calls24h: number;
+  createdDate: string;
+  lastUpdatedDate: string;
+};
+
+export type ProxyDetailDto = {
+  itemId: string;
+  name: string;
+  slug: string;
+  path: string;
+  upstream: string;
+  upstreamMasked: string;
+  methods: string[];
+  enabled: boolean;
+  headers: ProxyKeyValueDto[];
+  query: ProxyKeyValueDto[];
+  methodConfigs: ProxyMethodConfigDto[];
+  currentVersion: number;
+  createdDate: string;
+  createdBy?: string | null;
+  lastUpdatedDate: string;
+  lastUpdatedBy?: string | null;
+};
+
+export type ProxyVersionDto = {
+  itemId: string;
+  versionNumber: number;
+  /** "Create" | "ConfigUpdate" | "Toggle" | "Revert" | "Delete". */
+  kind: string;
+  changeSummary: string;
+  changes: ProxyFieldChange[];
+  who?: string | null;
+  whenUtc: string;
+  versionLabel: string;
+};
+
+export type ProxyExecutionListItemDto = {
+  itemId: string;
+  startedAtUtc: string;
+  requestMethod: string;
+  requestPath: string;
+  statusCode: number;
+  latencyMs: number;
+  outcome: string;
+  upstreamHost: string;
+};
+
+export type ProxyExecutionDetailDto = {
+  itemId: string;
+  proxyId: string;
+  proxySlug: string;
+  startedAtUtc: string;
+  finishedAtUtc: string;
+  latencyMs: number;
+  requestMethod: string;
+  requestPath: string;
+  requestQuery: string;
+  upstreamUrl: string;
+  upstreamHost: string;
+  injectedHeaderKeys: string[];
+  injectedQueryKeys: string[];
+  statusCode: number;
+  upstreamStatusCode?: number | null;
+  outcome: string;
+  errorMessage?: string | null;
+  responseContentType?: string | null;
+  responseBodyBytes: number;
+  responseBody?: string | null;
+  responseBodyTruncatedForDisplay: boolean;
+};
+
+export type ProxyOverviewDto = {
+  calls24h: number;
+  avgLatencyMs: number;
+  errorRatePct: number;
+  errorRateIsHigh: boolean;
+  credentialRefs: string[];
+  methods: string[];
+  lastCallAtUtc?: string | null;
+};
+
+export type ProxyTestResponseDto = {
+  ok: boolean;
+  status: number;
+  outcome: string;
+  latencyMs: number;
+  upstreamUrl: string;
+  upstreamHost: string;
+  injectedHeaderKeys: string[];
+  injectedQueryKeys: string[];
+  responseContentType?: string | null;
+  responseBody?: string | null;
+  errorMessage?: string | null;
+};
+
+export type ProxyOverview = {
+  calls24h: number;
+  avgLatencyMs: number;
+  errorRatePct: number;
+  errorRateIsHigh: boolean;
+  credentialRefs: string[];
+  methods: ProxyMethod[];
+  lastCallAtUtc: string | null;
+};
 
 export type ProxyExecutionLog = {
   id: string;
@@ -66,8 +264,7 @@ export type ProxyVersionHistory = {
   summary: string;
   actor: string;
   whenUtc: string;
-  before?: string | null;
-  after?: string | null;
+  changes: ProxyFieldChange[];
 };
 
 export type ProxyTestRequest = {
@@ -100,4 +297,8 @@ export type ProxyMutationResponse = {
   itemId?: string;
   data?: Proxy;
   errors?: string | Record<string, string> | null;
+  /** Stable failure code from SPEC §3.4 (e.g. PROXY_SLUG_CONFLICT); null on success. */
+  code?: string | null;
+  /** Human-readable failure message when the server provides one. */
+  message?: string | null;
 };

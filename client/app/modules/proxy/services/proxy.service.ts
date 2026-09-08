@@ -1,202 +1,272 @@
+import { HttpError } from "@seliseblocks/genesis-os";
 import { serviceInstances } from "@/lib/http-client";
-import { PROXY_ENDPOINTS, PROXY_MOCK_DATA, PROXY_MOCK_EXECUTION_LOGS, PROXY_MOCK_VERSION_HISTORY } from "../constants";
-import { mapProxyToCreatePayload, mapProxyToUpdatePayload } from "../mappers";
-import { compactKeyValues, maskUpstreamUrl, slugifyProxyName } from "../utils";
+import { PROXY_ENDPOINTS, PROXY_IAM_ENDPOINTS } from "../constants";
 import {
+  mapLogFilterToStatusClass,
+  mapMutationResponse,
+  mapProxyDetailDtoToProxy,
+  mapProxyExecutionDetailDtoToLog,
+  mapProxyExecutionListItemDtoToLog,
+  mapProxyListItemDtoToProxy,
+  mapProxyOverviewDtoToOverview,
+  mapProxyTestResponseDtoToResponse,
+  mapProxyToCreatePayload,
+  mapProxyToUpdatePayload,
+  mapProxyTestRequestToPayload,
+  mapProxyVersionDtoToHistory,
+} from "../mappers";
+import {
+  BaseMutationResponseDto,
+  BaseQueryListResponse,
+  BaseQueryResponse,
   Proxy,
   ProxyCsvExport,
+  ProxyDetailDto,
+  ProxyExecutionDetailDto,
+  ProxyExecutionListItemDto,
   ProxyExecutionLog,
   ProxyFormValues,
+  ProxyIamUserDto,
+  ProxyListItemDto,
   ProxyListParams,
   ProxyLogFilter,
   ProxyMutationResponse,
+  ProxyOverview,
+  ProxyOverviewDto,
   ProxyTestRequest,
   ProxyTestResponse,
+  ProxyTestResponseDto,
+  ProxyVersionDto,
   ProxyVersionHistory,
 } from "../types";
 
-let proxyStore: Proxy[] = PROXY_MOCK_DATA.map((proxy) => ({ ...proxy }));
-let proxyLogs: ProxyExecutionLog[] = PROXY_MOCK_EXECUTION_LOGS.map((log) => ({ ...log }));
-let proxyVersions: ProxyVersionHistory[] = PROXY_MOCK_VERSION_HISTORY.map((version) => ({ ...version }));
+/** Turn a thrown {@link HttpError} into the `{ isSuccess: false, ... }` shape callers already branch on. */
+const toMutationFailure = (error: unknown): ProxyMutationResponse => {
+  if (error instanceof HttpError) {
+    const body = (error.errors ?? {}) as Record<string, unknown>;
+    const isEnvelope = body && typeof body === "object" && "isSuccess" in body;
+    const message = typeof body.message === "string" ? body.message : undefined;
+    const code = typeof body.code === "string" ? body.code : null;
+    const fieldErrors = !isEnvelope
+      ? (body as Record<string, string>)
+      : ((body.errors as Record<string, string> | null) ?? undefined);
 
-const waitForMock = async () => new Promise((resolve) => setTimeout(resolve, 10));
+    return {
+      isSuccess: false,
+      errors: message ?? fieldErrors ?? "The request could not be completed.",
+      code,
+      message: message ?? null,
+    };
+  }
 
-const buildProxy = (values: ProxyFormValues, existing?: Proxy): Proxy => {
-  const now = new Date().toISOString();
-  const upstreamUrl = values.upstreamUrl.trim();
-  return {
-    id: existing?.id ?? `p-${Date.now()}`,
-    name: values.name.trim(),
-    slug: slugifyProxyName(values.name),
-    upstreamUrl,
-    upstreamMasked: maskUpstreamUrl(upstreamUrl),
-    methods: values.methods,
-    enabled: existing?.enabled ?? true,
-    headers: compactKeyValues(values.headers),
-    query: compactKeyValues(values.query),
-    calls24h: existing?.calls24h ?? 0,
-    createdAt: existing?.createdAt ?? now,
-    updatedAt: now,
-  };
+  return { isSuccess: false, errors: "The request could not be completed.", code: null };
 };
 
-const matchesLogFilter = (status: number, filter: ProxyLogFilter) => {
-  if (filter === "ok") return status >= 200 && status < 300;
-  if (filter === "client") return status >= 400 && status < 500;
-  if (filter === "server") return status >= 500 && status < 600;
-  return true;
+const flattenErrors = (error: unknown): string => {
+  if (error instanceof HttpError) {
+    const body = (error.errors ?? {}) as Record<string, unknown>;
+    if (typeof body.message === "string") return body.message;
+    const values = Object.values(body).filter(
+      (value): value is string => typeof value === "string",
+    );
+    if (values.length) return values.join(" ");
+  }
+  return "The proxy test request could not be completed.";
 };
 
-const toCsv = (rows: ProxyExecutionLog[]) => {
-  const headers = ["TIME", "METH", "PATH", "CODE", "TOOK", "UPSTREAM"];
-  const values = rows.map((row) =>
-    [row.timeUtc, row.method, row.path, row.status, row.latencyMs, row.upstreamUrl]
-      .map((value) => `"${String(value).replace(/"/g, '""')}"`)
-      .join(","),
-  );
-  return [headers.join(","), ...values].join("\n");
+const buildQuery = (params: Record<string, string | number | boolean | undefined>) => {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      search.append(key, String(value));
+    }
+  });
+  const query = search.toString();
+  return query ? `?${query}` : "";
 };
 
 export class ProxyService {
   private readonly logicHttpClient = serviceInstances.logicService;
+  private readonly iamHttpClient = serviceInstances.iamService;
 
   endpoints = PROXY_ENDPOINTS;
 
   getAll = async (params: ProxyListParams = {}): Promise<Proxy[]> => {
-    void this.logicHttpClient;
-    await waitForMock();
-    const search = params.searchKey?.trim().toLowerCase();
-    if (!search) return proxyStore;
-    return proxyStore.filter((proxy) =>
-      [proxy.name, proxy.slug, proxy.upstreamMasked].some((value) =>
-        value.toLowerCase().includes(search),
-      ),
+    const response = await this.logicHttpClient.post<BaseQueryListResponse<ProxyListItemDto[]>>(
+      PROXY_ENDPOINTS.GET_ALL,
+      {
+        search: params.searchKey?.trim() || undefined,
+        enabled: params.enabled,
+        pageSize: params.pageSize ?? 200,
+        pageNumber: params.pageNumber ?? 0,
+      },
     );
+    return (response.data ?? []).map(mapProxyListItemDtoToProxy);
   };
 
   get = async (id: string): Promise<Proxy | null> => {
-    await waitForMock();
-    return proxyStore.find((proxy) => proxy.id === id) ?? null;
+    const response = await this.logicHttpClient.get<BaseQueryResponse<ProxyDetailDto | null>>(
+      `${PROXY_ENDPOINTS.GET}${buildQuery({ itemId: id })}`,
+    );
+    return response.data ? mapProxyDetailDtoToProxy(response.data) : null;
   };
 
   create = async (values: ProxyFormValues): Promise<ProxyMutationResponse> => {
-    await waitForMock();
-    const proxy = buildProxy(values);
-    void mapProxyToCreatePayload(values);
-    proxyStore = [proxy, ...proxyStore];
-    return { isSuccess: true, itemId: proxy.id, data: proxy, errors: null };
+    try {
+      const response = await this.logicHttpClient.post<BaseMutationResponseDto>(
+        PROXY_ENDPOINTS.CREATE,
+        mapProxyToCreatePayload(values),
+      );
+      return mapMutationResponse(response);
+    } catch (error) {
+      return toMutationFailure(error);
+    }
   };
 
-  update = async ({ id, values }: { id: string; values: ProxyFormValues }) => {
-    await waitForMock();
-    const existing = proxyStore.find((proxy) => proxy.id === id);
-    if (!existing) return { isSuccess: false, errors: "Proxy not found" };
-    const next = buildProxy(values, existing);
-    void mapProxyToUpdatePayload(id, values);
-    proxyStore = proxyStore.map((proxy) => (proxy.id === id ? next : proxy));
-    return { isSuccess: true, itemId: id, data: next, errors: null };
+  update = async ({
+    id,
+    values,
+  }: {
+    id: string;
+    values: ProxyFormValues;
+  }): Promise<ProxyMutationResponse> => {
+    try {
+      const response = await this.logicHttpClient.put<BaseMutationResponseDto>(
+        PROXY_ENDPOINTS.UPDATE,
+        mapProxyToUpdatePayload(id, values),
+      );
+      return mapMutationResponse(response);
+    } catch (error) {
+      return toMutationFailure(error);
+    }
   };
 
-  toggle = async ({ id, enabled }: { id: string; enabled: boolean }) => {
-    await waitForMock();
-    const existing = proxyStore.find((proxy) => proxy.id === id);
-    if (!existing) return { isSuccess: false, errors: "Proxy not found" };
-    const next = { ...existing, enabled, updatedAt: new Date().toISOString() };
-    proxyStore = proxyStore.map((proxy) => (proxy.id === id ? next : proxy));
-    return { isSuccess: true, itemId: id, data: next, errors: null };
+  toggle = async ({
+    id,
+    enabled,
+  }: {
+    id: string;
+    enabled: boolean;
+  }): Promise<ProxyMutationResponse> => {
+    try {
+      const response = await this.logicHttpClient.post<BaseMutationResponseDto>(
+        PROXY_ENDPOINTS.TOGGLE,
+        { itemId: id, enabled },
+      );
+      return mapMutationResponse(response);
+    } catch (error) {
+      return toMutationFailure(error);
+    }
   };
 
-  delete = async (id: string) => {
-    await waitForMock();
-    const exists = proxyStore.some((proxy) => proxy.id === id);
-    if (!exists) return { isSuccess: false, errors: "Proxy not found" };
-    proxyStore = proxyStore.filter((proxy) => proxy.id !== id);
-    return { isSuccess: true, itemId: id, errors: null };
+  delete = async (id: string): Promise<ProxyMutationResponse> => {
+    try {
+      const response = await this.logicHttpClient.delete<BaseMutationResponseDto>(
+        `${PROXY_ENDPOINTS.DELETE}${buildQuery({ itemId: id })}`,
+      );
+      return mapMutationResponse(response);
+    } catch (error) {
+      return toMutationFailure(error);
+    }
   };
 
   getExecutions = async (
     proxyId: string,
     filter: ProxyLogFilter,
-    options: { live?: boolean } = {},
+    options: { live?: boolean; afterId?: string } = {},
   ): Promise<ProxyExecutionLog[]> => {
-    await waitForMock();
-    const proxy = proxyStore.find((item) => item.id === proxyId);
-    if (options.live && proxy?.enabled) {
-      const liveLog: ProxyExecutionLog = {
-        id: `live-${Date.now()}`,
-        proxyId,
-        timeUtc: new Date().toISOString(),
-        method: proxy.methods[0] ?? "GET",
-        path: `/api/proxy/gateway/${proxy.slug}/live`,
-        status: 200,
-        statusText: "OK",
-        latencyMs: 120,
-        upstreamHost: new URL(proxy.upstreamUrl).host,
-        upstreamUrl: proxy.upstreamUrl,
-        injectedHeaderKeys: proxy.headers.map((header) => header.key),
-        injectedQueryKeys: proxy.query.map((query) => query.key),
-        responseBody: "{\n  \"live\": true\n}",
-        responseContentType: "application/json",
-      };
-      proxyLogs = [liveLog, ...proxyLogs].slice(0, 50);
-    }
-    return proxyLogs.filter((log) => log.proxyId === proxyId && matchesLogFilter(log.status, filter));
+    const response = await this.logicHttpClient.post<
+      BaseQueryListResponse<ProxyExecutionListItemDto[]>
+    >(PROXY_ENDPOINTS.GET_EXECUTIONS, {
+      proxyId,
+      statusClass: mapLogFilterToStatusClass(filter),
+      afterId: options.afterId,
+      pageSize: 200,
+      pageNumber: 0,
+    });
+    return (response.data ?? []).map((row) => mapProxyExecutionListItemDtoToLog(row, proxyId));
+  };
+
+  getExecution = async (
+    proxyId: string,
+    executionId: string,
+  ): Promise<ProxyExecutionLog | null> => {
+    const response = await this.logicHttpClient.get<
+      BaseQueryResponse<ProxyExecutionDetailDto | null>
+    >(`${PROXY_ENDPOINTS.GET_EXECUTION}${buildQuery({ itemId: executionId, proxyId })}`);
+    return response.data ? mapProxyExecutionDetailDtoToLog(response.data) : null;
+  };
+
+  getOverview = async (proxyId: string): Promise<ProxyOverview | null> => {
+    const response = await this.logicHttpClient.post<BaseQueryResponse<ProxyOverviewDto | null>>(
+      PROXY_ENDPOINTS.GET_OVERVIEW,
+      { proxyId },
+    );
+    return response.data ? mapProxyOverviewDtoToOverview(response.data) : null;
   };
 
   getVersions = async (proxyId: string): Promise<ProxyVersionHistory[]> => {
-    await waitForMock();
-    return proxyVersions.filter((version) => version.proxyId === proxyId);
+    const response = await this.logicHttpClient.post<BaseQueryListResponse<ProxyVersionDto[]>>(
+      PROXY_ENDPOINTS.GET_VERSIONS,
+      { proxyId, pageSize: 200, pageNumber: 0 },
+    );
+    return (response.data ?? []).map((row) => mapProxyVersionDtoToHistory(row, proxyId));
   };
 
-  revert = async ({ proxyId, versionId }: { proxyId: string; versionId: string }) => {
-    await waitForMock();
-    const version = proxyVersions.find((item) => item.proxyId === proxyId && item.id === versionId);
-    const proxy = proxyStore.find((item) => item.id === proxyId);
-    if (!version || !proxy || version.kind === "delete") {
-      return { isSuccess: false, errors: "Unable to revert this proxy version." };
+  getUserDisplayName = async (userId: string): Promise<string | null> => {
+    try {
+      const response = await this.iamHttpClient.get<BaseQueryResponse<ProxyIamUserDto | null>>(
+        `${PROXY_IAM_ENDPOINTS.GET_USER}/${encodeURIComponent(userId)}`,
+      );
+      const user = response.data;
+      if (!user) return null;
+
+      const displayName = [user.firstName, user.lastName]
+        .map((part) => part?.trim())
+        .filter(Boolean)
+        .join(" ");
+      return displayName || null;
+    } catch {
+      return null;
     }
-    const next = { ...proxy, updatedAt: new Date().toISOString() };
-    proxyStore = proxyStore.map((item) => (item.id === proxyId ? next : item));
-    proxyVersions = [
-      {
-        id: `rv-${Date.now()}`,
-        proxyId,
-        versionLabel: `v${version.versionNumber + 1}`,
-        versionNumber: version.versionNumber + 1,
-        kind: "revert",
-        summary: `Reverted to ${version.versionLabel}.`,
-        actor: "Current user",
-        whenUtc: new Date().toISOString(),
-        before: version.after ?? null,
-        after: version.before ?? null,
-      },
-      ...proxyVersions,
-    ];
-    return { isSuccess: true, itemId: proxyId, data: next, errors: null };
+  };
+
+  revert = async ({
+    proxyId,
+    versionId,
+  }: {
+    proxyId: string;
+    versionId: string;
+  }): Promise<ProxyMutationResponse> => {
+    try {
+      const response = await this.logicHttpClient.post<BaseMutationResponseDto>(
+        PROXY_ENDPOINTS.REVERT,
+        { proxyId, versionId },
+      );
+      return mapMutationResponse(response);
+    } catch (error) {
+      return toMutationFailure(error);
+    }
   };
 
   test = async (request: ProxyTestRequest): Promise<ProxyTestResponse> => {
-    await waitForMock();
-    const saved = request.proxyId ? proxyStore.find((proxy) => proxy.id === request.proxyId) : null;
-    const upstream = request.draft?.upstreamUrl ?? saved?.upstreamUrl ?? "";
-    if (!upstream.startsWith("https://")) {
+    try {
+      const response = await this.logicHttpClient.post<ProxyTestResponseDto>(
+        PROXY_ENDPOINTS.TEST,
+        mapProxyTestRequestToPayload(request),
+      );
+      return mapProxyTestResponseDtoToResponse(response, request);
+    } catch (error) {
+      const status = error instanceof HttpError ? error.status : 0;
       return {
         ok: false,
-        status: 502,
-        statusText: "Bad Gateway",
-        latencyMs: 18,
-        meta: "Mock proxy test rejected an invalid upstream endpoint.",
-        responseBody: "{\n  \"error\": \"Invalid upstream. Use https:// endpoints only.\"\n}",
+        status,
+        statusText: status === 400 ? "Bad Request" : "Request Failed",
+        latencyMs: 0,
+        meta: flattenErrors(error),
+        responseBody: "",
       };
     }
-    return {
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      latencyMs: 142,
-      meta: `${request.method} ${request.pathSuffix || "/"} via mock proxy`,
-      responseBody: "{\n  \"ok\": true,\n  \"source\": \"mock-proxy-test\"\n}",
-    };
   };
 
   exportExecutionsCsv = async ({
@@ -206,21 +276,21 @@ export class ProxyService {
     proxyId: string;
     filter: ProxyLogFilter;
   }): Promise<ProxyCsvExport> => {
-    await waitForMock();
-    const proxy = proxyStore.find((item) => item.id === proxyId);
-    if (!proxy) throw new Error("Proxy not found");
-    const rows = proxyLogs.filter((log) => log.proxyId === proxyId && matchesLogFilter(log.status, filter));
+    const csv = await this.logicHttpClient.get<string>(
+      `${PROXY_ENDPOINTS.EXPORT_EXECUTIONS_CSV}${buildQuery({
+        proxyId,
+        statusClass: mapLogFilterToStatusClass(filter),
+      })}`,
+    );
+    const rowCount = csv
+      .split(/\r?\n/)
+      .slice(1)
+      .filter((line) => line.trim().length > 0).length;
     return {
-      fileName: `proxy-${proxy.slug}-executions.csv`,
-      csv: toCsv(rows),
-      rowCount: rows.length,
+      fileName: `proxy-${proxyId}-executions.csv`,
+      csv,
+      rowCount,
     };
-  };
-
-  resetMockStore = () => {
-    proxyStore = PROXY_MOCK_DATA.map((proxy) => ({ ...proxy }));
-    proxyLogs = PROXY_MOCK_EXECUTION_LOGS.map((log) => ({ ...log }));
-    proxyVersions = PROXY_MOCK_VERSION_HISTORY.map((version) => ({ ...version }));
   };
 }
 

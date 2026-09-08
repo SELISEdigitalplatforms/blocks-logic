@@ -26,19 +26,18 @@ export const navigationMenus: Menu[] = [
     icon: CalendarClock,
   },
   {
+    id: "service-workflow",
+    type: "menu",
+    name: "Workflow",
+    path: "/app/workflow",
+    icon: Workflow,
+  },
+  {
     id: "service-proxy",
     type: "menu",
     name: "Proxy",
     path: "/app/proxy",
     icon: Route,
     badge: "new",
-  },
-
-  {
-    id: "service-workflow",
-    type: "menu",
-    name: "Workflow",
-    path: "/app/workflow",
-    icon: Workflow,
   },
 ];

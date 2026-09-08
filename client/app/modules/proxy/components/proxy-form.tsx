@@ -24,6 +24,7 @@ import {
 } from "../utils";
 import { KeyValueFieldArray } from "./key-value-field-array";
 import { ProxyFormHeader } from "./proxy-form-header";
+import { ProxyMethodOverrides } from "./proxy-method-overrides";
 import { ProxyMethodSelector } from "./proxy-method-selector";
 import { ProxyTestPanel } from "./proxy-test-panel";
 
@@ -75,6 +76,7 @@ export const ProxyForm = ({
         value: row.value ?? "",
         isSecretRef: row.isSecretRef,
       })) ?? [],
+    methodConfigs: (draft.methodConfigs ?? []) as ProxyFormValues["methodConfigs"],
   };
 
   useEffect(() => {
@@ -85,6 +87,7 @@ export const ProxyForm = ({
         methods: proxy.methods,
         headers: proxy.headers,
         query: proxy.query,
+        methodConfigs: proxy.methodConfigs ?? [],
       });
     } else if (!isEdit) {
       form.reset(proxyFormDefaultValues);
@@ -142,7 +145,7 @@ export const ProxyForm = ({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+      <form noValidate onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
         <ProxyFormHeader
           isEdit={isEdit}
           isPending={isPending}
@@ -160,7 +163,7 @@ export const ProxyForm = ({
                   <FormItem>
                     <FormLabel>Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="Stripe Payments" {...field} />
+                      <Input placeholder="Enter name" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -174,8 +177,9 @@ export const ProxyForm = ({
                     <FormLabel>Third-party endpoint</FormLabel>
                     <FormControl>
                       <Input
-                        type="url"
-                        placeholder="https://api.example.com/v1/resource"
+                        type="text"
+                        inputMode="url"
+                        placeholder="Enter third-party endpoint"
                         {...field}
                       />
                     </FormControl>
@@ -224,6 +228,13 @@ export const ProxyForm = ({
               />
             </CardContent>
           </Card>
+          {selectedMethods.length > 1 ? (
+            <Card className="rounded-xl">
+              <CardContent className="p-0">
+                <ProxyMethodOverrides selectedMethods={selectedMethods} />
+              </CardContent>
+            </Card>
+          ) : null}
           <ProxyTestPanel
             proxyId={proxy?.id}
             draft={draftValues}

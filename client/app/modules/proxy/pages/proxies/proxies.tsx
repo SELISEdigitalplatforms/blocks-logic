@@ -10,6 +10,8 @@ export const Proxies = () => {
   const scoped = useScopedPath();
   const { data, isLoading, isFetching } = useGetProxies();
   const proxies = data ?? [];
+  const isListLoading = isLoading || isFetching;
+  const shouldShowAddProxyButton = !isListLoading && proxies.length > 0;
 
   return (
     <section className="flex flex-col gap-6 p-4">
@@ -21,13 +23,15 @@ export const Proxies = () => {
             and secret never reach the browser.
           </p>
         </div>
-        <Button className="gap-2" onClick={() => navigate(scoped("proxy/new"))}>
-          <Plus className="h-4 w-4" />
-          Add proxy
-        </Button>
+        {shouldShowAddProxyButton && (
+          <Button className="gap-2" onClick={() => navigate(scoped("proxy/new"))}>
+            <Plus className="h-4 w-4" />
+            Add proxy
+          </Button>
+        )}
       </div>
       <div>
-        <ProxyList proxies={proxies} isLoading={isLoading || isFetching} />
+        <ProxyList proxies={proxies} isLoading={isListLoading} />
       </div>
     </section>
   );

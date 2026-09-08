@@ -3,8 +3,15 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
 import { PROXY_MOCK_DATA } from "../constants";
+
+vi.mock("../services", async () => ({
+  proxyService: (await import("../test-support/mock-proxy-service")).mockProxyService,
+}));
+
 import { proxyService } from "../services";
 import { ProxyLogsTab } from "./proxy-logs-tab";
+
+const mockProxyService = proxyService as unknown as { resetMockStore: () => void };
 
 const toasts = vi.hoisted(() => ({
   showErrorToast: vi.fn(),
@@ -15,7 +22,7 @@ vi.mock("@/hooks/use-toast", () => toasts);
 
 describe("ProxyLogsTab", () => {
   beforeEach(() => {
-    proxyService.resetMockStore();
+    mockProxyService.resetMockStore();
     vi.clearAllMocks();
   });
 
@@ -39,6 +46,7 @@ describe("ProxyLogsTab", () => {
 
     await screen.findByText("1 of 1 requests");
     await user.click(screen.getByRole("button", { name: "5xx" }));
+    await screen.findByText("0 of 1 requests");
     await user.click(screen.getByRole("button", { name: /export csv/i }));
 
     await waitFor(() =>
@@ -46,5 +54,17 @@ describe("ProxyLogsTab", () => {
         description: "0 requests exported as CSV.",
       }),
     );
+  });
+
+  it("shows an empty state card without log controls when there are no requests", async () => {
+    renderWithProviders(
+      <ProxyLogsTab proxy={{ ...PROXY_MOCK_DATA[0], id: "proxy-without-logs" }} active={true} />,
+    );
+
+    expect(await screen.findByText("No request logs yet")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "All" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Live" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /export csv/i })).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: "TIME" })).toBeNull();
   });
 });

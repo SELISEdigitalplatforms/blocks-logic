@@ -3,8 +3,14 @@ import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
+vi.mock("../services", async () => ({
+  proxyService: (await import("../test-support/mock-proxy-service")).mockProxyService,
+}));
+
 import { proxyService } from "../services";
 import { ProxyForm } from "./proxy-form";
+
+const mockProxyService = proxyService as unknown as { resetMockStore: () => void };
 
 const toasts = vi.hoisted(() => ({
   showErrorToast: vi.fn(),
@@ -15,7 +21,7 @@ vi.mock("@/hooks/use-toast", () => toasts);
 
 describe("ProxyForm", () => {
   beforeEach(() => {
-    proxyService.resetMockStore();
+    mockProxyService.resetMockStore();
     vi.clearAllMocks();
   });
 
@@ -28,10 +34,10 @@ describe("ProxyForm", () => {
       </MemoryRouter>,
     );
 
-    fireEvent.change(screen.getByPlaceholderText("Stripe Payments"), {
+    fireEvent.change(screen.getByPlaceholderText("Enter name"), {
       target: { value: "Docs Proxy" },
     });
-    fireEvent.change(screen.getByPlaceholderText("https://api.example.com/v1/resource"), {
+    fireEvent.change(screen.getByPlaceholderText("Enter third-party endpoint"), {
       target: { value: "https://api.example.com/docs" },
     });
     await user.click(screen.getByRole("button", { name: "Create" }));
@@ -58,5 +64,26 @@ describe("ProxyForm", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     await user.click(screen.getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(onDelete).toHaveBeenCalled());
+  });
+
+  it("shows an inline url validation message instead of relying on native validation", async () => {
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+    renderWithProviders(
+      <MemoryRouter>
+        <ProxyForm mode="create" onSuccess={onSuccess} />
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("Enter name"), {
+      target: { value: "Docs Proxy" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("Enter third-party endpoint"), {
+      target: { value: "jsonplaceholder.typicode.com/users" },
+    });
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    expect(await screen.findByText("Please enter a valid url")).toBeTruthy();
+    expect(onSuccess).not.toHaveBeenCalled();
   });
 });

@@ -1,19 +1,30 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { makeHookWrapper } from "@/test-utils/test-providers/render";
+
+vi.mock("../services", async () => ({
+  proxyService: (await import("../test-support/mock-proxy-service")).mockProxyService,
+}));
+
 import {
   useCreateProxy,
   useExportProxyExecutionCsv,
   useGetProxies,
+  useGetProxyActorNames,
   useGetProxyExecutions,
   useRevertProxyVersion,
   useSendProxyTestRequest,
 } from "./use-proxy-api";
 import { proxyService } from "../services";
 
+const mockProxyService = proxyService as unknown as {
+  getUserDisplayName: (userId: string) => Promise<string | null>;
+  resetMockStore: () => void;
+};
+
 describe("use-proxy-api hooks", () => {
   beforeEach(() => {
-    proxyService.resetMockStore();
+    mockProxyService.resetMockStore();
   });
 
   it("reads and mutates proxy data through React Query", async () => {
@@ -57,5 +68,25 @@ describe("use-proxy-api hooks", () => {
       exportCsv.result.current.mutateAsync({ proxyId: "p1", filter: "all" }),
     ).resolves.toMatchObject({ rowCount: 3 });
   });
-});
 
+  it("resolves actor ids to display names and omits failed lookups", async () => {
+    const wrapper = makeHookWrapper();
+    const nameSpy = vi.spyOn(mockProxyService, "getUserDisplayName");
+    const names = renderHook(
+      () =>
+        useGetProxyActorNames([
+          "755991d9-6c90-4f12-b710-8cb896075a35",
+          "00000000-0000-0000-0000-000000000000",
+          "Avery Stone",
+        ]),
+      { wrapper },
+    );
+
+    await waitFor(() =>
+      expect(names.result.current["755991d9-6c90-4f12-b710-8cb896075a35"]).toBe("John Doe"),
+    );
+    expect(names.result.current["00000000-0000-0000-0000-000000000000"]).toBeUndefined();
+    expect(names.result.current["Avery Stone"]).toBeUndefined();
+    expect(nameSpy).toHaveBeenCalledTimes(2);
+  });
+});

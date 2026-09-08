@@ -1,8 +1,9 @@
 import { useNavigate } from "react-router";
 import { useScopedPath } from "@seliseblocks/genesis-os";
-import { Activity, Plus, ShieldCheck } from "lucide-react";
+import { Activity, Plus, Route } from "lucide-react";
 import { Button } from "@/components/ui-kits/button/button";
 import { Card, CardContent } from "@/components/ui-kits/card/card";
+import { Skeleton } from "@/components/ui-kits/skeleton/skeleton";
 import { Switch } from "@/components/ui-kits/switch/switch";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { Proxy } from "../types";
@@ -16,6 +17,32 @@ type Props = {
   isLoading: boolean;
 };
 
+const ProxyListSkeleton = () => (
+  <div className="grid gap-3">
+    {Array.from({ length: 4 }).map((_, index) => (
+      <Card key={index} className="p-0">
+        <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0 flex-1 space-y-3">
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-5 w-40" />
+              <Skeleton className="h-5 w-16" />
+            </div>
+            <Skeleton className="h-4 w-full max-w-sm" />
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-6 w-12" />
+              <Skeleton className="h-4 w-full max-w-md" />
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-5 lg:justify-end">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-6 w-10 rounded-full" />
+          </div>
+        </CardContent>
+      </Card>
+    ))}
+  </div>
+);
+
 export const ProxyList = ({ proxies, isLoading }: Props) => {
   const navigate = useNavigate();
   const scoped = useScopedPath();
@@ -28,25 +55,27 @@ export const ProxyList = ({ proxies, isLoading }: Props) => {
   };
 
   if (isLoading) {
-    return (
-      <div className="py-16 text-center text-sm text-muted-foreground">Loading proxies...</div>
-    );
+    return <ProxyListSkeleton />;
   }
 
   if (!proxies.length) {
     return (
-      <div className="flex min-h-[360px] flex-col items-center justify-center text-center">
-        <ShieldCheck className="h-12 w-12 text-primary" />
-        <h3 className="mt-5 text-xl font-semibold">No proxies yet</h3>
-        <p className="mt-2 max-w-md text-sm text-muted-foreground">
-          Create your first proxy configuration to keep client traffic stable while upstream
-          services stay behind a managed route.
-        </p>
-        <Button className="mt-5 gap-2" onClick={() => navigate(scoped("proxy/new"))}>
-          <Plus className="h-4 w-4" />
-          Add proxy
-        </Button>
-      </div>
+      <Card className="p-0">
+        <CardContent className="flex min-h-[360px] flex-col items-center justify-center px-6 py-12 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <Route className="h-7 w-7" />
+          </div>
+          <h3 className="mt-5 text-xl font-semibold">No proxies yet</h3>
+          <p className="mt-2 max-w-md text-sm text-muted-foreground">
+            Create your first proxy configuration to keep client traffic stable while upstream
+            services stay behind a managed route.
+          </p>
+          <Button className="mt-5 gap-2" onClick={() => navigate(scoped("proxy/new"))}>
+            <Plus className="h-4 w-4" />
+            Add proxy
+          </Button>
+        </CardContent>
+      </Card>
     );
   }
 

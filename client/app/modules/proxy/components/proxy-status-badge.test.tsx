@@ -11,6 +11,6 @@ describe("ProxyStatusBadge", () => {
 
     rerender(<ProxyStatusBadge proxy={{ enabled: false }} />);
     expect(screen.getByText("Paused")).toBeTruthy();
+    expect(screen.getByText("Paused").className).toContain("bg-amber-100");
   });
 });
-

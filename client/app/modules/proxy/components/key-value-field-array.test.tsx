@@ -38,8 +38,8 @@ describe("KeyValueFieldArray", () => {
     expect(screen.getByText("No injected values.")).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: /add header/i }));
-    expect(screen.getByPlaceholderText("Key")).toBeTruthy();
-    expect(screen.getByPlaceholderText("Value")).toBeTruthy();
+    expect(screen.getByPlaceholderText("Enter key")).toBeTruthy();
+    expect(screen.getByPlaceholderText("Enter value")).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: /remove header rows row/i }));
     expect(screen.getByText("No injected values.")).toBeTruthy();

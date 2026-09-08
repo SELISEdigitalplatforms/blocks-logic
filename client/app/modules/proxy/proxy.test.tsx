@@ -7,7 +7,14 @@ import { Proxies } from "./pages/proxies";
 import { ProxyDetails } from "./pages/proxy-details";
 import { ProxyForm } from "./components/proxy-form";
 import { ProxyFormPage } from "./pages/proxy-form-page";
+
+vi.mock("./services", async () => ({
+  proxyService: (await import("./test-support/mock-proxy-service")).mockProxyService,
+}));
+
 import { proxyService } from "./services";
+
+const mockProxyService = proxyService as unknown as { resetMockStore: () => void };
 
 const toasts = vi.hoisted(() => ({
   showErrorToast: vi.fn(),
@@ -27,7 +34,7 @@ vi.mock("@seliseblocks/genesis-os", async () => {
 describe("Proxy feature", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    proxyService.resetMockStore();
+    mockProxyService.resetMockStore();
   });
 
   it("renders the mock-backed list with the expected summaries", async () => {
@@ -59,7 +66,7 @@ describe("Proxy feature", () => {
     );
 
     expect(screen.getByText("Live")).toBeTruthy();
-    expect(screen.getByText("/api/proxy/stripe-payments/*")).toBeTruthy();
+    expect(screen.getByText("/api/proxy/gateway/stripe-payments/*")).toBeTruthy();
     expect(screen.getByText("Authorization")).toBeTruthy();
     expect(screen.getAllByText("vault").length).toBeGreaterThan(0);
 

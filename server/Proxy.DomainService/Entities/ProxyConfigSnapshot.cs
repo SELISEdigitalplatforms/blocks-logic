@@ -1,0 +1,32 @@
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
+
+namespace Proxy.DomainService.Entities
+{
+    /// <summary>
+    /// The full effective proxy configuration captured on a <see cref="ProxyVersionEntity"/> immediately
+    /// after the change it describes (or, for <see cref="ProxyVersionKind.Delete"/>, as it was just before
+    /// deletion). Drives the console's <em>Revert</em> button.
+    /// </summary>
+    [BsonIgnoreExtraElements]
+    public sealed class ProxyConfigSnapshot
+    {
+        public string Name { get; set; } = string.Empty;
+
+        public string Slug { get; set; } = string.Empty;
+
+        public string Upstream { get; set; } = string.Empty;
+
+        [BsonRepresentation(BsonType.String)]
+        public List<HttpMethodType> Methods { get; set; } = new();
+
+        public bool Enabled { get; set; }
+
+        public List<ProxyKeyValue> Headers { get; set; } = new();
+
+        public List<ProxyKeyValue> Query { get; set; } = new();
+
+        /// <summary>Per-method overrides captured with the rest of the config. Empty until Phase D-feature.</summary>
+        public List<ProxyMethodConfig> MethodConfigs { get; set; } = new();
+    }
+}

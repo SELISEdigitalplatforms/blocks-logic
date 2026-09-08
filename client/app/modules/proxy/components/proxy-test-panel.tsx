@@ -38,10 +38,28 @@ export const ProxyTestPanel = ({ proxyId, draft, method = "GET" }: Props) => {
         <CardTitle className="text-base">Test it</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 p-0">
-        <Input value={pathSuffix} onChange={(event) => setPathSuffix(event.target.value)} placeholder="/charges" />
-        <Textarea value={body} onChange={(event) => setBody(event.target.value)} placeholder="{ }" />
-        <Button type="button" className="gap-2" onClick={handleSend} disabled={sendTest.isPending}>
-          {sendTest.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+        <Input
+          value={pathSuffix}
+          onChange={(event) => setPathSuffix(event.target.value)}
+          placeholder="/charges"
+        />
+        <Textarea
+          value={body}
+          onChange={(event) => setBody(event.target.value)}
+          placeholder="{ }"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          className="gap-2"
+          onClick={handleSend}
+          disabled={sendTest.isPending}
+        >
+          {sendTest.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Send className="h-4 w-4" />
+          )}
           Send test request
         </Button>
         {response ? (
@@ -62,4 +80,3 @@ export const ProxyTestPanel = ({ proxyId, draft, method = "GET" }: Props) => {
     </Card>
   );
 };
-

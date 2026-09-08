@@ -4,8 +4,15 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
 import { PROXY_MOCK_DATA } from "../constants";
+
+vi.mock("../services", async () => ({
+  proxyService: (await import("../test-support/mock-proxy-service")).mockProxyService,
+}));
+
 import { proxyService } from "../services";
 import { ProxyList } from "./proxy-list";
+
+const mockProxyService = proxyService as unknown as { resetMockStore: () => void };
 
 const toasts = vi.hoisted(() => ({
   showErrorToast: vi.fn(),
@@ -24,7 +31,7 @@ vi.mock("@seliseblocks/genesis-os", async () => {
 
 describe("ProxyList", () => {
   beforeEach(() => {
-    proxyService.resetMockStore();
+    mockProxyService.resetMockStore();
     vi.clearAllMocks();
   });
 
@@ -35,7 +42,8 @@ describe("ProxyList", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText("Loading proxies...")).toBeTruthy();
+    expect(screen.queryByText("Loading proxies...")).toBeNull();
+    expect(screen.queryByText("No proxies yet")).toBeNull();
 
     rerender(
       <MemoryRouter>

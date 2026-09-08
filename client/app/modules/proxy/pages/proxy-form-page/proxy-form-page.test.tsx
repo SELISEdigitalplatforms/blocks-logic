@@ -1,13 +1,20 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
+
+vi.mock("../../services", async () => ({
+  proxyService: (await import("../../test-support/mock-proxy-service")).mockProxyService,
+}));
+
 import { proxyService } from "../../services";
 import { ProxyFormPage } from "./proxy-form-page";
 
+const mockProxyService = proxyService as unknown as { resetMockStore: () => void };
+
 describe("ProxyFormPage", () => {
   beforeEach(() => {
-    proxyService.resetMockStore();
+    mockProxyService.resetMockStore();
   });
 
   it("renders create and edit modes", async () => {

@@ -49,17 +49,48 @@ const keyValueSchema = z
     });
   });
 
-export const proxyFormSchema = z.object({
-  name: z.string().trim().min(1, "Give the proxy a name - it becomes the path."),
-  upstreamUrl: z
-    .string()
-    .trim()
-    .url("Enter a valid https endpoint.")
-    .refine((url) => url.startsWith("https://"), "Use an https endpoint."),
-  methods: z.array(z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"])).min(1, "Select at least one method."),
-  headers: keyValueSchema,
-  query: keyValueSchema,
+const methodOverrideSchema = z.object({
+  method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
+  upstream: z.string().nullable(),
+  headers: keyValueSchema.nullable(),
+  query: keyValueSchema.nullable(),
 });
+
+export const proxyFormSchema = z
+  .object({
+    name: z.string().trim().min(1, "Give the proxy a name - it becomes the path."),
+    upstreamUrl: z
+      .string()
+      .trim()
+      .url("Please enter a valid url")
+      .refine((url) => url.startsWith("https://"), "Use an https endpoint."),
+    methods: z
+      .array(z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]))
+      .min(1, "Select at least one method."),
+    headers: keyValueSchema,
+    query: keyValueSchema,
+    methodConfigs: z.array(methodOverrideSchema),
+  })
+  .superRefine((values, ctx) => {
+    values.methodConfigs.forEach((override, index) => {
+      if (!values.methods.includes(override.method)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["methodConfigs", index, "method"],
+          message: "Enable this method above before configuring it.",
+        });
+      }
+
+      const upstream = override.upstream?.trim();
+      if (upstream && !/^https:\/\/.+/i.test(upstream)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["methodConfigs", index, "upstream"],
+          message: "Please enter a valid url",
+        });
+      }
+    });
+  });
 
 export const proxyFormDefaultValues: ProxyFormValues = {
   name: "",
@@ -67,6 +98,7 @@ export const proxyFormDefaultValues: ProxyFormValues = {
   methods: ["GET"],
   headers: [],
   query: [],
+  methodConfigs: [],
 };
 
 export const compactKeyValues = (rows: ProxyFormValues["headers"]) =>

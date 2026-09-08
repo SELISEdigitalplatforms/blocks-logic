@@ -1,14 +1,21 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
+
+vi.mock("../services", async () => ({
+  proxyService: (await import("../test-support/mock-proxy-service")).mockProxyService,
+}));
+
 import { proxyService } from "../services";
 import { ProxyTestPanel } from "./proxy-test-panel";
+
+const mockProxyService = proxyService as unknown as { resetMockStore: () => void };
 
 describe("ProxyTestPanel", () => {
   it("sends a saved proxy test request and renders success", async () => {
     const user = userEvent.setup();
-    proxyService.resetMockStore();
+    mockProxyService.resetMockStore();
 
     renderWithProviders(<ProxyTestPanel proxyId="p1" method="POST" />);
 
