@@ -95,9 +95,7 @@ export const ProxyForm = ({
   }, [form, isEdit, proxy]);
 
   const toggleMethod = (method: ProxyMethod, checked: boolean) => {
-    const next = checked
-      ? Array.from(new Set([...selectedMethods, method]))
-      : selectedMethods.filter((item) => item !== method);
+    const next = checked ? [method] : selectedMethods.filter((item) => item !== method);
     if (!next.length) {
       form.setError("methods", { message: "Select at least one method." });
       return;

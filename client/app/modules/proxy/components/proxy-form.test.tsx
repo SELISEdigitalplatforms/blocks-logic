@@ -48,6 +48,29 @@ describe("ProxyForm", () => {
     });
   });
 
+  it("keeps only one selected method when creating a proxy", async () => {
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+    renderWithProviders(
+      <MemoryRouter>
+        <ProxyForm mode="create" onSuccess={onSuccess} />
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("Enter name"), {
+      target: { value: "Docs Proxy" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("Enter third-party endpoint"), {
+      target: { value: "https://api.example.com/docs" },
+    });
+    await user.click(screen.getByRole("button", { name: "POST" }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+    const proxy = await proxyService.get(onSuccess.mock.calls[0][0]);
+    expect(proxy?.methods).toEqual(["POST"]);
+  });
+
   it("edits and deletes an existing proxy", async () => {
     const user = userEvent.setup();
     const onDelete = vi.fn();
