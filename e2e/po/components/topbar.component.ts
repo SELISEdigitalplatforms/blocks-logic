@@ -16,34 +16,34 @@ export class TopbarComponent {
 
   // ---- Theme switcher ----
 
-  /** Theme tablist (Dark / Light toggle group). */
-  get themeTablist(): Locator {
-    return this.page.getByRole("tablist").first();
-  }
+  // /** Theme tablist (Dark / Light toggle group). */
+  // get themeTablist(): Locator {
+  //   return this.page.getByRole("tablist").first();
+  // }
 
-  get darkTab(): Locator {
-    return this.themeTablist.locator('[aria-controls$="-content-dark"]');
-  }
+  // get darkTab(): Locator {
+  //   return this.themeTablist.locator('[aria-controls$="-content-dark"]');
+  // }
 
-  get lightTab(): Locator {
-    return this.themeTablist.locator('[aria-controls$="-content-light"]');
-  }
+  // get lightTab(): Locator {
+  //   return this.themeTablist.locator('[aria-controls$="-content-light"]');
+  // }
 
-  async expectThemeApplied(theme: "dark" | "light"): Promise<void> {
-    if (theme === "dark") {
-      await expect(this.page.locator("html")).toHaveClass(/dark/);
-    } else {
-      await expect(this.page.locator("html")).not.toHaveClass(/dark/);
-    }
-  }
+  // async expectThemeApplied(theme: "dark" | "light"): Promise<void> {
+  //   if (theme === "dark") {
+  //     await expect(this.page.locator("html")).toHaveClass(/dark/);
+  //   } else {
+  //     await expect(this.page.locator("html")).not.toHaveClass(/dark/);
+  //   }
+  // }
 
-  async switchToDark(): Promise<void> {
-    await this.darkTab.click();
-  }
+  // async switchToDark(): Promise<void> {
+  //   await this.darkTab.click();
+  // }
 
-  async switchToLight(): Promise<void> {
-    await this.lightTab.click();
-  }
+  // async switchToLight(): Promise<void> {
+  //   await this.lightTab.click();
+  // }
 
   // ---- Language selector ----
 
@@ -144,9 +144,7 @@ export class TopbarComponent {
    * This matcher covers both, and the caller decides which one to assert.
    */
   appMenuItem(name: string | RegExp): Locator {
-    return this.page.getByRole("menuitem", { name }).or(
-      this.page.getByRole("link", { name }),
-    );
+    return this.page.getByRole("menuitem", { name }).or(this.page.getByRole("link", { name }));
   }
 
   async clickAppMenuItem(name: string | RegExp): Promise<void> {

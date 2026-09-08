@@ -117,9 +117,7 @@ export class ConsolePage {
    * to avoid picking up sidebar text.
    */
   async listProjectNames(): Promise<string[]> {
-    const envButtons = this.page
-      .getByRole("main")
-      .getByRole("button", { name: ENV_BUTTON });
+    const envButtons = this.page.getByRole("main").getByRole("button", { name: ENV_BUTTON });
     const count = await envButtons.count();
     if (count === 0) return [];
     // Each project card contains an env button; traverse the DOM to find the

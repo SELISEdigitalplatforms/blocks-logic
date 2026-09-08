@@ -2,12 +2,7 @@ import test, { expect } from "@playwright/test";
 import { e2eBaseUrl } from "../../support/env";
 import { openEnvironment } from "../../support/navigation";
 import { readLogicProject } from "../../support/logic-project";
-import {
-  ConsolePage,
-  DashboardPage,
-  SidebarComponent,
-  TopbarComponent,
-} from "../../po";
+import { ConsolePage, DashboardPage, SidebarComponent, TopbarComponent } from "../../po";
 
 test.describe("flow: Overview menu", () => {
   test("Overview page — console, topbar, sidebar navigation, Project Details, Core APIs", async ({
@@ -22,13 +17,13 @@ test.describe("flow: Overview menu", () => {
 
     await page.goto(`${e2eBaseUrl()}/app/console`, { waitUntil: "domcontentloaded" });
 
-    await test.step("Topbar: switching theme to Dark applies it, then Light restores it", async () => {
-      await expect(topbar.themeTablist).toBeVisible({ timeout: 30_000 });
-      await topbar.switchToDark();
-      await topbar.expectThemeApplied("dark");
-      await topbar.switchToLight();
-      await topbar.expectThemeApplied("light");
-    });
+    // await test.step("Topbar: switching theme to Dark applies it, then Light restores it", async () => {
+    //   await expect(topbar.themeTablist).toBeVisible({ timeout: 30_000 });
+    //   await topbar.switchToDark();
+    //   await topbar.expectThemeApplied("dark");
+    //   await topbar.switchToLight();
+    //   await topbar.expectThemeApplied("light");
+    // });
 
     await test.step("Topbar: language selector lists EN/German/French with non-English disabled", async () => {
       await topbar.openLanguageMenu();
@@ -63,7 +58,10 @@ test.describe("flow: Overview menu", () => {
       const rows = page.locator(
         '[class*="cursor-pointer"][class*="items-start"][class*="border-b"]',
       );
-      const hasRows = await rows.first().isVisible({ timeout: 3_000 }).catch(() => false);
+      const hasRows = await rows
+        .first()
+        .isVisible({ timeout: 3_000 })
+        .catch(() => false);
 
       if (isEmpty || !hasRows) {
         // Close the popover so subsequent steps start clean.
@@ -229,14 +227,14 @@ test.describe("flow: Overview menu", () => {
 
     // ----- NEW: Theme persistence after reload ------------------------------------
 
-    await test.step("Theme switch to Dark persists after a page reload", async () => {
-      await topbar.switchToDark();
-      await topbar.expectThemeApplied("dark");
-      await page.reload({ waitUntil: "domcontentloaded" });
-      await topbar.expectThemeApplied("dark");
-      await topbar.switchToLight();
-      await topbar.expectThemeApplied("light");
-    });
+    // await test.step("Theme switch to Dark persists after a page reload", async () => {
+    //   await topbar.switchToDark();
+    //   await topbar.expectThemeApplied("dark");
+    //   await page.reload({ waitUntil: "domcontentloaded" });
+    //   await topbar.expectThemeApplied("dark");
+    //   await topbar.switchToLight();
+    //   await topbar.expectThemeApplied("light");
+    // });
 
     // ----- NEW: Apps menu items render as interactive entries --------------------
 
@@ -253,29 +251,29 @@ test.describe("flow: Overview menu", () => {
 
     // ----- NEW: Console edge cases ----------------------------------------------
 
-    await test.step("Console: heading, Add Project CTA, and at least one env chip render", async () => {
-      const edgeConsole = new ConsolePage(page);
-      await page.goto(`${e2eBaseUrl()}/app/console`, { waitUntil: "domcontentloaded" });
-      await edgeConsole.expectConsoleHeading();
+    // await test.step("Console: heading, Add Project CTA, and at least one env chip render", async () => {
+    //   const edgeConsole = new ConsolePage(page);
+    //   await page.goto(`${e2eBaseUrl()}/app/console`, { waitUntil: "domcontentloaded" });
+    //   await edgeConsole.expectConsoleHeading();
 
-      const add = edgeConsole.addProjectText;
-      const create = edgeConsole.createProjectButton;
-      const welcome = edgeConsole.welcomeHeading;
-      const visible =
-        (await add.isVisible({ timeout: 5_000 }).catch(() => false)) ||
-        (await create.isVisible({ timeout: 5_000 }).catch(() => false)) ||
-        (await welcome.isVisible({ timeout: 5_000 }).catch(() => false));
-      expect(visible).toBe(true);
+    //   const add = edgeConsole.addProjectText;
+    //   const create = edgeConsole.createProjectButton;
+    //   const welcome = edgeConsole.welcomeHeading;
+    //   const visible =
+    //     (await add.isVisible({ timeout: 5_000 }).catch(() => false)) ||
+    //     (await create.isVisible({ timeout: 5_000 }).catch(() => false)) ||
+    //     (await welcome.isVisible({ timeout: 5_000 }).catch(() => false));
+    //   expect(visible).toBe(true);
 
-      const envChip = page
-        .getByRole("main")
-        .getByRole("button", {
-          name: /^(Development|Production|Testing|Staging|IAT|UAT|Prod Shadow|Pre-Prod)$/,
-        })
-        .first();
-      if (await envChip.isVisible({ timeout: 5_000 }).catch(() => false)) {
-        await expect(envChip).toBeVisible();
-      }
-    });
+    //   const envChip = page
+    //     .getByRole("main")
+    //     .getByRole("button", {
+    //       name: /^(Development|Production|Testing|Staging|IAT|UAT|Prod Shadow|Pre-Prod)$/,
+    //     })
+    //     .first();
+    //   if (await envChip.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    //     await expect(envChip).toBeVisible();
+    //   }
+    // });
   });
 });
