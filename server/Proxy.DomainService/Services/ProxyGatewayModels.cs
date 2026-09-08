@@ -25,6 +25,12 @@ namespace Proxy.DomainService.Services
         public IReadOnlyList<ProxyKeyValue> Query { get; init; } = Array.Empty<ProxyKeyValue>();
 
         /// <summary>
+        /// Fields merged into the top level of the client's JSON body when forwarding POST / PUT / PATCH.
+        /// Empty ⇒ the body is forwarded unchanged.
+        /// </summary>
+        public IReadOnlyList<ProxyKeyValue> BodyMerge { get; init; } = Array.Empty<ProxyKeyValue>();
+
+        /// <summary>
         /// Per-method overrides. Empty ⇒ every method uses the shared <see cref="Headers"/> / <see cref="Query"/>
         /// / <see cref="Upstream"/> (today's behaviour). Not writable via the API until Phase D-feature.
         /// </summary>
@@ -39,6 +45,7 @@ namespace Proxy.DomainService.Services
             Enabled = proxy.Enabled,
             Headers = proxy.Headers,
             Query = proxy.Query,
+            BodyMerge = proxy.BodyMerge,
             MethodConfigs = proxy.MethodConfigs,
         };
     }

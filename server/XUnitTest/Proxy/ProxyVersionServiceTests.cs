@@ -74,6 +74,7 @@ namespace XUnitTest.Proxy
                         },
                     }),
                 CreatedBy = "user-1",
+                CreatedByName = "User One",
                 CreatedDate = DateTime.UtcNow,
                 Snapshot = new ProxyConfigSnapshot
                 {
@@ -111,6 +112,7 @@ namespace XUnitTest.Proxy
             result.Data[0].Kind.Should().Be("ConfigUpdate");
             result.Data[0].Changes.Should().NotBeEmpty();
             result.Data[0].Who.Should().Be("user-1");
+            result.Data[0].WhoName.Should().Be("User One");
         }
 
         // ---------- GetVersions : H7 (works after delete) ----------
@@ -168,6 +170,7 @@ namespace XUnitTest.Proxy
             written!.Kind.Should().Be(ProxyVersionKind.Revert);
             written.VersionNumber.Should().Be(5);
             written.ChangeSummary.Should().Be("Reverted the change from v2");
+            written.CreatedByName.Should().Be("Test User");
             written.Changes.Should().Contain(c =>
                 c.Field == "upstream"
                 && c.Before == "https://api.stripe.com/v9/x"

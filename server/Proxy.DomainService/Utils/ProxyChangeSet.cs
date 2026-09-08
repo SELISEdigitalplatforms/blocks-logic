@@ -13,6 +13,7 @@ namespace Proxy.DomainService.Utils
         private const string DisabledWord = "disabled";
         private const string HeaderPrefix = "header:";
         private const string QueryPrefix = "query:";
+        private const string BodyPrefix = "body:";
         private const string MethodPrefix = "method:";
 
         private static readonly IReadOnlyList<ProxyKeyValue> NoPairs = Array.Empty<ProxyKeyValue>();
@@ -59,6 +60,7 @@ namespace Proxy.DomainService.Utils
 
             DiffPairs(before.Headers, after.Headers, HeaderPrefix, "header", changes);
             DiffPairs(before.Query, after.Query, QueryPrefix, "query", changes);
+            DiffPairs(before.BodyMerge, after.BodyMerge, BodyPrefix, "body field", changes);
             DiffMethodConfigs(before.MethodConfigs, after.MethodConfigs, changes);
 
             return changes;
@@ -146,6 +148,18 @@ namespace Proxy.DomainService.Utils
                     return $"{key} credential switched to a configuration variable";
                 }
 
+                if (TrySplitBodyField(change.Field, out var bodyKey))
+                {
+                    if (change.Before is null)
+                    {
+                        return $"body field {bodyKey} added";
+                    }
+
+                    return change.After is null
+                        ? $"body field {bodyKey} removed"
+                        : $"body field {bodyKey} changed";
+                }
+
                 if (TryParseMethodField(change.Field, out var overrideMethod, out var overrideTail))
                 {
                     var wire = overrideMethod.Wire();
@@ -219,6 +233,12 @@ namespace Proxy.DomainService.Utils
                 return null;
             }
 
+            if (TrySplitBodyField(field, out var bodyKey))
+            {
+                return proxy.BodyMerge
+                    .FirstOrDefault(kv => string.Equals(kv.Key, bodyKey, StringComparison.Ordinal))?.Value;
+            }
+
             if (TrySplitPair(field, out var isHeader, out var key))
             {
                 var list = isHeader ? proxy.Headers : proxy.Query;
@@ -254,6 +274,12 @@ namespace Proxy.DomainService.Utils
             if (TryParseMethodField(field, out var method, out var tail))
             {
                 ApplyMethodField(proxy, method, tail, rawValue);
+                return;
+            }
+
+            if (TrySplitBodyField(field, out var bodyKey))
+            {
+                proxy.BodyMerge = ApplyPair(proxy.BodyMerge, bodyKey, rawValue) ?? new List<ProxyKeyValue>();
                 return;
             }
 
@@ -482,6 +508,19 @@ namespace Proxy.DomainService.Utils
             }
 
             isHeader = false;
+            key = string.Empty;
+            return false;
+        }
+
+        /// <summary>Splits a <c>body:&lt;key&gt;</c> address into its (ordinal, case-sensitive) JSON key.</summary>
+        private static bool TrySplitBodyField(string field, out string key)
+        {
+            if (field.StartsWith(BodyPrefix, StringComparison.Ordinal))
+            {
+                key = field[BodyPrefix.Length..];
+                return true;
+            }
+
             key = string.Empty;
             return false;
         }

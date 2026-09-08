@@ -36,5 +36,12 @@ namespace Proxy.DomainService.Entities
 
         /// <summary>The full effective config after this change (for Delete: the config as it was just before deletion).</summary>
         public required ProxyConfigSnapshot Snapshot { get; set; }
+
+        /// <summary>
+        /// Display name of the user who made the change, captured from the ambient <c>BlocksContext</c> at write
+        /// time. <c>null</c> when the context carried no name (older rows, or system-initiated changes); the
+        /// console then falls back to resolving <see cref="BaseEntity.CreatedBy"/> against IAM.
+        /// </summary>
+        public string? CreatedByName { get; set; }
     }
 }

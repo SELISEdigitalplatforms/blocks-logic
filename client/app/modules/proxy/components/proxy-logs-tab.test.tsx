@@ -22,8 +22,20 @@ vi.mock("@/hooks/use-toast", () => toasts);
 
 describe("ProxyLogsTab", () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     mockProxyService.resetMockStore();
     vi.clearAllMocks();
+  });
+
+  it("shows visible loading skeletons while request logs load", () => {
+    vi.spyOn(proxyService, "getExecutions").mockImplementation(
+      () => new Promise(() => undefined),
+    );
+
+    renderWithProviders(<ProxyLogsTab proxy={PROXY_MOCK_DATA[0]} active={true} />);
+
+    const loading = screen.getByRole("status", { name: "Loading request logs" });
+    expect(loading.querySelector(".bg-slate-200")).toBeTruthy();
   });
 
   it("filters rows and expands log details", async () => {

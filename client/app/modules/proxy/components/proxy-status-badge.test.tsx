@@ -11,6 +11,10 @@ describe("ProxyStatusBadge", () => {
 
     rerender(<ProxyStatusBadge proxy={{ enabled: false }} />);
     expect(screen.getByText("Paused")).toBeTruthy();
-    expect(screen.getByText("Paused").className).toContain("bg-amber-100");
+    expect(screen.getByText("Paused").className).toContain("border-slate-300");
+    expect(screen.getByText("Paused").className).toContain("bg-slate-200");
+    expect(screen.getByText("Paused").className).toContain("hover:bg-slate-200");
+    expect(screen.getByText("Paused").className).toContain("dark:bg-slate-800");
+    expect(screen.getByText("Paused").className).toContain("dark:hover:bg-slate-800");
   });
 });

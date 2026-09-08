@@ -29,7 +29,7 @@ vi.mock("@seliseblocks/genesis-os", () => ({ HttpError: FakeHttpError }));
 
 import { proxyService } from "./proxy.service";
 
-const { iamService, logicService } = http;
+const { logicService } = http;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -81,6 +81,8 @@ describe("ProxyService HTTP wiring", () => {
       methods: ["GET"],
       headers: [],
       query: [],
+      bodyMerge: [],
+      bodyMode: "passthrough",
       methodConfigs: [],
     });
 
@@ -90,6 +92,7 @@ describe("ProxyService HTTP wiring", () => {
       methods: ["GET"],
       headers: [],
       query: [],
+      bodyMerge: [],
       methodConfigs: [],
       enabled: true,
     });
@@ -192,25 +195,5 @@ describe("ProxyService HTTP wiring", () => {
       "/api/Proxy/ExportExecutionsCsv?proxyId=p1&statusClass=2xx",
     );
     expect(csv).toMatchObject({ fileName: "proxy-p1-executions.csv", rowCount: 2 });
-  });
-
-  it("gets an IAM user's display name and falls back to null on failure", async () => {
-    iamService.get.mockResolvedValueOnce({
-      data: {
-        itemId: "755991d9-6c90-4f12-b710-8cb896075a35",
-        firstName: "John",
-        lastName: "Doe",
-      },
-    });
-
-    await expect(
-      proxyService.getUserDisplayName("755991d9-6c90-4f12-b710-8cb896075a35"),
-    ).resolves.toBe("John Doe");
-    expect(iamService.get).toHaveBeenCalledWith(
-      "/api/iam/users/755991d9-6c90-4f12-b710-8cb896075a35",
-    );
-
-    iamService.get.mockRejectedValueOnce(new Error("500"));
-    await expect(proxyService.getUserDisplayName("missing-user")).resolves.toBeNull();
   });
 });

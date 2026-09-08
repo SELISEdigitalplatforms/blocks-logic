@@ -35,7 +35,7 @@ describe("ProxyHistoryTab", () => {
     // a scalar change renders both - and + lines
     expect(screen.getByText(/- status: disabled/)).toBeTruthy();
     expect(screen.getByText(/\+ status: enabled/)).toBeTruthy();
-    expect(screen.getAllByRole("button", { name: /revert/i })).toHaveLength(3);
+    expect(screen.getAllByRole("button", { name: /revert/i })).toHaveLength(4);
 
     await user.click(screen.getAllByRole("button", { name: /revert/i })[0]);
     await waitFor(() =>
@@ -49,11 +49,11 @@ describe("ProxyHistoryTab", () => {
     const user = userEvent.setup();
     renderWithProviders(<ProxyHistoryTab proxyId="p1" active={true} />);
 
-    // First revert of v3 removes the query key it added.
+    // First revert of the newest version removes the body field it added.
     await user.click((await screen.findAllByRole("button", { name: /revert/i }))[0]);
     await waitFor(() => expect(toasts.showSuccessToast).toHaveBeenCalled());
 
-    // Reverting the same version again conflicts: the key no longer holds v3's "after" value.
+    // Reverting the same version again conflicts: the key no longer holds that version's "after" value.
     await user.click(screen.getAllByRole("button", { name: /revert/i })[0]);
     await waitFor(() =>
       expect(toasts.showErrorToast).toHaveBeenCalledWith({

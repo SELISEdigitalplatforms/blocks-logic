@@ -172,6 +172,65 @@ namespace XUnitTest.Proxy
             result.Query[0].IsSecretRef.Should().BeFalse();
         }
 
+        [Fact]
+        public void Validator_NormalizesBodyMerge_FlagsSecretRefs_AndDropsBlankRows()
+        {
+            var result = ProxyConfigValidator.Validate(
+                "Name", "https://api.x.com", new[] { "POST" }, null, null, null,
+                new[]
+                {
+                    new ProxyKeyValueInputDto { Key = "account", Value = "acct_123" },
+                    new ProxyKeyValueInputDto { Key = "api_key", Value = "${SECRET.K}" },
+                });
+
+            result.IsValid.Should().BeTrue();
+            result.BodyMerge.Should().HaveCount(2);
+            result.BodyMerge[0].IsSecretRef.Should().BeFalse();
+            result.BodyMerge[1].IsSecretRef.Should().BeTrue();
+        }
+
+        [Fact]
+        public void Validator_RejectsDuplicateBodyMergeKey_OrdinalCaseSensitive()
+        {
+            var result = ProxyConfigValidator.Validate(
+                "Name", "https://api.x.com", new[] { "POST" }, null, null, null,
+                new[]
+                {
+                    new ProxyKeyValueInputDto { Key = "account", Value = "a" },
+                    new ProxyKeyValueInputDto { Key = "account", Value = "b" },
+                });
+
+            result.IsValid.Should().BeFalse();
+            result.Errors.Should().ContainKey("bodyMerge")
+                .WhoseValue.Should().Be("Each body field key must be unique.");
+        }
+
+        [Fact]
+        public void Validator_AllowsBodyMergeKeysDifferingOnlyInCase()
+        {
+            var result = ProxyConfigValidator.Validate(
+                "Name", "https://api.x.com", new[] { "POST" }, null, null, null,
+                new[]
+                {
+                    new ProxyKeyValueInputDto { Key = "Account", Value = "a" },
+                    new ProxyKeyValueInputDto { Key = "account", Value = "b" },
+                });
+
+            result.IsValid.Should().BeTrue();
+            result.BodyMerge.Should().HaveCount(2);
+        }
+
+        [Fact]
+        public void Validator_RejectsOversizedBodyMergeValue()
+        {
+            var result = ProxyConfigValidator.Validate(
+                "Name", "https://api.x.com", new[] { "POST" }, null, null, null,
+                new[] { new ProxyKeyValueInputDto { Key = "big", Value = new string('x', 4097) } });
+
+            result.IsValid.Should().BeFalse();
+            result.Errors.Should().ContainKey("bodyMerge");
+        }
+
         [Theory]
         [InlineData("ftp://x")]
         [InlineData("http://api.stripe.com")]

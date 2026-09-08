@@ -89,6 +89,65 @@ describe("ProxyForm", () => {
     await waitFor(() => expect(onDelete).toHaveBeenCalled());
   });
 
+  it("shows the Request body card only when a POST/PUT/PATCH method is selected", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <MemoryRouter>
+        <ProxyForm mode="create" onSuccess={vi.fn()} />
+      </MemoryRouter>,
+    );
+
+    // default methods === ["GET"] -> no card
+    expect(screen.queryByText("Request body")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "POST" }));
+    expect(screen.getByText("Request body")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "GET" }));
+    expect(screen.queryByText("Request body")).toBeNull();
+  });
+
+  it("seeds the body tab to merge when editing a proxy that has body fields", async () => {
+    const proxy = (await proxyService.get("p1"))!; // p1 mock has a non-empty bodyMerge
+
+    renderWithProviders(
+      <MemoryRouter>
+        <ProxyForm mode="edit" proxy={proxy} />
+      </MemoryRouter>,
+    );
+
+    // merge tab active -> the existing body rows are rendered
+    expect(await screen.findByDisplayValue("account")).toBeTruthy();
+  });
+
+  it("persists bodyMerge: [] when body fields are typed then the tab is switched to Pass through", async () => {
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+    renderWithProviders(
+      <MemoryRouter>
+        <ProxyForm mode="create" onSuccess={onSuccess} />
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("Enter name"), {
+      target: { value: "Body Proxy" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("Enter third-party endpoint"), {
+      target: { value: "https://api.example.com/x" },
+    });
+    await user.click(screen.getByRole("button", { name: "POST" }));
+    await user.click(screen.getByRole("button", { name: "Merge fields" }));
+    await user.click(screen.getByRole("button", { name: /add field/i }));
+    fireEvent.change(screen.getByPlaceholderText("Enter key"), { target: { value: "account" } });
+    fireEvent.change(screen.getByPlaceholderText("Enter value"), { target: { value: "acct_1" } });
+    await user.click(screen.getByRole("button", { name: "Pass through" }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+    const saved = await proxyService.get(onSuccess.mock.calls[0][0]);
+    expect(saved?.bodyMerge).toEqual([]);
+  });
+
   it("shows an inline url validation message instead of relying on native validation", async () => {
     const user = userEvent.setup();
     const onSuccess = vi.fn();

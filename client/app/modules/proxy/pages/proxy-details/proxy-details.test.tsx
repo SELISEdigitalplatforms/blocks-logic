@@ -8,10 +8,12 @@ vi.mock("../../services", async () => ({
 }));
 
 import { proxyService } from "../../services";
+import { PROXY_MOCK_DATA } from "../../constants";
 import { ProxyDetails } from "./proxy-details";
 
 const mockProxyService = proxyService as unknown as {
   resetMockStore: () => void;
+  get: (id: string) => Promise<unknown>;
   toggle: (payload: { id: string; enabled: boolean }) => Promise<unknown>;
 };
 
@@ -32,8 +34,33 @@ vi.mock("@seliseblocks/genesis-os", async () => {
 
 describe("ProxyDetails page", () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     mockProxyService.resetMockStore();
     vi.clearAllMocks();
+  });
+
+  it("shows a route skeleton while the proxy is loading", async () => {
+    let resolveGet: (value: unknown) => void = () => undefined;
+    vi.spyOn(mockProxyService, "get").mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveGet = resolve;
+        }),
+    );
+
+    renderWithProviders(
+      <MemoryRouter initialEntries={["/proxy/p1"]}>
+        <Routes>
+          <Route path="/proxy/:proxyId" element={<ProxyDetails />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("status", { name: "Loading proxy details" })).toBeTruthy();
+    expect(screen.queryByText("Loading proxy...")).toBeNull();
+
+    resolveGet(PROXY_MOCK_DATA[0]);
+    expect(await screen.findByRole("heading", { name: "Stripe Payments" })).toBeTruthy();
   });
 
   it("renders overview tabs for a known proxy", async () => {
@@ -82,6 +109,12 @@ describe("ProxyDetails page", () => {
     );
 
     const resume = await screen.findByRole("button", { name: /resume/i });
+    expect(screen.getByLabelText("Paused status indicator").className).toContain("bg-slate-400");
+    expect(screen.getByLabelText("Paused status indicator").className).toContain(
+      "dark:bg-slate-500",
+    );
+    expect(screen.getByText("Paused").className).toContain("bg-slate-200");
+    expect(screen.getByText("Paused").className).toContain("dark:bg-slate-800");
     expect(screen.queryByRole("button", { name: /^pause$/i })).toBeNull();
 
     await user.click(resume);

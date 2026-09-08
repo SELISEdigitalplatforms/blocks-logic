@@ -29,16 +29,29 @@ export type Proxy = {
   enabled: boolean;
   headers: ProxyKeyValue[];
   query: ProxyKeyValue[];
+  /**
+   * Fields merged into the top level of the client's JSON body on POST/PUT/PATCH forwards.
+   * Empty ⇒ the body is forwarded byte-for-byte. There is no mode flag — pass-through is
+   * `bodyMerge.length === 0` everywhere.
+   */
+  bodyMerge: ProxyKeyValue[];
   methodConfigs: ProxyMethodOverride[];
   calls24h: number;
   createdAt?: string;
   updatedAt?: string;
 };
 
+/**
+ * Frontend-only view state for the "Request body" card. Never sent on a request DTO (the
+ * mapper reads it to decide whether to emit `bodyMerge`, then drops it) and never read off a
+ * response DTO (it is derived from `bodyMerge.length` on load).
+ */
+export type ProxyBodyMode = "passthrough" | "merge";
+
 export type ProxyFormValues = Pick<
   Proxy,
-  "name" | "upstreamUrl" | "methods" | "headers" | "query" | "methodConfigs"
->;
+  "name" | "upstreamUrl" | "methods" | "headers" | "query" | "bodyMerge" | "methodConfigs"
+> & { bodyMode: ProxyBodyMode };
 
 export type ProxyBackendDto = Record<string, unknown>;
 
@@ -107,12 +120,7 @@ export type ProxyKeyValueDto = {
 export type ProxyKeyValueInputDto = {
   key: string;
   value: string;
-};
-
-export type ProxyIamUserDto = {
-  itemId: string;
-  firstName?: string | null;
-  lastName?: string | null;
+  isSecretRef: boolean;
 };
 
 /** Mirrors server `ProxyMethodConfigDto` / `ProxyMethodConfigInputDto`. */
@@ -149,6 +157,7 @@ export type ProxyDetailDto = {
   enabled: boolean;
   headers: ProxyKeyValueDto[];
   query: ProxyKeyValueDto[];
+  bodyMerge?: ProxyKeyValueDto[] | null;
   methodConfigs: ProxyMethodConfigDto[];
   currentVersion: number;
   createdDate: string;
@@ -165,6 +174,8 @@ export type ProxyVersionDto = {
   changeSummary: string;
   changes: ProxyFieldChange[];
   who?: string | null;
+  /** Display name captured at write time; null for older rows / system changes. */
+  whoName?: string | null;
   whenUtc: string;
   versionLabel: string;
 };
@@ -262,7 +273,10 @@ export type ProxyVersionHistory = {
   versionNumber: number;
   kind: "create" | "edit" | "toggle" | "revert" | "delete";
   summary: string;
+  /** User id of who made the change; falls back to "Unknown". */
   actor: string;
+  /** Display name captured at write time, if the server recorded one. */
+  actorName?: string;
   whenUtc: string;
   changes: ProxyFieldChange[];
 };

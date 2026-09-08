@@ -90,7 +90,7 @@ const toKeyValueInputs = (rows: ProxyKeyValue[]): ProxyKeyValueInputDto[] =>
     .map((row) => ({
       key: row.key.trim(),
       value: row.value.trim(),
-      isSecretRef: Boolean(row.isSecretRef),
+      isSecretRef: false,
     }))
     .filter((row) => row.key || row.value);
 
@@ -118,12 +118,22 @@ const toMethodConfigInputs = (
     })
     .filter((entry) => entry.upstream || entry.headers || entry.query);
 
+/**
+ * Body-merge rows only reach the wire when the "Merge fields" tab is the selected one. On the
+ * "Pass through" tab the rows the user may have typed are excluded — the request carries
+ * `bodyMerge: []`, identical to never having entered anything (locked decision §2.2). `bodyMode`
+ * itself is never added to the payload.
+ */
+const toBodyMergeInputs = (values: ProxyFormValues): ProxyKeyValueInputDto[] =>
+  values.bodyMode === "merge" ? toKeyValueInputs(values.bodyMerge) : [];
+
 export const mapProxyToCreatePayload = (values: ProxyFormValues) => ({
   name: values.name.trim(),
   upstream: values.upstreamUrl.trim(),
   methods: values.methods,
   headers: toKeyValueInputs(values.headers),
   query: toKeyValueInputs(values.query),
+  bodyMerge: toBodyMergeInputs(values),
   methodConfigs: toMethodConfigInputs(values.methodConfigs, values.methods),
   enabled: true,
 });
@@ -135,6 +145,7 @@ export const mapProxyToUpdatePayload = (id: string, values: ProxyFormValues) => 
   methods: values.methods,
   headers: toKeyValueInputs(values.headers),
   query: toKeyValueInputs(values.query),
+  bodyMerge: toBodyMergeInputs(values),
   methodConfigs: toMethodConfigInputs(values.methodConfigs, values.methods),
 });
 
@@ -146,6 +157,7 @@ export const mapProxyTestRequestToPayload = (request: ProxyTestRequest) => ({
         methods: request.draft.methods,
         headers: toKeyValueInputs(request.draft.headers),
         query: toKeyValueInputs(request.draft.query),
+        bodyMerge: toBodyMergeInputs(request.draft),
         methodConfigs: toMethodConfigInputs(request.draft.methodConfigs, request.draft.methods),
       }
     : undefined,
@@ -190,6 +202,7 @@ export const mapProxyListItemDtoToProxy = (dto: ProxyListItemDto): Proxy => ({
   enabled: dto.enabled,
   headers: [],
   query: [],
+  bodyMerge: [],
   methodConfigs: [],
   calls24h: Number(dto.calls24h ?? 0),
   createdAt: dto.createdDate,
@@ -207,6 +220,7 @@ export const mapProxyDetailDtoToProxy = (dto: ProxyDetailDto): Proxy => ({
   enabled: dto.enabled,
   headers: toKeyValues(dto.headers),
   query: toKeyValues(dto.query),
+  bodyMerge: toKeyValues(dto.bodyMerge),
   methodConfigs: toMethodOverrides(dto.methodConfigs),
   calls24h: 0,
   createdAt: dto.createdDate,
@@ -245,6 +259,7 @@ export const mapProxyVersionDtoToHistory = (
   kind: VERSION_KIND[dto.kind] ?? "edit",
   summary: dto.changeSummary ?? "",
   actor: dto.who ?? "Unknown",
+  actorName: dto.whoName ?? undefined,
   whenUtc: dto.whenUtc,
   changes: toFieldChanges(dto.changes),
 });

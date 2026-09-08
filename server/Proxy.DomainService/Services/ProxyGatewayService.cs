@@ -109,6 +109,40 @@ namespace Proxy.DomainService.Services
             // member inherits the shared value. With MethodConfigs empty this is exactly config.* (today).
             var (effHeaders, effQuery, effUpstream) = ResolveEffective(config, requestedMethod);
 
+            // Request-body merge: with BodyMerge configured and a body-bearing method, parse the client's JSON
+            // body, set each configured key at the top level (overriding the client), re-serialise and forward
+            // as application/json. Empty BodyMerge ⇒ the body is relayed byte-for-byte (effBody == request.Body).
+            var effBody = request.Body;
+            var effContentType = request.ContentType;
+
+            var mergeApplies = config.BodyMerge.Count > 0
+                && requestedMethod is HttpMethodType.Post or HttpMethodType.Put or HttpMethodType.Patch;
+
+            if (mergeApplies)
+            {
+                var merge = ProxyBodyMerger.Merge(request.Body, config.BodyMerge, _secretResolver);
+                if (merge.NotMergeable)
+                {
+                    _logger.LogWarning(
+                        "Proxy gateway: request body for slug '{Slug}' (tenant {TenantId}) is not a JSON object; returning 422, no upstream call.",
+                        config.Slug, request.TenantId);
+                    return await FinalizeAsync(request, config, BuildPreflight(
+                        ProxyExecutionOutcome.RequestBodyNotMergeable, 422, startedAt));
+                }
+
+                if ((merge.Body?.LongLength ?? 0) > MaxBodyBytes)
+                {
+                    _logger.LogWarning(
+                        "Proxy gateway: merged request body exceeds {Cap} bytes for slug '{Slug}' (tenant {TenantId}); returning 413, no upstream call.",
+                        MaxBodyBytes, config.Slug, request.TenantId);
+                    return await FinalizeAsync(request, config, BuildPreflight(
+                        ProxyExecutionOutcome.RequestTooLarge, 413, startedAt));
+                }
+
+                effBody = merge.Body;
+                effContentType = "application/json";
+            }
+
             var (storedUrl, outboundUrl, injectedQueryKeys) = BuildUrls(effUpstream, effQuery, request);
             var upstreamHost = SafeHost(outboundUrl);
             // Best-effort list for failure rows; replaced with the keys that actually attached once the
@@ -135,7 +169,8 @@ namespace Proxy.DomainService.Services
             {
                 // Factory clients are pooled and cheap; do NOT dispose per call.
                 var client = _httpClientFactory.CreateClient(UpstreamClientName);
-                using var message = BuildUpstreamRequest(effHeaders, request, outboundUrl, out var attachedHeaderKeys);
+                using var message = BuildUpstreamRequest(
+                    effHeaders, request, effBody, effContentType, outboundUrl, out var attachedHeaderKeys);
                 injectedHeaderKeys = attachedHeaderKeys;
                 response = await client.SendAsync(message, HttpCompletionOption.ResponseContentRead, cancellationToken);
             }
@@ -295,21 +330,21 @@ namespace Proxy.DomainService.Services
         }
 
         private HttpRequestMessage BuildUpstreamRequest(
-            IReadOnlyList<ProxyKeyValue> headers, ProxyForwardRequest request, string outboundUrl,
-            out List<string> attachedHeaderKeys)
+            IReadOnlyList<ProxyKeyValue> headers, ProxyForwardRequest request, byte[]? body, string? contentType,
+            string outboundUrl, out List<string> attachedHeaderKeys)
         {
             var message = new HttpRequestMessage(new HttpMethod(request.Method), outboundUrl);
 
-            // note: a zero-length body is delivered as request.Body == null (ReadBodyAsync collapses "empty"
-            // to null), so a deliberate POST/PUT with an empty body forwards with no Content-Type /
-            // Content-Length: 0. Threading an "empty vs absent" signal out of ReadBodyAsync is deferred until
-            // a real upstream needs it.
-            if (request.Body is { Length: > 0 })
+            // note: a zero-length body is delivered as body == null (ReadBodyAsync collapses "empty" to null,
+            // and a body-merge that produced nothing never gets here), so a deliberate POST/PUT with an empty
+            // body forwards with no Content-Type / Content-Length: 0. Threading an "empty vs absent" signal out
+            // of ReadBodyAsync is deferred until a real upstream needs it.
+            if (body is { Length: > 0 })
             {
-                var content = new ByteArrayContent(request.Body);
-                if (!string.IsNullOrWhiteSpace(request.ContentType))
+                var content = new ByteArrayContent(body);
+                if (!string.IsNullOrWhiteSpace(contentType))
                 {
-                    if (MediaTypeHeaderValue.TryParse(request.ContentType, out var parsed))
+                    if (MediaTypeHeaderValue.TryParse(contentType, out var parsed))
                     {
                         content.Headers.ContentType = parsed;
                     }
@@ -317,7 +352,7 @@ namespace Proxy.DomainService.Services
                     {
                         // Malformed Content-Type (e.g. "application/json; charset="): relay it verbatim
                         // rather than dropping it, so the upstream still sees the caller's declared type.
-                        content.Headers.TryAddWithoutValidation("Content-Type", request.ContentType);
+                        content.Headers.TryAddWithoutValidation("Content-Type", contentType);
                     }
                 }
 

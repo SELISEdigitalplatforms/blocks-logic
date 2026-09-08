@@ -11,6 +11,10 @@ export const PROXY_MOCK_DATA: Proxy[] = [
     enabled: true,
     headers: [{ key: "Authorization", value: "${SECRET.STRIPE_API_KEY}", isSecretRef: true }],
     query: [{ key: "expand[]", value: "payment_intent" }],
+    bodyMerge: [
+      { key: "account", value: "acct_platform", isSecretRef: false },
+      { key: "idempotency_key", value: "${SECRET.STRIPE_IDEMPOTENCY}", isSecretRef: true },
+    ],
     methodConfigs: [
       {
         method: "POST",
@@ -33,6 +37,7 @@ export const PROXY_MOCK_DATA: Proxy[] = [
     enabled: true,
     headers: [{ key: "Authorization", value: "${SECRET.SENDGRID_API_KEY}", isSecretRef: true }],
     query: [],
+    bodyMerge: [],
     methodConfigs: [],
     calls24h: 382,
     createdAt: "2026-05-02T14:00:00.000Z",
@@ -48,6 +53,7 @@ export const PROXY_MOCK_DATA: Proxy[] = [
     enabled: false,
     headers: [],
     query: [{ key: "key", value: "${SECRET.WEATHER_API_KEY}", isSecretRef: true }],
+    bodyMerge: [],
     methodConfigs: [],
     calls24h: 74,
     createdAt: "2026-06-18T10:20:00.000Z",
@@ -140,13 +146,33 @@ export const PROXY_MOCK_EXECUTION_LOGS: ProxyExecutionLog[] = [
 
 export const PROXY_MOCK_VERSION_HISTORY: ProxyVersionHistory[] = [
   {
+    id: "v5",
+    proxyId: "p1",
+    versionLabel: "v5",
+    versionNumber: 5,
+    kind: "edit",
+    summary: "body field account added",
+    actor: "755991d9-6c90-4f12-b710-8cb896075a35",
+    actorName: "Avery Stone",
+    whenUtc: "2026-09-03T08:00:00.000Z",
+    changes: [
+      {
+        field: "body:account",
+        label: "body field account",
+        before: null,
+        after: "acct_platform",
+      },
+    ],
+  },
+  {
     id: "v4",
     proxyId: "p1",
     versionLabel: "v4",
     versionNumber: 4,
     kind: "edit",
     summary: "POST header X-Trace overridden.",
-    actor: "Avery Stone",
+    actor: "755991d9-6c90-4f12-b710-8cb896075a35",
+    actorName: "Avery Stone",
     whenUtc: "2026-09-02T09:00:00.000Z",
     changes: [
       {
@@ -164,7 +190,8 @@ export const PROXY_MOCK_VERSION_HISTORY: ProxyVersionHistory[] = [
     versionNumber: 3,
     kind: "edit",
     summary: "Added payment intent expansion query.",
-    actor: "Avery Stone",
+    actor: "755991d9-6c90-4f12-b710-8cb896075a35",
+    actorName: "Avery Stone",
     whenUtc: "2026-09-01T11:30:00.000Z",
     changes: [
       {
@@ -182,7 +209,8 @@ export const PROXY_MOCK_VERSION_HISTORY: ProxyVersionHistory[] = [
     versionNumber: 2,
     kind: "toggle",
     summary: "Enabled proxy traffic.",
-    actor: "Mina Patel",
+    actor: "3f2a1b6c-8d4e-4a91-b0c2-1e5f7a9d3c40",
+    actorName: "Mina Patel",
     whenUtc: "2026-08-22T10:00:00.000Z",
     changes: [
       { field: "enabled", label: "status", before: "disabled", after: "enabled" },
@@ -195,7 +223,8 @@ export const PROXY_MOCK_VERSION_HISTORY: ProxyVersionHistory[] = [
     versionNumber: 1,
     kind: "create",
     summary: "Created proxy configuration.",
-    actor: "Avery Stone",
+    actor: "755991d9-6c90-4f12-b710-8cb896075a35",
+    actorName: "Avery Stone",
     whenUtc: "2026-04-12T09:15:00.000Z",
     changes: [],
   },

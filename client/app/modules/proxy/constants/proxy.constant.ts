@@ -5,7 +5,7 @@ export const PROXY_ENDPOINTS = {
   GET: "/api/Proxy/Get",
   CREATE: "/api/Proxy/Create",
   UPDATE: "/api/Proxy/Update",
-  TOGGLE: "/api/Proxy/Toggle",
+  UPDATE_STATE: "/api/Proxy/UpdateState",
   DELETE: "/api/Proxy/Delete",
   GET_VERSIONS: "/api/Proxy/GetVersions",
   REVERT: "/api/Proxy/Revert",
@@ -14,10 +14,6 @@ export const PROXY_ENDPOINTS = {
   GET_EXECUTION: "/api/Proxy/GetExecution",
   GET_OVERVIEW: "/api/Proxy/GetOverview",
   EXPORT_EXECUTIONS_CSV: "/api/Proxy/ExportExecutionsCsv",
-} as const;
-
-export const PROXY_IAM_ENDPOINTS = {
-  GET_USER: "/api/iam/users",
 } as const;
 
 export const PROXY_METHODS: ProxyMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];

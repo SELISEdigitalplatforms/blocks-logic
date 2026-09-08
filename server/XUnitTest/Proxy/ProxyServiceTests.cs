@@ -105,6 +105,8 @@ namespace XUnitTest.Proxy
             version.Changes.Should().BeEmpty();
             version.ChangeSummary.Should().Be("Proxy created");
             version.Snapshot.Slug.Should().Be("stripe-payments");
+            version.CreatedBy.Should().Be("user-1");
+            version.CreatedByName.Should().Be("Test User");
         }
 
         // ---------- Create : C1 ----------

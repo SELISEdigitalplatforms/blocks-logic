@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui-kits/card/card";
 import { Skeleton } from "@/components/ui-kits/skeleton/skeleton";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { useGetProxyActorNames, useGetProxyVersions, useRevertProxyVersion } from "../hooks";
+import { useGetProxyVersions, useRevertProxyVersion } from "../hooks";
 
 const ProxyHistorySkeleton = () => (
   <Card className="rounded-xl px-6 py-1">
@@ -25,10 +25,6 @@ const ProxyHistorySkeleton = () => (
 
 export const ProxyHistoryTab = ({ proxyId, active }: { proxyId: string; active: boolean }) => {
   const { data = [], isLoading } = useGetProxyVersions(active ? proxyId : undefined);
-  const actorNames = useGetProxyActorNames(
-    data.map((version) => version.actor),
-    active && data.length > 0,
-  );
   const revertVersion = useRevertProxyVersion();
 
   const handleRevert = async (versionId: string) => {
@@ -61,7 +57,7 @@ export const ProxyHistoryTab = ({ proxyId, active }: { proxyId: string; active: 
             <div className="min-w-0">
               <h3 className="text-lg font-semibold">{version.summary.replace(/\.$/, "")}</h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                {actorNames[version.actor] ?? version.actor} -{" "}
+                {version.actorName ?? version.actor} -{" "}
                 {new Date(version.whenUtc).toLocaleString()} - {version.versionLabel}
               </p>
               {version.changes.length ? (

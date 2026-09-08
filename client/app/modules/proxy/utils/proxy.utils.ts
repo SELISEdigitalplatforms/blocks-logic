@@ -69,9 +69,38 @@ export const proxyFormSchema = z
       .min(1, "Select at least one method."),
     headers: keyValueSchema,
     query: keyValueSchema,
+    bodyMerge: keyValueSchema,
+    bodyMode: z.enum(["passthrough", "merge"]),
     methodConfigs: z.array(methodOverrideSchema),
   })
   .superRefine((values, ctx) => {
+    if (values.bodyMode === "merge") {
+      const bodyMethods = values.methods.some(
+        (method) => method === "POST" || method === "PUT" || method === "PATCH",
+      );
+      if (!bodyMethods) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["bodyMode"],
+          message: "Body fields apply to POST, PUT or PATCH only.",
+        });
+      }
+
+      const seen = new Set<string>();
+      values.bodyMerge.forEach((row, index) => {
+        const key = row.key.trim();
+        if (!key) return;
+        if (seen.has(key)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["bodyMerge", index, "key"],
+            message: "Each body field key must be unique.",
+          });
+        }
+        seen.add(key);
+      });
+    }
+
     values.methodConfigs.forEach((override, index) => {
       if (!values.methods.includes(override.method)) {
         ctx.addIssue({
@@ -98,6 +127,8 @@ export const proxyFormDefaultValues: ProxyFormValues = {
   methods: ["GET"],
   headers: [],
   query: [],
+  bodyMerge: [],
+  bodyMode: "passthrough",
   methodConfigs: [],
 };
 

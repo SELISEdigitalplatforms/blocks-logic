@@ -67,7 +67,7 @@ namespace Utilities.Api.Controllers
 
         [Authorize]
         [HttpPost]
-        public async Task<IActionResult> Toggle([FromBody] ProxyToggleRequestDto dto)
+        public async Task<IActionResult> UpdateState([FromBody] ProxyToggleRequestDto dto)
         {
             var result = await _proxyService.ToggleAsync(GetTenantId(), dto);
             return StatusCode(result.HttpStatus, result);

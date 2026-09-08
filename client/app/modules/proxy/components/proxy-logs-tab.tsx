@@ -1,12 +1,16 @@
 import { useState } from "react";
-import { Activity, Download, Pause, Play } from "lucide-react";
+import { Activity, Download, Loader2, Pause, Play } from "lucide-react";
 import { Badge } from "@/components/ui-kits/badge/badge";
 import { Button } from "@/components/ui-kits/button/button";
 import { Card, CardContent } from "@/components/ui-kits/card/card";
 import { Skeleton } from "@/components/ui-kits/skeleton/skeleton";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { useExportProxyExecutionCsv, useGetProxyExecutions } from "../hooks";
+import {
+  useExportProxyExecutionCsv,
+  useGetProxyExecution,
+  useGetProxyExecutions,
+} from "../hooks";
 import { Proxy, ProxyExecutionLog, ProxyLogFilter } from "../types";
 
 const FILTERS: { value: ProxyLogFilter; label: string }[] = [
@@ -19,25 +23,27 @@ const FILTERS: { value: ProxyLogFilter; label: string }[] = [
 const statusClass = (status: number) =>
   status >= 500 ? "text-red-700" : status >= 400 ? "text-amber-700" : "text-green-700";
 
+const logSkeletonClass = "bg-slate-200 dark:bg-muted";
+
 const ProxyLogsSkeleton = () => (
-  <div className="space-y-4">
+  <div className="space-y-4" role="status" aria-label="Loading request logs">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex gap-2">
-        <Skeleton className="h-8 w-12" />
-        <Skeleton className="h-8 w-14" />
-        <Skeleton className="h-8 w-14" />
-        <Skeleton className="h-8 w-14" />
+        <Skeleton className={cn("h-8 w-12", logSkeletonClass)} />
+        <Skeleton className={cn("h-8 w-14", logSkeletonClass)} />
+        <Skeleton className={cn("h-8 w-14", logSkeletonClass)} />
+        <Skeleton className={cn("h-8 w-14", logSkeletonClass)} />
       </div>
       <div className="flex gap-2">
-        <Skeleton className="h-8 w-32" />
-        <Skeleton className="h-8 w-20" />
-        <Skeleton className="h-8 w-28" />
+        <Skeleton className={cn("h-8 w-32", logSkeletonClass)} />
+        <Skeleton className={cn("h-8 w-20", logSkeletonClass)} />
+        <Skeleton className={cn("h-8 w-28", logSkeletonClass)} />
       </div>
     </div>
     <div className="overflow-hidden rounded-sm border">
       <div className="grid grid-cols-[150px_80px_minmax(160px,1fr)_80px_80px] gap-4 px-4 py-3">
         {Array.from({ length: 5 }).map((_, index) => (
-          <Skeleton key={index} className="h-4 w-full" />
+          <Skeleton key={index} className={cn("h-4 w-full", logSkeletonClass)} />
         ))}
       </div>
       {Array.from({ length: 5 }).map((_, rowIndex) => (
@@ -46,7 +52,7 @@ const ProxyLogsSkeleton = () => (
           className="grid grid-cols-[150px_80px_minmax(160px,1fr)_80px_80px] gap-4 border-t px-4 py-3"
         >
           {Array.from({ length: 5 }).map((_, cellIndex) => (
-            <Skeleton key={cellIndex} className="h-4 w-full" />
+            <Skeleton key={cellIndex} className={cn("h-4 w-full", logSkeletonClass)} />
           ))}
         </div>
       ))}
@@ -54,29 +60,52 @@ const ProxyLogsSkeleton = () => (
   </div>
 );
 
-const LogDetails = ({ log }: { log: ProxyExecutionLog }) => (
-  <div className="grid gap-3 border-t bg-muted/20 px-4 py-3 text-sm lg:grid-cols-2">
-    <div>
-      <span className="text-xs font-medium uppercase text-muted-foreground">Forwarded to</span>
-      <p className="break-all font-mono">{log.upstreamUrl}</p>
+const LogDetails = ({ proxyId, log }: { proxyId: string; log: ProxyExecutionLog }) => {
+  // The list row carries only summary fields; the upstream response body, forwarded
+  // URL and injected keys are fetched on demand from `GET /api/Proxy/GetExecution`.
+  const { data, isLoading, isError } = useGetProxyExecution(proxyId, log.id);
+  const detail = data ?? log;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 border-t bg-muted/20 px-4 py-6 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading response...
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-3 border-t bg-muted/20 px-4 py-3 text-sm lg:grid-cols-2">
+      <div>
+        <span className="text-xs font-medium uppercase text-muted-foreground">Forwarded to</span>
+        <p className="break-all font-mono">{detail.upstreamUrl || detail.upstreamHost || "—"}</p>
+      </div>
+      <div>
+        <span className="text-xs font-medium uppercase text-muted-foreground">Result</span>
+        <p>
+          {detail.status} {detail.statusText} in {detail.latencyMs}ms
+        </p>
+      </div>
+      <div>
+        <span className="text-xs font-medium uppercase text-muted-foreground">
+          Injected credentials
+        </span>
+        <p>{[...detail.injectedHeaderKeys, ...detail.injectedQueryKeys].join(", ") || "None"}</p>
+      </div>
+      <div className="lg:col-span-2">
+        <span className="text-xs font-medium uppercase text-muted-foreground">Response body</span>
+        {isError ? (
+          <p className="mt-1 text-red-700">Failed to load the response body.</p>
+        ) : (
+          <pre className="mt-1 max-h-48 overflow-auto rounded-sm bg-background p-3 text-xs">
+            {detail.responseBody || "(empty response body)"}
+          </pre>
+        )}
+      </div>
     </div>
-    <div>
-      <span className="text-xs font-medium uppercase text-muted-foreground">Result</span>
-      <p>
-        {log.status} {log.statusText} in {log.latencyMs}ms
-      </p>
-    </div>
-    <div>
-      <span className="text-xs font-medium uppercase text-muted-foreground">
-        Injected credentials
-      </span>
-      <p>{[...log.injectedHeaderKeys, ...log.injectedQueryKeys].join(", ") || "None"}</p>
-    </div>
-    <pre className="max-h-48 overflow-auto rounded-sm bg-background p-3 text-xs lg:col-span-2">
-      {log.responseBody}
-    </pre>
-  </div>
-);
+  );
+};
 
 export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean }) => {
   const [filter, setFilter] = useState<ProxyLogFilter>("all");
@@ -208,7 +237,9 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
                       </Badge>
                       <span>{log.latencyMs}ms</span>
                     </button>
-                    {expandedId === log.id ? <LogDetails log={log} /> : null}
+                    {expandedId === log.id ? (
+                      <LogDetails proxyId={proxy.id} log={log} />
+                    ) : null}
                   </td>
                 </tr>
               ))

@@ -38,8 +38,14 @@ namespace Proxy.DomainService.Dtos
         /// </summary>
         public List<ProxyFieldChangeDto> Changes { get; set; } = new();
 
-        /// <summary>Who made the change (the version row's <c>CreatedBy</c>).</summary>
+        /// <summary>Who made the change (the version row's <c>CreatedBy</c> user id).</summary>
         public string? Who { get; set; }
+
+        /// <summary>
+        /// Display name of who made the change, captured at write time (the version row's <c>CreatedByName</c>).
+        /// <c>null</c> for older rows / system changes &mdash; the console then resolves <see cref="Who"/> against IAM.
+        /// </summary>
+        public string? WhoName { get; set; }
 
         /// <summary>When the change was made (the version row's <c>CreatedDate</c>, UTC).</summary>
         public DateTime WhenUtc { get; set; }

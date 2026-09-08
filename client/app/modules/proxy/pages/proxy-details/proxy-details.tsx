@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useScopedPath } from "@seliseblocks/genesis-os";
 import { Eye, EyeOff, Loader2, Pause, Pen, Play } from "lucide-react";
@@ -19,36 +19,95 @@ import { ProxyStatusBadge } from "../../components/proxy-status-badge";
 import { ProxyLogsTab } from "../../components/proxy-logs-tab";
 import { ProxyHistoryTab } from "../../components/proxy-history-tab";
 
-type InjectedRow = ProxyKeyValue & { type: "header" | "query" };
+type ProxyValueSection = "headers" | "query" | "body";
+type RevealedValues = Partial<Record<ProxyValueSection, Record<string, boolean>>>;
 
-const InjectedRows = ({ title, rows }: { title: string; rows: InjectedRow[] }) => (
+const bulletMask = "••••••••••••";
+
+const pluralize = (count: number, singular: string, plural = `${singular}s`) =>
+  `${count} ${count === 1 ? singular : plural}`;
+
+const ValueRevealButton = ({
+  shown,
+  label,
+  onClick,
+}: {
+  shown: boolean;
+  label: string;
+  onClick: () => void;
+}) => (
+  <Button
+    type="button"
+    variant="ghost"
+    size="icon"
+    className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+    aria-label={`${shown ? "Hide" : "Reveal"} ${label}`}
+    title={`${shown ? "Hide" : "Reveal"} ${label}`}
+    onClick={onClick}
+  >
+    {shown ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+  </Button>
+);
+
+const KeyValueRows = ({
+  section,
+  title,
+  rows,
+  empty,
+  revealed,
+  onToggle,
+}: {
+  section: ProxyValueSection;
+  title: string;
+  rows: ProxyKeyValue[];
+  empty: string;
+  revealed: RevealedValues;
+  onToggle: (section: ProxyValueSection, id: string) => void;
+}) => (
   <div>
-    <h3 className="text-xs font-semibold uppercase text-muted-foreground">{title}</h3>
-    {rows.length ? (
-      <div className="mt-2 divide-y overflow-hidden rounded-lg border">
-        {rows.map((row) => (
-          <div
-            key={`${row.key}-${row.value}`}
-            className="grid gap-2 px-4 py-3 text-sm sm:grid-cols-[auto_1fr_auto] sm:items-center"
-          >
-            <Badge variant="info" className="w-fit lowercase">
-              {row.type}
-            </Badge>
-            <span className="min-w-0 truncate">
-              <span className="font-mono font-medium">{row.key}</span>
-              <span className="mx-2 font-mono text-muted-foreground">{row.value}</span>
-            </span>
-            {row.isSecretRef ? (
-              <Badge variant="success" className="w-fit lowercase">
-                vault
-              </Badge>
-            ) : null}
-          </div>
-        ))}
+    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      {title}
+    </h3>
+    <div className="mt-3 overflow-hidden rounded-lg border bg-card">
+      <div className="border-b bg-muted/20 px-4 py-3 text-sm font-semibold text-muted-foreground">
+        {title} · {rows.length}
       </div>
-    ) : (
-      <p className="mt-2 text-sm text-muted-foreground">No injected values.</p>
-    )}
+      {rows.length ? (
+        <div className="divide-y">
+          {rows.map((row, index) => {
+            const id = `${row.key}-${index}`;
+            const shown = Boolean(revealed[section]?.[id]);
+            return (
+              <div
+                key={id}
+                className="grid gap-3 px-4 py-3 text-sm sm:grid-cols-[minmax(160px,0.4fr)_minmax(0,1fr)_auto] sm:items-center"
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="truncate font-mono font-semibold text-foreground">
+                    {row.key}
+                  </span>
+                  {row.isSecretRef ? (
+                    <Badge variant="success" className="w-fit shrink-0 lowercase">
+                      vault
+                    </Badge>
+                  ) : null}
+                </div>
+                <span className="min-w-0 truncate font-mono text-muted-foreground">
+                  {shown ? row.value : bulletMask}
+                </span>
+                <ValueRevealButton
+                  shown={shown}
+                  label={`${title.toLowerCase()} value ${row.key}`}
+                  onClick={() => onToggle(section, id)}
+                />
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="px-4 py-3 text-sm text-muted-foreground">{empty}</p>
+      )}
+    </div>
   </div>
 );
 
@@ -72,6 +131,28 @@ const MetricCard = ({
       <p className="mt-1 text-sm text-muted-foreground">{note}</p>
     </CardContent>
   </Card>
+);
+
+const ConfigurationStepCard = ({
+  eyebrow,
+  children,
+  active,
+}: {
+  eyebrow: string;
+  children: ReactNode;
+  active?: boolean;
+}) => (
+  <div
+    className={cn(
+      "min-h-[140px] rounded-lg border p-4",
+      active ? "border-primary/40 bg-primary/10 text-primary" : "bg-card",
+    )}
+  >
+    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      {eyebrow}
+    </span>
+    <div className="mt-3">{children}</div>
+  </div>
 );
 
 const tabClass =
@@ -103,12 +184,46 @@ const ProxyOverviewSkeleton = () => (
   </div>
 );
 
+const ProxyDetailsSkeleton = () => (
+  <div className="flex min-h-screen flex-col" role="status" aria-label="Loading proxy details">
+    <div className="px-6 pb-2 pt-4">
+      <Skeleton className="h-5 w-64" />
+    </div>
+    <div className="flex-1 space-y-6 px-6 pb-8 pt-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-3.5 w-3.5 rounded-full" />
+            <Skeleton className="h-8 w-56" />
+            <Skeleton className="h-6 w-16 rounded-full" />
+          </div>
+          <Skeleton className="h-4 w-72" />
+        </div>
+        <div className="flex gap-3">
+          <Skeleton className="h-10 w-24" />
+          <Skeleton className="h-10 w-20" />
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex gap-8 border-b border-border">
+          <Skeleton className="h-8 w-20 rounded-none" />
+          <Skeleton className="h-8 w-28 rounded-none" />
+          <Skeleton className="h-8 w-32 rounded-none" />
+        </div>
+        <ProxyOverviewSkeleton />
+      </div>
+    </div>
+  </div>
+);
+
 export const ProxyDetails = () => {
   const navigate = useNavigate();
   const scoped = useScopedPath();
   const params = useParams<{ proxyId?: string }>();
   const proxyId = params.proxyId;
   const [showUpstream, setShowUpstream] = useState(false);
+  const [revealedValues, setRevealedValues] = useState<RevealedValues>({});
   const [activeTab, setActiveTab] = useState("overview");
   const { data: proxy, isLoading, isFetched } = useGetProxyById(proxyId);
   const { data: overview, isLoading: isLoadingOverview } = useGetProxyOverview(proxy?.id, {
@@ -128,7 +243,7 @@ export const ProxyDetails = () => {
   }, [isFetched, isLoading, navigate, proxy, proxyId, scoped]);
 
   if (isLoading || !isFetched) {
-    return <div className="p-8 text-sm text-muted-foreground">Loading proxy...</div>;
+    return <ProxyDetailsSkeleton />;
   }
 
   if (!proxy) return null;
@@ -138,6 +253,22 @@ export const ProxyDetails = () => {
   const averageLatency = overview?.avgLatencyMs ?? 0;
   const errorRate = (overview?.errorRatePct ?? 0).toFixed(1);
   const errorRateIsHigh = overview?.errorRateIsHigh ?? false;
+  const addedCount = proxy.headers.length + proxy.query.length + proxy.bodyMerge.length;
+  const addedSummary = [
+    pluralize(proxy.headers.length, "header"),
+    pluralize(proxy.query.length, "param"),
+    pluralize(proxy.bodyMerge.length, "body field"),
+  ].join(" · ");
+
+  const toggleRevealedValue = (section: ProxyValueSection, id: string) => {
+    setRevealedValues((current) => ({
+      ...current,
+      [section]: {
+        ...current[section],
+        [id]: !current[section]?.[id],
+      },
+    }));
+  };
 
   const handleToggleEnabled = async () => {
     const enabled = !proxy.enabled;
@@ -158,9 +289,10 @@ export const ProxyDetails = () => {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex flex-wrap items-center gap-3">
             <span
+              aria-label={`${proxy.enabled ? "Live" : "Paused"} status indicator`}
               className={cn(
                 "h-3.5 w-3.5 rounded-full",
-                proxy.enabled ? "bg-success" : "bg-amber-500",
+                proxy.enabled ? "bg-success" : "bg-slate-400 dark:bg-slate-500",
               )}
             />
             <h1 className="text-2xl font-bold tracking-tight">{proxy.name}</h1>
@@ -232,53 +364,69 @@ export const ProxyDetails = () => {
                   <CardHeader>
                     <h2 className="text-xl font-semibold">Configuration</h2>
                   </CardHeader>
-                  <CardContent className="space-y-5">
-                    <div className="space-y-3 rounded-lg border border-primary/25 bg-primary/5 p-4 text-primary">
-                      <div>
-                        <span className="text-xs font-semibold uppercase tracking-wide">
-                          Your client calls
-                        </span>
-                        <p className="mt-1 break-all font-mono text-sm text-foreground">
+                  <CardContent className="space-y-6">
+                    <div className="grid gap-4 lg:grid-cols-3">
+                      <ConfigurationStepCard eyebrow="Your client calls">
+                        <div className="mb-3 flex flex-wrap gap-2">
+                          <ProxyMethodChips methods={proxy.methods} />
+                        </div>
+                        <p className="break-all font-mono text-sm text-foreground">
                           {getProxyClientPath(proxy.slug)}
                         </p>
-                      </div>
-                      <div>
-                        <span className="text-xs font-semibold uppercase tracking-wide">
-                          Blocks forwards to
-                        </span>
-                        <p className="mt-1 break-all font-mono text-sm text-foreground">
-                          {showUpstream ? proxy.upstreamUrl : proxy.upstreamMasked}
+                      </ConfigurationStepCard>
+                      <ConfigurationStepCard eyebrow="→ Blocks adds" active>
+                        <p className="text-3xl font-bold leading-none">{addedCount}</p>
+                        <p className="mt-3 text-sm text-primary">{addedSummary}</p>
+                      </ConfigurationStepCard>
+                      <ConfigurationStepCard eyebrow="→ Third party receives">
+                        <div className="flex items-start gap-2">
+                          <p className="min-w-0 break-all font-mono text-sm text-foreground">
+                            {showUpstream ? proxy.upstreamUrl : proxy.upstreamMasked}
+                          </p>
                           <Button
                             type="button"
                             variant="ghost"
-                            size="xs"
-                            className="ml-2 h-auto px-1 py-0 text-primary"
+                            size="icon"
+                            className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+                            aria-label={`${showUpstream ? "Hide" : "Reveal"} third party endpoint`}
+                            title={`${showUpstream ? "Hide" : "Reveal"} third party endpoint`}
                             onClick={() => setShowUpstream((value) => !value)}
                           >
                             {showUpstream ? (
-                              <EyeOff className="mr-1 h-3.5 w-3.5" />
+                              <EyeOff className="h-4 w-4" />
                             ) : (
-                              <Eye className="mr-1 h-3.5 w-3.5" />
+                              <Eye className="h-4 w-4" />
                             )}
-                            {showUpstream ? "hide" : "reveal"}
                           </Button>
+                        </div>
+                        <p className="mt-3 text-sm text-muted-foreground">
+                          Body: {pluralize(proxy.bodyMerge.length, "field")} merged server-side
                         </p>
-                      </div>
+                      </ConfigurationStepCard>
                     </div>
-                    <div>
-                      <span className="text-xs font-semibold uppercase text-muted-foreground">
-                        Methods
-                      </span>
-                      <div className="mt-2">
-                        <ProxyMethodChips methods={proxy.methods} />
-                      </div>
-                    </div>
-                    <InjectedRows
-                      title="Headers & parameters sent"
-                      rows={[
-                        ...proxy.headers.map((row) => ({ ...row, type: "header" as const })),
-                        ...proxy.query.map((row) => ({ ...row, type: "query" as const })),
-                      ]}
+                    <KeyValueRows
+                      section="headers"
+                      title="Headers"
+                      rows={proxy.headers}
+                      empty="No headers added."
+                      revealed={revealedValues}
+                      onToggle={toggleRevealedValue}
+                    />
+                    <KeyValueRows
+                      section="query"
+                      title="Query parameters"
+                      rows={proxy.query}
+                      empty="No query parameters added."
+                      revealed={revealedValues}
+                      onToggle={toggleRevealedValue}
+                    />
+                    <KeyValueRows
+                      section="body"
+                      title="Body fields"
+                      rows={proxy.bodyMerge}
+                      empty="No body fields merged."
+                      revealed={revealedValues}
+                      onToggle={toggleRevealedValue}
                     />
                   </CardContent>
                 </Card>

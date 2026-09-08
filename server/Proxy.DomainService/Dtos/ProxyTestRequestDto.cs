@@ -40,6 +40,12 @@ namespace Proxy.DomainService.Dtos
 
         public List<ProxyKeyValueInputDto>? Query { get; set; }
 
+        /// <summary>
+        /// Fields merged into the top level of the client's JSON body on POST / PUT / PATCH forwards.
+        /// Same rules as Create / Update.
+        /// </summary>
+        public List<ProxyKeyValueInputDto>? BodyMerge { get; set; }
+
         /// <summary>Per-method overrides for the unsaved draft. Same rules as Create / Update.</summary>
         public List<ProxyMethodConfigInputDto>? MethodConfigs { get; set; }
     }

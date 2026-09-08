@@ -13,6 +13,12 @@ namespace Proxy.DomainService.Dtos
 
         public List<ProxyKeyValueInputDto>? Query { get; set; }
 
+        /// <summary>
+        /// Fields merged into the top level of the client's JSON body on POST / PUT / PATCH forwards.
+        /// Empty / omitted ⇒ the body is forwarded unchanged.
+        /// </summary>
+        public List<ProxyKeyValueInputDto>? BodyMerge { get; set; }
+
         /// <summary>Per-method overrides. Reserved for Phase D-feature; a non-empty value is rejected today.</summary>
         public List<ProxyMethodConfigInputDto>? MethodConfigs { get; set; }
 

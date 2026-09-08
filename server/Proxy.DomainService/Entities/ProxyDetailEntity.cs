@@ -42,6 +42,12 @@ namespace Proxy.DomainService.Entities
         public List<ProxyKeyValue> Query { get; set; } = new();
 
         /// <summary>
+        /// Fields merged into the top level of the client's JSON body when forwarding POST / PUT / PATCH.
+        /// Empty ⇒ the body is forwarded unchanged (byte-for-byte pass-through).
+        /// </summary>
+        public List<ProxyKeyValue> BodyMerge { get; set; } = new();
+
+        /// <summary>
         /// Per-method overrides. Empty ⇒ every method uses the shared <see cref="Headers"/> / <see cref="Query"/>
         /// / <see cref="Upstream"/>. Not yet writable via the API (the validator rejects a non-empty value).
         /// </summary>

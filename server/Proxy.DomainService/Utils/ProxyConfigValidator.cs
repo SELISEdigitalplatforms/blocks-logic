@@ -24,6 +24,8 @@ namespace Proxy.DomainService.Utils
 
         public List<ProxyKeyValue> Query { get; set; } = new();
 
+        public List<ProxyKeyValue> BodyMerge { get; set; } = new();
+
         public List<ProxyMethodConfig> MethodConfigs { get; set; } = new();
     }
 
@@ -46,7 +48,8 @@ namespace Proxy.DomainService.Utils
             IEnumerable<string>? methods,
             IEnumerable<ProxyKeyValueInputDto>? headers,
             IEnumerable<ProxyKeyValueInputDto>? query,
-            IEnumerable<ProxyMethodConfigInputDto>? methodConfigs = null)
+            IEnumerable<ProxyMethodConfigInputDto>? methodConfigs = null,
+            IEnumerable<ProxyKeyValueInputDto>? bodyMerge = null)
         {
             var result = new ProxyConfigValidationResult();
 
@@ -55,6 +58,7 @@ namespace Proxy.DomainService.Utils
             result.Methods = NormalizeMethods(methods, result);
             result.Headers = NormalizePairs(headers, "headers", result);
             result.Query = NormalizePairs(query, "query", result);
+            result.BodyMerge = NormalizePairs(bodyMerge, "bodyMerge", result);
             result.MethodConfigs = NormalizeMethodConfigs(methodConfigs, result);
 
             return result;
@@ -213,6 +217,8 @@ namespace Proxy.DomainService.Utils
         {
             var normalized = new List<ProxyKeyValue>();
             var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            // Body-merge keys are JSON object keys: case-sensitive, so dedupe them ordinally, unlike headers.
+            var seenBodyKeys = new HashSet<string>(StringComparer.Ordinal);
 
             foreach (var pair in pairs ?? Enumerable.Empty<ProxyKeyValueInputDto>())
             {
@@ -228,6 +234,10 @@ namespace Proxy.DomainService.Utils
                 {
                     // A repeated header key would otherwise be sent as multiple header lines upstream.
                     result.Errors[field] = "Each header key must be unique (case-insensitive).";
+                }
+                else if (field == "bodyMerge" && !seenBodyKeys.Add(key.Trim()))
+                {
+                    result.Errors[field] = "Each body field key must be unique.";
                 }
 
                 if (value.Length > MaxValueLength)

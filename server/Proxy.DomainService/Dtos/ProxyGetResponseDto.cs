@@ -32,6 +32,12 @@ namespace Proxy.DomainService.Dtos
 
         public List<ProxyKeyValueDto> Query { get; set; } = new();
 
+        /// <summary>
+        /// Fields merged into the top level of the client's JSON body on POST / PUT / PATCH forwards.
+        /// Empty ⇒ the body is forwarded unchanged.
+        /// </summary>
+        public List<ProxyKeyValueDto> BodyMerge { get; set; } = new();
+
         /// <summary>Per-method overrides. Always empty until Phase D-feature; wired so the form can round-trip it.</summary>
         public List<ProxyMethodConfigDto> MethodConfigs { get; set; } = new();
 

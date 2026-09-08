@@ -72,7 +72,7 @@ export const ProxyList = ({ proxies, isLoading }: Props) => {
             services stay behind a managed route.
           </p>
           <div className="mt-5 flex flex-col items-center gap-2 sm:flex-row">
-            <VariablesButton />
+            <VariablesButton className="hidden" />
             <Button className="gap-2" onClick={() => navigate(scoped("proxy/new"))}>
               <Plus className="h-4 w-4" />
               Add proxy

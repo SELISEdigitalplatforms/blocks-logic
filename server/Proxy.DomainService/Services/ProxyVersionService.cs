@@ -158,7 +158,7 @@ namespace Proxy.DomainService.Services
             var newVersion = ProxyVersionFactory.Build(
                 proxy, proxy.CurrentVersion, ProxyVersionKind.Revert,
                 $"Reverted the change from v{sourceVersion.VersionNumber}",
-                changes, afterSnapshot, proxy.LastUpdatedBy ?? "system");
+                changes, afterSnapshot, proxy.LastUpdatedBy ?? "system", ProxyVersionFactory.CurrentUserName());
             await _proxyVersionRepository.InsertAsync(newVersion);
 
             _logger.LogInformation(
@@ -202,6 +202,7 @@ namespace Proxy.DomainService.Services
                 After = c.After,
             }).ToList(),
             Who = version.CreatedBy,
+            WhoName = version.CreatedByName,
             WhenUtc = version.CreatedDate,
             VersionLabel = $"v{version.VersionNumber}",
         };

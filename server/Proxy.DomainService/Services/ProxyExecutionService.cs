@@ -368,7 +368,7 @@ namespace Proxy.DomainService.Services
                 return new List<string>();
             }
 
-            return proxy.Headers.Concat(proxy.Query)
+            return proxy.Headers.Concat(proxy.Query).Concat(proxy.BodyMerge)
                 .SelectMany(kv => ProxySecretRef.Tokens(kv.Value))
                 .Distinct(StringComparer.Ordinal)
                 .ToList();

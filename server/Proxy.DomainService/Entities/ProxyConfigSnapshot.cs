@@ -26,6 +26,12 @@ namespace Proxy.DomainService.Entities
 
         public List<ProxyKeyValue> Query { get; set; } = new();
 
+        /// <summary>
+        /// Fields merged into the top level of the client's JSON body on forward. Empty ⇒ body forwarded
+        /// unchanged. Captured per version so Revert round-trips a <c>body:&lt;key&gt;</c> change.
+        /// </summary>
+        public List<ProxyKeyValue> BodyMerge { get; set; } = new();
+
         /// <summary>Per-method overrides captured with the rest of the config. Empty until Phase D-feature.</summary>
         public List<ProxyMethodConfig> MethodConfigs { get; set; } = new();
     }

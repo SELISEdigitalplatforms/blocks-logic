@@ -26,7 +26,7 @@ export const Proxies = () => {
         </div>
         {shouldShowAddProxyButton && (
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <VariablesButton />
+            <VariablesButton className="hidden" />
             <Button className="gap-2" onClick={() => navigate(scoped("proxy/new"))}>
               <Plus className="h-4 w-4" />
               Add proxy

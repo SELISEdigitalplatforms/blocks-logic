@@ -115,12 +115,12 @@ namespace XUnitTest.Proxy
         }
 
         [Fact]
-        public async Task Toggle_Returns200_WhenServiceSucceeds()
+        public async Task UpdateState_Returns200_WhenServiceSucceeds()
         {
             _proxyService.Setup(s => s.ToggleAsync("tenant-abc", It.IsAny<ProxyToggleRequestDto>()))
                 .ReturnsAsync(ProxyMutationResponse.Success("p1"));
 
-            var result = await _controller.Toggle(new ProxyToggleRequestDto { ItemId = "p1", Enabled = false });
+            var result = await _controller.UpdateState(new ProxyToggleRequestDto { ItemId = "p1", Enabled = false });
 
             StatusOf(result).Should().Be(200);
         }

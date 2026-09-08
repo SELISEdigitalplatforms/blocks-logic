@@ -26,7 +26,11 @@ import { KeyValueFieldArray } from "./key-value-field-array";
 import { ProxyFormHeader } from "./proxy-form-header";
 import { ProxyMethodOverrides } from "./proxy-method-overrides";
 import { ProxyMethodSelector } from "./proxy-method-selector";
+import { ProxyRequestBodyCard } from "./proxy-request-body-card";
 import { ProxyTestPanel } from "./proxy-test-panel";
+
+const isBodyMethod = (method: ProxyMethod) =>
+  method === "POST" || method === "PUT" || method === "PATCH";
 
 type Props = {
   mode: "create" | "edit";
@@ -76,6 +80,13 @@ export const ProxyForm = ({
         value: row.value ?? "",
         isSecretRef: row.isSecretRef,
       })) ?? [],
+    bodyMerge:
+      draft.bodyMerge?.map((row) => ({
+        key: row.key ?? "",
+        value: row.value ?? "",
+        isSecretRef: row.isSecretRef,
+      })) ?? [],
+    bodyMode: draft.bodyMode ?? "passthrough",
     methodConfigs: (draft.methodConfigs ?? []) as ProxyFormValues["methodConfigs"],
   };
 
@@ -87,6 +98,8 @@ export const ProxyForm = ({
         methods: proxy.methods,
         headers: proxy.headers,
         query: proxy.query,
+        bodyMerge: proxy.bodyMerge,
+        bodyMode: proxy.bodyMerge.length ? "merge" : "passthrough",
         methodConfigs: proxy.methodConfigs ?? [],
       });
     } else if (!isEdit) {
@@ -196,7 +209,7 @@ export const ProxyForm = ({
                 Your client calls this
               </span>
               <p className="break-all font-mono text-sm">
-                {selectedMethods[0] ?? "GET"} https://api.blocks.dev{clientPath}
+                {selectedMethods[0] ?? "GET"} https://blocksapi.slsblx.com/logic/v4{clientPath}
               </p>
               <p className="text-sm text-primary/80">
                 Send X-Blocks-Key. Path, body and extra query string pass straight through.
@@ -226,6 +239,9 @@ export const ProxyForm = ({
               />
             </CardContent>
           </Card>
+          {selectedMethods.some(isBodyMethod) ? (
+            <ProxyRequestBodyCard control={form.control} />
+          ) : null}
           {selectedMethods.length > 1 ? (
             <Card className="rounded-xl">
               <CardContent className="p-0">

@@ -10,7 +10,6 @@ import {
   useCreateProxy,
   useExportProxyExecutionCsv,
   useGetProxies,
-  useGetProxyActorNames,
   useGetProxyExecutions,
   useRevertProxyVersion,
   useSendProxyTestRequest,
@@ -18,7 +17,6 @@ import {
 import { proxyService } from "../services";
 
 const mockProxyService = proxyService as unknown as {
-  getUserDisplayName: (userId: string) => Promise<string | null>;
   resetMockStore: () => void;
 };
 
@@ -67,26 +65,5 @@ describe("use-proxy-api hooks", () => {
     await expect(
       exportCsv.result.current.mutateAsync({ proxyId: "p1", filter: "all" }),
     ).resolves.toMatchObject({ rowCount: 3 });
-  });
-
-  it("resolves actor ids to display names and omits failed lookups", async () => {
-    const wrapper = makeHookWrapper();
-    const nameSpy = vi.spyOn(mockProxyService, "getUserDisplayName");
-    const names = renderHook(
-      () =>
-        useGetProxyActorNames([
-          "755991d9-6c90-4f12-b710-8cb896075a35",
-          "00000000-0000-0000-0000-000000000000",
-          "Avery Stone",
-        ]),
-      { wrapper },
-    );
-
-    await waitFor(() =>
-      expect(names.result.current["755991d9-6c90-4f12-b710-8cb896075a35"]).toBe("John Doe"),
-    );
-    expect(names.result.current["00000000-0000-0000-0000-000000000000"]).toBeUndefined();
-    expect(names.result.current["Avery Stone"]).toBeUndefined();
-    expect(nameSpy).toHaveBeenCalledTimes(2);
   });
 });

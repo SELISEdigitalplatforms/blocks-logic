@@ -83,7 +83,8 @@ namespace Proxy.DomainService.Services
             {
                 var draft = request.Draft!;
                 var validation = ProxyConfigValidator.Validate(
-                    "draft", draft.Upstream, draft.Methods, draft.Headers, draft.Query, draft.MethodConfigs);
+                    "draft", draft.Upstream, draft.Methods, draft.Headers, draft.Query, draft.MethodConfigs,
+                    draft.BodyMerge);
 
                 foreach (var pair in validation.Errors)
                 {
@@ -114,6 +115,7 @@ namespace Proxy.DomainService.Services
                     Enabled = true,
                     Headers = validation.Headers,
                     Query = validation.Query,
+                    BodyMerge = validation.BodyMerge,
                     MethodConfigs = validation.MethodConfigs,
                 };
             }

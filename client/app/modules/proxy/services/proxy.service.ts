@@ -1,6 +1,6 @@
 import { HttpError } from "@seliseblocks/genesis-os";
 import { serviceInstances } from "@/lib/http-client";
-import { PROXY_ENDPOINTS, PROXY_IAM_ENDPOINTS } from "../constants";
+import { PROXY_ENDPOINTS } from "../constants";
 import {
   mapLogFilterToStatusClass,
   mapMutationResponse,
@@ -26,7 +26,6 @@ import {
   ProxyExecutionListItemDto,
   ProxyExecutionLog,
   ProxyFormValues,
-  ProxyIamUserDto,
   ProxyListItemDto,
   ProxyListParams,
   ProxyLogFilter,
@@ -87,7 +86,6 @@ const buildQuery = (params: Record<string, string | number | boolean | undefined
 
 export class ProxyService {
   private readonly logicHttpClient = serviceInstances.logicService;
-  private readonly iamHttpClient = serviceInstances.iamService;
 
   endpoints = PROXY_ENDPOINTS;
 
@@ -150,7 +148,7 @@ export class ProxyService {
   }): Promise<ProxyMutationResponse> => {
     try {
       const response = await this.logicHttpClient.post<BaseMutationResponseDto>(
-        PROXY_ENDPOINTS.TOGGLE,
+        PROXY_ENDPOINTS.UPDATE_STATE,
         { itemId: id, enabled },
       );
       return mapMutationResponse(response);
@@ -181,7 +179,7 @@ export class ProxyService {
       proxyId,
       statusClass: mapLogFilterToStatusClass(filter),
       afterId: options.afterId,
-      pageSize: 200,
+      pageSize: 2,
       pageNumber: 0,
     });
     return (response.data ?? []).map((row) => mapProxyExecutionListItemDtoToLog(row, proxyId));
@@ -211,24 +209,6 @@ export class ProxyService {
       { proxyId, pageSize: 200, pageNumber: 0 },
     );
     return (response.data ?? []).map((row) => mapProxyVersionDtoToHistory(row, proxyId));
-  };
-
-  getUserDisplayName = async (userId: string): Promise<string | null> => {
-    try {
-      const response = await this.iamHttpClient.get<BaseQueryResponse<ProxyIamUserDto | null>>(
-        `${PROXY_IAM_ENDPOINTS.GET_USER}/${encodeURIComponent(userId)}`,
-      );
-      const user = response.data;
-      if (!user) return null;
-
-      const displayName = [user.firstName, user.lastName]
-        .map((part) => part?.trim())
-        .filter(Boolean)
-        .join(" ");
-      return displayName || null;
-    } catch {
-      return null;
-    }
   };
 
   revert = async ({

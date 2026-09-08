@@ -57,7 +57,7 @@ namespace Proxy.DomainService.Services
                 UpstreamMasked = ProxyUpstreamMasker.Mask(p.Upstream),
                 Methods = p.Methods.Select(m => m.Wire()).ToList(),
                 Enabled = p.Enabled,
-                InjectedCredential = p.Headers.Concat(p.Query).Any(kv => kv.IsSecretRef),
+                InjectedCredential = p.Headers.Concat(p.Query).Concat(p.BodyMerge).Any(kv => kv.IsSecretRef),
                 HeaderCount = p.Headers.Count,
                 QueryCount = p.Query.Count,
                 Calls24h = calls24h.TryGetValue(p.ItemId, out var count) ? count : 0,
@@ -95,6 +95,7 @@ namespace Proxy.DomainService.Services
                 Enabled = proxy.Enabled,
                 Headers = proxy.Headers.Select(ToKeyValueDto).ToList(),
                 Query = proxy.Query.Select(ToKeyValueDto).ToList(),
+                BodyMerge = proxy.BodyMerge.Select(ToKeyValueDto).ToList(),
                 MethodConfigs = proxy.MethodConfigs.Select(ToMethodConfigDto).ToList(),
                 CurrentVersion = proxy.CurrentVersion,
                 CreatedDate = proxy.CreatedDate,
@@ -112,7 +113,8 @@ namespace Proxy.DomainService.Services
             _logger.LogInformation("Creating proxy '{Name}' for tenant {TenantId}.", request.Name, tenantId);
 
             var validation = ProxyConfigValidator.Validate(
-                request.Name, request.Upstream, request.Methods, request.Headers, request.Query, request.MethodConfigs);
+                request.Name, request.Upstream, request.Methods, request.Headers, request.Query, request.MethodConfigs,
+                request.BodyMerge);
             if (!validation.IsValid)
             {
                 _logger.LogWarning(
@@ -132,6 +134,7 @@ namespace Proxy.DomainService.Services
             }
 
             var userId = ProxyVersionFactory.CurrentUserId();
+            var userName = ProxyVersionFactory.CurrentUserName();
             var now = DateTime.UtcNow;
             var proxy = new ProxyDetailEntity
             {
@@ -144,6 +147,7 @@ namespace Proxy.DomainService.Services
                 Enabled = request.Enabled,
                 Headers = validation.Headers,
                 Query = validation.Query,
+                BodyMerge = validation.BodyMerge,
                 MethodConfigs = validation.MethodConfigs,
                 CurrentVersion = 1,
                 CreatedDate = now,
@@ -169,7 +173,7 @@ namespace Proxy.DomainService.Services
             var snapshot = ProxyVersionFactory.SnapshotOf(proxy);
             var version = ProxyVersionFactory.Build(
                 proxy, 1, ProxyVersionKind.Create, "Proxy created",
-                new List<ProxyFieldChange>(), snapshot, userId);
+                new List<ProxyFieldChange>(), snapshot, userId, userName);
             await _proxyVersionRepository.InsertAsync(version);
 
             _logger.LogInformation(
@@ -183,7 +187,8 @@ namespace Proxy.DomainService.Services
             _logger.LogInformation("Updating proxy {ItemId} for tenant {TenantId}.", itemId, tenantId);
 
             var validation = ProxyConfigValidator.Validate(
-                request.Name, request.Upstream, request.Methods, request.Headers, request.Query, request.MethodConfigs);
+                request.Name, request.Upstream, request.Methods, request.Headers, request.Query, request.MethodConfigs,
+                request.BodyMerge);
             if (!validation.IsValid)
             {
                 _logger.LogWarning(
@@ -214,6 +219,7 @@ namespace Proxy.DomainService.Services
                 Enabled = proxy.Enabled,
                 Headers = validation.Headers.Select(ProxyVersionFactory.CloneKeyValue).ToList(),
                 Query = validation.Query.Select(ProxyVersionFactory.CloneKeyValue).ToList(),
+                BodyMerge = validation.BodyMerge.Select(ProxyVersionFactory.CloneKeyValue).ToList(),
                 MethodConfigs = validation.MethodConfigs.Select(ProxyVersionFactory.CloneMethodConfig).ToList(),
             };
             var changes = ProxyChangeSet.Diff(beforeSnapshot, candidate);
@@ -230,6 +236,7 @@ namespace Proxy.DomainService.Services
             proxy.Methods = validation.Methods;
             proxy.Headers = validation.Headers;
             proxy.Query = validation.Query;
+            proxy.BodyMerge = validation.BodyMerge;
             proxy.MethodConfigs = validation.MethodConfigs;
             proxy.LastUpdatedDate = DateTime.UtcNow;
             proxy.LastUpdatedBy = ProxyVersionFactory.CurrentUserId();
@@ -240,7 +247,7 @@ namespace Proxy.DomainService.Services
             var afterSnapshot = ProxyVersionFactory.SnapshotOf(proxy);
             var version = ProxyVersionFactory.Build(
                 proxy, proxy.CurrentVersion, ProxyVersionKind.ConfigUpdate, ProxyChangeSet.Summarize(changes),
-                changes, afterSnapshot, proxy.LastUpdatedBy ?? "system");
+                changes, afterSnapshot, proxy.LastUpdatedBy ?? "system", ProxyVersionFactory.CurrentUserName());
             await _proxyVersionRepository.InsertAsync(version);
 
             _logger.LogInformation(
@@ -294,7 +301,7 @@ namespace Proxy.DomainService.Services
             };
             var version = ProxyVersionFactory.Build(
                 proxy, proxy.CurrentVersion, ProxyVersionKind.Toggle, summary,
-                changes, snapshot, proxy.LastUpdatedBy ?? "system");
+                changes, snapshot, proxy.LastUpdatedBy ?? "system", ProxyVersionFactory.CurrentUserName());
             await _proxyVersionRepository.InsertAsync(version);
 
             _logger.LogInformation(
@@ -319,7 +326,8 @@ namespace Proxy.DomainService.Services
             var snapshot = ProxyVersionFactory.SnapshotOf(proxy);
             var version = ProxyVersionFactory.Build(
                 proxy, proxy.CurrentVersion + 1, ProxyVersionKind.Delete, "Proxy deleted",
-                new List<ProxyFieldChange>(), snapshot, ProxyVersionFactory.CurrentUserId());
+                new List<ProxyFieldChange>(), snapshot, ProxyVersionFactory.CurrentUserId(),
+                ProxyVersionFactory.CurrentUserName());
 
             // Write the final history row FIRST, then hard-delete the row. Versions are retained.
             await _proxyVersionRepository.InsertAsync(version);

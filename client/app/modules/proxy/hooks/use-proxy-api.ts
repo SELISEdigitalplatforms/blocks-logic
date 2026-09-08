@@ -1,4 +1,4 @@
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PROXY_QUERY_KEY } from "../constants";
 import { proxyService } from "../services";
 import { ProxyFormValues, ProxyListParams, ProxyLogFilter, ProxyTestRequest } from "../types";
@@ -66,6 +66,18 @@ export const useGetProxyExecutions = (
     refetchInterval: options.live ? 3000 : false,
   });
 
+export const useGetProxyExecution = (
+  proxyId: string | undefined,
+  executionId: string | null,
+  options: { enabled?: boolean } = {},
+) =>
+  useQuery({
+    queryKey: [...PROXY_QUERY_KEY, "execution", proxyId, executionId],
+    queryFn: () => proxyService.getExecution(proxyId!, executionId!),
+    enabled: Boolean(proxyId) && Boolean(executionId) && (options.enabled ?? true),
+    staleTime: Infinity,
+  });
+
 export const useGetProxyOverview = (proxyId?: string, options: { enabled?: boolean } = {}) =>
   useQuery({
     queryKey: [...PROXY_QUERY_KEY, "overview", proxyId],
@@ -79,29 +91,6 @@ export const useGetProxyVersions = (proxyId?: string) =>
     queryFn: () => proxyService.getVersions(proxyId!),
     enabled: Boolean(proxyId),
   });
-
-const isLikelyUserId = (value: string) => /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(value);
-
-export const useGetProxyActorNames = (actorIds: string[], enabled = true) => {
-  const uniqueActorIds = Array.from(
-    new Set(actorIds.map((actorId) => actorId.trim()).filter(isLikelyUserId)),
-  );
-
-  const queries = useQueries({
-    queries: uniqueActorIds.map((actorId) => ({
-      queryKey: [...PROXY_QUERY_KEY, "iam-user", actorId],
-      queryFn: () => proxyService.getUserDisplayName(actorId),
-      enabled,
-      staleTime: 5 * 60 * 1000,
-    })),
-  });
-
-  return uniqueActorIds.reduce<Record<string, string>>((names, actorId, index) => {
-    const displayName = queries[index]?.data;
-    if (displayName) names[actorId] = displayName;
-    return names;
-  }, {});
-};
 
 export const useRevertProxyVersion = () => {
   const queryClient = useQueryClient();

@@ -35,6 +35,7 @@ namespace Proxy.DomainService.Services
             Enabled = proxy.Enabled,
             Headers = proxy.Headers.Select(CloneKeyValue).ToList(),
             Query = proxy.Query.Select(CloneKeyValue).ToList(),
+            BodyMerge = proxy.BodyMerge.Select(CloneKeyValue).ToList(),
             MethodConfigs = proxy.MethodConfigs.Select(CloneMethodConfig).ToList(),
         };
 
@@ -45,7 +46,8 @@ namespace Proxy.DomainService.Services
             string changeSummary,
             List<ProxyFieldChange> changes,
             ProxyConfigSnapshot snapshot,
-            string userId)
+            string userId,
+            string? userName = null)
         {
             var now = DateTime.UtcNow;
             return new ProxyVersionEntity
@@ -62,9 +64,20 @@ namespace Proxy.DomainService.Services
                 LastUpdatedDate = now,
                 CreatedBy = userId,
                 LastUpdatedBy = userId,
+                CreatedByName = userName,
             };
         }
 
         public static string CurrentUserId() => BlocksContext.GetContext()?.UserId ?? "system";
+
+        /// <summary>
+        /// Display name of the current user, or <c>null</c> when the ambient context carries none. Kept nullable
+        /// (no <c>"system"</c> sentinel) so the console can fall back to resolving <c>CreatedBy</c> against IAM.
+        /// </summary>
+        public static string? CurrentUserName()
+        {
+            var name = BlocksContext.GetContext()?.UserName;
+            return string.IsNullOrWhiteSpace(name) ? null : name;
+        }
     }
 }

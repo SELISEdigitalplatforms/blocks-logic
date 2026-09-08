@@ -6,6 +6,7 @@ import {
   mapProxyExecutionListItemDtoToLog,
   mapProxyListItemDtoToProxy,
   mapProxyOverviewDtoToOverview,
+  mapProxyTestRequestToPayload,
   mapProxyToCreatePayload,
   mapProxyToUpdatePayload,
   mapProxyVersionDtoToHistory,
@@ -80,6 +81,8 @@ describe("proxy mapper", () => {
       methods: ["GET", "POST"] as const,
       headers: [{ key: " Authorization ", value: " x ", isSecretRef: true }],
       query: [{ key: "", value: "" }],
+      bodyMerge: [],
+      bodyMode: "passthrough" as const,
       methodConfigs: [],
     };
 
@@ -87,13 +90,82 @@ describe("proxy mapper", () => {
       name: "Stripe Payments",
       upstream: "https://api.stripe.com/v1/charges",
       methods: ["GET", "POST"],
-      headers: [{ key: "Authorization", value: "x", isSecretRef: true }],
+      headers: [{ key: "Authorization", value: "x", isSecretRef: false }],
       query: [],
+      bodyMerge: [],
       methodConfigs: [],
       enabled: true,
     });
     expect(mapProxyToUpdatePayload("p1", values)).toMatchObject({ itemId: "p1" });
     expect(mapProxyToUpdatePayload("p1", values)).not.toHaveProperty("enabled");
+  });
+
+  it("gates bodyMerge on the bodyMode tab and never emits bodyMode", () => {
+    const base = {
+      name: "P",
+      upstreamUrl: "https://api.x.com",
+      methods: ["POST"] as const,
+      headers: [],
+      query: [],
+      bodyMerge: [{ key: " account ", value: " acct_1 ", isSecretRef: false }],
+      methodConfigs: [],
+    };
+
+    const merged = mapProxyToCreatePayload({ ...base, bodyMode: "merge" });
+    expect(merged.bodyMerge).toEqual([{ key: "account", value: "acct_1", isSecretRef: false }]);
+    expect(merged).not.toHaveProperty("bodyMode");
+
+    const passthrough = mapProxyToCreatePayload({ ...base, bodyMode: "passthrough" });
+    expect(passthrough.bodyMerge).toEqual([]);
+    expect(passthrough).not.toHaveProperty("bodyMode");
+
+    const test = mapProxyTestRequestToPayload({
+      draft: { ...base, bodyMode: "passthrough" },
+      method: "POST",
+    });
+    expect(test.draft?.bodyMerge).toEqual([]);
+    expect(test.draft).not.toHaveProperty("bodyMode");
+  });
+
+  it("maps a detail DTO's bodyMerge, tolerating a missing/null list", () => {
+    const withRows = mapProxyDetailDtoToProxy({
+      itemId: "p1",
+      name: "P",
+      slug: "p",
+      path: "/api/proxy/gateway/p/*",
+      upstream: "https://api.x.com",
+      upstreamMasked: "https://api.x.com",
+      methods: ["POST"],
+      enabled: true,
+      headers: [],
+      query: [],
+      bodyMerge: [{ key: "account", value: "${SECRET.A}", isSecretRef: true }],
+      methodConfigs: [],
+      currentVersion: 1,
+      createdDate: "2026-09-01T00:00:00.000Z",
+      lastUpdatedDate: "2026-09-01T00:00:00.000Z",
+    });
+    expect(withRows.bodyMerge).toEqual([
+      { key: "account", value: "${SECRET.A}", isSecretRef: true },
+    ]);
+
+    const withoutRows = mapProxyDetailDtoToProxy({
+      itemId: "p2",
+      name: "P",
+      slug: "p",
+      path: "/api/proxy/gateway/p/*",
+      upstream: "https://api.x.com",
+      upstreamMasked: "https://api.x.com",
+      methods: ["GET"],
+      enabled: true,
+      headers: [],
+      query: [],
+      methodConfigs: [],
+      currentVersion: 1,
+      createdDate: "2026-09-01T00:00:00.000Z",
+      lastUpdatedDate: "2026-09-01T00:00:00.000Z",
+    });
+    expect(withoutRows.bodyMerge).toEqual([]);
   });
 
   it("round-trips per-method overrides and prunes all-inherit / deselected entries", () => {
@@ -172,7 +244,8 @@ describe("proxy mapper", () => {
         { field: "upstream", label: "upstream", before: "https://a/v1", after: "https://a/v2" },
         { field: "header:X-Add", label: "header X-Add", before: null, after: "v" },
       ],
-      who: "Jane",
+      who: "user-jane",
+      whoName: "Jane Doe",
       whenUtc: "2026-09-01T11:30:00.000Z",
       versionLabel: "v2",
     };
@@ -181,7 +254,8 @@ describe("proxy mapper", () => {
       proxyId: "p1",
       kind: "edit",
       summary: "Added payment intent expansion query.",
-      actor: "Jane",
+      actor: "user-jane",
+      actorName: "Jane Doe",
       changes: [
         { field: "upstream", label: "upstream", before: "https://a/v1", after: "https://a/v2" },
         { field: "header:X-Add", label: "header X-Add", before: null, after: "v" },

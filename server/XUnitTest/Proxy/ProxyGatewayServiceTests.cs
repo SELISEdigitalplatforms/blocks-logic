@@ -231,6 +231,127 @@ namespace XUnitTest.Proxy
             _handler.LastRequest!.Content!.Headers.ContentType!.MediaType.Should().Be("application/json");
         }
 
+        // ---------- BodyMerge (request-body merge) ----------
+
+        [Fact]
+        public async Task Forward_Post_WithBodyMerge_ForwardsMergedJson_AsApplicationJson()
+        {
+            var proxy = Proxy(p => p.BodyMerge.AddRange(new[]
+            {
+                new ProxyKeyValue { Key = "account", Value = "acct_123" },
+                new ProxyKeyValue { Key = "api_key", Value = "${SECRET.DEMO_KEY}", IsSecretRef = true },
+            }));
+            GivenProxy(proxy);
+            string? seenBody = null;
+            _handler.Respond = (req, _) =>
+            {
+                seenBody = req.Content!.ReadAsStringAsync().Result;
+                return Json(HttpStatusCode.OK, "{\"ok\":1}");
+            };
+
+            var result = await _service.ForwardAsync(Request("POST", b =>
+            {
+                b.Slug = proxy.Slug;
+                b.Body = Encoding.UTF8.GetBytes("{\"amount\":10,\"account\":\"client\"}");
+                b.ContentType = "text/plain";
+            }));
+
+            result.StatusCode.Should().Be(200);
+            // configured key overrides the client's "account"; identity resolver relays the secret token.
+            seenBody.Should().Be("{\"amount\":10,\"account\":\"acct_123\",\"api_key\":\"${SECRET.DEMO_KEY}\"}");
+            _handler.LastRequest!.Content!.Headers.ContentType!.MediaType.Should().Be("application/json");
+            _handler.LastRequest!.Content!.Headers.ContentLength.Should()
+                .Be(Encoding.UTF8.GetByteCount(seenBody!));
+        }
+
+        [Fact]
+        public async Task Forward_Post_WithBodyMerge_EmptyClientBody_StartsFromEmptyObject()
+        {
+            var proxy = Proxy(p => p.BodyMerge.Add(new ProxyKeyValue { Key = "account", Value = "acct_123" }));
+            GivenProxy(proxy);
+            string? seenBody = null;
+            _handler.Respond = (req, _) =>
+            {
+                seenBody = req.Content?.ReadAsStringAsync().Result;
+                return Json(HttpStatusCode.OK, "{}");
+            };
+
+            await _service.ForwardAsync(Request("POST", b => b.Slug = proxy.Slug));
+
+            seenBody.Should().Be("{\"account\":\"acct_123\"}");
+        }
+
+        [Fact]
+        public async Task Forward_Get_WithBodyMergeConfigured_LeavesBodyUntouched()
+        {
+            var proxy = Proxy(p => p.BodyMerge.Add(new ProxyKeyValue { Key = "account", Value = "acct_123" }));
+            GivenProxy(proxy);
+            string? seenBody = null;
+            _handler.Respond = (req, _) =>
+            {
+                seenBody = req.Content?.ReadAsStringAsync().Result;
+                return Json(HttpStatusCode.OK, "{}");
+            };
+
+            var result = await _service.ForwardAsync(Request("GET", b =>
+            {
+                b.Slug = proxy.Slug;
+                b.Body = Encoding.UTF8.GetBytes("{\"q\":1}");
+                b.ContentType = "application/json";
+            }));
+
+            result.Outcome.Should().Be(ProxyExecutionOutcome.Success);
+            seenBody.Should().Be("{\"q\":1}"); // merge only runs for POST/PUT/PATCH
+        }
+
+        [Fact]
+        public async Task Forward_Post_WithBodyMerge_NonObjectBody_Returns422_NoUpstreamCall_WritesRow()
+        {
+            var proxy = Proxy(p => p.BodyMerge.Add(new ProxyKeyValue { Key = "account", Value = "acct_123" }));
+            GivenProxy(proxy);
+            ProxyExecutionEntity? row = null;
+            _executionRepo.Setup(r => r.InsertAsync(It.IsAny<ProxyExecutionEntity>()))
+                .Callback<ProxyExecutionEntity>(e => row = e).Returns(Task.CompletedTask);
+
+            var result = await _service.ForwardAsync(Request("POST", b =>
+            {
+                b.Slug = proxy.Slug;
+                b.Body = Encoding.UTF8.GetBytes("[1,2,3]");
+                b.ContentType = "application/json";
+            }));
+
+            result.StatusCode.Should().Be(422);
+            result.Outcome.Should().Be(ProxyExecutionOutcome.RequestBodyNotMergeable);
+            _handler.CallCount.Should().Be(0);
+            row!.Outcome.Should().Be(ProxyExecutionOutcome.RequestBodyNotMergeable);
+            row.StatusCode.Should().Be(422);
+        }
+
+        [Fact]
+        public async Task Forward_Post_EmptyBodyMerge_ForwardsBodyByteForByte()
+        {
+            var proxy = Proxy(); // no BodyMerge
+            GivenProxy(proxy);
+            string? seenContentType = null;
+            string? seenBody = null;
+            _handler.Respond = (req, _) =>
+            {
+                seenContentType = req.Content!.Headers.ContentType!.ToString();
+                seenBody = req.Content!.ReadAsStringAsync().Result;
+                return Json(HttpStatusCode.OK, "{}");
+            };
+
+            await _service.ForwardAsync(Request("POST", b =>
+            {
+                b.Slug = proxy.Slug;
+                b.Body = Encoding.UTF8.GetBytes("{\"amount\":1}");
+                b.ContentType = "application/json; charset=utf-8";
+            }));
+
+            seenBody.Should().Be("{\"amount\":1}");
+            seenContentType.Should().Be("application/json; charset=utf-8"); // relayed verbatim
+        }
+
         // ---------- H6 ----------
 
         [Fact]

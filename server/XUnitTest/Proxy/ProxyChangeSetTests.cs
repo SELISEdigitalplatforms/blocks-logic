@@ -113,6 +113,62 @@ namespace XUnitTest.Proxy
         }
 
         [Fact]
+        public void Diff_BodyMerge_AddRemoveAndValueChange_UsesBodyPrefix()
+        {
+            var before = Snapshot(s => s.BodyMerge = new List<ProxyKeyValue> { Kv("keep", "s"), Kv("edit", "old"), Kv("drop", "x") });
+            var after = Snapshot(s => s.BodyMerge = new List<ProxyKeyValue> { Kv("keep", "s"), Kv("edit", "new"), Kv("add", "y") });
+
+            var changes = ProxyChangeSet.Diff(before, after);
+
+            changes.Should().Contain(c => c.Field == "body:edit" && c.Before == "old" && c.After == "new");
+            changes.Should().Contain(c => c.Field == "body:drop" && c.Before == "x" && c.After == null);
+            changes.Should().Contain(c => c.Field == "body:add" && c.Before == null && c.After == "y");
+            changes.Should().NotContain(c => c.Field == "body:keep");
+        }
+
+        [Fact]
+        public void Diff_BodyMerge_ReorderOnly_IsNotAChange()
+        {
+            var before = Snapshot(s => s.BodyMerge = new List<ProxyKeyValue> { Kv("a", "1"), Kv("b", "2") });
+            var after = Snapshot(s => s.BodyMerge = new List<ProxyKeyValue> { Kv("b", "2"), Kv("a", "1") });
+
+            ProxyChangeSet.Diff(before, after).Should().BeEmpty();
+        }
+
+        [Fact]
+        public void ReadField_ApplyField_RoundTrip_ForBodyAddress_RecomputesSecretRef()
+        {
+            var proxy = new ProxyDetailEntity
+            {
+                TenantId = "T", Name = "N", Slug = "n", Upstream = "https://a.com",
+                Methods = new List<HttpMethodType> { HttpMethodType.Post },
+                BodyMerge = new List<ProxyKeyValue> { Kv("account", "acct_1") },
+            };
+
+            ProxyChangeSet.ReadField(proxy, "body:account").Should().Be("acct_1");
+            ProxyChangeSet.ReadField(proxy, "body:missing").Should().BeNull();
+
+            ProxyChangeSet.ApplyField(proxy, "body:account", "${SECRET.K}");
+            ProxyChangeSet.ApplyField(proxy, "body:api_key", "plain");
+            proxy.BodyMerge.Single(kv => kv.Key == "account").IsSecretRef.Should().BeTrue();
+            proxy.BodyMerge.Single(kv => kv.Key == "api_key").IsSecretRef.Should().BeFalse();
+
+            ProxyChangeSet.ApplyField(proxy, "body:account", null);
+            proxy.BodyMerge.Should().ContainSingle(kv => kv.Key == "api_key");
+        }
+
+        [Theory]
+        [InlineData(null, "v", "body field k added")]
+        [InlineData("v", "w", "body field k changed")]
+        [InlineData("v", null, "body field k removed")]
+        public void Summarize_SingleBodyFieldChange(string? before, string? after, string expected)
+        {
+            var change = new ProxyFieldChange { Field = "body:k", Label = "body field k", Before = before, After = after };
+
+            ProxyChangeSet.Summarize(new[] { change }).Should().Be(expected);
+        }
+
+        [Fact]
         public void Invert_SwapsBeforeAndAfter()
         {
             var change = new ProxyFieldChange { Field = "upstream", Label = "upstream", Before = "a", After = "b" };

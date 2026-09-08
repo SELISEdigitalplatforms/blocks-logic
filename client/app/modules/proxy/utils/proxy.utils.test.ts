@@ -48,5 +48,62 @@ describe("proxy utils", () => {
       expect(messages).toContain("Key is required when a value is provided.");
     }
   });
+
+  const validBase = {
+    name: "P",
+    upstreamUrl: "https://api.x.com",
+    headers: [],
+    query: [],
+    methodConfigs: [],
+  };
+
+  it("flags a merge-tab body config with no body-bearing method", () => {
+    const result = proxyFormSchema.safeParse({
+      ...validBase,
+      methods: ["GET"],
+      bodyMerge: [{ key: "a", value: "1" }],
+      bodyMode: "merge",
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.map((i) => i.message)).toContain(
+        "Body fields apply to POST, PUT or PATCH only.",
+      );
+    }
+  });
+
+  it("flags duplicate body field keys on the merge tab", () => {
+    const result = proxyFormSchema.safeParse({
+      ...validBase,
+      methods: ["POST"],
+      bodyMerge: [
+        { key: "account", value: "1" },
+        { key: "account", value: "2" },
+      ],
+      bodyMode: "merge",
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.map((i) => i.message)).toContain(
+        "Each body field key must be unique.",
+      );
+    }
+  });
+
+  it("ignores body validation entirely on the passthrough tab", () => {
+    const result = proxyFormSchema.safeParse({
+      ...validBase,
+      methods: ["GET"],
+      bodyMerge: [
+        { key: "account", value: "1" },
+        { key: "account", value: "2" },
+      ],
+      bodyMode: "passthrough",
+    });
+
+    expect(result.success).toBe(true);
+  });
 });
 
