@@ -2,10 +2,15 @@ import { Control, useController } from "react-hook-form";
 import { ArrowRightLeft, Layers } from "lucide-react";
 import { Card, CardContent } from "@/components/ui-kits/card/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui-kits/tabs/tabs";
-import { ProxyBodyMode, ProxyFormValues } from "../types";
+import { ProxyBodyMode, ProxyFormValues, SecretListItem } from "../types";
 import { KeyValueFieldArray } from "./key-value-field-array";
 
-type Props = { control: Control<ProxyFormValues> };
+type Props = {
+  control: Control<ProxyFormValues>;
+  variables?: SecretListItem[];
+  variablesLoading?: boolean;
+  variablesError?: boolean;
+};
 
 const TABS: { value: ProxyBodyMode; label: string }[] = [
   { value: "passthrough", label: "Pass through" },
@@ -18,7 +23,12 @@ const TABS: { value: ProxyBodyMode; label: string }[] = [
  * `bodyMerge` rows, so flipping back and forth is lossless. The mapper (§4.2) is the single
  * place that decides a Pass-through save sends `bodyMerge: []`.
  */
-export const ProxyRequestBodyCard = ({ control }: Props) => {
+export const ProxyRequestBodyCard = ({
+  control,
+  variables,
+  variablesLoading,
+  variablesError,
+}: Props) => {
   const { field } = useController({ control, name: "bodyMode" });
   const tab = field.value;
 
@@ -73,6 +83,9 @@ export const ProxyRequestBodyCard = ({ control }: Props) => {
             addLabel="Add field"
             addButtonPlacement="footer"
             footerNote="Merged into the top level of the client's JSON, server-side. These keys override whatever the client sent."
+            variables={variables}
+            variablesLoading={variablesLoading}
+            variablesError={variablesError}
           />
         )}
       </CardContent>

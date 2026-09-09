@@ -137,6 +137,7 @@ namespace Utilities.Api.Controllers
             ProxyExecutionOutcome.UpstreamUnreachable => "The upstream endpoint could not be reached.",
             ProxyExecutionOutcome.UpstreamBlocked => "The upstream endpoint is not an allowed destination.",
             ProxyExecutionOutcome.UpstreamResponseTooLarge => "The upstream response exceeds the 10 MB limit.",
+            ProxyExecutionOutcome.VariableResolutionFailed => "A configured configuration variable could not be resolved.",
             _ => "The proxy could not complete the request.",
         };
 

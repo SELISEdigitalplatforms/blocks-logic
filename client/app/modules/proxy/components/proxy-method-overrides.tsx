@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { type ReactNode, useRef } from "react";
 import { useFormContext } from "react-hook-form";
 import { Plus, Trash2 } from "lucide-react";
 import {
@@ -12,13 +12,19 @@ import { Input } from "@/components/ui-kits/input/input";
 import { Switch } from "@/components/ui-kits/switch/switch";
 import { Label } from "@/components/ui-kits/label/label";
 import { PROXY_METHODS } from "../constants";
-import { ProxyFormValues, ProxyKeyValue, ProxyMethod } from "../types";
+import { ProxyFormValues, ProxyKeyValue, ProxyMethod, SecretListItem } from "../types";
+import { buildVarToken, insertToken } from "../utils";
+import { VariableInsertMenu } from "./variable-insert-menu";
 
-const SECRET_REF = /\$\{SECRET\.[A-Za-z0-9_]+\}/;
-
-const emptyRow = (): ProxyKeyValue => ({ key: "", value: "", isSecretRef: false });
+const emptyRow = (): ProxyKeyValue => ({ key: "", value: "" });
 
 type MethodOverride = ProxyFormValues["methodConfigs"][number];
+
+type VariablePickerProps = {
+  variables?: SecretListItem[];
+  variablesLoading?: boolean;
+  variablesError?: boolean;
+};
 
 const blankOverride = (method: ProxyMethod): MethodOverride => ({
   method,
@@ -27,7 +33,7 @@ const blankOverride = (method: ProxyMethod): MethodOverride => ({
   query: null,
 });
 
-type Props = {
+type Props = VariablePickerProps & {
   selectedMethods: ProxyMethod[];
 };
 
@@ -35,7 +41,12 @@ type Props = {
  * The per-method override editor. One panel per selected method, each with three
  * independent switches: off means inherit the shared endpoint, headers and query.
  */
-export const ProxyMethodOverrides = ({ selectedMethods }: Props) => {
+export const ProxyMethodOverrides = ({
+  selectedMethods,
+  variables,
+  variablesLoading,
+  variablesError,
+}: Props) => {
   const { watch, setValue, getValues, formState } = useFormContext<ProxyFormValues>();
   const methodConfigs = watch("methodConfigs") ?? [];
   const ordered = PROXY_METHODS.filter((method) => selectedMethods.includes(method));
@@ -107,6 +118,9 @@ export const ProxyMethodOverrides = ({ selectedMethods }: Props) => {
                     rows={entry.headers ?? []}
                     addLabel="Add header"
                     onChange={(rows) => patch(method, { headers: rows })}
+                    variables={variables}
+                    variablesLoading={variablesLoading}
+                    variablesError={variablesError}
                   />
                 </OverrideToggleRow>
 
@@ -119,6 +133,9 @@ export const ProxyMethodOverrides = ({ selectedMethods }: Props) => {
                     rows={entry.query ?? []}
                     addLabel="Add query"
                     onChange={(rows) => patch(method, { query: rows })}
+                    variables={variables}
+                    variablesLoading={variablesLoading}
+                    variablesError={variablesError}
                   />
                 </OverrideToggleRow>
               </div>
@@ -147,54 +164,38 @@ const OverrideToggleRow = ({ label, on, onToggle, children }: OverrideToggleRowP
   </div>
 );
 
-type RowEditorProps = {
+type RowEditorProps = VariablePickerProps & {
   rows: ProxyKeyValue[];
   addLabel: string;
   onChange: (rows: ProxyKeyValue[]) => void;
 };
 
-const RowEditor = ({ rows, addLabel, onChange }: RowEditorProps) => (
+const RowEditor = ({
+  rows,
+  addLabel,
+  onChange,
+  variables,
+  variablesLoading,
+  variablesError,
+}: RowEditorProps) => (
   <div className="space-y-2">
     {rows.map((row, index) => (
-      // eslint-disable-next-line react/no-array-index-key
-      <div key={index} className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
-        <Input
-          placeholder="Enter key"
-          className="font-mono text-xs"
-          value={row.key}
-          onChange={(event) =>
-            onChange(rows.map((r, i) => (i === index ? { ...r, key: event.target.value } : r)))
-          }
-        />
-        <Input
-          placeholder="Enter value"
-          className="font-mono text-xs"
-          value={row.value}
-          onChange={(event) =>
-            onChange(
-              rows.map((r, i) =>
-                i === index
-                  ? {
-                      ...r,
-                      value: event.target.value,
-                      isSecretRef: SECRET_REF.test(event.target.value),
-                    }
-                  : r,
-              ),
-            )
-          }
-        />
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label={`Remove ${addLabel.toLowerCase()} row`}
-          className="h-9 w-9 text-muted-foreground hover:text-destructive"
-          onClick={() => onChange(rows.filter((_, i) => i !== index))}
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
-      </div>
+      <OverrideRow
+        // eslint-disable-next-line react/no-array-index-key
+        key={index}
+        row={row}
+        addLabel={addLabel}
+        onKeyChange={(value) =>
+          onChange(rows.map((r, i) => (i === index ? { ...r, key: value } : r)))
+        }
+        onValueChange={(value) =>
+          onChange(rows.map((r, i) => (i === index ? { ...r, value } : r)))
+        }
+        onRemove={() => onChange(rows.filter((_, i) => i !== index))}
+        variables={variables}
+        variablesLoading={variablesLoading}
+        variablesError={variablesError}
+      />
     ))}
     <Button
       type="button"
@@ -208,3 +209,72 @@ const RowEditor = ({ rows, addLabel, onChange }: RowEditorProps) => (
     </Button>
   </div>
 );
+
+type OverrideRowProps = VariablePickerProps & {
+  row: ProxyKeyValue;
+  addLabel: string;
+  onKeyChange: (value: string) => void;
+  onValueChange: (value: string) => void;
+  onRemove: () => void;
+};
+
+const OverrideRow = ({
+  row,
+  addLabel,
+  onKeyChange,
+  onValueChange,
+  onRemove,
+  variables,
+  variablesLoading,
+  variablesError,
+}: OverrideRowProps) => {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const caretRef = useRef<number | null>(null);
+  const rememberCaret = () => {
+    caretRef.current = inputRef.current?.selectionStart ?? null;
+  };
+
+  return (
+    <div className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
+      <Input
+        placeholder="Enter key"
+        className="font-mono text-xs"
+        value={row.key}
+        onChange={(event) => onKeyChange(event.target.value)}
+      />
+      <div className="flex items-center gap-1.5">
+        <Input
+          ref={inputRef}
+          placeholder="Enter value"
+          className="font-mono text-xs"
+          value={row.value}
+          onChange={(event) => onValueChange(event.target.value)}
+          onSelect={rememberCaret}
+          onKeyUp={rememberCaret}
+          onClick={rememberCaret}
+        />
+        <VariableInsertMenu
+          variables={variables}
+          variablesLoading={variablesLoading}
+          variablesError={variablesError}
+          ariaLabel={`Insert a configuration variable into ${addLabel.toLowerCase()} value`}
+          onPick={(name) =>
+            onValueChange(
+              insertToken(row.value, caretRef.current ?? row.value.length, buildVarToken(name)),
+            )
+          }
+        />
+      </div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        aria-label={`Remove ${addLabel.toLowerCase()} row`}
+        className="h-9 w-9 text-muted-foreground hover:text-destructive"
+        onClick={onRemove}
+      >
+        <Trash2 className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+};

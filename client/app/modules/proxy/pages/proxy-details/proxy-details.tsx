@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils";
 import { getProxyClientPath } from "../../constants";
 import { useGetProxyById, useGetProxyOverview, useToggleProxy } from "../../hooks";
 import { ProxyKeyValue } from "../../types";
+import { containsVarRef } from "../../utils";
 import { ProxyMethodChips } from "../../components/proxy-method-chips";
 import { ProxyStatusBadge } from "../../components/proxy-status-badge";
 import { ProxyLogsTab } from "../../components/proxy-logs-tab";
@@ -98,9 +99,9 @@ const KeyValueRows = ({
                   <span className="truncate font-mono font-semibold text-foreground">
                     {row.key}
                   </span>
-                  {row.isSecretRef ? (
+                  {containsVarRef(row.value) ? (
                     <Badge variant="success" className="w-fit shrink-0 lowercase">
-                      vault
+                      variable
                     </Badge>
                   ) : null}
                 </div>

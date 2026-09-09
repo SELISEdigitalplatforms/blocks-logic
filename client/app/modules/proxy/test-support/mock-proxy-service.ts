@@ -24,7 +24,7 @@ import {
   ProxyTestResponse,
   ProxyVersionHistory,
 } from "../types";
-import { compactKeyValues, maskUpstreamUrl, slugifyProxyName } from "../utils";
+import { compactKeyValues, containsVarRef, maskUpstreamUrl, slugifyProxyName } from "../utils";
 
 let proxyStore: Proxy[] = PROXY_MOCK_DATA.map((proxy) => ({ ...proxy }));
 let proxyLogs: ProxyExecutionLog[] = PROXY_MOCK_EXECUTION_LOGS.map((log) => ({ ...log }));
@@ -124,12 +124,7 @@ const applyProxyField = (proxy: Proxy, field: string, value: string | null): Pro
       const overrideKey = tail.slice(tail.indexOf(":") + 1);
       const next =
         (isHeader ? entry.headers : entry.query)?.filter((r) => r.key !== overrideKey) ?? [];
-      if (value !== null)
-        next.push({
-          key: overrideKey,
-          value,
-          isSecretRef: /\$\{SECRET\.[A-Za-z0-9_]+\}/.test(value),
-        });
+      if (value !== null) next.push({ key: overrideKey, value });
       if (isHeader) entry.headers = next;
       else entry.query = next;
     }
@@ -146,8 +141,7 @@ const applyProxyField = (proxy: Proxy, field: string, value: string | null): Pro
   const listKey =
     prefix === "header" ? "headers" : prefix === "body" ? "bodyMerge" : "query";
   const rows = proxy[listKey].filter((row) => row.key !== key);
-  if (value !== null)
-    rows.push({ key, value, isSecretRef: /\$\{SECRET\.[A-Za-z0-9_]+\}/.test(value) });
+  if (value !== null) rows.push({ key, value });
   return { ...proxy, [listKey]: rows };
 };
 
@@ -283,7 +277,7 @@ export const mockProxyService = {
       errorRatePct,
       errorRateIsHigh: errorRatePct > 5,
       credentialRefs: [...proxy.headers, ...proxy.query, ...proxy.bodyMerge]
-        .filter((row) => row.isSecretRef)
+        .filter((row) => containsVarRef(row.value))
         .map((row) => row.value),
       methods: proxy.methods,
       lastCallAtUtc: rows[0]?.timeUtc ?? null,

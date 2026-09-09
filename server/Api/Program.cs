@@ -1,6 +1,7 @@
 using Blocks.Extension.DependencyInjection;
 using Blocks.Extensions.DependencyInjection;
 using Blocks.Genesis;
+using Blocks.Secrets;
 using BlocksTemplate.Api;
 using CloudConfiguration.DomainService.Shared.Utilities;
 using Common.InternalService.Shared.Utilities;
@@ -50,6 +51,7 @@ ApplicationConfigurations.ConfigureApi(services, serviceName);
 builder.Services.Configure<MvcOptions>(options =>
 {
     options.Conventions.Insert(0, new GlobalApiRoutePrefixConvention("api"));
+    options.Filters.Add<SecretExceptionFilter>();
 });
 
 var wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
@@ -66,6 +68,7 @@ services.AddProxyServices();
 services.AddCloudConfigurationServices();
 services.AddSchedulerServices();
 services.AddStorageDomainServices();
+services.AddBlocksSecrets();
 services.RegisterBlocksStorageServices();
 await services.RegisterBlocksDeploymentServicesAsync(vaultType);
 

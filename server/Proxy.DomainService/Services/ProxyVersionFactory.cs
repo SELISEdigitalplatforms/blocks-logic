@@ -13,7 +13,6 @@ namespace Proxy.DomainService.Services
         {
             Key = source.Key,
             Value = source.Value,
-            IsSecretRef = source.IsSecretRef,
         };
 
         /// <summary>Deep-copies a per-method override so a snapshot never aliases the live entity's list.</summary>

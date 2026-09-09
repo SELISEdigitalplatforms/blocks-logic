@@ -14,7 +14,7 @@ import {
 import { Input } from "@/components/ui-kits/input/input";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { getProxyClientPath } from "../constants";
-import { useCreateProxy, useUpdateProxy } from "../hooks";
+import { useCreateProxy, useSecrets, useUpdateProxy } from "../hooks";
 import { Proxy, ProxyFormValues, ProxyMethod } from "../types";
 import {
   compactKeyValues,
@@ -47,6 +47,14 @@ export const ProxyForm = ({ mode, proxy, isLoadingProxy, onSuccess, onCancel }: 
   const updateProxy = useUpdateProxy();
   const isPending = createProxy.isPending || updateProxy.isPending;
 
+  // The tenant's `{{$VAR.name}}` picker list — loaded once and prop-drilled into every value field.
+  const secretsQuery = useSecrets();
+  const variableProps = {
+    variables: secretsQuery.data ?? [],
+    variablesLoading: secretsQuery.isLoading,
+    variablesError: secretsQuery.isError,
+  };
+
   const form = useForm<ProxyFormValues>({
     defaultValues: proxyFormDefaultValues,
     resolver: zodResolver(proxyFormSchema),
@@ -64,19 +72,16 @@ export const ProxyForm = ({ mode, proxy, isLoadingProxy, onSuccess, onCancel }: 
       draft.headers?.map((row) => ({
         key: row.key ?? "",
         value: row.value ?? "",
-        isSecretRef: row.isSecretRef,
       })) ?? [],
     query:
       draft.query?.map((row) => ({
         key: row.key ?? "",
         value: row.value ?? "",
-        isSecretRef: row.isSecretRef,
       })) ?? [],
     bodyMerge:
       draft.bodyMerge?.map((row) => ({
         key: row.key ?? "",
         value: row.value ?? "",
-        isSecretRef: row.isSecretRef,
       })) ?? [],
     bodyMode: draft.bodyMode ?? "passthrough",
     methodConfigs: (draft.methodConfigs ?? []) as ProxyFormValues["methodConfigs"],
@@ -206,6 +211,7 @@ export const ProxyForm = ({ mode, proxy, isLoadingProxy, onSuccess, onCancel }: 
                 name="headers"
                 label="Header rows"
                 addLabel="Add header"
+                {...variableProps}
               />
             </CardContent>
           </Card>
@@ -216,16 +222,20 @@ export const ProxyForm = ({ mode, proxy, isLoadingProxy, onSuccess, onCancel }: 
                 name="query"
                 label="Query parameter rows"
                 addLabel="Add query"
+                {...variableProps}
               />
             </CardContent>
           </Card>
           {selectedMethods.some(isBodyMethod) ? (
-            <ProxyRequestBodyCard control={form.control} />
+            <ProxyRequestBodyCard control={form.control} {...variableProps} />
           ) : null}
           {selectedMethods.length > 1 ? (
             <Card className="rounded-xl">
               <CardContent className="p-0">
-                <ProxyMethodOverrides selectedMethods={selectedMethods} />
+                <ProxyMethodOverrides
+                  selectedMethods={selectedMethods}
+                  {...variableProps}
+                />
               </CardContent>
             </Card>
           ) : null}

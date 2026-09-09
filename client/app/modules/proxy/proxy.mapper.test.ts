@@ -48,7 +48,7 @@ describe("proxy mapper", () => {
     });
   });
 
-  it("maps the Get detail projection, keeping the secret-ref flag", () => {
+  it("maps the Get detail projection, storing the value verbatim", () => {
     const dto: ProxyDetailDto = {
       itemId: "p1",
       name: "Stripe Payments",
@@ -58,7 +58,7 @@ describe("proxy mapper", () => {
       upstreamMasked: "api.st****.com/***",
       methods: ["GET"],
       enabled: false,
-      headers: [{ key: "Authorization", value: "${SECRET.STRIPE}", isSecretRef: true }],
+      headers: [{ key: "Authorization", value: "Bearer {{$VAR.stripe}}" }],
       query: [],
       currentVersion: 3,
       createdDate: "2026-04-12T09:15:00.000Z",
@@ -71,7 +71,7 @@ describe("proxy mapper", () => {
       upstreamUrl: "https://api.stripe.com/v1/charges",
       enabled: false,
     });
-    expect(proxy.headers[0]).toMatchObject({ key: "Authorization", isSecretRef: true });
+    expect(proxy.headers[0]).toEqual({ key: "Authorization", value: "Bearer {{$VAR.stripe}}" });
   });
 
   it("keeps request-payload field-name assumptions in one place", () => {
@@ -79,7 +79,7 @@ describe("proxy mapper", () => {
       name: " Stripe Payments ",
       upstreamUrl: " https://api.stripe.com/v1/charges ",
       methods: ["GET", "POST"] as const,
-      headers: [{ key: " Authorization ", value: " x ", isSecretRef: true }],
+      headers: [{ key: " Authorization ", value: " x " }],
       query: [{ key: "", value: "" }],
       bodyMerge: [],
       bodyMode: "passthrough" as const,
@@ -90,7 +90,7 @@ describe("proxy mapper", () => {
       name: "Stripe Payments",
       upstream: "https://api.stripe.com/v1/charges",
       methods: ["GET", "POST"],
-      headers: [{ key: "Authorization", value: "x", isSecretRef: false }],
+      headers: [{ key: "Authorization", value: "x" }],
       query: [],
       bodyMerge: [],
       methodConfigs: [],
@@ -107,12 +107,12 @@ describe("proxy mapper", () => {
       methods: ["POST"] as const,
       headers: [],
       query: [],
-      bodyMerge: [{ key: " account ", value: " acct_1 ", isSecretRef: false }],
+      bodyMerge: [{ key: " account ", value: " acct_1 " }],
       methodConfigs: [],
     };
 
     const merged = mapProxyToCreatePayload({ ...base, bodyMode: "merge" });
-    expect(merged.bodyMerge).toEqual([{ key: "account", value: "acct_1", isSecretRef: false }]);
+    expect(merged.bodyMerge).toEqual([{ key: "account", value: "acct_1" }]);
     expect(merged).not.toHaveProperty("bodyMode");
 
     const passthrough = mapProxyToCreatePayload({ ...base, bodyMode: "passthrough" });
@@ -139,15 +139,13 @@ describe("proxy mapper", () => {
       enabled: true,
       headers: [],
       query: [],
-      bodyMerge: [{ key: "account", value: "${SECRET.A}", isSecretRef: true }],
+      bodyMerge: [{ key: "account", value: "{{$VAR.a}}" }],
       methodConfigs: [],
       currentVersion: 1,
       createdDate: "2026-09-01T00:00:00.000Z",
       lastUpdatedDate: "2026-09-01T00:00:00.000Z",
     });
-    expect(withRows.bodyMerge).toEqual([
-      { key: "account", value: "${SECRET.A}", isSecretRef: true },
-    ]);
+    expect(withRows.bodyMerge).toEqual([{ key: "account", value: "{{$VAR.a}}" }]);
 
     const withoutRows = mapProxyDetailDtoToProxy({
       itemId: "p2",
@@ -179,7 +177,7 @@ describe("proxy mapper", () => {
         {
           method: "POST" as const,
           upstream: " https://api.x.com/v2 ",
-          headers: [{ key: " X-Trace ", value: " on ", isSecretRef: false }],
+          headers: [{ key: " X-Trace ", value: " on " }],
           query: [],
         },
         // all-inherit -> dropped
@@ -193,7 +191,7 @@ describe("proxy mapper", () => {
       {
         method: "POST",
         upstream: "https://api.x.com/v2",
-        headers: [{ key: "X-Trace", value: "on", isSecretRef: false }],
+        headers: [{ key: "X-Trace", value: "on" }],
         query: null,
       },
     ]);
@@ -212,7 +210,7 @@ describe("proxy mapper", () => {
       headers: [],
       query: [],
       methodConfigs: [
-        { method: "POST", upstream: "https://api.x.com/v2", headers: [{ key: "X-Trace", value: "on", isSecretRef: false }], query: null },
+        { method: "POST", upstream: "https://api.x.com/v2", headers: [{ key: "X-Trace", value: "on" }], query: null },
       ],
       currentVersion: 3,
       createdDate: "2026-09-01T00:00:00.000Z",
@@ -223,7 +221,7 @@ describe("proxy mapper", () => {
       {
         method: "POST",
         upstream: "https://api.x.com/v2",
-        headers: [{ key: "X-Trace", value: "on", isSecretRef: false }],
+        headers: [{ key: "X-Trace", value: "on" }],
         query: null,
       },
     ]);

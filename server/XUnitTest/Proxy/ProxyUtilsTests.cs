@@ -56,25 +56,55 @@ namespace XUnitTest.Proxy
             ProxyConfigLine.From(snapshot).Should().Be("a.example.com · [GET] · disabled · 0 header(s) · 0 query param(s)");
         }
 
-        // ---------- ProxySecretRef ----------
+        // ---------- ProxyVarRef ----------
         [Theory]
-        [InlineData("Bearer ${SECRET.STRIPE_KEY}", true)]
-        [InlineData("${SECRET.A_B_9}", true)]
+        [InlineData("Bearer {{$VAR.stripe-key}}", true)]
+        [InlineData("{{$VAR.a.b_9:x-y}}", true)]
         [InlineData("plain-value", false)]
-        [InlineData("${SECRET.}", false)]
+        [InlineData("{{$VAR.}}", false)]           // empty name
+        [InlineData("{{ $VAR.x }}", false)]        // whitespace inside braces
+        [InlineData("{{$var.x}}", false)]          // wrong case
+        [InlineData("{{VAR.x}}", false)]           // missing $
+        [InlineData("${SECRET.X}", false)]         // the old syntax is now literal text
         [InlineData("", false)]
-        public void ProxySecretRef_IsSecretReference_MatchesTokenSyntax(string value, bool expected)
+        public void ProxyVarRef_ContainsRef_MatchesTokenSyntax(string value, bool expected)
         {
-            ProxySecretRef.IsSecretReference(value).Should().Be(expected);
+            ProxyVarRef.ContainsRef(value).Should().Be(expected);
         }
 
         [Fact]
-        public void ProxySecretRef_Tokens_YieldsEveryOccurrenceInOrder()
+        public void ProxyVarRef_Tokens_YieldsEveryOccurrenceInOrder()
         {
-            ProxySecretRef.Tokens("${SECRET.A} and ${SECRET.B} and ${SECRET.A}")
-                .Should().Equal("${SECRET.A}", "${SECRET.B}", "${SECRET.A}");
-            ProxySecretRef.Tokens("plain").Should().BeEmpty();
-            ProxySecretRef.Tokens(null).Should().BeEmpty();
+            ProxyVarRef.Tokens("{{$VAR.a}} and {{$VAR.b}} and {{$VAR.a}}")
+                .Should().Equal("{{$VAR.a}}", "{{$VAR.b}}", "{{$VAR.a}}");
+            ProxyVarRef.Tokens("plain").Should().BeEmpty();
+            ProxyVarRef.Tokens(null).Should().BeEmpty();
+        }
+
+        [Fact]
+        public void ProxyVarRef_Names_DeduplicatesAcrossListsInFirstSeenOrder()
+        {
+            var headers = new List<ProxyKeyValue>
+            {
+                new() { Key = "Authorization", Value = "Bearer {{$VAR.token}}" },
+                new() { Key = "X-Extra", Value = "{{$VAR.token}} {{$VAR.other}}" },
+            };
+            var query = new List<ProxyKeyValue> { new() { Key = "k", Value = "{{$VAR.token}}" } };
+
+            ProxyVarRef.Names(headers, query, null).Should().Equal("token", "other");
+        }
+
+        [Fact]
+        public void ProxyVarRef_Substitute_ReplacesEveryToken_ThrowsOnMissingName()
+        {
+            var map = new Dictionary<string, string>(StringComparer.Ordinal) { ["token"] = "abc", ["k"] = "v" };
+
+            ProxyVarRef.Substitute("Bearer {{$VAR.token}}", map).Should().Be("Bearer abc");
+            ProxyVarRef.Substitute("{{$VAR.token}}-{{$VAR.k}}-{{$VAR.token}}", map).Should().Be("abc-v-abc");
+            ProxyVarRef.Substitute("no tokens here", map).Should().Be("no tokens here");
+
+            var act = () => ProxyVarRef.Substitute("{{$VAR.unknown}}", map);
+            act.Should().Throw<KeyNotFoundException>();
         }
 
         // ---------- ProxyStatusClassParser ----------
@@ -141,52 +171,37 @@ namespace XUnitTest.Proxy
 
         // ---------- ProxyConfigValidator ----------
         [Fact]
-        public void Validator_NormalizesMethodsAndFlagsSecretRefs()
+        public void Validator_NormalizesMethodsAndStoresValueVerbatim()
         {
             var result = ProxyConfigValidator.Validate(
                 "  Stripe Payments  ",
                 " https://api.stripe.com/v1/charges ",
                 new[] { "get", "POST", "get" },
-                new[] { new ProxyKeyValueInputDto { Key = "Authorization", Value = "Bearer ${SECRET.K}" } },
+                new[] { new ProxyKeyValueInputDto { Key = "Authorization", Value = "Bearer {{$VAR.k}}" } },
                 null);
 
             result.IsValid.Should().BeTrue();
             result.Name.Should().Be("Stripe Payments");
             result.Upstream.Should().Be("https://api.stripe.com/v1/charges");
             result.Methods.Should().Equal(HttpMethodType.Get, HttpMethodType.Post);
-            result.Headers[0].IsSecretRef.Should().BeTrue();
+            result.Headers[0].Value.Should().Be("Bearer {{$VAR.k}}");
         }
 
         [Fact]
-        public void Validator_HonoursExplicitVaultFlagOnPlainValue()
-        {
-            var result = ProxyConfigValidator.Validate(
-                "Name",
-                "https://api.stripe.com",
-                new[] { "GET" },
-                new[] { new ProxyKeyValueInputDto { Key = "X-Api-Key", Value = "abc123", IsSecretRef = true } },
-                new[] { new ProxyKeyValueInputDto { Key = "token", Value = "plain", IsSecretRef = false } });
-
-            result.IsValid.Should().BeTrue();
-            result.Headers[0].IsSecretRef.Should().BeTrue();
-            result.Query[0].IsSecretRef.Should().BeFalse();
-        }
-
-        [Fact]
-        public void Validator_NormalizesBodyMerge_FlagsSecretRefs_AndDropsBlankRows()
+        public void Validator_NormalizesBodyMerge_StoresTokenVerbatim_AndDropsBlankRows()
         {
             var result = ProxyConfigValidator.Validate(
                 "Name", "https://api.x.com", new[] { "POST" }, null, null, null,
                 new[]
                 {
                     new ProxyKeyValueInputDto { Key = "account", Value = "acct_123" },
-                    new ProxyKeyValueInputDto { Key = "api_key", Value = "${SECRET.K}" },
+                    new ProxyKeyValueInputDto { Key = "api_key", Value = "{{$VAR.k}}" },
                 });
 
             result.IsValid.Should().BeTrue();
             result.BodyMerge.Should().HaveCount(2);
-            result.BodyMerge[0].IsSecretRef.Should().BeFalse();
-            result.BodyMerge[1].IsSecretRef.Should().BeTrue();
+            result.BodyMerge[0].Value.Should().Be("acct_123");
+            result.BodyMerge[1].Value.Should().Be("{{$VAR.k}}");
         }
 
         [Fact]
@@ -296,7 +311,7 @@ namespace XUnitTest.Proxy
         }
 
         [Fact]
-        public void Validator_NormalizesMethodConfig_CollapsesEmptyMembersAndFlagsSecretRefs()
+        public void Validator_NormalizesMethodConfig_CollapsesEmptyMembers_StoresValueVerbatim()
         {
             var result = ProxyConfigValidator.Validate(
                 "X", "https://api.x.com", new[] { "GET", "POST" }, null, null,
@@ -308,7 +323,7 @@ namespace XUnitTest.Proxy
                         Upstream = "  https://api.x.com/v2  ",
                         Headers = new List<ProxyKeyValueInputDto>
                         {
-                            new() { Key = "Authorization", Value = "Bearer ${SECRET.K}" },
+                            new() { Key = "Authorization", Value = "Bearer {{$VAR.k}}" },
                         },
                         Query = new List<ProxyKeyValueInputDto>(),
                     },
@@ -319,7 +334,7 @@ namespace XUnitTest.Proxy
             var config = result.MethodConfigs[0];
             config.Method.Should().Be(HttpMethodType.Post);
             config.Upstream.Should().Be("https://api.x.com/v2");
-            config.Headers.Should().ContainSingle().Which.IsSecretRef.Should().BeTrue();
+            config.Headers.Should().ContainSingle().Which.Value.Should().Be("Bearer {{$VAR.k}}");
             config.Query.Should().BeNull();
         }
 

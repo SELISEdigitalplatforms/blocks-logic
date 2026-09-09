@@ -6,7 +6,7 @@ namespace XUnitTest.Proxy
 {
     /// <summary>
     /// Covers <see cref="ProxyChangeSet"/>: the field-by-field <c>Diff</c>, the <c>Invert</c> mirror, the
-    /// <c>ReadField</c> / <c>ApplyField</c> round-trip (incl. secret-ref recompute), and the
+    /// <c>ReadField</c> / <c>ApplyField</c> round-trip (values stored verbatim), and the
     /// <c>Summarize</c> headline rules (SPEC &sect;8.4).
     /// </summary>
     public class ProxyChangeSetTests
@@ -28,7 +28,7 @@ namespace XUnitTest.Proxy
         }
 
         private static ProxyKeyValue Kv(string key, string value) =>
-            new() { Key = key, Value = value, IsSecretRef = ProxySecretRef.IsSecretReference(value) };
+            new() { Key = key, Value = value };
 
         [Fact]
         public void Diff_IdenticalSnapshots_ReturnsEmpty()
@@ -97,19 +97,19 @@ namespace XUnitTest.Proxy
         }
 
         [Fact]
-        public void Diff_Headers_VaultFlagFlipOnUnchangedValue_IsAChange()
+        public void Diff_Headers_ValueEqualRows_ProduceNoChange()
         {
+            // With IsSecretRef gone, value-equal ⇒ ref-equal: two identical rows are not a change.
             var before = Snapshot(s => s.Headers = new List<ProxyKeyValue>
             {
-                new() { Key = "X-Api-Key", Value = "abc123", IsSecretRef = false },
+                new() { Key = "X-Api-Key", Value = "abc123" },
             });
             var after = Snapshot(s => s.Headers = new List<ProxyKeyValue>
             {
-                new() { Key = "X-Api-Key", Value = "abc123", IsSecretRef = true },
+                new() { Key = "X-Api-Key", Value = "abc123" },
             });
 
-            ProxyChangeSet.Diff(before, after)
-                .Should().ContainSingle(c => c.Field == "header:X-Api-Key");
+            ProxyChangeSet.Diff(before, after).Should().BeEmpty();
         }
 
         [Fact]
@@ -136,7 +136,7 @@ namespace XUnitTest.Proxy
         }
 
         [Fact]
-        public void ReadField_ApplyField_RoundTrip_ForBodyAddress_RecomputesSecretRef()
+        public void ReadField_ApplyField_RoundTrip_ForBodyAddress_StoresValueVerbatim()
         {
             var proxy = new ProxyDetailEntity
             {
@@ -148,10 +148,10 @@ namespace XUnitTest.Proxy
             ProxyChangeSet.ReadField(proxy, "body:account").Should().Be("acct_1");
             ProxyChangeSet.ReadField(proxy, "body:missing").Should().BeNull();
 
-            ProxyChangeSet.ApplyField(proxy, "body:account", "${SECRET.K}");
+            ProxyChangeSet.ApplyField(proxy, "body:account", "{{$VAR.k}}");
             ProxyChangeSet.ApplyField(proxy, "body:api_key", "plain");
-            proxy.BodyMerge.Single(kv => kv.Key == "account").IsSecretRef.Should().BeTrue();
-            proxy.BodyMerge.Single(kv => kv.Key == "api_key").IsSecretRef.Should().BeFalse();
+            proxy.BodyMerge.Single(kv => kv.Key == "account").Value.Should().Be("{{$VAR.k}}");
+            proxy.BodyMerge.Single(kv => kv.Key == "api_key").Value.Should().Be("plain");
 
             ProxyChangeSet.ApplyField(proxy, "body:account", null);
             proxy.BodyMerge.Should().ContainSingle(kv => kv.Key == "api_key");
@@ -204,14 +204,13 @@ namespace XUnitTest.Proxy
             ProxyChangeSet.ApplyField(proxy, "name", "N2");
             ProxyChangeSet.ApplyField(proxy, "enabled", "disabled");
             ProxyChangeSet.ApplyField(proxy, "methods", "POST, PUT");
-            ProxyChangeSet.ApplyField(proxy, "header:H", "${SECRET.TOKEN}");
+            ProxyChangeSet.ApplyField(proxy, "header:H", "{{$VAR.token}}");
             ProxyChangeSet.ApplyField(proxy, "query:Q", "qv");
 
             proxy.Name.Should().Be("N2");
             proxy.Enabled.Should().BeFalse();
             proxy.Methods.Should().Equal(HttpMethodType.Post, HttpMethodType.Put);
-            proxy.Headers.Single(h => h.Key == "H").Value.Should().Be("${SECRET.TOKEN}");
-            proxy.Headers.Single(h => h.Key == "H").IsSecretRef.Should().BeTrue();
+            proxy.Headers.Single(h => h.Key == "H").Value.Should().Be("{{$VAR.token}}");
             proxy.Query.Single(q => q.Key == "Q").Value.Should().Be("qv");
 
             ProxyChangeSet.ApplyField(proxy, "header:H", null);
@@ -242,14 +241,14 @@ namespace XUnitTest.Proxy
         }
 
         [Fact]
-        public void Summarize_LiteralSwitchedToSecretRef()
+        public void Summarize_LiteralSwitchedToConfigurationVariable()
         {
             ProxyChangeSet.Summarize(new[]
             {
                 new ProxyFieldChange
                 {
                     Field = "header:Authorization", Label = "header Authorization",
-                    Before = "Bearer abc", After = "${SECRET.TOKEN}",
+                    Before = "Bearer abc", After = "Bearer {{$VAR.token}}",
                 },
             }).Should().Be("Authorization credential switched to a configuration variable");
         }
@@ -327,13 +326,13 @@ namespace XUnitTest.Proxy
 
             // auto-create the entry
             ProxyChangeSet.ApplyField(proxy, "method:POST:upstream", "https://a.v2");
-            ProxyChangeSet.ApplyField(proxy, "method:POST:header:Authorization", "${SECRET.K}");
+            ProxyChangeSet.ApplyField(proxy, "method:POST:header:Authorization", "{{$VAR.k}}");
             proxy.MethodConfigs.Should().ContainSingle();
             var entry = proxy.MethodConfigs[0];
             entry.Method.Should().Be(HttpMethodType.Post);
             entry.Upstream.Should().Be("https://a.v2");
-            entry.Headers!.Single().IsSecretRef.Should().BeTrue();
-            ProxyChangeSet.ReadField(proxy, "method:POST:header:Authorization").Should().Be("${SECRET.K}");
+            entry.Headers!.Single().Value.Should().Be("{{$VAR.k}}");
+            ProxyChangeSet.ReadField(proxy, "method:POST:header:Authorization").Should().Be("{{$VAR.k}}");
 
             // strip every override member -> entry is pruned
             ProxyChangeSet.ApplyField(proxy, "method:POST:upstream", null);

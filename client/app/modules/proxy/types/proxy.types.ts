@@ -2,8 +2,44 @@ export type ProxyMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export type ProxyKeyValue = {
   key: string;
+  /**
+   * Stored verbatim, including any `{{$VAR.name}}` configuration-variable token. The token is
+   * resolved server-side on the forward / Test path only; nothing about a variable's value ever
+   * reaches the console.
+   */
   value: string;
-  isSecretRef?: boolean;
+};
+
+/**
+ * One row of `GET /api/Secrets/gets` (Blocks OS Secret management). Only `service`- and
+ * `both`-typed secrets are usable from a proxy — an `api`-typed secret needs an access list the
+ * proxy caller is not on — so those are filtered out of the picker.
+ */
+export type SecretListItem = {
+  id: string;
+  name: string;
+  type: string;
+  tags: string[];
+};
+
+/** Response envelope of `GET /api/Secrets/gets` (Blocks.Secrets `SecretListResult`). */
+export type SecretListResponseDto = {
+  data: SecretListItemDto[] | null;
+  totalCount: number;
+};
+
+export type SecretListItemDto = {
+  secretId: string;
+  name: string;
+  type: string;
+  tags?: string[] | null;
+};
+
+export type SecretListParams = {
+  search?: string;
+  tags?: string[];
+  pageNumber?: number;
+  pageSize?: number;
 };
 
 /**
@@ -114,13 +150,11 @@ export type BaseMutationResponseDto = {
 export type ProxyKeyValueDto = {
   key: string;
   value: string;
-  isSecretRef: boolean;
 };
 
 export type ProxyKeyValueInputDto = {
   key: string;
   value: string;
-  isSecretRef: boolean;
 };
 
 /** Mirrors server `ProxyMethodConfigDto` / `ProxyMethodConfigInputDto`. */

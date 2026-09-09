@@ -369,7 +369,7 @@ namespace Proxy.DomainService.Services
             }
 
             return proxy.Headers.Concat(proxy.Query).Concat(proxy.BodyMerge)
-                .SelectMany(kv => ProxySecretRef.Tokens(kv.Value))
+                .SelectMany(kv => ProxyVarRef.Tokens(kv.Value))
                 .Distinct(StringComparer.Ordinal)
                 .ToList();
         }

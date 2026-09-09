@@ -13,12 +13,9 @@ namespace Proxy.DomainService.Entities
         public string Key { get; set; } = string.Empty;
 
         /// <summary>
-        /// Stored verbatim, INCLUDING any <c>${SECRET.NAME}</c> token. Phase 1 does not resolve secret
-        /// references; it only records that the value contains one via <see cref="IsSecretRef"/>.
+        /// Stored verbatim, including any <c>{{$VAR.name}}</c> configuration-variable token; the token is
+        /// resolved on the fly by the forwarder (from Blocks Secrets) and never persisted.
         /// </summary>
         public string Value { get; set; } = string.Empty;
-
-        /// <summary>Computed on write: <c>true</c> when <see cref="Value"/> contains a <c>${SECRET.NAME}</c> reference.</summary>
-        public bool IsSecretRef { get; set; }
     }
 }

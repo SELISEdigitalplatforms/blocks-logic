@@ -54,7 +54,7 @@ namespace XUnitTest.Proxy
                 Enabled = true,
                 Headers = new List<ProxyKeyValue>
                 {
-                    new() { Key = "Authorization", Value = "Bearer ${SECRET.STRIPE_KEY}", IsSecretRef = true },
+                    new() { Key = "Authorization", Value = "Bearer {{$VAR.stripe-key}}" },
                 },
                 Query = new List<ProxyKeyValue>(),
                 CurrentVersion = 1,
@@ -66,7 +66,7 @@ namespace XUnitTest.Proxy
         }
 
         private static ProxyKeyValueInputDto Header() =>
-            new() { Key = "Authorization", Value = "Bearer ${SECRET.STRIPE_KEY}" };
+            new() { Key = "Authorization", Value = "Bearer {{$VAR.stripe-key}}" };
 
         // ---------- Create : H1, H2 ----------
         [Fact]
@@ -97,7 +97,7 @@ namespace XUnitTest.Proxy
             inserted.Methods.Should().Equal(HttpMethodType.Get, HttpMethodType.Post);
             inserted.Enabled.Should().BeTrue();
             inserted.CurrentVersion.Should().Be(1);
-            inserted.Headers[0].IsSecretRef.Should().BeTrue();
+            inserted.Headers[0].Value.Should().Be("Bearer {{$VAR.stripe-key}}");
 
             version.Should().NotBeNull();
             version!.VersionNumber.Should().Be(1);
@@ -261,7 +261,7 @@ namespace XUnitTest.Proxy
             result.Data!.Path.Should().Be("/api/proxy/gateway/stripe-payments/*");
             result.Data.Upstream.Should().Be("https://api.stripe.com/v1/charges");
             result.Data.UpstreamMasked.Should().Be("api.st••••.com/•••");
-            result.Data.Headers[0].IsSecretRef.Should().BeTrue();
+            result.Data.Headers[0].Value.Should().Be("Bearer {{$VAR.stripe-key}}");
             result.Data.CurrentVersion.Should().Be(1);
         }
 

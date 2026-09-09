@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildVarToken,
   compactKeyValues,
+  containsVarRef,
+  insertToken,
   maskUpstreamUrl,
   proxyFormSchema,
   slugifyProxyName,
+  VAR_REF_RE,
 } from "./proxy.utils";
 
 describe("proxy utils", () => {
@@ -20,10 +24,37 @@ describe("proxy utils", () => {
   it("compacts injected rows by trimming values and dropping empty rows", () => {
     expect(
       compactKeyValues([
-        { key: " Authorization ", value: " ${SECRET.KEY} ", isSecretRef: true },
+        { key: " Authorization ", value: " Bearer {{$VAR.key}} " },
         { key: "", value: "" },
       ]),
-    ).toEqual([{ key: "Authorization", value: "${SECRET.KEY}", isSecretRef: true }]);
+    ).toEqual([{ key: "Authorization", value: "Bearer {{$VAR.key}}" }]);
+  });
+
+  describe("configuration-variable token helpers", () => {
+    it.each([
+      ["Bearer {{$VAR.stripe-key}}", true],
+      ["{{$VAR.a.b_9:x-y}}", true],
+      ["plain", false],
+      ["{{$VAR.}}", false],
+      ["{{ $VAR.x }}", false],
+      ["{{$var.x}}", false],
+      ["${SECRET.X}", false],
+      ["", false],
+    ])("containsVarRef(%j) === %s", (value, expected) => {
+      expect(containsVarRef(value)).toBe(expected);
+      expect(VAR_REF_RE.test(value)).toBe(expected);
+    });
+
+    it("buildVarToken wraps a name in the token syntax", () => {
+      expect(buildVarToken("api-key")).toBe("{{$VAR.api-key}}");
+    });
+
+    it("insertToken splices the token at the caret and clamps out-of-range carets", () => {
+      expect(insertToken("Bearer ", 7, "{{$VAR.t}}")).toBe("Bearer {{$VAR.t}}");
+      expect(insertToken("ab", 1, "X")).toBe("aXb");
+      expect(insertToken("ab", 99, "X")).toBe("abX");
+      expect(insertToken("ab", -1, "X")).toBe("Xab");
+    });
   });
 
   it("blocks invalid form values deterministically", () => {

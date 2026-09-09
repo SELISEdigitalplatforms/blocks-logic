@@ -24,6 +24,7 @@ namespace XUnitTest.Proxy
         private readonly Mock<IProxyExecutionRepository> _executionRepo = new();
         private readonly StubHandler _handler = new();
         private readonly FakeUpstreamGuard _upstreamGuard = new();
+        private readonly FakeVariableResolver _variables = new();
         private readonly ProxyGatewayService _service;
 
         public void Dispose()
@@ -42,11 +43,18 @@ namespace XUnitTest.Proxy
                     MaxResponseContentBufferSize = ProxyGatewayService.MaxResponseBodyBytes,
                 });
 
+            // Every {{$VAR.name}} the fixtures use resolves to a URL-safe stub value by default; individual
+            // tests override the map or mark a name as unresolvable.
+            _variables.Map["stripe-key"] = "sk_test_xyz";
+            _variables.Map["weather-key"] = "wk_live_1";
+            _variables.Map["demo-key"] = "sk_live_9";
+            _variables.Map["token"] = "tok_abc";
+
             _service = new ProxyGatewayService(
                 factory.Object,
                 _proxyRepo.Object,
                 _executionRepo.Object,
-                new IdentityProxySecretResolver(),
+                _variables,
                 _upstreamGuard,
                 Mock.Of<ILogger<ProxyGatewayService>>());
         }
@@ -64,7 +72,7 @@ namespace XUnitTest.Proxy
                 Enabled = true,
                 Headers = new List<ProxyKeyValue>
                 {
-                    new() { Key = "Authorization", Value = "Bearer ${SECRET.STRIPE_KEY}", IsSecretRef = true },
+                    new() { Key = "Authorization", Value = "Bearer {{$VAR.stripe-key}}" },
                 },
                 Query = new List<ProxyKeyValue>(),
             };
@@ -130,14 +138,14 @@ namespace XUnitTest.Proxy
         }
 
         [Fact]
-        public async Task Forward_SecretRefQuery_StoresPlaceholderToken_NotAResolvedValue()
+        public async Task Forward_VariableTokenQuery_StoresRawToken_SendsResolvedValueUnencoded()
         {
             var proxy = Proxy(p =>
             {
                 p.Upstream = "https://api.weatherapi.com/v1/current.json";
                 p.Methods = new List<HttpMethodType> { HttpMethodType.Get };
                 p.Headers.Clear();
-                p.Query.Add(new ProxyKeyValue { Key = "key", Value = "${SECRET.WEATHER_KEY}", IsSecretRef = true });
+                p.Query.Add(new ProxyKeyValue { Key = "key", Value = "{{$VAR.weather-key}}" });
             });
             GivenProxy(proxy);
             _handler.Respond = (_, _) => Json(HttpStatusCode.OK, "{}");
@@ -148,9 +156,118 @@ namespace XUnitTest.Proxy
                 b.IncomingQuery = "q=London";
             }));
 
-            result.UpstreamUrl.Should().Be("https://api.weatherapi.com/v1/current.json?q=London&key=${SECRET.WEATHER_KEY}");
+            // The stored/audited URL keeps the raw token; the outbound URL carries the resolved value,
+            // un-encoded (so query-string-signing upstreams still work for a bare token).
+            result.UpstreamUrl.Should().Be("https://api.weatherapi.com/v1/current.json?q=London&key={{$VAR.weather-key}}");
             _handler.LastRequestUri!.ToString()
-                .Should().Be("https://api.weatherapi.com/v1/current.json?q=London&key=${SECRET.WEATHER_KEY}");
+                .Should().Be("https://api.weatherapi.com/v1/current.json?q=London&key=wk_live_1");
+        }
+
+        // ---------- {{$VAR.name}} configuration-variable resolution ----------
+
+        [Fact]
+        public async Task Forward_HeaderVariableToken_ResolvedIntoOutboundRequest_NeverIntoTheAuditTrail()
+        {
+            var proxy = Proxy(); // Authorization: "Bearer {{$VAR.stripe-key}}" -> "sk_test_xyz"
+            GivenProxy(proxy);
+            _handler.Respond = (_, _) => Json(HttpStatusCode.OK, "{}");
+
+            ProxyExecutionEntity? row = null;
+            _executionRepo.Setup(r => r.InsertAsync(It.IsAny<ProxyExecutionEntity>()))
+                .Callback<ProxyExecutionEntity>(e => row = e).Returns(Task.CompletedTask);
+
+            var result = await _service.ForwardAsync(Request("GET", b => b.Slug = proxy.Slug));
+
+            _handler.LastRequest!.Headers.GetValues("Authorization").Single().Should().Be("Bearer sk_test_xyz");
+
+            // the resolved value must not leak into anything persisted / returned / audited
+            result.UpstreamUrl.Should().NotContain("sk_test_xyz");
+            result.InjectedHeaderKeys.Should().Equal("Authorization");
+            result.ErrorMessage.Should().BeNull();
+            row!.UpstreamUrl.Should().NotContain("sk_test_xyz");
+            row.InjectedHeaderKeys.Should().Equal("Authorization");
+            row.ErrorMessage.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task Forward_MultipleAndEmbeddedTokens_InOneValue_AreAllSubstituted()
+        {
+            _variables.Map["a"] = "AA";
+            _variables.Map["b"] = "BB";
+            var proxy = Proxy(p =>
+            {
+                p.Headers.Clear();
+                p.Headers.Add(new ProxyKeyValue { Key = "X-Combo", Value = "p_{{$VAR.a}}_{{$VAR.b}}_{{$VAR.a}}" });
+            });
+            GivenProxy(proxy);
+            _handler.Respond = (_, _) => Json(HttpStatusCode.OK, "{}");
+
+            await _service.ForwardAsync(Request("GET", b => b.Slug = proxy.Slug));
+
+            _handler.LastRequest!.Headers.GetValues("X-Combo").Single().Should().Be("p_AA_BB_AA");
+        }
+
+        [Fact]
+        public async Task Forward_PerMethodOverrideToken_IsResolved()
+        {
+            _variables.Map["post-key"] = "pk_1";
+            var proxy = Proxy(p =>
+            {
+                p.Headers.Clear();
+                p.MethodConfigs.Add(new ProxyMethodConfig
+                {
+                    Method = HttpMethodType.Post,
+                    Headers = new List<ProxyKeyValue> { new() { Key = "X-Api-Key", Value = "{{$VAR.post-key}}" } },
+                });
+            });
+            GivenProxy(proxy);
+            _handler.Respond = (_, _) => Json(HttpStatusCode.OK, "{}");
+
+            await _service.ForwardAsync(Request("POST", b => b.Slug = proxy.Slug));
+
+            _handler.LastRequest!.Headers.GetValues("X-Api-Key").Single().Should().Be("pk_1");
+        }
+
+        [Fact]
+        public async Task Forward_UnknownVariable_Returns502_WritesRow_MakesNoUpstreamCall()
+        {
+            _variables.Unresolvable.Add("stripe-key");
+            var proxy = Proxy();
+            GivenProxy(proxy);
+
+            var upstreamCalled = false;
+            _handler.Respond = (_, _) => { upstreamCalled = true; return Json(HttpStatusCode.OK, "{}"); };
+
+            ProxyExecutionEntity? row = null;
+            _executionRepo.Setup(r => r.InsertAsync(It.IsAny<ProxyExecutionEntity>()))
+                .Callback<ProxyExecutionEntity>(e => row = e).Returns(Task.CompletedTask);
+
+            var result = await _service.ForwardAsync(Request("GET", b => b.Slug = proxy.Slug));
+
+            upstreamCalled.Should().BeFalse();
+            result.Ok.Should().BeFalse();
+            result.StatusCode.Should().Be(502);
+            result.Outcome.Should().Be(ProxyExecutionOutcome.VariableResolutionFailed);
+            result.ErrorMessage.Should().Contain("stripe-key");
+            row.Should().NotBeNull();
+            row!.Outcome.Should().Be(ProxyExecutionOutcome.VariableResolutionFailed);
+            row.ErrorMessage.Should().Contain("stripe-key");
+        }
+
+        [Fact]
+        public async Task Forward_NoTokensInConfig_MakesNoResolverCall()
+        {
+            var proxy = Proxy(p =>
+            {
+                p.Headers.Clear();
+                p.Headers.Add(new ProxyKeyValue { Key = "X-Plain", Value = "literal" });
+            });
+            GivenProxy(proxy);
+            _handler.Respond = (_, _) => Json(HttpStatusCode.OK, "{}");
+
+            await _service.ForwardAsync(Request("GET", b => b.Slug = proxy.Slug));
+
+            _variables.Calls.Should().BeEmpty();
         }
 
         // ---------- D-schema: per-method override layer ----------
@@ -239,7 +356,7 @@ namespace XUnitTest.Proxy
             var proxy = Proxy(p => p.BodyMerge.AddRange(new[]
             {
                 new ProxyKeyValue { Key = "account", Value = "acct_123" },
-                new ProxyKeyValue { Key = "api_key", Value = "${SECRET.DEMO_KEY}", IsSecretRef = true },
+                new ProxyKeyValue { Key = "api_key", Value = "{{$VAR.demo-key}}" },
             }));
             GivenProxy(proxy);
             string? seenBody = null;
@@ -257,8 +374,8 @@ namespace XUnitTest.Proxy
             }));
 
             result.StatusCode.Should().Be(200);
-            // configured key overrides the client's "account"; identity resolver relays the secret token.
-            seenBody.Should().Be("{\"amount\":10,\"account\":\"acct_123\",\"api_key\":\"${SECRET.DEMO_KEY}\"}");
+            // configured key overrides the client's "account"; the {{$VAR.demo-key}} token is substituted.
+            seenBody.Should().Be("{\"amount\":10,\"account\":\"acct_123\",\"api_key\":\"sk_live_9\"}");
             _handler.LastRequest!.Content!.Headers.ContentType!.MediaType.Should().Be("application/json");
             _handler.LastRequest!.Content!.Headers.ContentLength.Should()
                 .Be(Encoding.UTF8.GetByteCount(seenBody!));
@@ -748,6 +865,35 @@ namespace XUnitTest.Proxy
 
             public Task<bool> IsTargetBlockedAsync(string url, CancellationToken cancellationToken = default) =>
                 Task.FromResult(Blocked(url));
+        }
+
+        /// <summary>
+        /// In-memory <see cref="IProxyVariableResolver"/>. <see cref="Map"/> is the name &rarr; value table;
+        /// any requested name outside it (or listed in <see cref="Unresolvable"/>) fails the whole resolve
+        /// with a <see cref="ProxyVariableResolutionException"/>, exactly like the real resolver.
+        /// <see cref="Calls"/> records every batch it was asked to resolve.
+        /// </summary>
+        internal sealed class FakeVariableResolver : IProxyVariableResolver
+        {
+            public Dictionary<string, string> Map { get; } = new(StringComparer.Ordinal);
+
+            public HashSet<string> Unresolvable { get; } = new(StringComparer.Ordinal);
+
+            public List<IReadOnlyCollection<string>> Calls { get; } = new();
+
+            public Task<IReadOnlyDictionary<string, string>> ResolveAsync(
+                IReadOnlyCollection<string> names, string tenantId, CancellationToken ct = default)
+            {
+                Calls.Add(names.ToList());
+                var missing = names.Where(n => Unresolvable.Contains(n) || !Map.ContainsKey(n)).ToList();
+                if (missing.Count > 0)
+                {
+                    throw new ProxyVariableResolutionException(missing);
+                }
+
+                return Task.FromResult<IReadOnlyDictionary<string, string>>(
+                    names.ToDictionary(n => n, n => Map[n], StringComparer.Ordinal));
+            }
         }
 
         /// <summary>Reports an oversized <c>Content-Length</c> but throws if anything actually reads it.</summary>

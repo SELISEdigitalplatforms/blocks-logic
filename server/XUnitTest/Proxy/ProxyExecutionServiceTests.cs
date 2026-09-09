@@ -60,7 +60,7 @@ namespace XUnitTest.Proxy
             dto.AvgLatencyMs.Should().Be(132);
             dto.ErrorRatePct.Should().Be(37.5);
             dto.ErrorRateIsHigh.Should().BeTrue();
-            dto.CredentialRefs.Should().Equal("${SECRET.STRIPE_KEY}");
+            dto.CredentialRefs.Should().Equal("{{$VAR.stripe-key}}");
             dto.Methods.Should().Equal("GET", "POST");
             dto.LastCallAtUtc.Should().Be(InWindow);
         }
@@ -460,7 +460,7 @@ namespace XUnitTest.Proxy
             Enabled = true,
             Headers = new List<ProxyKeyValue>
             {
-                new() { Key = "Authorization", Value = "Bearer ${SECRET.STRIPE_KEY}", IsSecretRef = true },
+                new() { Key = "Authorization", Value = "Bearer {{$VAR.stripe-key}}" },
             },
             Query = new List<ProxyKeyValue>(),
             CurrentVersion = 1,

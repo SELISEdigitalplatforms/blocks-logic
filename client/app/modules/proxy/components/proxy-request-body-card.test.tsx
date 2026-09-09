@@ -15,7 +15,7 @@ const Harness = ({ bodyMode = "passthrough" as ProxyBodyMode }) => {
       methods: ["POST"],
       headers: [],
       query: [],
-      bodyMerge: [{ key: "account", value: "acct_1", isSecretRef: false }],
+      bodyMerge: [{ key: "account", value: "acct_1" }],
       bodyMode,
       methodConfigs: [],
     },

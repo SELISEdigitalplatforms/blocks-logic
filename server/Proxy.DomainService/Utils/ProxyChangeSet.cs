@@ -140,9 +140,9 @@ namespace Proxy.DomainService.Utils
                 if ((change.Field.StartsWith(HeaderPrefix, StringComparison.Ordinal)
                         || change.Field.StartsWith(QueryPrefix, StringComparison.Ordinal))
                     && change.Before is { } literalBefore
-                    && !ProxySecretRef.IsSecretReference(literalBefore)
+                    && !ProxyVarRef.ContainsRef(literalBefore)
                     && change.After is { } refAfter
-                    && ProxySecretRef.IsSecretReference(refAfter))
+                    && ProxyVarRef.ContainsRef(refAfter))
                 {
                     TrySplitPair(change.Field, out _, out var key);
                     return $"{key} credential switched to a configuration variable";
@@ -251,7 +251,7 @@ namespace Proxy.DomainService.Utils
         /// <summary>
         /// Writes <paramref name="rawValue"/> onto one field address of <paramref name="proxy"/>. A
         /// <c>null</c> value on a <c>header:</c> / <c>query:</c> address removes the row; a non-null value adds
-        /// or updates it (recomputing <see cref="ProxyKeyValue.IsSecretRef"/>).
+        /// or updates it. The value (any <c>{{$VAR.name}}</c> token included) is stored verbatim.
         /// </summary>
         public static void ApplyField(ProxyDetailEntity proxy, string field, string? rawValue)
         {
@@ -305,7 +305,6 @@ namespace Proxy.DomainService.Utils
             {
                 Key = key,
                 Value = rawValue,
-                IsSecretRef = ProxySecretRef.IsSecretReference(rawValue),
             };
 
             if (existingIndex >= 0)
@@ -388,7 +387,7 @@ namespace Proxy.DomainService.Utils
 
         /// <summary>
         /// Add / update / remove one key in a nullable override list. A <c>null</c> <paramref name="rawValue"/>
-        /// removes the key; a non-null value adds or replaces it (recomputing <see cref="ProxyKeyValue.IsSecretRef"/>).
+        /// removes the key; a non-null value adds or replaces it (stored verbatim).
         /// Returns the list to store back (a <c>null</c> input list stays <c>null</c> on a remove).
         /// </summary>
         private static List<ProxyKeyValue>? ApplyPair(List<ProxyKeyValue>? list, string key, string? rawValue)
@@ -409,7 +408,6 @@ namespace Proxy.DomainService.Utils
             {
                 Key = key,
                 Value = rawValue,
-                IsSecretRef = ProxySecretRef.IsSecretReference(rawValue),
             };
 
             var existingIndex = list.FindIndex(kv => string.Equals(kv.Key, key, StringComparison.Ordinal));
@@ -448,11 +446,8 @@ namespace Proxy.DomainService.Utils
                 {
                     changes.Add(Pair(fieldPrefix, labelWord, kv.Key, kv.Value, null));
                 }
-                else if (!string.Equals(kv.Value, afterValue.Value, StringComparison.Ordinal)
-                    || kv.IsSecretRef != afterValue.IsSecretRef)
+                else if (!string.Equals(kv.Value, afterValue.Value, StringComparison.Ordinal))
                 {
-                    // A value edit, or a "Vault" flag flip on an otherwise unchanged value, is a change: the
-                    // latter keeps Before == After for the value but still lets Update persist the new flag.
                     changes.Add(Pair(fieldPrefix, labelWord, kv.Key, kv.Value, afterValue.Value));
                 }
             }

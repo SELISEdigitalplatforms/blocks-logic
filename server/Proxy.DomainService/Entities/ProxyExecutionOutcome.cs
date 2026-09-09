@@ -11,8 +11,8 @@ namespace Proxy.DomainService.Entities
     /// link-local and was refused (SSRF guard).</item>
     /// <item><see cref="UpstreamResponseTooLarge"/> &mdash; the upstream response body exceeded the 10 MB cap.</item>
     /// <item><see cref="RequestTooLarge"/> / <see cref="MethodNotAllowed"/> / <see cref="ProxyNotFound"/> /
-    /// <see cref="Unauthorized"/> / <see cref="RequestBodyNotMergeable"/> &mdash; Blocks rejected the call
-    /// before forwarding.</item>
+    /// <see cref="Unauthorized"/> / <see cref="RequestBodyNotMergeable"/> /
+    /// <see cref="VariableResolutionFailed"/> &mdash; Blocks rejected the call before forwarding.</item>
     /// <item><see cref="InternalError"/> &mdash; an unexpected bug in the forwarder.</item>
     /// </list>
     /// </summary>
@@ -32,6 +32,14 @@ namespace Proxy.DomainService.Entities
         /// with no upstream call; an execution row is still written.
         /// </summary>
         public const string RequestBodyNotMergeable = "RequestBodyNotMergeable";
+
+        /// <summary>
+        /// Blocks rejected the call before forwarding because a configured <c>{{$VAR.name}}</c> token could not
+        /// be resolved from Blocks Secrets (unknown / locked / access-denied variable, or Key Vault
+        /// unreachable). Returned as <c>502</c> with no upstream call; an execution row is still written and
+        /// its <see cref="ProxyExecutionEntity.ErrorMessage"/> lists the offending variable names only.
+        /// </summary>
+        public const string VariableResolutionFailed = "VariableResolutionFailed";
         public const string MethodNotAllowed = "MethodNotAllowed";
         public const string ProxyNotFound = "ProxyNotFound";
         public const string Unauthorized = "Unauthorized";

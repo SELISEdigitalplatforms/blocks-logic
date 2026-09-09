@@ -22,14 +22,14 @@ namespace Proxy.DomainService.Utils
         /// <summary>
         /// Merges <paramref name="mergeFields"/> into the top level of <paramref name="clientBody"/> (UTF-8 JSON).
         /// A null / empty <paramref name="clientBody"/> starts from <c>{}</c>. A body that is not a JSON object
-        /// (array, scalar, or malformed) returns <c>Result(null, NotMergeable: true)</c>. Each field value is
-        /// resolved through <paramref name="resolver"/> and written as a JSON string, overriding any client key
-        /// of the same name.
+        /// (array, scalar, or malformed) returns <c>Result(null, NotMergeable: true)</c>. Each field value has
+        /// its <c>{{$VAR.name}}</c> tokens substituted from <paramref name="variables"/> and is written as a
+        /// JSON string, overriding any client key of the same name.
         /// </summary>
         public static Result Merge(
             byte[]? clientBody,
             IReadOnlyList<ProxyKeyValue> mergeFields,
-            IProxySecretResolver resolver)
+            IReadOnlyDictionary<string, string> variables)
         {
             JsonObject obj;
             if (clientBody is null || clientBody.Length == 0)
@@ -58,7 +58,7 @@ namespace Proxy.DomainService.Utils
 
             foreach (var field in mergeFields)
             {
-                obj[field.Key] = JsonValue.Create(resolver.Resolve(field.Value));
+                obj[field.Key] = JsonValue.Create(ProxyVarRef.Substitute(field.Value, variables));
             }
 
             return new Result(JsonSerializer.SerializeToUtf8Bytes(obj), false);

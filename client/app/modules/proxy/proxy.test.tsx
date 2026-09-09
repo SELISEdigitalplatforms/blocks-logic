@@ -68,7 +68,7 @@ describe("Proxy feature", () => {
     expect(screen.getByText("Live")).toBeTruthy();
     expect(screen.getByText("/api/proxy/gateway/stripe-payments/*")).toBeTruthy();
     expect(screen.getByText("Authorization")).toBeTruthy();
-    expect(screen.getAllByText("vault").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("variable").length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole("button", { name: /reveal/i }));
     expect(screen.getByText("https://api.stripe.com/v1/charges")).toBeTruthy();

@@ -9,8 +9,8 @@ namespace Proxy.DomainService
 {
     /// <summary>
     /// Registers the Proxy control-plane services and repositories (Phase 1) plus the Phase 2 data-plane
-    /// forwarder, its inbound-auth service, the <c>ProxyExecutions</c> repository, the deferred secret
-    /// resolver seam, and the named <c>"proxy-upstream"</c> <see cref="System.Net.Http.HttpClient"/>
+    /// forwarder, its inbound-auth service, the <c>ProxyExecutions</c> repository, the
+    /// <c>{{$VAR.name}}</c> configuration-variable resolver, and the named <c>"proxy-upstream"</c> <see cref="System.Net.Http.HttpClient"/>
     /// (30 s timeout, no redirect following). Phase 3 adds <see cref="IProxyExecutionService"/> (request
     /// logs / metrics / CSV export, read-only over <c>ProxyExecutions</c>) and a <see cref="TimeProvider"/>
     /// for its rolling 24h windows. Call from <c>Program.cs</c> next to
@@ -36,8 +36,12 @@ namespace Proxy.DomainService
             services.AddSingleton<IProxyVersionRepository, ProxyVersionRepository>();
             services.AddSingleton<IProxyExecutionRepository, ProxyExecutionRepository>();
 
-            // ${SECRET.NAME} resolution is deferred to a later spec; Phase 2 is the identity function.
-            services.AddSingleton<IProxySecretResolver, IdentityProxySecretResolver>();
+            // {{$VAR.name}} configuration-variable resolution: name -> id -> Key Vault value at forward time,
+            // behind a short-TTL per-tenant cache. ISecretService is supplied by AddBlocksSecrets() in
+            // Program.cs; if AddProxyServices() is ever used without it, this resolver throws at first use.
+            services.AddMemoryCache();
+            services.AddSingleton<IProxyVariableResolver, ProxyVariableResolver>();
+            services.AddOptions<ProxyVariableResolverOptions>();
 
             // SSRF guard: rejects private / loopback / link-local upstream targets at config-write and again
             // (post-DNS) just before the send.

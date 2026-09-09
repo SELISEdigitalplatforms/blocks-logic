@@ -57,7 +57,8 @@ namespace Proxy.DomainService.Services
                 UpstreamMasked = ProxyUpstreamMasker.Mask(p.Upstream),
                 Methods = p.Methods.Select(m => m.Wire()).ToList(),
                 Enabled = p.Enabled,
-                InjectedCredential = p.Headers.Concat(p.Query).Concat(p.BodyMerge).Any(kv => kv.IsSecretRef),
+                InjectedCredential = p.Headers.Concat(p.Query).Concat(p.BodyMerge)
+                    .Any(kv => ProxyVarRef.ContainsRef(kv.Value)),
                 HeaderCount = p.Headers.Count,
                 QueryCount = p.Query.Count,
                 Calls24h = calls24h.TryGetValue(p.ItemId, out var count) ? count : 0,
@@ -371,7 +372,6 @@ namespace Proxy.DomainService.Services
         {
             Key = source.Key,
             Value = source.Value,
-            IsSecretRef = source.IsSecretRef,
         };
 
         private static ProxyMethodConfigDto ToMethodConfigDto(ProxyMethodConfig source) => new()

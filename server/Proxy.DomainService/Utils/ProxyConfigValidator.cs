@@ -32,7 +32,9 @@ namespace Proxy.DomainService.Utils
     /// <summary>
     /// Shallow, deterministic validation of a proxy configuration payload. Trims and normalizes on the way
     /// through: name is trimmed, upstream is trimmed, methods are upper-cased / de-duplicated /
-    /// first-occurrence ordered, and each header / query value is flagged for a <c>${SECRET.NAME}</c> reference.
+    /// first-occurrence ordered. Header / query / body-merge values are stored verbatim, including any
+    /// <c>{{$VAR.name}}</c> token; the validator stays pure, sync, and offline (no Key Vault call at save
+    /// time) &mdash; the token's existence is checked only on the forward path.
     /// </summary>
     public static class ProxyConfigValidator
     {
@@ -249,9 +251,6 @@ namespace Proxy.DomainService.Utils
                 {
                     Key = key,
                     Value = value,
-                    // A ${SECRET.NAME} value is always a secret reference; the console's "Vault" checkbox opts a
-                    // plain value into the same treatment.
-                    IsSecretRef = pair?.IsSecretRef == true || ProxySecretRef.IsSecretReference(value),
                 });
             }
 

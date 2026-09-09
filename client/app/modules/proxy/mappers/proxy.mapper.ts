@@ -90,7 +90,6 @@ const toKeyValueInputs = (rows: ProxyKeyValue[]): ProxyKeyValueInputDto[] =>
     .map((row) => ({
       key: row.key.trim(),
       value: row.value.trim(),
-      isSecretRef: false,
     }))
     .filter((row) => row.key || row.value);
 
@@ -176,7 +175,6 @@ const toKeyValues = (dtos: ProxyKeyValueDto[] | null | undefined): ProxyKeyValue
   (dtos ?? []).map((dto) => ({
     key: dto.key,
     value: dto.value,
-    isSecretRef: Boolean(dto.isSecretRef),
   }));
 
 const toMethodOverrides = (

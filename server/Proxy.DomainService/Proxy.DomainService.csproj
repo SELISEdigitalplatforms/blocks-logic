@@ -16,6 +16,8 @@
   <ItemGroup>
     <PackageReference Include="MongoDB.Driver" />
     <PackageReference Include="SeliseBlocks.Genesis.OS" />
+    <!-- On-the-fly {{$VAR.name}} resolution reads the tenant's Blocks Secrets via the in-process ISecretService. -->
+    <PackageReference Include="SeliseBlocks.Secrets.OS" />
   </ItemGroup>
 
 </Project>

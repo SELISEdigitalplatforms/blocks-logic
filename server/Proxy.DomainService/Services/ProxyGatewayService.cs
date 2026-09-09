@@ -30,7 +30,7 @@ namespace Proxy.DomainService.Services
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IProxyRepository _proxyRepository;
         private readonly IProxyExecutionRepository _executionRepository;
-        private readonly IProxySecretResolver _secretResolver;
+        private readonly IProxyVariableResolver _variableResolver;
         private readonly IProxyUpstreamGuard _upstreamGuard;
         private readonly ILogger<ProxyGatewayService> _logger;
 
@@ -38,14 +38,14 @@ namespace Proxy.DomainService.Services
             IHttpClientFactory httpClientFactory,
             IProxyRepository proxyRepository,
             IProxyExecutionRepository executionRepository,
-            IProxySecretResolver secretResolver,
+            IProxyVariableResolver variableResolver,
             IProxyUpstreamGuard upstreamGuard,
             ILogger<ProxyGatewayService> logger)
         {
             _httpClientFactory = httpClientFactory;
             _proxyRepository = proxyRepository;
             _executionRepository = executionRepository;
-            _secretResolver = secretResolver;
+            _variableResolver = variableResolver;
             _upstreamGuard = upstreamGuard;
             _logger = logger;
         }
@@ -109,6 +109,34 @@ namespace Proxy.DomainService.Services
             // member inherits the shared value. With MethodConfigs empty this is exactly config.* (today).
             var (effHeaders, effQuery, effUpstream) = ResolveEffective(config, requestedMethod);
 
+            // Collect every {{$VAR.name}} across the fields we will actually send and resolve them once,
+            // batched, from Blocks Secrets. The resolved values are substituted into the outbound request in
+            // memory only — never stored, logged, or returned. A resolution failure fails the call before any
+            // upstream connection (an execution row is still written).
+            var bodyMergeForVars = requestedMethod is HttpMethodType.Post or HttpMethodType.Put or HttpMethodType.Patch
+                && config.BodyMerge.Count > 0
+                    ? config.BodyMerge
+                    : null;
+            var varNames = ProxyVarRef.Names(effHeaders, effQuery, bodyMergeForVars).ToArray();
+
+            IReadOnlyDictionary<string, string> vars = ProxyVariableResolver.EmptyMap;
+            if (varNames.Length > 0)
+            {
+                try
+                {
+                    vars = await _variableResolver.ResolveAsync(varNames, request.TenantId, cancellationToken);
+                }
+                catch (ProxyVariableResolutionException ex)
+                {
+                    _logger.LogWarning(
+                        "Proxy gateway: could not resolve configuration variable(s) [{Names}] for slug '{Slug}' (tenant {TenantId}); returning 502, no upstream call.",
+                        string.Join(", ", ex.Names), config.Slug, request.TenantId);
+                    return await FinalizeAsync(request, config, BuildPreflight(
+                        ProxyExecutionOutcome.VariableResolutionFailed, 502, startedAt,
+                        errorMessage: $"Could not resolve configuration variable(s): {string.Join(", ", ex.Names)}"));
+                }
+            }
+
             // Request-body merge: with BodyMerge configured and a body-bearing method, parse the client's JSON
             // body, set each configured key at the top level (overriding the client), re-serialise and forward
             // as application/json. Empty BodyMerge ⇒ the body is relayed byte-for-byte (effBody == request.Body).
@@ -120,7 +148,7 @@ namespace Proxy.DomainService.Services
 
             if (mergeApplies)
             {
-                var merge = ProxyBodyMerger.Merge(request.Body, config.BodyMerge, _secretResolver);
+                var merge = ProxyBodyMerger.Merge(request.Body, config.BodyMerge, vars);
                 if (merge.NotMergeable)
                 {
                     _logger.LogWarning(
@@ -143,7 +171,7 @@ namespace Proxy.DomainService.Services
                 effContentType = "application/json";
             }
 
-            var (storedUrl, outboundUrl, injectedQueryKeys) = BuildUrls(effUpstream, effQuery, request);
+            var (storedUrl, outboundUrl, injectedQueryKeys) = BuildUrls(effUpstream, effQuery, request, vars);
             var upstreamHost = SafeHost(outboundUrl);
             // Best-effort list for failure rows; replaced with the keys that actually attached once the
             // request message is built (a malformed key is dropped rather than sent).
@@ -170,7 +198,7 @@ namespace Proxy.DomainService.Services
                 // Factory clients are pooled and cheap; do NOT dispose per call.
                 var client = _httpClientFactory.CreateClient(UpstreamClientName);
                 using var message = BuildUpstreamRequest(
-                    effHeaders, request, effBody, effContentType, outboundUrl, out var attachedHeaderKeys);
+                    effHeaders, request, effBody, effContentType, outboundUrl, vars, out var attachedHeaderKeys);
                 injectedHeaderKeys = attachedHeaderKeys;
                 response = await client.SendAsync(message, HttpCompletionOption.ResponseContentRead, cancellationToken);
             }
@@ -329,9 +357,9 @@ namespace Proxy.DomainService.Services
                 over?.Upstream ?? config.Upstream);
         }
 
-        private HttpRequestMessage BuildUpstreamRequest(
+        private static HttpRequestMessage BuildUpstreamRequest(
             IReadOnlyList<ProxyKeyValue> headers, ProxyForwardRequest request, byte[]? body, string? contentType,
-            string outboundUrl, out List<string> attachedHeaderKeys)
+            string outboundUrl, IReadOnlyDictionary<string, string> variables, out List<string> attachedHeaderKeys)
         {
             var message = new HttpRequestMessage(new HttpMethod(request.Method), outboundUrl);
 
@@ -359,12 +387,12 @@ namespace Proxy.DomainService.Services
                 message.Content = content;
             }
 
-            // Attach ONLY the configured headers (values materialised through the secret-resolver seam).
+            // Attach ONLY the configured headers ({{$VAR.name}} tokens substituted with their resolved values).
             // Track the keys that actually attached so the audit list on the execution row is truthful.
             attachedHeaderKeys = new List<string>(headers.Count);
             foreach (var header in headers)
             {
-                var value = _secretResolver.Resolve(header.Value);
+                var value = ProxyVarRef.Substitute(header.Value, variables);
                 if (message.Headers.TryAddWithoutValidation(header.Key, value)
                     || (message.Content is not null
                         && message.Content.Headers.TryAddWithoutValidation(header.Key, value)))
@@ -377,12 +405,13 @@ namespace Proxy.DomainService.Services
         }
 
         /// <summary>
-        /// Rebuilds the target URL. Returns the URL to STORE (secret-ref query values keep their
-        /// <c>${SECRET.NAME}</c> token), the URL to CALL (values materialised through the resolver), and the
-        /// list of query keys Blocks injected.
+        /// Rebuilds the target URL. Returns the URL to STORE (a query value carrying a <c>{{$VAR.name}}</c>
+        /// token keeps the raw token), the URL to CALL (tokens substituted with their resolved values), and
+        /// the list of query keys Blocks injected.
         /// </summary>
-        private (string StoredUrl, string OutboundUrl, List<string> InjectedQueryKeys) BuildUrls(
-            string upstream, IReadOnlyList<ProxyKeyValue> query, ProxyForwardRequest request)
+        private static (string StoredUrl, string OutboundUrl, List<string> InjectedQueryKeys) BuildUrls(
+            string upstream, IReadOnlyList<ProxyKeyValue> query, ProxyForwardRequest request,
+            IReadOnlyDictionary<string, string> variables)
         {
             var target = upstream.TrimEnd('/');
             if (!string.IsNullOrEmpty(request.PathSuffix))
@@ -421,18 +450,20 @@ namespace Proxy.DomainService.Services
                 }
             }
 
-            // Configured params override on collision. Phase 2 sends values verbatim (identity resolver) and
-            // stores secret-ref entries with their ${SECRET.NAME} token, never a resolved value (C7).
+            // Configured params override on collision. A value carrying a {{$VAR.name}} token is sent with the
+            // token substituted but NOT URL-encoded (so upstreams that sign the query string still work for a
+            // bare token), and is STORED with the raw token, never a resolved value (C8 / C9).
             var injectedQueryKeys = new List<string>();
             foreach (var configured in query)
             {
                 injectedQueryKeys.Add(configured.Key);
                 var key = Uri.EscapeDataString(configured.Key);
-                var outboundValue = _secretResolver.Resolve(configured.Value);
-                outboundParts.Add(configured.IsSecretRef
+                var hasToken = ProxyVarRef.ContainsRef(configured.Value);
+                var outboundValue = ProxyVarRef.Substitute(configured.Value, variables);
+                outboundParts.Add(hasToken
                     ? $"{key}={outboundValue}"
                     : $"{key}={Uri.EscapeDataString(outboundValue)}");
-                storedParts.Add(configured.IsSecretRef
+                storedParts.Add(hasToken
                     ? $"{key}={configured.Value}"
                     : $"{key}={Uri.EscapeDataString(outboundValue)}");
             }
@@ -465,7 +496,8 @@ namespace Proxy.DomainService.Services
         }
 
         private static ProxyForwardResult BuildPreflight(
-            string outcome, int statusCode, DateTime startedAt, IReadOnlyList<string>? allowedMethods = null) => new()
+            string outcome, int statusCode, DateTime startedAt, IReadOnlyList<string>? allowedMethods = null,
+            string? errorMessage = null) => new()
         {
             StatusCode = statusCode,
             Outcome = outcome,
@@ -479,7 +511,7 @@ namespace Proxy.DomainService.Services
             ResponseBodyBytes = 0,
             ResponseContentType = null,
             ResponseBytes = null,
-            ErrorMessage = null,
+            ErrorMessage = errorMessage,
             AllowedMethods = allowedMethods ?? Array.Empty<string>(),
             StartedAtUtc = startedAt,
             FinishedAtUtc = startedAt,
