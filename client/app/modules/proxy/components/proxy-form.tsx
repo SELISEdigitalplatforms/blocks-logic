@@ -28,6 +28,7 @@ import { ProxyMethodOverrides } from "./proxy-method-overrides";
 import { ProxyMethodSelector } from "./proxy-method-selector";
 import { ProxyRequestBodyCard } from "./proxy-request-body-card";
 import { ProxyTestPanel } from "./proxy-test-panel";
+import { getRuntimeEnv } from "@seliseblocks/genesis-os";
 
 const isBodyMethod = (method: ProxyMethod) =>
   method === "POST" || method === "PUT" || method === "PATCH";
@@ -187,7 +188,8 @@ export const ProxyForm = ({ mode, proxy, isLoadingProxy, onSuccess, onCancel }: 
                 Your client calls this
               </span>
               <p className="break-all font-mono text-sm">
-                {selectedMethods[0] ?? "GET"} https://blocksapi.slsblx.com/logic/v4{clientPath}
+                {selectedMethods[0] ?? "GET"} {getRuntimeEnv("BLOCKS_LOGIC_BASE_URL")}
+                {clientPath}
               </p>
               <p className="text-sm text-primary/80">
                 Send X-Blocks-Key. Path, body and extra query string pass straight through.

@@ -106,16 +106,21 @@ export const ProxyList = ({ proxies, isLoading }: Props) => {
     <>
       <div className="grid gap-3">
         {proxies.map((proxy) => (
-          <Card key={proxy.id} className="rounded-xl p-0">
+          <Card
+            key={proxy.id}
+            className="group rounded-xl p-0 transition-all duration-200 hover:border-primary/40 hover:bg-card hover:shadow-[0_8px_24px_rgba(59,130,246,0.18)] focus-within:border-primary/40 focus-within:bg-card focus-within:shadow-[0_8px_24px_rgba(59,130,246,0.18)]"
+          >
             <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
               <button
                 type="button"
-                className="min-w-0 flex-1 text-left"
+                className="min-w-0 flex-1 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={() => navigate(scoped(`proxy/${proxy.id}`))}
               >
                 <div className="min-w-0 space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-base font-semibold">{proxy.name}</h3>
+                    <h3 className="text-base font-semibold transition-colors group-hover:text-primary group-focus-within:text-primary">
+                      {proxy.name}
+                    </h3>
                     <ProxyStatusBadge proxy={proxy} />
                   </div>
                   <p className="truncate font-mono text-xs text-muted-foreground">

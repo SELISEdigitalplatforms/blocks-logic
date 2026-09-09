@@ -1,12 +1,25 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { useScopedPath } from "@seliseblocks/genesis-os";
-import { Eye, EyeOff, Loader2, Pause, Pen, Play, Trash2 } from "lucide-react";
+import { EllipsisVertical, Eye, EyeOff, Loader2, Pause, Pen, Play, Trash2 } from "lucide-react";
 import PageBreadcrumb from "@/components/breadcrumb/breadcrumb";
 import { BREADCRUMB_CUSTOM_TITLES } from "@/constants/breadcrumb-custom-title";
 import { Badge } from "@/components/ui-kits/badge/badge";
 import { Button } from "@/components/ui-kits/button/button";
 import { Card, CardContent, CardHeader } from "@/components/ui-kits/card/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui-kits/dropdown-menu/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui-kits/select/select";
 import { Skeleton } from "@/components/ui-kits/skeleton/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui-kits/tabs/tabs";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
@@ -157,6 +170,12 @@ const ConfigurationStepCard = ({
 const tabClass =
   "rounded-none border-b-2 border-transparent px-0 pb-2 pt-0 text-base data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none";
 
+const proxyDetailTabs = [
+  { value: "overview", label: "Overview" },
+  { value: "logs", label: "Request logs" },
+  { value: "history", label: "Change history" },
+];
+
 const ProxyOverviewSkeleton = () => (
   <div className="space-y-6">
     <div className="grid gap-4 md:grid-cols-3">
@@ -287,23 +306,67 @@ export const ProxyDetails = () => {
         <PageBreadcrumb breadcrumbIndex={3} />
       </div>
       <div className="flex-1 space-y-6 px-6 pb-8 pt-4">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center justify-between gap-4 sm:items-start">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             <span
               aria-label={`${proxy.enabled ? "Live" : "Paused"} status indicator`}
               className={cn(
-                "h-3.5 w-3.5 rounded-full",
+                "h-3.5 w-3.5 shrink-0 rounded-full",
                 proxy.enabled ? "bg-success" : "bg-slate-400 dark:bg-slate-500",
               )}
             />
-            <h1 className="text-2xl font-bold tracking-tight">{proxy.name}</h1>
-            <ProxyStatusBadge proxy={proxy} />
+            <h1 className="min-w-0 truncate text-2xl font-bold tracking-tight">{proxy.name}</h1>
+            <div className="shrink-0">
+              <ProxyStatusBadge proxy={proxy} />
+            </div>
           </div>
-          <div className="flex flex-wrap gap-3">
+          <div className="shrink-0 sm:hidden">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" aria-label="Proxy actions">
+                  <EllipsisVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  disabled={toggleProxy.isPending}
+                  onClick={handleToggleEnabled}
+                >
+                  {toggleProxy.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : proxy.enabled ? (
+                    <Pause className="mr-2 h-4 w-4" />
+                  ) : (
+                    <Play className="mr-2 h-4 w-4" />
+                  )}
+                  <span>{toggleProxy.isPending ? pendingToggleLabel : toggleLabel}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onClick={() => navigate(scoped(`proxy/${proxy.id}/edit`))}
+                >
+                  <Pen className="mr-2 h-4 w-4" />
+                  <span>Edit</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="cursor-pointer text-destructive focus:text-destructive"
+                  disabled={toggleProxy.isPending}
+                  onClick={() => setIsDeleteOpen(true)}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  <span>Delete</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          <div className="hidden flex-wrap gap-3 sm:flex">
             <Button
               type="button"
               variant="outline"
               disabled={toggleProxy.isPending}
+              aria-label={toggleProxy.isPending ? pendingToggleLabel : toggleLabel}
+              title={toggleProxy.isPending ? pendingToggleLabel : toggleLabel}
               onClick={handleToggleEnabled}
             >
               {toggleProxy.isPending ? (
@@ -315,7 +378,11 @@ export const ProxyDetails = () => {
               )}
               {toggleProxy.isPending ? pendingToggleLabel : toggleLabel}
             </Button>
-            <Button onClick={() => navigate(scoped(`proxy/${proxy.id}/edit`))}>
+            <Button
+              aria-label="Edit"
+              title="Edit"
+              onClick={() => navigate(scoped(`proxy/${proxy.id}/edit`))}
+            >
               <Pen className="mr-2 h-4 w-4" />
               Edit
             </Button>
@@ -324,6 +391,8 @@ export const ProxyDetails = () => {
               variant="outline"
               className="gap-2 text-destructive hover:text-destructive"
               disabled={toggleProxy.isPending}
+              aria-label="Delete"
+              title="Delete"
               onClick={() => setIsDeleteOpen(true)}
             >
               <Trash2 className="h-4 w-4" />
@@ -333,17 +402,27 @@ export const ProxyDetails = () => {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <div className="border-b border-border">
-            <TabsList className="h-auto justify-start gap-8 rounded-none bg-transparent p-0">
-              <TabsTrigger value="overview" className={tabClass}>
-                Overview
-              </TabsTrigger>
-              <TabsTrigger value="logs" className={tabClass}>
-                Request logs
-              </TabsTrigger>
-              <TabsTrigger value="history" className={tabClass}>
-                Change history
-              </TabsTrigger>
+          <div>
+            <div className="sm:hidden">
+              <Select value={activeTab} onValueChange={setActiveTab}>
+                <SelectTrigger aria-label="Proxy detail section">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {proxyDetailTabs.map((tab) => (
+                    <SelectItem key={tab.value} value={tab.value}>
+                      {tab.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <TabsList className="hidden h-auto justify-start gap-8 rounded-none border-b border-border bg-transparent p-0 sm:inline-flex">
+              {proxyDetailTabs.map((tab) => (
+                <TabsTrigger key={tab.value} value={tab.value} className={tabClass}>
+                  {tab.label}
+                </TabsTrigger>
+              ))}
             </TabsList>
           </div>
 
