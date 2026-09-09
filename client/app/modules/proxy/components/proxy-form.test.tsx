@@ -136,11 +136,11 @@ describe("ProxyForm", () => {
       target: { value: "https://api.example.com/x" },
     });
     await user.click(screen.getByRole("button", { name: "POST" }));
-    await user.click(screen.getByRole("button", { name: "Merge fields" }));
+    await user.click(screen.getByRole("tab", { name: "Merge fields" }));
     await user.click(screen.getByRole("button", { name: /add field/i }));
     fireEvent.change(screen.getByPlaceholderText("Enter key"), { target: { value: "account" } });
     fireEvent.change(screen.getByPlaceholderText("Enter value"), { target: { value: "acct_1" } });
-    await user.click(screen.getByRole("button", { name: "Pass through" }));
+    await user.click(screen.getByRole("tab", { name: "Pass through" }));
     await user.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalled());

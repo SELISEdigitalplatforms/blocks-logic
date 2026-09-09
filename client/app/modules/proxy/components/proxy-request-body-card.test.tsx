@@ -49,12 +49,12 @@ describe("ProxyRequestBodyCard", () => {
 
     expect(screen.getByDisplayValue("account")).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: "Pass through" }));
+    await user.click(screen.getByRole("tab", { name: "Pass through" }));
     expect(screen.queryByDisplayValue("account")).toBeNull();
     expect(screen.getByText(/forwarded to the vendor unchanged/i)).toBeTruthy();
 
     // flipping back shows the same row — nothing was mutated
-    await user.click(screen.getByRole("button", { name: "Merge fields" }));
+    await user.click(screen.getByRole("tab", { name: "Merge fields" }));
     expect(screen.getByDisplayValue("account")).toBeTruthy();
   });
 

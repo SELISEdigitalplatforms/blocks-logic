@@ -1,6 +1,7 @@
 import { Control, useController } from "react-hook-form";
+import { ArrowRightLeft, Layers } from "lucide-react";
 import { Card, CardContent } from "@/components/ui-kits/card/card";
-import { cn } from "@/lib/utils";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui-kits/tabs/tabs";
 import { ProxyBodyMode, ProxyFormValues } from "../types";
 import { KeyValueFieldArray } from "./key-value-field-array";
 
@@ -24,39 +25,44 @@ export const ProxyRequestBodyCard = ({ control }: Props) => {
   return (
     <Card className="rounded-xl">
       <CardContent className="space-y-4 p-0">
-        <div className="flex items-start justify-between gap-4">
-          <div>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <h3 className="text-sm font-semibold">Request body</h3>
             <p className="text-sm text-muted-foreground">
               Add fields the vendor needs but the client should never hold.
             </p>
           </div>
-          <div className="flex flex-shrink-0 gap-1 rounded-sm border border-input p-0.5">
-            {TABS.map((option) => {
-              const selected = tab === option.value;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  aria-pressed={selected}
-                  className={cn(
-                    "inline-flex h-8 items-center justify-center rounded-sm px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    selected
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                  onClick={() => field.onChange(option.value)}
-                >
-                  {option.label}
-                </button>
-              );
-            })}
-          </div>
+          <Tabs
+            value={tab}
+            onValueChange={(value) => field.onChange(value as ProxyBodyMode)}
+            className="w-full flex-shrink-0 sm:w-auto"
+          >
+            <TabsList className="grid h-10 w-full grid-cols-2 rounded-lg bg-muted p-1 sm:w-auto">
+              {TABS.map((option) => {
+                const Icon = option.value === "passthrough" ? ArrowRightLeft : Layers;
+                return (
+                  <TabsTrigger
+                    key={option.value}
+                    value={option.value}
+                    className="gap-2 rounded-md px-3 text-sm text-muted-foreground shadow-none data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    {option.label}
+                  </TabsTrigger>
+                );
+              })}
+            </TabsList>
+          </Tabs>
         </div>
 
         {tab === "passthrough" ? (
-          <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
-            The client&apos;s JSON is forwarded to the vendor unchanged.
+          <div className="flex items-start gap-3 rounded-lg border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
+            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-background text-primary shadow-sm">
+              <ArrowRightLeft className="h-4 w-4" />
+            </div>
+            <p className="pt-1">
+              The client&apos;s JSON is forwarded to the vendor unchanged.
+            </p>
           </div>
         ) : (
           <KeyValueFieldArray
