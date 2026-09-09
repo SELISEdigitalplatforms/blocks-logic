@@ -22,6 +22,7 @@ const statusClass = (status: number) =>
   status >= 500 ? "text-red-700" : status >= 400 ? "text-amber-700" : "text-green-700";
 
 const logSkeletonClass = "bg-slate-200 dark:bg-muted";
+const logTableGridClass = "grid-cols-[170px_96px_minmax(300px,1fr)_96px_112px]";
 
 const ProxyLogsSkeleton = () => (
   <div className="space-y-4" role="status" aria-label="Loading request logs">
@@ -39,7 +40,7 @@ const ProxyLogsSkeleton = () => (
       </div>
     </div>
     <div className="overflow-hidden rounded-sm border">
-      <div className="grid grid-cols-[150px_80px_minmax(160px,1fr)_80px_80px] gap-4 px-4 py-3">
+      <div className={cn("grid gap-4 px-4 py-3", logTableGridClass)}>
         {Array.from({ length: 5 }).map((_, index) => (
           <Skeleton key={index} className={cn("h-4 w-full", logSkeletonClass)} />
         ))}
@@ -47,7 +48,7 @@ const ProxyLogsSkeleton = () => (
       {Array.from({ length: 5 }).map((_, rowIndex) => (
         <div
           key={rowIndex}
-          className="grid grid-cols-[150px_80px_minmax(160px,1fr)_80px_80px] gap-4 border-t px-4 py-3"
+          className={cn("grid gap-4 border-t px-4 py-3", logTableGridClass)}
         >
           {Array.from({ length: 5 }).map((_, cellIndex) => (
             <Skeleton key={cellIndex} className={cn("h-4 w-full", logSkeletonClass)} />
@@ -213,15 +214,19 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
           </Button>
         </div>
       </div>
-      <div className="overflow-hidden rounded-sm border bg-card">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-sm border bg-card">
+        <table className="min-w-[900px] w-full text-sm">
           <thead className="bg-muted/40 text-xs text-muted-foreground">
             <tr>
-              <th className="px-4 py-2 text-left">TIME</th>
-              <th className="px-4 py-2 text-left">METH</th>
-              <th className="px-4 py-2 text-left">PATH</th>
-              <th className="px-4 py-2 text-left">CODE</th>
-              <th className="px-4 py-2 text-left">TOOK</th>
+              <th colSpan={5} className="p-0 text-left font-medium">
+                <div className={cn("grid gap-4 px-4 py-2", logTableGridClass)}>
+                  <span role="columnheader">TIME</span>
+                  <span role="columnheader">METH</span>
+                  <span role="columnheader">PATH</span>
+                  <span role="columnheader">CODE</span>
+                  <span role="columnheader">TOOK</span>
+                </div>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -237,7 +242,7 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
                   <td colSpan={5} className="p-0">
                     <button
                       type="button"
-                      className="grid w-full grid-cols-[150px_80px_minmax(160px,1fr)_80px_80px] px-4 py-3 text-left"
+                      className={cn("grid w-full gap-4 px-4 py-3 text-left", logTableGridClass)}
                       onClick={() => setExpandedId((id) => (id === log.id ? null : log.id))}
                     >
                       <span>{new Date(log.timeUtc).toLocaleTimeString()}</span>

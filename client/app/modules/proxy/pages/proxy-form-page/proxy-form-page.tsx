@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useLocation, useNavigate, useParams } from "react-router";
 import { useScopedPath } from "@seliseblocks/genesis-os";
 import PageBreadcrumb from "@/components/breadcrumb/breadcrumb";
 import { BREADCRUMB_CUSTOM_TITLES } from "@/constants/breadcrumb-custom-title";
@@ -10,6 +10,7 @@ import { useGetProxyById } from "../../hooks";
 export const ProxyFormPage = ({ mode }: { mode: "create" | "edit" }) => {
   const navigate = useNavigate();
   const scoped = useScopedPath();
+  const { pathname } = useLocation();
   const params = useParams<{ proxyId?: string }>();
   const proxyId = params.proxyId;
   const isEdit = mode === "edit";
@@ -19,12 +20,14 @@ export const ProxyFormPage = ({ mode }: { mode: "create" | "edit" }) => {
     if (isEdit && proxyId && isFetched && !isLoading && !proxy) {
       showErrorToast({ errors: "Proxy not found" });
       navigate(scoped("proxy"));
-    } else if (isEdit && proxy?.name && proxyId) {
-      BREADCRUMB_CUSTOM_TITLES[`/proxy/${proxyId}/edit`] = `Edit: ${proxy.name}`;
-    } else {
-      BREADCRUMB_CUSTOM_TITLES["/proxy/new"] = "New Proxy";
+    } else if (isEdit && proxy?.name) {
+      // 2nd breadcrumb position: show the proxy name instead of the raw id.
+      BREADCRUMB_CUSTOM_TITLES[pathname.replace(/\/edit$/, "")] = proxy.name;
+      BREADCRUMB_CUSTOM_TITLES[pathname] = "Edit";
+    } else if (!isEdit) {
+      BREADCRUMB_CUSTOM_TITLES[pathname] = "New Proxy";
     }
-  }, [isEdit, isFetched, isLoading, navigate, proxy, proxyId, scoped]);
+  }, [isEdit, isFetched, isLoading, navigate, pathname, proxy, proxyId, scoped]);
 
   const handleSuccess = (savedProxyId?: string) => {
     navigate(scoped(savedProxyId ? `proxy/${savedProxyId}` : "proxy"));
@@ -42,10 +45,8 @@ export const ProxyFormPage = ({ mode }: { mode: "create" | "edit" }) => {
           isLoadingProxy={isEdit && isLoading}
           onSuccess={handleSuccess}
           onCancel={() => navigate(scoped(isEdit && proxyId ? `proxy/${proxyId}` : "proxy"))}
-          onDelete={() => navigate(scoped("proxy"))}
         />
       </div>
     </div>
   );
 };
-

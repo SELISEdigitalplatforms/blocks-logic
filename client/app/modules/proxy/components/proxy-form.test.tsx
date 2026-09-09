@@ -71,22 +71,22 @@ describe("ProxyForm", () => {
     expect(proxy?.methods).toEqual(["POST"]);
   });
 
-  it("edits and deletes an existing proxy", async () => {
+  it("edits an existing proxy and has no delete action", async () => {
     const user = userEvent.setup();
-    const onDelete = vi.fn();
+    const onSuccess = vi.fn();
     const proxy = (await proxyService.get("p1"))!;
 
     renderWithProviders(
       <MemoryRouter>
-        <ProxyForm mode="edit" proxy={proxy} onDelete={onDelete} />
+        <ProxyForm mode="edit" proxy={proxy} onSuccess={onSuccess} />
       </MemoryRouter>,
     );
 
     expect(screen.getByDisplayValue("Stripe Payments")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
 
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-    await user.click(screen.getByRole("button", { name: "Delete" }));
-    await waitFor(() => expect(onDelete).toHaveBeenCalled());
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
   });
 
   it("shows the Request body card only when a POST/PUT/PATCH method is selected", async () => {

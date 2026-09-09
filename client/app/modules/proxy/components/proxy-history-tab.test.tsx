@@ -29,6 +29,7 @@ describe("ProxyHistoryTab", () => {
     renderWithProviders(<ProxyHistoryTab proxyId="p1" active={true} />);
 
     expect(await screen.findByText("Added payment intent expansion query")).toBeTruthy();
+    expect(screen.queryByText(/Avery Stone/)).toBeNull();
     // an "add" change renders only the + line
     expect(screen.getByText(/\+ query expand\[\]: payment_intent/)).toBeTruthy();
     expect(screen.queryByText(/- query expand\[\]:/)).toBeNull();

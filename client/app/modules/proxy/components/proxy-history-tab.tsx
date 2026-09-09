@@ -56,10 +56,6 @@ export const ProxyHistoryTab = ({ proxyId, active }: { proxyId: string; active: 
             />
             <div className="min-w-0">
               <h3 className="text-lg font-semibold">{version.summary.replace(/\.$/, "")}</h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {version.actorName ?? version.actor} -{" "}
-                {new Date(version.whenUtc).toLocaleString()} - {version.versionLabel}
-              </p>
               {version.changes.length ? (
                 <pre className="mt-4 whitespace-pre-wrap rounded-lg border bg-muted/20 p-4 text-sm">
                   {version.changes.map((change) => (
@@ -78,6 +74,9 @@ export const ProxyHistoryTab = ({ proxyId, active }: { proxyId: string; active: 
                   ))}
                 </pre>
               ) : null}
+              <p className="mt-3 text-sm text-muted-foreground">
+                {new Date(version.whenUtc).toLocaleString()} - {version.versionLabel}
+              </p>
             </div>
             {!["create", "delete"].includes(version.kind) ? (
               <Button

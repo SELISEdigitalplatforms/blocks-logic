@@ -58,7 +58,10 @@ describe("ProxyList", () => {
     renderWithProviders(
       <MemoryRouter initialEntries={["/proxy"]}>
         <Routes>
-          <Route path="/proxy" element={<ProxyList proxies={PROXY_MOCK_DATA} isLoading={false} />} />
+          <Route
+            path="/proxy"
+            element={<ProxyList proxies={PROXY_MOCK_DATA} isLoading={false} />}
+          />
           <Route path="/app/item-123/proxy/p1" element={<div>Stripe detail</div>} />
         </Routes>
       </MemoryRouter>,
@@ -79,6 +82,43 @@ describe("ProxyList", () => {
     await user.click(screen.getByLabelText("Weather Lookup enabled"));
     await waitFor(() =>
       expect(toasts.showSuccessToast).toHaveBeenCalledWith({ description: "Proxy enabled." }),
+    );
+  });
+
+  it("enables a proxy from the options menu", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <MemoryRouter>
+        <ProxyList proxies={PROXY_MOCK_DATA} isLoading={false} />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Weather Lookup options" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Enable" }));
+
+    await waitFor(() =>
+      expect(toasts.showSuccessToast).toHaveBeenCalledWith({ description: "Proxy enabled." }),
+    );
+  });
+
+  it("deletes a proxy through the confirmation modal", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <MemoryRouter>
+        <ProxyList proxies={PROXY_MOCK_DATA} isLoading={false} />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Stripe Payments options" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Delete" }));
+
+    expect(await screen.findByRole("heading", { name: "Delete Proxy" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    await waitFor(() =>
+      expect(toasts.showSuccessToast).toHaveBeenCalledWith({
+        description: "Proxy deleted successfully.",
+      }),
     );
   });
 });

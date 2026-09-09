@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
@@ -123,6 +123,31 @@ describe("ProxyDetails page", () => {
     await waitFor(() =>
       expect(toasts.showSuccessToast).toHaveBeenCalledWith({ description: "Proxy resumed." }),
     );
+  });
+
+  it("deletes the proxy from the details header and returns to the list", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <MemoryRouter initialEntries={["/proxy/p1"]}>
+        <Routes>
+          <Route path="/proxy/:proxyId" element={<ProxyDetails />} />
+          <Route path="/app/item-123/proxy" element={<div>Proxy list route</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Delete" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("heading", { name: "Delete Proxy" })).toBeTruthy();
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+    await waitFor(() =>
+      expect(toasts.showSuccessToast).toHaveBeenCalledWith({
+        description: "Proxy deleted successfully.",
+      }),
+    );
+    expect(await screen.findByText("Proxy list route")).toBeTruthy();
   });
 
   it("shows pending text while pausing an active proxy", async () => {

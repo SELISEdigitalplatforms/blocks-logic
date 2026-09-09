@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useLocation, useNavigate, useParams } from "react-router";
 import { useScopedPath } from "@seliseblocks/genesis-os";
-import { Eye, EyeOff, Loader2, Pause, Pen, Play } from "lucide-react";
+import { Eye, EyeOff, Loader2, Pause, Pen, Play, Trash2 } from "lucide-react";
 import PageBreadcrumb from "@/components/breadcrumb/breadcrumb";
 import { BREADCRUMB_CUSTOM_TITLES } from "@/constants/breadcrumb-custom-title";
 import { Badge } from "@/components/ui-kits/badge/badge";
@@ -18,6 +18,7 @@ import { ProxyMethodChips } from "../../components/proxy-method-chips";
 import { ProxyStatusBadge } from "../../components/proxy-status-badge";
 import { ProxyLogsTab } from "../../components/proxy-logs-tab";
 import { ProxyHistoryTab } from "../../components/proxy-history-tab";
+import { DeleteProxyDialog } from "../../components/delete-proxy-dialog";
 
 type ProxyValueSection = "headers" | "query" | "body";
 type RevealedValues = Partial<Record<ProxyValueSection, Record<string, boolean>>>;
@@ -65,9 +66,7 @@ const KeyValueRows = ({
   onToggle: (section: ProxyValueSection, id: string) => void;
 }) => (
   <div>
-    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-      {title}
-    </h3>
+    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
     <div className="mt-3 overflow-hidden rounded-lg border bg-card">
       <div className="border-b bg-muted/20 px-4 py-3 text-sm font-semibold text-muted-foreground">
         {title} · {rows.length}
@@ -220,11 +219,13 @@ const ProxyDetailsSkeleton = () => (
 export const ProxyDetails = () => {
   const navigate = useNavigate();
   const scoped = useScopedPath();
+  const { pathname } = useLocation();
   const params = useParams<{ proxyId?: string }>();
   const proxyId = params.proxyId;
   const [showUpstream, setShowUpstream] = useState(false);
   const [revealedValues, setRevealedValues] = useState<RevealedValues>({});
   const [activeTab, setActiveTab] = useState("overview");
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const { data: proxy, isLoading, isFetched } = useGetProxyById(proxyId);
   const { data: overview, isLoading: isLoadingOverview } = useGetProxyOverview(proxy?.id, {
     enabled: Boolean(proxy),
@@ -237,10 +238,10 @@ export const ProxyDetails = () => {
     if (proxyId && isFetched && !isLoading && !proxy) {
       showErrorToast({ errors: "Proxy not found" });
       navigate(scoped("proxy"));
-    } else if (proxy?.name && proxyId) {
-      BREADCRUMB_CUSTOM_TITLES[`/proxy/${proxyId}`] = proxy.name;
+    } else if (proxy?.name) {
+      BREADCRUMB_CUSTOM_TITLES[pathname] = proxy.name;
     }
-  }, [isFetched, isLoading, navigate, proxy, proxyId, scoped]);
+  }, [isFetched, isLoading, navigate, pathname, proxy, proxyId, scoped]);
 
   if (isLoading || !isFetched) {
     return <ProxyDetailsSkeleton />;
@@ -317,6 +318,16 @@ export const ProxyDetails = () => {
             <Button onClick={() => navigate(scoped(`proxy/${proxy.id}/edit`))}>
               <Pen className="mr-2 h-4 w-4" />
               Edit
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-2 text-destructive hover:text-destructive"
+              disabled={toggleProxy.isPending}
+              onClick={() => setIsDeleteOpen(true)}
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
             </Button>
           </div>
         </div>
@@ -441,6 +452,13 @@ export const ProxyDetails = () => {
           </TabsContent>
         </Tabs>
       </div>
+
+      <DeleteProxyDialog
+        open={isDeleteOpen}
+        onOpenChange={setIsDeleteOpen}
+        proxy={proxy}
+        onDeleted={() => navigate(scoped("proxy"))}
+      />
     </div>
   );
 };

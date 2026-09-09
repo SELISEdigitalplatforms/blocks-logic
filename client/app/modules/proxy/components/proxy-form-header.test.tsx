@@ -18,15 +18,11 @@ describe("ProxyFormHeader", () => {
     expect(onCancel).toHaveBeenCalled();
   });
 
-  it("renders edit actions and calls delete", async () => {
-    const user = userEvent.setup();
-    const onDelete = vi.fn();
-
-    renderWithProviders(<ProxyFormHeader isEdit={true} isPending={false} onDelete={onDelete} />);
+  it("renders edit actions without a delete button", () => {
+    renderWithProviders(<ProxyFormHeader isEdit={true} isPending={false} />);
 
     expect(screen.getByRole("heading", { name: "Edit Proxy" })).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "Delete" }));
-    expect(onDelete).toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Save" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
   });
 });
-

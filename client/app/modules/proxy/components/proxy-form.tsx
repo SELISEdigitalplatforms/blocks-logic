@@ -14,7 +14,7 @@ import {
 import { Input } from "@/components/ui-kits/input/input";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { getProxyClientPath } from "../constants";
-import { useCreateProxy, useDeleteProxy, useUpdateProxy } from "../hooks";
+import { useCreateProxy, useUpdateProxy } from "../hooks";
 import { Proxy, ProxyFormValues, ProxyMethod } from "../types";
 import {
   compactKeyValues,
@@ -38,22 +38,13 @@ type Props = {
   isLoadingProxy?: boolean;
   onSuccess?: (proxyId?: string) => void;
   onCancel?: () => void;
-  onDelete?: () => void;
 };
 
-export const ProxyForm = ({
-  mode,
-  proxy,
-  isLoadingProxy,
-  onSuccess,
-  onCancel,
-  onDelete,
-}: Props) => {
+export const ProxyForm = ({ mode, proxy, isLoadingProxy, onSuccess, onCancel }: Props) => {
   const isEdit = mode === "edit";
   const createProxy = useCreateProxy();
   const updateProxy = useUpdateProxy();
-  const deleteProxy = useDeleteProxy();
-  const isPending = createProxy.isPending || updateProxy.isPending || deleteProxy.isPending;
+  const isPending = createProxy.isPending || updateProxy.isPending;
 
   const form = useForm<ProxyFormValues>({
     defaultValues: proxyFormDefaultValues,
@@ -138,14 +129,6 @@ export const ProxyForm = ({
     onSuccess?.(res.itemId);
   };
 
-  const handleDelete = async () => {
-    if (!proxy || !window.confirm("Delete this proxy?")) return;
-    const res = await deleteProxy.mutateAsync(proxy.id);
-    if (!res.isSuccess) return showErrorToast({ errors: res.errors || "Failed to delete proxy" });
-    showSuccessToast({ description: "Proxy deleted successfully." });
-    onDelete?.();
-  };
-
   if (isLoadingProxy) {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
@@ -157,12 +140,7 @@ export const ProxyForm = ({
   return (
     <Form {...form}>
       <form noValidate onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
-        <ProxyFormHeader
-          isEdit={isEdit}
-          isPending={isPending}
-          onCancel={onCancel}
-          onDelete={handleDelete}
-        />
+        <ProxyFormHeader isEdit={isEdit} isPending={isPending} onCancel={onCancel} />
 
         <Card className="rounded-xl">
           <CardContent className="space-y-6 p-0">
