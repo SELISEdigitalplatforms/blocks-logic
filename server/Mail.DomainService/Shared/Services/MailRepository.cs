@@ -91,6 +91,26 @@ namespace Mail.DomainService.Services
 
             return mailServerConfigurationCollection.Find(_ => true).FirstOrDefaultAsync();
         }
+
+        public async Task<List<MailServerConfigurationSummary>> GetMailServerConfigurationSummariesAsync()
+        {
+            var collection = GetCollection<MailServerConfiguration>();
+            var options = new FindOptions<MailServerConfiguration, MailServerConfigurationSummary>
+            {
+                Sort = Builders<MailServerConfiguration>.Sort.Descending(c => c.IsDefault),
+                Projection = Builders<MailServerConfiguration>.Projection.Expression(c => new MailServerConfigurationSummary
+                {
+                    ItemId = c.ItemId,
+                    Name = c.Name,
+                    IsDefault = c.IsDefault,
+                    IsInbound = c.IsInbound,
+                    Provider = c.Provider
+                })
+            };
+
+            using var cursor = await collection.FindAsync(FilterDefinition<MailServerConfiguration>.Empty, options);
+            return await cursor.ToListAsync();
+        }
         public Task<EmailTemplate> GetEmailTemplateByPurpose(string purpose, string language, string organizationId)
         {
             return GetEmailTemplate(purpose, language, organizationId);
