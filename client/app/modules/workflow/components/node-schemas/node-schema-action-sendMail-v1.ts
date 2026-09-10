@@ -115,9 +115,19 @@ export const NodeSchemaActionSendMailV1: NodeSchemaDefinition = {
           }
           return getTemplates(config.projectKey).then((templates) => {
             const selected = findTemplate(templates, emailTemplate, config.projectKey);
-            return extractTemplateBodyKeys(selected?.templateBody);
-          });
-        },
+          return extractTemplateBodyKeys(selected?.templateBody);
+        });
+      },
+    },
+      {
+        id: "attachments",
+        type: "expression-list",
+        label: "Attachments",
+        info: 'Storage File IDs to attach. Use a literal File ID, or an expression such as {{$json.output.fileId}} or {{$node["NodeName"].json.output.fileId}} to resolve it per run.',
+        key: "Attachments",
+        required: false,
+        placeholder: "File ID or {{ expression }}",
+        addButtonText: "Add attachment",
       },
     ],
     settings: [],
@@ -130,6 +140,7 @@ export const NodeSchemaActionSendMailV1: NodeSchemaDefinition = {
       Language: "",
       To: "",
       BodyDataContext: {},
+      Attachments: [],
     },
     settings: {},
   },
