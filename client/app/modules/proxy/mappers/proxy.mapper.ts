@@ -305,6 +305,7 @@ export const mapProxyExecutionListItemDtoToLog = (
   injectedQueryKeys: [],
   responseBody: "",
   responseContentType: undefined,
+  outcome: dto.outcome ?? undefined,
 });
 
 /** `GET /api/Proxy/GetExecution` — the expanded row with the display-clipped response body. */
@@ -325,6 +326,8 @@ export const mapProxyExecutionDetailDtoToLog = (
   injectedQueryKeys: Array.isArray(dto.injectedQueryKeys) ? dto.injectedQueryKeys : [],
   responseBody: dto.responseBody ?? "",
   responseContentType: dto.responseContentType ?? undefined,
+  outcome: dto.outcome ?? undefined,
+  errorMessage: dto.errorMessage ?? undefined,
 });
 
 /** `POST /api/Proxy/GetOverview` — the rolling 24h tiles for the detail view. */

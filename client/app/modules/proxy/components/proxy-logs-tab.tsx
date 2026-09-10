@@ -21,6 +21,40 @@ const FILTERS: { value: ProxyLogFilter; label: string }[] = [
 const statusClass = (status: number) =>
   status >= 500 ? "text-red-700" : status >= 400 ? "text-amber-700" : "text-green-700";
 
+/** Human label for a server `outcome` enum, used when the row carries no `errorMessage`. */
+const OUTCOME_LABELS: Record<string, string> = {
+  Timeout: "The upstream endpoint did not respond in time.",
+  UpstreamUnreachable: "The upstream endpoint could not be reached.",
+  UpstreamBlocked: "The upstream endpoint is not an allowed destination.",
+  UpstreamResponseTooLarge: "The upstream response exceeded the 10 MB limit.",
+  RequestTooLarge: "The request body exceeded the 10 MB limit.",
+  RequestBodyNotMergeable: "The request body is not a JSON object and could not be merged.",
+  VariableResolutionFailed: "A configured configuration variable could not be resolved.",
+  ResponseFilterFailed: "The upstream response could not be filtered to the configured fields.",
+  MethodNotAllowed: "This HTTP method is not allowed for this proxy.",
+  ProxyNotFound: "No enabled proxy is configured for this path.",
+  Unauthorized: "Missing or invalid credentials for this tenant.",
+  InternalError: "The proxy forwarder encountered an unexpected error.",
+};
+
+const outcomeLabel = (outcome?: string) =>
+  outcome && outcome !== "Success" ? (OUTCOME_LABELS[outcome] ?? outcome) : "";
+
+/** Pretty-print a JSON body; return the text unchanged when it is not JSON. */
+const formatResponseBody = (body: string, contentType?: string) => {
+  const trimmed = body.trim();
+  const looksJson =
+    (contentType?.toLowerCase().includes("json") ?? false) ||
+    trimmed.startsWith("{") ||
+    trimmed.startsWith("[");
+  if (!looksJson) return body;
+  try {
+    return JSON.stringify(JSON.parse(trimmed), null, 2);
+  } catch {
+    return body;
+  }
+};
+
 const logSkeletonClass = "bg-slate-200 dark:bg-muted";
 const logTableGridClass = "grid-cols-[170px_96px_minmax(300px,1fr)_96px_112px]";
 
@@ -64,6 +98,8 @@ const LogDetails = ({ proxyId, log }: { proxyId: string; log: ProxyExecutionLog 
   // URL and injected keys are fetched on demand from `GET /api/Proxy/GetExecution`.
   const { data, isLoading, isError } = useGetProxyExecution(proxyId, log.id);
   const detail = data ?? log;
+  const errorText = detail.errorMessage || outcomeLabel(detail.outcome);
+  const showError = detail.status >= 400 && Boolean(errorText);
 
   if (isLoading) {
     return (
@@ -92,13 +128,21 @@ const LogDetails = ({ proxyId, log }: { proxyId: string; log: ProxyExecutionLog 
         </span>
         <p>{[...detail.injectedHeaderKeys, ...detail.injectedQueryKeys].join(", ") || "None"}</p>
       </div>
+      {showError ? (
+        <div className="lg:col-span-2">
+          <span className="text-xs font-medium uppercase text-muted-foreground">Error</span>
+          <p className="mt-1 text-red-700">{errorText}</p>
+        </div>
+      ) : null}
       <div className="lg:col-span-2">
         <span className="text-xs font-medium uppercase text-muted-foreground">Response body</span>
         {isError ? (
           <p className="mt-1 text-red-700">Failed to load the response body.</p>
         ) : (
-          <pre className="mt-1 max-h-48 overflow-auto rounded-sm bg-background p-3 text-xs">
-            {detail.responseBody || "(empty response body)"}
+          <pre className="mt-1 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-background p-3 text-xs">
+            {detail.responseBody
+              ? formatResponseBody(detail.responseBody, detail.responseContentType)
+              : "(empty response body)"}
           </pre>
         )}
       </div>

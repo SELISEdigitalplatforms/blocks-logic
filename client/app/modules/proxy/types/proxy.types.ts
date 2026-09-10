@@ -349,6 +349,10 @@ export type ProxyExecutionLog = {
   injectedQueryKeys: string[];
   responseBody: string;
   responseContentType?: string;
+  /** Server outcome enum, e.g. "Success" | "UpstreamUnreachable" | "VariableResolutionFailed". */
+  outcome?: string;
+  /** Short, safe diagnostic for a failed attempt; only populated on the on-demand detail row. */
+  errorMessage?: string;
 };
 
 /** One page of the Request logs list: the mapped rows plus the unpaged 24h match count. */
