@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="XUnitTest" />
+  </ItemGroup>
+
+  <!--
+    Phase 2 adds the data-plane forwarder and its inbound-auth service. Both need ASP.NET Core types
+    (HttpRequest for the token helper, QueryHelpers for query rebuilding), so the project takes a
+    FrameworkReference on the shared framework exactly as the Workflow domain does.
+  -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MongoDB.Driver" />
+    <PackageReference Include="SeliseBlocks.Genesis.OS" />
+    <!-- On-the-fly {{$VAR.name}} resolution reads the tenant's Blocks Secrets via the in-process ISecretService. -->
+    <PackageReference Include="SeliseBlocks.Secrets.OS" />
+  </ItemGroup>
+
+</Project>

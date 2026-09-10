@@ -47,6 +47,35 @@
         <member name="M:BlocksTemplate.Api.GlobalApiRoutePrefixConvention.#ctor(System.String)">
             <summary>Prepends a segment (e.g. <c>api</c>) to every controller’s attribute route template.</summary>
         </member>
+        <!-- Badly formed XML comment ignored for member "T:Utilities.Api.Controllers.ProxyController" -->
+        <!-- Badly formed XML comment ignored for member "M:Utilities.Api.Controllers.ProxyController.Test(Proxy.DomainService.Dtos.ProxyTestRequestDto)" -->
+        <!-- Badly formed XML comment ignored for member "M:Utilities.Api.Controllers.ProxyController.GetExecutions(Proxy.DomainService.Dtos.ProxyGetExecutionsRequestDto)" -->
+        <!-- Badly formed XML comment ignored for member "M:Utilities.Api.Controllers.ProxyController.GetExecution(Proxy.DomainService.Dtos.ProxyGetExecutionRequestDto)" -->
+        <!-- Badly formed XML comment ignored for member "M:Utilities.Api.Controllers.ProxyController.GetOverview(Proxy.DomainService.Dtos.ProxyGetOverviewRequestDto)" -->
+        <!-- Badly formed XML comment ignored for member "M:Utilities.Api.Controllers.ProxyController.ExportExecutionsCsv(Proxy.DomainService.Dtos.ProxyExportExecutionsRequestDto)" -->
+        <!-- Badly formed XML comment ignored for member "M:Utilities.Api.Controllers.ProxyController.Variables(Proxy.DomainService.Dtos.ProxyVariableListRequestDto)" -->
+        <!-- Badly formed XML comment ignored for member "M:Utilities.Api.Controllers.ProxyController.VariableTags" -->
+        <member name="T:Utilities.Api.Controllers.ProxyGatewayController">
+            <summary>
+            Data-plane forwarder (Phase 2). A tenant's client calls
+            <c>{METHOD} /api/proxy/gateway/{slug}/{**path}</c> instead of the vendor; Blocks authenticates the
+            caller with the <c>X-Blocks-Key</c> tenant header + a bearer valid for that tenant, rebuilds the
+            request against the stored upstream, attaches ONLY the configured headers / query params, calls the
+            third party server-side, relays the response, and records one <see cref="T:Proxy.DomainService.Entities.ProxyExecutionEntity"/> per
+            attempt.
+            <para>
+            The route is the literal <c>api/proxy/gateway</c> (NOT the <c>[controller]/[action]</c> convention);
+            <see cref="T:BlocksTemplate.Api.GlobalApiRoutePrefixConvention"/> skips it so the effective path is
+            exactly <c>/api/proxy/gateway/...</c> and never <c>/api/api/...</c>. It is <see cref="T:Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute"/>
+            at the framework level because the credential is the <c>X-Blocks-Key</c> header, not the standard
+            scheme; auth is done here via <see cref="T:Proxy.DomainService.Services.IProxyGatewayAuthService"/>.
+            </para>
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxyGatewayController.Relay(Proxy.DomainService.Services.ProxyForwardResult)">
+            <summary>Relays the upstream status, body, and Content-Type byte-for-byte. No other header is relayed.</summary>
+        </member>
+        <!-- Badly formed XML comment ignored for member "M:Utilities.Api.Controllers.ProxyGatewayController.GatewayError(System.String,System.Int32,System.String,System.Nullable{System.Int32})" -->
         <member name="T:Program">
             <summary>
             Auto-generated public partial Program class for top-level statement apps.

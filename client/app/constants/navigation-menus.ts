@@ -1,5 +1,32 @@
 import { Menu } from "@/models/menu-models";
-import { CalendarClock, Home, Workflow } from "lucide-react";
+import * as React from "react";
+import { CalendarClock, Home, type LucideIcon, type LucideProps, Workflow } from "lucide-react";
+
+export const ProxyIcon = React.forwardRef<SVGSVGElement, LucideProps>(
+  ({ color = "currentColor", size = 20, strokeWidth = 2.2, ...props }, ref) =>
+    React.createElement(
+      "svg",
+      {
+        ref,
+        xmlns: "http://www.w3.org/2000/svg",
+        width: size,
+        height: size,
+        viewBox: "0 0 24 24",
+        fill: "none",
+        stroke: color,
+        strokeWidth,
+        strokeLinecap: "round",
+        strokeLinejoin: "round",
+        ...props,
+      },
+      React.createElement("circle", { cx: "5", cy: "12", r: "2.5" }),
+      React.createElement("circle", { cx: "19", cy: "12", r: "2.5" }),
+      React.createElement("path", { d: "M7.5 12h9" }),
+      React.createElement("path", { d: "M12 6.5v11" }),
+    ),
+) as LucideIcon;
+
+ProxyIcon.displayName = "ProxyIcon";
 
 export const navigationMenus: Menu[] = [
   {
@@ -25,12 +52,18 @@ export const navigationMenus: Menu[] = [
     path: "/app/schedule",
     icon: CalendarClock,
   },
-
   {
     id: "service-workflow",
     type: "menu",
     name: "Workflow",
     path: "/app/workflow",
     icon: Workflow,
+  },
+  {
+    id: "service-proxy",
+    type: "menu",
+    name: "Proxy",
+    path: "/app/proxy",
+    icon: ProxyIcon,
   },
 ];

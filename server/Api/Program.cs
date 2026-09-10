@@ -1,6 +1,7 @@
 using Blocks.Extension.DependencyInjection;
 using Blocks.Extensions.DependencyInjection;
 using Blocks.Genesis;
+using Blocks.Secrets;
 using BlocksTemplate.Api;
 using CloudConfiguration.DomainService.Shared.Utilities;
 using Common.InternalService.Shared.Utilities;
@@ -9,6 +10,7 @@ using DomainService.Shared;
 using DomainService.Utilities;
 using DomainService.Workflow;
 using DomainService.Workflow.Utils;
+using Proxy.DomainService;
 using Mail.DomainService.Shared.Utilities;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
@@ -49,6 +51,7 @@ ApplicationConfigurations.ConfigureApi(services, serviceName);
 builder.Services.Configure<MvcOptions>(options =>
 {
     options.Conventions.Insert(0, new GlobalApiRoutePrefixConvention("api"));
+    options.Filters.Add<SecretExceptionFilter>();
 });
 
 var wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
@@ -61,9 +64,11 @@ services.RegisterBlocksEurolmServices();
 services.RegisterAllMailApplicationServices();
 services.RegisterBlocksObservabilityServices();
 services.AddWorkflowExecutionEngine();
+services.AddProxyServices();
 services.AddCloudConfigurationServices();
 services.AddSchedulerServices();
 services.AddStorageDomainServices();
+services.AddBlocksSecrets();
 services.RegisterBlocksStorageServices();
 await services.RegisterBlocksDeploymentServicesAsync(vaultType);
 
