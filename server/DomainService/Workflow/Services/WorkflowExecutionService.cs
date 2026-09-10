@@ -8,13 +8,14 @@ using DomainService.Workflow.Events;
 using DomainService.Workflow.Enums;
 using DomainService.Workflow.Utils;
 using Microsoft.Extensions.Logging;
-using DomainService.Workflow.Nodes.TriggerEmailV1;
 using DomainService.Workflow.Nodes.TriggerDataV1;
 using DomainService.Workflow.Nodes.TriggerScheduleV1;
 using MongoDB.Bson;
 using System.Diagnostics.CodeAnalysis;
 using DotLiquid.Util;
 using Microsoft.AspNetCore.Http;
+using Mail.DomainService.Mails;
+using Mail.DomainService.Shared.Enums;
 
 
 
@@ -308,9 +309,8 @@ namespace DomainService.Workflow.Services
             {
                 _logger.LogError("ProjectKey (TenantId) is null or empty in BlocksContext");
                 return;
-
             }
-            if (emailEvent.Mail.MailServerConfigurationId == null)
+            if (string.IsNullOrEmpty(emailEvent.Mail.MailServerConfigurationId))
             {
                 _logger.LogError("MailServerConfigurationId is null in EmailTriggerEvent");
                 return;
@@ -328,60 +328,124 @@ namespace DomainService.Workflow.Services
                 return;
             }
 
-            var workflows = await _workflowRepository.GetWorkflowsByMailServerConfigurationIdAsync(tenantId, emailEvent.Mail.MailServerConfigurationId);
-            _logger.LogInformation("Found {WorkflowCount} workflows for MailServerConfigurationId: {MailServerConfigurationId}", workflows.Count, emailEvent.Mail.MailServerConfigurationId);
+            var draftWorkflows = await _workflowRepository.GetWorkflowsByMailServerConfigurationIdAsync(tenantId, emailEvent.Mail.MailServerConfigurationId);
+            _logger.LogInformation("Found {WorkflowCount} workflows for MailServerConfigurationId: {MailServerConfigurationId}", draftWorkflows.Count, emailEvent.Mail.MailServerConfigurationId);
 
-            foreach (var workflow in workflows)
+            var pendingProduction = new List<WorkflowEntity>();
+
+            foreach (var workflow in draftWorkflows)
             {
-                try
+                var triggerNode = FindEmailTriggerNode(workflow.Nodes, emailEvent.Mail.MailServerConfigurationId);
+                if (triggerNode == null)
                 {
-                    _logger.LogInformation("Creating execution for WorkflowId: {WorkflowId}", workflow.ItemId);
-                    var triggerNode = workflow.Nodes.FirstOrDefault(n =>
-                        n.Type == "email" &&
-                        n.Category == "trigger" &&
-                        n.Parameters != null &&
-                        n.Parameters.Contains("mailServerConfigurationId") &&
-                        n.Parameters["mailServerConfigurationId"].ToString() == emailEvent.Mail.MailServerConfigurationId
-                    );
+                    _logger.LogWarning("No Email trigger node found for WorkflowId: {WorkflowId} with MailServerConfigurationId: {MailServerConfigurationId}", workflow.ItemId, emailEvent.Mail.MailServerConfigurationId);
+                    continue;
+                }
 
-                    if (triggerNode == null)
+                if (IsTestSubjectMatch(triggerNode, emailEvent.Mail.Subject))
+                {
+                    await QueueEmailTriggerExecutionAsync(workflow, triggerNode, WorkflowExecutionMode.Test, emailEvent, tenantId);
+                }
+                else if (workflow.IsPublished && !string.IsNullOrEmpty(workflow.PublishedVersionId))
+                {
+                    pendingProduction.Add(workflow);
+                }
+                else
+                {
+                    _logger.LogInformation("WorkflowId {WorkflowId} matched but is not published; skipping production dispatch.", workflow.ItemId);
+                }
+            }
+
+            if (pendingProduction.Count == 0)
+            {
+                return;
+            }
+
+            var workflowIds = pendingProduction.Select(w => w.ItemId).ToArray();
+            var versions = await _workflowVersionRepository.GetWorkflowVersionsAsync(tenantId, workflowIds);
+            foreach (var workflow in pendingProduction)
+            {
+                var snapshot = versions.FirstOrDefault(v => v.ItemId == workflow.PublishedVersionId)?.Snapshot;
+                if (snapshot == null)
+                {
+                    _logger.LogWarning("Published version {VersionId} not found for WorkflowId: {WorkflowId}", workflow.PublishedVersionId, workflow.ItemId);
+                    continue;
+                }
+
+                var triggerNode = FindEmailTriggerNode(snapshot.Nodes, emailEvent.Mail.MailServerConfigurationId);
+                if (triggerNode == null)
+                {
+                    _logger.LogWarning("No Email trigger node found in published snapshot for WorkflowId: {WorkflowId}", workflow.ItemId);
+                    continue;
+                }
+
+                await QueueEmailTriggerExecutionAsync(snapshot, triggerNode, WorkflowExecutionMode.Production, emailEvent, tenantId);
+            }
+        }
+
+        private static NodeEntity? FindEmailTriggerNode(IEnumerable<NodeEntity> nodes, string mailServerConfigurationId)
+        {
+            return nodes.FirstOrDefault(n =>
+                n.Type == "email" &&
+                n.Category == "trigger" &&
+                n.Parameters != null &&
+                n.Parameters.Contains("mailServerConfigurationId") &&
+                n.Parameters["mailServerConfigurationId"].ToString() == mailServerConfigurationId);
+        }
+
+        private static bool IsTestSubjectMatch(NodeEntity triggerNode, string? mailSubject)
+        {
+            if (triggerNode.Parameters == null || !triggerNode.Parameters.Contains("testSubject"))
+            {
+                return false;
+            }
+
+            var testSubject = triggerNode.Parameters["testSubject"].ToString();
+            return !string.IsNullOrWhiteSpace(testSubject) &&
+                   string.Equals(testSubject.Trim(), mailSubject?.Trim(), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private async Task QueueEmailTriggerExecutionAsync(
+            WorkflowEntity workflow,
+            NodeEntity triggerNode,
+            WorkflowExecutionMode executionMode,
+            EmailTriggerEvent emailEvent,
+            string tenantId)
+        {
+            try
+            {
+                _logger.LogInformation("Creating {ExecutionMode} execution for WorkflowId: {WorkflowId}", executionMode, workflow.ItemId);
+                var emailJson = JsonSerializer.Serialize(emailEvent.Mail);
+                var emailBsonDoc = BsonDocument.Parse(emailJson);
+                var execution = await CreateExecutionAsync(workflow, new TriggerMetadata
+                {
+                    TriggerNodeId = triggerNode.Id,
+                    TriggerType = triggerNode.Type,
+                    TriggerData = new BsonArray { emailBsonDoc }
+                }, executionMode);
+
+                execution.Context["Input"] = new BsonArray { emailBsonDoc };
+                execution.Status = WorkflowExecutionStatus.Queued;
+                execution.ActiveNodeIds.Add(triggerNode.Id);
+
+                await _executionRepository.UpdateAsync(execution);
+                await NotifyWorkflowStartedAsync(execution);
+                await _messageClient.SendToConsumerAsync(new ConsumerMessage<AddExcuationNodeEvent>
+                {
+                    ConsumerName = LogicConstants.NodeExecutionQueue,
+                    Payload = new AddExcuationNodeEvent
                     {
-                        _logger.LogWarning("No Email trigger node found for WorkflowId: {WorkflowId} with MailServerConfigurationId: {MailServerConfigurationId}", workflow.ItemId, emailEvent.Mail.MailServerConfigurationId);
-                        continue;
+                        WorkflowId = workflow.ItemId,
+                        WorkflowExecutionId = execution.Id!,
+                        NodeId = triggerNode.Id,
+                        ProjectKey = tenantId
                     }
-
-                    var execution = await CreateExecutionAsync(workflow, new TriggerMetadata
-                    {
-                        TriggerNodeId = triggerNode.Id,
-                        TriggerType = triggerNode.Type,
-                        TriggerData = new BsonArray { BsonDocument.Parse(JsonSerializer.Serialize(emailEvent.Mail)) }
-                    }, WorkflowExecutionMode.Production);
-                    var emailJson = JsonSerializer.Serialize(emailEvent.Mail);
-                    var emailBsonDoc = BsonDocument.Parse(emailJson);
-                    execution.Context["Input"] = new BsonArray { emailBsonDoc };
-
-                    execution.Status = WorkflowExecutionStatus.Queued;
-                    execution.ActiveNodeIds.Add(triggerNode.Id);
-
-                    await _executionRepository.UpdateAsync(execution);
-                    await NotifyWorkflowStartedAsync(execution);
-                    await _messageClient.SendToConsumerAsync(new ConsumerMessage<AddExcuationNodeEvent>
-                    {
-                        ConsumerName = LogicConstants.NodeExecutionQueue,
-                        Payload = new AddExcuationNodeEvent
-                        {
-                            WorkflowId = workflow.ItemId,
-                            WorkflowExecutionId = execution.Id!,
-                            NodeId = triggerNode.Id,
-                            ProjectKey = tenantId
-                        }
-                    });
-                    _logger.LogInformation("Queued execution {ExecutionId} for WorkflowId: {WorkflowId}", execution.Id, workflow.ItemId);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to create execution for WorkflowId: {WorkflowId}", workflow.ItemId);
-                }
+                });
+                _logger.LogInformation("Queued execution {ExecutionId} for WorkflowId: {WorkflowId}", execution.Id, workflow.ItemId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to create execution for WorkflowId: {WorkflowId}", workflow.ItemId);
             }
         }
 

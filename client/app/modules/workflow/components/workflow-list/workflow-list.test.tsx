@@ -14,14 +14,21 @@ vi.mock("react-router", async (orig) => {
 const svc = vi.hoisted(() => ({
   deleteWorkflow: vi.fn().mockResolvedValue({ isSuccess: true }),
   duplicateWorkflow: vi.fn().mockResolvedValue({ isSuccess: true }),
+  createWorkflow: vi.fn().mockResolvedValue({ isSuccess: true, itemId: "NEW" }),
   updateWorkflow: vi.fn().mockResolvedValue({ isSuccess: true }),
   publishWorkflow: vi.fn().mockResolvedValue({ isSuccess: true }),
   publishWorkflowNewVersion: vi.fn().mockResolvedValue({ isSuccess: true }),
   unpublishWorkflow: vi.fn().mockResolvedValue({ isSuccess: true }),
+  getWorkflowById: vi.fn().mockResolvedValue({
+    isSuccess: true,
+    data: { name: "wf", description: "", settings: {}, nodes: [], edges: [] },
+  }),
 }));
 vi.mock("@/modules/workflow/services/workflow.service", () => ({
   workflowService: svc,
 }));
+vi.mock("../../utils/download-json.util", () => ({ downloadJson: vi.fn() }));
+import { downloadJson } from "../../utils/download-json.util";
 
 import { WorkflowList } from "./workflow-list";
 
@@ -63,6 +70,26 @@ describe("WorkflowList", () => {
     wrap(<WorkflowList workflow={[]} isLoading={false} />);
     expect(screen.getByText("Create your first workflow")).toBeTruthy();
     expect(screen.getByText("Create workflow")).toBeTruthy();
+  });
+
+  it("shows an Import control in the empty state (H4)", () => {
+    const { container } = wrap(<WorkflowList workflow={[]} isLoading={false} />);
+    expect(screen.getByRole("button", { name: /import/i })).toBeTruthy();
+    expect(container.querySelector('input[type="file"]')).toBeTruthy();
+  });
+
+  it("exports a workflow from the row menu (H1, H2)", async () => {
+    const user = userEvent.setup();
+    wrap(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      <WorkflowList workflow={[wf("42") as any]} isLoading={false} />,
+    );
+    const triggers = screen.getAllByRole("button");
+    await user.click(triggers[triggers.length - 1]);
+    await user.click(await screen.findByText("Export"));
+    await waitFor(() => expect(svc.getWorkflowById).toHaveBeenCalledWith({ id: "42" }));
+    await waitFor(() => expect(downloadJson).toHaveBeenCalled());
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it("renders workflow rows with name and status", () => {
