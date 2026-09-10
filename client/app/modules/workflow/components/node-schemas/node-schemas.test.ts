@@ -321,6 +321,17 @@ describe("send mail v1", () => {
     const keys = await f.fixedKeys({ EmailTemplate: "Promo_body-pk" }, { projectKey: "body-pk" });
     expect(Array.isArray(keys)).toBe(true);
   });
+
+  it("has an Attachments field of type expression-list", () => {
+    const f = field(NodeSchemaActionSendMailV1, "Attachments");
+    expect(f).toBeDefined();
+    expect(f.type).toBe("expression-list");
+    expect(f.required).toBeFalsy();
+  });
+
+  it("defaults Attachments to an empty array", () => {
+    expect(NodeSchemaActionSendMailV1.defaults.parameters.Attachments).toEqual([]);
+  });
 });
 
 describe("webhook trigger v1", () => {

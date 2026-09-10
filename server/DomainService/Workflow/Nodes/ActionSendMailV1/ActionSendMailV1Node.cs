@@ -2,7 +2,6 @@ using Mail.DomainService;
 using System.Text.Json;
 using Blocks.Genesis;
 using MongoDB.Bson;
-using System.Diagnostics.CodeAnalysis;
 using Mail.DomainService.Mails;
 
 namespace DomainService.Workflow.Nodes.ActionSendMailV1
@@ -11,7 +10,6 @@ namespace DomainService.Workflow.Nodes.ActionSendMailV1
     /// Action node that sends email using mail driver service
     /// Takes email configuration and processes each input item
     /// </summary>
-    [ExcludeFromCodeCoverage]
     public class ActionSendMailV1Node : NodeExecutorBase<ActionSendMailV1Parameters>
     {
         public override string NodeType => "sendMail";
@@ -36,16 +34,31 @@ namespace DomainService.Workflow.Nodes.ActionSendMailV1
                     var to = parseExpression<string>(parameters.To, context.InputItems[i], context) ?? "";
                     var bodyDataContext = parameters.BodyDataContext.Keys.ToDictionary(key => key, key => parseExpression<string>(parameters.BodyDataContext[key], context.InputItems[i], context) ?? "");
 
+                    // Each entry is either a literal storage File ID, or an expression (same
+                    // {{$json...}}/{{$node[...]...}}/{{$context...}} syntax as `To`) resolved
+                    // per-iteration. Mail.DomainService's StorageMailAttachmentResolver already
+                    // drops blanks and de-duplicates, so no extra handling is needed here.
+                    var attachments = (parameters.Attachments ?? new List<string>())
+                        .Select(a => parseExpression<string>(a, context.InputItems[i], context) ?? a)
+                        .ToList();
+
                     var projectkey = parameters.ProjectKey ?? "";
                     var securityData = BlocksContext.Create(projectkey, [], "", false, "", "", DateTime.MinValue, "", [], "", "", "", "", "", projectkey);
                     BlocksContext.SetContext(securityData, false);
-                    var response = await SendMailAsync(projectkey, to, parameters.Template, parameters.Language, bodyDataContext);
+                    var response = await SendMailAsync(projectkey, to, parameters.Template, parameters.Language, bodyDataContext, attachments);
                     BlocksContext.SetContext(blocksContext, false);
-                    var output = new Dictionary<string, object>
+                    // Built as a plain BsonDocument (not a Dictionary<string, object> run through
+                    // ToBsonDocument()) so non-primitive values (the Errors document, the
+                    // AttachmentsSent array) serialize as themselves rather than getting wrapped
+                    // in a polymorphic discriminator, which is what happens when the driver's
+                    // object serializer sees a declared type of `object` for a BsonValue/array.
+                    var output = new BsonDocument
                     {
                         { "Success", response.IsSuccess },
-                        { "Errors", response.Errors?.ToBsonDocument() ?? null },
-                        { "To", to }
+                        { "Errors", response.Errors != null ? response.Errors.ToBsonDocument() : BsonNull.Value },
+                        { "To", to },
+                        { "AttachmentsSent", new BsonArray(attachments) },
+                        { "AttachmentCount", attachments.Count }
                     };
 
                     outputItems.Add(new NodeOutputItem
@@ -53,7 +66,7 @@ namespace DomainService.Workflow.Nodes.ActionSendMailV1
                         Data = new NodeOutputItemData
                         {
                             Input = context.InputItems[i].Data.Output,
-                            Output = output.ToBsonDocument(),
+                            Output = output,
                             Parameters = parameters.ToBsonDocument(),
                         },
                         Branch = "source",
@@ -87,7 +100,7 @@ namespace DomainService.Workflow.Nodes.ActionSendMailV1
         }
 
 
-        private async Task<BaseMutationResponse> SendMailAsync(string projectkey, string to, string template, string language, Dictionary<string, string> bodyDataContext)
+        private async Task<BaseMutationResponse> SendMailAsync(string projectkey, string to, string template, string language, Dictionary<string, string> bodyDataContext, List<string> attachments)
         {
             var email = new SendMailToAny
             {
@@ -97,6 +110,7 @@ namespace DomainService.Workflow.Nodes.ActionSendMailV1
                 Purpose = template,
                 Language = language ?? "en-US",
                 To = new List<string>() { to.Trim() },
+                Attachments = attachments,
                 ProjectKey = projectkey
             };
 
