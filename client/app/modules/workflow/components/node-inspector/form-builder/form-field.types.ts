@@ -18,6 +18,7 @@ export type FormFieldType =
   | "fixed-key-value-pairs"
   | "key-type-value-pairs"
   | "array"
+  | "expression-list"
   | "schema-fields"
   | "schema-field-picker"
   | "conditions"
