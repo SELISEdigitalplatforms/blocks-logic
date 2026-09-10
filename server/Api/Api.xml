@@ -4,6 +4,17 @@
         <name>Api</name>
     </assembly>
     <members>
+        <member name="M:BlocksTemplate.Api.Controllers.CertificateController.UploadCertificate(Microsoft.AspNetCore.Http.IFormFile,System.Boolean)">
+            <summary>
+            Stores a public certificate for the calling tenant and returns the URL to read it back.
+            </summary>
+            <remarks>
+            The file arrives as multipart form data while the flag arrives on the query string, so
+            both are bound explicitly - a single complex parameter would be inferred as
+            <c>[FromBody]</c> and reject the upload. Callers also send a <c>TenantId</c> query
+            parameter; it is ignored, because the tenant comes from the request context.
+            </remarks>
+        </member>
         <member name="M:BlocksTemplate.Api.Controllers.LanguageController.Gets(Common.InternalService.Language.GetLanguagesRequest)">
             <summary>
             Retrieves all available languages.
