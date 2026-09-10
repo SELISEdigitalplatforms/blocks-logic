@@ -55,7 +55,7 @@ export const FunctionsPage = () => {
         </Card>
       ) : (
         <Card>
-          <CardHeader className="mb-0 flex flex-row items-center gap-3">
+          <CardHeader className="mb-4 flex flex-row items-center gap-3">
             <FunctionsFilterToolBar />
             {isFetching && !isLoading && (
               <Loader2 className="h-4 w-4 shrink-0 animate-spin text-medium-emphasis" />
@@ -66,10 +66,12 @@ export const FunctionsPage = () => {
               functions={functions}
               isLoading={isLoading}
               hasFilters={hasFilters}
+              rowCount={Number(queryParams.pageSize)}
               onCreateFunction={() => setIsCreateOpen(true)}
             />
 
-            {!!data?.totalCount && (
+            {/* One page of results needs no pager — matches the runs tab, which guards the same way. */}
+            {!!data?.totalCount && data.totalCount > Number(queryParams.pageSize) && (
               <div className="mt-5 flex justify-end">
                 <Pagination
                   totalCount={data?.totalCount || 0}

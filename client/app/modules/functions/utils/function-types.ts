@@ -19,8 +19,7 @@ const envMembers = (envKeys: string[]) => {
   }
   return [
     ...keys.map(
-      (key) =>
-        `  /** Variable ${key}, snapshotted at deploy. */\n  ${quoteKey(key)}: string;`,
+      (key) => `  /** Variable ${key}, snapshotted at deploy. */\n  ${quoteKey(key)}: string;`,
     ),
     "  /** Variables added after this deploy. */\n  [key: string]: string | undefined;",
   ].join("\n");
@@ -87,8 +86,16 @@ declare const Buffer: any;
 export const buildCtxCompletions = (envKeys: string[] = []) => {
   const keys = Array.from(new Set(envKeys.map((key) => key.trim()).filter(Boolean)));
   return [
-    { label: "env", detail: "Record<string, string>", documentation: "Your variables, as plain strings." },
-    { label: "log", detail: "FunctionLogger", documentation: "info / warn / error / debug — kept on the run." },
+    {
+      label: "env",
+      detail: "Record<string, string>",
+      documentation: "Your variables, as plain strings.",
+    },
+    {
+      label: "log",
+      detail: "FunctionLogger",
+      documentation: "info / warn / error / debug — kept on the run.",
+    },
     { label: "run", detail: "FunctionRun", documentation: "id, version, attempt, invokedBy." },
     {
       label: "context",

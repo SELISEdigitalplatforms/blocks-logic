@@ -208,6 +208,16 @@ namespace Functions.DomainService.Dtos.Responses
         public string? Result { get; set; }
         public string? ErrorCode { get; set; }
         public string? ErrorMessage { get; set; }
+
+        /// <summary>
+        /// Set instead of a run when the image was still building: there is nothing to invoke yet,
+        /// so the caller polls <c>GetBuild</c> with this id and runs again once it succeeds. The
+        /// editor's build-progress indicator is driven from here.
+        /// </summary>
+        public string? BuildId { get; set; }
+
+        /// <summary>The build's status at the moment the request gave up waiting.</summary>
+        public string? BuildStatus { get; set; }
     }
 
     /// <summary>Static platform ceilings and defaults, for the editor's limits form.</summary>

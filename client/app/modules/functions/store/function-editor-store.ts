@@ -93,7 +93,10 @@ export const useFunctionEditorStore = create<FunctionEditorState>((set) => ({
   setIndexJs: (indexJs) =>
     set((state) => {
       const next = { ...state, indexJs };
-      return { indexJs, isDirty: !snapshotsEqual(currentSnapshot(next), state.savedSnapshot ?? emptySnapshot) };
+      return {
+        indexJs,
+        isDirty: !snapshotsEqual(currentSnapshot(next), state.savedSnapshot ?? emptySnapshot),
+      };
     }),
   setPackageJson: (packageJson) =>
     set((state) => {
@@ -106,17 +109,26 @@ export const useFunctionEditorStore = create<FunctionEditorState>((set) => ({
   setLimits: (limits) =>
     set((state) => {
       const next = { ...state, limits };
-      return { limits, isDirty: !snapshotsEqual(currentSnapshot(next), state.savedSnapshot ?? emptySnapshot) };
+      return {
+        limits,
+        isDirty: !snapshotsEqual(currentSnapshot(next), state.savedSnapshot ?? emptySnapshot),
+      };
     }),
   setRetry: (retry) =>
     set((state) => {
       const next = { ...state, retry };
-      return { retry, isDirty: !snapshotsEqual(currentSnapshot(next), state.savedSnapshot ?? emptySnapshot) };
+      return {
+        retry,
+        isDirty: !snapshotsEqual(currentSnapshot(next), state.savedSnapshot ?? emptySnapshot),
+      };
     }),
   setTrigger: (trigger) =>
     set((state) => {
       const next = { ...state, trigger };
-      return { trigger, isDirty: !snapshotsEqual(currentSnapshot(next), state.savedSnapshot ?? emptySnapshot) };
+      return {
+        trigger,
+        isDirty: !snapshotsEqual(currentSnapshot(next), state.savedSnapshot ?? emptySnapshot),
+      };
     }),
   setOutputActions: (outputActions) =>
     set((state) => {

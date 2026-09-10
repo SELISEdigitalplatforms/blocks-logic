@@ -213,6 +213,9 @@ namespace Functions.DomainService.Services
             foreach (var function in items)
             {
                 var activeVersion = await GetActiveVersionAsync(tenantId, function, cancellationToken);
+                // Derived, exactly as the detail view does it. Without this the list read the
+                // unset default and never showed "unpublished changes" for anything.
+                function.IsDirty = IsDirty(function, activeVersion);
                 stats.TryGetValue(function.ItemId, out var functionStats);
                 runs24h.TryGetValue(function.ItemId, out var recentRuns);
                 summaries.Add(FunctionSummaryDto.From(

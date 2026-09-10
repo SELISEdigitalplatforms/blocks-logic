@@ -21,11 +21,17 @@ export const useTestFunction = () => {
  * Runs list. Polls every 5 s while the page holds any non-terminal run, so in-flight runs settle
  * without a manual refresh; `autoRefresh: false` is the runs tab's toggle turned off.
  */
-export const useGetRuns = (payload: IGetRunsPayload, options?: { autoRefresh?: boolean }) => {
+export const useGetRuns = (
+  payload: IGetRunsPayload,
+  options?: { autoRefresh?: boolean; enabled?: boolean },
+) => {
   const autoRefresh = options?.autoRefresh ?? true;
   return useQuery({
     queryKey: [...RUNS_QUERY_KEY, payload],
     queryFn: () => functionService.getRuns(payload),
+    // Lets the caller hold the query until every part of the key is settled, so a window that is
+    // computed in an effect does not cost a first fetch with the wrong bound.
+    enabled: options?.enabled ?? true,
     refetchInterval: (query) => {
       if (!autoRefresh) return false;
       const runs = query.state.data?.data ?? [];

@@ -135,11 +135,11 @@ namespace Functions.DomainService.Repositories
                 .Set(f => f.Retry, retry)
                 .Set(f => f.Trigger, trigger)
                 .Set(f => f.OutputActions, outputActions)
-                .Set(f => f.Variables, variables)
-                // Saved edits mean the working copy may differ from the deployed version. The
-                // detail view recomputes this exactly by comparing hashes; storing it here is
-                // what keeps the list view honest without reading every version.
-                .Set(f => f.IsDirty, true);
+                .Set(f => f.Variables, variables);
+            // IsDirty is deliberately [BsonIgnore] — it is derived by comparing the working
+            // source hash against the active version's, in FunctionService.IsDirty. Setting it
+            // here asked the driver to write a field that has no BSON mapping, which threw
+            // "Expression not supported: f.IsDirty" and turned every Save into a 500.
             return ApplyAsync(tenantId, functionId, update, actorId, cancellationToken);
         }
 
@@ -151,9 +151,9 @@ namespace Functions.DomainService.Repositories
                 .Set(f => f.ActiveVersionId, versionId)
                 .Set(f => f.LastVersionNumber, versionNumber)
                 .Set(f => f.Status, Enums.FunctionStatus.Live)
-                .Set(f => f.LastDeployedAt, deployedAt)
-                // What was just deployed is what is saved, by definition.
-                .Set(f => f.IsDirty, false);
+                .Set(f => f.LastDeployedAt, deployedAt);
+            // Nothing to clear: what was just deployed matches the working copy, so the derived
+            // IsDirty is false on its own. (Same reason as SaveSourceAsync above.)
             return ApplyAsync(tenantId, functionId, update, actorId, cancellationToken);
         }
 

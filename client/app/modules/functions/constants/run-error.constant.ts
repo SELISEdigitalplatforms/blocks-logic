@@ -15,7 +15,8 @@ export const RUN_ERROR_EXPLANATIONS: Record<RunErrorCode, string> = {
   ResultNotSerializable:
     "The returned value could not be turned into JSON. Return plain objects, arrays and primitives.",
   ImagePullFailed: "The deployed image could not be pulled. Deploy again to rebuild it.",
-  TimedOut: "The run passed its timeout and was stopped. Raise the timeout (max 60 s) or do less work per call.",
+  TimedOut:
+    "The run passed its timeout and was stopped. Raise the timeout (max 60 s) or do less work per call.",
   SandboxStartFailed: "The sandbox failed to start. Nothing ran, so a replay is safe.",
   OutputActionFailed: "The function returned successfully, but an output action did not deliver.",
 };

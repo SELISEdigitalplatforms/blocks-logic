@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Functions.DomainService.Enums
 {
     /// <summary>Lifecycle of a function as the tenant sees it.</summary>
@@ -62,6 +64,14 @@ namespace Functions.DomainService.Enums
     }
 
     /// <summary>How an HTTP trigger authenticates its caller.</summary>
+    /// <summary>
+    /// Serialised by name. These four reach the wire inside <c>SaveFunctionRequestDto</c>, which
+    /// embeds the domain models, and the client's types declare them as string unions — without
+    /// this, System.Text.Json wants a number and Save fails with
+    /// "The JSON value could not be converted … Path: $.outputActions[0]". Reading still accepts a
+    /// number, so nothing that already sent one breaks.
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum AuthMode
     {
         /// <summary>No authentication. The sandbox gets an anonymous, unauthenticated context.</summary>
@@ -72,6 +82,14 @@ namespace Functions.DomainService.Enums
     }
 
     /// <summary>Whether every listed role/permission is required, or any one of them.</summary>
+    /// <summary>
+    /// Serialised by name. These four reach the wire inside <c>SaveFunctionRequestDto</c>, which
+    /// embeds the domain models, and the client's types declare them as string unions — without
+    /// this, System.Text.Json wants a number and Save fails with
+    /// "The JSON value could not be converted … Path: $.outputActions[0]". Reading still accepts a
+    /// number, so nothing that already sent one breaks.
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum MatchMode
     {
         Any = 0,
@@ -79,6 +97,14 @@ namespace Functions.DomainService.Enums
     }
 
     /// <summary>Shape of the delay between run attempts.</summary>
+    /// <summary>
+    /// Serialised by name. These four reach the wire inside <c>SaveFunctionRequestDto</c>, which
+    /// embeds the domain models, and the client's types declare them as string unions — without
+    /// this, System.Text.Json wants a number and Save fails with
+    /// "The JSON value could not be converted … Path: $.outputActions[0]". Reading still accepts a
+    /// number, so nothing that already sent one breaks.
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum BackoffKind
     {
         None = 0,
@@ -87,6 +113,14 @@ namespace Functions.DomainService.Enums
     }
 
     /// <summary>What to do with a successful run's result.</summary>
+    /// <summary>
+    /// Serialised by name. These four reach the wire inside <c>SaveFunctionRequestDto</c>, which
+    /// embeds the domain models, and the client's types declare them as string unions — without
+    /// this, System.Text.Json wants a number and Save fails with
+    /// "The JSON value could not be converted … Path: $.outputActions[0]". Reading still accepts a
+    /// number, so nothing that already sent one breaks.
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum OutputActionKind
     {
         /// <summary>POST/PUT the result to an external endpoint.</summary>

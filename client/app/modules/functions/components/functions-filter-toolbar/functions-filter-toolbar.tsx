@@ -1,6 +1,5 @@
 "use client";
-import { Search } from "lucide-react";
-import { Input } from "@/components/ui-kits/input/input";
+import { SearchInput } from "@/components/filter-toolbar/search-input/search-input";
 import {
   Select,
   SelectContent,
@@ -11,11 +10,16 @@ import {
 import { cn } from "@/lib/utils";
 import { useFunctionsFilterQueryParams } from "../../hooks/use-functions-filter-query-params";
 
-/** Segmented status filter, per FEATURES-AND-UI §4.1 — "" is All. */
+/**
+ * Segmented status filter, per FEATURES-AND-UI §4.1 — "" is All. `Paused` is not in the spec's
+ * list but is a real server status (FunctionEnums.FunctionStatus), so it gets a chip: without one
+ * a paused function is reachable only through All and the control implies it cannot exist.
+ */
 const STATUS_OPTIONS = [
   { label: "All", value: "" },
   { label: "Live", value: "Live" },
   { label: "Draft", value: "Draft" },
+  { label: "Paused", value: "Paused" },
 ];
 
 /**
@@ -34,15 +38,19 @@ export const FunctionsFilterToolBar = () => {
     setQueryParams((params) => ({ ...params, ...partial, page: 0 }));
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <div className="relative min-w-[200px] flex-1">
-        <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-medium-emphasis" />
-        <Input
+    <div className="flex flex-1 flex-wrap items-center gap-3">
+      {/*
+        The shared SearchInput debounces at 300 ms. Writing straight to the nuqs param on every
+        keystroke would put a character-by-character request on the wire (and a history entry
+        behind every one of them), because `search` is part of the functions query key.
+      */}
+      <div className="min-w-[220px] flex-1">
+        <SearchInput
           aria-label="Search functions"
           placeholder="Search by name"
-          className="h-9 pl-8"
+          className="h-8 w-full"
           value={queryParams.search}
-          onChange={(e) => patch({ search: e.target.value })}
+          onChange={(search) => patch({ search })}
         />
       </div>
 
@@ -54,6 +62,7 @@ export const FunctionsFilterToolBar = () => {
             aria-pressed={queryParams.status === option.value}
             className={cn(
               "px-3 py-1.5 text-xs font-semibold transition-colors",
+              "focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               queryParams.status === option.value
                 ? "bg-primary text-primary-foreground"
                 : "bg-background text-medium-emphasis hover:bg-surface-app",
@@ -69,7 +78,7 @@ export const FunctionsFilterToolBar = () => {
         value={queryParams.sort || "Updated"}
         onValueChange={(sort) => patch({ sort: sort === "Updated" ? "" : sort })}
       >
-        <SelectTrigger className="h-9 w-[170px]" aria-label="Sort">
+        <SelectTrigger className="h-9 w-[170px] shrink-0" aria-label="Sort">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

@@ -27,7 +27,7 @@ describe("buildFunctionTypeDefs", () => {
   });
 
   it("quotes a key that is not a bare identifier so the declaration stays valid", () => {
-    const dts = buildFunctionTypeDefs(["ODD KEY", "WITH\"QUOTE"]);
+    const dts = buildFunctionTypeDefs(["ODD KEY", 'WITH"QUOTE']);
 
     expect(dts).toContain('"ODD KEY": string;');
     expect(dts).toContain('"WITH\\"QUOTE": string;');

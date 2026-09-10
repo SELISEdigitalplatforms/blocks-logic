@@ -12,7 +12,12 @@ type RollbackDialogProps = {
   onOpenChange: (value: boolean) => void;
 };
 
-export const RollbackDialog = ({ functionId, version, open, onOpenChange }: RollbackDialogProps) => {
+export const RollbackDialog = ({
+  functionId,
+  version,
+  open,
+  onOpenChange,
+}: RollbackDialogProps) => {
   const { mutateAsync, isPending } = useRollbackFunction();
 
   const confirmHandler = async () => {

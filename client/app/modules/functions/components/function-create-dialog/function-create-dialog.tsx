@@ -114,12 +114,13 @@ export const FunctionCreateDialog = ({ open, onOpenChange }: FunctionCreateDialo
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Template</FormLabel>
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-2" role="radiogroup" aria-label="Template">
                     {FUNCTION_TEMPLATES.map((template) => (
                       <button
                         key={template.value}
                         type="button"
-                        aria-pressed={field.value === template.value}
+                        role="radio"
+                        aria-checked={field.value === template.value}
                         className={cn(
                           "flex items-start gap-2.5 rounded-lg border p-3 text-left transition-colors",
                           field.value === template.value
@@ -156,7 +157,9 @@ export const FunctionCreateDialog = ({ open, onOpenChange }: FunctionCreateDialo
                 <FormItem>
                   <FormLabel>
                     Description
-                    <span className="ml-1.5 text-xs font-normal text-muted-foreground">optional</span>
+                    <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                      optional
+                    </span>
                   </FormLabel>
                   <FormControl>
                     <Textarea

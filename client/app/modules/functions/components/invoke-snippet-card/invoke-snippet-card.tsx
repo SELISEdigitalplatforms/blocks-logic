@@ -49,8 +49,8 @@ export const InvokeSnippetCard = ({ functionId, trigger }: InvokeSnippetCardProp
         </pre>
         <span className="text-xs leading-relaxed text-medium-emphasis">
           Add <code className="font-mono">?wait=true</code> to hold the call open for the result, or
-          poll <code className="font-mono">GET /api/fn/runs/{"{runId}"}</code>. Every trigger — HTTP,
-          workflow or a test from the editor — is listed under Runs.
+          poll <code className="font-mono">GET /api/fn/runs/{"{runId}"}</code>. Every trigger —
+          HTTP, workflow or a test from the editor — is listed under Runs.
         </span>
       </div>
     </Card>

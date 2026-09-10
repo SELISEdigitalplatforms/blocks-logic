@@ -16,9 +16,18 @@ namespace Functions.DomainService.Services
         /// Ensures a built, digest-pinned image exists for <paramref name="function"/>'s
         /// current source, reusing a cached build when one exists (DECISIONS D3). Waits up to
         /// <c>Functions:BuildWaitSeconds</c> (default 300 s) for an in-flight build to finish.
+        /// <para>
+        /// <paramref name="waitSecondsOverride"/> shortens that wait. Test passes a few seconds:
+        /// holding an editor's request open for five minutes and then answering "still building"
+        /// tells the caller nothing it could not have polled for, so it takes the build back
+        /// unfinished and reports progress instead.
+        /// </para>
         /// </summary>
         Task<FunctionBuildEntity> EnsureImageAsync(
-            string tenantId, FunctionEntity function, CancellationToken cancellationToken = default);
+            string tenantId,
+            FunctionEntity function,
+            CancellationToken cancellationToken = default,
+            int? waitSecondsOverride = null);
 
         /// <summary>A single build's current state — for the editor's build-progress indicator to poll.</summary>
         Task<FunctionBuildEntity> GetAsync(string tenantId, string buildId, CancellationToken cancellationToken = default);
@@ -66,7 +75,10 @@ namespace Functions.DomainService.Services
         }
 
         public async Task<FunctionBuildEntity> EnsureImageAsync(
-            string tenantId, FunctionEntity function, CancellationToken cancellationToken = default)
+            string tenantId,
+            FunctionEntity function,
+            CancellationToken cancellationToken = default,
+            int? waitSecondsOverride = null)
         {
             var sourceHash = function.SourceHash;
 
@@ -77,18 +89,53 @@ namespace Functions.DomainService.Services
             var inProgress = await _buildRepository.GetInProgressBySourceHashAsync(
                 tenantId, function.ItemId, sourceHash, cancellationToken);
 
+            // A queued build that no runner ever claimed would otherwise block this source hash for
+            // good: every later Test finds the same in-flight record and waits on a job that is not
+            // coming. It happens for real — an entry added to `functions:builds` before a runner's
+            // consumer group existed on that Redis is never delivered to anyone, and the source
+            // payload behind it expires after SourceTtl. So a record that has not moved within the
+            // stale window is retired and a fresh build is queued in its place.
+            if (inProgress is not null && IsStale(inProgress))
+            {
+                _logger.LogWarning(
+                    "Build {BuildId} for function {FunctionId} has been {Status} since {Updated:o} " +
+                    "and was never claimed; retiring it and queueing a replacement",
+                    inProgress.ItemId, function.ItemId, inProgress.Status, inProgress.LastUpdatedDate);
+
+                await _buildRepository.ApplyResultAsync(
+                    tenantId,
+                    inProgress.ItemId,
+                    BuildStatus.Failed,
+                    imageDigest: null,
+                    packages: null,
+                    log: null,
+                    errorMessage: "the build was never picked up by a runner and has been retired",
+                    completedAt: DateTime.UtcNow,
+                    cancellationToken).ConfigureAwait(false);
+
+                inProgress = null;
+            }
+
             var build = inProgress ?? await QueueBuildAsync(tenantId, function, sourceHash, cancellationToken);
 
-            return await WaitForCompletionAsync(tenantId, build, cancellationToken);
+            return await WaitForCompletionAsync(tenantId, build, cancellationToken, waitSecondsOverride);
         }
 
         private async Task<FunctionBuildEntity> QueueBuildAsync(
             string tenantId, FunctionEntity function, string sourceHash, CancellationToken cancellationToken)
         {
+            // Both hashes are full sha256 hex (64 chars), so the tag was 64 + 1 + 64 = 129 —
+            // one character past Docker's 128-char tag limit. Every build died on
+            // `invalid reference format` before it started. Twelve hex characters each (48 bits,
+            // 96 combined) is the usual short-digest convention and leaves the tag at 25.
+            const int TagHashChars = 12;
             var codeHash = Utils.FunctionHashing.CodeHash(function.Source);
             var manifestHash = Utils.FunctionHashing.ManifestHash(function.Source);
             var registry = _configuration["Functions:Registry"] ?? "127.0.0.1:5000";
-            var imageRef = $"{registry}/fn/{function.ItemId}:{codeHash}-{manifestHash}";
+            var imageTag =
+                $"{codeHash[..Math.Min(TagHashChars, codeHash.Length)]}-" +
+                $"{manifestHash[..Math.Min(TagHashChars, manifestHash.Length)]}";
+            var imageRef = $"{registry}/fn/{function.ItemId}:{imageTag}";
 
             var build = new FunctionBuildEntity
             {
@@ -142,10 +189,25 @@ namespace Functions.DomainService.Services
             return files;
         }
 
-        private async Task<FunctionBuildEntity> WaitForCompletionAsync(
-            string tenantId, FunctionBuildEntity build, CancellationToken cancellationToken)
+        /// <summary>
+        /// A queued or building record that has not been touched within
+        /// <c>Functions:BuildStaleAfterSeconds</c> (default 600 s). A runner claims within seconds
+        /// and moves the record to Building, so silence well past that means nobody is working on it.
+        /// </summary>
+        private bool IsStale(FunctionBuildEntity build)
         {
-            var waitSeconds = _configuration.GetValue("Functions:BuildWaitSeconds", 300);
+            var staleAfter = _configuration.GetValue("Functions:BuildStaleAfterSeconds", 600);
+            return build.LastUpdatedDate < DateTime.UtcNow.AddSeconds(-staleAfter);
+        }
+
+        private async Task<FunctionBuildEntity> WaitForCompletionAsync(
+            string tenantId,
+            FunctionBuildEntity build,
+            CancellationToken cancellationToken,
+            int? waitSecondsOverride = null)
+        {
+            var waitSeconds = waitSecondsOverride
+                ?? _configuration.GetValue("Functions:BuildWaitSeconds", 300);
             var deadline = DateTime.UtcNow.AddSeconds(waitSeconds);
             var current = build;
 

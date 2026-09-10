@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
 import { RunsFilterBar, RunsFilterValue } from "./runs-filter-bar";
@@ -30,13 +30,17 @@ describe("RunsFilterBar", () => {
     expect(onChange).toHaveBeenCalledWith({ status: "TimedOut" });
   });
 
-  it("reports a run-id search", async () => {
+  it("reports a run-id search once the debounce has elapsed", async () => {
     const onChange = vi.fn();
     renderWithProviders(<RunsFilterBar value={value} onChange={onChange} hasActiveRun={false} />);
 
     await userEvent.type(screen.getByLabelText(/search by run id/i), "r");
 
-    expect(onChange).toHaveBeenCalledWith({ search: "r" });
+    // The shared SearchInput debounces, so the keystroke must not have reached the caller yet:
+    // that is what keeps one request per character off the wire.
+    expect(onChange).not.toHaveBeenCalled();
+
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith({ search: "r" }));
   });
 
   it("lets auto-refresh be turned off", async () => {

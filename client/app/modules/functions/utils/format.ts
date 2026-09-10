@@ -52,7 +52,10 @@ export const formatMegabytes = (bytes?: number | null): string =>
   bytes == null ? "—" : `${Math.round(bytes / (1024 * 1024))} MB`;
 
 /** "82 / 192 MB" — peak memory against the limit it ran under. */
-export const formatMemoryAgainstLimit = (bytes?: number | null, limitMb?: number | null): string => {
+export const formatMemoryAgainstLimit = (
+  bytes?: number | null,
+  limitMb?: number | null,
+): string => {
   if (bytes == null) return "—";
   const used = Math.round(bytes / (1024 * 1024));
   return limitMb == null ? `${used} MB` : `${used} / ${limitMb} MB`;

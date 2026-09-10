@@ -69,7 +69,9 @@ export const useDeployFunction = () => {
     mutationFn: (payload: IDeployFunctionPayload) => functionService.deployFunction(payload),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: [FUNCTIONS_QUERY_KEY] });
-      queryClient.invalidateQueries({ queryKey: [FUNCTIONS_QUERY_KEY, "versions", variables.functionId] });
+      queryClient.invalidateQueries({
+        queryKey: [FUNCTIONS_QUERY_KEY, "versions", variables.functionId],
+      });
     },
   });
 };
@@ -81,7 +83,9 @@ export const useRollbackFunction = () => {
     mutationFn: (payload: IRollbackFunctionPayload) => functionService.rollbackFunction(payload),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: [FUNCTIONS_QUERY_KEY] });
-      queryClient.invalidateQueries({ queryKey: [FUNCTIONS_QUERY_KEY, "versions", variables.functionId] });
+      queryClient.invalidateQueries({
+        queryKey: [FUNCTIONS_QUERY_KEY, "versions", variables.functionId],
+      });
     },
   });
 };

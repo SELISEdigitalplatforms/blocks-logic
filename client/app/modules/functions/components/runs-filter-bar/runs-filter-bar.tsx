@@ -1,5 +1,5 @@
-import { RefreshCw, Search } from "lucide-react";
-import { Input } from "@/components/ui-kits/input/input";
+import { RefreshCw } from "lucide-react";
+import { SearchInput } from "@/components/filter-toolbar/search-input/search-input";
 import { Switch } from "@/components/ui-kits/switch/switch";
 import { Label } from "@/components/ui-kits/label/label";
 import {
@@ -20,8 +20,12 @@ export const RUN_STATUS_FILTERS = [
   { label: "Running", value: "Running" },
 ];
 
+/** Radix Select cannot hold "" as an item value — it means "nothing selected" and shows a blank
+ *  trigger — so "any" is the sentinel and is mapped back to "" for the query. */
+const ANY_TRIGGER = "any";
+
 const TRIGGER_FILTERS = [
-  { label: "Any trigger", value: "" },
+  { label: "Any trigger", value: ANY_TRIGGER },
   { label: "HTTP", value: "Http" },
   { label: "Workflow", value: "Workflow" },
   { label: "Test", value: "Test" },
@@ -71,18 +75,26 @@ export const RunsFilterBar = ({ value, onChange, hasActiveRun }: RunsFilterBarPr
     </div>
 
     <div className="flex flex-wrap items-center gap-3">
-      <div className="relative min-w-[190px] flex-1">
-        <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-medium-emphasis" />
-        <Input
+      {/*
+        Debounced (300 ms) by the shared control: `search` is part of the runs query key, so a raw
+        onChange put one request — and one history entry — on the wire per character typed.
+      */}
+      <div className="min-w-[190px] flex-1">
+        <SearchInput
           aria-label="Search by run id"
           placeholder="Search by run id"
-          className="h-9 pl-8 font-mono text-xs"
+          className="h-8 w-full font-mono text-xs"
           value={value.search}
-          onChange={(e) => onChange({ search: e.target.value })}
+          onChange={(search) => onChange({ search })}
         />
       </div>
 
-      <Select value={value.invokedBy || ""} onValueChange={(invokedBy) => onChange({ invokedBy })}>
+      <Select
+        value={value.invokedBy || ANY_TRIGGER}
+        onValueChange={(invokedBy) =>
+          onChange({ invokedBy: invokedBy === ANY_TRIGGER ? "" : invokedBy })
+        }
+      >
         <SelectTrigger className="h-9 w-[150px]" aria-label="Trigger">
           <SelectValue />
         </SelectTrigger>

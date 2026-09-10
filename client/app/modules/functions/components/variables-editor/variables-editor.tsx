@@ -62,7 +62,10 @@ export const VariablesEditor = ({ value, onChange }: VariablesEditorProps) => {
         </p>
       ) : (
         <>
-          <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto] gap-3 border-b px-4 py-2 text-xs font-semibold uppercase tracking-wide text-low-emphasis">
+          {/* Header and rows are separate grids: the last track is a fixed 32 px (the Remove
+              button) rather than `auto`, which measured 0 in the header and 32 in each row and
+              pushed every label out of line with its input. */}
+          <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.2fr)_minmax(0,1fr)_32px] gap-3 border-b px-4 py-2 text-xs font-semibold uppercase tracking-wide text-low-emphasis">
             <span>Key</span>
             <span>Value</span>
             <span>Read in code as</span>
@@ -74,7 +77,7 @@ export const VariablesEditor = ({ value, onChange }: VariablesEditorProps) => {
             const secretWarning = looksLikeSecret(variable);
             return (
               <div key={index} className="border-b px-4 py-2.5 last:border-b-0">
-                <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto] items-center gap-3">
+                <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.2fr)_minmax(0,1fr)_32px] items-center gap-3">
                   <Input
                     aria-label={`Variable ${index + 1} key`}
                     placeholder="STRIPE_ACCOUNT"

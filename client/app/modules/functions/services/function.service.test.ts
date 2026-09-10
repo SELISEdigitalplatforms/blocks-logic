@@ -28,9 +28,7 @@ describe("functionService", () => {
 
   it("gets a function by id via query string", async () => {
     await functionService.getFunction("fn_1");
-    expect(http.logicService.get).toHaveBeenCalledWith(
-      expect.stringContaining("functionId=fn_1"),
-    );
+    expect(http.logicService.get).toHaveBeenCalledWith(expect.stringContaining("functionId=fn_1"));
   });
 
   it("posts Create/Update/Save with the payload verbatim", async () => {

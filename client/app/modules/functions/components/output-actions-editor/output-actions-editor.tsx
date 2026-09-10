@@ -77,7 +77,13 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
           What happens to the value the function returns. Actions run in order on the Blocks host —
           outside the sandbox — so they can use stored secrets the code never sees.
         </p>
-        <Button type="button" variant="outline" size="sm" className="shrink-0 gap-1.5" onClick={add}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="shrink-0 gap-1.5"
+          onClick={add}
+        >
           <Plus className="h-3.5 w-3.5" />
           Add action
         </Button>
@@ -106,7 +112,8 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
               variant="ghost"
               size="icon"
               aria-label="Move earlier"
-              className={cn("h-7 w-7", index === 0 && "pointer-events-none opacity-30")}
+              disabled={index === 0}
+              className="h-7 w-7 disabled:opacity-30"
               onClick={() => move(index, -1)}
             >
               <ArrowUp className="h-3.5 w-3.5" />
@@ -116,7 +123,8 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
               variant="ghost"
               size="icon"
               aria-label="Move later"
-              className={cn("h-7 w-7", index === value.length - 1 && "pointer-events-none opacity-30")}
+              disabled={index === value.length - 1}
+              className="h-7 w-7 disabled:opacity-30"
               onClick={() => move(index, 1)}
             >
               <ArrowDown className="h-3.5 w-3.5" />
@@ -216,7 +224,9 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
                     onChange={(e) => updateHeader(index, key, e.target.value)}
                   />
                   <SecretPickerPopover
-                    onInsert={(placeholder) => updateHeader(index, key, `${headerValue}${placeholder}`)}
+                    onInsert={(placeholder) =>
+                      updateHeader(index, key, `${headerValue}${placeholder}`)
+                    }
                   />
                   <Button
                     type="button"
@@ -233,8 +243,14 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
             </div>
 
             <div className="flex flex-col gap-2">
-              <Label className="text-xs font-semibold">Body</Label>
-              <div className="flex flex-wrap gap-2">
+              <Label className="text-xs font-semibold" id={`fn-body-mode-${action.id}`}>
+                Body
+              </Label>
+              <div
+                className="flex flex-wrap gap-2"
+                role="radiogroup"
+                aria-labelledby={`fn-body-mode-${action.id}`}
+              >
                 {[
                   { label: "Function result", isTemplate: false },
                   { label: "Template", isTemplate: true },
@@ -244,7 +260,8 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
                     <button
                       key={option.label}
                       type="button"
-                      aria-pressed={isSelected}
+                      role="radio"
+                      aria-checked={isSelected}
                       className={cn(
                         "rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors",
                         isSelected
@@ -269,7 +286,7 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
                   <Textarea
                     aria-label="Body template"
                     className="min-h-[90px] resize-y font-mono text-xs"
-                    placeholder={"{ \"payload\": {{result}}, \"runId\": \"{{run.id}}\" }"}
+                    placeholder={'{ "payload": {{result}}, "runId": "{{run.id}}" }'}
                     value={action.bodyTemplate}
                     onChange={(e) => update(index, { bodyTemplate: e.target.value })}
                   />
@@ -281,7 +298,9 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
                     </p>
                     <SecretPickerPopover
                       onInsert={(placeholder) =>
-                        update(index, { bodyTemplate: `${action.bodyTemplate ?? ""}${placeholder}` })
+                        update(index, {
+                          bodyTemplate: `${action.bodyTemplate ?? ""}${placeholder}`,
+                        })
                       }
                     />
                   </div>

@@ -11,7 +11,14 @@ import { FUNCTION_INVOKE_ENDPOINT_BASE } from "../../constants/endpoint.constant
  * for every path under `api`.
  */
 export const buildInvokeUrl = (functionId: string) =>
-  `${getRuntimeEnv("BLOCKS_LOGIC_BASE_URL") || ""}${FUNCTION_INVOKE_ENDPOINT_BASE}/${functionId}`;
+  `${getRuntimeEnv("BLOCKS_LOGIC_BASE_URL") || ""}${buildInvokePath(functionId)}`;
+
+/**
+ * The path half of {@link buildInvokeUrl}, for the places the design shows a path rather than a
+ * full URL (the list's mono sub-line). Sharing the tail keeps the two from drifting apart.
+ */
+export const buildInvokePath = (functionId: string) =>
+  `${FUNCTION_INVOKE_ENDPOINT_BASE}/${functionId}`;
 
 export const EndpointBadge = ({ functionId }: { functionId: string }) => {
   const [copied, setCopied] = useState(false);
@@ -32,10 +39,15 @@ export const EndpointBadge = ({ functionId }: { functionId: string }) => {
       <Button
         variant="ghost"
         size="icon"
+        aria-label={copied ? "Endpoint copied" : "Copy endpoint"}
         className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
         onClick={handleCopy}
       >
-        {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+        {copied ? (
+          <Check className="h-3.5 w-3.5 text-green-500" />
+        ) : (
+          <Copy className="h-3.5 w-3.5" />
+        )}
       </Button>
     </div>
   );

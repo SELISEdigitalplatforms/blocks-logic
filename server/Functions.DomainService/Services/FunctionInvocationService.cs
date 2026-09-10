@@ -190,13 +190,31 @@ namespace Functions.DomainService.Services
             var function = await _functionRepository.GetByIdAsync(tenantId, functionId, cancellationToken)
                 ?? throw new FunctionNotFoundException($"function '{functionId}' was not found");
 
-            var build = await _buildService.EnsureImageAsync(tenantId, function, cancellationToken);
+            // A short wait, not the deploy-length one: a first build takes minutes, and holding the
+            // editor's request open for all of it only to answer "not finished" is worse than
+            // handing back the build id — the client polls it and shows the build's own progress.
+            var testWaitSeconds = _configuration.GetValue("Functions:TestBuildWaitSeconds", 5);
+            var build = await _buildService.EnsureImageAsync(
+                tenantId, function, cancellationToken, testWaitSeconds);
+
+            if (build.Status is BuildStatus.Queued or BuildStatus.Building)
+            {
+                // Status is what a caller reads first, so it says what is actually happening rather
+                // than coming back empty: "Building"/"Queued" is the build's own state, and there
+                // is no run to report one for yet.
+                return new InvokeResultDto
+                {
+                    RunId = string.Empty,
+                    Status = build.Status.ToString(),
+                    BuildId = build.ItemId,
+                    BuildStatus = build.Status.ToString(),
+                };
+            }
+
             if (build.Status != BuildStatus.Succeeded || string.IsNullOrEmpty(build.ImageDigest))
             {
                 throw new FunctionValidationException(
-                    build.Status is BuildStatus.Queued or BuildStatus.Building
-                        ? "the build has not finished yet; try testing again shortly"
-                        : $"the build failed: {build.ErrorMessage ?? "unknown error"}");
+                    $"the build failed: {build.ErrorMessage ?? "unknown error"}");
             }
 
             var context = BlocksContext.GetContext();

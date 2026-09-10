@@ -61,8 +61,8 @@ export const TriggerWorkflowCard = ({ value, onChange }: TriggerWorkflowCardProp
             ))}
           </div>
           <span className="text-xs leading-relaxed text-medium-emphasis">
-            The workflow waits for the run to finish, so the next node always gets the value. A throw
-            fails the step and the workflow&apos;s own error path takes over.
+            The workflow waits for the run to finish, so the next node always gets the value. A
+            throw fails the step and the workflow&apos;s own error path takes over.
           </span>
         </div>
       )}

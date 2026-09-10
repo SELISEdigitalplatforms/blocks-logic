@@ -47,7 +47,10 @@ export const RetryForm = ({ value, onChange }: RetryFormProps) => {
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <Label className="text-xs font-semibold">Attempts</Label>
-          <Select value={String(value.attempts)} onValueChange={(next) => setAttempts(Number(next))}>
+          <Select
+            value={String(value.attempts)}
+            onValueChange={(next) => setAttempts(Number(next))}
+          >
             <SelectTrigger className="h-9 text-sm" aria-label="Attempts">
               <SelectValue />
             </SelectTrigger>

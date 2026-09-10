@@ -9,6 +9,8 @@ interface SearchInputProps {
   placeholder?: string;
   value: string;
   className?: string;
+  /** Accessible name. A placeholder alone is not a label — pass this when there is no visible one. */
+  "aria-label"?: string;
 }
 
 export const SearchInput: React.FC<SearchInputProps> = ({
@@ -16,6 +18,7 @@ export const SearchInput: React.FC<SearchInputProps> = ({
   placeholder = "Search...",
   value,
   className = "",
+  "aria-label": ariaLabel,
 }) => {
   const [state, setState] = useState(value);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -53,6 +56,7 @@ export const SearchInput: React.FC<SearchInputProps> = ({
       <Search className="mr-2 h-4 w-4 text-muted-foreground" />
       <Input
         ref={inputRef}
+        aria-label={ariaLabel}
         placeholder={placeholder}
         value={state}
         onChange={handleChange}

@@ -30,7 +30,7 @@ describe("TriggerHttpCard", () => {
   it("switches to public and warns about the lost identity", async () => {
     const onChange = render(tokenTrigger);
 
-    await userEvent.click(screen.getByRole("button", { name: /^public/i }));
+    await userEvent.click(screen.getByRole("radio", { name: /^public/i }));
 
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ authMode: "Public" }));
   });
@@ -43,7 +43,7 @@ describe("TriggerHttpCard", () => {
   it("applies one OR/AND choice to both roles and permissions", async () => {
     const onChange = render(tokenTrigger);
 
-    await userEvent.click(screen.getByRole("button", { name: "AND" }));
+    await userEvent.click(screen.getByRole("radio", { name: "AND" }));
 
     expect(onChange).toHaveBeenCalledWith(
       expect.objectContaining({ roleMatch: "All", permissionMatch: "All" }),

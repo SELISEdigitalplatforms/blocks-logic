@@ -18,7 +18,12 @@ import { IFunctionSummary } from "../../types/function.types";
 type DeleteFunctionDialogProps = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
-  fn: IFunctionSummary | null;
+  /**
+   * Only the id (to delete) and the name (to type back) are used. Asking for a whole
+   * `IFunctionSummary` made the detail page invent run counts and dates it does not have, which
+   * would quietly become wrong numbers the moment this dialog started showing any of them.
+   */
+  fn: Pick<IFunctionSummary, "id" | "name"> | null;
   onDeleted?: () => void;
 };
 

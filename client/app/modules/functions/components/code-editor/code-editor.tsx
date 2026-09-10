@@ -40,6 +40,66 @@ const typescriptDefaults = (monaco: Monaco) =>
   monaco.typescript ??
   (monaco.languages as unknown as { typescript?: typeof monaco.typescript }).typescript;
 
+/**
+ * Monaco ships `vs` / `vs-dark`, which sit on their own greys and read as a foreign panel dropped
+ * into the page. These two put the editor on the app's own surfaces (SELISE tokens) so the card,
+ * the file tabs and the code all share one background, and keep the comment/keyword contrast up.
+ */
+const THEMES = {
+  light: {
+    name: "blocks-light",
+    base: "vs" as const,
+    colors: {
+      "editor.background": "#FFFFFF",
+      "editor.foreground": "#1B2021",
+      "editorLineNumber.foreground": "#A9ACAF",
+      "editorLineNumber.activeForeground": "#1B2021",
+      "editor.lineHighlightBackground": "#F4F6F8",
+      "editor.selectionBackground": "#CCE0EF",
+      "editorIndentGuide.background1": "#E7EAEE",
+      "editorIndentGuide.activeBackground1": "#C3C7CC",
+      "editorGutter.background": "#FFFFFF",
+      "editorWidget.background": "#FFFFFF",
+      "editorWidget.border": "#E7EAEE",
+      "editorSuggestWidget.background": "#FFFFFF",
+      "scrollbarSlider.background": "#1B202120",
+    },
+    rules: [
+      { token: "comment", foreground: "6A8759", fontStyle: "italic" },
+      { token: "keyword", foreground: "0067A3" },
+      { token: "string", foreground: "8E4B00" },
+      { token: "number", foreground: "8E0021" },
+    ],
+  },
+  dark: {
+    name: "blocks-dark",
+    base: "vs-dark" as const,
+    colors: {
+      "editor.background": "#14181A",
+      "editor.foreground": "#E7EAEE",
+      "editorLineNumber.foreground": "#5A6066",
+      "editorLineNumber.activeForeground": "#E7EAEE",
+      "editor.lineHighlightBackground": "#1D2225",
+      "editorGutter.background": "#14181A",
+      "editorWidget.background": "#1D2225",
+      "editorWidget.border": "#2A3034",
+      "editorSuggestWidget.background": "#1D2225",
+    },
+    rules: [],
+  },
+};
+
+const defineThemes = (monaco: Monaco) => {
+  (Object.values(THEMES) as (typeof THEMES)[keyof typeof THEMES][]).forEach((theme) => {
+    monaco.editor.defineTheme(theme.name, {
+      base: theme.base,
+      inherit: true,
+      rules: theme.rules,
+      colors: theme.colors,
+    });
+  });
+};
+
 const configureJavaScript = (monaco: Monaco) => {
   const typescript = typescriptDefaults(monaco);
   if (!typescript) return;
@@ -75,13 +135,13 @@ export const CodeEditor = ({
   value,
   onChange,
   readOnly = false,
-  height = "420px",
+  height = "clamp(240px, 40vh, 460px)",
   className,
   envKeys,
 }: CodeEditorProps) => {
   const { resolvedTheme } = useTheme();
   const monaco = useMonaco();
-  const monacoTheme = resolvedTheme === "dark" ? "vs-dark" : "vs";
+  const monacoTheme = resolvedTheme === "dark" ? THEMES.dark.name : THEMES.light.name;
   const isJavaScript = language === "javascript";
 
   // A stable key for the bound variables, so re-renders do not rebuild the type definitions.
@@ -185,7 +245,10 @@ export const CodeEditor = ({
       theme={monacoTheme}
       value={value}
       onChange={(next) => onChange?.(next ?? "")}
-      beforeMount={configureJavaScript}
+      beforeMount={(monacoInstance) => {
+        defineThemes(monacoInstance);
+        configureJavaScript(monacoInstance);
+      }}
       onMount={handleMount}
       options={{
         readOnly,
@@ -194,8 +257,10 @@ export const CodeEditor = ({
         fontSize: 13,
         fontLigatures: true,
         lineHeight: 20,
-        minimap: { enabled: !readOnly, renderCharacters: false, maxColumn: 80 },
-        stickyScroll: { enabled: true },
+        // No minimap and no ruler: in a two-column editor panel they are the two things that
+        // read as noise — a map of a 4-line file, and a vertical line down otherwise empty space.
+        minimap: { enabled: false },
+        stickyScroll: { enabled: false },
         bracketPairColorization: { enabled: true },
         guides: { bracketPairs: true, indentation: true, highlightActiveIndentation: true },
         renderLineHighlight: "all",
@@ -231,7 +296,6 @@ export const CodeEditor = ({
         tabSize: 2,
         insertSpaces: true,
         detectIndentation: false,
-        rulers: [100],
         scrollBeyondLastLine: false,
         automaticLayout: true,
         fixedOverflowWidgets: true,

@@ -11,7 +11,10 @@ import { useFunctionEditorStore } from "../store/function-editor-store";
  * Drives the Code+Configuration editor: hydrates the store from a loaded function, saves the
  * whole working copy in one round trip (`SaveFunctionRequestDto`), and binds Ctrl+S to save.
  */
-export const useFunctionEditor = (functionId: string | undefined, functionDetail?: IFunctionDetail) => {
+export const useFunctionEditor = (
+  functionId: string | undefined,
+  functionDetail?: IFunctionDetail,
+) => {
   const queryClient = useQueryClient();
   const hydrate = useFunctionEditorStore((s) => s.hydrate);
   const isDirty = useFunctionEditorStore((s) => s.isDirty);
@@ -60,14 +63,21 @@ export const useFunctionEditor = (functionId: string | undefined, functionDetail
     },
   });
 
+  /**
+   * Resolves true only when the working copy actually reached the server. It used to swallow the
+   * failure, so a rejected Save still let Deploy and Test carry on — against the *previous*
+   * server-side source, with nothing but a toast to say so.
+   */
   const save = useCallback(async () => {
-    if (!functionId) return;
+    if (!functionId) return false;
     try {
       await saveMutateAsync();
       showSuccessToast({ description: "Function saved." });
+      return true;
     } catch (error) {
-      if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
-      return showErrorToast({ errors: "Failed to save function." });
+      if (isErrorWithErrors(error)) showErrorToast({ errors: error.errors });
+      else showErrorToast({ errors: "Failed to save function." });
+      return false;
     }
   }, [functionId, saveMutateAsync]);
 

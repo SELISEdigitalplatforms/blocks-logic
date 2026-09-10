@@ -1,5 +1,5 @@
 "use client";
-import { ChevronRight, EllipsisVertical, ArrowRightFromLine, RotateCcw, Ban } from "lucide-react";
+import { EllipsisVertical, ArrowRightFromLine, RotateCcw, Ban } from "lucide-react";
 import { Skeleton } from "@/components/ui-kits/skeleton/skeleton";
 import {
   DropdownMenu,
@@ -7,11 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui-kits/dropdown-menu/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui-kits/tooltip/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
 import { Button } from "@/components/ui-kits/button/button";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { isErrorWithErrors } from "@/lib/error";
@@ -25,9 +21,13 @@ import {
 import { RunStatusChip } from "../run-status-chip";
 import { useCancelRun, useReplayRun } from "../../hooks/use-runs";
 
-/** Design's grid: Run · Status · Triggered by · Duration · Peak mem · Version · chevron. */
+/**
+ * Design's grid: Run · Status · Triggered by · Duration · Peak mem · Version · row actions.
+ * The last track holds the kebab, the row's only control. It was 18 px — the prototype's
+ * chevron-only width — which left the menu button overflowing across the Version column.
+ */
 const GRID =
-  "grid grid-cols-[minmax(0,1.1fr)_112px_minmax(0,0.9fr)_84px_92px_78px_18px] items-center gap-3";
+  "grid grid-cols-[minmax(0,1.1fr)_112px_minmax(0,0.9fr)_84px_92px_78px_28px] items-center gap-3";
 
 const TRIGGER_LABELS: Record<string, string> = {
   Http: "HTTP",
@@ -82,26 +82,40 @@ export const RunsTable = ({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="overflow-hidden rounded-lg border">
+      <div className="overflow-hidden rounded-lg border" role="grid" aria-label="Runs">
         <div
           className={`${GRID} border-b bg-surface-app px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-low-emphasis`}
+          role="row"
         >
-          <span>Run</span>
-          <span>Status</span>
-          <span>Triggered by</span>
-          <span>Duration</span>
-          <span className="whitespace-nowrap">Peak mem</span>
-          <span>Version</span>
-          <span />
+          <span role="columnheader">Run</span>
+          <span role="columnheader">Status</span>
+          <span role="columnheader" className="whitespace-nowrap">
+            Triggered by
+          </span>
+          <span role="columnheader">Duration</span>
+          <span role="columnheader" className="whitespace-nowrap">
+            Peak mem
+          </span>
+          <span role="columnheader">Version</span>
+          <span role="columnheader" aria-label="Row actions" />
         </div>
 
-        {isLoading && (
-          <div className="flex flex-col gap-2 p-3">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <Skeleton key={index} className="h-10 w-full" />
-            ))}
-          </div>
-        )}
+        {isLoading &&
+          Array.from({ length: 6 }).map((_, index) => (
+            // Same frame as a loaded row, so the card keeps its shape and height on load.
+            <div key={index} className={`${GRID} border-b px-4 py-3 last:border-b-0`}>
+              <div className="flex flex-col gap-1">
+                <Skeleton className="h-3.5 w-32" />
+                <Skeleton className="h-3 w-20" />
+              </div>
+              <Skeleton className="h-5 w-20" />
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-3 w-12" />
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-3 w-8" />
+              <span />
+            </div>
+          ))}
 
         {!isLoading && runs.length === 0 && (
           <p className="px-5 py-9 text-center text-sm text-medium-emphasis">
@@ -119,10 +133,17 @@ export const RunsTable = ({
             return (
               <div
                 key={run.id}
-                className={`${GRID} cursor-pointer border-b px-4 py-3 last:border-b-0 hover:bg-surface-app`}
+                role="row"
+                tabIndex={0}
+                className={`${GRID} cursor-pointer border-b px-4 py-3 last:border-b-0 hover:bg-surface-app focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring`}
                 onClick={() => onOpenRun(run.id)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  onOpenRun(run.id);
+                }}
               >
-                <div className="flex min-w-0 flex-col gap-0.5">
+                <div className="flex min-w-0 flex-col gap-0.5" role="gridcell">
                   <code className="truncate font-mono text-xs font-semibold">{run.id}</code>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -134,34 +155,47 @@ export const RunsTable = ({
                   </Tooltip>
                 </div>
 
-                <RunStatusChip status={run.status} />
+                <span role="gridcell">
+                  <RunStatusChip status={run.status} />
+                </span>
 
-                <span className="min-w-0 truncate text-xs text-medium-emphasis">
+                <span className="min-w-0 truncate text-xs text-medium-emphasis" role="gridcell">
                   {TRIGGER_LABELS[run.invokedBy] ?? run.invokedBy}
                   {run.attempt > 1 ? ` · attempt ${run.attempt}` : ""}
                 </span>
 
-                <span className="whitespace-nowrap text-xs">{formatDuration(run.durationMs)}</span>
+                <span className="whitespace-nowrap text-xs" role="gridcell">
+                  {formatDuration(run.durationMs)}
+                </span>
 
-                <span className="whitespace-nowrap text-xs">
+                <span className="whitespace-nowrap text-xs" role="gridcell">
                   {formatMemoryAgainstLimit(run.peakMemoryBytes, memoryLimitMb)}
                 </span>
 
-                <code className="font-mono text-xs text-primary">v{run.versionNumber}</code>
+                <code className="font-mono text-xs text-primary" role="gridcell">
+                  v{run.versionNumber}
+                </code>
 
-                <div className="flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
+                <div
+                  className="flex items-center justify-end gap-0.5"
+                  role="gridcell"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
                         variant="ghost"
                         aria-label={`Actions for run ${run.id}`}
-                        className="h-6 w-6 p-0"
+                        className="h-6 w-6 shrink-0 p-0"
                       >
                         <EllipsisVertical className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem className="cursor-pointer" onClick={() => onOpenRun(run.id)}>
+                      <DropdownMenuItem
+                        className="cursor-pointer"
+                        onClick={() => onOpenRun(run.id)}
+                      >
                         <ArrowRightFromLine className="mr-2 h-4 w-4" />
                         <span>Open</span>
                       </DropdownMenuItem>
@@ -184,7 +218,6 @@ export const RunsTable = ({
                       )}
                     </DropdownMenuContent>
                   </DropdownMenu>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-low-emphasis" />
                 </div>
               </div>
             );

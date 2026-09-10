@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Play } from "lucide-react";
 import { Card, CardContent } from "@/components/ui-kits/card/card";
 import { Button } from "@/components/ui-kits/button/button";
@@ -8,27 +8,39 @@ import { showErrorToast } from "@/hooks/use-toast";
 import { isErrorWithErrors } from "@/lib/error";
 import { RunStatusChip } from "../run-status-chip";
 import { useGetRun, useGetRunLogs, useTestFunction } from "../../hooks/use-runs";
+import { useGetBuild } from "../../hooks/use-versions";
+import { BuildProgress } from "../build-progress";
 import { useFunctionEditorStore } from "../../store/function-editor-store";
 import { explainRunError } from "../../constants/run-error.constant";
 import { TERMINAL_RUN_STATUSES } from "../../types/run.types";
+import { formatDuration, formatMegabytes } from "../../utils/format";
 
 type TestPanelProps = {
   functionId: string;
   /** Most recent run, so its input can be reused as the test payload. */
   lastRunId?: string;
   onOpenRun: (runId: string) => void;
-  /** Saves the working copy first — a test always runs the code that is on screen. */
-  onBeforeRun?: () => Promise<void>;
+  /**
+   * Saves the working copy first — a test always runs the code that is on screen. Returning false
+   * stops the run: testing the previous source after a failed save is worse than not testing.
+   */
+  onBeforeRun?: () => Promise<boolean>;
 };
 
-const STAGES = ["Saving", "Queued", "Running", "Done"] as const;
+/** §4.4's stepper. "Building" is the slow one — the image build gates every test. */
+const STAGES = ["Saving", "Building", "Queued", "Running", "Done"] as const;
 
-const stageIndex = (isSaving: boolean, status?: string) => {
+/**
+ * `Test` builds the image before it queues anything, and answers only once a run exists, so the
+ * window with a request in flight and no run yet *is* the build. Without that stage the wait shows
+ * as "Queued" and a slow build looks like a stall.
+ */
+const stageIndex = (isSaving: boolean, isBuilding: boolean, status?: string) => {
   if (isSaving) return 0;
-  if (!status) return 1;
-  if (TERMINAL_RUN_STATUSES.includes(status as never)) return 3;
-  if (status === "Queued" || status === "Claimed") return 1;
-  return 2;
+  if (!status) return isBuilding ? 1 : 2;
+  if (TERMINAL_RUN_STATUSES.includes(status as never)) return 4;
+  if (status === "Queued" || status === "Claimed") return 2;
+  return 3;
 };
 
 const LOG_LEVEL_CLASS: Record<string, string> = {
@@ -38,26 +50,30 @@ const LOG_LEVEL_CLASS: Record<string, string> = {
   debug: "text-low-emphasis",
 };
 
-const formatDuration = (durationMs?: number | null) =>
-  durationMs == null ? null : durationMs < 1000 ? `${durationMs} ms` : `${(durationMs / 1000).toFixed(2)} s`;
-
-const formatMemory = (peakMemoryBytes?: number | null) =>
-  peakMemoryBytes == null ? null : `${Math.round(peakMemoryBytes / (1024 * 1024))} MB`;
-
 /** Test input + the result of the last test, in the Code tab's right rail. Ctrl+Enter runs it. */
 export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: TestPanelProps) => {
   const testInput = useFunctionEditorStore((s) => s.testInput);
   const setTestInput = useFunctionEditorStore((s) => s.setTestInput);
   const [runId, setRunId] = useState<string | null>(null);
+  // Set when Test came back with a build rather than a run: the image was not ready yet.
+  const [buildId, setBuildId] = useState<string | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const autoRanForBuild = useRef<string | null>(null);
 
   const { mutateAsync, isPending } = useTestFunction();
   const { data: run } = useGetRun({ runId: runId ?? undefined });
   const { data: logs } = useGetRunLogs(runId ?? undefined, 0, 8);
   const { data: lastRun } = useGetRun({ runId: lastRunId, enabled: !!lastRunId });
+  // Already polls itself every 2 s while queued or building.
+  const { data: build } = useGetBuild(buildId ?? undefined);
 
-  const isActive = isPending || isSaving || (!!run && !TERMINAL_RUN_STATUSES.includes(run.status));
+  const isBuildInFlight = build?.status === "Queued" || build?.status === "Building";
+  const isActive =
+    isPending ||
+    isSaving ||
+    isBuildInFlight ||
+    (!!run && !TERMINAL_RUN_STATUSES.includes(run.status));
 
   const handleRun = useCallback(async () => {
     try {
@@ -69,10 +85,18 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
     try {
       if (onBeforeRun) {
         setIsSaving(true);
-        await onBeforeRun();
+        const saved = await onBeforeRun();
+        if (!saved) return;
       }
       const response = await mutateAsync({ functionId, inputJson: testInput });
-      setRunId(response.runId);
+      if (response.runId) {
+        setBuildId(null);
+        setRunId(response.runId);
+      } else if (response.buildId) {
+        // No run yet — the image is still building. Follow the build and start the run when it lands.
+        setRunId(null);
+        setBuildId(response.buildId);
+      }
     } catch (error) {
       if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
       return showErrorToast({ errors: "Failed to run test" });
@@ -80,6 +104,13 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
       setIsSaving(false);
     }
   }, [functionId, mutateAsync, onBeforeRun, testInput]);
+
+  useEffect(() => {
+    if (!buildId || build?.status !== "Succeeded") return;
+    if (autoRanForBuild.current === buildId) return;
+    autoRanForBuild.current = buildId;
+    void handleRun();
+  }, [buildId, build?.status, handleRun]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -110,8 +141,12 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
     }
   };
 
-  const currentStage = stageIndex(isSaving, run?.status);
-  const meta = [formatDuration(run?.durationMs), formatMemory(run?.peakMemoryBytes), run?.versionNumber ? `v${run.versionNumber}` : null]
+  const currentStage = stageIndex(isSaving, isPending || isBuildInFlight, run?.status);
+  const meta = [
+    run?.durationMs == null ? null : formatDuration(run.durationMs),
+    run?.peakMemoryBytes == null ? null : formatMegabytes(run.peakMemoryBytes),
+    run?.versionNumber ? `v${run.versionNumber}` : null,
+  ]
     .filter(Boolean)
     .join(" · ");
   const explanation = explainRunError(run?.errorCode, run?.errorMessage);
@@ -155,14 +190,16 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
         </div>
       </Card>
 
-      {(isActive || run) && (
+      {(isActive || run || buildId) && (
         <Card className="overflow-hidden">
           <div className="flex items-center justify-between gap-3 border-b px-4 py-2.5">
             <div className="flex min-w-0 items-center gap-2">
               {run ? (
                 <RunStatusChip status={run.status} />
               ) : (
-                <span className="text-xs font-semibold text-medium-emphasis">Starting…</span>
+                <span className="text-xs font-semibold text-medium-emphasis">
+                  {buildId ? "Building…" : "Starting…"}
+                </span>
               )}
               {!!meta && <span className="truncate text-xs text-medium-emphasis">{meta}</span>}
             </div>
@@ -176,6 +213,12 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
               </button>
             )}
           </div>
+
+          {buildId && !run && (
+            <div className="border-b px-4 py-2.5">
+              <BuildProgress buildId={buildId} />
+            </div>
+          )}
 
           <div className="flex items-center gap-1.5 border-b px-4 py-2.5">
             {STAGES.map((stage, index) => (

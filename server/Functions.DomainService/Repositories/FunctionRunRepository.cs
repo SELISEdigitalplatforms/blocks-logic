@@ -64,7 +64,11 @@ namespace Functions.DomainService.Repositories
             {
                 query &= builder.Eq(r => r.FunctionId, filter.FunctionId);
             }
-            if (filter.Status.HasValue)
+            if (filter.ActiveOnly)
+            {
+                query &= builder.In(r => r.Status, NonTerminalStatuses);
+            }
+            else if (filter.Status.HasValue)
             {
                 query &= builder.Eq(r => r.Status, filter.Status.Value);
             }

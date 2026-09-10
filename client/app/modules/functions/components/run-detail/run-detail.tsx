@@ -408,7 +408,10 @@ export const RunDetail = ({ runId, memoryLimitMb, onUseAsTestInput }: RunDetailP
           {run.outputResults.map((outputResult, index) => (
             <div
               key={outputResult.actionId}
-              className="grid grid-cols-[24px_minmax(0,1fr)_auto_minmax(0,auto)] items-center gap-3 border-b px-4 py-3 last:border-b-0"
+              // Fixed status and timing tracks: as `auto` they were measured per row, so "Sent"
+              // and "Skipped" (and "142 ms" vs "200 in 1.2 s · 3 attempts") put every row's
+              // right-hand columns at a different offset.
+              className="grid grid-cols-[24px_minmax(0,1fr)_72px_168px] items-center gap-3 border-b px-4 py-3 last:border-b-0"
             >
               <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blocks-primary-50 text-xs font-semibold text-primary">
                 {index + 1}
@@ -423,7 +426,7 @@ export const RunDetail = ({ runId, memoryLimitMb, onUseAsTestInput }: RunDetailP
               </div>
               <span
                 className={cn(
-                  "rounded px-2 py-0.5 text-[10px] font-semibold uppercase",
+                  "w-fit rounded px-2 py-0.5 text-[10px] font-semibold uppercase",
                   outputResult.ok
                     ? "bg-success/15 text-success"
                     : outputResult.statusCode == null
@@ -433,7 +436,7 @@ export const RunDetail = ({ runId, memoryLimitMb, onUseAsTestInput }: RunDetailP
               >
                 {outputResult.ok ? "Sent" : outputResult.statusCode == null ? "Skipped" : "Failed"}
               </span>
-              <span className="whitespace-nowrap text-xs text-medium-emphasis">
+              <span className="truncate whitespace-nowrap text-xs text-medium-emphasis">
                 {outputResult.statusCode ? `${outputResult.statusCode} in ` : ""}
                 {formatDuration(outputResult.durationMs)}
                 {outputResult.attempts > 1 ? ` · ${outputResult.attempts} attempts` : ""}

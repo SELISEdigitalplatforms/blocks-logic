@@ -64,8 +64,14 @@ namespace Functions.DomainService.Services
         public async Task<(IReadOnlyList<RunSummaryDto> Items, long TotalCount)> GetAllAsync(
             string tenantId, GetRunsRequestDto request, CancellationToken cancellationToken = default)
         {
+            // "Running" is the design's chip for "still going", which is every non-terminal
+            // status — Queued, Claimed, Starting, Running, OutputProcessing. Filtering it here
+            // rather than in the client keeps the page, the total and the pager in agreement.
+            var activeOnly = string.Equals(request.Status, "Running", StringComparison.OrdinalIgnoreCase);
+
             RunStatus? status = null;
-            if (!string.IsNullOrWhiteSpace(request.Status) &&
+            if (!activeOnly &&
+                !string.IsNullOrWhiteSpace(request.Status) &&
                 Enum.TryParse<RunStatus>(request.Status, ignoreCase: true, out var parsed))
             {
                 status = parsed;
@@ -79,7 +85,8 @@ namespace Functions.DomainService.Services
             }
 
             var filter = new FunctionRunFilter(
-                request.FunctionId, status, request.FromUtc, request.ToUtc, invokedBy, request.SearchKey);
+                request.FunctionId, status, request.FromUtc, request.ToUtc, invokedBy,
+                request.SearchKey, activeOnly);
             var (items, totalCount) = await _runRepository.GetAllAsync(
                 tenantId, filter, request.PageNumber, request.PageSize, cancellationToken);
 

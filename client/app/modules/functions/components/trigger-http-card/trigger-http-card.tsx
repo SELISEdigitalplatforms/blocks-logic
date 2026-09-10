@@ -60,6 +60,13 @@ const ChipList = ({ label, values, onChange, placeholder, mono }: ChipListProps)
               e.preventDefault();
               commit();
             }
+            // Committing on blur means abandoned text still becomes a chip, so there has to be a
+            // way to abandon it deliberately: Esc drops the draft, and the blur that follows sees
+            // nothing to commit.
+            if (e.key === "Escape") {
+              e.preventDefault();
+              setDraft("");
+            }
           }}
           onBlur={commit}
         />
@@ -105,15 +112,26 @@ export const TriggerHttpCard = ({ value, onChange, functionId }: TriggerHttpCard
         <EndpointBadge functionId={functionId} />
 
         <div className="flex flex-col gap-2">
-          <span className="text-xs font-semibold">Who can call it</span>
-          <div className="flex flex-col gap-2">
+          <span className="text-xs font-semibold" id="fn-auth-mode-label">
+            Who can call it
+          </span>
+          {/*
+            An exclusive choice, so radio semantics rather than aria-pressed: a toggle button
+            announces "pressed/not pressed" per option and never says one of two.
+          */}
+          <div
+            className="flex flex-col gap-2"
+            role="radiogroup"
+            aria-labelledby="fn-auth-mode-label"
+          >
             {AUTH_MODE_OPTIONS.map((option) => {
               const isSelected = value.authMode === option.value;
               return (
                 <button
                   key={option.value}
                   type="button"
-                  aria-pressed={isSelected}
+                  role="radio"
+                  aria-checked={isSelected}
                   className={cn(
                     "flex items-start gap-2.5 rounded-lg border p-3 text-left transition-colors",
                     isSelected
@@ -149,12 +167,17 @@ export const TriggerHttpCard = ({ value, onChange, functionId }: TriggerHttpCard
                   — optional, both work together
                 </span>
               </span>
-              <div className="flex overflow-hidden rounded-md border">
+              <div
+                className="flex overflow-hidden rounded-md border"
+                role="radiogroup"
+                aria-label="How roles and permissions combine"
+              >
                 {MATCH_MODE_OPTIONS.map((option) => (
                   <button
                     key={option.value}
                     type="button"
-                    aria-pressed={value.roleMatch === option.value}
+                    role="radio"
+                    aria-checked={value.roleMatch === option.value}
                     className={cn(
                       "px-3 py-1.5 text-xs font-semibold transition-colors",
                       value.roleMatch === option.value
@@ -194,8 +217,8 @@ export const TriggerHttpCard = ({ value, onChange, functionId }: TriggerHttpCard
               Anonymous callers get no identity:{" "}
               <code className="font-mono">ctx.context.isAuthenticated</code> is{" "}
               <code className="font-mono">false</code> and <code className="font-mono">userId</code>{" "}
-              is <code className="font-mono">null</code>. Roles and permissions don&apos;t apply, and
-              nothing token-scoped will work.
+              is <code className="font-mono">null</code>. Roles and permissions don&apos;t apply,
+              and nothing token-scoped will work.
             </span>
           </div>
         )}

@@ -1,3 +1,4 @@
+import { BuildStatus } from "./version.types";
 export type RunStatus =
   | "Queued"
   | "Claimed"
@@ -126,10 +127,17 @@ export interface IGetRunLogsResponse {
 /** What Test/Invoke/Replay return: 202-shaped when still running, full result once terminal. */
 export interface IInvokeResult {
   runId: string;
-  status: RunStatus;
+  /** A run's status — or the build's, when {@link IInvokeResult.buildId} is set and no run exists yet. */
+  status: RunStatus | BuildStatus;
   result?: string | null;
   errorCode?: string | null;
   errorMessage?: string | null;
+  /**
+   * Returned instead of a run when the image was still building — there is nothing to invoke yet.
+   * Poll the build with it and run again once it succeeds.
+   */
+  buildId?: string | null;
+  buildStatus?: string | null;
 }
 
 export interface ITestFunctionPayload {

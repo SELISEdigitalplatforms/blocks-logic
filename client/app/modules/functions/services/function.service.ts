@@ -127,11 +127,7 @@ export class FunctionService {
     return this.logicHttpClient.get(`${FUNCTIONS_ENDPOINTS.GET_RUN}?${params.toString()}`);
   };
 
-  getRunLogs = (
-    runId: string,
-    pageNumber = 0,
-    pageSize = 200,
-  ): Promise<IGetRunLogsResponse> => {
+  getRunLogs = (runId: string, pageNumber = 0, pageSize = 200): Promise<IGetRunLogsResponse> => {
     const params = new URLSearchParams({
       runId,
       pageNumber: String(pageNumber),

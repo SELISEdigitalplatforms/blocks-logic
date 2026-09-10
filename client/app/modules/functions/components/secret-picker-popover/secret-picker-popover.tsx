@@ -36,7 +36,9 @@ export const SecretPickerPopover = ({ onInsert }: SecretPickerPopoverProps) => {
           />
         </div>
         <div className="max-h-64 overflow-y-auto p-1">
-          {isLoading && <p className="px-2 py-3 text-center text-xs text-muted-foreground">Loading…</p>}
+          {isLoading && (
+            <p className="px-2 py-3 text-center text-xs text-muted-foreground">Loading…</p>
+          )}
           {!isLoading && filtered.length === 0 && (
             <p className="px-2 py-3 text-center text-xs text-muted-foreground">No secrets found.</p>
           )}

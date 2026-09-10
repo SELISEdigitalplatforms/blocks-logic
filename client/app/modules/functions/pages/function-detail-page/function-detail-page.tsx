@@ -3,27 +3,12 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { useScopedPath } from "@seliseblocks/genesis-os";
 import { parseAsInteger, parseAsString, useQueryStates } from "nuqs";
-import {
-  Check,
-  Copy,
-  Loader2,
-  MoreHorizontal,
-  Pencil,
-  Rocket,
-  Save,
-  Trash2,
-} from "lucide-react";
+import { Check, Copy, Loader2, Pencil, Rocket, Save } from "lucide-react";
 import PageBreadcrumb from "@/components/breadcrumb/breadcrumb";
 import { Button } from "@/components/ui-kits/button/button";
-import { Card, CardContent } from "@/components/ui-kits/card/card";
+import { Card, CardContent, CardHeader } from "@/components/ui-kits/card/card";
 import { Pagination } from "@/components/ui-kits/pagination/pagination";
 import { Input } from "@/components/ui-kits/input/input";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui-kits/dropdown-menu/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui-kits/tabs/tabs";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { isErrorWithErrors } from "@/lib/error";
@@ -57,10 +42,18 @@ import { buildInvokeUrl } from "../../components/endpoint-badge";
 
 const RUNS_PAGE_SIZE = 20;
 
-/** The runs range chips, as an ISO lower bound for the query. */
-const rangeStart = (range: string): string | undefined => {
+/**
+ * The runs range chips, as an ISO lower bound for the query.
+ *
+ * Rounded down to the minute, and it must stay that way: this value is part of the runs query key,
+ * so a fresh `Date.now()` on every render gave every render a new key — react-query fetched, the
+ * result re-rendered, the key changed again. That is the request-per-render loop that filled the
+ * network panel and kept the Runs tab on its skeleton forever.
+ */
+const rangeStart = (range: string, now: number): string => {
   const hours = range === "24h" ? 24 : range === "30d" ? 24 * 30 : 24 * 7;
-  return new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+  const start = now - hours * 60 * 60 * 1000;
+  return new Date(Math.floor(start / 60_000) * 60_000).toISOString();
 };
 
 const TAB_ORDER = ["code", "trigger", "output", "configuration", "runs", "versions"] as const;
@@ -94,6 +87,7 @@ export const FunctionDetailPage = () => {
   const [renameDraft, setRenameDraft] = useState<string | null>(null);
   const [isEndpointCopied, setIsEndpointCopied] = useState(false);
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const isRenameSubmitting = useRef(false);
 
   const { data: fn, isLoading, isFetched } = useGetFunction({ functionId });
   const { save, isSaving, isDirty } = useFunctionEditor(functionId, fn);
@@ -119,6 +113,17 @@ export const FunctionDetailPage = () => {
   const setTestInput = useFunctionEditorStore((s) => s.setTestInput);
   const setVariables = useFunctionEditorStore((s) => s.setVariables);
 
+  // Held in state and written from an effect: reading the clock during render is the very thing
+  // that made this value unstable, and `react-hooks/purity` is right to reject it. Recomputed when
+  // the range changes, then once a minute so a page left open does not keep a stale window.
+  const [runsFromUtc, setRunsFromUtc] = useState("");
+  useEffect(() => {
+    const apply = () => setRunsFromUtc(rangeStart(queryParams.runRange, Date.now()));
+    apply();
+    const timer = window.setInterval(apply, 60_000);
+    return () => window.clearInterval(timer);
+  }, [queryParams.runRange]);
+
   const runsFilter: RunsFilterValue = {
     status: queryParams.runStatus,
     invokedBy: queryParams.runTrigger,
@@ -126,17 +131,21 @@ export const FunctionDetailPage = () => {
     search: queryParams.runSearch,
     autoRefresh: isRunsAutoRefresh,
   };
-  const { data: runsData, isLoading: isRunsLoading } = useGetRuns({
-    functionId,
-    // "Running" in the design covers every non-terminal status; the API filters one status at a
-    // time, so that chip is applied to the returned page instead of the query.
-    status: queryParams.runStatus === "Running" ? undefined : queryParams.runStatus || undefined,
-    invokedBy: queryParams.runTrigger || undefined,
-    searchKey: queryParams.runSearch || undefined,
-    fromUtc: rangeStart(queryParams.runRange),
-    pageNumber: queryParams.runPage,
-    pageSize: RUNS_PAGE_SIZE,
-  }, { autoRefresh: isRunsAutoRefresh });
+  const { data: runsData, isLoading: isRunsLoading } = useGetRuns(
+    {
+      functionId,
+      // Every chip, "Running" included, is a server-side filter: the API maps it to the
+      // non-terminal set. Trimming the page client-side made the total and the pager describe a
+      // different set of runs than the table showed.
+      status: queryParams.runStatus || undefined,
+      invokedBy: queryParams.runTrigger || undefined,
+      searchKey: queryParams.runSearch || undefined,
+      fromUtc: runsFromUtc,
+      pageNumber: queryParams.runPage,
+      pageSize: RUNS_PAGE_SIZE,
+    },
+    { autoRefresh: isRunsAutoRefresh, enabled: !!runsFromUtc },
+  );
   const { data: versionsData, isLoading: isVersionsLoading } = useGetVersions(functionId);
 
   useEffect(() => {
@@ -152,7 +161,8 @@ export const FunctionDetailPage = () => {
 
   const handleDeploy = async () => {
     try {
-      if (isDirty) await save();
+      // Deploying the previous source because the save failed would ship the wrong code.
+      if (isDirty && !(await save())) return;
       const version = await deployAsync({ functionId });
       showSuccessToast({ description: `Deployed as v${version.number}.` });
     } catch (error) {
@@ -162,14 +172,22 @@ export const FunctionDetailPage = () => {
   };
 
   const handleRename = async () => {
+    // Enter and blur both land here, and they fire in sequence for a single rename: submitting
+    // sets `isRenaming`, which disables the input, and disabling a focused field blurs it. A ref
+    // rather than `isRenaming` because the guard has to hold within one render, before React has
+    // re-rendered this handler with the new flag.
+    if (isRenameSubmitting.current) return;
     const name = renameDraft?.trim();
     if (!fn || !name || name === fn.name) return setRenameDraft(null);
+    isRenameSubmitting.current = true;
     try {
       await renameAsync({ functionId, name, description: fn.description });
       setRenameDraft(null);
     } catch (error) {
       if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
       return showErrorToast({ errors: "Failed to rename function" });
+    } finally {
+      isRenameSubmitting.current = false;
     }
   };
 
@@ -203,10 +221,6 @@ export const FunctionDetailPage = () => {
 
   const runs = runsData?.data ?? [];
   const hasActiveRun = runs.some((run) => !TERMINAL_RUN_STATUSES.includes(run.status));
-  const visibleRuns =
-    queryParams.runStatus === "Running"
-      ? runs.filter((run) => !TERMINAL_RUN_STATUSES.includes(run.status))
-      : runs;
   const hasRunFilters =
     !!queryParams.runStatus || !!queryParams.runTrigger || !!queryParams.runSearch;
 
@@ -280,7 +294,10 @@ export const FunctionDetailPage = () => {
               <span>
                 {isDeployed ? (
                   <>
-                    active <code className="font-mono font-semibold text-primary">v{fn.activeVersionNumber}</code>
+                    active{" "}
+                    <code className="font-mono font-semibold text-primary">
+                      v{fn.activeVersionNumber}
+                    </code>
                   </>
                 ) : (
                   "not deployed"
@@ -329,46 +346,54 @@ export const FunctionDetailPage = () => {
               )}
               {deployLabel}
             </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" aria-label="More actions" className="h-9 w-9">
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem className="text-error" onClick={() => setIsDeleteOpen(true)}>
-                  <Trash2 className="mr-2 h-3.5 w-3.5" />
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
         </div>
 
         <Tabs
           value={queryParams.tab}
-          onValueChange={(tab) => setQueryParams({ tab })}
-          className="flex flex-col gap-4"
+          // Leaving the runs tab clears its filters. They only mean anything beside the runs
+          // table, and a URL carrying `?runStatus=Running` while another tab is open both reads
+          // as nonsense and silently narrows the list on the next visit.
+          onValueChange={(tab) =>
+            setQueryParams(
+              tab === "runs"
+                ? { tab }
+                : {
+                    tab,
+                    runId: null,
+                    runStatus: null,
+                    runTrigger: null,
+                    runSearch: null,
+                    runRange: null,
+                    runPage: null,
+                  },
+            )
+          }
+          className="flex flex-col gap-3"
         >
-          <TabsList className="h-auto w-full justify-start gap-0.5 rounded-none border-b bg-transparent p-0">
-            {TAB_ORDER.map((tab) => (
-              <TabsTrigger
-                key={tab}
-                value={tab}
-                className="gap-2 rounded-none border-b-2 border-transparent px-4 py-2.5 text-medium-emphasis data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-primary data-[state=active]:shadow-none"
-              >
-                {TAB_LABELS[tab]}
-                {!!tabBadges[tab] && (
-                  <span className="text-[10px] font-semibold text-low-emphasis">
-                    {tabBadges[tab]}
-                  </span>
-                )}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+          {/* Segmented pills, matching Blocks OS settings (idp/settings/pages/settings-page).
+              Six tabs do not fit a phone, so the strip scrolls rather than wrapping — the
+              pill group keeps its shape instead of breaking onto a second row. */}
+          <div className="-mx-1 overflow-x-auto px-1 pb-0.5">
+            <TabsList className="h-[42px] w-max bg-blocks-primary-shades-300">
+              {TAB_ORDER.map((tab) => (
+                <TabsTrigger key={tab} value={tab} className="h-8 gap-2 px-4 text-sm font-medium">
+                  {TAB_LABELS[tab]}
+                  {!!tabBadges[tab] && (
+                    <span className="text-[10px] font-semibold text-low-emphasis">
+                      {tabBadges[tab]}
+                    </span>
+                  )}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
 
-          <TabsContent value="code" className="flex flex-wrap items-start gap-4">
-            <Card className="min-w-0 flex-1 basis-[560px] overflow-hidden">
+          <TabsContent
+            value="code"
+            className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]"
+          >
+            <Card className="min-w-0 overflow-hidden">
               <div className="flex items-center justify-between gap-3 border-b bg-surface-app pr-4">
                 <div className="flex">
                   {(["index.js", "package.json"] as const).map((file) => (
@@ -397,7 +422,7 @@ export const FunctionDetailPage = () => {
                   language="javascript"
                   value={indexJs}
                   onChange={setIndexJs}
-                  height="560px"
+                  height="clamp(280px, 46vh, 520px)"
                   className="overflow-hidden"
                   // The tenant's own keys, so `ctx.env.` completes with what is actually bound.
                   envKeys={variables.map((variable) => variable.key)}
@@ -407,7 +432,7 @@ export const FunctionDetailPage = () => {
                   language="json"
                   value={packageJson}
                   onChange={setPackageJson}
-                  height="560px"
+                  height="clamp(280px, 46vh, 520px)"
                   className="overflow-hidden"
                 />
               )}
@@ -417,7 +442,7 @@ export const FunctionDetailPage = () => {
               </p>
             </Card>
 
-            <div className="flex w-full min-w-[280px] flex-col gap-3 lg:w-[330px] lg:flex-none">
+            <div className="flex min-w-0 flex-col gap-3">
               <TestPanel
                 functionId={functionId}
                 lastRunId={runsData?.data?.[0]?.id}
@@ -432,45 +457,54 @@ export const FunctionDetailPage = () => {
             </div>
           </TabsContent>
 
-          <TabsContent value="trigger" className="flex max-w-[780px] flex-col gap-4">
+          {/* Full width with the supporting cards in columns, like proxy-details' overview. */}
+          <TabsContent value="trigger" className="flex flex-col gap-4">
             <TriggerHttpCard value={trigger} onChange={setTrigger} functionId={fn.id} />
-            <TriggerWorkflowCard value={trigger} onChange={setTrigger} />
-            <InvokeSnippetCard functionId={fn.id} trigger={trigger} />
+            <div className="grid gap-4 xl:grid-cols-2">
+              <TriggerWorkflowCard value={trigger} onChange={setTrigger} />
+              <InvokeSnippetCard functionId={fn.id} trigger={trigger} />
+            </div>
           </TabsContent>
 
-          <TabsContent value="output" className="max-w-[820px]">
-            <OutputActionsEditor value={outputActions} onChange={setOutputActions} />
+          <TabsContent value="output" className="flex flex-col gap-4">
+            <Card>
+              <CardContent>
+                <OutputActionsEditor value={outputActions} onChange={setOutputActions} />
+              </CardContent>
+            </Card>
           </TabsContent>
 
-          <TabsContent value="configuration" className="flex max-w-[820px] flex-col gap-4">
+          <TabsContent value="configuration" className="flex flex-col gap-4">
             <Card className="overflow-hidden">
               <VariablesEditor value={variables} onChange={setVariables} />
             </Card>
-            <Card>
-              <CardContent className="flex flex-col gap-4 p-5">
-                <div className="flex flex-col gap-1">
-                  <span className="text-base font-semibold">Limits</span>
-                  <span className="text-xs leading-relaxed text-medium-emphasis">
-                    Applied to every invocation. Runs over the concurrency setting queue rather than
-                    fail.
-                  </span>
-                </div>
-                <LimitsForm value={limits} onChange={setLimits} />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="flex flex-col gap-4 p-5">
-                <div className="flex flex-col gap-1">
-                  <span className="text-base font-semibold">Retries</span>
-                  <span className="text-xs leading-relaxed text-medium-emphasis">
-                    One policy for the whole function — a failed run and a failed output action retry
-                    the same way. After the last attempt the run is kept as failed and can be
-                    replayed.
-                  </span>
-                </div>
-                <RetryForm value={retry} onChange={setRetry} />
-              </CardContent>
-            </Card>
+            <div className="grid items-start gap-4 xl:grid-cols-2">
+              <Card>
+                <CardContent className="flex flex-col gap-4 p-5">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-base font-semibold">Limits</span>
+                    <span className="text-xs leading-relaxed text-medium-emphasis">
+                      Applied to every invocation. Runs over the concurrency setting queue rather
+                      than fail.
+                    </span>
+                  </div>
+                  <LimitsForm value={limits} onChange={setLimits} />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="flex flex-col gap-4 p-5">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-base font-semibold">Retries</span>
+                    <span className="text-xs leading-relaxed text-medium-emphasis">
+                      One policy for the whole function — a failed run and a failed output action
+                      retry the same way. After the last attempt the run is kept as failed and can
+                      be replayed.
+                    </span>
+                  </div>
+                  <RetryForm value={retry} onChange={setRetry} />
+                </CardContent>
+              </Card>
+            </div>
             <DangerZoneCard onDelete={() => setIsDeleteOpen(true)} />
           </TabsContent>
 
@@ -496,51 +530,64 @@ export const FunctionDetailPage = () => {
               </>
             ) : (
               <>
-                <RunsFilterBar
-                  value={runsFilter}
-                  hasActiveRun={hasActiveRun}
-                  onChange={(partial) => {
-                    if (partial.autoRefresh !== undefined) setIsRunsAutoRefresh(partial.autoRefresh);
-                    setQueryParams({
-                      ...(partial.status !== undefined ? { runStatus: partial.status } : {}),
-                      ...(partial.invokedBy !== undefined ? { runTrigger: partial.invokedBy } : {}),
-                      ...(partial.range !== undefined ? { runRange: partial.range } : {}),
-                      ...(partial.search !== undefined ? { runSearch: partial.search } : {}),
-                      runPage: 0,
-                    });
-                  }}
-                />
-                <RunsTable
-                  runs={visibleRuns}
-                  isLoading={isRunsLoading}
-                  memoryLimitMb={limits.memoryMb}
-                  hasFilters={hasRunFilters}
-                  isDeployed={isDeployed}
-                  onOpenRun={(runId) => setQueryParams({ runId })}
-                />
-                {!!runsData?.totalCount && runsData.totalCount > RUNS_PAGE_SIZE && (
-                  <div className="flex justify-end">
-                    <Pagination
-                      totalCount={runsData.totalCount}
-                      page={queryParams.runPage}
-                      pageSize={RUNS_PAGE_SIZE}
-                      pageSizeOptions={[RUNS_PAGE_SIZE]}
-                      onChange={(runPage) => setQueryParams({ runPage })}
-                      onPageSizeChange={() => undefined}
+                <Card>
+                  <CardHeader className="mb-4 p-0">
+                    <RunsFilterBar
+                      value={runsFilter}
+                      hasActiveRun={hasActiveRun}
+                      onChange={(partial) => {
+                        if (partial.autoRefresh !== undefined)
+                          setIsRunsAutoRefresh(partial.autoRefresh);
+                        setQueryParams({
+                          ...(partial.status !== undefined ? { runStatus: partial.status } : {}),
+                          ...(partial.invokedBy !== undefined
+                            ? { runTrigger: partial.invokedBy }
+                            : {}),
+                          ...(partial.range !== undefined ? { runRange: partial.range } : {}),
+                          ...(partial.search !== undefined ? { runSearch: partial.search } : {}),
+                          runPage: 0,
+                        });
+                      }}
                     />
-                  </div>
-                )}
+                  </CardHeader>
+                  <CardContent>
+                    <RunsTable
+                      runs={runs}
+                      isLoading={isRunsLoading}
+                      memoryLimitMb={limits.memoryMb}
+                      hasFilters={hasRunFilters}
+                      isDeployed={isDeployed}
+                      onOpenRun={(runId) => setQueryParams({ runId })}
+                    />
+                    {!!runsData?.totalCount && runsData.totalCount > RUNS_PAGE_SIZE && (
+                      <div className="mt-5 flex justify-end">
+                        <Pagination
+                          totalCount={runsData.totalCount}
+                          page={queryParams.runPage}
+                          pageSize={RUNS_PAGE_SIZE}
+                          pageSizeOptions={[RUNS_PAGE_SIZE]}
+                          onChange={(runPage) => setQueryParams({ runPage })}
+                          onPageSizeChange={() => undefined}
+                        />
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               </>
             )}
           </TabsContent>
 
-          <TabsContent value="versions">
-            <VersionsTable
-              functionId={functionId}
-              versions={versionsData?.data ?? []}
-              activeVersionNumber={fn.activeVersionNumber}
-              isLoading={isVersionsLoading}
-            />
+          <TabsContent value="versions" className="flex flex-col gap-4">
+            <Card>
+              <CardContent>
+                <VersionsTable
+                  functionId={functionId}
+                  versions={versionsData?.data ?? []}
+                  activeVersionNumber={fn.activeVersionNumber}
+                  isLoading={isVersionsLoading}
+                />
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
@@ -548,18 +595,7 @@ export const FunctionDetailPage = () => {
       <DeleteFunctionDialog
         open={isDeleteOpen}
         onOpenChange={setIsDeleteOpen}
-        fn={{
-          id: fn.id,
-          name: fn.name,
-          status: fn.status,
-          isDirty: fn.isDirty,
-          activeVersionNumber: fn.activeVersionNumber,
-          totalRuns: runsData?.totalCount ?? 0,
-          runs24h: 0,
-          httpEnabled: trigger.httpEnabled,
-          workflowEnabled: trigger.workflowEnabled,
-          lastUpdatedDate: "",
-        }}
+        fn={{ id: fn.id, name: fn.name }}
         onDeleted={() => navigate(scoped("functions"))}
       />
     </div>

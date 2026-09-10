@@ -69,9 +69,18 @@ describe("useFunctionEditorStore", () => {
     expect(useFunctionEditorStore.getState().isDirty).toBe(true);
 
     useFunctionEditorStore.getState().hydrate(snapshot);
-    useFunctionEditorStore
-      .getState()
-      .setOutputActions([{ id: "a1", kind: "ExternalHttp", enabled: true, url: "", method: "POST", headers: {}, bodyTemplate: null, timeoutSeconds: 30 }]);
+    useFunctionEditorStore.getState().setOutputActions([
+      {
+        id: "a1",
+        kind: "ExternalHttp",
+        enabled: true,
+        url: "",
+        method: "POST",
+        headers: {},
+        bodyTemplate: null,
+        timeoutSeconds: 30,
+      },
+    ]);
     expect(useFunctionEditorStore.getState().isDirty).toBe(true);
 
     useFunctionEditorStore.getState().hydrate(snapshot);

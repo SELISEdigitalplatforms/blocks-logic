@@ -17,7 +17,10 @@ const VARIANT_BY_STATUS: Record<RunStatus, "success" | "error" | "info" | "secon
 };
 
 export const RunStatusChip = ({ status }: { status: RunStatus }) => (
-  <Badge variant={VARIANT_BY_STATUS[status] ?? "secondary"} className="w-fit rounded-md px-2.5 py-0.5">
+  <Badge
+    variant={VARIANT_BY_STATUS[status] ?? "secondary"}
+    className="w-fit rounded-md px-2.5 py-0.5"
+  >
     {RUN_STATUS_LABELS[status] ?? status}
   </Badge>
 );

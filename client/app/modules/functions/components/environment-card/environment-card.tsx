@@ -40,8 +40,8 @@ export const EnvironmentCard = ({ variables, onEditVariables }: EnvironmentCardP
       )}
 
       <p className="text-xs leading-relaxed text-low-emphasis">
-        Snapshotted at deploy. Secrets are never placed on <code className="font-mono">ctx.env</code>{" "}
-        — use them in an output action.
+        Snapshotted at deploy. Secrets are never placed on{" "}
+        <code className="font-mono">ctx.env</code> — use them in an output action.
       </p>
     </CardContent>
   </Card>

@@ -5,13 +5,20 @@ namespace Functions.DomainService.Repositories
 {
     /// <summary>Optional filters for listing runs; a null field means "no filter".</summary>
     /// <param name="IdPrefix">Anchored prefix of a run's ItemId — the runs list searches by id.</param>
+    /// <summary>
+    /// <paramref name="ActiveOnly"/> is the design's "Running" chip: it covers every non-terminal
+    /// status, not the single <see cref="RunStatus.Running"/> one. It belongs here rather than in
+    /// the client, which used to ask for the whole page and hide the terminal rows itself — so the
+    /// page size, the total count and the pager all described a different set than the table did.
+    /// </summary>
     public sealed record FunctionRunFilter(
         string? FunctionId,
         RunStatus? Status,
         DateTime? FromUtc,
         DateTime? ToUtc,
         InvokedByType? InvokedBy = null,
-        string? IdPrefix = null);
+        string? IdPrefix = null,
+        bool ActiveOnly = false);
 
     public interface IFunctionRunRepository
     {
