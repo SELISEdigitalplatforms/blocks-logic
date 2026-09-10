@@ -9,9 +9,9 @@ import {
   Pen,
   Play,
   Plus,
-  Route,
   Trash,
 } from "lucide-react";
+import { ProxyIcon } from "@/constants/navigation-menus";
 import { Button } from "@/components/ui-kits/button/button";
 import { Card, CardContent } from "@/components/ui-kits/card/card";
 import {
@@ -83,7 +83,7 @@ export const ProxyList = ({ proxies, isLoading }: Props) => {
       <Card className="p-0">
         <CardContent className="flex min-h-[360px] flex-col items-center justify-center px-6 py-12 text-center">
           <div className="flex h-14 w-14 items-center justify-center rounded-md bg-primary/10 text-primary">
-            <Route className="h-7 w-7" />
+            <ProxyIcon className="h-7 w-7" />
           </div>
           <h3 className="mt-5 text-xl font-semibold">No proxies yet</h3>
           <p className="mt-2 max-w-md text-sm text-muted-foreground">

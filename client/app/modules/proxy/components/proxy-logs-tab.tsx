@@ -80,10 +80,7 @@ const ProxyLogsSkeleton = () => (
         ))}
       </div>
       {Array.from({ length: 5 }).map((_, rowIndex) => (
-        <div
-          key={rowIndex}
-          className={cn("grid gap-4 border-t px-4 py-3", logTableGridClass)}
-        >
+        <div key={rowIndex} className={cn("grid gap-4 border-t px-4 py-3", logTableGridClass)}>
           {Array.from({ length: 5 }).map((_, cellIndex) => (
             <Skeleton key={cellIndex} className={cn("h-4 w-full", logSkeletonClass)} />
           ))}
@@ -267,8 +264,8 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
                   <span role="columnheader">TIME</span>
                   <span role="columnheader">METHOD</span>
                   <span role="columnheader">PATH</span>
-                  <span role="columnheader">CODE</span>
-                  <span role="columnheader">TOOK</span>
+                  <span role="columnheader">STATUS</span>
+                  <span role="columnheader">LATENCY</span>
                 </div>
               </th>
             </tr>

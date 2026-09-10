@@ -41,23 +41,23 @@ export const ProxyHistoryTab = ({ proxyId, active }: { proxyId: string; active: 
   }
 
   return (
-    <Card className="rounded-xl px-6 py-1">
+    <Card className="rounded-xl px-6 py-3">
       <CardContent className="divide-y p-0">
         {!data.length ? (
           <p className="py-10 text-center text-sm text-muted-foreground">No change history yet.</p>
         ) : null}
         {data.map((version) => (
-          <div key={version.id} className="grid gap-4 py-6 sm:grid-cols-[1.25rem_1fr_auto]">
+          <div key={version.id} className="grid gap-4 py-4 sm:grid-cols-[1.25rem_1fr_auto]">
             <span
               className={cn(
-                "mt-1 h-3.5 w-3.5 rounded-full",
+                "mt-2 ml-2 h-2 w-2 rounded-full",
                 version.kind === "create" ? "bg-green-500" : "bg-primary",
               )}
             />
             <div className="min-w-0">
-              <h3 className="text-lg font-semibold">{version.summary.replace(/\.$/, "")}</h3>
+              <h3 className="text-md font-semibold">{version.summary.replace(/\.$/, "")}</h3>
               {version.changes.length ? (
-                <pre className="mt-4 whitespace-pre-wrap rounded-lg border bg-muted/20 p-4 text-sm">
+                <pre className="mt-2 whitespace-pre-wrap rounded-lg border bg-muted/20 p-4 text-sm">
                   {version.changes.map((change) => (
                     <div key={change.field}>
                       {change.before != null ? (

@@ -2,7 +2,7 @@ import { Menu } from "@/models/menu-models";
 import * as React from "react";
 import { CalendarClock, Home, type LucideIcon, type LucideProps, Workflow } from "lucide-react";
 
-const ProxyIcon = React.forwardRef<SVGSVGElement, LucideProps>(
+export const ProxyIcon = React.forwardRef<SVGSVGElement, LucideProps>(
   ({ color = "currentColor", size = 20, strokeWidth = 2.2, ...props }, ref) =>
     React.createElement(
       "svg",

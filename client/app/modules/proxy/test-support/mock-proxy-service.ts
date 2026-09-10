@@ -174,7 +174,7 @@ const matchesLogFilter = (status: number, filter: ProxyLogFilter) => {
 };
 
 const toCsv = (rows: ProxyExecutionLog[]) => {
-  const headers = ["TIME", "METH", "PATH", "CODE", "TOOK", "UPSTREAM"];
+  const headers = ["TIME", "METH", "PATH", "STATUS", "LATENCY", "UPSTREAM"];
   const values = rows.map((row) =>
     [row.timeUtc, row.method, row.path, row.status, row.latencyMs, row.upstreamUrl]
       .map((value) => `"${String(value).replace(/"/g, '""')}"`)
