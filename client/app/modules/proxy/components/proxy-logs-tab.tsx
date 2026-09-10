@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { PROXY_LOG_PAGE_SIZE, PROXY_LOG_PAGE_SIZE_OPTIONS } from "../constants";
 import { useExportProxyExecutionCsv, useGetProxyExecution, useGetProxyExecutions } from "../hooks";
 import { Proxy, ProxyExecutionLog, ProxyLogFilter } from "../types";
+import { ProxyMethodBadge } from "./proxy-method-badge";
 
 const FILTERS: { value: ProxyLogFilter; label: string }[] = [
   { value: "all", label: "All" },
@@ -287,7 +288,7 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
                       onClick={() => setExpandedId((id) => (id === log.id ? null : log.id))}
                     >
                       <span>{new Date(log.timeUtc).toLocaleTimeString()}</span>
-                      <span className="font-mono">{log.method}</span>
+                      <ProxyMethodBadge method={log.method} />
                       <span className="truncate font-mono text-xs">{log.path}</span>
                       <Badge variant="outline" className={cn("w-fit", statusClass(log.status))}>
                         {log.status}

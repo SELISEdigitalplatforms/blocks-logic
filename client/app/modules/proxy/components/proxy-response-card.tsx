@@ -10,8 +10,11 @@ import { ProxyFormValues, ProxyMethod, ResponseFieldNode, SampleResult } from ".
 import {
   countResponseLeaves,
   deriveResponseSchema,
+  isResponsePath,
   MAX_PROJECTABLE_BYTES,
+  MAX_RESPONSE_PATH_LENGTH,
   MAX_RESPONSE_PATH_SEGMENTS,
+  MAX_RESPONSE_PATHS,
   mergeSchemaIntoTree,
   pathsToTree,
   skeletonToPaths,
@@ -26,6 +29,7 @@ import {
   mapTree,
   newNode,
   pathTo,
+  validateFieldKey,
 } from "./response-field-tree.helpers";
 import { ResponseFieldTree } from "./response-field-tree";
 import { ResponseSkeletonEditor } from "./response-skeleton-editor";
@@ -120,8 +124,9 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [encodedPaths, wholeResponse]);
 
-  // Inline (non-schema) validation that must also block submit. Unnamed rows are simply dropped,
-  // so only duplicate keys and over-deep paths are flagged here.
+  // Inline (non-schema) validation that must also block submit. A leaf unnamed row is simply
+  // dropped, but a bad character in a key, a duplicate sibling, an unnamed *parent* (its named
+  // descendants vanish with it), and the server's path caps all have to stop a save.
   const errorSet = useRef(false);
   useEffect(() => {
     const problems: string[] = [];
@@ -129,8 +134,12 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
       const walk = (nodes: ResponseFieldNode[]) => {
         for (const node of nodes) {
           const key = node.key.trim();
+          const keyProblem = validateFieldKey(node.key);
           const dupes = nodes.filter((sib) => sib.key.trim() && sib.key.trim() === key);
-          if (key && dupes.length > 1) problems.push(`Duplicate field "${key}".`);
+          if (keyProblem) problems.push(keyProblem);
+          else if (key && dupes.length > 1) problems.push(`Duplicate field "${key}".`);
+          else if (!key && node.children.length > 0)
+            problems.push("A nested field has no name — name it or remove it.");
           walk(node.children);
         }
       };
@@ -140,6 +149,17 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
         (path) => path.split(".").length > MAX_RESPONSE_PATH_SEGMENTS,
       );
       if (tooDeep) problems.push(`"${tooDeep}" is nested too deep.`);
+
+      const tooLong = encodedPaths.find((path) => path.length > MAX_RESPONSE_PATH_LENGTH);
+      if (tooLong)
+        problems.push(
+          `A field path is over ${MAX_RESPONSE_PATH_LENGTH} characters — shorten or remove it.`,
+        );
+
+      if (encodedPaths.length > MAX_RESPONSE_PATHS)
+        problems.push(
+          `Too many fields selected (${encodedPaths.length}) — the limit is ${MAX_RESPONSE_PATHS}.`,
+        );
     }
 
     if (problems.length) {
@@ -356,8 +376,16 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
       setSkeletonError(error instanceof Error ? error.message : "Invalid JSON.");
       return;
     }
+    const paths = skeletonToPaths(parsed);
+    const bad = paths.find((path) => !isResponsePath(path));
+    if (bad) {
+      setSkeletonError(
+        `"${bad}" isn’t a usable field path — keys can’t contain "." "[" or "]", and nesting can’t exceed ${MAX_RESPONSE_PATH_SEGMENTS} levels.`,
+      );
+      return;
+    }
     setSkeletonError(null);
-    const seeded = pathsToTree(skeletonToPaths(parsed));
+    const seeded = pathsToTree(paths);
     setTree(seeded.tree);
     setChecked(seeded.checked);
     setWholeResponse(false);

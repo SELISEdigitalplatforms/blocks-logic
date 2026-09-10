@@ -35,14 +35,12 @@ export const ProxyFormPage = ({ mode }: { mode: "create" | "edit" }) => {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <div className="px-6 pb-2 pt-4">
-        <PageBreadcrumb breadcrumbIndex={3} />
-      </div>
       <div className="flex-1 px-6 pb-8 pt-4">
         <ProxyForm
           mode={mode}
           proxy={proxy}
           isLoadingProxy={isEdit && isLoading}
+          headerContent={<PageBreadcrumb breadcrumbIndex={3} />}
           onSuccess={handleSuccess}
           onCancel={() => navigate(scoped(isEdit && proxyId ? `proxy/${proxyId}` : "proxy"))}
         />

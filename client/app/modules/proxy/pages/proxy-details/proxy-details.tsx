@@ -191,7 +191,7 @@ const MetricCard = ({
   <Card className="rounded-xl">
     <CardContent className="p-0">
       <span className="text-xs font-semibold uppercase text-muted-foreground">{label}</span>
-      <p className={cn("mt-2 text-3xl font-bold", danger ? "text-destructive" : "text-foreground")}>
+      <p className={cn("mt-2 text-2xl font-bold", danger ? "text-destructive" : "text-foreground")}>
         {value}
       </p>
       <p className="mt-1 text-sm text-muted-foreground">{note}</p>
@@ -360,12 +360,12 @@ export const ProxyDetails = () => {
         <PageBreadcrumb breadcrumbIndex={3} />
       </div>
       <div className="flex-1 space-y-6 px-6 pb-8 pt-4">
-        <div className="flex items-center justify-between gap-4 sm:items-start">
+        <div className="flex items-center justify-between gap-4 sm:items-start mb-3">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <span
               aria-label={`${proxy.enabled ? "Live" : "Paused"} status indicator`}
               className={cn(
-                "h-3.5 w-3.5 shrink-0 rounded-full",
+                "h-2 w-2 shrink-0 rounded-full",
                 proxy.enabled ? "bg-success" : "bg-slate-400 dark:bg-slate-500",
               )}
             />
@@ -455,7 +455,7 @@ export const ProxyDetails = () => {
           </div>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 !mt-0">
           <div>
             <div className="sm:hidden">
               <Select value={activeTab} onValueChange={setActiveTab}>
@@ -506,7 +506,7 @@ export const ProxyDetails = () => {
 
                 <Card className="rounded-xl">
                   <CardHeader>
-                    <h2 className="text-xl font-semibold">Configuration</h2>
+                    <h2 className="text-lg font-semibold">Configuration</h2>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     <div className="grid gap-4 lg:grid-cols-3">
@@ -519,7 +519,7 @@ export const ProxyDetails = () => {
                         </p>
                       </ConfigurationStepCard>
                       <ConfigurationStepCard eyebrow="→ Blocks adds" active>
-                        <p className="text-3xl font-bold leading-none">{addedCount}</p>
+                        <p className="text-2xl font-bold leading-none">{addedCount}</p>
                         <p className="mt-3 text-sm text-primary">{addedSummary}</p>
                       </ConfigurationStepCard>
                       <ConfigurationStepCard eyebrow="→ Third party receives">

@@ -1,5 +1,43 @@
 import { ResponseFieldNode } from "../types";
 
+/**
+ * Longest a single field-tree key may be. The whole-path cap is
+ * `MAX_RESPONSE_PATH_LENGTH` (512); a per-segment ceiling well under it keeps one over-long
+ * key from being the thing that blows the path limit.
+ */
+export const MAX_FIELD_KEY_LENGTH = 200;
+
+/** `.` separates nesting (`parent.child`); `[` `]` form the `[]` list marker. None may appear in a key. */
+const RESERVED_KEY_CHARS = /[.[\]]/;
+
+/**
+ * Validate one field-tree key as it is typed. Returns a message, or `null` when the key is
+ * usable — including empty, since a blank row is silently dropped by `treeToPaths`, not rejected.
+ * Mirrors the segment grammar in `server/Proxy.DomainService/Utils/ProxyResponsePath.cs`.
+ */
+export const validateFieldKey = (raw: string): string | null => {
+  const key = raw.trim();
+  if (!key) return null;
+  if (key.startsWith("."))
+    return 'Field names can’t start with ".", use "Add child field" to nest a key.';
+  if (RESERVED_KEY_CHARS.test(key)) return 'A field name can’t contain "." "[" or "]".';
+  if (key.length > MAX_FIELD_KEY_LENGTH)
+    return `Keep the field name under ${MAX_FIELD_KEY_LENGTH} characters.`;
+  return null;
+};
+
+/** Trimmed keys that appear more than once directly within `nodes` (case-sensitive, mirrors the server). */
+export const duplicateKeys = (nodes: ResponseFieldNode[]): Set<string> => {
+  const counts = new Map<string, number>();
+  for (const node of nodes) {
+    const key = node.key.trim();
+    if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return new Set(
+    [...counts.entries()].filter(([, count]) => count > 1).map(([key]) => key),
+  );
+};
+
 let uidSeq = 0;
 const uid = () => `rf-new-${Date.now().toString(36)}-${(uidSeq++).toString(36)}`;
 
