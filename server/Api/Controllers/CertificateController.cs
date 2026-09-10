@@ -27,7 +27,7 @@ namespace BlocksTemplate.Api.Controllers
         [HttpPost]
         [Authorize]
         public Task<UploadCertificateResponse> UploadCertificate(
-            [FromForm] IFormFile? certificate,
+            IFormFile? certificate,
             [FromQuery] bool isThirdParty)
         {
             return _certificateStorageService.UploadPublicCertificateAsync(new UploadCertificateRequest
