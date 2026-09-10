@@ -14,5 +14,6 @@
     <ProjectReference Include="..\DomainService\DomainService.csproj" />
     <ProjectReference Include="..\Identifier.DomainService\Identifier.DomainService.csproj" />
     <ProjectReference Include="..\Scheduler.DomainService\Scheduler.DomainService.csproj" />
+    <ProjectReference Include="..\Functions.DomainService\Functions.DomainService.csproj" />
   </ItemGroup>
 </Project>

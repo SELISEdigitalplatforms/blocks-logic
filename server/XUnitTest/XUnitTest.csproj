@@ -19,6 +19,7 @@
 	<ProjectReference Include="..\Iam.DomainService\Iam.DomainService.csproj" />
 	<ProjectReference Include="..\Mfa.DomainService\Mfa.DomainService.csproj" />
 	<ProjectReference Include="..\Worker\Worker.csproj" />
+	<ProjectReference Include="..\Functions.DomainService\Functions.DomainService.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="XUnitTest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="MongoDB.Driver" />
+    <PackageReference Include="SeliseBlocks.Genesis.OS" />
+    <PackageReference Include="SeliseBlocks.Secrets.OS" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <!-- No StackExchange.Redis reference here on purpose. The Redis Streams work in this
+         project (plan/PROTOCOL.md) runs on the IDatabase that Genesis' own
+         ICacheClient.CacheDatabase() returns, so StackExchange.Redis is part of Genesis'
+         public surface rather than a client we chose: it flows in transitively and Genesis
+         owns the version (4.1.5 requires 2.12.14, which is what resolves). Declaring and
+         pinning it again would add a second place to bump — and a Genesis upgrade that
+         outpaced that pin would hold Redis *below* what Genesis needs, which fails at
+         runtime instead of at build time. -->
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- IWorkflowAuthService validates a webhook-style bearer token against the tenant's
+         public certificate and evaluates roles/permissions; the anonymous Function invoke
+         endpoint reuses it rather than re-implementing JWT validation. -->
+    <ProjectReference Include="..\DomainService\DomainService.csproj" />
+  </ItemGroup>
+
+</Project>

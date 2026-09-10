@@ -4,6 +4,53 @@
         <name>Api</name>
     </assembly>
     <members>
+        <member name="T:BlocksTemplate.Api.Controllers.FunctionInvokeController">
+            <summary>
+            The public function endpoint (DECISIONS D5): <c>POST /api/fn/{functionId}</c>.
+            <para>
+            The tenant comes from <see cref="T:Blocks.Genesis.BlocksContext"/>, never from the route. Genesis'
+            <c>TenantValidationMiddleware</c> guards every path under <c>api</c> — that prefix is in
+            its default set, so this route is covered — resolving the tenant from the
+            <c>x-blocks-key</c> header (or the query/form fallbacks in
+            <c>TenantContextHelper.ResolveTenantIdFromHeaders</c>), validating it against the real
+            tenant record, and calling <c>EnsureTenantContext</c> before any controller runs. So a
+            caller must present a tenant key to reach this action at all, and that key is the only
+            tenant identity the platform has actually verified.
+            </para>
+            <para>
+            <b>Never take a tenant from the route, the query or the body.</b> The middleware has
+            already authenticated one tenant — the header's — so a second, unvalidated tenant id in
+            the path would let any valid <c>x-blocks-key</c> reach a <c>Public</c> function in
+            whatever other tenant the caller could name, while every gate here was evaluated against
+            that named tenant rather than the authenticated one. There is exactly one tenant in this
+            request and it comes from <see cref="T:Blocks.Genesis.BlocksContext"/>.
+            </para>
+            <para>
+            The invoke action itself carries no <c>[Authorize]</c>: a tenant key identifies a tenant
+            but authenticates no user, and whether a caller may proceed is the function's own trigger
+            configuration (public vs. token-protected), decided inside
+            <c>FunctionInvocationService.InvokeHttpAsync</c> — this mirrors how the workflow webhook
+            action is anonymous at the controller and authorizes itself internally per-trigger.
+            </para>
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionInvokeController.ShouldWait(System.Boolean)">
+            <summary>
+            <c>?wait=true</c>, matching DECISIONS D5. A <c>Prefer: wait=&lt;sec&gt;</c> header is
+            also accepted for parity with the spec's Sync/Fire/Poll language, treated the same
+            as a plain <c>wait=true</c> — the actual wait budget is the function's own timeout
+            plus a fixed grace, not whatever value the header names.
+            </summary>
+        </member>
+        <member name="T:BlocksTemplate.Api.Controllers.FunctionsController">
+            <summary>
+            The authenticated management surface: everything a tenant does to their own functions
+            in the Blocks Studio. The public invocation endpoint lives separately in
+            <see cref="T:BlocksTemplate.Api.Controllers.FunctionInvokeController"/> — it is reached by callers who are not
+            necessarily Blocks users at all, and carries none of the assumptions this controller
+            makes about an authenticated, already-authorized caller.
+            </summary>
+        </member>
         <member name="M:BlocksTemplate.Api.Controllers.LanguageController.Gets(Common.InternalService.Language.GetLanguagesRequest)">
             <summary>
             Retrieves all available languages.

@@ -1,5 +1,5 @@
 import { Menu } from "@/models/menu-models";
-import { CalendarClock, Home, Workflow } from "lucide-react";
+import { CalendarClock, Home, Workflow, Zap } from "lucide-react";
 
 export const navigationMenus: Menu[] = [
   {
@@ -32,5 +32,13 @@ export const navigationMenus: Menu[] = [
     name: "Workflow",
     path: "/app/workflow",
     icon: Workflow,
+  },
+
+  {
+    id: "service-functions",
+    type: "menu",
+    name: "Functions",
+    path: "/app/functions",
+    icon: Zap,
   },
 ];

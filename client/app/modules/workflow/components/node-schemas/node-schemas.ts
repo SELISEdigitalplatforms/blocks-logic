@@ -9,6 +9,7 @@ import { NodeSchemaTriggerEmailV1 } from "./node-schema-trigger-email-v1";
 import { NodeSchemaTriggerDataGatewayV1 } from "./node-schema-trigger-dataGateway-v1";
 import { NodeSchemaTriggerScheduleV1 } from "./node-schema-trigger-schedule-v1";
 import { NodeSchemaActionDataActionV1 } from "./node-schema-action-dataAction-v1";
+import { NodeSchemaActionFunction } from "./node-schema-action-function";
 import { NodeSchemaLogicIfV1 } from "./node-schema-logic-if-v1";
 
 export const NodeSchemasDefinition: Record<string, NodeSchemaDefinition> = {
@@ -22,5 +23,6 @@ export const NodeSchemasDefinition: Record<string, NodeSchemaDefinition> = {
   actionsendMailv1: NodeSchemaActionSendMailV1,
   actionhttpRequestv1: NodeSchemaActionHttpRequestV1,
   actiondataActionv1: NodeSchemaActionDataActionV1,
+  actionfunctionv1: NodeSchemaActionFunction,
   logicifv1: NodeSchemaLogicIfV1,
 };

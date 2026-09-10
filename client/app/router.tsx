@@ -6,6 +6,8 @@ import ScheduleCreatePage from "./routes/private/schedules/schedule-create-page"
 import ScheduleEditPage from "./routes/private/schedules/schedule-edit-page";
 import ScheduleDetailsPage from "./routes/private/schedules/schedule-details-page";
 import WorkflowDetailsPage from "./routes/private/workflow-details/workflow-details-page";
+import FunctionsPage from "./routes/private/functions/functions-page";
+import FunctionDetailsPage from "./routes/private/functions/function-details-page";
 
 import {
   AuthResolver,
@@ -25,6 +27,7 @@ const redirectPaths: Record<string, string> = {
   "/workflow/*": "/app/workflow",
   "/schedules/*": "/app/schedule",
   "/schedule/*": "/app/schedule",
+  "/functions/*": "/app/functions",
 };
 
 
@@ -92,6 +95,8 @@ export const router = createBrowserRouter([
               { path: "schedule/new", element: <ScheduleCreatePage /> },
               { path: "schedule/:scheduleId/edit", element: <ScheduleEditPage /> },
               { path: "schedule/:scheduleId", element: <ScheduleDetailsPage /> },
+              { path: "functions", element: <FunctionsPage /> },
+              { path: "functions/:functionId", element: <FunctionDetailsPage /> },
               { path: "profile", element: <ProfilePage /> },
 
 

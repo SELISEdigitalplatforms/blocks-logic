@@ -11,6 +11,7 @@ import {
 	Clock,
 	DatabaseZap,
 	Code2,
+	Zap,
 } from "lucide-react";
 
 export const NodeDefinitions: WorkflowNodeDefinition[] = [
@@ -126,6 +127,21 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		type: "dataAction",
 		version: "v1",
 		defaultName: "Data Action",
+		handleSpec: {
+			source: ["source"],
+			target: ["target"],
+		},
+	},
+	{
+		id: "action-function-v1",
+		icon: <Zap className="h-5 w-5 text-amber-500" />,
+		title: "Function",
+		description:
+			"Invokes a deployed Function and uses its returned value as this step's output.",
+		category: "action",
+		type: "function",
+		version: "v1",
+		defaultName: "Function",
 		handleSpec: {
 			source: ["source"],
 			target: ["target"],
