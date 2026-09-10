@@ -60,6 +60,10 @@ export interface IFunctionSummary {
   isDirty: boolean;
   activeVersionNumber?: number | null;
   totalRuns: number;
+  /** Runs in the last 24 hours — the list's "Runs 24 h" column. */
+  runs24h: number;
+  httpEnabled: boolean;
+  workflowEnabled: boolean;
   lastRunAt?: string | null;
   lastDeployedAt?: string | null;
   lastUpdatedDate: string;
@@ -113,9 +117,13 @@ export interface IFunctionAuditEvent {
 
 // ─── request/response payloads ──────────────────────────────────────────────
 
+export type FunctionTemplate = "Minimal" | "HttpEcho" | "FetchTransform";
+
 export interface ICreateFunctionPayload {
   name: string;
   description?: string | null;
+  /** Which starter source to seed; the server falls back to the minimal handler. */
+  template?: FunctionTemplate;
 }
 
 export interface IUpdateFunctionPayload {
@@ -136,9 +144,13 @@ export interface ISaveFunctionPayload {
   variables: IVariableBinding[];
 }
 
+export type FunctionSort = "Updated" | "Name";
+
 export interface IGetFunctionsPayload {
   searchKey?: string;
   status?: string;
+  /** Only fields of the function itself are sortable server-side. */
+  sortBy?: FunctionSort;
   pageNumber: number;
   pageSize: number;
 }

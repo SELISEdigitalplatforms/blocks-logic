@@ -5,6 +5,7 @@ import {
   IDeployFunctionPayload,
   IGetFunctionsPayload,
   IRollbackFunctionPayload,
+  IUpdateFunctionPayload,
 } from "../types/function.types";
 
 export const FUNCTIONS_QUERY_KEY = "functions";
@@ -31,6 +32,21 @@ export const useCreateFunction = () => {
     mutationFn: (payload: ICreateFunctionPayload) => functionService.createFunction(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [FUNCTIONS_QUERY_KEY] });
+    },
+  });
+};
+
+/** Rename / re-describe. Only touches name and description — the working copy is saved separately. */
+export const useUpdateFunction = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: [FUNCTIONS_QUERY_KEY, "update"],
+    mutationFn: (payload: IUpdateFunctionPayload) => functionService.updateFunction(payload),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [FUNCTIONS_QUERY_KEY] });
+      queryClient.invalidateQueries({
+        queryKey: [FUNCTIONS_QUERY_KEY, "detail", variables.functionId],
+      });
     },
   });
 };

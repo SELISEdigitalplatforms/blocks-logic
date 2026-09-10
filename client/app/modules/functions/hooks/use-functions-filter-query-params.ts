@@ -5,6 +5,7 @@ export const useFunctionsFilterQueryParams = () => {
     {
       search: parseAsString.withDefault(""),
       status: parseAsString.withDefault(""),
+      sort: parseAsString.withDefault(""),
       page: parseAsInteger.withDefault(0),
       pageSize: parseAsInteger.withDefault(10),
     },

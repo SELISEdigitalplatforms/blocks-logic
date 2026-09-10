@@ -12,12 +12,20 @@ namespace Functions.DomainService.Dtos.Responses
         public bool IsDirty { get; set; }
         public int? ActiveVersionNumber { get; set; }
         public long TotalRuns { get; set; }
+
+        /// <summary>Runs in the last 24 hours — the list's "Runs 24 h" column.</summary>
+        public long Runs24h { get; set; }
+
+        /// <summary>The list's "Invoked by" column, without shipping the whole trigger config.</summary>
+        public bool HttpEnabled { get; set; }
+        public bool WorkflowEnabled { get; set; }
         public DateTime? LastRunAt { get; set; }
         public DateTime? LastDeployedAt { get; set; }
         public DateTime LastUpdatedDate { get; set; }
 
         public static FunctionSummaryDto From(
-            FunctionEntity function, int? activeVersionNumber, FunctionRunStatsEntity? stats) => new()
+            FunctionEntity function, int? activeVersionNumber, FunctionRunStatsEntity? stats,
+            long runs24h = 0) => new()
         {
             Id = function.ItemId,
             Name = function.Name,
@@ -25,6 +33,9 @@ namespace Functions.DomainService.Dtos.Responses
             IsDirty = function.IsDirty,
             ActiveVersionNumber = activeVersionNumber,
             TotalRuns = stats?.TotalRuns ?? 0,
+            Runs24h = runs24h,
+            HttpEnabled = function.Trigger.HttpEnabled,
+            WorkflowEnabled = function.Trigger.WorkflowEnabled,
             LastRunAt = stats?.LastRunAt,
             LastDeployedAt = function.LastDeployedAt,
             LastUpdatedDate = function.LastUpdatedDate,
@@ -76,15 +87,23 @@ namespace Functions.DomainService.Dtos.Responses
         public int Number { get; set; }
         public string ImageDigest { get; set; } = string.Empty;
         public string? Note { get; set; }
+
+        /// <summary>Resolved dependencies of this version, as the builder reported them.</summary>
+        public string? Packages { get; set; }
+
+        /// <summary>Runs recorded against this version — retention still applies to the runs.</summary>
+        public long RunCount { get; set; }
         public DateTime CreatedDate { get; set; }
         public string CreatedBy { get; set; } = string.Empty;
 
-        public static FunctionVersionSummaryDto From(FunctionVersionEntity version) => new()
+        public static FunctionVersionSummaryDto From(FunctionVersionEntity version, long runCount = 0) => new()
         {
             Id = version.ItemId,
             Number = version.Number,
             ImageDigest = version.ImageDigest,
             Note = version.Note,
+            Packages = version.Packages,
+            RunCount = runCount,
             CreatedDate = version.CreatedDate,
             CreatedBy = version.CreatedBy ?? string.Empty,
         };
@@ -103,6 +122,9 @@ namespace Functions.DomainService.Dtos.Responses
         public DateTime? CompletedAt { get; set; }
         public long? DurationMs { get; set; }
 
+        /// <summary>Peak RSS of the sandbox — the runs table shows it against the limit.</summary>
+        public long? PeakMemoryBytes { get; set; }
+
         public static RunSummaryDto From(FunctionRunEntity run) => new()
         {
             Id = run.ItemId,
@@ -115,6 +137,7 @@ namespace Functions.DomainService.Dtos.Responses
             CreatedDate = run.CreatedDate,
             CompletedAt = run.CompletedAt,
             DurationMs = run.DurationMs,
+            PeakMemoryBytes = run.PeakMemoryBytes,
         };
     }
 

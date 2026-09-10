@@ -45,6 +45,7 @@ export interface IRunSummary {
   createdDate: string;
   completedAt?: string | null;
   durationMs?: number | null;
+  peakMemoryBytes?: number | null;
 }
 
 export interface IRunAttempt {
@@ -102,6 +103,10 @@ export interface IRunLogLine {
 export interface IGetRunsPayload {
   functionId?: string;
   status?: string;
+  /** Trigger filter — one of `InvokedByType`. */
+  invokedBy?: string;
+  /** Run-id search; matched as a prefix. */
+  searchKey?: string;
   fromUtc?: string;
   toUtc?: string;
   pageNumber: number;

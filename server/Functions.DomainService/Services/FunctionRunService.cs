@@ -71,7 +71,15 @@ namespace Functions.DomainService.Services
                 status = parsed;
             }
 
-            var filter = new FunctionRunFilter(request.FunctionId, status, request.FromUtc, request.ToUtc);
+            InvokedByType? invokedBy = null;
+            if (!string.IsNullOrWhiteSpace(request.InvokedBy) &&
+                Enum.TryParse<InvokedByType>(request.InvokedBy, ignoreCase: true, out var parsedInvokedBy))
+            {
+                invokedBy = parsedInvokedBy;
+            }
+
+            var filter = new FunctionRunFilter(
+                request.FunctionId, status, request.FromUtc, request.ToUtc, invokedBy, request.SearchKey);
             var (items, totalCount) = await _runRepository.GetAllAsync(
                 tenantId, filter, request.PageNumber, request.PageSize, cancellationToken);
 

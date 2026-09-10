@@ -26,11 +26,17 @@ import { Textarea } from "@/components/ui-kits/textarea/textarea";
 import { Button } from "@/components/ui-kits/button/button";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { isErrorWithErrors } from "@/lib/error";
+import { cn } from "@/lib/utils";
 import { useCreateFunction } from "../../hooks/use-functions";
+import { FUNCTION_TEMPLATES } from "../../constants/templates";
+import { FunctionTemplate } from "../../types/function.types";
 
+// Limits from FEATURES-AND-UI §4.2. The server allows more, deliberately: this is the form's
+// contract with the person typing, not the storage limit.
 const createFunctionFormSchema = z.object({
-  name: z.string().min(1, "Name is required").max(200),
-  description: z.string().max(1000).optional(),
+  name: z.string().min(2, "Give it at least 2 characters").max(64, "Keep it under 64 characters"),
+  description: z.string().max(200, "Keep it under 200 characters").optional(),
+  template: z.enum(["Minimal", "HttpEcho", "FetchTransform"]),
 });
 
 type CreateFunctionFormValues = z.infer<typeof createFunctionFormSchema>;
@@ -46,12 +52,12 @@ export const FunctionCreateDialog = ({ open, onOpenChange }: FunctionCreateDialo
   const { mutateAsync, isPending } = useCreateFunction();
 
   const form = useForm<CreateFunctionFormValues>({
-    defaultValues: { name: "", description: "" },
+    defaultValues: { name: "", description: "", template: "Minimal" },
     resolver: zodResolver(createFunctionFormSchema),
   });
 
   useEffect(() => {
-    if (open) form.reset({ name: "", description: "" });
+    if (open) form.reset({ name: "", description: "", template: "Minimal" });
   }, [open, form]);
 
   const handleSubmit = async (values: CreateFunctionFormValues) => {
@@ -59,8 +65,9 @@ export const FunctionCreateDialog = ({ open, onOpenChange }: FunctionCreateDialo
       const created = await mutateAsync({
         name: values.name,
         description: values.description || null,
+        template: values.template,
       });
-      showSuccessToast({ description: "Function created." });
+      showSuccessToast({ description: "Created — deploy it to get a live endpoint." });
       onOpenChange(false);
       navigate(scoped(`functions/${created.id}`));
     } catch (error) {
@@ -79,7 +86,9 @@ export const FunctionCreateDialog = ({ open, onOpenChange }: FunctionCreateDialo
           <div className="min-w-0 flex-1 space-y-0.5">
             <DialogTitle className="tracking-tight">Create function</DialogTitle>
             <DialogDescription>
-              Name it, then write the code. Its invoke URL comes from the id it is created with.
+              Pick a starter and name it. Its endpoint is{" "}
+              <code className="font-mono text-xs">POST /api/fn/{"{id}"}</code>, so there is no slug
+              to choose and nothing here has to be unique.
             </DialogDescription>
           </div>
         </DialogHeader>
@@ -95,6 +104,47 @@ export const FunctionCreateDialog = ({ open, onOpenChange }: FunctionCreateDialo
                   <FormControl>
                     <Input placeholder="e.g. Send order confirmation" {...field} />
                   </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="template"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Template</FormLabel>
+                  <div className="flex flex-col gap-2">
+                    {FUNCTION_TEMPLATES.map((template) => (
+                      <button
+                        key={template.value}
+                        type="button"
+                        aria-pressed={field.value === template.value}
+                        className={cn(
+                          "flex items-start gap-2.5 rounded-lg border p-3 text-left transition-colors",
+                          field.value === template.value
+                            ? "border-primary bg-blocks-primary-25"
+                            : "border-border hover:bg-surface-app",
+                        )}
+                        onClick={() => field.onChange(template.value as FunctionTemplate)}
+                      >
+                        <span
+                          className={cn(
+                            "mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border bg-background",
+                            field.value === template.value
+                              ? "border-[4px] border-primary"
+                              : "border-border-medium-emphasis",
+                          )}
+                        />
+                        <span className="flex min-w-0 flex-col gap-0.5">
+                          <span className="text-xs font-semibold">{template.label}</span>
+                          <span className="text-xs leading-relaxed text-medium-emphasis">
+                            {template.description}
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
                   <FormMessage />
                 </FormItem>
               )}
@@ -129,7 +179,7 @@ export const FunctionCreateDialog = ({ open, onOpenChange }: FunctionCreateDialo
                 Cancel
               </Button>
               <Button type="submit" disabled={isPending} className="min-w-28">
-                {isPending ? "Creating…" : "Create function"}
+                {isPending ? "Creating…" : "Create"}
               </Button>
             </div>
           </form>

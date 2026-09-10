@@ -1,23 +1,28 @@
-/** Starter `index.js` for a newly created function — mirrors the Runner's `bootstrap.mjs` contract (`export default async function handler(input, ctx)`). */
-export const STARTER_INDEX_JS = `/**
- * @param {unknown} input - the JSON body the function was invoked with
- * @param {{ context: object, env: Record<string, string>, run: object, log: { debug: Function, info: Function, warn: Function, error: Function } }} ctx
+import { FunctionTemplate } from "../types/function.types";
+
+/**
+ * The starters offered by the create dialog. The source itself lives server-side
+ * (`FunctionStarterTemplates`) so a function is created with its code in one round trip; this is
+ * only what the picker shows.
  */
-export default async function handler(input, ctx) {
-  ctx.log.info("received input", input);
-
-  return {
-    message: "Hello from your function!",
-    input,
-  };
-}
-`;
-
-export const STARTER_PACKAGE_JSON = `{
-  "name": "function",
-  "version": "1.0.0",
-  "private": true,
-  "type": "module",
-  "dependencies": {}
-}
-`;
+export const FUNCTION_TEMPLATES: {
+  value: FunctionTemplate;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: "Minimal",
+    label: "Minimal handler",
+    description: "An empty handler that logs its input and returns it.",
+  },
+  {
+    value: "HttpEcho",
+    label: "HTTP echo",
+    description: "Echoes the request back with the caller's identity from ctx.context.",
+  },
+  {
+    value: "FetchTransform",
+    label: "Fetch & transform",
+    description: "Calls an HTTP API with fetch(), reshapes the response and returns it.",
+  },
+];

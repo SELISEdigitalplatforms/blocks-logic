@@ -32,7 +32,7 @@ describe("OutputActionsEditor", () => {
 
   it("shows an empty state when there are no output actions", () => {
     renderWithProviders(<OutputActionsEditor value={[]} onChange={vi.fn()} />);
-    expect(screen.getByText(/no output actions configured/i)).toBeTruthy();
+    expect(screen.getByText(/^no output actions$/i)).toBeTruthy();
   });
 
   it("adds a new output action", async () => {
@@ -46,11 +46,16 @@ describe("OutputActionsEditor", () => {
     ]);
   });
 
-  it("inserts a {{secret.NAME}} placeholder into the Authorization header", async () => {
+  it("inserts a {{secret.NAME}} placeholder into the header it belongs to", async () => {
     const onChange = vi.fn();
-    renderWithProviders(<OutputActionsEditor value={[baseAction]} onChange={onChange} />);
+    // The picker belongs to a header row, so the action needs one to insert into.
+    renderWithProviders(
+      <OutputActionsEditor
+        value={[{ ...baseAction, headers: { Authorization: "" } }]}
+        onChange={onChange}
+      />,
+    );
 
-    // Two secret pickers exist per action (headers, body); the header one renders first.
     await userEvent.click(screen.getAllByRole("button", { name: /insert secret/i })[0]);
 
     await userEvent.click(await screen.findByText("STRIPE_KEY"));
@@ -64,7 +69,7 @@ describe("OutputActionsEditor", () => {
     const onChange = vi.fn();
     renderWithProviders(<OutputActionsEditor value={[baseAction]} onChange={onChange} />);
 
-    await userEvent.click(screen.getByRole("button", { name: /remove action/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^remove$/i }));
 
     expect(onChange).toHaveBeenCalledWith([]);
   });

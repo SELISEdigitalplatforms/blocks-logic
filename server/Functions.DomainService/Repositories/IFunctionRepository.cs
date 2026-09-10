@@ -13,8 +13,8 @@ namespace Functions.DomainService.Repositories
     public interface IFunctionRepository
     {
         Task<(IReadOnlyList<FunctionEntity> Items, long TotalCount)> GetAllAsync(
-            string tenantId, string? searchKey, string? status, int pageNumber, int pageSize,
-            CancellationToken cancellationToken = default);
+            string tenantId, string? searchKey, string? status, string? sortBy,
+            int pageNumber, int pageSize, CancellationToken cancellationToken = default);
 
         Task<FunctionEntity?> GetByIdAsync(string tenantId, string functionId, CancellationToken cancellationToken = default);
 

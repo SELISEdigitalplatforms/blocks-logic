@@ -22,6 +22,8 @@ export interface FunctionEditorSnapshot {
 interface FunctionEditorState extends FunctionEditorSnapshot {
   activeFile: EditorFile;
   testInput: string;
+  /** Bumped by the header's "Test run" button; the test panel subscribes to it and runs. */
+  testRunRequestedAt: number;
   savedSnapshot: FunctionEditorSnapshot | null;
   isDirty: boolean;
 
@@ -34,6 +36,7 @@ interface FunctionEditorState extends FunctionEditorSnapshot {
   setOutputActions: (value: IOutputAction[]) => void;
   setVariables: (value: IVariableBinding[]) => void;
   setTestInput: (value: string) => void;
+  requestTestRun: () => void;
   /** Loads a function's config into the editor and clears the dirty flag — call on fetch/save. */
   hydrate: (snapshot: FunctionEditorSnapshot) => void;
   reset: () => void;
@@ -81,6 +84,7 @@ export const useFunctionEditorStore = create<FunctionEditorState>((set) => ({
   ...emptySnapshot,
   activeFile: "index.js",
   testInput: "{}",
+  testRunRequestedAt: 0,
   savedSnapshot: null,
   isDirty: false,
 
@@ -131,6 +135,7 @@ export const useFunctionEditorStore = create<FunctionEditorState>((set) => ({
       };
     }),
   setTestInput: (testInput) => set({ testInput }),
+  requestTestRun: () => set({ testRunRequestedAt: Date.now() }),
 
   hydrate: (snapshot) => set({ ...snapshot, savedSnapshot: snapshot, isDirty: false }),
 

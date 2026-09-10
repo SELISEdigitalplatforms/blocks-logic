@@ -43,13 +43,28 @@ namespace Functions.DomainService.Repositories
             await Collection(tenantId).Indexes.CreateManyAsync(
                 [
                     new CreateIndexModel<FunctionEntity>(keys.Ascending(f => f.Status)),
+                    // The list's two sorts. Without these Mongo sorts the whole matched set in
+                    // memory, which is fine for a handful of functions and fails at the 32 MB
+                    // sort limit for a tenant with many.
+                    new CreateIndexModel<FunctionEntity>(keys.Descending(f => f.LastUpdatedDate)),
+                    new CreateIndexModel<FunctionEntity>(keys.Ascending(f => f.Name)),
                 ],
                 cancellationToken);
         }
 
+        /// <summary>
+        /// The list's sort choice. Only fields of the function itself are sortable, so one query
+        /// still serves the page — "last run" lives in the run-stats collection and would need a
+        /// lookup. Anything unrecognised (including null) keeps the default, newest-updated first.
+        /// </summary>
+        public static SortDefinition<FunctionEntity> SortFor(string? sortBy) =>
+            string.Equals(sortBy, "Name", StringComparison.OrdinalIgnoreCase)
+                ? Builders<FunctionEntity>.Sort.Ascending(f => f.Name)
+                : Builders<FunctionEntity>.Sort.Descending(f => f.LastUpdatedDate);
+
         public async Task<(IReadOnlyList<FunctionEntity> Items, long TotalCount)> GetAllAsync(
-            string tenantId, string? searchKey, string? status, int pageNumber, int pageSize,
-            CancellationToken cancellationToken = default)
+            string tenantId, string? searchKey, string? status, string? sortBy,
+            int pageNumber, int pageSize, CancellationToken cancellationToken = default)
         {
             await EnsureIndexesAsync(tenantId, cancellationToken);
 
@@ -71,9 +86,11 @@ namespace Functions.DomainService.Repositories
             // The list shows name, status, version and counters — never the code. Source carries
             // index.js (up to 2 MB), package.json and the lockfile, so projecting it away keeps
             // a page of the list small regardless of how large the tenants' functions are.
+            var sort = SortFor(sortBy);
+
             var items = await collection.Find(filter)
                 .Project<FunctionEntity>(Builders<FunctionEntity>.Projection.Exclude(f => f.Source))
-                .SortByDescending(f => f.LastUpdatedDate)
+                .Sort(sort)
                 .Skip(Math.Max(0, pageNumber) * Math.Max(1, pageSize))
                 .Limit(Math.Max(1, pageSize))
                 .ToListAsync(cancellationToken);

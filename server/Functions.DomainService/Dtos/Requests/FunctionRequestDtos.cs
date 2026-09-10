@@ -6,6 +6,9 @@ namespace Functions.DomainService.Dtos.Requests
     {
         public string Name { get; set; } = string.Empty;
         public string? Description { get; set; }
+
+        /// <summary>Which starter source to seed. Unknown or missing falls back to the minimal handler.</summary>
+        public string? Template { get; set; }
     }
 
     public sealed class UpdateFunctionRequestDto
@@ -36,6 +39,10 @@ namespace Functions.DomainService.Dtos.Requests
     {
         public string? SearchKey { get; set; }
         public string? Status { get; set; }
+
+        /// <summary>"Name" or "Updated" (default). Both are fields of the function itself, so the
+        /// sort is served by the same query as the page.</summary>
+        public string? SortBy { get; set; }
         public int PageNumber { get; set; }
         public int PageSize { get; set; } = 20;
     }
@@ -63,6 +70,12 @@ namespace Functions.DomainService.Dtos.Requests
     {
         public string? FunctionId { get; set; }
         public string? Status { get; set; }
+
+        /// <summary>Trigger filter: Http, Workflow, Test, Replay, Schedule or Event.</summary>
+        public string? InvokedBy { get; set; }
+
+        /// <summary>Run-id search — matched as a prefix.</summary>
+        public string? SearchKey { get; set; }
         public DateTime? FromUtc { get; set; }
         public DateTime? ToUtc { get; set; }
         public int PageNumber { get; set; }

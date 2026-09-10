@@ -11,7 +11,7 @@ import {
 	Clock,
 	DatabaseZap,
 	Code2,
-	Zap,
+	FunctionSquare,
 } from "lucide-react";
 
 export const NodeDefinitions: WorkflowNodeDefinition[] = [
@@ -134,10 +134,10 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 	},
 	{
 		id: "action-function-v1",
-		icon: <Zap className="h-5 w-5 text-amber-500" />,
+		icon: <FunctionSquare className="h-5 w-5 text-primary" />,
 		title: "Function",
 		description:
-			"Invokes a deployed Function and uses its returned value as this step's output.",
+			"Run a deployed function and pass its result to the next node.",
 		category: "action",
 		type: "function",
 		version: "v1",

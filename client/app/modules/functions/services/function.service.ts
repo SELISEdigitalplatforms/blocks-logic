@@ -113,6 +113,8 @@ export class FunctionService {
     const params = new URLSearchParams();
     if (payload.functionId) params.set("functionId", payload.functionId);
     if (payload.status) params.set("status", payload.status);
+    if (payload.invokedBy) params.set("invokedBy", payload.invokedBy);
+    if (payload.searchKey) params.set("searchKey", payload.searchKey);
     if (payload.fromUtc) params.set("fromUtc", payload.fromUtc);
     if (payload.toUtc) params.set("toUtc", payload.toUtc);
     params.set("pageNumber", String(payload.pageNumber));

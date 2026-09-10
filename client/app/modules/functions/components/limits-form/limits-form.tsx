@@ -87,7 +87,7 @@ export const LimitsForm = ({ value, onChange }: LimitsFormProps) => {
           <div key={select.key} className="flex min-w-0 flex-col gap-1.5">
             <Label className="text-xs font-semibold">{select.label}</Label>
             <Select value={select.value} onValueChange={select.onValueChange}>
-              <SelectTrigger className="h-9 text-sm">
+              <SelectTrigger className="h-9 text-sm" aria-label={select.label}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

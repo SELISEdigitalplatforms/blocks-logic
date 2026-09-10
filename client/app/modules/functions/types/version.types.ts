@@ -3,6 +3,10 @@ export interface IFunctionVersionSummary {
   number: number;
   imageDigest: string;
   note?: string | null;
+  /** Resolved dependencies, as the builder reported them. */
+  packages?: string | null;
+  /** Runs recorded against this version. */
+  runCount: number;
   createdDate: string;
   createdBy: string;
 }

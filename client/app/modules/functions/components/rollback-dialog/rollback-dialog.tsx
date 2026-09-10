@@ -19,7 +19,9 @@ export const RollbackDialog = ({ functionId, version, open, onOpenChange }: Roll
     if (!version) return;
     try {
       await mutateAsync({ functionId, versionNumber: version.number });
-      showSuccessToast({ description: `Rolled back to v${version.number}.` });
+      showSuccessToast({
+        description: `Active version is now v${version.number} — routing switched, no rebuild.`,
+      });
       onOpenChange(false);
     } catch (error) {
       if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
@@ -31,8 +33,11 @@ export const RollbackDialog = ({ functionId, version, open, onOpenChange }: Roll
     <Dialog open={open} onOpenChange={onOpenChange}>
       <ConfirmationModal
         data={{
-          dialogTitle: "Roll back version",
-          dialogSubtitle: `Make v${version?.number} the active version? In-flight runs are unaffected.`,
+          dialogTitle: `Roll back to v${version?.number}?`,
+          dialogSubtitle:
+            `This re-points the active version to v${version?.number} — nothing is rebuilt, and the ` +
+            "image is the one that was already built and tested. Runs already in flight finish on " +
+            "the version they started with, and your editor's working copy is left untouched.",
         }}
         onConfirm={confirmHandler}
         onCancel={() => onOpenChange(false)}

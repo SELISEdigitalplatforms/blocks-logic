@@ -1,7 +1,9 @@
+using System.Text.RegularExpressions;
 using Blocks.Genesis;
 using Functions.DomainService.Entities;
 using Functions.DomainService.Enums;
 using Functions.DomainService.Utils;
+using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace Functions.DomainService.Repositories
@@ -35,6 +37,10 @@ namespace Functions.DomainService.Repositories
                     new CreateIndexModel<FunctionRunEntity>(
                         keys.Ascending(r => r.FunctionId).Descending(r => r.CreatedDate)),
                     new CreateIndexModel<FunctionRunEntity>(keys.Ascending(r => r.Status)),
+                    // Covers the versions tab's per-version run counts: the group reads the
+                    // index rather than every run document of the function.
+                    new CreateIndexModel<FunctionRunEntity>(
+                        keys.Ascending(r => r.FunctionId).Ascending(r => r.VersionNumber)),
                     // CompletedAt is null until a run finishes, and a TTL index only ever
                     // expires documents whose indexed field holds an actual date — an
                     // in-flight run is never at risk of being swept away mid-execution.
@@ -69,6 +75,18 @@ namespace Functions.DomainService.Repositories
             if (filter.ToUtc.HasValue)
             {
                 query &= builder.Lte(r => r.CreatedDate, filter.ToUtc.Value);
+            }
+            if (filter.InvokedBy.HasValue)
+            {
+                query &= builder.Eq(r => r.InvokedBy, filter.InvokedBy.Value);
+            }
+            if (!string.IsNullOrWhiteSpace(filter.IdPrefix))
+            {
+                // Anchored so the _id index can serve it; an unanchored regex would scan the
+                // whole collection for every keystroke in the runs search box.
+                query &= builder.Regex(
+                    r => r.ItemId,
+                    new BsonRegularExpression("^" + Regex.Escape(filter.IdPrefix.Trim()), "i"));
             }
 
             var collection = Collection(tenantId);
@@ -109,6 +127,47 @@ namespace Functions.DomainService.Repositories
 
             return runs.Where(id => !string.IsNullOrEmpty(id)).Select(id => id!)
                 .ToHashSet(StringComparer.Ordinal);
+        }
+
+        public async Task<IReadOnlyDictionary<int, long>> CountByVersionAsync(
+            string tenantId, string functionId, IReadOnlyCollection<int> versionNumbers,
+            CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(functionId) || versionNumbers.Count == 0)
+            {
+                return new Dictionary<int, long>();
+            }
+
+            var builder = Builders<FunctionRunEntity>.Filter;
+            var query = builder.Eq(r => r.FunctionId, functionId)
+                & builder.In(r => r.VersionNumber, versionNumbers);
+
+            var counts = await Collection(tenantId)
+                .Aggregate()
+                .Match(query)
+                .Group(r => r.VersionNumber, g => new { VersionNumber = g.Key, Count = g.LongCount() })
+                .ToListAsync(cancellationToken);
+
+            return counts.ToDictionary(c => c.VersionNumber, c => c.Count);
+        }
+
+        public async Task<IReadOnlyDictionary<string, long>> CountSinceByFunctionAsync(
+            string tenantId, IReadOnlyCollection<string> functionIds, DateTime since,
+            CancellationToken cancellationToken = default)
+        {
+            if (functionIds.Count == 0) return new Dictionary<string, long>();
+
+            var builder = Builders<FunctionRunEntity>.Filter;
+            var query = builder.In(r => r.FunctionId, functionIds)
+                & builder.Gte(r => r.CreatedDate, since);
+
+            var counts = await Collection(tenantId)
+                .Aggregate()
+                .Match(query)
+                .Group(r => r.FunctionId, g => new { FunctionId = g.Key, Count = g.LongCount() })
+                .ToListAsync(cancellationToken);
+
+            return counts.ToDictionary(c => c.FunctionId, c => c.Count);
         }
 
         public async Task<FunctionRunEntity?> GetByIdAsync(string tenantId, string runId, CancellationToken cancellationToken = default)

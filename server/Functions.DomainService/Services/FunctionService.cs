@@ -61,6 +61,7 @@ namespace Functions.DomainService.Services
         private readonly IFunctionRepository _repository;
         private readonly IFunctionVersionRepository _versionRepository;
         private readonly IFunctionRunStatsRepository _runStatsRepository;
+        private readonly IFunctionRunRepository _runRepository;
         private readonly IFunctionAuditService _auditService;
         private readonly IValidator<CreateFunctionRequestDto> _createValidator;
         private readonly IValidator<UpdateFunctionRequestDto> _updateValidator;
@@ -72,6 +73,7 @@ namespace Functions.DomainService.Services
             IFunctionRepository repository,
             IFunctionVersionRepository versionRepository,
             IFunctionRunStatsRepository runStatsRepository,
+            IFunctionRunRepository runRepository,
             IFunctionAuditService auditService,
             IValidator<CreateFunctionRequestDto> createValidator,
             IValidator<UpdateFunctionRequestDto> updateValidator,
@@ -83,6 +85,7 @@ namespace Functions.DomainService.Services
             _repository = repository;
             _versionRepository = versionRepository;
             _runStatsRepository = runStatsRepository;
+            _runRepository = runRepository;
             _auditService = auditService;
             _createValidator = createValidator;
             _updateValidator = updateValidator;
@@ -105,11 +108,7 @@ namespace Functions.DomainService.Services
                 LastUpdatedBy = actorId ?? string.Empty,
                 Name = request.Name,
                 Description = request.Description,
-                Source = new FunctionSource
-                {
-                    IndexJs = DefaultTemplate.IndexJs,
-                    PackageJson = DefaultTemplate.PackageJson,
-                },
+                Source = FunctionStarterTemplates.For(request.Template),
             };
             function.SourceHash = FunctionHashing.SourceHash(function.Source);
             function.IsDirty = true;
@@ -200,18 +199,24 @@ namespace Functions.DomainService.Services
             string tenantId, GetFunctionsRequestDto request, CancellationToken cancellationToken = default)
         {
             var (items, totalCount) = await _repository.GetAllAsync(
-                tenantId, request.SearchKey, request.Status, request.PageNumber, request.PageSize, cancellationToken);
+                tenantId, request.SearchKey, request.Status, request.SortBy,
+                request.PageNumber, request.PageSize, cancellationToken);
 
-            // One query for the whole page's counters rather than one per row.
-            var stats = await _runStatsRepository.GetManyAsync(
-                tenantId, items.Select(f => f.ItemId).ToList(), cancellationToken);
+            var functionIds = items.Select(f => f.ItemId).ToList();
+
+            // Two queries for the whole page's counters rather than two per row.
+            var stats = await _runStatsRepository.GetManyAsync(tenantId, functionIds, cancellationToken);
+            var runs24h = await _runRepository.CountSinceByFunctionAsync(
+                tenantId, functionIds, DateTime.UtcNow.AddHours(-24), cancellationToken);
 
             var summaries = new List<FunctionSummaryDto>(items.Count);
             foreach (var function in items)
             {
                 var activeVersion = await GetActiveVersionAsync(tenantId, function, cancellationToken);
                 stats.TryGetValue(function.ItemId, out var functionStats);
-                summaries.Add(FunctionSummaryDto.From(function, activeVersion?.Number, functionStats));
+                runs24h.TryGetValue(function.ItemId, out var recentRuns);
+                summaries.Add(FunctionSummaryDto.From(
+                    function, activeVersion?.Number, functionStats, recentRuns));
             }
 
             return (summaries, totalCount);
@@ -241,7 +246,19 @@ namespace Functions.DomainService.Services
         {
             var (items, totalCount) = await _versionRepository.GetAllAsync(
                 tenantId, functionId, pageNumber, pageSize, cancellationToken);
-            return (items.Select(FunctionVersionSummaryDto.From).ToList(), totalCount);
+
+            var runCounts = await _runRepository.CountByVersionAsync(
+                tenantId, functionId, items.Select(v => v.Number).ToList(), cancellationToken);
+
+            var summaries = items
+                .Select(version =>
+                {
+                    runCounts.TryGetValue(version.Number, out var runCount);
+                    return FunctionVersionSummaryDto.From(version, runCount);
+                })
+                .ToList();
+
+            return (summaries, totalCount);
         }
 
         public async Task<FunctionSource> GetVersionSourceAsync(
@@ -293,24 +310,5 @@ namespace Functions.DomainService.Services
             }
         }
 
-        private static class DefaultTemplate
-        {
-            public const string IndexJs = """
-                export default async function (input, ctx) {
-                  ctx.log.info("Function invoked", { input });
-                  return { received: input };
-                }
-                """;
-
-            public const string PackageJson = """
-                {
-                  "name": "function",
-                  "version": "1.0.0",
-                  "private": true,
-                  "type": "module",
-                  "main": "index.js"
-                }
-                """;
-        }
     }
 }

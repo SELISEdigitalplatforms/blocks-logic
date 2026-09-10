@@ -17,15 +17,20 @@ export const useTestFunction = () => {
   });
 };
 
-/** Runs list. Polls while the page shows any non-terminal run, so in-flight runs settle without a manual refresh. */
-export const useGetRuns = (payload: IGetRunsPayload) => {
+/**
+ * Runs list. Polls every 5 s while the page holds any non-terminal run, so in-flight runs settle
+ * without a manual refresh; `autoRefresh: false` is the runs tab's toggle turned off.
+ */
+export const useGetRuns = (payload: IGetRunsPayload, options?: { autoRefresh?: boolean }) => {
+  const autoRefresh = options?.autoRefresh ?? true;
   return useQuery({
     queryKey: [...RUNS_QUERY_KEY, payload],
     queryFn: () => functionService.getRuns(payload),
     refetchInterval: (query) => {
+      if (!autoRefresh) return false;
       const runs = query.state.data?.data ?? [];
       const hasActiveRun = runs.some((run) => !TERMINAL_RUN_STATUSES.includes(run.status));
-      return hasActiveRun ? 3000 : false;
+      return hasActiveRun ? 5000 : false;
     },
   });
 };

@@ -1,28 +1,21 @@
 import { useState } from "react";
-import { X } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui-kits/card/card";
-import { Switch } from "@/components/ui-kits/switch/switch";
+import { TriangleAlert, X } from "lucide-react";
+import { Card, CardContent } from "@/components/ui-kits/card/card";
 import { Input } from "@/components/ui-kits/input/input";
-import { Label } from "@/components/ui-kits/label/label";
-import { Badge } from "@/components/ui-kits/badge/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui-kits/select/select";
+import { cn } from "@/lib/utils";
 import { AUTH_MODE_OPTIONS, MATCH_MODE_OPTIONS } from "../../constants/limits.constant";
-import { ITriggerConfig } from "../../types/function.types";
+import { AuthMode, ITriggerConfig, MatchMode } from "../../types/function.types";
 import { EndpointBadge } from "../endpoint-badge";
 
-type TagListInputProps = {
+type ChipListProps = {
+  label: string;
   values: string[];
   onChange: (values: string[]) => void;
   placeholder: string;
+  mono?: boolean;
 };
 
-const TagListInput = ({ values, onChange, placeholder }: TagListInputProps) => {
+const ChipList = ({ label, values, onChange, placeholder, mono }: ChipListProps) => {
   const [draft, setDraft] = useState("");
 
   const commit = () => {
@@ -32,31 +25,55 @@ const TagListInput = ({ values, onChange, placeholder }: TagListInputProps) => {
   };
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap gap-1.5">
-        {values.map((tag) => (
-          <Badge key={tag} variant="secondary" className="gap-1 rounded-md px-2 py-1 font-mono">
-            {tag}
-            <button type="button" onClick={() => onChange(values.filter((v) => v !== tag))}>
+    <div className="flex flex-col gap-2">
+      <span className="text-xs font-medium uppercase tracking-wide text-medium-emphasis">
+        {label}
+      </span>
+      <div className="flex flex-wrap items-center gap-2">
+        {values.map((value) => (
+          <span
+            key={value}
+            className={cn(
+              "flex items-center gap-1.5 rounded-full bg-blocks-primary-50 px-2.5 py-1 text-xs font-semibold text-primary",
+              mono && "font-mono",
+            )}
+          >
+            {value}
+            <button
+              type="button"
+              aria-label={`Remove ${value}`}
+              className="text-medium-emphasis hover:text-error"
+              onClick={() => onChange(values.filter((v) => v !== value))}
+            >
               <X className="h-3 w-3" />
             </button>
-          </Badge>
+          </span>
         ))}
+        <Input
+          aria-label={`Add ${label.toLowerCase()}`}
+          placeholder={placeholder}
+          className="h-8 w-44 rounded-full border-dashed text-xs"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === ",") {
+              e.preventDefault();
+              commit();
+            }
+          }}
+          onBlur={commit}
+        />
       </div>
-      <Input
-        placeholder={placeholder}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === ",") {
-            e.preventDefault();
-            commit();
-          }
-        }}
-        onBlur={commit}
-      />
     </div>
   );
+};
+
+const summarise = ({ roles, permissions, roleMatch }: ITriggerConfig) => {
+  if (roles.length + permissions.length === 0)
+    return "No extra restriction — any signed-in caller with a valid Blocks token can invoke it.";
+  return roleMatch === "All"
+    ? "AND — the caller must hold every listed role and permission."
+    : "OR — the caller needs at least one of the listed roles or permissions.";
 };
 
 type TriggerHttpCardProps = {
@@ -65,94 +82,124 @@ type TriggerHttpCardProps = {
   functionId: string;
 };
 
+/**
+ * HTTP is always on — there is no switch, because a function with no endpoint has no way in. The
+ * only decision here is who may call it, and the two match modes are one control: the design has a
+ * single OR/AND choice covering roles and permissions together.
+ */
 export const TriggerHttpCard = ({ value, onChange, functionId }: TriggerHttpCardProps) => {
   const patch = (partial: Partial<ITriggerConfig>) => onChange({ ...value, ...partial });
+  const setMatch = (match: MatchMode) => patch({ roleMatch: match, permissionMatch: match });
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between pb-3">
-        <div>
-          <CardTitle className="text-base">HTTP trigger</CardTitle>
-          <CardDescription>Invoke this function directly over HTTP.</CardDescription>
+      <CardContent className="flex flex-col gap-4 p-5">
+        <div className="flex flex-col gap-1">
+          <span className="text-base font-semibold">HTTP endpoint</span>
+          <span className="text-xs leading-relaxed text-medium-emphasis">
+            Always on. The call returns <code className="font-mono">202 Accepted</code> with a run
+            id — the code runs on the sandbox host, so nothing is held open waiting.
+          </span>
         </div>
-        <Switch checked={value.httpEnabled} onCheckedChange={(checked) => patch({ httpEnabled: checked })} />
-      </CardHeader>
-      {value.httpEnabled && (
-        <CardContent className="space-y-4">
-          <EndpointBadge functionId={functionId} />
 
-          <div className="space-y-1.5">
-            <Label>Authentication</Label>
-            <Select value={value.authMode} onValueChange={(v) => patch({ authMode: v as ITriggerConfig["authMode"] })}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {AUTH_MODE_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        <EndpointBadge functionId={functionId} />
+
+        <div className="flex flex-col gap-2">
+          <span className="text-xs font-semibold">Who can call it</span>
+          <div className="flex flex-col gap-2">
+            {AUTH_MODE_OPTIONS.map((option) => {
+              const isSelected = value.authMode === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-pressed={isSelected}
+                  className={cn(
+                    "flex items-start gap-2.5 rounded-lg border p-3 text-left transition-colors",
+                    isSelected
+                      ? "border-primary bg-blocks-primary-25"
+                      : "border-border hover:bg-surface-app",
+                  )}
+                  onClick={() => patch({ authMode: option.value as AuthMode })}
+                >
+                  <span
+                    className={cn(
+                      "mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border bg-background",
+                      isSelected ? "border-[4px] border-primary" : "border-border-medium-emphasis",
+                    )}
+                  />
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    <span className="text-xs font-semibold">{option.label}</span>
+                    <span className="text-xs leading-relaxed text-medium-emphasis">
+                      {option.hint}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
+        </div>
 
-          {value.authMode === "Token" && (
-            <div className="grid grid-cols-1 gap-4 border-t pt-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <Label>Roles</Label>
-                  <Select
-                    value={value.roleMatch}
-                    onValueChange={(v) => patch({ roleMatch: v as ITriggerConfig["roleMatch"] })}
+        {value.authMode === "Token" && (
+          <div className="flex flex-col gap-3 rounded-lg border bg-surface-app p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span className="text-xs font-semibold">
+                Restrict further{" "}
+                <span className="font-normal text-medium-emphasis">
+                  — optional, both work together
+                </span>
+              </span>
+              <div className="flex overflow-hidden rounded-md border">
+                {MATCH_MODE_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    aria-pressed={value.roleMatch === option.value}
+                    className={cn(
+                      "px-3 py-1.5 text-xs font-semibold transition-colors",
+                      value.roleMatch === option.value
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-background text-medium-emphasis hover:bg-surface-app",
+                    )}
+                    onClick={() => setMatch(option.value as MatchMode)}
                   >
-                    <SelectTrigger className="h-7 w-20 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {MATCH_MODE_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <TagListInput
-                  values={value.roles}
-                  onChange={(roles) => patch({ roles })}
-                  placeholder="Add a role, press Enter"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <Label>Permissions</Label>
-                  <Select
-                    value={value.permissionMatch}
-                    onValueChange={(v) => patch({ permissionMatch: v as ITriggerConfig["permissionMatch"] })}
-                  >
-                    <SelectTrigger className="h-7 w-20 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {MATCH_MODE_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <TagListInput
-                  values={value.permissions}
-                  onChange={(permissions) => patch({ permissions })}
-                  placeholder="Add a permission, press Enter"
-                />
+                    {option.label}
+                  </button>
+                ))}
               </div>
             </div>
-          )}
-        </CardContent>
-      )}
+
+            <ChipList
+              label="Roles"
+              values={value.roles}
+              onChange={(roles) => patch({ roles })}
+              placeholder="＋ Add role"
+            />
+            <ChipList
+              label="Permissions"
+              mono
+              values={value.permissions}
+              onChange={(permissions) => patch({ permissions })}
+              placeholder="＋ Add permission"
+            />
+
+            <p className="text-xs leading-relaxed text-medium-emphasis">{summarise(value)}</p>
+          </div>
+        )}
+
+        {value.authMode === "Public" && (
+          <div className="flex items-start gap-2.5 rounded-lg border border-error/30 bg-error/5 p-3">
+            <TriangleAlert className="mt-px h-4 w-4 shrink-0 text-error" />
+            <span className="text-xs leading-relaxed text-error">
+              Anonymous callers get no identity:{" "}
+              <code className="font-mono">ctx.context.isAuthenticated</code> is{" "}
+              <code className="font-mono">false</code> and <code className="font-mono">userId</code>{" "}
+              is <code className="font-mono">null</code>. Roles and permissions don&apos;t apply, and
+              nothing token-scoped will work.
+            </span>
+          </div>
+        )}
+      </CardContent>
     </Card>
   );
 };

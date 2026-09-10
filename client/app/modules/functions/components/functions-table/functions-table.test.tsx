@@ -12,7 +12,10 @@ const live: IFunctionSummary = {
   isDirty: false,
   activeVersionNumber: 3,
   totalRuns: 42,
-  lastRunAt: "2026-09-01T00:00:00.000Z",
+  runs24h: 1204,
+  httpEnabled: true,
+  workflowEnabled: true,
+  lastRunAt: new Date(Date.now() - 3 * 60_000).toISOString(),
   lastDeployedAt: "2026-08-30T00:00:00.000Z",
   lastUpdatedDate: "2026-09-01T00:00:00.000Z",
 };
@@ -24,41 +27,61 @@ const draft: IFunctionSummary = {
   status: "Draft",
   activeVersionNumber: null,
   totalRuns: 0,
+  runs24h: 0,
+  workflowEnabled: false,
   lastRunAt: null,
 };
 
+const render = (functions: IFunctionSummary[], props: Partial<{ hasFilters: boolean }> = {}) =>
+  renderWithProviders(
+    <MemoryRouter>
+      <FunctionsTable
+        functions={functions}
+        isLoading={false}
+        onCreateFunction={vi.fn()}
+        {...props}
+      />
+    </MemoryRouter>,
+  );
+
 describe("FunctionsTable", () => {
-  it("shows the create-function empty state when there are no functions", () => {
-    renderWithProviders(
-      <MemoryRouter>
-        <FunctionsTable functions={[]} isLoading={false} onCreateFunction={vi.fn()} />
-      </MemoryRouter>,
-    );
-    expect(screen.getByText(/create your first function/i)).toBeTruthy();
+  it("explains what a function is when the project has none", () => {
+    render([]);
+    expect(screen.getByText(/no functions yet/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /new function/i })).toBeTruthy();
   });
 
-  it("renders each function's name, id, status and version", () => {
-    renderWithProviders(
-      <MemoryRouter>
-        <FunctionsTable functions={[live, draft]} isLoading={false} onCreateFunction={vi.fn()} />
-      </MemoryRouter>,
-    );
+  it("distinguishes an empty search from an empty project", () => {
+    render([], { hasFilters: true });
+    expect(screen.getByText(/no functions match this search/i)).toBeTruthy();
+    expect(screen.queryByText(/no functions yet/i)).toBeNull();
+  });
+
+  it("renders the design's columns for each function", () => {
+    render([live, draft]);
 
     expect(screen.getByText("Send confirmation")).toBeTruthy();
-    expect(screen.getByText("fn_1")).toBeTruthy();
+    // The endpoint, not the bare id — it is what a caller needs.
+    expect(screen.getByText("/api/fn/fn_1")).toBeTruthy();
     expect(screen.getByText("Live")).toBeTruthy();
     expect(screen.getByText("v3")).toBeTruthy();
+    expect(screen.getByText("1,204")).toBeTruthy();
+    expect(screen.getByText("3 min ago")).toBeTruthy();
 
     expect(screen.getByText("Sync inventory")).toBeTruthy();
     expect(screen.getByText("Draft")).toBeTruthy();
+    // Never deployed and no runs.
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+  });
+
+  it("shows how each function can be invoked", () => {
+    render([live, draft]);
+    expect(screen.getByText("HTTP · Workflow")).toBeTruthy();
+    expect(screen.getByText("HTTP")).toBeTruthy();
   });
 
   it("flags a Live function with unsaved changes", () => {
-    renderWithProviders(
-      <MemoryRouter>
-        <FunctionsTable functions={[{ ...live, isDirty: true }]} isLoading={false} onCreateFunction={vi.fn()} />
-      </MemoryRouter>,
-    );
+    render([{ ...live, isDirty: true }]);
     expect(screen.getByText(/unpublished changes/i)).toBeTruthy();
   });
 });

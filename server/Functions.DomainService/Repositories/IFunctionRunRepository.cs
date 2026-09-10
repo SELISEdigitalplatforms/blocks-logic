@@ -4,7 +4,14 @@ using Functions.DomainService.Enums;
 namespace Functions.DomainService.Repositories
 {
     /// <summary>Optional filters for listing runs; a null field means "no filter".</summary>
-    public sealed record FunctionRunFilter(string? FunctionId, RunStatus? Status, DateTime? FromUtc, DateTime? ToUtc);
+    /// <param name="IdPrefix">Anchored prefix of a run's ItemId — the runs list searches by id.</param>
+    public sealed record FunctionRunFilter(
+        string? FunctionId,
+        RunStatus? Status,
+        DateTime? FromUtc,
+        DateTime? ToUtc,
+        InvokedByType? InvokedBy = null,
+        string? IdPrefix = null);
 
     public interface IFunctionRunRepository
     {
@@ -21,6 +28,22 @@ namespace Functions.DomainService.Repositories
             string tenantId, string functionId, CancellationToken cancellationToken = default);
 
         Task<FunctionRunEntity?> GetByIdAsync(string tenantId, string runId, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Run counts per version number for one function, for the versions tab's "Runs" column.
+        /// One aggregation for the whole page rather than a count per row.
+        /// </summary>
+        Task<IReadOnlyDictionary<int, long>> CountByVersionAsync(
+            string tenantId, string functionId, IReadOnlyCollection<int> versionNumbers,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Run counts since <paramref name="since"/> per function, for the list's "Runs 24 h"
+        /// column. One aggregation for the whole page rather than a count per row.
+        /// </summary>
+        Task<IReadOnlyDictionary<string, long>> CountSinceByFunctionAsync(
+            string tenantId, IReadOnlyCollection<string> functionIds, DateTime since,
+            CancellationToken cancellationToken = default);
 
         Task CreateAsync(string tenantId, FunctionRunEntity run, CancellationToken cancellationToken = default);
 
