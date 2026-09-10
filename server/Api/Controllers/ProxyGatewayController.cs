@@ -96,7 +96,7 @@ namespace Utilities.Api.Controllers
                 Response.Headers.Allow = string.Join(", ", result.AllowedMethods);
             }
 
-            return GatewayError(result.Outcome, result.StatusCode, requestPath);
+            return GatewayError(result.Outcome, result.StatusCode, requestPath, result.UpstreamStatusCode);
         }
 
         /// <summary>Relays the upstream status, body, and Content-Type byte-for-byte. No other header is relayed.</summary>
@@ -116,14 +116,22 @@ namespace Utilities.Api.Controllers
         /// <summary>
         /// Blocks-generated error body (SPEC &sect;3.4): <c>{ code: "PROXY_GATEWAY_&lt;OUTCOME&gt;", message, instance }</c>.
         /// </summary>
-        private IActionResult GatewayError(string outcome, int statusCode, string instance)
+        private IActionResult GatewayError(string outcome, int statusCode, string instance, int? upstreamStatusCode = null)
         {
-            var body = new
-            {
-                code = ProxyGatewayErrorCodes.ForOutcome(outcome),
-                message = SafeMessage(outcome),
-                instance,
-            };
+            object body = upstreamStatusCode is { } upstream
+                ? new
+                {
+                    code = ProxyGatewayErrorCodes.ForOutcome(outcome),
+                    message = SafeMessage(outcome),
+                    instance,
+                    upstreamStatusCode = upstream,
+                }
+                : new
+                {
+                    code = ProxyGatewayErrorCodes.ForOutcome(outcome),
+                    message = SafeMessage(outcome),
+                    instance,
+                };
             return StatusCode(statusCode, body);
         }
 
@@ -138,6 +146,7 @@ namespace Utilities.Api.Controllers
             ProxyExecutionOutcome.UpstreamBlocked => "The upstream endpoint is not an allowed destination.",
             ProxyExecutionOutcome.UpstreamResponseTooLarge => "The upstream response exceeds the 10 MB limit.",
             ProxyExecutionOutcome.VariableResolutionFailed => "A configured configuration variable could not be resolved.",
+            ProxyExecutionOutcome.ResponseFilterFailed => "The upstream response could not be filtered to the configured fields.",
             _ => "The proxy could not complete the request.",
         };
 

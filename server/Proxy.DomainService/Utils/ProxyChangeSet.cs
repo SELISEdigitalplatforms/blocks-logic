@@ -15,6 +15,10 @@ namespace Proxy.DomainService.Utils
         private const string QueryPrefix = "query:";
         private const string BodyPrefix = "body:";
         private const string MethodPrefix = "method:";
+        private const string ResponsePrefix = "response:";
+        private const string ResponseModeField = "responseMode";
+        private const string ResponseModeAll = "All";
+        private const string ResponseModeSelect = "Select";
 
         private static readonly IReadOnlyList<ProxyKeyValue> NoPairs = Array.Empty<ProxyKeyValue>();
 
@@ -58,10 +62,22 @@ namespace Proxy.DomainService.Utils
                 });
             }
 
+            if (before.ResponseMode != after.ResponseMode)
+            {
+                changes.Add(new ProxyFieldChange
+                {
+                    Field = ResponseModeField,
+                    Label = "response mode",
+                    Before = before.ResponseMode.ToString(),
+                    After = after.ResponseMode.ToString(),
+                });
+            }
+
             DiffPairs(before.Headers, after.Headers, HeaderPrefix, "header", changes);
             DiffPairs(before.Query, after.Query, QueryPrefix, "query", changes);
             DiffPairs(before.BodyMerge, after.BodyMerge, BodyPrefix, "body field", changes);
             DiffMethodConfigs(before.MethodConfigs, after.MethodConfigs, changes);
+            DiffResponseInclude(before.ResponseInclude, after.ResponseInclude, changes);
 
             return changes;
         }
@@ -148,6 +164,28 @@ namespace Proxy.DomainService.Utils
                     return $"{key} credential switched to a configuration variable";
                 }
 
+                if (change.Field == ResponseModeField)
+                {
+                    if (string.Equals(change.Before, ResponseModeAll, StringComparison.Ordinal)
+                        && string.Equals(change.After, ResponseModeSelect, StringComparison.Ordinal))
+                    {
+                        return "Response filtering enabled";
+                    }
+
+                    if (string.Equals(change.Before, ResponseModeSelect, StringComparison.Ordinal)
+                        && string.Equals(change.After, ResponseModeAll, StringComparison.Ordinal))
+                    {
+                        return "Response filtering removed";
+                    }
+                }
+
+                if (TrySplitResponseField(change.Field, out var responsePath))
+                {
+                    return change.After is null
+                        ? $"response field {responsePath} removed"
+                        : $"response field {responsePath} added";
+                }
+
                 if (TrySplitBodyField(change.Field, out var bodyKey))
                 {
                     if (change.Before is null)
@@ -209,6 +247,12 @@ namespace Proxy.DomainService.Utils
                 case "upstream": return proxy.Upstream;
                 case "enabled": return proxy.Enabled ? EnabledWord : DisabledWord;
                 case "methods": return MethodsValue(proxy.Methods);
+                case ResponseModeField: return proxy.ResponseMode.ToString();
+            }
+
+            if (TrySplitResponseField(field, out var responsePath))
+            {
+                return proxy.ResponseInclude.Contains(responsePath, StringComparer.Ordinal) ? responsePath : null;
             }
 
             if (TryParseMethodField(field, out var method, out var tail))
@@ -269,6 +313,30 @@ namespace Proxy.DomainService.Utils
                 case "methods":
                     proxy.Methods = ParseMethods(rawValue);
                     return;
+                case ResponseModeField:
+                    proxy.ResponseMode = Enum.TryParse<ProxyResponseMode>(rawValue, ignoreCase: true, out var mode)
+                        ? mode
+                        : ProxyResponseMode.All;
+                    return;
+            }
+
+            if (TrySplitResponseField(field, out var responsePath))
+            {
+                var present = proxy.ResponseInclude.Contains(responsePath, StringComparer.Ordinal);
+                if (rawValue is null)
+                {
+                    if (present)
+                    {
+                        proxy.ResponseInclude = proxy.ResponseInclude
+                            .Where(p => !string.Equals(p, responsePath, StringComparison.Ordinal)).ToList();
+                    }
+                }
+                else if (!present)
+                {
+                    proxy.ResponseInclude.Add(responsePath);
+                }
+
+                return;
             }
 
             if (TryParseMethodField(field, out var method, out var tail))
@@ -423,6 +491,48 @@ namespace Proxy.DomainService.Utils
             return list;
         }
 
+        /// <summary>
+        /// Membership-only diff of the <c>ResponseInclude</c> path set (a path has no "value", so only add /
+        /// remove). Order-insensitive: the two lists are treated as ordered sets. Emits a <c>response:&lt;path&gt;</c>
+        /// address per added path and its mirror per removed path.
+        /// </summary>
+        private static void DiffResponseInclude(
+            IReadOnlyList<string> before, IReadOnlyList<string> after, List<ProxyFieldChange> changes)
+        {
+            var beforeSet = new HashSet<string>(before, StringComparer.Ordinal);
+            var afterSet = new HashSet<string>(after, StringComparer.Ordinal);
+            var emitted = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (var path in after)
+            {
+                if (!beforeSet.Contains(path) && emitted.Add(path))
+                {
+                    changes.Add(new ProxyFieldChange
+                    {
+                        Field = ResponsePrefix + path,
+                        Label = "response field " + path,
+                        Before = null,
+                        After = path,
+                    });
+                }
+            }
+
+            emitted.Clear();
+            foreach (var path in before)
+            {
+                if (!afterSet.Contains(path) && emitted.Add(path))
+                {
+                    changes.Add(new ProxyFieldChange
+                    {
+                        Field = ResponsePrefix + path,
+                        Label = "response field " + path,
+                        Before = path,
+                        After = null,
+                    });
+                }
+            }
+        }
+
         private static void DiffPairs(
             IReadOnlyList<ProxyKeyValue> before,
             IReadOnlyList<ProxyKeyValue> after,
@@ -517,6 +627,19 @@ namespace Proxy.DomainService.Utils
             }
 
             key = string.Empty;
+            return false;
+        }
+
+        /// <summary>Splits a <c>response:&lt;path&gt;</c> address into its field-path expression.</summary>
+        private static bool TrySplitResponseField(string field, out string path)
+        {
+            if (field.StartsWith(ResponsePrefix, StringComparison.Ordinal))
+            {
+                path = field[ResponsePrefix.Length..];
+                return path.Length > 0;
+            }
+
+            path = string.Empty;
             return false;
         }
 

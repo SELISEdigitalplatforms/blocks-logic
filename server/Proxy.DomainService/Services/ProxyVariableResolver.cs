@@ -92,11 +92,34 @@ namespace Proxy.DomainService.Services
             // tenant (and caller identity for access checks) from that context, so set it for the scope of
             // the resolve and restore afterwards. On the Test path the context is already the caller's.
             var restore = BlocksContext.GetContext();
-            var mustSwap = !string.Equals(restore?.TenantId, tenantId, StringComparison.Ordinal);
+            // Swap in a synthetic tenant-scoped context unless the ambient one is ALREADY usable by
+            // ISecretService — i.e. authenticated AND scoped to this tenant. On the data-plane path the Blocks
+            // tenant-resolution middleware leaves an ambient context that carries the right TenantId but
+            // IsAuthenticated == false, which SecretAuthorizationService.ResolveContext() rejects outright, so a
+            // tenant-only check here is not enough.
+            var mustSwap = restore is null
+                || !restore.IsAuthenticated
+                || !string.Equals(restore.TenantId, tenantId, StringComparison.Ordinal);
+
+            // TEMP DEBUG — remove after inspection.
+            _logger.LogInformation(
+                "TEMP DEBUG resolver.enter tenantId={TenantId} names=[{Names}] mustSwap={MustSwap} " +
+                "ambient(tenant={AmbTenant} auth={AmbAuth} user={AmbUser} org={AmbOrg})",
+                tenantId, string.Join(", ", distinct), mustSwap,
+                restore?.TenantId ?? "(null)", restore?.IsAuthenticated, restore?.UserId ?? "(null)",
+                restore?.OrganizationId ?? "(null)");
+
             if (mustSwap)
             {
                 EnterTenantContext(tenantId, restore);
             }
+
+            // TEMP DEBUG — remove after inspection. What ISecretService.ResolveContext() will now see.
+            var afterSwap = BlocksContext.GetContext();
+            _logger.LogInformation(
+                "TEMP DEBUG resolver.context-after-swap tenant={Tenant} auth={Auth} user={User} org={Org} original={Orig}",
+                afterSwap?.TenantId ?? "(null)", afterSwap?.IsAuthenticated, afterSwap?.UserId ?? "(null)",
+                afterSwap?.OrganizationId ?? "(null)", afterSwap?.OriginalTenantId ?? "(null)");
 
             try
             {
@@ -136,7 +159,17 @@ namespace Proxy.DomainService.Services
                 {
                     try
                     {
+                        // TEMP DEBUG — remove after inspection.
+                        _logger.LogInformation(
+                            "TEMP DEBUG resolver.get-values ids=[{Ids}]", string.Join(", ", uncachedIds));
+
                         var fetched = await _secrets.GetValuesAsync(uncachedIds, ct);
+
+                        // TEMP DEBUG — remove after inspection. Keys only, never values.
+                        _logger.LogInformation(
+                            "TEMP DEBUG resolver.get-values ok returnedKeys=[{Keys}]",
+                            string.Join(", ", fetched.Keys));
+
                         foreach (var id in uncachedIds)
                         {
                             if (fetched.TryGetValue(id, out var value) && value is not null)
@@ -146,13 +179,15 @@ namespace Proxy.DomainService.Services
                             }
                         }
                     }
-                    catch (SecretException ex)
+                    catch (Exception ex)
                     {
                         // Unknown / locked / access-denied / vault unreachable: every name backed by an
                         // uncached id in this batch is unresolvable. Names not affected still resolved above.
+                        // TEMP DEBUG: widened from SecretException + exType/msg so a KeyVault / Azure / Mongo
+                        // failure is visible.
                         _logger.LogWarning(ex,
-                            "Proxy variable resolver: batched value read failed for tenant {TenantId} ({Count} id(s)).",
-                            tenantId, uncachedIds.Count);
+                            "Proxy variable resolver: batched value read failed for tenant {TenantId} ({Count} id(s)). TEMP DEBUG exType={ExType} msg={Msg}",
+                            tenantId, uncachedIds.Count, ex.GetType().FullName, ex.Message);
                         foreach (var (name, id) in nameToId)
                         {
                             if (uncachedIds.Contains(id) && !idToValue.ContainsKey(id))
@@ -192,7 +227,9 @@ namespace Proxy.DomainService.Services
             {
                 if (mustSwap)
                 {
-                    BlocksContext.SetContext(restore, false);
+                    // Restore the ambient context. When there was none (the data-plane path) this clears it;
+                    // changeContext mirrors whether a real context is being put back.
+                    BlocksContext.SetContext(restore, restore is not null);
                 }
             }
         }
@@ -208,9 +245,22 @@ namespace Proxy.DomainService.Services
             try
             {
                 var found = await _secrets.FindAsync(new SecretFilter { Search = name, PageSize = FindPageSize }, ct);
+
+                // TEMP DEBUG — remove after inspection.
+                _logger.LogInformation(
+                    "TEMP DEBUG resolver.find name='{Name}' returned {Count} row(s): [{Rows}]",
+                    name, found.Data?.Count ?? 0,
+                    found.Data is null
+                        ? string.Empty
+                        : string.Join(" | ", found.Data.Select(s => $"name='{s.Name}' type='{s.Type}' status='{s.Status}' id={(string.IsNullOrEmpty(s.SecretId) ? "(empty)" : s.SecretId)}")));
+
                 var match = found.Data?.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.Ordinal));
                 if (match is null || string.IsNullOrEmpty(match.SecretId))
                 {
+                    // TEMP DEBUG — remove after inspection.
+                    _logger.LogWarning(
+                        "TEMP DEBUG resolver.no-match name='{Name}' tenant={TenantId} (matchNull={MatchNull})",
+                        name, tenantId, match is null);
                     return null;
                 }
 
@@ -220,19 +270,33 @@ namespace Proxy.DomainService.Services
             catch (SecretException ex)
             {
                 _logger.LogWarning(ex,
-                    "Proxy variable resolver: name lookup failed for a variable of tenant {TenantId}.", tenantId);
+                    "Proxy variable resolver: name lookup failed for a variable of tenant {TenantId}. TEMP DEBUG exType={ExType} msg={Msg}",
+                    tenantId, ex.GetType().FullName, ex.Message);
+                return null;
+            }
+            catch (Exception ex)
+            {
+                // TEMP DEBUG — remove after inspection. Widen so a non-SecretException (Mongo / context / DI)
+                // is visible instead of bubbling up as an opaque 500 / being reported as "unresolved".
+                _logger.LogError(ex,
+                    "TEMP DEBUG resolver.find-unexpected name='{Name}' tenant={TenantId} exType={ExType} msg={Msg}",
+                    name, tenantId, ex.GetType().FullName, ex.Message);
                 return null;
             }
         }
 
         private static void EnterTenantContext(string tenantId, BlocksContext? current)
         {
+            // isAuthenticated MUST be true: Blocks.Secrets' SecretAuthorizationService.ResolveContext() rejects
+            // any context with !IsAuthenticated || blank TenantId ("INVALID_CONTEXT"), and every ISecretService
+            // read (FindAsync / GetValuesAsync) calls it first. This synthetic context lives only for the scope
+            // of one resolve on the [AllowAnonymous] data-plane path and is restored in the finally below.
             BlocksContext.SetContext(
                 BlocksContext.Create(
                     tenantId: tenantId,
                     roles: [],
                     userId: current?.UserId ?? string.Empty,
-                    isAuthenticated: false,
+                    isAuthenticated: true,
                     requestUri: string.Empty,
                     organizationId: current?.OrganizationId ?? string.Empty,
                     expireOn: DateTime.MinValue,
@@ -244,7 +308,10 @@ namespace Proxy.DomainService.Services
                     oauthToken: string.Empty,
                     originalTenantId: current?.OriginalTenantId ?? tenantId,
                     applicationDomain: string.Empty),
-                false);
+                // changeContext: true — force BlocksContext.GetContext() to return this async-local context
+                // even if the ambient HttpContext still carries an authenticated ClaimsIdentity, so the resolve
+                // is always tenant-scoped to the proxy's tenant and never the caller's.
+                true);
         }
 
         private static string IdCacheKey(string tenantId, string name) => $"proxyvar:id:{tenantId}:{name}";

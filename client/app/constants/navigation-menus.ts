@@ -65,6 +65,5 @@ export const navigationMenus: Menu[] = [
     name: "Proxy",
     path: "/app/proxy",
     icon: ProxyIcon,
-    badge: "new",
   },
 ];

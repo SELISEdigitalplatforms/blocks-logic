@@ -146,7 +146,7 @@ describe("KeyValueFieldArray", () => {
     it("disables the trigger and shows a recovery affordance on error", () => {
       renderWithProviders(<PickerHarness variablesError />);
       expect((trigger() as HTMLButtonElement).disabled).toBe(true);
-      expect(screen.getByText(/couldn't load configuration variables/i)).toBeTruthy();
+      expect(screen.getByText(/unable to load secret keys/i)).toBeTruthy();
     });
 
     it("disables the trigger when the tenant has no usable variable", () => {

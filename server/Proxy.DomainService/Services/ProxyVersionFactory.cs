@@ -36,6 +36,8 @@ namespace Proxy.DomainService.Services
             Query = proxy.Query.Select(CloneKeyValue).ToList(),
             BodyMerge = proxy.BodyMerge.Select(CloneKeyValue).ToList(),
             MethodConfigs = proxy.MethodConfigs.Select(CloneMethodConfig).ToList(),
+            ResponseMode = proxy.ResponseMode,
+            ResponseInclude = new List<string>(proxy.ResponseInclude),
         };
 
         public static ProxyVersionEntity Build(

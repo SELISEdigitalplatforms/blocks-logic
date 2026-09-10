@@ -58,6 +58,14 @@ namespace Proxy.DomainService.Dtos
 
         public string? ResponseContentType { get; set; }
 
+        /// <summary>
+        /// <c>true</c> iff a response filter ran and produced output (Applied or EmptyResult) for this call.
+        /// </summary>
+        public bool ResponseFilterApplied { get; set; }
+
+        /// <summary><c>null</c> | <c>"Applied"</c> | <c>"EmptyResult"</c> | <c>"WholePrimitive"</c> | <c>"Failed"</c>.</summary>
+        public string? ResponseFilterNote { get; set; }
+
         public long ResponseBodyBytes { get; set; }
 
         /// <summary>

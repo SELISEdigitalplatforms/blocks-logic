@@ -26,8 +26,8 @@ import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { getProxyClientPath } from "../../constants";
 import { useGetProxyById, useGetProxyOverview, useToggleProxy } from "../../hooks";
-import { ProxyKeyValue } from "../../types";
-import { containsVarRef } from "../../utils";
+import { Proxy, ProxyKeyValue, ResponseFieldNode } from "../../types";
+import { containsVarRef, pathsToTree } from "../../utils";
 import { ProxyMethodChips } from "../../components/proxy-method-chips";
 import { ProxyStatusBadge } from "../../components/proxy-status-badge";
 import { ProxyLogsTab } from "../../components/proxy-logs-tab";
@@ -123,6 +123,59 @@ const KeyValueRows = ({
     </div>
   </div>
 );
+
+/** Read-only "Response filtering" block for the config panel (SPEC §5.7). */
+const ResponseFilterTree = ({
+  nodes,
+  depth = 0,
+}: {
+  nodes: ResponseFieldNode[];
+  depth?: number;
+}) => (
+  <ul className={cn("space-y-1", depth > 0 && "mt-1")}>
+    {nodes.map((node) => (
+      <li key={node.id}>
+        <div className="flex items-center gap-2" style={{ paddingLeft: depth * 16 }}>
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/50" />
+          <span className="font-mono text-xs text-foreground">
+            {node.key}
+            {node.isList ? "[]" : ""}
+          </span>
+        </div>
+        {node.children.length ? (
+          <ResponseFilterTree nodes={node.children} depth={depth + 1} />
+        ) : null}
+      </li>
+    ))}
+  </ul>
+);
+
+const ResponseFilterSection = ({ proxy }: { proxy: Proxy }) => {
+  const isSelect = proxy.responseMode === "select";
+  const paths = proxy.responseInclude ?? [];
+  const { tree } = pathsToTree(paths);
+  return (
+    <div>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Response filtering
+      </h3>
+      <div className="mt-3 rounded-lg border bg-card p-4 text-sm">
+        {!isSelect ? (
+          <p className="text-muted-foreground">Sends the full upstream response.</p>
+        ) : paths.length ? (
+          <div className="space-y-2">
+            <p className="text-muted-foreground">Forwards {pluralize(paths.length, "field")}:</p>
+            <ResponseFilterTree nodes={tree} />
+          </div>
+        ) : (
+          <p className="text-muted-foreground">
+            Forwards an empty object (<code>{"{}"}</code>) — no fields selected yet.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const MetricCard = ({
   label,
@@ -519,6 +572,7 @@ export const ProxyDetails = () => {
                       revealed={revealedValues}
                       onToggle={toggleRevealedValue}
                     />
+                    <ResponseFilterSection proxy={proxy} />
                   </CardContent>
                 </Card>
               </>

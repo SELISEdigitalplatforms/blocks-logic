@@ -98,6 +98,8 @@ namespace Proxy.DomainService.Services
                 Query = proxy.Query.Select(ToKeyValueDto).ToList(),
                 BodyMerge = proxy.BodyMerge.Select(ToKeyValueDto).ToList(),
                 MethodConfigs = proxy.MethodConfigs.Select(ToMethodConfigDto).ToList(),
+                ResponseMode = proxy.ResponseMode.ToString(),
+                ResponseInclude = proxy.ResponseInclude.ToList(),
                 CurrentVersion = proxy.CurrentVersion,
                 CreatedDate = proxy.CreatedDate,
                 CreatedBy = proxy.CreatedBy,
@@ -115,7 +117,7 @@ namespace Proxy.DomainService.Services
 
             var validation = ProxyConfigValidator.Validate(
                 request.Name, request.Upstream, request.Methods, request.Headers, request.Query, request.MethodConfigs,
-                request.BodyMerge);
+                request.BodyMerge, request.ResponseMode, request.ResponseInclude);
             if (!validation.IsValid)
             {
                 _logger.LogWarning(
@@ -150,6 +152,8 @@ namespace Proxy.DomainService.Services
                 Query = validation.Query,
                 BodyMerge = validation.BodyMerge,
                 MethodConfigs = validation.MethodConfigs,
+                ResponseMode = validation.ResponseMode,
+                ResponseInclude = validation.ResponseInclude,
                 CurrentVersion = 1,
                 CreatedDate = now,
                 LastUpdatedDate = now,
@@ -189,7 +193,7 @@ namespace Proxy.DomainService.Services
 
             var validation = ProxyConfigValidator.Validate(
                 request.Name, request.Upstream, request.Methods, request.Headers, request.Query, request.MethodConfigs,
-                request.BodyMerge);
+                request.BodyMerge, request.ResponseMode, request.ResponseInclude);
             if (!validation.IsValid)
             {
                 _logger.LogWarning(
@@ -222,6 +226,8 @@ namespace Proxy.DomainService.Services
                 Query = validation.Query.Select(ProxyVersionFactory.CloneKeyValue).ToList(),
                 BodyMerge = validation.BodyMerge.Select(ProxyVersionFactory.CloneKeyValue).ToList(),
                 MethodConfigs = validation.MethodConfigs.Select(ProxyVersionFactory.CloneMethodConfig).ToList(),
+                ResponseMode = validation.ResponseMode,
+                ResponseInclude = new List<string>(validation.ResponseInclude),
             };
             var changes = ProxyChangeSet.Diff(beforeSnapshot, candidate);
 
@@ -239,6 +245,8 @@ namespace Proxy.DomainService.Services
             proxy.Query = validation.Query;
             proxy.BodyMerge = validation.BodyMerge;
             proxy.MethodConfigs = validation.MethodConfigs;
+            proxy.ResponseMode = validation.ResponseMode;
+            proxy.ResponseInclude = validation.ResponseInclude;
             proxy.LastUpdatedDate = DateTime.UtcNow;
             proxy.LastUpdatedBy = ProxyVersionFactory.CurrentUserId();
             proxy.CurrentVersion += 1;

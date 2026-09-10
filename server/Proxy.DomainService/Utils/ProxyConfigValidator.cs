@@ -27,6 +27,15 @@ namespace Proxy.DomainService.Utils
         public List<ProxyKeyValue> BodyMerge { get; set; } = new();
 
         public List<ProxyMethodConfig> MethodConfigs { get; set; } = new();
+
+        /// <summary>Normalized response-body treatment. Defaults to <see cref="ProxyResponseMode.All"/>.</summary>
+        public ProxyResponseMode ResponseMode { get; set; } = ProxyResponseMode.All;
+
+        /// <summary>
+        /// Normalized (trimmed, blank-dropped, ordinal-deduped) response field paths. Kept regardless of
+        /// <see cref="ResponseMode"/> so a mode round-trip does not lose the user's paths.
+        /// </summary>
+        public List<string> ResponseInclude { get; set; } = new();
     }
 
     /// <summary>
@@ -51,7 +60,9 @@ namespace Proxy.DomainService.Utils
             IEnumerable<ProxyKeyValueInputDto>? headers,
             IEnumerable<ProxyKeyValueInputDto>? query,
             IEnumerable<ProxyMethodConfigInputDto>? methodConfigs = null,
-            IEnumerable<ProxyKeyValueInputDto>? bodyMerge = null)
+            IEnumerable<ProxyKeyValueInputDto>? bodyMerge = null,
+            string? responseMode = null,
+            IEnumerable<string>? responseInclude = null)
         {
             var result = new ProxyConfigValidationResult();
 
@@ -62,8 +73,63 @@ namespace Proxy.DomainService.Utils
             result.Query = NormalizePairs(query, "query", result);
             result.BodyMerge = NormalizePairs(bodyMerge, "bodyMerge", result);
             result.MethodConfigs = NormalizeMethodConfigs(methodConfigs, result);
+            NormalizeResponseFilter(responseMode, responseInclude, result);
 
             return result;
+        }
+
+        /// <summary>
+        /// Normalizes the response-field-filter layer (SPEC "response field filtering" &sect;4.3).
+        /// <paramref name="responseMode"/> is parsed case-insensitively to <c>All</c> / <c>Select</c> (empty ⇒
+        /// <c>All</c>); anything else is an error. <paramref name="responseInclude"/> entries are trimmed,
+        /// blank-dropped, ordinal-deduped, then capped at <see cref="ProxyResponsePath.MaxPaths"/> and each
+        /// checked against <see cref="ProxyResponsePath.IsValid"/>. An empty normalized list is valid
+        /// (Select + empty ⇒ <c>{}</c> at runtime). Normalization runs regardless of mode.
+        /// </summary>
+        private static void NormalizeResponseFilter(
+            string? responseMode, IEnumerable<string>? responseInclude, ProxyConfigValidationResult result)
+        {
+            var mode = (responseMode ?? string.Empty).Trim();
+            if (mode.Length == 0)
+            {
+                result.ResponseMode = ProxyResponseMode.All;
+            }
+            else if (Enum.TryParse<ProxyResponseMode>(mode, ignoreCase: true, out var parsed))
+            {
+                result.ResponseMode = parsed;
+            }
+            else
+            {
+                result.Errors["responseMode"] = "responseMode must be 'All' or 'Select'.";
+            }
+
+            var normalized = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var raw in responseInclude ?? Enumerable.Empty<string>())
+            {
+                var path = (raw ?? string.Empty).Trim();
+                if (path.Length == 0 || !seen.Add(path))
+                {
+                    continue;
+                }
+
+                normalized.Add(path);
+            }
+
+            if (normalized.Count > ProxyResponsePath.MaxPaths)
+            {
+                result.Errors["responseInclude"] = $"At most {ProxyResponsePath.MaxPaths} response fields.";
+            }
+            else
+            {
+                var invalid = normalized.FirstOrDefault(p => !ProxyResponsePath.IsValid(p));
+                if (invalid is not null)
+                {
+                    result.Errors["responseInclude"] = $"'{invalid}' is not a valid field path.";
+                }
+            }
+
+            result.ResponseInclude = normalized;
         }
 
         private static void ValidateName(string? name, ProxyConfigValidationResult result)

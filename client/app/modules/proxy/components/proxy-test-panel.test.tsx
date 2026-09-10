@@ -2,45 +2,81 @@ import { describe, expect, it, vi } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
-
-vi.mock("../services", async () => ({
-  proxyService: (await import("../test-support/mock-proxy-service")).mockProxyService,
-}));
-
-import { proxyService } from "../services";
+import { ProxyTestResponse } from "../types";
 import { ProxyTestPanel } from "./proxy-test-panel";
 
-const mockProxyService = proxyService as unknown as { resetMockStore: () => void };
+const baseResponse: ProxyTestResponse = {
+  ok: true,
+  status: 200,
+  statusText: "OK",
+  latencyMs: 12,
+  meta: "GET / → api.example.com",
+  responseBody: '{"ok":true}',
+  responseBodyBytes: 11,
+};
 
 describe("ProxyTestPanel", () => {
-  it("sends a saved proxy test request and renders success", async () => {
+  it("is presentational — Send calls onSend and inputs are controlled", async () => {
     const user = userEvent.setup();
-    mockProxyService.resetMockStore();
-
-    renderWithProviders(<ProxyTestPanel proxyId="p1" method="POST" />);
-
-    await user.click(screen.getByRole("button", { name: /send test request/i }));
-    expect(await screen.findByText("200 OK")).toBeTruthy();
-    expect(screen.getByText(/mock proxy/i)).toBeTruthy();
-  });
-
-  it("renders a mock bad gateway response for invalid drafts", async () => {
-    const user = userEvent.setup();
+    const onSend = vi.fn();
+    const onPathSuffixChange = vi.fn();
 
     renderWithProviders(
       <ProxyTestPanel
-        draft={{
-          name: "Bad",
-          upstreamUrl: "http://example.com",
-          methods: ["GET"],
-          headers: [],
-          query: [],
+        pathSuffix="/charges"
+        onPathSuffixChange={onPathSuffixChange}
+        body=""
+        onBodyChange={vi.fn()}
+        onSend={onSend}
+        sending={false}
+        response={null}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /test run/i }));
+    expect(onSend).toHaveBeenCalledOnce();
+
+    await user.type(screen.getByDisplayValue("/charges"), "x");
+    expect(onPathSuffixChange).toHaveBeenCalled();
+  });
+
+  it("renders the status and a filter badge from the response", () => {
+    renderWithProviders(
+      <ProxyTestPanel
+        pathSuffix="/"
+        onPathSuffixChange={vi.fn()}
+        body=""
+        onBodyChange={vi.fn()}
+        onSend={vi.fn()}
+        sending={false}
+        response={{ ...baseResponse, responseFilterNote: "Applied", responseFilterApplied: true }}
+      />,
+    );
+
+    expect(screen.getByText("200 OK")).toBeTruthy();
+    expect(screen.getByText("Filtered")).toBeTruthy();
+  });
+
+  it("shows a 502 filter-failed badge", () => {
+    renderWithProviders(
+      <ProxyTestPanel
+        pathSuffix="/"
+        onPathSuffixChange={vi.fn()}
+        body=""
+        onBodyChange={vi.fn()}
+        onSend={vi.fn()}
+        sending={false}
+        response={{
+          ...baseResponse,
+          ok: false,
+          status: 502,
+          statusText: "Bad Gateway",
+          responseFilterNote: "Failed",
         }}
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: /send test request/i }));
-    expect(await screen.findByText("502 Bad Gateway")).toBeTruthy();
+    expect(screen.getByText("502 Bad Gateway")).toBeTruthy();
+    expect(screen.getByText("Filter failed — 502")).toBeTruthy();
   });
 });
-

@@ -41,6 +41,12 @@ namespace Proxy.DomainService.Dtos
         /// <summary>Per-method overrides. Always empty until Phase D-feature; wired so the form can round-trip it.</summary>
         public List<ProxyMethodConfigDto> MethodConfigs { get; set; } = new();
 
+        /// <summary><c>"All"</c> or <c>"Select"</c> — how the upstream response body is treated on forward.</summary>
+        public string ResponseMode { get; set; } = "All";
+
+        /// <summary>Response field paths kept when <see cref="ResponseMode"/> is <c>"Select"</c>.</summary>
+        public List<string> ResponseInclude { get; set; } = new();
+
         public int CurrentVersion { get; set; }
 
         public DateTime CreatedDate { get; set; }

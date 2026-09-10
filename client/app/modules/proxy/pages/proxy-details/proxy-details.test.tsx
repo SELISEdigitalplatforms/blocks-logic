@@ -80,6 +80,27 @@ describe("ProxyDetails page", () => {
     expect(screen.queryByRole("tab", { name: /Change history\s+\d+/i })).toBeNull();
   });
 
+  it("shows selected response fields as a nested tree", async () => {
+    renderWithProviders(
+      <MemoryRouter initialEntries={["/proxy/p3"]}>
+        <Routes>
+          <Route path="/proxy/:proxyId" element={<ProxyDetails />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Weather Lookup" })).toBeTruthy();
+    expect(await screen.findByText(/Forwards 3 fields/)).toBeTruthy();
+    expect(screen.getByText("location")).toBeTruthy();
+    expect(screen.getByText("name")).toBeTruthy();
+    expect(screen.getByText("current")).toBeTruthy();
+    expect(screen.getByText("temp_c")).toBeTruthy();
+    expect(screen.getByText("condition")).toBeTruthy();
+    expect(screen.getByText("text")).toBeTruthy();
+    expect(screen.queryByText("location.name")).toBeNull();
+    expect(screen.queryByText("current.condition.text")).toBeNull();
+  });
+
   it("redirects unknown proxies back to the list", async () => {
     renderWithProviders(
       <MemoryRouter initialEntries={["/proxy/missing"]}>

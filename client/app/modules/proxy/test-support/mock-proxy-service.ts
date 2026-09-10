@@ -63,6 +63,11 @@ const buildProxy = (values: ProxyFormValues, existing?: Proxy): Proxy => {
         };
       })
       .filter((entry) => entry.upstream || entry.headers || entry.query),
+    responseMode: values.responseMode === "select" ? "select" : "all",
+    responseInclude:
+      values.responseMode === "select"
+        ? [...new Set(values.responseInclude.map((path) => path.trim()).filter(Boolean))]
+        : [],
     calls24h: existing?.calls24h ?? 0,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
@@ -349,15 +354,21 @@ export const mockProxyService = {
         latencyMs: 18,
         meta: "Mock proxy test rejected an invalid upstream endpoint.",
         responseBody: '{\n  "error": "Invalid upstream. Use https:// endpoints only."\n}',
+        responseBodyBytes: 0,
       };
     }
+    const responseBody = '{\n  "ok": true,\n  "source": "mock-proxy-test"\n}';
     return {
       ok: true,
       status: 200,
       statusText: "OK",
       latencyMs: 142,
       meta: `${request.method} ${request.pathSuffix || "/"} via mock proxy`,
-      responseBody: '{\n  "ok": true,\n  "source": "mock-proxy-test"\n}',
+      responseBody,
+      contentType: "application/json",
+      responseFilterNote: null,
+      responseFilterApplied: false,
+      responseBodyBytes: responseBody.length,
     };
   },
 

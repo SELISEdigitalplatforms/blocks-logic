@@ -32,6 +32,18 @@ namespace Proxy.DomainService.Dtos
         /// <summary>Full upstream body (same capture seam as the persisted rows).</summary>
         public string? ResponseBody { get; set; }
 
+        /// <summary>
+        /// <c>true</c> iff a response filter ran and produced output (Applied or EmptyResult). <c>false</c>
+        /// when the mode was All, the response was a whole-primitive, or the filter failed.
+        /// </summary>
+        public bool ResponseFilterApplied { get; set; }
+
+        /// <summary><c>null</c> | <c>"Applied"</c> | <c>"EmptyResult"</c> | <c>"WholePrimitive"</c> | <c>"Failed"</c>.</summary>
+        public string? ResponseFilterNote { get; set; }
+
+        /// <summary>Size of the body relayed to the client, in bytes (post-projection under Select).</summary>
+        public long ResponseBodyBytes { get; set; }
+
         public string? ErrorMessage { get; set; }
     }
 }

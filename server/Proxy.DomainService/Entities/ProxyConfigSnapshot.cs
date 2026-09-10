@@ -34,5 +34,18 @@ namespace Proxy.DomainService.Entities
 
         /// <summary>Per-method overrides captured with the rest of the config. Empty until Phase D-feature.</summary>
         public List<ProxyMethodConfig> MethodConfigs { get; set; } = new();
+
+        /// <summary>
+        /// Response-body treatment on forward, captured per version so Revert round-trips a
+        /// <c>responseMode</c> change. <see cref="ProxyResponseMode.All"/> ⇒ relayed unchanged.
+        /// </summary>
+        [BsonRepresentation(BsonType.String)]
+        public ProxyResponseMode ResponseMode { get; set; } = ProxyResponseMode.All;
+
+        /// <summary>
+        /// Field paths kept under <see cref="ProxyResponseMode.Select"/>, captured per version so Revert
+        /// round-trips a <c>response:&lt;path&gt;</c> change.
+        /// </summary>
+        public List<string> ResponseInclude { get; set; } = new();
     }
 }

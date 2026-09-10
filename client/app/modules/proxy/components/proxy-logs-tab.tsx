@@ -221,7 +221,7 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
               <th colSpan={5} className="p-0 text-left font-medium">
                 <div className={cn("grid gap-4 px-4 py-2", logTableGridClass)}>
                   <span role="columnheader">TIME</span>
-                  <span role="columnheader">METH</span>
+                  <span role="columnheader">METHOD</span>
                   <span role="columnheader">PATH</span>
                   <span role="columnheader">CODE</span>
                   <span role="columnheader">TOOK</span>

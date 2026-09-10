@@ -246,6 +246,92 @@ namespace XUnitTest.Proxy
             result.Errors.Should().ContainKey("bodyMerge");
         }
 
+        // ---------- ProxyConfigValidator: response field filtering ----------
+
+        [Theory]
+        [InlineData("select", ProxyResponseMode.Select)]
+        [InlineData("SELECT", ProxyResponseMode.Select)]
+        [InlineData("All", ProxyResponseMode.All)]
+        [InlineData("", ProxyResponseMode.All)]
+        [InlineData(null, ProxyResponseMode.All)]
+        public void Validator_ParsesResponseMode_CaseInsensitive(string? mode, ProxyResponseMode expected)
+        {
+            var result = ProxyConfigValidator.Validate(
+                "X", "https://api.x.com", new[] { "GET" }, null, null, null, null, mode, null);
+
+            result.IsValid.Should().BeTrue();
+            result.ResponseMode.Should().Be(expected);
+        }
+
+        [Fact]
+        public void Validator_RejectsUnknownResponseMode()
+        {
+            var result = ProxyConfigValidator.Validate(
+                "X", "https://api.x.com", new[] { "GET" }, null, null, null, null, "trim", null);
+
+            result.IsValid.Should().BeFalse();
+            result.Errors.Should().ContainKey("responseMode")
+                .WhoseValue.Should().Be("responseMode must be 'All' or 'Select'.");
+        }
+
+        [Fact]
+        public void Validator_NormalizesResponseInclude_TrimsDedupesDropsBlank()
+        {
+            var result = ProxyConfigValidator.Validate(
+                "X", "https://api.x.com", new[] { "GET" }, null, null, null, null, "Select",
+                new[] { " data.id ", "data.id", "", "   ", "data.name" });
+
+            result.IsValid.Should().BeTrue();
+            result.ResponseInclude.Should().Equal("data.id", "data.name");
+        }
+
+        [Fact]
+        public void Validator_RejectsInvalidResponsePath()
+        {
+            var result = ProxyConfigValidator.Validate(
+                "X", "https://api.x.com", new[] { "GET" }, null, null, null, null, "Select",
+                new[] { "items[0]" });
+
+            result.IsValid.Should().BeFalse();
+            result.Errors.Should().ContainKey("responseInclude")
+                .WhoseValue.Should().Be("'items[0]' is not a valid field path.");
+        }
+
+        [Fact]
+        public void Validator_RejectsOverTwoHundredResponsePaths()
+        {
+            var paths = Enumerable.Range(0, 201).Select(i => $"f{i}").ToArray();
+            var result = ProxyConfigValidator.Validate(
+                "X", "https://api.x.com", new[] { "GET" }, null, null, null, null, "Select", paths);
+
+            result.IsValid.Should().BeFalse();
+            result.Errors.Should().ContainKey("responseInclude")
+                .WhoseValue.Should().Be("At most 200 response fields.");
+        }
+
+        [Fact]
+        public void Validator_EmptyResponseIncludeUnderSelect_IsValid()
+        {
+            var result = ProxyConfigValidator.Validate(
+                "X", "https://api.x.com", new[] { "GET" }, null, null, null, null, "Select", Array.Empty<string>());
+
+            result.IsValid.Should().BeTrue();
+            result.ResponseMode.Should().Be(ProxyResponseMode.Select);
+            result.ResponseInclude.Should().BeEmpty();
+        }
+
+        [Fact]
+        public void Validator_KeepsResponsePaths_EvenWhenModeIsAll()
+        {
+            var result = ProxyConfigValidator.Validate(
+                "X", "https://api.x.com", new[] { "GET" }, null, null, null, null, "All",
+                new[] { "data.id" });
+
+            result.IsValid.Should().BeTrue();
+            result.ResponseMode.Should().Be(ProxyResponseMode.All);
+            result.ResponseInclude.Should().Equal("data.id");
+        }
+
         [Theory]
         [InlineData("ftp://x")]
         [InlineData("http://api.stripe.com")]

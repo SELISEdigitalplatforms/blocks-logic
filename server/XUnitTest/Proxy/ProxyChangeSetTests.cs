@@ -353,5 +353,98 @@ namespace XUnitTest.Proxy
                 new ProxyFieldChange { Field = "method:GET:header:X", Label = "GET header X", Before = "v", After = null },
             }).Should().Be("GET header X override removed");
         }
+
+        // ---------- response field filtering ----------
+
+        [Fact]
+        public void Diff_ResponseMode_IsReported()
+        {
+            var before = Snapshot();
+            var after = Snapshot(s => s.ResponseMode = ProxyResponseMode.Select);
+
+            var changes = ProxyChangeSet.Diff(before, after);
+
+            changes.Should().ContainSingle(c => c.Field == "responseMode"
+                && c.Before == "All" && c.After == "Select" && c.Label == "response mode");
+        }
+
+        [Fact]
+        public void Diff_ResponseInclude_IsSetBased_ReorderIsNotAChange()
+        {
+            var before = Snapshot(s => s.ResponseInclude = new List<string> { "a.b", "c.d" });
+            var after = Snapshot(s => s.ResponseInclude = new List<string> { "c.d", "a.b" });
+
+            ProxyChangeSet.Diff(before, after).Should().BeEmpty();
+        }
+
+        [Fact]
+        public void Diff_ResponseInclude_AddAndRemove()
+        {
+            var before = Snapshot(s => s.ResponseInclude = new List<string> { "a.b" });
+            var after = Snapshot(s => s.ResponseInclude = new List<string> { "a.b", "c.d" });
+
+            var added = ProxyChangeSet.Diff(before, after);
+            added.Should().ContainSingle(c => c.Field == "response:c.d" && c.Before == null && c.After == "c.d");
+
+            var removed = ProxyChangeSet.Diff(after, before);
+            removed.Should().ContainSingle(c => c.Field == "response:c.d" && c.Before == "c.d" && c.After == null);
+        }
+
+        [Fact]
+        public void Summarize_ResponseFiltering()
+        {
+            ProxyChangeSet.Summarize(new[]
+            {
+                new ProxyFieldChange { Field = "responseMode", Label = "response mode", Before = "All", After = "Select" },
+            }).Should().Be("Response filtering enabled");
+
+            ProxyChangeSet.Summarize(new[]
+            {
+                new ProxyFieldChange { Field = "responseMode", Label = "response mode", Before = "Select", After = "All" },
+            }).Should().Be("Response filtering removed");
+
+            ProxyChangeSet.Summarize(new[]
+            {
+                new ProxyFieldChange { Field = "response:data.id", Label = "response field data.id", Before = null, After = "data.id" },
+            }).Should().Be("response field data.id added");
+
+            ProxyChangeSet.Summarize(new[]
+            {
+                new ProxyFieldChange { Field = "response:data.id", Label = "response field data.id", Before = "data.id", After = null },
+            }).Should().Be("response field data.id removed");
+        }
+
+        [Fact]
+        public void ReadApply_ResponseAddresses_RoundTrip()
+        {
+            var proxy = new ProxyDetailEntity
+            {
+                TenantId = "t",
+                Name = "N",
+                Slug = "n",
+                Upstream = "https://a.test",
+                Methods = new List<HttpMethodType> { HttpMethodType.Get },
+                Enabled = true,
+                Headers = new List<ProxyKeyValue>(),
+                Query = new List<ProxyKeyValue>(),
+            };
+
+            ProxyChangeSet.ReadField(proxy, "responseMode").Should().Be("All");
+            ProxyChangeSet.ReadField(proxy, "response:data.id").Should().BeNull();
+
+            ProxyChangeSet.ApplyField(proxy, "responseMode", "Select");
+            ProxyChangeSet.ApplyField(proxy, "response:data.id", "data.id");
+            ProxyChangeSet.ApplyField(proxy, "response:data.id", "data.id"); // idempotent add
+
+            proxy.ResponseMode.Should().Be(ProxyResponseMode.Select);
+            proxy.ResponseInclude.Should().Equal("data.id");
+            ProxyChangeSet.ReadField(proxy, "response:data.id").Should().Be("data.id");
+
+            ProxyChangeSet.ApplyField(proxy, "response:data.id", null);
+            proxy.ResponseInclude.Should().BeEmpty();
+
+            ProxyChangeSet.ApplyField(proxy, "responseMode", "bogus");
+            proxy.ResponseMode.Should().Be(ProxyResponseMode.All);
+        }
     }
 }

@@ -249,6 +249,7 @@ export class ProxyService {
         latencyMs: 0,
         meta: flattenErrors(error),
         responseBody: "",
+        responseBodyBytes: 0,
       };
     }
   };

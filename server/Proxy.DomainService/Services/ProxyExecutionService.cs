@@ -191,6 +191,8 @@ namespace Proxy.DomainService.Services
                     Outcome = row.Outcome,
                     ErrorMessage = row.ErrorMessage,
                     ResponseContentType = row.ResponseContentType,
+                    ResponseFilterApplied = row.ResponseFilterApplied,
+                    ResponseFilterNote = row.ResponseFilterNote,
                     ResponseBodyBytes = row.ResponseBodyBytes,
                     ResponseBody = body,
                     ResponseBodyTruncatedForDisplay = truncated,

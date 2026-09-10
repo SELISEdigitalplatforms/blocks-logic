@@ -217,7 +217,7 @@ describe("Proxy feature", () => {
       </MemoryRouter>,
     );
 
-    await user.click(screen.getByRole("button", { name: /send test request/i }));
+    await user.click(screen.getByRole("button", { name: /^test run$/i }));
     expect(await screen.findByText("502 Bad Gateway")).toBeTruthy();
     expect(screen.getAllByText(/Invalid upstream/i).length).toBeGreaterThan(0);
   });

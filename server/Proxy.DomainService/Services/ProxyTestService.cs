@@ -84,7 +84,7 @@ namespace Proxy.DomainService.Services
                 var draft = request.Draft!;
                 var validation = ProxyConfigValidator.Validate(
                     "draft", draft.Upstream, draft.Methods, draft.Headers, draft.Query, draft.MethodConfigs,
-                    draft.BodyMerge);
+                    draft.BodyMerge, draft.ResponseMode, draft.ResponseInclude);
 
                 foreach (var pair in validation.Errors)
                 {
@@ -117,6 +117,8 @@ namespace Proxy.DomainService.Services
                     Query = validation.Query,
                     BodyMerge = validation.BodyMerge,
                     MethodConfigs = validation.MethodConfigs,
+                    ResponseMode = validation.ResponseMode,
+                    ResponseInclude = validation.ResponseInclude,
                 };
             }
 
@@ -162,6 +164,9 @@ namespace Proxy.DomainService.Services
                 InjectedQueryKeys = forward.InjectedQueryKeys.ToList(),
                 ResponseContentType = forward.ResponseContentType,
                 ResponseBody = forward.ResponseBody,
+                ResponseFilterApplied = forward.ResponseFilterApplied,
+                ResponseFilterNote = forward.ResponseFilterNote,
+                ResponseBodyBytes = forward.ResponseBodyBytes,
                 ErrorMessage = forward.ErrorMessage,
             });
         }

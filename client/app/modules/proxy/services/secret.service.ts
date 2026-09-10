@@ -7,13 +7,17 @@ import {
 } from "../types";
 
 /**
- * Blocks OS Secret management, read-only. The proxy console reads the tenant's variable list
- * straight from the package's own routes (via the logic HTTP client) to populate the
- * `{{$VAR.name}}` picker. There is no `values` call here — plaintext is server-only.
+ * The tenant's configuration variables, read-only, for the `{{$VAR.name}}` picker.
+ *
+ * `SeliseBlocks.Secrets.OS` is an in-process NuGet library with **no HTTP surface of its own**, so the
+ * console cannot call it directly. These routes are the thin control-plane wrapper the logic API exposes
+ * over the in-process `ISecretService` (`ProxyController.Variables` / `.VariableTags`). Names / ids / type
+ * / tags only — there is no `values` call, plaintext is resolved server-side on the forward / Test path
+ * and never reaches the console.
  */
 export const SECRET_ENDPOINTS = {
-  GETS: "/api/Secrets/gets",
-  TAGS: "/api/Secrets/tags",
+  GETS: "/api/Proxy/Variables",
+  TAGS: "/api/Proxy/VariableTags",
 } as const;
 
 /** Types a proxy can actually resolve at forward time (an `api`-typed secret is out of reach). */
@@ -50,9 +54,6 @@ export class SecretService {
     const response = await this.logicHttpClient.get<SecretListResponseDto>(
       `${SECRET_ENDPOINTS.GETS}${buildQuery({
         search: params.search?.trim() || undefined,
-        tags: params.tags?.length ? params.tags.join(",") : undefined,
-        pageSize: params.pageSize ?? 200,
-        pageNumber: params.pageNumber ?? 0,
       })}`,
     );
     return (response.data ?? []).map(mapSecretListItemDto);

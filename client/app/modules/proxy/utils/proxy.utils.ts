@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ProxyFormValues } from "../types";
+import { ProxyFormValues, ResponseFieldNode } from "../types";
 
 export const slugifyProxyName = (name: string) =>
   name
@@ -74,6 +74,333 @@ const methodOverrideSchema = z.object({
   query: keyValueSchema.nullable(),
 });
 
+// ---------------------------------------------------------------------------
+// Response field filtering ("Send everything" vs "Choose fields")
+// Mirrors server/Proxy.DomainService/Utils/ProxyResponsePath.cs +
+// ProxyResponseProjector.cs. The path grammar, the caps, and the projector's
+// M1–M5 keep rules are re-implemented here for the console preview only.
+// ---------------------------------------------------------------------------
+
+/** `segment ( "." segment )*` where `segment = KEY [ "[]" ]`, `KEY = [^.\[\]]+`. Mirrors the server regex. */
+export const RESPONSE_PATH_RE = /^(?:[^.[\]]+(?:\[\])?)(?:\.[^.[\]]+(?:\[\])?)*$/;
+export const MAX_RESPONSE_PATH_SEGMENTS = 25;
+export const MAX_RESPONSE_PATHS = 200;
+/** Mirrors `ProxyResponseProjector.MaxProjectableBytes`. */
+export const MAX_PROJECTABLE_BYTES = 5 * 1024 * 1024;
+/** Array elements unioned per level when deriving a schema from a Test sample. */
+export const RESPONSE_SCHEMA_SAMPLE = 50;
+
+/** trim → grammar → ≤ {@link MAX_RESPONSE_PATH_SEGMENTS} segments. */
+export const isResponsePath = (value: string): boolean => {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 512 || !RESPONSE_PATH_RE.test(trimmed)) return false;
+  return trimmed.split(".").length <= MAX_RESPONSE_PATH_SEGMENTS;
+};
+
+let responseNodeSeq = 0;
+const responseNodeUid = () => `rf-${Date.now().toString(36)}-${(responseNodeSeq++).toString(36)}`;
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const splitSegment = (raw: string): { key: string; isList: boolean } => {
+  const isList = raw.endsWith("[]");
+  return { key: isList ? raw.slice(0, -2) : raw, isList };
+};
+
+const encodeSegment = (node: ResponseFieldNode) =>
+  `${node.key.trim()}${node.isList ? "[]" : ""}`;
+
+/**
+ * Minimal-encode a tree + checked-id set to a deduped path list: emit the path of every checked node
+ * that has NO checked ancestor; skip empty-key nodes (and anything below one — it cannot form a
+ * valid path).
+ */
+export const treeToPaths = (nodes: ResponseFieldNode[], checked: Set<string>): string[] => {
+  const out: string[] = [];
+  const walk = (list: ResponseFieldNode[], prefix: string[], checkedAncestor: boolean) => {
+    for (const node of list) {
+      const key = node.key.trim();
+      if (!key) continue; // unnamed row — not encodable, and neither is anything under it
+      const path = [...prefix, encodeSegment(node)];
+      const selfChecked = checked.has(node.id);
+      if (selfChecked && !checkedAncestor) out.push(path.join("."));
+      walk(node.children, path, checkedAncestor || selfChecked);
+    }
+  };
+  walk(nodes, [], false);
+  return [...new Set(out)];
+};
+
+/**
+ * Build a scaffold tree from saved paths. Every leaf-of-path node is checked; the intermediate nodes
+ * it passes through are present but unchecked. `key[]` → `isList`.
+ */
+export const pathsToTree = (
+  paths: string[],
+): { tree: ResponseFieldNode[]; checked: Set<string> } => {
+  const tree: ResponseFieldNode[] = [];
+  const checked = new Set<string>();
+  for (const raw of paths) {
+    if (!isResponsePath(raw)) continue;
+    const segments = raw.trim().split(".");
+    let siblings = tree;
+    segments.forEach((segRaw, index) => {
+      const { key, isList } = splitSegment(segRaw);
+      let node = siblings.find((sibling) => sibling.key === key);
+      if (!node) {
+        node = { id: responseNodeUid(), key, isList, children: [] };
+        siblings.push(node);
+      } else if (isList) {
+        node.isList = true;
+      }
+      if (index === segments.length - 1) checked.add(node.id);
+      siblings = node.children;
+    });
+  }
+  return { tree, checked };
+};
+
+const unionObjectKeys = (objects: Record<string, unknown>[]): string[] => {
+  const keys: string[] = [];
+  const seen = new Set<string>();
+  for (const object of objects.slice(0, RESPONSE_SCHEMA_SAMPLE)) {
+    for (const key of Object.keys(object)) {
+      if (!seen.has(key)) {
+        seen.add(key);
+        keys.push(key);
+      }
+    }
+  }
+  return keys;
+};
+
+const schemaNodesFromObject = (
+  objects: Record<string, unknown>[],
+  depth: number,
+): ResponseFieldNode[] => {
+  if (depth > MAX_RESPONSE_PATH_SEGMENTS) return [];
+  return unionObjectKeys(objects).map((key) => {
+    const values = objects
+      .map((object) => object[key])
+      .filter((value) => value !== undefined);
+    const objectValues = values.filter(isPlainObject);
+    const arrayValues = values.filter((value): value is unknown[] => Array.isArray(value));
+
+    if (arrayValues.length) {
+      const elementObjects = arrayValues.flat().filter(isPlainObject);
+      return {
+        id: responseNodeUid(),
+        key,
+        isList: true,
+        children: elementObjects.length
+          ? schemaNodesFromObject(elementObjects, depth + 1)
+          : [],
+      };
+    }
+
+    if (objectValues.length) {
+      return {
+        id: responseNodeUid(),
+        key,
+        isList: false,
+        children: schemaNodesFromObject(objectValues, depth + 1),
+      };
+    }
+
+    return { id: responseNodeUid(), key, isList: false, children: [] };
+  });
+};
+
+/**
+ * Read the *shape* of a parsed Test sample. Objects recurse; arrays → `isList`; an array of objects
+ * unions keys across the first {@link RESPONSE_SCHEMA_SAMPLE} elements. Arrays of primitives / empty
+ * arrays → a childless list leaf. Stops emitting nodes past {@link MAX_RESPONSE_PATH_SEGMENTS} depth.
+ * Values are never read.
+ */
+export const deriveResponseSchema = (
+  sample: unknown,
+): { rootKind: "object" | "array-of-objects" | "primitive"; tree: ResponseFieldNode[] } => {
+  if (isPlainObject(sample)) {
+    return { rootKind: "object", tree: schemaNodesFromObject([sample], 1) };
+  }
+  if (Array.isArray(sample)) {
+    const objects = sample.filter(isPlainObject);
+    if (!objects.length) return { rootKind: "primitive", tree: [] };
+    return { rootKind: "array-of-objects", tree: schemaNodesFromObject(objects, 1) };
+  }
+  return { rootKind: "primitive", tree: [] };
+};
+
+const cloneSchemaSubtree = (
+  node: ResponseFieldNode,
+  checked: Set<string>,
+): ResponseFieldNode => {
+  const copy: ResponseFieldNode = {
+    id: responseNodeUid(),
+    key: node.key,
+    isList: node.isList,
+    children: node.children.map((child) => cloneSchemaSubtree(child, checked)),
+  };
+  checked.add(copy.id);
+  return copy;
+};
+
+const cloneTree = (nodes: ResponseFieldNode[]): ResponseFieldNode[] =>
+  nodes.map((node) => ({ ...node, children: cloneTree(node.children) }));
+
+/**
+ * Non-destructive overlay: for every schema node, find-or-create the matching node in `tree` (by
+ * key path); keep existing checked state; newly created nodes (and everything under them) are added
+ * to `checked`.
+ */
+export const mergeSchemaIntoTree = (
+  tree: ResponseFieldNode[],
+  checked: Set<string>,
+  schema: ResponseFieldNode[],
+): { tree: ResponseFieldNode[]; checked: Set<string> } => {
+  const nextTree = cloneTree(tree);
+  const nextChecked = new Set(checked);
+
+  const merge = (target: ResponseFieldNode[], source: ResponseFieldNode[]) => {
+    for (const sourceNode of source) {
+      const key = sourceNode.key.trim();
+      if (!key) continue;
+      let match = target.find((node) => node.key.trim() === key);
+      if (!match) {
+        match = cloneSchemaSubtree(sourceNode, nextChecked);
+        target.push(match);
+        continue;
+      }
+      if (sourceNode.isList) match.isList = true;
+      merge(match.children, sourceNode.children);
+    }
+  };
+
+  merge(nextTree, schema);
+  return { tree: nextTree, checked: nextChecked };
+};
+
+/** Number of leaf nodes in a schema tree — the count shown in "Filled N fields …". */
+export const countResponseLeaves = (nodes: ResponseFieldNode[]): number =>
+  nodes.reduce(
+    (total, node) => total + (node.children.length ? countResponseLeaves(node.children) : 1),
+    0,
+  );
+
+const hasCheckedInSubtree = (node: ResponseFieldNode, checked: Set<string>): boolean =>
+  checked.has(node.id) || node.children.some((child) => hasCheckedInSubtree(child, checked));
+
+/**
+ * Checked subtree → JSON skeleton value: object → `{}`, list → `[oneElement]` (or `[null]`),
+ * leaf → `null`. Shape only — every value is `null` / `{}`.
+ */
+export const treeToSkeleton = (
+  nodes: ResponseFieldNode[],
+  checked: Set<string>,
+): unknown => {
+  const buildObject = (list: ResponseFieldNode[]): Record<string, unknown> => {
+    const object: Record<string, unknown> = {};
+    for (const node of list) {
+      const key = node.key.trim();
+      if (!key || !hasCheckedInSubtree(node, checked)) continue;
+      const childObject = buildObject(node.children);
+      const base = Object.keys(childObject).length
+        ? childObject
+        : checked.has(node.id)
+          ? null
+          : {};
+      object[key] = node.isList ? [base] : base;
+    }
+    return object;
+  };
+  return buildObject(nodes);
+};
+
+/**
+ * Parse a user-edited skeleton (already `JSON.parse`d) to a path list — KEY STRUCTURE ONLY, every
+ * value ignored; arrays contribute `[]` to their key and recurse on element 0.
+ */
+export const skeletonToPaths = (json: unknown): string[] => {
+  const out: string[] = [];
+  const walk = (node: unknown, segments: string[]) => {
+    if (Array.isArray(node)) {
+      const segs =
+        segments.length && !segments[segments.length - 1].endsWith("[]")
+          ? [...segments.slice(0, -1), `${segments[segments.length - 1]}[]`]
+          : segments;
+      const first = node[0];
+      if (isPlainObject(first) || Array.isArray(first)) {
+        walk(first, segs);
+      } else if (segs.length) {
+        out.push(segs.join("."));
+      }
+      return;
+    }
+    if (isPlainObject(node)) {
+      const keys = Object.keys(node);
+      if (!keys.length) {
+        if (segments.length) out.push(segments.join("."));
+        return;
+      }
+      for (const key of keys) walk(node[key], [...segments, key]);
+      return;
+    }
+    if (segments.length) out.push(segments.join("."));
+  };
+  walk(json, []);
+  return [...new Set(out)].filter(isResponsePath);
+};
+
+/**
+ * JS port of the server projector's keep rules (M1–M5) — used only for the "Test sample" preview
+ * pane. An empty / all-invalid path list yields `{}` / `[]` (or the primitive itself).
+ */
+export const projectSample = (sample: unknown, paths: string[]): unknown => {
+  const cursors = paths
+    .filter(isResponsePath)
+    .map((path) => ({
+      path: path.trim().split(".").map((segment) => splitSegment(segment).key),
+      pos: 0,
+    }));
+
+  if (!cursors.length) {
+    if (Array.isArray(sample)) return [];
+    return isPlainObject(sample) ? {} : sample;
+  }
+
+  type Cursor = { path: string[]; pos: number };
+  const project = (node: unknown, state: Cursor[]): unknown => {
+    if (state.some((cursor) => cursor.pos === cursor.path.length)) return node; // M1
+
+    if (Array.isArray(node)) {
+      return node.map((element) =>
+        element && typeof element === "object" ? project(element, state) : element,
+      );
+    }
+
+    if (isPlainObject(node)) {
+      const out: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(node)) {
+        const next = state
+          .filter((cursor) => cursor.pos < cursor.path.length && cursor.path[cursor.pos] === key)
+          .map((cursor) => ({ path: cursor.path, pos: cursor.pos + 1 }));
+        if (!next.length) continue;
+        if (value && typeof value === "object") {
+          out[key] = project(value, next);
+        } else if (next.some((cursor) => cursor.pos === cursor.path.length)) {
+          out[key] = value;
+        }
+      }
+      return out;
+    }
+
+    return node;
+  };
+
+  return project(sample, cursors);
+};
+
 export const proxyFormSchema = z
   .object({
     name: z.string().trim().min(1, "Give the proxy a name - it becomes the path."),
@@ -90,8 +417,29 @@ export const proxyFormSchema = z
     bodyMerge: keyValueSchema,
     bodyMode: z.enum(["passthrough", "merge"]),
     methodConfigs: z.array(methodOverrideSchema),
+    responseMode: z.enum(["all", "select"]).default("all"),
+    responseInclude: z.array(z.string()).default([]),
   })
   .superRefine((values, ctx) => {
+    if (values.responseMode === "select") {
+      if (values.responseInclude.length > MAX_RESPONSE_PATHS) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["responseInclude"],
+          message: `Keep at most ${MAX_RESPONSE_PATHS} response fields.`,
+        });
+      }
+      values.responseInclude.forEach((path, index) => {
+        if (!isResponsePath(path)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["responseInclude", index],
+            message: `'${path}' is not a valid field path.`,
+          });
+        }
+      });
+    }
+
     if (values.bodyMode === "merge") {
       const bodyMethods = values.methods.some(
         (method) => method === "POST" || method === "PUT" || method === "PATCH",
@@ -148,6 +496,8 @@ export const proxyFormDefaultValues: ProxyFormValues = {
   bodyMerge: [],
   bodyMode: "passthrough",
   methodConfigs: [],
+  responseMode: "all",
+  responseInclude: [],
 };
 
 export const compactKeyValues = (rows: ProxyFormValues["headers"]) =>

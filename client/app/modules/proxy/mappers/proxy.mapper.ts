@@ -1,4 +1,4 @@
-import { maskUpstreamUrl } from "../utils";
+import { isResponsePath, maskUpstreamUrl } from "../utils";
 import {
   BaseMutationResponseDto,
   Proxy,
@@ -126,6 +126,20 @@ const toMethodConfigInputs = (
 const toBodyMergeInputs = (values: ProxyFormValues): ProxyKeyValueInputDto[] =>
   values.bodyMode === "merge" ? toKeyValueInputs(values.bodyMerge) : [];
 
+/**
+ * Response-field-filter payload. A "select" save emits `Select` + the trimmed / deduped / valid
+ * path list (an empty list is legal — the server relays `{}` then). "all" always emits `All` + `[]`.
+ */
+const toResponseFilter = (values: ProxyFormValues) =>
+  values.responseMode === "select"
+    ? {
+        responseMode: "Select",
+        responseInclude: [
+          ...new Set(values.responseInclude.map((path) => path.trim()).filter(isResponsePath)),
+        ],
+      }
+    : { responseMode: "All", responseInclude: [] };
+
 export const mapProxyToCreatePayload = (values: ProxyFormValues) => ({
   name: values.name.trim(),
   upstream: values.upstreamUrl.trim(),
@@ -134,6 +148,7 @@ export const mapProxyToCreatePayload = (values: ProxyFormValues) => ({
   query: toKeyValueInputs(values.query),
   bodyMerge: toBodyMergeInputs(values),
   methodConfigs: toMethodConfigInputs(values.methodConfigs, values.methods),
+  ...toResponseFilter(values),
   enabled: true,
 });
 
@@ -146,6 +161,7 @@ export const mapProxyToUpdatePayload = (id: string, values: ProxyFormValues) => 
   query: toKeyValueInputs(values.query),
   bodyMerge: toBodyMergeInputs(values),
   methodConfigs: toMethodConfigInputs(values.methodConfigs, values.methods),
+  ...toResponseFilter(values),
 });
 
 export const mapProxyTestRequestToPayload = (request: ProxyTestRequest) => ({
@@ -158,6 +174,7 @@ export const mapProxyTestRequestToPayload = (request: ProxyTestRequest) => ({
         query: toKeyValueInputs(request.draft.query),
         bodyMerge: toBodyMergeInputs(request.draft),
         methodConfigs: toMethodConfigInputs(request.draft.methodConfigs, request.draft.methods),
+        ...toResponseFilter(request.draft),
       }
     : undefined,
   method: request.method,
@@ -202,6 +219,8 @@ export const mapProxyListItemDtoToProxy = (dto: ProxyListItemDto): Proxy => ({
   query: [],
   bodyMerge: [],
   methodConfigs: [],
+  responseMode: "all",
+  responseInclude: [],
   calls24h: Number(dto.calls24h ?? 0),
   createdAt: dto.createdDate,
   updatedAt: dto.lastUpdatedDate,
@@ -220,6 +239,8 @@ export const mapProxyDetailDtoToProxy = (dto: ProxyDetailDto): Proxy => ({
   query: toKeyValues(dto.query),
   bodyMerge: toKeyValues(dto.bodyMerge),
   methodConfigs: toMethodOverrides(dto.methodConfigs),
+  responseMode: dto.responseMode?.toLowerCase() === "select" ? "select" : "all",
+  responseInclude: Array.isArray(dto.responseInclude) ? dto.responseInclude : [],
   calls24h: 0,
   createdAt: dto.createdDate,
   updatedAt: dto.lastUpdatedDate,
@@ -323,9 +344,12 @@ export const mapProxyTestResponseDtoToResponse = (
   request: ProxyTestRequest,
 ): ProxyTestResponse => {
   const host = dto.upstreamHost || (dto.upstreamUrl ? safeHost(dto.upstreamUrl) : "");
+  const filterMeta = responseFilterMeta(dto.responseFilterNote);
   const meta =
     dto.errorMessage ||
-    `${request.method} ${request.pathSuffix || "/"}${host ? ` → ${host}` : ""}`;
+    `${request.method} ${request.pathSuffix || "/"}${host ? ` → ${host}` : ""}${
+      filterMeta ? ` · ${filterMeta}` : ""
+    }`;
   return {
     ok: Boolean(dto.ok),
     status: Number(dto.status ?? 0),
@@ -333,7 +357,27 @@ export const mapProxyTestResponseDtoToResponse = (
     latencyMs: Number(dto.latencyMs ?? 0),
     meta,
     responseBody: dto.responseBody ?? dto.errorMessage ?? "",
+    contentType: dto.responseContentType ?? undefined,
+    responseFilterNote: dto.responseFilterNote ?? null,
+    responseFilterApplied: Boolean(dto.responseFilterApplied),
+    responseBodyBytes: Number(dto.responseBodyBytes ?? 0),
   };
+};
+
+/** Short human tag for the Test-result meta line, from the server's `ResponseFilterNote`. */
+const responseFilterMeta = (note: string | null | undefined): string | null => {
+  switch (note) {
+    case "Applied":
+      return "filter: applied";
+    case "EmptyResult":
+      return "filter: empty-result";
+    case "WholePrimitive":
+      return "filter: whole-primitive";
+    case "Failed":
+      return "filter: FAILED";
+    default:
+      return null;
+  }
 };
 
 const safeHost = (url: string) => {

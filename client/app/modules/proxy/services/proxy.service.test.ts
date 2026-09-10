@@ -94,6 +94,8 @@ describe("ProxyService HTTP wiring", () => {
       query: [],
       bodyMerge: [],
       methodConfigs: [],
+      responseMode: "All",
+      responseInclude: [],
       enabled: true,
     });
     expect(res).toMatchObject({ isSuccess: true, itemId: "p9" });

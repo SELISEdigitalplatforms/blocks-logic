@@ -1,36 +1,51 @@
-import { useState } from "react";
 import { Loader2, Send } from "lucide-react";
 import { Button } from "@/components/ui-kits/button/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui-kits/card/card";
 import { Input } from "@/components/ui-kits/input/input";
 import { Textarea } from "@/components/ui-kits/textarea/textarea";
 import { Badge } from "@/components/ui-kits/badge/badge";
-import { useSendProxyTestRequest } from "../hooks";
-import { ProxyFormValues, ProxyMethod, ProxyTestResponse } from "../types";
+import { ProxyTestResponse } from "../types";
 
 type Props = {
-  proxyId?: string;
-  draft?: ProxyFormValues;
-  method?: ProxyMethod;
+  pathSuffix: string;
+  onPathSuffixChange: (value: string) => void;
+  body: string;
+  onBodyChange: (value: string) => void;
+  onSend: () => void;
+  sending: boolean;
+  response: ProxyTestResponse | null;
 };
 
-export const ProxyTestPanel = ({ proxyId, draft, method = "GET" }: Props) => {
-  const [pathSuffix, setPathSuffix] = useState("/");
-  const [body, setBody] = useState("");
-  const [response, setResponse] = useState<ProxyTestResponse | null>(null);
-  const sendTest = useSendProxyTestRequest();
+/** Short badge for the response-filter outcome of a Test (SPEC §5.6). */
+const filterBadge = (note: string | null | undefined) => {
+  switch (note) {
+    case "Applied":
+    case "EmptyResult":
+      return { label: "Filtered", variant: "success" as const };
+    case "WholePrimitive":
+      return { label: "Whole response", variant: "secondary" as const };
+    case "Failed":
+      return { label: "Filter failed — 502", variant: "error" as const };
+    default:
+      return null;
+  }
+};
 
-  const handleSend = async () => {
-    const res = await sendTest.mutateAsync({
-      proxyId,
-      draft,
-      method,
-      pathSuffix,
-      body,
-      contentType: "application/json",
-    });
-    setResponse(res);
-  };
+/**
+ * Presentational Test panel. The Test hook, its inputs (path / body) and its last result are owned
+ * by {@link ProxyForm} so the "Fill from test connection" button on the Response card can reuse the
+ * same inputs (SPEC §5.4).
+ */
+export const ProxyTestPanel = ({
+  pathSuffix,
+  onPathSuffixChange,
+  body,
+  onBodyChange,
+  onSend,
+  sending,
+  response,
+}: Props) => {
+  const badge = response ? filterBadge(response.responseFilterNote) : null;
 
   return (
     <Card>
@@ -40,34 +55,31 @@ export const ProxyTestPanel = ({ proxyId, draft, method = "GET" }: Props) => {
       <CardContent className="space-y-3 p-0">
         <Input
           value={pathSuffix}
-          onChange={(event) => setPathSuffix(event.target.value)}
+          onChange={(event) => onPathSuffixChange(event.target.value)}
           placeholder="/charges"
         />
         <Textarea
           value={body}
-          onChange={(event) => setBody(event.target.value)}
+          onChange={(event) => onBodyChange(event.target.value)}
           placeholder="{ }"
         />
         <Button
           type="button"
           variant="outline"
           className="gap-2"
-          onClick={handleSend}
-          disabled={sendTest.isPending}
+          onClick={onSend}
+          disabled={sending}
         >
-          {sendTest.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Send className="h-4 w-4" />
-          )}
-          Send test request
+          {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          Test Run
         </Button>
         {response ? (
           <div className="rounded-sm border bg-muted/20 p-3">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Badge variant={response.ok ? "success" : "error"}>
                 {response.status} {response.statusText}
               </Badge>
+              {badge ? <Badge variant={badge.variant}>{badge.label}</Badge> : null}
               <span className="text-xs text-muted-foreground">{response.latencyMs}ms</span>
             </div>
             <p className="mt-2 text-sm text-muted-foreground">{response.meta}</p>

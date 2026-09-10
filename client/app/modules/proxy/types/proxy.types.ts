@@ -11,9 +11,10 @@ export type ProxyKeyValue = {
 };
 
 /**
- * One row of `GET /api/Secrets/gets` (Blocks OS Secret management). Only `service`- and
- * `both`-typed secrets are usable from a proxy — an `api`-typed secret needs an access list the
- * proxy caller is not on — so those are filtered out of the picker.
+ * One row of `GET /api/Proxy/Variables` (the logic API's read-only wrapper over the in-process
+ * Blocks Secrets `ISecretService` — `SeliseBlocks.Secrets.OS` has no HTTP surface of its own). Only
+ * `service`- and `both`-typed secrets are usable from a proxy — an `api`-typed secret needs an access
+ * list the proxy caller is not on — so those are filtered out of the picker.
  */
 export type SecretListItem = {
   id: string;
@@ -22,7 +23,7 @@ export type SecretListItem = {
   tags: string[];
 };
 
-/** Response envelope of `GET /api/Secrets/gets` (Blocks.Secrets `SecretListResult`). */
+/** Response envelope of `GET /api/Proxy/Variables` (`ProxyVariableListResponseDto`). */
 export type SecretListResponseDto = {
   data: SecretListItemDto[] | null;
   totalCount: number;
@@ -36,10 +37,8 @@ export type SecretListItemDto = {
 };
 
 export type SecretListParams = {
+  /** Case-insensitive substring match on the variable name. The only filter `GET /api/Proxy/Variables` takes. */
   search?: string;
-  tags?: string[];
-  pageNumber?: number;
-  pageSize?: number;
 };
 
 /**
@@ -54,6 +53,14 @@ export type ProxyMethodOverride = {
 };
 
 export type ProxyStatus = "live" | "paused";
+
+/**
+ * How the gateway treats the upstream JSON response body before relaying it. `"all"` — relay it
+ * byte-for-byte (today's behaviour). `"select"` — project it to {@link Proxy.responseInclude}
+ * (structural subset), fail-closed on a non-2xx / non-JSON / oversized upstream. Unlike
+ * {@link ProxyBodyMode} this is a *persisted* field, not view-state.
+ */
+export type ProxyResponseMode = "all" | "select";
 
 export type Proxy = {
   id: string;
@@ -72,9 +79,27 @@ export type Proxy = {
    */
   bodyMerge: ProxyKeyValue[];
   methodConfigs: ProxyMethodOverride[];
+  /** Persisted. `"all"` ⇒ relay the upstream response unchanged. */
+  responseMode: ProxyResponseMode;
+  /** Field-path expressions kept when {@link responseMode} is `"select"` (`data.user.email`, `items[].id`). */
+  responseInclude: string[];
   calls24h: number;
   createdAt?: string;
   updatedAt?: string;
+};
+
+/**
+ * A node in the "Choose fields" tree builder. Component state only — never persisted (the form
+ * stores the flattened {@link Proxy.responseInclude} path list) and never read off a response DTO.
+ */
+export type ResponseFieldNode = {
+  /** Stable local uid. */
+  id: string;
+  /** Editable segment key (`""` while a freshly added row is unnamed). */
+  key: string;
+  /** Renders / stores as `key[]`. */
+  isList: boolean;
+  children: ResponseFieldNode[];
 };
 
 /**
@@ -86,8 +111,29 @@ export type ProxyBodyMode = "passthrough" | "merge";
 
 export type ProxyFormValues = Pick<
   Proxy,
-  "name" | "upstreamUrl" | "methods" | "headers" | "query" | "bodyMerge" | "methodConfigs"
+  | "name"
+  | "upstreamUrl"
+  | "methods"
+  | "headers"
+  | "query"
+  | "bodyMerge"
+  | "methodConfigs"
+  | "responseMode"
+  | "responseInclude"
 > & { bodyMode: ProxyBodyMode };
+
+/**
+ * The result of a "Fill from test connection" run — a Test executed with filtering forced off
+ * (`responseMode: "all"`, `responseInclude: []`) so the sample is always the full response shape.
+ */
+export type SampleResult = {
+  ok: boolean;
+  status: number;
+  contentType?: string;
+  body: string;
+  bytes: number;
+  error?: string;
+};
 
 export type ProxyBackendDto = Record<string, unknown>;
 
@@ -193,6 +239,8 @@ export type ProxyDetailDto = {
   query: ProxyKeyValueDto[];
   bodyMerge?: ProxyKeyValueDto[] | null;
   methodConfigs: ProxyMethodConfigDto[];
+  responseMode?: string | null;
+  responseInclude?: string[] | null;
   currentVersion: number;
   createdDate: string;
   createdBy?: string | null;
@@ -270,6 +318,9 @@ export type ProxyTestResponseDto = {
   injectedQueryKeys: string[];
   responseContentType?: string | null;
   responseBody?: string | null;
+  responseFilterApplied?: boolean;
+  responseFilterNote?: string | null;
+  responseBodyBytes?: number;
   errorMessage?: string | null;
 };
 
@@ -338,6 +389,14 @@ export type ProxyTestResponse = {
   latencyMs: number;
   meta: string;
   responseBody: string;
+  /** Content-Type relayed to the client (`application/json; charset=utf-8` after a Select projection). */
+  contentType?: string;
+  /** `null` | `"Applied"` | `"EmptyResult"` | `"WholePrimitive"` | `"Failed"`. */
+  responseFilterNote?: string | null;
+  /** `true` iff a response filter ran and produced output for this Test. */
+  responseFilterApplied?: boolean;
+  /** Size of the body relayed to the client, in bytes (post-projection under Select). */
+  responseBodyBytes: number;
 };
 
 export type ProxyCsvExport = {

@@ -94,6 +94,8 @@ describe("proxy mapper", () => {
       query: [],
       bodyMerge: [],
       methodConfigs: [],
+      responseMode: "All",
+      responseInclude: [],
       enabled: true,
     });
     expect(mapProxyToUpdatePayload("p1", values)).toMatchObject({ itemId: "p1" });
@@ -330,6 +332,95 @@ describe("proxy mapper", () => {
       isSuccess: false,
       errors: "A proxy with this slug already exists.",
       code: "PROXY_SLUG_CONFLICT",
+    });
+  });
+
+  describe("response field filtering", () => {
+    const base = {
+      name: "P",
+      upstreamUrl: "https://api.x.com",
+      methods: ["GET"] as const,
+      headers: [],
+      query: [],
+      bodyMerge: [],
+      bodyMode: "passthrough" as const,
+      methodConfigs: [],
+    };
+
+    it('"all" emits Select/All + [] and drops the paths', () => {
+      const payload = mapProxyToCreatePayload({
+        ...base,
+        responseMode: "all",
+        responseInclude: ["data.id"],
+      });
+      expect(payload.responseMode).toBe("All");
+      expect(payload.responseInclude).toEqual([]);
+    });
+
+    it('"select" keeps the trimmed / deduped / valid list (empty allowed)', () => {
+      const payload = mapProxyToUpdatePayload("p1", {
+        ...base,
+        responseMode: "select",
+        responseInclude: [" data.id ", "data.id", "items[0]", "data.name"],
+      });
+      expect(payload.responseMode).toBe("Select");
+      expect(payload.responseInclude).toEqual(["data.id", "data.name"]);
+    });
+
+    it("test-request draft carries the response filter", () => {
+      const payload = mapProxyTestRequestToPayload({
+        draft: { ...base, responseMode: "select", responseInclude: ["a.b"] },
+        method: "GET",
+      });
+      expect(payload.draft).toMatchObject({ responseMode: "Select", responseInclude: ["a.b"] });
+    });
+
+    it("detail DTO → model maps both fields", () => {
+      const dto = {
+        itemId: "p1",
+        name: "P",
+        slug: "p",
+        path: "/api/proxy/gateway/p/*",
+        upstream: "https://api.x.com",
+        upstreamMasked: "https://api.x.com",
+        methods: ["GET"],
+        enabled: true,
+        headers: [],
+        query: [],
+        bodyMerge: [],
+        methodConfigs: [],
+        responseMode: "Select",
+        responseInclude: ["data.id"],
+        currentVersion: 1,
+        createdDate: "2026-01-01T00:00:00Z",
+        lastUpdatedDate: "2026-01-01T00:00:00Z",
+      } as unknown as ProxyDetailDto;
+      const proxy = mapProxyDetailDtoToProxy(dto);
+      expect(proxy.responseMode).toBe("select");
+      expect(proxy.responseInclude).toEqual(["data.id"]);
+    });
+
+    it("detail DTO with no filter fields defaults to all / []", () => {
+      const dto = {
+        itemId: "p1",
+        name: "P",
+        slug: "p",
+        path: "",
+        upstream: "https://api.x.com",
+        upstreamMasked: "",
+        methods: ["GET"],
+        enabled: true,
+        headers: [],
+        query: [],
+        bodyMerge: [],
+        methodConfigs: [],
+        currentVersion: 1,
+        createdDate: "2026-01-01T00:00:00Z",
+        lastUpdatedDate: "2026-01-01T00:00:00Z",
+      } as unknown as ProxyDetailDto;
+      const proxy = mapProxyDetailDtoToProxy(dto);
+      expect(proxy.responseMode).toBe("all");
+      expect(proxy.responseInclude).toEqual([]);
     });
   });
 });

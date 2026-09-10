@@ -318,6 +318,27 @@ namespace Proxy.DomainService.Services
                 var status = (int)response.StatusCode;
                 var finishedAt = startedAt.AddMilliseconds(stopwatch.Elapsed.TotalMilliseconds);
 
+                // Response field filtering (SPEC "response field filtering" §2.2 / §4.7). With ResponseMode.All
+                // the projector short-circuits at step 1 — same bytes, ResponseFilterNote null, zero behaviour
+                // change on the default path. Under Select the policy is fail-closed: a non-2xx / non-JSON /
+                // unparseable / oversized upstream fails the call with 502, relaying nothing.
+                var (relayBytes, relayCt, filterNote, failReason) = ProxyResponseProjector.Project(
+                    bytes, contentType, status, config.ResponseMode, config.ResponseInclude);
+
+                if (filterNote == ProxyResponseFilterNote.Failed)
+                {
+                    _logger.LogWarning(
+                        "Proxy gateway: response filter failed for slug '{Slug}' (tenant {TenantId}): {Reason}; returning 502.",
+                        config.Slug, request.TenantId, failReason);
+                    return await FinalizeAsync(request, config, BuildFailure(
+                        ProxyExecutionOutcome.ResponseFilterFailed, 502, startedAt, stopwatch, storedUrl, upstreamHost,
+                        injectedHeaderKeys, injectedQueryKeys,
+                        failReason ?? "The upstream response could not be filtered",
+                        upstreamStatusCode: status,
+                        responseFilterNote: ProxyResponseFilterNote.Failed.ToString()));
+                }
+
+                var effectiveCt = relayCt ?? contentType;
                 var result = new ProxyForwardResult
                 {
                     StatusCode = status,
@@ -328,10 +349,12 @@ namespace Proxy.DomainService.Services
                     InjectedHeaderKeys = injectedHeaderKeys,
                     InjectedQueryKeys = injectedQueryKeys,
                     LatencyMs = (int)stopwatch.ElapsedMilliseconds,
-                    ResponseBody = ExecutionBodyStore.Capture(bytes, contentType),
-                    ResponseBodyBytes = bytes.LongLength,
-                    ResponseContentType = contentType,
-                    ResponseBytes = bytes,
+                    ResponseBody = ExecutionBodyStore.Capture(relayBytes, effectiveCt),
+                    ResponseBodyBytes = relayBytes?.LongLength ?? 0,
+                    ResponseContentType = effectiveCt,
+                    ResponseBytes = relayBytes,
+                    ResponseFilterApplied = filterNote is ProxyResponseFilterNote.Applied or ProxyResponseFilterNote.EmptyResult,
+                    ResponseFilterNote = filterNote == ProxyResponseFilterNote.NotConfigured ? null : filterNote.ToString(),
                     ErrorMessage = null,
                     StartedAtUtc = startedAt,
                     FinishedAtUtc = finishedAt,
@@ -521,11 +544,11 @@ namespace Proxy.DomainService.Services
             string outcome, int statusCode, DateTime startedAt, Stopwatch stopwatch,
             string storedUrl, string upstreamHost,
             IReadOnlyList<string> injectedHeaderKeys, IReadOnlyList<string> injectedQueryKeys,
-            string errorMessage) => new()
+            string errorMessage, int? upstreamStatusCode = null, string? responseFilterNote = null) => new()
         {
             StatusCode = statusCode,
             Outcome = outcome,
-            UpstreamStatusCode = null,
+            UpstreamStatusCode = upstreamStatusCode,
             UpstreamUrl = storedUrl,
             UpstreamHost = upstreamHost,
             InjectedHeaderKeys = injectedHeaderKeys,
@@ -535,6 +558,8 @@ namespace Proxy.DomainService.Services
             ResponseBodyBytes = 0,
             ResponseContentType = null,
             ResponseBytes = null,
+            ResponseFilterApplied = false,
+            ResponseFilterNote = responseFilterNote,
             ErrorMessage = errorMessage,
             StartedAtUtc = startedAt,
             FinishedAtUtc = startedAt.AddMilliseconds(stopwatch.Elapsed.TotalMilliseconds),
@@ -574,6 +599,8 @@ namespace Proxy.DomainService.Services
                 ResponseBodyBytes = result.ResponseBodyBytes,
                 ResponseBody = result.ResponseBody,
                 ResponseContentType = result.ResponseContentType,
+                ResponseFilterApplied = result.ResponseFilterApplied,
+                ResponseFilterNote = result.ResponseFilterNote,
                 ErrorMessage = result.ErrorMessage,
                 StartedAtUtc = result.StartedAtUtc,
                 FinishedAtUtc = result.FinishedAtUtc,

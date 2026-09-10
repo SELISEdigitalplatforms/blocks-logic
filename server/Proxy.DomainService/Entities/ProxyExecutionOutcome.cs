@@ -40,6 +40,14 @@ namespace Proxy.DomainService.Entities
         /// its <see cref="ProxyExecutionEntity.ErrorMessage"/> lists the offending variable names only.
         /// </summary>
         public const string VariableResolutionFailed = "VariableResolutionFailed";
+        /// <summary>
+        /// The proxy is in <c>ResponseMode.Select</c> and the upstream response could not be projected: a
+        /// 4xx/5xx status, a non-JSON body, unparseable JSON, or a body over the 5 MB filtering limit. Returned
+        /// as <c>502</c>; the upstream body is neither relayed nor persisted. An execution row is written with
+        /// the real <see cref="ProxyExecutionEntity.UpstreamStatusCode"/> and a specific
+        /// <see cref="ProxyExecutionEntity.ErrorMessage"/>.
+        /// </summary>
+        public const string ResponseFilterFailed = "ResponseFilterFailed";
         public const string MethodNotAllowed = "MethodNotAllowed";
         public const string ProxyNotFound = "ProxyNotFound";
         public const string Unauthorized = "Unauthorized";

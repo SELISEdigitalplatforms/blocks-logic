@@ -27,5 +27,11 @@ namespace Proxy.DomainService.Dtos
 
         /// <summary>Per-method overrides. Reserved for Phase D-feature; a non-empty value is rejected today.</summary>
         public List<ProxyMethodConfigInputDto>? MethodConfigs { get; set; }
+
+        /// <summary><c>"All"</c> (default) or <c>"Select"</c>. See <c>ProxyResponseProjector</c>.</summary>
+        public string? ResponseMode { get; set; }
+
+        /// <summary>Response field paths kept when <see cref="ResponseMode"/> is <c>"Select"</c>.</summary>
+        public List<string>? ResponseInclude { get; set; }
     }
 }

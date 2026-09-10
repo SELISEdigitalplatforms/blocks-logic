@@ -852,6 +852,129 @@ namespace XUnitTest.Proxy
             row!.Outcome.Should().Be(ProxyExecutionOutcome.UpstreamBlocked);
         }
 
+        // ---------- response field filtering (RESP-BE) ----------
+
+        [Fact]
+        public async Task Forward_Select_ObjectResponse_RelaysProjectedSubset_AndWritesRow()
+        {
+            var proxy = Proxy(p =>
+            {
+                p.ResponseMode = ProxyResponseMode.Select;
+                p.ResponseInclude = new List<string> { "data.id" };
+            });
+            GivenProxy(proxy);
+            _handler.Respond = (_, _) => Json(HttpStatusCode.OK, "{\"data\":{\"id\":7,\"secret\":\"x\"},\"meta\":1}");
+
+            ProxyExecutionEntity? row = null;
+            _executionRepo.Setup(r => r.InsertAsync(It.IsAny<ProxyExecutionEntity>()))
+                .Callback<ProxyExecutionEntity>(e => row = e).Returns(Task.CompletedTask);
+
+            var result = await _service.ForwardAsync(Request("GET", b => b.Slug = proxy.Slug));
+
+            result.Ok.Should().BeTrue();
+            result.StatusCode.Should().Be(200);
+            Encoding.UTF8.GetString(result.ResponseBytes!).Should().Be("{\"data\":{\"id\":7}}");
+            result.ResponseContentType.Should().Be("application/json; charset=utf-8");
+            result.ResponseFilterApplied.Should().BeTrue();
+            result.ResponseFilterNote.Should().Be("Applied");
+
+            row!.Outcome.Should().Be(ProxyExecutionOutcome.Success);
+            row.ResponseBody.Should().Be("{\"data\":{\"id\":7}}");
+            row.ResponseFilterApplied.Should().BeTrue();
+            row.ResponseFilterNote.Should().Be("Applied");
+        }
+
+        [Fact]
+        public async Task Forward_Select_Upstream503_Fails502_NoBodyRelayedOrPersisted()
+        {
+            var proxy = Proxy(p =>
+            {
+                p.ResponseMode = ProxyResponseMode.Select;
+                p.ResponseInclude = new List<string> { "data.id" };
+            });
+            GivenProxy(proxy);
+            _handler.Respond = (_, _) => Json(HttpStatusCode.ServiceUnavailable, "{\"error\":\"down\"}");
+
+            ProxyExecutionEntity? row = null;
+            _executionRepo.Setup(r => r.InsertAsync(It.IsAny<ProxyExecutionEntity>()))
+                .Callback<ProxyExecutionEntity>(e => row = e).Returns(Task.CompletedTask);
+
+            var result = await _service.ForwardAsync(Request("GET", b => b.Slug = proxy.Slug));
+
+            result.Ok.Should().BeFalse();
+            result.StatusCode.Should().Be(502);
+            result.Outcome.Should().Be(ProxyExecutionOutcome.ResponseFilterFailed);
+            result.UpstreamStatusCode.Should().Be(503);
+            result.ResponseBytes.Should().BeNull();
+            result.ErrorMessage.Should().Contain("503");
+
+            row!.Outcome.Should().Be(ProxyExecutionOutcome.ResponseFilterFailed);
+            row.ResponseBody.Should().BeNull();
+            row.UpstreamStatusCode.Should().Be(503);
+            row.ResponseFilterApplied.Should().BeFalse();
+            row.ResponseFilterNote.Should().Be("Failed");
+            row.ErrorMessage.Should().Contain("503");
+        }
+
+        [Fact]
+        public async Task Forward_Select_NonJsonContentType_Fails502()
+        {
+            var proxy = Proxy(p =>
+            {
+                p.ResponseMode = ProxyResponseMode.Select;
+                p.ResponseInclude = new List<string> { "data.id" };
+            });
+            GivenProxy(proxy);
+            _handler.Respond = (_, _) => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("<html/>", Encoding.UTF8, "text/html"),
+            };
+
+            var result = await _service.ForwardAsync(Request("GET", b => b.Slug = proxy.Slug));
+
+            result.StatusCode.Should().Be(502);
+            result.Outcome.Should().Be(ProxyExecutionOutcome.ResponseFilterFailed);
+            result.ErrorMessage.Should().Contain("was not JSON");
+        }
+
+        [Fact]
+        public async Task Forward_Select_WholePrimitiveResponse_RelaysUnchanged()
+        {
+            var proxy = Proxy(p =>
+            {
+                p.ResponseMode = ProxyResponseMode.Select;
+                p.ResponseInclude = new List<string> { "data.id" };
+            });
+            GivenProxy(proxy);
+            _handler.Respond = (_, _) => Json(HttpStatusCode.OK, "\"just-a-string\"");
+
+            var result = await _service.ForwardAsync(Request("GET", b => b.Slug = proxy.Slug));
+
+            result.Ok.Should().BeTrue();
+            Encoding.UTF8.GetString(result.ResponseBytes!).Should().Be("\"just-a-string\"");
+            result.ResponseFilterApplied.Should().BeFalse();
+            result.ResponseFilterNote.Should().Be("WholePrimitive");
+        }
+
+        [Fact]
+        public async Task Forward_AllMode_IsByteForByte_WithNoFilterNote()
+        {
+            var proxy = Proxy(); // ResponseMode defaults to All
+            GivenProxy(proxy);
+            _handler.Respond = (_, _) => Json(HttpStatusCode.OK, "{\"data\":{\"id\":7},\"meta\":1}");
+
+            ProxyExecutionEntity? row = null;
+            _executionRepo.Setup(r => r.InsertAsync(It.IsAny<ProxyExecutionEntity>()))
+                .Callback<ProxyExecutionEntity>(e => row = e).Returns(Task.CompletedTask);
+
+            var result = await _service.ForwardAsync(Request("GET", b => b.Slug = proxy.Slug));
+
+            Encoding.UTF8.GetString(result.ResponseBytes!).Should().Be("{\"data\":{\"id\":7},\"meta\":1}");
+            result.ResponseFilterApplied.Should().BeFalse();
+            result.ResponseFilterNote.Should().BeNull();
+            row!.ResponseFilterNote.Should().BeNull();
+        }
+
         // ---------- helpers ----------
 
         private static HttpResponseMessage Json(HttpStatusCode status, string body) => new(status)

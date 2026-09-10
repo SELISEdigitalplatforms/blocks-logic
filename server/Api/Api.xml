@@ -42,6 +42,8 @@
         <!-- Badly formed XML comment ignored for member "M:Utilities.Api.Controllers.ProxyController.GetExecution(Proxy.DomainService.Dtos.ProxyGetExecutionRequestDto)" -->
         <!-- Badly formed XML comment ignored for member "M:Utilities.Api.Controllers.ProxyController.GetOverview(Proxy.DomainService.Dtos.ProxyGetOverviewRequestDto)" -->
         <!-- Badly formed XML comment ignored for member "M:Utilities.Api.Controllers.ProxyController.ExportExecutionsCsv(Proxy.DomainService.Dtos.ProxyExportExecutionsRequestDto)" -->
+        <!-- Badly formed XML comment ignored for member "M:Utilities.Api.Controllers.ProxyController.Variables(Proxy.DomainService.Dtos.ProxyVariableListRequestDto)" -->
+        <!-- Badly formed XML comment ignored for member "M:Utilities.Api.Controllers.ProxyController.VariableTags" -->
         <member name="T:Utilities.Api.Controllers.ProxyGatewayController">
             <summary>
             Data-plane forwarder (Phase 2). A tenant's client calls
@@ -62,7 +64,7 @@
         <member name="M:Utilities.Api.Controllers.ProxyGatewayController.Relay(Proxy.DomainService.Services.ProxyForwardResult)">
             <summary>Relays the upstream status, body, and Content-Type byte-for-byte. No other header is relayed.</summary>
         </member>
-        <!-- Badly formed XML comment ignored for member "M:Utilities.Api.Controllers.ProxyGatewayController.GatewayError(System.String,System.Int32,System.String)" -->
+        <!-- Badly formed XML comment ignored for member "M:Utilities.Api.Controllers.ProxyGatewayController.GatewayError(System.String,System.Int32,System.String,System.Nullable{System.Int32})" -->
         <member name="T:Program">
             <summary>
             Auto-generated public partial Program class for top-level statement apps.

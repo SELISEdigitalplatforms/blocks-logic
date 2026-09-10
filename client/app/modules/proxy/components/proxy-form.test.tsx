@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
@@ -87,6 +88,65 @@ describe("ProxyForm", () => {
 
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+  });
+
+  it("edits response fields and saves the NEW selection, not the originally loaded one", async () => {
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+    const proxy = (await proxyService.get("p3"))!; // select mode, 3 response paths
+
+    renderWithProviders(
+      <MemoryRouter>
+        <ProxyForm mode="edit" proxy={proxy} onSuccess={onSuccess} />
+      </MemoryRouter>,
+    );
+
+    // tree seeds from responseInclude: location.name / current.temp_c / current.condition.text
+    const nameInput = await screen.findByDisplayValue("name");
+    await user.click(within(nameInput.closest("div")!).getByRole("checkbox"));
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+
+    const saved = await proxyService.get("p3");
+    expect(saved?.responseInclude).toEqual(
+      expect.arrayContaining(["current.temp_c", "current.condition.text"]),
+    );
+    expect(saved?.responseInclude).not.toContain("location.name");
+  });
+
+  it("keeps response edits when the proxy prop gets a fresh reference (React Query refetch)", async () => {
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+    const base = (await proxyService.get("p3"))!;
+
+    const Wrapper = () => {
+      const [proxy, setProxy] = useState(base);
+      return (
+        <MemoryRouter>
+          <button type="button" onClick={() => setProxy({ ...base })}>
+            refetch
+          </button>
+          <ProxyForm mode="edit" proxy={proxy} onSuccess={onSuccess} />
+        </MemoryRouter>
+      );
+    };
+
+    renderWithProviders(<Wrapper />);
+
+    const nameInput = await screen.findByDisplayValue("name");
+    await user.click(within(nameInput.closest("div")!).getByRole("checkbox"));
+
+    // simulate a background refetch handing down a new object with identical content
+    await user.click(screen.getByRole("button", { name: "refetch" }));
+
+    // the unchecked field must NOT come back
+    expect(screen.queryByDisplayValue("name")).toBeTruthy(); // row still there
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+
+    const saved = await proxyService.get("p3");
+    expect(saved?.responseInclude).not.toContain("location.name");
   });
 
   it("shows the Request body card only when a POST/PUT/PATCH method is selected", async () => {

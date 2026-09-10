@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
@@ -14,8 +14,8 @@ import {
 import { Input } from "@/components/ui-kits/input/input";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { getProxyClientPath } from "../constants";
-import { useCreateProxy, useSecrets, useUpdateProxy } from "../hooks";
-import { Proxy, ProxyFormValues, ProxyMethod } from "../types";
+import { useCreateProxy, useSecrets, useSendProxyTestRequest, useUpdateProxy } from "../hooks";
+import { Proxy, ProxyFormValues, ProxyMethod, ProxyTestResponse, SampleResult } from "../types";
 import {
   compactKeyValues,
   proxyFormDefaultValues,
@@ -27,6 +27,7 @@ import { ProxyFormHeader } from "./proxy-form-header";
 import { ProxyMethodOverrides } from "./proxy-method-overrides";
 import { ProxyMethodSelector } from "./proxy-method-selector";
 import { ProxyRequestBodyCard } from "./proxy-request-body-card";
+import { ProxyResponseCard } from "./proxy-response-card";
 import { ProxyTestPanel } from "./proxy-test-panel";
 import { getRuntimeEnv } from "@seliseblocks/genesis-os";
 
@@ -85,10 +86,58 @@ export const ProxyForm = ({ mode, proxy, isLoadingProxy, onSuccess, onCancel }: 
       })) ?? [],
     bodyMode: draft.bodyMode ?? "passthrough",
     methodConfigs: (draft.methodConfigs ?? []) as ProxyFormValues["methodConfigs"],
+    responseMode: draft.responseMode ?? "all",
+    responseInclude: (draft.responseInclude ?? []).filter(Boolean),
   };
 
+  // The Test panel's inputs live here so the Response card's "Fill from test connection" can
+  // reuse them (SPEC §5.4). One Test hook instance backs both the normal Send and the sample run.
+  const [testPathSuffix, setTestPathSuffix] = useState("/");
+  const [testBody, setTestBody] = useState("");
+  const [testResponse, setTestResponse] = useState<ProxyTestResponse | null>(null);
+  const sendTest = useSendProxyTestRequest();
+  const primaryMethod = selectedMethods?.[0] ?? "GET";
+
+  const runTest = async () => {
+    const res = await sendTest.mutateAsync({
+      proxyId: proxy?.id,
+      draft: proxy?.id ? undefined : draftValues,
+      method: primaryMethod,
+      pathSuffix: testPathSuffix,
+      body: testBody,
+      contentType: "application/json",
+    });
+    setTestResponse(res);
+  };
+
+  const runSample = async (): Promise<SampleResult> => {
+    // Always send a draft with filtering forced off so the sample is the full response shape.
+    const res = await sendTest.mutateAsync({
+      draft: { ...draftValues, responseMode: "all", responseInclude: [] },
+      method: primaryMethod,
+      pathSuffix: testPathSuffix,
+      body: testBody,
+      contentType: "application/json",
+    });
+    // "Fill from test run" doubles as a Test — surface the raw result in the Test panel too.
+    setTestResponse(res);
+    return {
+      ok: res.ok,
+      status: res.status,
+      contentType: res.contentType,
+      body: res.responseBody,
+      bytes: res.responseBodyBytes,
+      error: res.ok ? undefined : res.meta,
+    };
+  };
+
+  // Seed the form from the loaded proxy exactly once per identity. A bare `proxy` dependency
+  // would re-run on every React Query background refetch (the query has no `staleTime`), and each
+  // fresh reference would `form.reset` the user's in-progress edits back to the server values.
+  const seededForId = useRef<string | null>(null);
   useEffect(() => {
-    if (isEdit && proxy) {
+    if (isEdit && proxy && seededForId.current !== proxy.id) {
+      seededForId.current = proxy.id;
       form.reset({
         name: proxy.name,
         upstreamUrl: proxy.upstreamUrl,
@@ -98,8 +147,11 @@ export const ProxyForm = ({ mode, proxy, isLoadingProxy, onSuccess, onCancel }: 
         bodyMerge: proxy.bodyMerge,
         bodyMode: proxy.bodyMerge.length ? "merge" : "passthrough",
         methodConfigs: proxy.methodConfigs ?? [],
+        responseMode: proxy.responseMode,
+        responseInclude: proxy.responseInclude,
       });
-    } else if (!isEdit) {
+    } else if (!isEdit && seededForId.current !== "new") {
+      seededForId.current = "new";
       form.reset(proxyFormDefaultValues);
     }
   }, [form, isEdit, proxy]);
@@ -229,6 +281,13 @@ export const ProxyForm = ({ mode, proxy, isLoadingProxy, onSuccess, onCancel }: 
           {selectedMethods.some(isBodyMethod) ? (
             <ProxyRequestBodyCard control={form.control} {...variableProps} />
           ) : null}
+          <ProxyResponseCard
+            control={form.control}
+            draft={draftValues}
+            method={primaryMethod}
+            runSample={runSample}
+            seedKey={proxy?.id ?? "new"}
+          />
           {selectedMethods.length > 1 ? (
             <Card className="rounded-xl">
               <CardContent className="p-0">
@@ -240,9 +299,13 @@ export const ProxyForm = ({ mode, proxy, isLoadingProxy, onSuccess, onCancel }: 
             </Card>
           ) : null}
           <ProxyTestPanel
-            proxyId={proxy?.id}
-            draft={draftValues}
-            method={selectedMethods[0] ?? "GET"}
+            pathSuffix={testPathSuffix}
+            onPathSuffixChange={setTestPathSuffix}
+            body={testBody}
+            onBodyChange={setTestBody}
+            onSend={runTest}
+            sending={sendTest.isPending}
+            response={testResponse}
           />
         </div>
       </form>

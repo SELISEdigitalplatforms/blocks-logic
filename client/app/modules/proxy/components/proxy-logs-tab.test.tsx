@@ -43,6 +43,8 @@ describe("ProxyLogsTab", () => {
     renderWithProviders(<ProxyLogsTab proxy={PROXY_MOCK_DATA[0]} active={true} />);
 
     expect(await screen.findByText("3 of 3 requests")).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "METHOD" })).toBeTruthy();
+    expect(screen.queryByRole("columnheader", { name: "METH" })).toBeNull();
     await user.click(screen.getByRole("button", { name: "5xx" }));
     expect(await screen.findByText("1 of 3 requests")).toBeTruthy();
     await user.click(screen.getByText("/api/proxy/gateway/stripe-payments/charges"));

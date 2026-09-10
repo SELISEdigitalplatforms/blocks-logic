@@ -20,17 +20,20 @@ namespace Utilities.Api.Controllers
         private readonly IProxyVersionService _proxyVersionService;
         private readonly IProxyTestService _proxyTestService;
         private readonly IProxyExecutionService _proxyExecutionService;
+        private readonly IProxyVariableCatalog _proxyVariableCatalog;
 
         public ProxyController(
             IProxyService proxyService,
             IProxyVersionService proxyVersionService,
             IProxyTestService proxyTestService,
-            IProxyExecutionService proxyExecutionService)
+            IProxyExecutionService proxyExecutionService,
+            IProxyVariableCatalog proxyVariableCatalog)
         {
             _proxyService = proxyService;
             _proxyVersionService = proxyVersionService;
             _proxyTestService = proxyTestService;
             _proxyExecutionService = proxyExecutionService;
+            _proxyVariableCatalog = proxyVariableCatalog;
         }
 
         [Authorize]
@@ -177,6 +180,29 @@ namespace Utilities.Api.Controllers
             }
 
             return File(result.Content, "text/csv; charset=utf-8", result.FileName);
+        }
+
+        /// <summary>
+        /// The caller-tenant's Blocks Secrets for the console's <c>{{$VAR.name}}</c> picker &mdash; names / ids /
+        /// type / tags only, never a value. <c>SeliseBlocks.Secrets.OS</c> ships no HTTP API of its own, so this
+        /// action is the thin read-only wrapper over the in-process <c>ISecretService</c>. The tenant and caller
+        /// identity come from <see cref="BlocksContext"/> (this is an <c>[Authorize]</c> route).
+        /// </summary>
+        [Authorize]
+        [HttpGet]
+        public async Task<IActionResult> Variables([FromQuery] ProxyVariableListRequestDto dto)
+        {
+            var result = await _proxyVariableCatalog.ListAsync(dto.Search);
+            return Ok(result);
+        }
+
+        /// <summary>The caller-tenant's secret-tag catalog (<c>key</c> / <c>label</c>) &mdash; wrapper over the in-process <c>ISecretService.GetTagsAsync</c>.</summary>
+        [Authorize]
+        [HttpGet]
+        public async Task<IActionResult> VariableTags()
+        {
+            var result = await _proxyVariableCatalog.ListTagsAsync();
+            return Ok(result);
         }
 
         private static string GetTenantId()

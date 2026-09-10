@@ -36,6 +36,16 @@ namespace Proxy.DomainService.Services
         /// </summary>
         public IReadOnlyList<ProxyMethodConfig> MethodConfigs { get; init; } = Array.Empty<ProxyMethodConfig>();
 
+        /// <summary>
+        /// How the upstream response body is treated on forward. <see cref="ProxyResponseMode.All"/> ⇒ relayed
+        /// byte-for-byte (today's behaviour). <see cref="ProxyResponseMode.Select"/> ⇒ projected to
+        /// <see cref="ResponseInclude"/>, fail-closed (see ProxyResponseProjector).
+        /// </summary>
+        public ProxyResponseMode ResponseMode { get; init; } = ProxyResponseMode.All;
+
+        /// <summary>Field paths kept when <see cref="ResponseMode"/> is <see cref="ProxyResponseMode.Select"/>.</summary>
+        public IReadOnlyList<string> ResponseInclude { get; init; } = Array.Empty<string>();
+
         public static ProxyResolvedConfig FromEntity(ProxyDetailEntity proxy) => new()
         {
             ProxyId = proxy.ItemId,
@@ -47,6 +57,8 @@ namespace Proxy.DomainService.Services
             Query = proxy.Query,
             BodyMerge = proxy.BodyMerge,
             MethodConfigs = proxy.MethodConfigs,
+            ResponseMode = proxy.ResponseMode,
+            ResponseInclude = proxy.ResponseInclude,
         };
     }
 
@@ -123,6 +135,15 @@ namespace Proxy.DomainService.Services
         public long ResponseBodyBytes { get; init; }
 
         public string? ResponseContentType { get; init; }
+
+        /// <summary>
+        /// <c>true</c> iff a response filter ran and produced output (Applied or EmptyResult). <c>false</c>
+        /// when the mode was All, the response was a whole-primitive, or the filter failed.
+        /// </summary>
+        public bool ResponseFilterApplied { get; init; }
+
+        /// <summary><c>null</c> | <c>"Applied"</c> | <c>"EmptyResult"</c> | <c>"WholePrimitive"</c> | <c>"Failed"</c>.</summary>
+        public string? ResponseFilterNote { get; init; }
 
         public string? ErrorMessage { get; init; }
 

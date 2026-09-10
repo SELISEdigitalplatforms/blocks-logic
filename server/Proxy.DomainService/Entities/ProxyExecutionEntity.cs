@@ -94,6 +94,18 @@ namespace Proxy.DomainService.Entities
         public string? ResponseContentType { get; set; }
 
         /// <summary>
+        /// <c>true</c> iff a response filter ran and produced output (Applied or EmptyResult). <c>false</c>
+        /// when <c>ResponseMode</c> was All, the response was a whole-primitive, or the filter failed.
+        /// </summary>
+        public bool ResponseFilterApplied { get; set; }
+
+        /// <summary>
+        /// <c>null</c> | <c>"Applied"</c> | <c>"EmptyResult"</c> | <c>"WholePrimitive"</c> | <c>"Failed"</c>.
+        /// Diagnostic for the logs tab.
+        /// </summary>
+        public string? ResponseFilterNote { get; set; }
+
+        /// <summary>
         /// Short, safe diagnostic for Timeout / UpstreamUnreachable / InternalError; <c>null</c> on success.
         /// </summary>
         public string? ErrorMessage { get; set; }

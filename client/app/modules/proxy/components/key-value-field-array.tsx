@@ -210,7 +210,7 @@ export const KeyValueFieldArray = ({
           (!variablesLoading && Array.isArray(variables) && variables.length === 0) ? (
             <p className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
               {variablesError
-                ? "Couldn't load configuration variables."
+                ? "Unable to load secret keys."
                 : "No configuration variables yet."}
               <VariablesButton className="h-7 px-2 text-xs" />
             </p>

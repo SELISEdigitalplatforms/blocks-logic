@@ -48,5 +48,11 @@ namespace Proxy.DomainService.Dtos
 
         /// <summary>Per-method overrides for the unsaved draft. Same rules as Create / Update.</summary>
         public List<ProxyMethodConfigInputDto>? MethodConfigs { get; set; }
+
+        /// <summary><c>"All"</c> (default) or <c>"Select"</c>. Same rules as Create / Update.</summary>
+        public string? ResponseMode { get; set; }
+
+        /// <summary>Response field paths kept when <see cref="ResponseMode"/> is <c>"Select"</c>.</summary>
+        public List<string>? ResponseInclude { get; set; }
     }
 }

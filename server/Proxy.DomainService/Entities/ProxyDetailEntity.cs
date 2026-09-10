@@ -53,6 +53,21 @@ namespace Proxy.DomainService.Entities
         /// </summary>
         public List<ProxyMethodConfig> MethodConfigs { get; set; } = new();
 
+        /// <summary>
+        /// How the upstream response body is treated on forward. <see cref="ProxyResponseMode.All"/> ⇒ relayed
+        /// unchanged. <see cref="ProxyResponseMode.Select"/> ⇒ projected to <see cref="ResponseInclude"/>; a
+        /// non-JSON / 4xx-5xx / oversized response then fails the call with 502 ResponseFilterFailed.
+        /// </summary>
+        [BsonRepresentation(BsonType.String)]
+        public ProxyResponseMode ResponseMode { get; set; } = ProxyResponseMode.All;
+
+        /// <summary>
+        /// Field paths kept when <see cref="ResponseMode"/> is <see cref="ProxyResponseMode.Select"/>
+        /// (structural subset — see ProxyResponseProjector). Empty under Select ⇒ the client receives
+        /// <c>{}</c> / <c>[]</c>. Ignored when All.
+        /// </summary>
+        public List<string> ResponseInclude { get; set; } = new();
+
         /// <summary>Monotonic; equals the highest <see cref="ProxyVersionEntity.VersionNumber"/> written for this proxy.</summary>
         public int CurrentVersion { get; set; }
     }
