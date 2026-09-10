@@ -24,6 +24,10 @@ namespace Functions.DomainService.Utils
         };
 
         private const string MinimalIndexJs = """
+            /**
+             * @param {unknown} input - the JSON body this function was invoked with
+             * @param {FunctionContext} ctx - env, run, caller context and the logger
+             */
             export default async function handler(input, ctx) {
               ctx.log.info("Function invoked", { input });
               return { received: input };
@@ -31,6 +35,10 @@ namespace Functions.DomainService.Utils
             """;
 
         private const string HttpEchoIndexJs = """
+            /**
+             * @param {unknown} input - the JSON body this function was invoked with
+             * @param {FunctionContext} ctx - env, run, caller context and the logger
+             */
             export default async function handler(input, ctx) {
               ctx.log.info("Invoked", { invokedBy: ctx.run.invokedBy });
 
@@ -45,6 +53,10 @@ namespace Functions.DomainService.Utils
             """;
 
         private const string FetchTransformIndexJs = """
+            /**
+             * @param {unknown} input - the JSON body this function was invoked with
+             * @param {FunctionContext} ctx - env, run, caller context and the logger
+             */
             export default async function handler(input, ctx) {
               // Variables arrive as plain strings on ctx.env; set them under Configuration.
               const base = ctx.env.API_BASE ?? "https://api.exchangerate.host";

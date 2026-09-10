@@ -85,6 +85,21 @@ namespace XUnitTest.Functions
             dto.DurationMs.Should().Be(684);
         }
 
+        [Fact]
+        public void Every_starter_is_annotated_so_the_editor_can_type_its_parameters()
+        {
+            foreach (var template in new[]
+            {
+                FunctionStarterTemplates.Minimal,
+                FunctionStarterTemplates.HttpEcho,
+                FunctionStarterTemplates.FetchTransform,
+            })
+            {
+                FunctionStarterTemplates.For(template).IndexJs
+                    .Should().Contain("@param {FunctionContext} ctx", $"{template} needs the JSDoc the Code tab's IntelliSense reads");
+            }
+        }
+
         [Theory]
         [InlineData(FunctionStarterTemplates.Minimal, "return { received: input }")]
         [InlineData(FunctionStarterTemplates.HttpEcho, "isAuthenticated")]

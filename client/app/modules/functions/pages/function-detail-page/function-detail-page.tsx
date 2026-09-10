@@ -399,6 +399,8 @@ export const FunctionDetailPage = () => {
                   onChange={setIndexJs}
                   height="560px"
                   className="overflow-hidden"
+                  // The tenant's own keys, so `ctx.env.` completes with what is actually bound.
+                  envKeys={variables.map((variable) => variable.key)}
                 />
               ) : (
                 <CodeEditor
