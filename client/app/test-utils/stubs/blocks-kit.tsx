@@ -71,6 +71,14 @@ export class HttpError extends Error {
 // Returns a path scoper; the identity keeps navigation targets predictable.
 export const useScopedPath = () => (path: string) => path;
 
+// Cross-app redirect prefetch stand-in. Reports "ready" with a no-op redirect so
+// components that gate a button on `isReady` render it enabled in tests.
+export const usePrefetchRedirect = (_options?: unknown) => ({
+  isFetching: false,
+  isReady: true,
+  redirect: () => {},
+});
+
 // Theme hook stand-in.
 export const useTheme = () => ({
   theme: "light",

@@ -216,26 +216,38 @@ describe("ai agent v1", () => {
 });
 
 describe("email trigger v1", () => {
-  it("options returns only inbound mailboxes", async () => {
+  const mailboxConfig = { projectKey: "pk-1" };
+
+  it("options returns only inbound mailboxes from the slim Gets payload", async () => {
     fetchEmailConfigs.mockResolvedValue([
-      { itemId: "m1", name: "Inbox", isInbound: true },
-      { itemId: "m2", name: "Outbox", isInbound: false },
+      { itemId: "m1", name: "Inbox", isInbound: true, isDefault: true, provider: 0 },
+      { itemId: "m2", name: "Outbox", isInbound: false, isDefault: false, provider: 0 },
+      { itemId: "", name: "Broken", isInbound: true, isDefault: false, provider: 1 },
     ]);
     const opts = field(NodeSchemaTriggerEmailV1, "mailbox_composite").options;
-    const result = await opts({}, { projectKey: "pk-1" });
+    const result = await opts({}, mailboxConfig);
     expect(result).toEqual([{ value: "m1_pk-1", label: "Inbox" }]);
+  });
+
+  it("options falls back to itemId when name is missing", async () => {
+    fetchEmailConfigs.mockResolvedValue([
+      { itemId: "m3", name: "", isInbound: true, isDefault: false, provider: 1 },
+    ]);
+    const opts = field(NodeSchemaTriggerEmailV1, "mailbox_composite").options;
+    const result = await opts({}, mailboxConfig);
+    expect(result).toEqual([{ value: "m3_pk-1", label: "m3" }]);
   });
 
   it("options rejects on failure", async () => {
     fetchEmailConfigs.mockRejectedValue(new Error("nope"));
     const opts = field(NodeSchemaTriggerEmailV1, "mailbox_composite").options;
-    await expect(opts({}, { projectKey: "pk-1" })).rejects.toThrow("nope");
+    await expect(opts({}, mailboxConfig)).rejects.toThrow("nope");
   });
 
-  it("onChange derives the mail server configuration id", () => {
+  it("onChange stores itemId and uses config projectKey", () => {
     const onChange = field(NodeSchemaTriggerEmailV1, "mailbox_composite").onChange;
-    expect(onChange("m1_pk-1")).toEqual({
-      mailbox_composite: "m1_pk-1",
+    expect(onChange("m1_pk_with_underscores", {}, mailboxConfig)).toEqual({
+      mailbox_composite: "m1_pk_with_underscores",
       mailServerConfigurationId: "m1",
       projectKey: "pk-1",
     });
@@ -244,6 +256,15 @@ describe("email trigger v1", () => {
   it("transform is a passthrough", () => {
     const node = { id: "n", parameters: {} } as never;
     expect(NodeSchemaTriggerEmailV1.transform?.(node)).toBe(node);
+  });
+
+  it("exposes a testSubject parameter for test-mode matching", () => {
+    expect(field(NodeSchemaTriggerEmailV1, "testSubject")).toMatchObject({
+      key: "testSubject",
+      type: "text",
+      required: false,
+    });
+    expect(NodeSchemaTriggerEmailV1.defaults.parameters.testSubject).toBe("");
   });
 });
 
@@ -299,6 +320,17 @@ describe("send mail v1", () => {
     const f = field(NodeSchemaActionSendMailV1, "BodyDataContext");
     const keys = await f.fixedKeys({ EmailTemplate: "Promo_body-pk" }, { projectKey: "body-pk" });
     expect(Array.isArray(keys)).toBe(true);
+  });
+
+  it("has an Attachments field of type expression-list", () => {
+    const f = field(NodeSchemaActionSendMailV1, "Attachments");
+    expect(f).toBeDefined();
+    expect(f.type).toBe("expression-list");
+    expect(f.required).toBeFalsy();
+  });
+
+  it("defaults Attachments to an empty array", () => {
+    expect(NodeSchemaActionSendMailV1.defaults.parameters.Attachments).toEqual([]);
   });
 });
 

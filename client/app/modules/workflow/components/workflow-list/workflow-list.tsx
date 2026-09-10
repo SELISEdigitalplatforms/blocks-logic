@@ -36,6 +36,7 @@ import {
   Ban,
   Check,
   Copy,
+  Download,
   EllipsisVertical,
   Trash,
   Workflow,
@@ -51,6 +52,8 @@ import { useScopedPath } from "@seliseblocks/genesis-os";
 import { RenameWorkflow } from "../rename-workflow/rename-workflow";
 import { Pen } from "lucide-react";
 import { AddWorkflow } from "../add-workflow";
+import { ImportWorkflow } from "../import-workflow";
+import { useExportWorkflow } from "../../hooks/use-export-workflow";
 
 
 const WorkflowListSkeleton = ({ length }: { length: number }) => {
@@ -81,10 +84,16 @@ const WorkflowEmptyState = () => (
     <p className="mt-2 max-w-md text-sm text-muted-foreground">
       Start building an automation flow with triggers, actions, and publish controls.
     </p>
-    <div className="mt-6">
+    <div className="mt-6 flex items-center gap-3">
       <AddWorkflow
         variant="default"
         label="Create workflow"
+        hideLabelOnMobile={false}
+        showIcon={false}
+      />
+      <ImportWorkflow
+        variant="outline"
+        label="Import"
         hideLabelOnMobile={false}
         showIcon={false}
       />
@@ -107,6 +116,7 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
     data: {},
   });
   const scoped = useScopedPath();
+  const { exportWorkflow, isExporting } = useExportWorkflow();
 
   const [publishVersionName, setPublishVersionName] = useState("");
   const [publishDescription, setPublishDescription] = useState("");
@@ -190,7 +200,10 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
         id: "action",
         header: () => <div className="font-bold text-medium-emphasis"></div>,
         cell: (info) => (
-          <div className="flex items-center gap-4">
+          <div
+            className="flex items-center gap-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <Tooltip>
               <TooltipTrigger asChild>
                 <div>
@@ -232,12 +245,21 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
             </Tooltip>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-5 w-5 p-0">
+                <Button
+                  variant="ghost"
+                  className="h-5 w-5 p-0"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <EllipsisVertical width={20} height={20} />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem className="cursor-pointer">
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
+                >
                   <Link
                     to={scoped(`workflow/${info.row.original.itemId}`)}
                     className="flex w-full items-center"
@@ -271,6 +293,17 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
                 >
                   <Copy className="mr-2 h-4 w-4" />
                   <span>Duplicate</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  disabled={isExporting}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void exportWorkflow(info.row.original.itemId);
+                  }}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  <span>Export</span>
                 </DropdownMenuItem>
 
                 {!(info.row.original.isPublished) && (<DropdownMenuItem
@@ -336,6 +369,8 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
       publishUnversioned,
       scoped,
       unpublish,
+      exportWorkflow,
+      isExporting,
     ],
   );
 

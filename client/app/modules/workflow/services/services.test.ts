@@ -110,12 +110,23 @@ describe("workflowService", () => {
 
 describe("emailService", () => {
   it("fetches inbound-capable email configs with paging", async () => {
-    await emailService.fetchEmailConfigs("pk", 0, 50);
+    http.logicService.get.mockResolvedValue([
+      { itemId: "m1", name: "Inbox", isInbound: true, isDefault: true, provider: 0 },
+    ]);
+    const result = await emailService.fetchEmailConfigs("pk", 0, 50);
     expect(http.logicService.get).toHaveBeenCalledWith(
       expect.stringContaining("pageNumber=1"),
       undefined,
       { absoluteUrl: true },
     );
+    expect(result).toEqual([
+      { itemId: "m1", name: "Inbox", isInbound: true, isDefault: true, provider: 0 },
+    ]);
+  });
+
+  it("returns an empty list when Mail/Gets is not an array", async () => {
+    http.logicService.get.mockResolvedValue(null);
+    await expect(emailService.fetchEmailConfigs("pk", 0, 50)).resolves.toEqual([]);
   });
 
   it("fetches email templates", async () => {

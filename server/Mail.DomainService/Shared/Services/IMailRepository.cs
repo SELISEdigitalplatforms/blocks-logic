@@ -8,6 +8,7 @@ namespace Mail.DomainService.Services
         Task<bool> FileExists(string fileId);
         Task<List<string>> GetEmailAdressOfUsers(IEnumerable<string> emails);
         Task<MailServerConfiguration> GetMailServerConfigurationByTenantId(string tenantId);
+        Task<List<MailServerConfigurationSummary>> GetMailServerConfigurationSummariesAsync();
         Task<EmailTemplate> GetEmailTemplateByPurpose(string purpose, string language, string organizationId);
         Task<MailServerConfiguration> GetMailServerConfigurationByPurpose(string purpose, string language, string organizationId);
         Task<bool> MailTemplateForPurposeExists(string purpose, string language);

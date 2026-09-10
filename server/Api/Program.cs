@@ -1,6 +1,7 @@
 using Blocks.Extension.DependencyInjection;
 using Blocks.Extensions.DependencyInjection;
 using Blocks.Genesis;
+using Blocks.Secrets;
 using BlocksTemplate.Api;
 using CloudConfiguration.DomainService.Shared.Utilities;
 using Common.InternalService.Shared.Utilities;
@@ -9,6 +10,7 @@ using DomainService.Shared;
 using DomainService.Utilities;
 using DomainService.Workflow;
 using DomainService.Workflow.Utils;
+using Proxy.DomainService;
 using Mail.DomainService.Shared.Utilities;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
@@ -52,8 +54,8 @@ builder.Services.Configure<MvcOptions>(options =>
     options.Conventions.Insert(0, new GlobalApiRoutePrefixConvention("api"));
     // Translates the Secrets SDK's own exceptions (DECISIONS D6) into the HTTP codes its
     // README documents, so a Functions call that touches a secret does not need its own
-    // try/catch for SecretNotFoundException et al.
-    options.Filters.Add<Blocks.Secrets.SecretExceptionFilter>();
+    // try/catch for SecretNotFoundException et al. Registered once — Proxy relies on it too.
+    options.Filters.Add<SecretExceptionFilter>();
 });
 
 var wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
@@ -66,6 +68,7 @@ services.RegisterBlocksEurolmServices();
 services.RegisterAllMailApplicationServices();
 services.RegisterBlocksObservabilityServices();
 services.AddWorkflowExecutionEngine();
+services.AddProxyServices();
 services.AddCloudConfigurationServices();
 services.AddSchedulerServices();
 services.AddFunctionsServices();
@@ -74,6 +77,7 @@ services.AddFunctionsServices();
 // reference: Functions.DomainService already depends on DomainService for IWorkflowAuthService.
 services.AddSingleton<DomainService.Workflow.Nodes.INodeExecutor, Functions.DomainService.Nodes.ActionFunctionNode>();
 services.AddStorageDomainServices();
+services.AddBlocksSecrets();
 services.RegisterBlocksStorageServices();
 await services.RegisterBlocksDeploymentServicesAsync(vaultType);
 

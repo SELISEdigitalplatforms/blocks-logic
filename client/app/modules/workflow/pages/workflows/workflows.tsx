@@ -2,6 +2,7 @@
 import { Card, CardContent, CardHeader } from "@/components/ui-kits/card/card";
 import { WorkflowList } from "../../components/workflow-list";
 import { AddWorkflow } from "../../components/add-workflow";
+import { ImportWorkflow } from "../../components/import-workflow";
 import { WorkflowFilterToolBar } from "../../components/workflow-filter-toolbar";
 import { Pagination } from "@/components/ui-kits/pagination/pagination";
 import { useGetWorkflows } from "@blocks-workflow/hooks/use-workflow-api";
@@ -37,7 +38,10 @@ export const Workflows = () => {
           {!isEmpty && (
             <CardHeader className="flex flex-row items-center justify-between mb-0">
               <WorkflowFilterToolBar />
-              <AddWorkflow />
+              <div className="flex items-center gap-1">
+                <ImportWorkflow />
+                <AddWorkflow />
+              </div>
             </CardHeader>
           )}
           <CardContent>
@@ -49,7 +53,7 @@ export const Workflows = () => {
                   totalCount={data?.totalCount || 0}
                   page={queryParams.page}
                   pageSize={queryParams.pageSize}
-                  pageSizeOptions={[5, 10]}
+                  pageSizeOptions={[10, 20]}
                   onChange={(page) => setQueryParams((params) => ({ ...params, page }))}
                   onPageSizeChange={(pageSize) =>
                     setQueryParams((params) => ({

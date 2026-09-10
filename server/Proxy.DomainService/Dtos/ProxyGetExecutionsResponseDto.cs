@@ -1,0 +1,45 @@
+using System.Text.Json.Serialization;
+using Blocks.Genesis;
+
+namespace Proxy.DomainService.Dtos
+{
+    /// <summary>
+    /// Response of <c>POST /api/Proxy/GetExecutions</c>. <c>TotalCount</c> is the unpaged 24 h match count for
+    /// the requested <c>statusClass</c> and is NOT affected by <c>afterId</c> (SPEC &sect;3.1 / H2, H3). On a
+    /// validation failure <see cref="HttpStatus"/> is 400 and <see cref="Code"/> is <c>PROXY_VALIDATION</c>;
+    /// on an unknown proxy it is 404 / <c>PROXY_NOT_FOUND</c>.
+    /// </summary>
+    public sealed class ProxyGetExecutionsResponseDto : BaseQueryListResponse<List<ProxyExecutionListItemDto>>
+    {
+        /// <summary>Stable failure code (see <see cref="Utils.ProxyErrorCodes"/>); <c>null</c> on success.</summary>
+        public string? Code { get; set; }
+
+        /// <summary>Human-readable message for the 404 case; <c>null</c> otherwise.</summary>
+        public string? Message { get; set; }
+
+        /// <summary>HTTP status the controller returns (200 normally, 400 on validation, 404 on unknown proxy).</summary>
+        [JsonIgnore]
+        public int HttpStatus { get; set; } = 200;
+    }
+
+    /// <summary>One row of the <em>Request logs</em> list (SPEC &sect;3.1).</summary>
+    public sealed class ProxyExecutionListItemDto
+    {
+        public string ItemId { get; set; } = string.Empty;
+
+        public DateTime StartedAtUtc { get; set; }
+
+        public string RequestMethod { get; set; } = string.Empty;
+
+        public string RequestPath { get; set; } = string.Empty;
+
+        public int StatusCode { get; set; }
+
+        public int LatencyMs { get; set; }
+
+        /// <summary>One of <see cref="Entities.ProxyExecutionOutcome"/>.</summary>
+        public string Outcome { get; set; } = string.Empty;
+
+        public string UpstreamHost { get; set; } = string.Empty;
+    }
+}

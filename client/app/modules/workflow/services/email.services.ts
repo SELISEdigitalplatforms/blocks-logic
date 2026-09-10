@@ -7,16 +7,17 @@ import {
 
 class EmailService {
   private readonly LogicHttpClient = serviceInstances.logicService;
-  fetchEmailConfigs = (
+  fetchEmailConfigs = async (
     projectKey: string,
     pageNumber: number,
     pageSize: number,
   ): Promise<IEmailConfig[]> => {
-    return this.LogicHttpClient.get(
+    const res = await this.LogicHttpClient.get<IEmailConfig[] | null>(
       `${MAIL_CONFIG_ENDPOINTS.GET_CONFIGS}?projectKey=${projectKey}&pageNumber=${pageNumber + 1}&pageSize=${pageSize}`,
       undefined,
       { absoluteUrl: true },
     );
+    return Array.isArray(res) ? res : [];
   };
 
   fetchEmailTemplates = (

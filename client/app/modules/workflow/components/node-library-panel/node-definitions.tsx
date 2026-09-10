@@ -37,7 +37,6 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		description: "Triggers the workflow when a new email is received",
 		type: "email",
 		category: "trigger",
-		isComingSoon: true,
 		version: "v1",
 		defaultName: "Email Trigger",
 		handleSpec: {

@@ -23,6 +23,7 @@
     <PackageReference Include="SeliseBlocks.Localization.OS" />
     <PackageReference Include="SeliseBlocks.ReleaseDriver.OS" />
     <PackageReference Include="SeliseBlocks.MonitorDriver.OS" />
+    <PackageReference Include="SeliseBlocks.Secrets.OS" />
     <!--<PackageReference Include="SeliseBlocks.StorageDriver.OS" />-->
     <PackageReference Include="SeliseBlocks.ConfigurationDriver" />
     <PackageReference Include="SeliseBlocks.Genesis.OS" />
@@ -41,6 +42,7 @@
 
     <ProjectReference Include="..\DomainService\DomainService.csproj" />
     <ProjectReference Include="..\Notification.DomainService\Notification.DomainService.csproj" />
+    <ProjectReference Include="..\Proxy.DomainService\Proxy.DomainService.csproj" />
     <ProjectReference Include="..\Scheduler.DomainService\Scheduler.DomainService.csproj" />
     <ProjectReference Include="..\Functions.DomainService\Functions.DomainService.csproj" />
     <!--<ProjectReference Include="..\ConfigurationDriver\SeliseBlocks.ConfigurationDriver.csproj" />-->

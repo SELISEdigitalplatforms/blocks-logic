@@ -8,6 +8,10 @@ import ScheduleDetailsPage from "./routes/private/schedules/schedule-details-pag
 import WorkflowDetailsPage from "./routes/private/workflow-details/workflow-details-page";
 import FunctionsPage from "./routes/private/functions/functions-page";
 import FunctionDetailsPage from "./routes/private/functions/function-details-page";
+import ProxiesPage from "./routes/private/proxy/proxies-page";
+import ProxyCreatePage from "./routes/private/proxy/proxy-create-page";
+import ProxyEditPage from "./routes/private/proxy/proxy-edit-page";
+import ProxyDetailsPage from "./routes/private/proxy/proxy-details-page";
 
 import {
   AuthResolver,
@@ -28,6 +32,7 @@ const redirectPaths: Record<string, string> = {
   "/schedules/*": "/app/schedule",
   "/schedule/*": "/app/schedule",
   "/functions/*": "/app/functions",
+  "/proxy/*": "/app/proxy",
 };
 
 
@@ -97,6 +102,10 @@ export const router = createBrowserRouter([
               { path: "schedule/:scheduleId", element: <ScheduleDetailsPage /> },
               { path: "functions", element: <FunctionsPage /> },
               { path: "functions/:functionId", element: <FunctionDetailsPage /> },
+              { path: "proxy", element: <ProxiesPage /> },
+              { path: "proxy/new", element: <ProxyCreatePage /> },
+              { path: "proxy/:proxyId/edit", element: <ProxyEditPage /> },
+              { path: "proxy/:proxyId", element: <ProxyDetailsPage /> },
               { path: "profile", element: <ProfilePage /> },
 
 

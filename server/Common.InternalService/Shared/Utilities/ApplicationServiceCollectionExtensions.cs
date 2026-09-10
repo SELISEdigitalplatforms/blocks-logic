@@ -20,6 +20,7 @@ namespace Common.InternalService.Shared.Utilities
             serviceCollection.AddSingleton<IConfigurationRepository, ConfigurationRepository>();
 
             serviceCollection.AddSingleton<IFileManagementService, FileManagementService>();
+            serviceCollection.AddSingleton<ICertificateStorageService, CertificateStorageService>();
             serviceCollection.AddSingleton<IFileRepository, FileRepository>();
             serviceCollection.AddSingleton<IFileVersionRepository, FileVersionRepository>();
             serviceCollection.AddSingleton<IDirectoryRepository, DirectoryRepository>();

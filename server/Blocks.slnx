@@ -9,9 +9,11 @@
   <Project Path="Iam.DomainService/Iam.DomainService.csproj" />
   <Project Path="Identifier.DomainService/Identifier.DomainService.csproj" />
   <Project Path="Mail.DomainService/Mail.DomainService.csproj" />
+  <Project Path="MailBoxSyncService/MailBoxSyncService.csproj" />
   <Project Path="Mail.Driver/Mail.Driver.csproj" />
   <Project Path="Mfa.DomainService/Mfa.DomainService.csproj" />
   <Project Path="Notification.DomainService/Notification.DomainService.csproj" />
+  <Project Path="Proxy.DomainService/Proxy.DomainService.csproj" />
   <Project Path="Scheduler.DomainService/Scheduler.DomainService.csproj" />
   <Project Path="Worker/Worker.csproj" />
   <Project Path="XUnitTest/XUnitTest.csproj" />
