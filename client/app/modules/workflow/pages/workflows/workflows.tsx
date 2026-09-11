@@ -13,7 +13,6 @@ export const Workflows = () => {
   const { data, isLoading, isFetching } = useGetWorkflows({
     pageSize: Number(queryParams.pageSize),
     pageNumber: Number(queryParams.page),
-    // projectKey: tenantId,
     search: queryParams.search || "",
     isPublished:
       queryParams.isPublished === "all"

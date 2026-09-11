@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
@@ -38,11 +38,19 @@ type Props = {
   mode: "create" | "edit";
   proxy?: Proxy | null;
   isLoadingProxy?: boolean;
+  headerContent?: ReactNode;
   onSuccess?: (proxyId?: string) => void;
   onCancel?: () => void;
 };
 
-export const ProxyForm = ({ mode, proxy, isLoadingProxy, onSuccess, onCancel }: Props) => {
+export const ProxyForm = ({
+  mode,
+  proxy,
+  isLoadingProxy,
+  headerContent,
+  onSuccess,
+  onCancel,
+}: Props) => {
   const isEdit = mode === "edit";
   const createProxy = useCreateProxy();
   const updateProxy = useUpdateProxy();
@@ -198,9 +206,12 @@ export const ProxyForm = ({ mode, proxy, isLoadingProxy, onSuccess, onCancel }: 
   return (
     <Form {...form}>
       <form noValidate onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
-        <ProxyFormHeader isEdit={isEdit} isPending={isPending} onCancel={onCancel} />
+        <div className="sticky top-0 z-30 -mx-6 -mt-4 bg-surface-app px-6 pb-4 pt-4 shadow-sm">
+          {headerContent ? <div className="pb-6">{headerContent}</div> : null}
+          <ProxyFormHeader isEdit={isEdit} isPending={isPending} onCancel={onCancel} />
+        </div>
 
-        <Card className="rounded-xl">
+        <Card className="rounded-xl !mt-0">
           <CardContent className="space-y-6 p-0">
             <div className="grid gap-5 lg:grid-cols-[minmax(260px,0.8fr)_minmax(320px,1.2fr)]">
               <FormField
@@ -291,10 +302,7 @@ export const ProxyForm = ({ mode, proxy, isLoadingProxy, onSuccess, onCancel }: 
           {selectedMethods.length > 1 ? (
             <Card className="rounded-xl">
               <CardContent className="p-0">
-                <ProxyMethodOverrides
-                  selectedMethods={selectedMethods}
-                  {...variableProps}
-                />
+                <ProxyMethodOverrides selectedMethods={selectedMethods} {...variableProps} />
               </CardContent>
             </Card>
           ) : null}

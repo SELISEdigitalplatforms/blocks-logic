@@ -9,7 +9,11 @@ import {
 } from "@/components/ui-kits/tooltip/tooltip";
 import { cn } from "@/lib/utils";
 import { ResponseFieldNode } from "../types";
-import { isNodeSelected } from "./response-field-tree.helpers";
+import {
+  duplicateKeys,
+  isNodeSelected,
+  validateFieldKey,
+} from "./response-field-tree.helpers";
 import { AddChildIcon } from "./response-field-icons";
 
 type TreeHandlers = {
@@ -26,18 +30,30 @@ type TreeHandlers = {
 export const ResponseFieldTree = ({
   nodes,
   ...handlers
-}: TreeHandlers & { nodes: ResponseFieldNode[] }) => (
-  <ul className="space-y-1">
-    {nodes.map((node) => (
-      <ResponseFieldRow key={node.id} {...handlers} node={node} depth={0} inherited={false} />
-    ))}
-  </ul>
-);
+}: TreeHandlers & { nodes: ResponseFieldNode[] }) => {
+  const dupes = duplicateKeys(nodes);
+  return (
+    <ul className="space-y-1">
+      {nodes.map((node) => (
+        <ResponseFieldRow
+          key={node.id}
+          {...handlers}
+          node={node}
+          depth={0}
+          inherited={false}
+          duplicate={dupes.has(node.key.trim())}
+        />
+      ))}
+    </ul>
+  );
+};
 
 type RowProps = TreeHandlers & {
   node: ResponseFieldNode;
   depth: number;
   inherited: boolean;
+  /** A sibling directly at this level already carries the same trimmed key. */
+  duplicate: boolean;
 };
 
 const rowIconButton =
@@ -71,6 +87,7 @@ const ResponseFieldRow = ({
   node,
   depth,
   inherited,
+  duplicate,
   checked,
   collapsed,
   onToggle,
@@ -84,6 +101,14 @@ const ResponseFieldRow = ({
   const isCollapsed = collapsed.has(node.id);
   const hasChildren = node.children.length > 0;
   const childInherited = inherited || checked.has(node.id);
+  const childDupes = duplicateKeys(node.children);
+
+  const keyError =
+    validateFieldKey(node.key) ??
+    (duplicate ? "Another field at this level already uses this name." : null) ??
+    (hasChildren && !node.key.trim()
+      ? "Name this field — unnamed rows and everything nested under them are dropped."
+      : null);
 
   return (
     <li>
@@ -105,13 +130,22 @@ const ResponseFieldRow = ({
           <span className="w-3.5" />
         )}
         <Checkbox checked={selected} onCheckedChange={() => onToggle(node)} />
-        <Input
-          value={node.key}
-          placeholder="field name"
-          onChange={(event) => onRename(node.id, event.target.value)}
-          onBlur={(event) => onRename(node.id, event.target.value.trim())}
-          className="h-7 w-40 text-xs"
-        />
+        <div className="flex w-40 flex-col gap-0.5">
+          <Input
+            value={node.key}
+            placeholder="field name"
+            aria-invalid={!!keyError}
+            onChange={(event) => onRename(node.id, event.target.value)}
+            onBlur={(event) => onRename(node.id, event.target.value.trim())}
+            className={cn(
+              "h-7 w-full text-xs",
+              keyError && "border-destructive focus-visible:ring-destructive",
+            )}
+          />
+          {keyError ? (
+            <span className="text-[11px] leading-tight text-destructive">{keyError}</span>
+          ) : null}
+        </div>
         <RowIconButton label="Add child field" onClick={() => onAddChild(node.id)}>
           <AddChildIcon className="h-4 w-4" />
         </RowIconButton>
@@ -134,6 +168,7 @@ const ResponseFieldRow = ({
               node={child}
               depth={depth + 1}
               inherited={childInherited}
+              duplicate={childDupes.has(child.key.trim())}
               checked={checked}
               collapsed={collapsed}
               onToggle={onToggle}

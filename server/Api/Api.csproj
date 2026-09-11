@@ -29,22 +29,16 @@
     <PackageReference Include="SeliseBlocks.Genesis.OS" />
   </ItemGroup>
   <ItemGroup>
-    <!--<ProjectReference Include="..\Authentication.DomainService\Authentication.DomainService.csproj" />-->
-    <!--<ProjectReference Include="..\Captcha.DomainService\Captcha.DomainService.csproj" />-->
-    <!--<ProjectReference Include="..\Cloud.DomainService\Cloud.DomainService.csproj" />-->
-    <!--<ProjectReference Include="..\Cloud.LmtService\Cloud.LmtService.csproj" />-->
     <ProjectReference Include="..\CloudConfiguration.DomainService\CloudConfiguration.DomainService.csproj" />
 
-    <!--<ProjectReference Include="..\Iam.DomainService\Iam.DomainService.csproj" />-->
     <ProjectReference Include="..\Common.InternalService\Common.InternalService.csproj" />
     <ProjectReference Include="..\Identifier.DomainService\Identifier.DomainService.csproj" />
     <ProjectReference Include="..\Mail.DomainService\Mail.DomainService.csproj" />
 
-    <ProjectReference Include="..\DomainService\DomainService.csproj" />
+    <ProjectReference Include="..\Workflow.DomainService\Workflow.DomainService.csproj" />
     <ProjectReference Include="..\Notification.DomainService\Notification.DomainService.csproj" />
     <ProjectReference Include="..\Proxy.DomainService\Proxy.DomainService.csproj" />
     <ProjectReference Include="..\Scheduler.DomainService\Scheduler.DomainService.csproj" />
     <ProjectReference Include="..\Functions.DomainService\Functions.DomainService.csproj" />
-    <!--<ProjectReference Include="..\ConfigurationDriver\SeliseBlocks.ConfigurationDriver.csproj" />-->
   </ItemGroup>
 </Project>

@@ -11,7 +11,6 @@ namespace Mail.DomainService.Mails
     public record EmailTriggerEvent
     {
         public required EmailTriggerType Type { get; set; }
-        public required string ProjectKey { get; set; }
         public required MailBoxEntity Mail { get; set; }
     }
 

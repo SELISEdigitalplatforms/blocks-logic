@@ -85,6 +85,8 @@ const methodOverrideSchema = z.object({
 export const RESPONSE_PATH_RE = /^(?:[^.[\]]+(?:\[\])?)(?:\.[^.[\]]+(?:\[\])?)*$/;
 export const MAX_RESPONSE_PATH_SEGMENTS = 25;
 export const MAX_RESPONSE_PATHS = 200;
+/** Mirrors `ProxyResponsePath.MaxPathLength` — the longest one stored path expression may be. */
+export const MAX_RESPONSE_PATH_LENGTH = 512;
 /** Mirrors `ProxyResponseProjector.MaxProjectableBytes`. */
 export const MAX_PROJECTABLE_BYTES = 5 * 1024 * 1024;
 /** Array elements unioned per level when deriving a schema from a Test sample. */
@@ -93,7 +95,8 @@ export const RESPONSE_SCHEMA_SAMPLE = 50;
 /** trim → grammar → ≤ {@link MAX_RESPONSE_PATH_SEGMENTS} segments. */
 export const isResponsePath = (value: string): boolean => {
   const trimmed = value.trim();
-  if (!trimmed || trimmed.length > 512 || !RESPONSE_PATH_RE.test(trimmed)) return false;
+  if (!trimmed || trimmed.length > MAX_RESPONSE_PATH_LENGTH || !RESPONSE_PATH_RE.test(trimmed))
+    return false;
   return trimmed.split(".").length <= MAX_RESPONSE_PATH_SEGMENTS;
 };
 

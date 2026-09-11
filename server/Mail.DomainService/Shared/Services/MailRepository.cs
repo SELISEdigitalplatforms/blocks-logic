@@ -183,7 +183,7 @@ namespace Mail.DomainService.Services
         //deprecated
         public async Task<(List<MailBoxEntity> Mails, long TotalCount)> GetMailBoxMails(GetMailBoxMails request)
         {
-            var dbContext = _dbContextProvider.GetDatabase(request.ProjectKey);
+            var dbContext = _dbContextProvider.GetDatabase(BlocksContext.GetContext()?.TenantId);
             var collection = dbContext.GetCollection<MailBoxEntity>($"{nameof(MailBoxEntity)}s");
 
             var builder = Builders<MailBoxEntity>.Filter;
@@ -232,7 +232,7 @@ namespace Mail.DomainService.Services
 
         public async Task<(List<MailBoxEntityResponse> Mails, long TotalCount)> GetMailBoxAggregatedMails(GetMailBoxMails request)
         {
-            var dbContext = _dbContextProvider.GetDatabase(request.ProjectKey);
+            var dbContext = _dbContextProvider.GetDatabase(BlocksContext.GetContext()?.TenantId);
             var collection = dbContext.GetCollection<MailBoxEntity>($"{nameof(MailBoxEntity)}s");
 
             var groupBy = new BsonDocument
@@ -325,9 +325,9 @@ namespace Mail.DomainService.Services
             return (mails, totalCount);
         }
 
-        public async Task<MailBoxEntity> GetMailBoxMail(string messageId, string projectKey)
+        public async Task<MailBoxEntity> GetMailBoxMail(string messageId, string tenantId)
         {
-            var dbContext = _dbContextProvider.GetDatabase(projectKey);
+            var dbContext = _dbContextProvider.GetDatabase(tenantId);
             var collection = dbContext.GetCollection<MailBoxEntity>($"{nameof(MailBoxEntity)}s");
             var filter = Builders<MailBoxEntity>.Filter.Eq(x => x.MessageId, messageId);
 

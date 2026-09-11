@@ -2,17 +2,6 @@
 using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using MongoDB.Bson;
-using CloudConfiguration.DomainService.Authentication;
-using CloudConfiguration.DomainService.Authentication.Entities;
-using CloudConfiguration.DomainService.Captcha.Entities;
-using CloudConfiguration.DomainService.Captcha.RequestModel;
-using CloudConfiguration.DomainService.Captcha.ResponseModel;
-using CloudConfiguration.DomainService.IAM.Entities;
-using CloudConfiguration.DomainService.IAM.RequestModel;
-using CloudConfiguration.DomainService.IAM.ResponseModel;
-using CloudConfiguration.DomainService.MFA.RequestModel;
-using CloudConfiguration.DomainService.MFA.ResponseModel;
-using CloudConfiguration.DomainService.MFA.Entities;
 using CloudConfiguration.DomainService.Shared.Utilities;
 using CloudConfiguration.DomainService.Notification.RequestModel;
 using CloudConfiguration.DomainService.Notification.ResponseModel;
@@ -32,8 +21,6 @@ namespace CloudConfiguration.DomainService.Shared.Services
         private const string MaskedSecretValue = "********";
 
         private readonly IConfigurationRepository _configurationRepository;
-        private readonly IValidator<SaveCaptchaConfigurationRequest> _captchaConfigurationValidator;
-        private readonly IValidator<SaveIamConfigurationRequest> _iamConfigurationValidator;
         private readonly IValidator<SaveNotificatonConfigurationRequest> _notificatonConfigurationValidator;
         private readonly IValidator<SaveStorageConfigurationRequest> _storageConfigurationValidator;
         private readonly IValidator<MailConfiguration> _mailConfigurationValidator;
@@ -43,8 +30,6 @@ namespace CloudConfiguration.DomainService.Shared.Services
 
 
         public ConfigurationService(IConfigurationRepository configurationRepository,
-                                    IValidator<SaveCaptchaConfigurationRequest> configurationValidator,
-                                    IValidator<SaveIamConfigurationRequest> iamConfigurationValidator,
                                     IValidator<SaveNotificatonConfigurationRequest> notificatonConfigurationValidator,
                                     IValidator<SaveStorageConfigurationRequest> storageConfigurationValidator,
                                     IValidator<MailConfiguration> mailConfigurationValidator,
@@ -53,8 +38,6 @@ namespace CloudConfiguration.DomainService.Shared.Services
                                     ITenants tenants)
         {
             _configurationRepository = configurationRepository;
-            _captchaConfigurationValidator = configurationValidator;
-            _iamConfigurationValidator = iamConfigurationValidator;
             _notificatonConfigurationValidator = notificatonConfigurationValidator;
             _storageConfigurationValidator = storageConfigurationValidator;
             _mailConfigurationValidator = mailConfigurationValidator;
@@ -62,186 +45,6 @@ namespace CloudConfiguration.DomainService.Shared.Services
             _logger = logger;
             _tenants = tenants;
         }
-
-        #region Authentication 
-
-        public async Task<IActionResult> GetAuthenticationConfigAsync()
-        {
-            var config = await _configurationRepository.GetAuthenticationConfigurationAsync();
-            var publicCertificatePath = (_tenants.GetTenantByID(BlocksContext.GetContext()?.TenantId ?? ""))?.JwtTokenParameters.PublicCertificatePath;
-
-            return new OkObjectResult(new
-            {
-                ItemId = config.ItemId.ToString(),
-                config.RefreshTokenValidForNumberMinutes,
-                config.AccessTokenValidForNumberMinutes,
-                config.RememberMeRefreshTokenValidForNumberMinutes,
-                config.AllowedGrantTypes,
-                config.GetNumberOfWrongAttemptsToLockTheAccount,
-                config.AccountLockDurationInMinutes,
-                PublicCertificatePath = publicCertificatePath
-            });
-        }
-
-        public async Task<BaseResponse> UpdateAuthenticationConfigAsync(UpdateAuthenticationConfigurationRequest configuration)
-        {
-            var authConfiguration = new AuthenticationConfiguration
-            {
-                ItemId = ObjectId.Parse(configuration.ItemId),
-                RefreshTokenValidForNumberMinutes = configuration.RefreshTokenValidForNumberMinutes,
-                AccessTokenValidForNumberMinutes = configuration.AccessTokenValidForNumberMinutes,
-                RememberMeRefreshTokenValidForNumberMinutes = configuration.RememberMeRefreshTokenValidForNumberMinutes,
-                AllowedGrantTypes = configuration.AllowedGrantTypes,
-                GetNumberOfWrongAttemptsToLockTheAccount = configuration.GetNumberOfWrongAttemptsToLockTheAccount,
-                AccountLockDurationInMinutes = configuration.AccountLockDurationInMinutes
-            };
-
-            await _configurationRepository.UpdateAuthenticationConfigAsync(authConfiguration);
-
-            return new BaseResponse { IsSuccess = true };
-        }
-
-        #endregion
-
-        #region Captcha
-
-        public async Task<GetCaptchaConfigurationResponse> GetCaptchaConfigurationAsync(string provider)
-        {
-            var configuration = await _configurationRepository.GetCaptchaConfigurationByProviderAsync(provider);
-            return configuration == null ? new GetCaptchaConfigurationResponse { IsSuccess = true, Errors = new Dictionary<string, string> { { "no_configuration_exist", $"No configuration exist with provider {provider}" } } } : new GetCaptchaConfigurationResponse { IsSuccess = true, Configuration = configuration };
-        }
-
-        public async Task<GetCaptchaConfigurationsResponse> GetCaptchaConfigurationsAsync(GetCaptchaConfigurationsRequest request)
-        {
-            return await _configurationRepository.GetCaptchaConfigurationsAsync(request);
-        }
-
-        public async Task<BaseMutationResponse> SaveCaptchaConfigurationAsync(SaveCaptchaConfigurationRequest request)
-        {
-            var validationResult = await _captchaConfigurationValidator.ValidateAsync(request);
-
-            if (!validationResult.IsValid)
-            {
-                return new BaseMutationResponse
-                {
-                    IsSuccess = false,
-                    Errors = validationResult.Errors.ToDictionary(e => e.PropertyName, e => e.ErrorMessage)
-                };
-            }
-
-            var repoConfiguration = await MappedIntoCaptchaRepoConfigurationAsync(request);
-            await _configurationRepository.SaveCaptchaConfigurationAsync(repoConfiguration);
-
-            return new BaseMutationResponse { IsSuccess = true };
-        }
-
-        public async Task<BaseMutationResponse> UpdateCaptchaConfigurationStatusAsync(UpdateCaptchaConfigurationStatusRequest request)
-        {
-            await _configurationRepository.UpdateCaptchaConfigurationStatusAsync(request);
-            return new BaseMutationResponse { IsSuccess = true };
-        }
-
-        private async Task<CaptchaConfiguration> MappedIntoCaptchaRepoConfigurationAsync(SaveCaptchaConfigurationRequest configuration)
-        {
-            var repoConfiguration = await _configurationRepository.GetCaptchaConfigurationByProviderAsync(configuration.Provider);
-
-            repoConfiguration ??= new CaptchaConfiguration { ItemId = Guid.NewGuid().ToString(), CreatedDate = DateTime.UtcNow };
-
-            repoConfiguration.CreatedBy = BlocksContext.GetContext()?.TenantId;
-            repoConfiguration.LastUpdatedBy = BlocksContext.GetContext()?.TenantId;
-            repoConfiguration.LastUpdatedDate = DateTime.UtcNow;
-
-            repoConfiguration.CaptchaKey = configuration.CaptchaKey;
-            repoConfiguration.CaptchaSecret = configuration.CaptchaSecret;
-            repoConfiguration.Provider = configuration.Provider;
-            repoConfiguration.CaptchaGenerator = configuration.CaptchaGenerator;
-            repoConfiguration.IsEnable = configuration.IsEnable;
-
-            return repoConfiguration;
-        }
-
-        #endregion
-
-        #region IAM
-
-        public async Task<BaseMutationResponse> SaveIamConfigurationAsync(SaveIamConfigurationRequest request)
-        {
-            var validationResult = await _iamConfigurationValidator.ValidateAsync(request);
-
-            if (!validationResult.IsValid)
-            {
-                return new BaseMutationResponse
-                {
-                    Errors = validationResult.Errors.ToDictionary(x => x.PropertyName, x => x.ErrorMessage)
-                };
-            }
-
-            await Process(request);
-
-            return new BaseMutationResponse { IsSuccess = true };
-        }
-
-        public async Task<GetConfigurationResponse> GetIamConfigurationAsync()
-        {
-            var result = await _configurationRepository.GetIamConfigurationAsync();
-            return new GetConfigurationResponse { Data = result };
-        }
-
-        public async Task Process(SaveIamConfigurationRequest request)
-        {
-            var config = await _configurationRepository.GetIamConfigurationAsync() ?? new IamConfiguration();
-
-            config.AccountActivationUrl = request.AccountActivationUrl;
-            config.AccountVerificationUrl = request.AccountVerificationUrl;
-            config.RecoverAccountUrl = request.RecoverAccountUrl;
-            config.ActivationUrlLifetimeInMinutes = request.ActivationUrlLifetimeInMinutes;
-            config.RecoverAccountUrlLifetimeInMinutes = request.RecoverAccountUrlLifetimeInMinutes;
-            config.LogoutOnPasswordChange = request.LogoutOnPasswordChange;
-            config.PasswordStrengthCheckerRegex = string.IsNullOrWhiteSpace(request.PasswordStrengthCheckerRegex) ? config.PasswordStrengthCheckerRegex : request.PasswordStrengthCheckerRegex;
-
-            await _configurationRepository.SaveIamConfigurationAsync(config);
-
-        }
-
-        #endregion
-
-        #region MFA
-
-        public async Task<BaseResponse> SaveMfaConfigurationAsync(SaveMfaConfigurationRequest request)
-        {
-            var mafConfiguration = await _configurationRepository.GetDefaultMfaConfiguration();
-
-            mafConfiguration ??= new MfaConfiguration { ItemId = Guid.NewGuid().ToString(), CreatedDate = DateTime.UtcNow, CreatedBy = BlocksContext.GetContext()?.UserId ?? "" };
-
-            mafConfiguration.EnableMfa = request.EnableMfa;
-            mafConfiguration.LastUpdatedBy = BlocksContext.GetContext()?.UserId ?? "";
-            mafConfiguration.UserMfaTypes = request.UserMfaType;
-            mafConfiguration.MfaTemplate = request.MfaTemplate ?? new MfaTemplate { TemplateId = Constants.DefaultMfaTemplateId, TemplateName = Constants.DefaultMfaTemplateName };
-
-            await _configurationRepository.UpsertAsync(mafConfiguration, (m => m.ItemId == mafConfiguration.ItemId));
-
-            var bc = BlocksContext.GetContext();
-            await _messageClient.SendToConsumerAsync(new ConsumerMessage<MfaActionEvent>
-            {
-                Payload = new MfaActionEvent
-                {
-                    IsEnable = mafConfiguration.EnableMfa,
-                    ProjectKey = bc.TenantId,
-                },
-                ConsumerName = Constants.AuthenticationQueue,
-            });
-
-            return new BaseResponse { IsSuccess = true };
-        }
-
-        public async Task<GetMfaConfigurationResponse> GetMfaConfigurationAsync()
-        {
-            var repoConfiguration = await _configurationRepository.GetDefaultMfaConfiguration();
-
-            return repoConfiguration != null ? new GetMfaConfigurationResponse { MfaTemplate = repoConfiguration.MfaTemplate, EnableMfa = repoConfiguration.EnableMfa, UserMfaType = repoConfiguration.UserMfaTypes } : new GetMfaConfigurationResponse { MfaTemplate = new MfaTemplate(), UserMfaType = [] };
-        }
-
-        #endregion
 
         #region Notification
 
@@ -317,7 +120,6 @@ namespace CloudConfiguration.DomainService.Shared.Services
                     ItemId = repoConfiguration.ItemId,
                     ConfigurationName = repoConfiguration.Name,
                     StorageStrategy = repoConfiguration.StorageStrategy,
-                    ProjectKey = BlocksContext.GetContext().TenantId
                     },
                 ConsumerName = Constants.StorageQueue,
             });

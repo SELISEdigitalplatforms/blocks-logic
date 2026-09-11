@@ -88,6 +88,15 @@
             Get schedules.
             </summary>
         </member>
+        <!-- Badly formed XML comment ignored for member "T:BlocksTemplate.Api.Controllers.SecretController" -->
+        <member name="M:BlocksTemplate.Api.Controllers.SecretController.GetAll(Common.InternalService.Secret.GetSecretsRequest)">
+            <summary>
+            The tenant's platform secrets: <c>id</c> / <c>name</c> / <c>tags</c> only, never a value and never
+            the Blocks Secrets type. Optionally narrowed by <c>name</c>, <c>tag</c> and <c>search</c>. The
+            tenant and caller identity come from the ambient <c>BlocksContext</c> (this is an
+            <c>[Authorize]</c> route).
+            </summary>
+        </member>
         <member name="T:BlocksTemplate.Api.GlobalApiRoutePrefixConvention">
             <summary>Prepends a segment (e.g. <c>api</c>) to every controller’s attribute route template.</summary>
         </member>
@@ -100,8 +109,6 @@
         <!-- Badly formed XML comment ignored for member "M:Utilities.Api.Controllers.ProxyController.GetExecution(Proxy.DomainService.Dtos.ProxyGetExecutionRequestDto)" -->
         <!-- Badly formed XML comment ignored for member "M:Utilities.Api.Controllers.ProxyController.GetOverview(Proxy.DomainService.Dtos.ProxyGetOverviewRequestDto)" -->
         <!-- Badly formed XML comment ignored for member "M:Utilities.Api.Controllers.ProxyController.ExportExecutionsCsv(Proxy.DomainService.Dtos.ProxyExportExecutionsRequestDto)" -->
-        <!-- Badly formed XML comment ignored for member "M:Utilities.Api.Controllers.ProxyController.Variables(Proxy.DomainService.Dtos.ProxyVariableListRequestDto)" -->
-        <!-- Badly formed XML comment ignored for member "M:Utilities.Api.Controllers.ProxyController.VariableTags" -->
         <member name="T:Utilities.Api.Controllers.ProxyGatewayController">
             <summary>
             Data-plane forwarder (Phase 2). A tenant's client calls

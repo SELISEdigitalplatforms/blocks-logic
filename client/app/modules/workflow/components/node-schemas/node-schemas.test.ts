@@ -183,11 +183,10 @@ describe("ai agent v1", () => {
       agents: [{ id: "a1", widget_id: "w1", name: "Agent One" }],
     });
     const opts = field(NodeSchemaActionAiAgentV1, "agent").options;
-    const result = await opts({}, { projectKey: "pk-1" });
+    const result = await opts({}, { tenantId: "pk-1" });
     expect(getAgents).toHaveBeenCalledWith({
       limit: 100,
       offset: 0,
-      project_key: "pk-1",
     });
     expect(result).toEqual([{ value: "a1_w1_pk-1", label: "Agent One" }]);
   });
@@ -195,7 +194,7 @@ describe("ai agent v1", () => {
   it("options rejects when the service fails", async () => {
     getAgents.mockRejectedValue(new Error("boom"));
     const opts = field(NodeSchemaActionAiAgentV1, "agent").options;
-    await expect(opts({}, { projectKey: "pk-1" })).rejects.toThrow("boom");
+    await expect(opts({}, { tenantId: "pk-1" })).rejects.toThrow("boom");
   });
 
   it("onChange splits the composite agent value", () => {
@@ -204,7 +203,6 @@ describe("ai agent v1", () => {
       agent: "a1_w1_pk-1",
       AgentId: "a1",
       WidgetId: "w1",
-      ProjectKey: "pk-1",
     });
   });
 
@@ -216,7 +214,7 @@ describe("ai agent v1", () => {
 });
 
 describe("email trigger v1", () => {
-  const mailboxConfig = { projectKey: "pk-1" };
+  const mailboxConfig = { tenantId: "pk-1" };
 
   it("options returns only inbound mailboxes from the slim Gets payload", async () => {
     fetchEmailConfigs.mockResolvedValue([
@@ -244,12 +242,11 @@ describe("email trigger v1", () => {
     await expect(opts({}, mailboxConfig)).rejects.toThrow("nope");
   });
 
-  it("onChange stores itemId and uses config projectKey", () => {
+  it("onChange stores the mailbox itemId", () => {
     const onChange = field(NodeSchemaTriggerEmailV1, "mailbox_composite").onChange;
     expect(onChange("m1_pk_with_underscores", {}, mailboxConfig)).toEqual({
       mailbox_composite: "m1_pk_with_underscores",
       mailServerConfigurationId: "m1",
-      projectKey: "pk-1",
     });
   });
 
@@ -275,7 +272,7 @@ describe("send mail v1", () => {
       totalCount: 1,
     });
     const opts = field(NodeSchemaActionSendMailV1, "EmailTemplate").options;
-    const result = await opts({}, { projectKey: "cache-pk" });
+    const result = await opts({}, { tenantId: "cache-pk" });
     expect(result).toEqual([{ label: "Welcome", value: "Welcome_cache-pk" }]);
   });
 
@@ -283,33 +280,32 @@ describe("send mail v1", () => {
     fetchEmailTemplates.mockResolvedValue({ templates: [], totalCount: 0 });
     const opts = field(NodeSchemaActionSendMailV1, "EmailTemplate").options;
     // fresh project key to bypass the module-level cache
-    expect(await opts({}, { projectKey: "empty-pk" })).toEqual([]);
+    expect(await opts({}, { tenantId: "empty-pk" })).toEqual([]);
   });
 
-  it("template onChange splits template and project key", () => {
+  it("template onChange splits the template name", () => {
     const onChange = field(NodeSchemaActionSendMailV1, "EmailTemplate").onChange;
     expect(onChange("Welcome_pk-1")).toEqual({
       EmailTemplate: "Welcome_pk-1",
       Template: "Welcome",
-      ProjectKey: "pk-1",
     });
   });
 
   it("language options map languages", async () => {
     fetchBlocksLanguages.mockResolvedValue([{ languageName: "English", languageCode: "en" }]);
     const opts = field(NodeSchemaActionSendMailV1, "Language").options;
-    expect(await opts({}, { projectKey: "pk-1" })).toEqual([{ label: "English", value: "en" }]);
+    expect(await opts({}, { tenantId: "pk-1" })).toEqual([{ label: "English", value: "en" }]);
   });
 
   it("language options return [] when none exist", async () => {
     fetchBlocksLanguages.mockResolvedValue([]);
     const opts = field(NodeSchemaActionSendMailV1, "Language").options;
-    expect(await opts({}, { projectKey: "pk-1" })).toEqual([]);
+    expect(await opts({}, { tenantId: "pk-1" })).toEqual([]);
   });
 
   it("body fixedKeys return [] when no template is selected", async () => {
     const f = field(NodeSchemaActionSendMailV1, "BodyDataContext");
-    expect(await f.fixedKeys({}, { projectKey: "pk-1" })).toEqual([]);
+    expect(await f.fixedKeys({}, { tenantId: "pk-1" })).toEqual([]);
   });
 
   it("body fixedKeys extract keys from the matched template", async () => {
@@ -318,7 +314,7 @@ describe("send mail v1", () => {
       totalCount: 1,
     });
     const f = field(NodeSchemaActionSendMailV1, "BodyDataContext");
-    const keys = await f.fixedKeys({ EmailTemplate: "Promo_body-pk" }, { projectKey: "body-pk" });
+    const keys = await f.fixedKeys({ EmailTemplate: "Promo_body-pk" }, { tenantId: "body-pk" });
     expect(Array.isArray(keys)).toBe(true);
   });
 
@@ -339,7 +335,7 @@ describe("webhook trigger v1", () => {
     const f = field(NodeSchemaTriggerWebhookV1, "executionMode");
     const url = f.displayValue(
       { executionMode: 1 },
-      { projectKey: "pk", workflowId: "wf", nodeId: "nd", executionMode: 0 },
+      { tenantId: "pk", workflowId: "wf", nodeId: "nd", executionMode: 0 },
     );
     expect(url).toContain("/Workflow/webhook/pk/wf/nd");
   });
@@ -348,7 +344,7 @@ describe("webhook trigger v1", () => {
     const f = field(NodeSchemaTriggerWebhookV1, "executionMode");
     const url = f.displayValue(
       {},
-      { projectKey: "pk", workflowId: "wf", nodeId: "nd", executionMode: 0 },
+      { tenantId: "pk", workflowId: "wf", nodeId: "nd", executionMode: 0 },
     );
     expect(url).toContain("/Workflow/webhook-test/pk/wf/nd");
   });
@@ -444,7 +440,7 @@ describe("webhook trigger v1", () => {
       data: AnyRec,
       config: AnyRec,
     ) => Promise<{ value: string; label: string }[]>;
-    const result = await opts({}, { projectKey: "pk" });
+    const result = await opts({}, { tenantId: "pk" });
     expect(result).toEqual([
       { value: "", label: "None" },
       { value: "default", label: "Default" },
@@ -464,7 +460,7 @@ describe("webhook trigger v1", () => {
       data: AnyRec,
       config: AnyRec,
     ) => Promise<{ value: string; label: string }[]>;
-    expect(await opts({}, { projectKey: "pk" })).toEqual([{ value: "", label: "None" }]);
+    expect(await opts({}, { tenantId: "pk" })).toEqual([{ value: "", label: "None" }]);
   });
 
   it("organization options are None only when organizations is empty", async () => {
@@ -477,7 +473,7 @@ describe("webhook trigger v1", () => {
       data: AnyRec,
       config: AnyRec,
     ) => Promise<{ value: string; label: string }[]>;
-    expect(await opts({}, { projectKey: "pk" })).toEqual([{ value: "", label: "None" }]);
+    expect(await opts({}, { tenantId: "pk" })).toEqual([{ value: "", label: "None" }]);
   });
 
   it("organization options are None only when getOrganizations rejects", async () => {
@@ -486,7 +482,7 @@ describe("webhook trigger v1", () => {
       data: AnyRec,
       config: AnyRec,
     ) => Promise<{ value: string; label: string }[]>;
-    expect(await opts({}, { projectKey: "pk" })).toEqual([{ value: "", label: "None" }]);
+    expect(await opts({}, { tenantId: "pk" })).toEqual([{ value: "", label: "None" }]);
   });
 
   it.skip("roles options call getRoles with the selected organization", async () => {
@@ -495,7 +491,7 @@ describe("webhook trigger v1", () => {
       data: AnyRec,
       config: AnyRec,
     ) => Promise<{ value: string; label: string }[]>;
-    const result = await opts({ authorization: { organizationId: "acme" } }, { projectKey: "pk" });
+    const result = await opts({ authorization: { organizationId: "acme" } }, { tenantId: "pk" });
     expect(getRoles).toHaveBeenCalledWith({ organizationId: "acme" });
     expect(result).toEqual([{ value: "clouduser", label: "clouduser" }]);
   });
@@ -508,10 +504,9 @@ describe("webhook trigger v1", () => {
     ) => Promise<{ value: string; label: string }[]>;
     const result = await opts(
       { authorization: { roles: { items: ["cloudadmin"] } } },
-      { projectKey: "pk-1" },
+      { tenantId: "pk-1" },
     );
     expect(getPermissions).toHaveBeenCalledWith({
-      projectKey: "pk-1",
       roles: ["cloudadmin"],
     });
     expect(result).toEqual([{ value: "Change User Password", label: "Change User Password" }]);
@@ -530,18 +525,17 @@ describe("data gateway trigger v1", () => {
       },
     });
     const opts = field(NodeSchemaTriggerDataGatewayV1, "collectionName_composite").options;
-    expect(await opts({}, { projectKey: "pk-1" })).toEqual([
+    expect(await opts({}, { tenantId: "pk-1" })).toEqual([
       { value: "col:::Sch:::id1", label: "Sch" },
     ]);
   });
 
-  it("collection onChange splits parts and reads the project tenant", () => {
+  it("collection onChange splits parts", () => {
     const onChange = field(NodeSchemaTriggerDataGatewayV1, "collectionName_composite").onChange;
     expect(onChange("col:::Sch:::id1")).toEqual({
       collectionName_composite: "col:::Sch:::id1",
       collectionName: "col",
       schemaName: "Sch",
-      projectKey: "tenant-1",
     });
   });
 
@@ -560,12 +554,6 @@ describe("data gateway trigger v1", () => {
     }) as string;
     expect(out).toContain('"Operation": "Inserted"');
     expect(out).toContain('"CollectionName": "col"');
-  });
-
-  it("transform injects the project tenant id", () => {
-    const node = { id: "n", parameters: {} } as never;
-    const out = NodeSchemaTriggerDataGatewayV1.transform?.(node) as AnyRec;
-    expect((out.parameters as AnyRec).projectKey).toBe("tenant-1");
   });
 });
 
@@ -653,7 +641,7 @@ describe("data action v1", () => {
       data: { items: [{ collectionName: "c", schemaName: "S", id: "i" }] },
     });
     const opts = field(NodeSchemaActionDataActionV1, "collectionName_composite").options;
-    expect(await opts({}, { projectKey: "pk-1" })).toEqual([{ value: "c:::S:::i", label: "S" }]);
+    expect(await opts({}, { tenantId: "pk-1" })).toEqual([{ value: "c:::S:::i", label: "S" }]);
   });
 
   it("collection onChange returns base fields without a store", () => {
@@ -662,7 +650,6 @@ describe("data action v1", () => {
     expect(result).toMatchObject({
       collectionName: "c",
       schemaName: "S",
-      projectKey: "tenant-1",
       projectShortKey: "slug-1",
     });
     // No schema id present, so getSchemaDetails is not called.
@@ -696,7 +683,7 @@ describe("data action v1", () => {
       { itemId: "cc2", clientSecret: "s2", name: "Inactive", isActive: false },
     ]);
     const opts = field(NodeSchemaActionDataActionV1, "clientCredential_composite").options;
-    expect(await opts({}, { projectKey: "pk-1" })).toEqual([
+    expect(await opts({}, { tenantId: "pk-1" })).toEqual([
       { value: "cc1:::s1", label: "Active" },
     ]);
   });
@@ -734,7 +721,6 @@ describe("data action v1", () => {
     const node = { id: "n", parameters: {} } as never;
     const out = NodeSchemaActionDataActionV1.transform?.(node) as AnyRec;
     const params = out.parameters as AnyRec;
-    expect(params.projectKey).toBe("tenant-1");
     expect(params.projectShortKey).toBe("slug-1");
     expect("apiBaseUrl" in params).toBe(true);
   });

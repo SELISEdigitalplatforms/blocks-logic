@@ -8,7 +8,6 @@ namespace Common.InternalService.Storage
         public TimeSpan ExpiryDuration { get; set; }
         public AccessModifier AccessModifier { get; set; }
         public long? FileVersion { get; set; }
-        public string? ProjectKey { get; set; }
         public string? RequestUrl { get; set; }
     }
 }

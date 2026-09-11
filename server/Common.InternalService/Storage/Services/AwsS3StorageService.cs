@@ -33,7 +33,7 @@ namespace Common.InternalService.Storage
             EnsureBucketExistsAsync().GetAwaiter().GetResult();
         }
 
-        public async Task<Stream?> DownloadFileAsync(string fileName, string? projectKey = null, string? itemId = null, string? versionId = null)
+        public async Task<Stream?> DownloadFileAsync(string fileName, string? tenantId = null, string? itemId = null, string? versionId = null)
         {
             try
             {
@@ -84,7 +84,7 @@ namespace Common.InternalService.Storage
             return await _s3Client.GetPreSignedURLAsync(finalRequest);
         }
 
-        public Task<bool> UploadFileToSftpAsync(string fileName, string projectKey, string itemId, string versionId, IFormFile file)
+        public Task<bool> UploadFileToSftpAsync(string fileName, string tenantId, string itemId, string versionId, IFormFile file)
         {
             throw new NotImplementedException();
         }

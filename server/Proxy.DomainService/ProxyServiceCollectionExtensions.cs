@@ -43,11 +43,6 @@ namespace Proxy.DomainService
             services.AddSingleton<IProxyVariableResolver, ProxyVariableResolver>();
             services.AddOptions<ProxyVariableResolverOptions>();
 
-            // Read-only list of the tenant's Blocks Secrets for the console's {{$VAR.name}} picker.
-            // SeliseBlocks.Secrets.OS has no HTTP surface of its own, so this thin control-plane seam over
-            // the in-process ISecretService is what GET /api/Proxy/Variables calls.
-            services.AddSingleton<IProxyVariableCatalog, ProxyVariableCatalog>();
-
             // SSRF guard: rejects private / loopback / link-local upstream targets at config-write and again
             // (post-DNS) just before the send.
             services.AddSingleton<IProxyUpstreamGuard, ProxyUpstreamGuard>();

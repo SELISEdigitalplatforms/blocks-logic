@@ -2,7 +2,6 @@ namespace Common.InternalService.Monitor
 {
     public class SaveMonitorConfigurationRequest
     {
-        public string? ProjectKey { get; set; }
         public string? RepoId { get; set; }
         public string? RepoName { get; set; }
         public string? ExternalServiceId { get; set; }

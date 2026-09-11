@@ -189,7 +189,6 @@ export type AgentSummary = Pick<
 export interface IGetAgentsPayload {
   limit: number;
   offset: number;
-  project_key: string;
   agent_type?: string;
   name?: string;
   organization_ids?: string[];

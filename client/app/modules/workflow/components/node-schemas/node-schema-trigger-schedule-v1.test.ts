@@ -11,7 +11,6 @@ const derive = (data: Record<string, unknown>) =>
 
 const cronFor = (data: Record<string, unknown>) =>
   p("triggerInterval").onChange(undefined, data, {
-    projectKey: "pk",
     workflowId: "wf-1",
     nodeId: "node-1",
   }).cronExpression;

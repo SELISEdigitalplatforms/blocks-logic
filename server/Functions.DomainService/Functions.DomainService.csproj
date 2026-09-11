@@ -25,7 +25,7 @@
     <!-- IWorkflowAuthService validates a webhook-style bearer token against the tenant's
          public certificate and evaluates roles/permissions; the anonymous Function invoke
          endpoint reuses it rather than re-implementing JWT validation. -->
-    <ProjectReference Include="..\DomainService\DomainService.csproj" />
+    <ProjectReference Include="..\Workflow.DomainService\Workflow.DomainService.csproj" />
   </ItemGroup>
 
 </Project>

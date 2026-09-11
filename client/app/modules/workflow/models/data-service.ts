@@ -6,7 +6,6 @@ export interface IDataServiceConfigurationResponse {
     | null
     | {
         itemId: string;
-        projectKey: string;
         projectShortKey: string;
       };
 }
@@ -18,7 +17,6 @@ export interface IGetSchemaListPayload {
   sortDescending?: boolean;
   sortBy?: "CreatedDate";
   schemaName?: string;
-  projectKey: string;
   schemaType?: string | number;
 }
 
@@ -96,7 +94,6 @@ export interface ISchemaDetails {
   readAccess?: IDataAccessRuleSet;
   writeAccess?: IDataAccessRuleSet;
   deleteAccess?: IDataAccessRuleSet;
-  projectKey?: string;
   isRlsEnabled?: boolean;
   isClsEnabled?: boolean;
   projectShortKey: string;
@@ -166,7 +163,6 @@ export interface IGetSchemaDetailsResponse extends IDataServiceConfigurationResp
     readAccess?: IDataAccessRuleSetDto | null;
     writeAccess?: IDataAccessRuleSetDto | null;
     deleteAccess?: IDataAccessRuleSetDto | null;
-    projectKey?: string;
     isRlsEnabled?: boolean;
     isClsEnabled?: boolean;
     projectShortKey: string;

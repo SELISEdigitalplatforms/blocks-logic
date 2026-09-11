@@ -14,15 +14,13 @@ namespace XUnitTest.Proxy
         private readonly Mock<IProxyVersionService> _versionService = new();
         private readonly Mock<IProxyTestService> _testService = new();
         private readonly Mock<IProxyExecutionService> _executionService = new();
-        private readonly Mock<IProxyVariableCatalog> _variableCatalog = new();
         private readonly ProxyController _controller;
 
         public ProxyControllerTests()
         {
             TestBlocksContext.Set("tenant-abc");
             _controller = new ProxyController(
-                _proxyService.Object, _versionService.Object, _testService.Object, _executionService.Object,
-                _variableCatalog.Object);
+                _proxyService.Object, _versionService.Object, _testService.Object, _executionService.Object);
         }
 
         public void Dispose()

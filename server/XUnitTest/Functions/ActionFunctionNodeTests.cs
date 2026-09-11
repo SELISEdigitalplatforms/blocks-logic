@@ -1,6 +1,6 @@
 using Blocks.Genesis;
-using DomainService.Workflow.Entities;
-using DomainService.Workflow.Nodes;
+using Workflow.DomainService.Entities;
+using Workflow.DomainService.Nodes;
 using FluentAssertions;
 using Functions.DomainService.Dtos.Requests;
 using Functions.DomainService.Dtos.Responses;

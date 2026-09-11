@@ -1,5 +1,5 @@
 using Blocks.Genesis;
-using DomainService.Workflow.Services;
+using Workflow.DomainService.Services;
 using Functions.DomainService.Dtos.Requests;
 using Functions.DomainService.Dtos.Responses;
 using Functions.DomainService.Entities;

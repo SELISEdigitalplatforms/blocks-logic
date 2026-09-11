@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Blocks.Genesis;
-using DomainService.Workflow.Dtos;
-using DomainService.Workflow.Services;
+using Workflow.DomainService.Dtos;
+using Workflow.DomainService.Services;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;

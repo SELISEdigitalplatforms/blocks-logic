@@ -1,10 +1,10 @@
 using Blocks.Extension.DependencyInjection;
 using Blocks.Genesis;
 using DomainService.Shared;
-using DomainService.Workflow;
-using DomainService.Workflow.Events;
-using DomainService.Workflow.Nodes.TriggerDataV1;
-using DomainService.Workflow.Utils;
+using Workflow.DomainService;
+using Workflow.DomainService.Events;
+using Workflow.DomainService.Nodes.TriggerDataV1;
+using Workflow.DomainService.Utils;
 using Mail.DomainService.Dtos;
 using Mail.DomainService.Mails;
 using Mail.DomainService.Shared.Utilities;
@@ -64,7 +64,7 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             services.AddSchedulerWorkerServices();
             services.AddFunctionsServices();
             services.AddFunctionsWorkerServices();
-            services.AddSingleton<DomainService.Workflow.Nodes.INodeExecutor, Functions.DomainService.Nodes.ActionFunctionNode>();
+            services.AddSingleton<Workflow.DomainService.Nodes.INodeExecutor, Functions.DomainService.Nodes.ActionFunctionNode>();
             services.AddStorageDomainServices();
             services.RegisterBlocksStorageServices();
             //services.RegisterSharedServices();

@@ -293,7 +293,7 @@ namespace Common.InternalService.Monitor
 
         private static void UpdateMonitorConfiguration(SaveMonitorConfigurationRequest request, MonitorConfiguration monitorConfiguration)
         {
-            monitorConfiguration.TenantId = monitorConfiguration.TenantId ?? request.ProjectKey;
+            monitorConfiguration.TenantId = monitorConfiguration.TenantId ?? BlocksContext.GetContext()?.TenantId;
             monitorConfiguration.LastUpdatedDate = DateTime.UtcNow;
             monitorConfiguration.LastUpdatedBy = GetCurrentUserId();
 

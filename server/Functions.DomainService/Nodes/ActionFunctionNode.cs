@@ -1,8 +1,8 @@
 using System.Text.Json;
 using Blocks.Genesis;
-using DomainService.Workflow.Entities;
-using DomainService.Workflow.Nodes;
-using DomainService.Workflow.Utils;
+using Workflow.DomainService.Entities;
+using Workflow.DomainService.Nodes;
+using Workflow.DomainService.Utils;
 using Functions.DomainService.Dtos.Responses;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Services;
@@ -18,7 +18,7 @@ namespace Functions.DomainService.Nodes
     /// Api/Worker composition root rather than from
     /// <c>WorkflowExecutionServiceCollectionExtensions.AddWorkflowExecutionEngine()</c>:
     /// <c>Functions.DomainService</c> already depends on <c>DomainService</c> (for
-    /// <see cref="DomainService.Workflow.Services.IWorkflowAuthService"/>), so registering this
+    /// <see cref="Workflow.DomainService.Services.IWorkflowAuthService"/>), so registering this
     /// node from inside <c>DomainService</c> itself would create a circular project reference.
     /// </summary>
     public class ActionFunctionNode : NodeExecutorBase<ActionFunctionParameters>

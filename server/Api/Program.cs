@@ -8,8 +8,8 @@ using Common.InternalService.Shared.Utilities;
 using DomainService.Notification;
 using DomainService.Shared;
 using DomainService.Utilities;
-using DomainService.Workflow;
-using DomainService.Workflow.Utils;
+using Workflow.DomainService;
+using Workflow.DomainService.Utils;
 using Proxy.DomainService;
 using Mail.DomainService.Shared.Utilities;
 using Microsoft.AspNetCore.Http.Features;
@@ -73,9 +73,9 @@ services.AddCloudConfigurationServices();
 services.AddSchedulerServices();
 services.AddFunctionsServices();
 // The function-invoke workflow action step. Registered here (not from inside
-// DomainService.Workflow's own AddWorkflowExecutionEngine()) to avoid a circular project
+// Workflow.DomainService's own AddWorkflowExecutionEngine()) to avoid a circular project
 // reference: Functions.DomainService already depends on DomainService for IWorkflowAuthService.
-services.AddSingleton<DomainService.Workflow.Nodes.INodeExecutor, Functions.DomainService.Nodes.ActionFunctionNode>();
+services.AddSingleton<Workflow.DomainService.Nodes.INodeExecutor, Functions.DomainService.Nodes.ActionFunctionNode>();
 services.AddStorageDomainServices();
 services.AddBlocksSecrets();
 services.RegisterBlocksStorageServices();

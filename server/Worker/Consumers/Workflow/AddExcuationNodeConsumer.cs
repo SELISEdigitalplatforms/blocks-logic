@@ -1,6 +1,6 @@
 using Blocks.Genesis;
-using DomainService.Workflow.Events;
-using DomainService.Workflow.Services;
+using Workflow.DomainService.Events;
+using Workflow.DomainService.Services;
 
 
 namespace Worker.Consumers.Workflow

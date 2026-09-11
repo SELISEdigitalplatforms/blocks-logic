@@ -8,12 +8,11 @@ import {
 class EmailService {
   private readonly LogicHttpClient = serviceInstances.logicService;
   fetchEmailConfigs = async (
-    projectKey: string,
     pageNumber: number,
     pageSize: number,
   ): Promise<IEmailConfig[]> => {
     const res = await this.LogicHttpClient.get<IEmailConfig[] | null>(
-      `${MAIL_CONFIG_ENDPOINTS.GET_CONFIGS}?projectKey=${projectKey}&pageNumber=${pageNumber + 1}&pageSize=${pageSize}`,
+      `${MAIL_CONFIG_ENDPOINTS.GET_CONFIGS}?pageNumber=${pageNumber + 1}&pageSize=${pageSize}`,
       undefined,
       { absoluteUrl: true },
     );
@@ -23,14 +22,13 @@ class EmailService {
   fetchEmailTemplates = (
     pageNumber: number,
     pageSize: number,
-    projectKey: string,
     searchKey: string,
     sortProperty: string = "Name",
     isDescending: boolean = false,
     language: string,
     mailConfigurationId: string,
   ): Promise<{ templates: IEmailTemplate[]; totalCount: number }> => {
-    const url = `${EMAIL_TEMPLATE_ENDPOINTS.GET_TEMPLATES}?pageNumber=${pageNumber}&pageSize=${pageSize}&projectKey=${projectKey}&searchKey=${searchKey}&sortProperty=${sortProperty}&isDescending=${isDescending}&language=${language}&mailConfigurationId=${mailConfigurationId}`;
+    const url = `${EMAIL_TEMPLATE_ENDPOINTS.GET_TEMPLATES}?pageNumber=${pageNumber}&pageSize=${pageSize}&searchKey=${searchKey}&sortProperty=${sortProperty}&isDescending=${isDescending}&language=${language}&mailConfigurationId=${mailConfigurationId}`;
     return this.LogicHttpClient.get(url, undefined, { absoluteUrl: true });
   };
 }

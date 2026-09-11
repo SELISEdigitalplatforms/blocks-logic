@@ -10,16 +10,16 @@ namespace BlocksTemplate.Api.Controllers
     {
         [HttpGet, Authorize]
         public Task<PaginatedResponse> GetMonitorList(
-            [FromQuery] string projectKey,
+            [FromQuery] string tenantId,
             [FromQuery] string? monitorSourcetype,
             [FromQuery] int pageNumber = 0,
             [FromQuery] int pageSize = 10)
-            => observability.GetMonitorListAsync(projectKey, monitorSourcetype, pageNumber, pageSize);
+            => observability.GetMonitorListAsync(tenantId, monitorSourcetype, pageNumber, pageSize);
 
         [HttpGet, Authorize]
         public Task<BaseApiResponse> GetMonitorListByRepoId(
-            [FromQuery] string projectKey, [FromQuery] string repoId)
-            => observability.GetMonitorListByRepoIdAsync(projectKey, repoId);
+            [FromQuery] string tenantId, [FromQuery] string repoId)
+            => observability.GetMonitorListByRepoIdAsync(tenantId, repoId);
 
         [HttpGet, Authorize]
         public Task<BaseApiResponse> GetMonitorById([FromQuery] string monitorId)

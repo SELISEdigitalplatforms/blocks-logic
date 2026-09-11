@@ -17,6 +17,6 @@ namespace Mail.DomainService.Services
         Task<MailToBeSent> GetMailToBeSent(string itemId);
         Task<(List<MailBoxEntity> Mails, long TotalCount)> GetMailBoxMails(GetMailBoxMails request); //deprecated
         Task<(List<MailBoxEntityResponse> Mails, long TotalCount)> GetMailBoxAggregatedMails(GetMailBoxMails request);
-        Task<MailBoxEntity> GetMailBoxMail(string messageId, string projectKey);
+        Task<MailBoxEntity> GetMailBoxMail(string messageId, string tenantId);
     }
 }

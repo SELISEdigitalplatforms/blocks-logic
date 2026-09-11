@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Blocks.Genesis;
-using DomainService.Workflow.Dtos;
-using DomainService.Workflow.Services;
+using Workflow.DomainService.Dtos;
+using Workflow.DomainService.Services;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 
@@ -155,21 +155,15 @@ namespace Utilities.Api.Controllers
 
 
 
-        [HttpPost("{projectKey}/{workflowId}/{webhookId}")]
-        public async Task<IActionResult> Webhook(string projectKey, string workflowId, string webhookId, [FromBody] JsonElement input)
+        [HttpPost("{tenantId}/{workflowId}/{webhookId}")]
+        public async Task<IActionResult> Webhook(string tenantId, string workflowId, string webhookId, [FromBody] JsonElement input)
         {
-            var dto = new WorkflowWebhookRequestDto
-            {
-                ProjectKey = projectKey,
-                Input = input
-            };
-
             try
             {
                 var response = await _workflowExecutionService.TriggerWebhookAsync(
                     workflowId,
                     webhookId,
-                    projectKey,
+                    tenantId,
                     input
                 );
 
@@ -183,21 +177,15 @@ namespace Utilities.Api.Controllers
         }
 
         [ActionName("webhook-test")]
-        [HttpPost("{projectKey}/{workflowId}/{webhookId}")]
-        public async Task<IActionResult> TestWebhook(string projectKey, string workflowId, string webhookId, [FromBody] JsonElement input)
+        [HttpPost("{tenantId}/{workflowId}/{webhookId}")]
+        public async Task<IActionResult> TestWebhook(string tenantId, string workflowId, string webhookId, [FromBody] JsonElement input)
         {
-            var dto = new WorkflowWebhookRequestDto
-            {
-                ProjectKey = projectKey,
-                Input = input
-            };
-
             try
             {
                 var response = await _workflowExecutionService.TriggerTestWebhookAsync(
                     workflowId,
                     webhookId,
-                    projectKey,
+                    tenantId,
                     input
                 );
 
