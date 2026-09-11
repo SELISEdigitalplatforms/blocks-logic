@@ -46,12 +46,6 @@ namespace Functions.DomainService.Utils
             services.AddSingleton<IFunctionRunService, FunctionRunService>();
             services.AddSingleton<IFunctionInvocationService, FunctionInvocationService>();
 
-            // Scoped, not singleton: it constructor-injects the Secrets SDK's own
-            // ISecretService, which AddBlocksSecrets() registers scoped. A singleton here
-            // would capture a scoped dependency for the app's whole lifetime — the classic
-            // captive-dependency bug, and one the DI container's own validation catches at
-            // startup rather than at first use.
-            services.AddScoped<IFunctionSecretCatalogService, FunctionSecretCatalogService>();
             services.AddSingleton<IOutputActionProcessor, OutputActionProcessor>();
             services.AddSingleton<ISecretResolver>(sp => SelectSecretResolver(sp));
             services.AddHttpClient(nameof(BlocksOsHttpSecretResolver));

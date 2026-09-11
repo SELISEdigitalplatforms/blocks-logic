@@ -11,7 +11,6 @@ import {
   IGetFunctionsResponse,
   IRollbackFunctionPayload,
   ISaveFunctionPayload,
-  ISecretCatalogEntry,
   IUpdateFunctionPayload,
 } from "../types/function.types";
 import {
@@ -142,10 +141,6 @@ export class FunctionService {
 
   cancelRun = (runId: string): Promise<IBaseResponse> => {
     return this.logicHttpClient.post(FUNCTIONS_ENDPOINTS.CANCEL_RUN, { runId });
-  };
-
-  getSecretCatalog = (): Promise<ISecretCatalogEntry[]> => {
-    return this.logicHttpClient.get(FUNCTIONS_ENDPOINTS.GET_SECRET_CATALOG);
   };
 
   getAuditLog = (

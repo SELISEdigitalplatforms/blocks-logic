@@ -23,7 +23,6 @@ namespace BlocksTemplate.Api.Controllers
         private readonly IFunctionInvocationService _invocationService;
         private readonly IFunctionRunService _runService;
         private readonly IFunctionBuildService _buildService;
-        private readonly IFunctionSecretCatalogService _secretCatalogService;
         private readonly IFunctionAuditService _auditService;
 
         public FunctionsController(
@@ -32,7 +31,6 @@ namespace BlocksTemplate.Api.Controllers
             IFunctionInvocationService invocationService,
             IFunctionRunService runService,
             IFunctionBuildService buildService,
-            IFunctionSecretCatalogService secretCatalogService,
             IFunctionAuditService auditService)
         {
             _functionService = functionService;
@@ -40,7 +38,6 @@ namespace BlocksTemplate.Api.Controllers
             _invocationService = invocationService;
             _runService = runService;
             _buildService = buildService;
-            _secretCatalogService = secretCatalogService;
             _auditService = auditService;
         }
 
@@ -161,12 +158,6 @@ namespace BlocksTemplate.Api.Controllers
             await _runService.CancelAsync(GetTenantId(), request.RunId, GetUserId(), GetEmail());
             return new BaseResponse { IsSuccess = true };
         }
-
-        // ----------------------------------------------------------------- secrets ----
-
-        [HttpGet]
-        [ProtectedEndPoint("blocks-logic::function::read")]
-        public async Task<List<SecretCatalogEntry>> GetSecretCatalog() => (await _secretCatalogService.ListAsync()).ToList();
 
         // ------------------------------------------------------------------ audit ----
 

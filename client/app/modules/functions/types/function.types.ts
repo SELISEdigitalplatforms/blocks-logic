@@ -102,11 +102,6 @@ export interface IFunctionLimitsOptions {
   showRateLimits: boolean;
 }
 
-export interface ISecretCatalogEntry {
-  id: string;
-  name: string;
-}
-
 export interface IFunctionAuditEvent {
   action: string;
   actorId?: string | null;

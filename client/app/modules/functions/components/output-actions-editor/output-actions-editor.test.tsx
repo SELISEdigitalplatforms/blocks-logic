@@ -5,11 +5,11 @@ import { renderWithProviders } from "@/test-utils/test-providers/render";
 import { OutputActionsEditor } from "./output-actions-editor";
 import { IOutputAction } from "../../types/function.types";
 
-vi.mock("../../services/function.service", () => ({
-  functionService: {
-    getSecretCatalog: vi.fn().mockResolvedValue([
-      { id: "s1", name: "STRIPE_KEY" },
-      { id: "s2", name: "SLACK_WEBHOOK" },
+vi.mock("@/services/secret.service", () => ({
+  secretService: {
+    getAll: vi.fn().mockResolvedValue([
+      { id: "s1", name: "STRIPE_KEY", tags: [] },
+      { id: "s2", name: "SLACK_WEBHOOK", tags: [] },
     ]),
   },
 }));

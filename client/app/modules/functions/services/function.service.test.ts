@@ -116,11 +116,4 @@ describe("functionService", () => {
       { runId: "run_1" },
     );
   });
-
-  it("gets the secret catalog with no arguments", async () => {
-    await functionService.getSecretCatalog();
-    expect(http.logicService.get).toHaveBeenCalledWith(
-      expect.stringContaining("/Functions/GetSecretCatalog"),
-    );
-  });
 });
