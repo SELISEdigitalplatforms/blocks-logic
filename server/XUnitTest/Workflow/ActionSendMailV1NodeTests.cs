@@ -1,7 +1,7 @@
 using Blocks.Genesis;
-using DomainService.Workflow.Entities;
-using DomainService.Workflow.Nodes;
-using DomainService.Workflow.Nodes.ActionSendMailV1;
+using Workflow.DomainService.Entities;
+using Workflow.DomainService.Nodes;
+using Workflow.DomainService.Nodes.ActionSendMailV1;
 using FluentAssertions;
 using Mail.DomainService;
 using Mail.DomainService.Mails;

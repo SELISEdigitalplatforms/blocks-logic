@@ -1,0 +1,1201 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using Blocks.Genesis;
+using Workflow.DomainService.Entities;
+using Workflow.DomainService.Repositories;
+using Workflow.DomainService.Dtos;
+using Workflow.DomainService.Events;
+using Workflow.DomainService.Enums;
+using Workflow.DomainService.Utils;
+using Microsoft.Extensions.Logging;
+using Workflow.DomainService.Nodes.TriggerDataV1;
+using Workflow.DomainService.Nodes.TriggerScheduleV1;
+using MongoDB.Bson;
+using System.Diagnostics.CodeAnalysis;
+using DotLiquid.Util;
+using Microsoft.AspNetCore.Http;
+using Mail.DomainService.Mails;
+using Mail.DomainService.Shared.Enums;
+
+
+
+namespace Workflow.DomainService.Services
+{
+    [ExcludeFromCodeCoverage]
+    public class WorkflowExecutionService : IWorkflowExecutionService
+    {
+        private readonly IWorkflowRepository _workflowRepository;
+        private readonly IWorkflowExecutionRepository _executionRepository;
+        private readonly IWorkflowVersionRepository _workflowVersionRepository;
+
+        private readonly IMessageClient _messageClient;
+
+        private readonly ILogger<WorkflowExecutionService> _logger;
+        private readonly IWorkflowEngineService _workflowEngineService;
+        private readonly IWorkflowNotificationService _workflowNotificationService;
+        private readonly IWorkflowAuthService _workflowAuthService;
+        private readonly IHttpContextAccessor _httpContextAccessor;
+        private readonly IDelegationGrantFactory _delegationGrantFactory;
+
+        public WorkflowExecutionService(
+            IWorkflowRepository workflowRepository,
+            IWorkflowExecutionRepository executionRepository,
+            IMessageClient messageClient,
+            ILogger<WorkflowExecutionService> logger,
+            IWorkflowEngineService workflowEngineService,
+            IWorkflowVersionRepository workflowVersionRepository,
+            IWorkflowNotificationService workflowNotificationService,
+            IWorkflowAuthService workflowAuthService,
+            IHttpContextAccessor httpContextAccessor,
+            IDelegationGrantFactory delegationGrantFactory
+            )
+        {
+            _workflowRepository = workflowRepository;
+            _executionRepository = executionRepository;
+            _messageClient = messageClient;
+            _workflowEngineService = workflowEngineService;
+            _logger = logger;
+            _workflowVersionRepository = workflowVersionRepository;
+            _workflowNotificationService = workflowNotificationService;
+            _workflowAuthService = workflowAuthService;
+            _httpContextAccessor = httpContextAccessor;
+            _delegationGrantFactory = delegationGrantFactory;
+        }
+
+        private async Task NotifyWorkflowStartedAsync(WorkflowExecutionEntity execution)
+        {
+            await _workflowNotificationService.NotifyExecutionEventAsync(
+                execution,
+                nodeExecution: null,
+                eventName: "WorkflowStarted",
+                code: ExecutionEventCodes.WorkflowExecutionCode(WorkflowExecutionStatus.Running),
+                status: nameof(WorkflowExecutionStatus.Running),
+                data: execution.Id!,
+                message: $"Workflow '{execution.WorkflowSnapshot.Name}' started.");
+        }
+
+
+        public async Task<WorkflowExecutionEntity> CreateExecutionAsync(WorkflowEntity workflowSnapshot, TriggerMetadata triggerMetadata, WorkflowExecutionMode executionMode = WorkflowExecutionMode.Test)
+        {
+            var execution = new WorkflowExecutionEntity
+            {
+                Id = Guid.NewGuid().ToString().Replace("-", ""),
+                WorkflowId = workflowSnapshot.ItemId,
+                WorkflowName = workflowSnapshot.Name,
+                TenantId = workflowSnapshot.TenantId,
+                WorkflowSnapshot = workflowSnapshot,
+                Status = WorkflowExecutionStatus.Init,
+                ExecutionMode = executionMode,
+                TriggerMetadata = triggerMetadata,
+                NodeExecutions = new List<NodeExecutionEntity>(),
+                StartedAt = DateTime.UtcNow,
+            };
+            return await _executionRepository.CreateAsync(execution);
+        }
+
+        public async Task<WorkflowWebhookResponseDto> TriggerWebhookAsync(string workflowId, string triggerId, string tenantId, JsonElement input)
+        {
+            var workflow = await _workflowRepository.GetWorkflowAsync(tenantId, workflowId);
+            if (workflow == null)
+            {
+                _logger.LogError("Workflow not found: {WorkflowId}, {TenantId}", workflowId, tenantId);
+                return new WorkflowWebhookResponseDto
+                {
+                    ExecutionId = null,
+                    Status = "Workflow not found"
+                };
+            }
+            if (!workflow.IsPublished)
+            {
+                _logger.LogError("Workflow is not published: {WorkflowId}, {TenantId}", workflowId, tenantId);
+                return new WorkflowWebhookResponseDto
+                {
+                    ExecutionId = null,
+                    Status = "Workflow is not published"
+                };
+            }
+            if (String.IsNullOrWhiteSpace(workflow.PublishedVersionId))
+            {
+                return new WorkflowWebhookResponseDto
+                {
+                    ExecutionId = null,
+                    Status = "Workflow is not published"
+                };
+            }
+            var publishedVersion = await _workflowVersionRepository.GetWorkflowVersionAsync(tenantId, workflow.PublishedVersionId);
+
+            if (publishedVersion == null)
+            {
+                return new WorkflowWebhookResponseDto
+                {
+                    ExecutionId = null,
+                    Status = "Something went wrong"
+                };
+            }
+
+            var workfowSnapshot = publishedVersion.Snapshot;
+            if (workfowSnapshot == null)
+            {
+                return new WorkflowWebhookResponseDto
+                {
+                    ExecutionId = null,
+                    Status = "Something went wrong"
+                };
+            }
+            return await HandleWebhookExecutionAsync(workfowSnapshot, WorkflowExecutionMode.Production, triggerId, input);
+        }
+
+        public async Task<WorkflowWebhookResponseDto> TriggerTestWebhookAsync(string workflowId, string triggerId, string tenantId, JsonElement input)
+        {
+            var workflow = await _workflowRepository.GetWorkflowAsync(tenantId, workflowId);
+            if (workflow == null)
+            {
+                _logger.LogError("Workflow not found: {WorkflowId}, {TenantId}", workflowId, tenantId);
+                return new WorkflowWebhookResponseDto
+                {
+                    ExecutionId = null,
+                    Status = "Workflow not found"
+                };
+            }
+            if (workflow.TestMeta == null || !workflow.TestMeta.IsListening || workflow.TestMeta.ListenerTriggerNodes == null || !workflow.TestMeta.ListenerTriggerNodes.Any(n => n.Id == triggerId))
+            {
+                _logger.LogError("Workflow is not active for testing: {WorkflowId}, {TenantId}", workflowId, tenantId);
+                return new WorkflowWebhookResponseDto
+                {
+                    ExecutionId = null,
+                    Status = $"The requested webhook {triggerId} is not listening for test executions. Please activate the test mode in the workflow",
+                };
+            }
+            return await HandleWebhookExecutionAsync(workflow, WorkflowExecutionMode.Test, triggerId, input);
+        }
+        private async Task<WorkflowWebhookResponseDto?> HandleWebhookExecutionAsync(WorkflowEntity workflow, WorkflowExecutionMode executionMode, string triggerId, JsonElement input)
+        {
+            WorkflowExecutionEntity execution;
+            try
+            {
+
+                var triggerNode = workflow.Nodes.FirstOrDefault(n => n.Id == triggerId);
+                if (triggerNode == null)
+                {
+                    _logger.LogError("Trigger node {TriggerId} not found in workflow {WorkflowId}", triggerId, workflow.ItemId);
+                    return new WorkflowWebhookResponseDto
+                    {
+                        ExecutionId = null,
+                        Status = "Workflow not found",
+                    };
+                }
+                var authType = triggerNode.Parameters.GetValue("authType")?.ToString();
+
+                if (string.Equals(authType, "blocksAuthentication", StringComparison.OrdinalIgnoreCase))
+                {
+                    var isAuthenticatedUser = await _workflowAuthService.IsAuthenticated(_httpContextAccessor.HttpContext.Request, workflow.TenantId);
+                    if (!isAuthenticatedUser) throw new UnauthorizedAccessException();
+                }
+                else if (string.Equals(authType, "blocksAuthorization", StringComparison.OrdinalIgnoreCase))
+                {
+                    var authConfig = ParseAuthorizationConfig(triggerNode.Parameters);
+                    if (authConfig is null) throw new UnauthorizedAccessException();
+                    var (isAuthorizedUser, context) = await _workflowAuthService.IsAuthorized(
+                        _httpContextAccessor.HttpContext.Request, workflow.TenantId, authConfig);
+                    if (!isAuthorizedUser) throw new UnauthorizedAccessException();
+                    BlocksContext.SetContext(context);
+                }
+
+                var normalizedInput = new BsonArray();
+
+                if (input.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var element in input.EnumerateArray())
+                    {
+                        normalizedInput.Add(BsonDocument.Parse(element.GetRawText()));
+                    }
+                }
+                else
+                {
+                    normalizedInput.Add(BsonDocument.Parse(input.GetRawText()));
+                }
+
+                var triggerMetadata = new TriggerMetadata
+                {
+                    TriggerNodeId = triggerId,
+                    TriggerType = triggerNode.Type,
+                    TriggerData = normalizedInput,
+                };
+
+                execution = await CreateExecutionAsync(workflow, triggerMetadata, executionMode);
+                execution.Context["Input"] = normalizedInput;
+                execution.Status = WorkflowExecutionStatus.Queued;
+                execution.ActiveNodeIds.Add(triggerId);
+
+                await _executionRepository.UpdateAsync(execution);
+                await NotifyWorkflowStartedAsync(execution);
+
+                var payload = new AddExcuationNodeEvent
+                {
+                    WorkflowId = workflow.ItemId,
+                    WorkflowExecutionId = execution.Id,
+                    NodeId = triggerId,
+                };
+
+                var responseMode = triggerNode.Parameters.GetValue("httpResponseMode");
+
+                if (responseMode != null && responseMode.ToString().ToLower() == "last")
+                {
+                    await AttachDelegationGrantAsync();
+
+                    var response = await _workflowEngineService.RunNodeInProcessAsync(payload);
+                    var responseModeData = triggerNode.Parameters.GetValue("httpResponseData");
+                    if (responseModeData == null)
+                    {
+                        return new WorkflowWebhookResponseDto
+                        {
+                            ExecutionId = execution.Id,
+                            Status = "Completed",
+                        };
+                    }
+                    if (responseModeData.ToString().ToLower() == "none")
+                    {
+
+                        return null;
+                    }
+                    var lastExecutationNode = response.NodeExecutions.MaxBy(ne => ne.RunIndex);
+                    var lastNodeOutput = await _executionRepository.GetAllItemsByNodeExecutionIdAsync(lastExecutationNode.Id, workflow.TenantId);
+                    var data = JsonDocument.Parse(new BsonArray(lastNodeOutput.Select(item => item.Data.Output)).ToJson()).RootElement;
+
+                    if (responseModeData.ToString().ToLower() == "all")
+                    {
+                        return new WorkflowWebhookResponseDto
+                        {
+                            ExecutionId = execution.Id,
+                            Status = "Completed",
+                            Data = data
+                        };
+                    }
+                    return new WorkflowWebhookResponseDto
+                    {
+                        ExecutionId = execution.Id,
+                        Status = "Completed",
+                        Data = data[0]
+                    };
+                }
+                await _messageClient.SendToConsumerAsync(new ConsumerMessage<AddExcuationNodeEvent>
+                {
+                    ConsumerName = LogicConstants.NodeExecutionQueue,
+                    Payload = payload
+                });
+                return new WorkflowWebhookResponseDto
+                {
+                    ExecutionId = execution.Id,
+                    Status = "Queued"
+                };
+            }
+            catch (UnauthorizedAccessException)
+            {
+                throw; // preserve 401
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("Failed to create execution for webhook", ex);
+            }
+        }
+
+
+        public async Task EmailTriggerStartAsync(EmailTriggerEvent emailEvent)
+        {
+            _logger.LogInformation("Starting EmailTriggerStartAsync for MailServerConfigurationId: {MailServerConfigurationId} and status: {Status}", emailEvent.Mail.MailServerConfigurationId, emailEvent.Mail.Status);
+            var tenantId = BlocksContext.GetContext()?.TenantId;
+            if (string.IsNullOrEmpty(tenantId))
+            {
+                _logger.LogError("TenantId (TenantId) is null or empty in BlocksContext");
+                return;
+            }
+            if (string.IsNullOrEmpty(emailEvent.Mail.MailServerConfigurationId))
+            {
+                _logger.LogError("MailServerConfigurationId is null in EmailTriggerEvent");
+                return;
+            }
+
+            if (emailEvent.Type != EmailTriggerType.Inbound)
+            {
+                _logger.LogInformation("EmailTriggerType is {EmailTriggerType}, skipping processing.", emailEvent.Type);
+                return;
+            }
+
+            if (emailEvent.Mail.Status != MailStatus.Received)
+            {
+                _logger.LogInformation("Email status is {MailStatus}, skipping processing.", emailEvent.Mail.Status);
+                return;
+            }
+
+            var draftWorkflows = await _workflowRepository.GetWorkflowsByMailServerConfigurationIdAsync(tenantId, emailEvent.Mail.MailServerConfigurationId);
+            _logger.LogInformation("Found {WorkflowCount} workflows for MailServerConfigurationId: {MailServerConfigurationId}", draftWorkflows.Count, emailEvent.Mail.MailServerConfigurationId);
+
+            var pendingProduction = new List<WorkflowEntity>();
+
+            foreach (var workflow in draftWorkflows)
+            {
+                var triggerNode = FindEmailTriggerNode(workflow.Nodes, emailEvent.Mail.MailServerConfigurationId);
+                if (triggerNode == null)
+                {
+                    _logger.LogWarning("No Email trigger node found for WorkflowId: {WorkflowId} with MailServerConfigurationId: {MailServerConfigurationId}", workflow.ItemId, emailEvent.Mail.MailServerConfigurationId);
+                    continue;
+                }
+
+                if (IsTestSubjectMatch(triggerNode, emailEvent.Mail.Subject))
+                {
+                    await QueueEmailTriggerExecutionAsync(workflow, triggerNode, WorkflowExecutionMode.Test, emailEvent, tenantId);
+                }
+                else if (workflow.IsPublished && !string.IsNullOrEmpty(workflow.PublishedVersionId))
+                {
+                    pendingProduction.Add(workflow);
+                }
+                else
+                {
+                    _logger.LogInformation("WorkflowId {WorkflowId} matched but is not published; skipping production dispatch.", workflow.ItemId);
+                }
+            }
+
+            if (pendingProduction.Count == 0)
+            {
+                return;
+            }
+
+            var workflowIds = pendingProduction.Select(w => w.ItemId).ToArray();
+            var versions = await _workflowVersionRepository.GetWorkflowVersionsAsync(tenantId, workflowIds);
+            foreach (var workflow in pendingProduction)
+            {
+                var snapshot = versions.FirstOrDefault(v => v.ItemId == workflow.PublishedVersionId)?.Snapshot;
+                if (snapshot == null)
+                {
+                    _logger.LogWarning("Published version {VersionId} not found for WorkflowId: {WorkflowId}", workflow.PublishedVersionId, workflow.ItemId);
+                    continue;
+                }
+
+                var triggerNode = FindEmailTriggerNode(snapshot.Nodes, emailEvent.Mail.MailServerConfigurationId);
+                if (triggerNode == null)
+                {
+                    _logger.LogWarning("No Email trigger node found in published snapshot for WorkflowId: {WorkflowId}", workflow.ItemId);
+                    continue;
+                }
+
+                await QueueEmailTriggerExecutionAsync(snapshot, triggerNode, WorkflowExecutionMode.Production, emailEvent, tenantId);
+            }
+        }
+
+        private static NodeEntity? FindEmailTriggerNode(IEnumerable<NodeEntity> nodes, string mailServerConfigurationId)
+        {
+            return nodes.FirstOrDefault(n =>
+                n.Type == "email" &&
+                n.Category == "trigger" &&
+                n.Parameters != null &&
+                n.Parameters.Contains("mailServerConfigurationId") &&
+                n.Parameters["mailServerConfigurationId"].ToString() == mailServerConfigurationId);
+        }
+
+        private static bool IsTestSubjectMatch(NodeEntity triggerNode, string? mailSubject)
+        {
+            if (triggerNode.Parameters == null || !triggerNode.Parameters.Contains("testSubject"))
+            {
+                return false;
+            }
+
+            var testSubject = triggerNode.Parameters["testSubject"].ToString();
+            return !string.IsNullOrWhiteSpace(testSubject) &&
+                   string.Equals(testSubject.Trim(), mailSubject?.Trim(), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private async Task QueueEmailTriggerExecutionAsync(
+            WorkflowEntity workflow,
+            NodeEntity triggerNode,
+            WorkflowExecutionMode executionMode,
+            EmailTriggerEvent emailEvent,
+            string tenantId)
+        {
+            try
+            {
+                _logger.LogInformation("Creating {ExecutionMode} execution for WorkflowId: {WorkflowId}", executionMode, workflow.ItemId);
+                var emailJson = JsonSerializer.Serialize(emailEvent.Mail);
+                var emailBsonDoc = BsonDocument.Parse(emailJson);
+                var execution = await CreateExecutionAsync(workflow, new TriggerMetadata
+                {
+                    TriggerNodeId = triggerNode.Id,
+                    TriggerType = triggerNode.Type,
+                    TriggerData = new BsonArray { emailBsonDoc }
+                }, executionMode);
+
+                execution.Context["Input"] = new BsonArray { emailBsonDoc };
+                execution.Status = WorkflowExecutionStatus.Queued;
+                execution.ActiveNodeIds.Add(triggerNode.Id);
+
+                await _executionRepository.UpdateAsync(execution);
+                await NotifyWorkflowStartedAsync(execution);
+                await _messageClient.SendToConsumerAsync(new ConsumerMessage<AddExcuationNodeEvent>
+                {
+                    ConsumerName = LogicConstants.NodeExecutionQueue,
+                    Payload = new AddExcuationNodeEvent
+                    {
+                        WorkflowId = workflow.ItemId,
+                        WorkflowExecutionId = execution.Id!,
+                        NodeId = triggerNode.Id,
+                    }
+                });
+                _logger.LogInformation("Queued execution {ExecutionId} for WorkflowId: {WorkflowId}", execution.Id, workflow.ItemId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to create execution for WorkflowId: {WorkflowId}", workflow.ItemId);
+            }
+        }
+
+        public async Task<WorkflowExecutionsGetResponseDto> GetExecutionsByWorkflowIdAsync(string tenantId, WorkflowExecutionsGetRequestDto dto)
+        {
+            var executions = await _executionRepository.GetByWorkflowIdAsync(dto.WorkflowId, tenantId);
+
+            var executionItems = executions.Select(e => new WorkflowExecutionItemDto
+            {
+                Id = e.Id!,
+                WorkflowId = e.WorkflowId,
+                WorkflowName = e.WorkflowName,
+                Status = e.Status,
+                StartedAt = e.StartedAt,
+                FinishedAt = e.FinishedAt,
+                ErrorMessage = e.ErrorMessage,
+                AttemptNumber = e.AttemptNumber,
+                ExecutionMode = e.ExecutionMode,
+                // TriggerMetadata = e.TriggerMetadata
+            }).ToList();
+
+            return new WorkflowExecutionsGetResponseDto
+            {
+                TotalCount = executionItems.Count,
+                Data = executionItems,
+                Errors = null
+            };
+        }
+
+        public async Task<WorkflowExecutionGetResponseDto> GetExecutionByIdAsync(string tenantId, WorkflowExecutionGetRequestDto dto)
+        {
+            var execution = await _executionRepository.GetByIdAsync(dto.ExecutionId, tenantId)
+                ?? throw new InvalidOperationException($"Execution {dto.ExecutionId} not found");
+
+            // Get all workflow items - frontend will organize them into input/output structure
+            var allItems = await _executionRepository.GetAllItemsByExecutionIdAsync(dto.ExecutionId, tenantId);
+
+            var nodes = execution.WorkflowSnapshot.Nodes.Select(item => new NodeDto
+            {
+                Id = item.Id,
+                Name = item.Name,
+                Type = item.Type,
+                Version = item.Version,
+                Category = item.Category,
+                Position = item.Position,
+                Handle = item.Handle,
+                Parameters = BsonJsonConverter.ToJsonElement(item.Parameters),
+                Settings = BsonJsonConverter.ToJsonElement(item.Settings),
+                PinData = BsonJsonConverter.ToJsonElementOrNull(item.PinData)
+            }).ToList();
+
+            var workflow = new WorkflowResponseDto
+            {
+                ItemId = execution.WorkflowSnapshot.ItemId,
+                Name = execution.WorkflowSnapshot.Name,
+                Nodes = nodes,
+                Edges = execution.WorkflowSnapshot.Edges,
+                IsPublished = execution.WorkflowSnapshot.IsPublished,
+                Settings = execution.WorkflowSnapshot.Settings,
+                TenantId = execution.WorkflowSnapshot.TenantId
+            };
+
+
+
+            return new WorkflowExecutionGetResponseDto
+            {
+                IsSuccess = true,
+                Data = new WorkflowExecutionDto
+                {
+                    Id = execution.Id,
+                    WorkflowId = execution.WorkflowId,
+                    WorkflowName = execution.WorkflowName,
+                    Status = execution.Status,
+                    ExecutionMode = execution.ExecutionMode,
+                    StartedAt = execution.StartedAt,
+                    FinishedAt = execution.FinishedAt,
+                    ErrorMessage = execution.ErrorMessage,
+                    AttemptNumber = execution.AttemptNumber,
+                    Context = BsonJsonConverter.ToJsonElement(execution.Context),
+                    ActiveNodeIds = execution.ActiveNodeIds,
+                    // TriggerMetadata = execution.TriggerMetadata,
+                    NodeExecutions = execution.NodeExecutions.Select(ne => new NodeExecutionResponseDto
+                    {
+                        Id = ne.Id,
+                        NodeId = ne.NodeId,
+                        NodeName = ne.NodeName,
+                        NodeType = ne.NodeType,
+                        NodeVersion = ne.NodeVersion,
+                        RunIndex = ne.RunIndex,
+                        Status = ne.Status,
+                        InputItemCount = ne.InputItemCount,
+                        OutputItemCount = ne.OutputItemCount,
+                        OutputCountsByBranch = ne.OutputCountsByBranch,
+                        StartedAt = ne.StartedAt,
+                        EndedAt = ne.EndedAt,
+                        Error = ne.Error,
+                        AttemptNumber = ne.AttemptNumber,
+                        Parameters = JsonDocument.Parse(workflow.Nodes.FirstOrDefault(n => n.Id == ne.NodeId)?.Parameters.ToJson() ?? "{}"),
+                        Input = new JsonArray(
+                            allItems
+                                .Where(p => allItems
+                                    .Where(i => i.NodeExecutionId == ne.Id)
+                                    .SelectMany(i => i.ParentItemIds ?? new List<string>())
+                                    .Contains(p.Id))
+                                .Select(p => JsonNode.Parse(p.Data.Output?.ToJson() ?? "null"))
+                                .ToArray()),
+                        Output = new JsonArray(
+                            allItems
+                                .Where(i => i.NodeExecutionId == ne.Id)
+                                .Select(i => JsonNode.Parse(i.Data.Output?.ToJson() ?? "null"))
+                                .ToArray()),
+                    }).ToList(),
+                    WorkflowSnapshot = workflow,
+                    Items = allItems.Select(i => new WorkflowItemExecutionDto
+                    {
+                        ItemId = i.Id!,
+                        NodeId = i.NodeId,
+                        NodeExecutionId = i.NodeExecutionId,
+                        Branch = i.Branch,
+                        Data = JsonDocument.Parse(i.Data.ToJson()),
+                        ParentItemIds = i.ParentItemIds,
+                        ItemIndex = i.ItemIndex,
+                        CreatedAt = i.CreatedAt
+                    }).ToList()
+                }
+            };
+        }
+
+        public async Task<WorkflowExecutionGetResponseDto> LastSuccessfullExecutionAsync(string tenantId, LastSuccessfullExecutionRequestDto dto)
+        {
+            var execution = await _executionRepository.GetLastCompletedExecution(tenantId, dto.WorkflowId);
+            if (execution == null)
+            {
+                return new WorkflowExecutionGetResponseDto
+                {
+                    IsSuccess = false,
+                    Data = null,
+                    Errors = new Dictionary<string, string> { { "Message", "No Execution" } }
+                };
+            }
+            var allItems = await _executionRepository.GetAllItemsByExecutionIdAsync(execution.Id, tenantId);
+
+            var nodes = execution.WorkflowSnapshot.Nodes.Select(item => new NodeDto
+            {
+                Id = item.Id,
+                Name = item.Name,
+                Type = item.Type,
+                Version = item.Version,
+                Category = item.Category,
+                Position = item.Position,
+                Handle = item.Handle,
+                Parameters = BsonJsonConverter.ToJsonElement(item.Parameters),
+                Settings = BsonJsonConverter.ToJsonElement(item.Settings),
+                PinData = BsonJsonConverter.ToJsonElementOrNull(item.PinData)
+            }).ToList();
+
+            var workflow = new WorkflowResponseDto
+            {
+                ItemId = execution.WorkflowSnapshot.ItemId,
+                Name = execution.WorkflowSnapshot.Name,
+                Nodes = nodes,
+                Edges = execution.WorkflowSnapshot.Edges,
+                IsPublished = execution.WorkflowSnapshot.IsPublished,
+                Settings = execution.WorkflowSnapshot.Settings,
+                TenantId = execution.WorkflowSnapshot.TenantId
+            };
+
+
+
+            return new WorkflowExecutionGetResponseDto
+            {
+                IsSuccess = true,
+                Data = new WorkflowExecutionDto
+                {
+                    Id = execution.Id,
+                    WorkflowId = execution.WorkflowId,
+                    WorkflowName = execution.WorkflowName,
+                    Status = execution.Status,
+                    ExecutionMode = execution.ExecutionMode,
+                    StartedAt = execution.StartedAt,
+                    FinishedAt = execution.FinishedAt,
+                    ErrorMessage = execution.ErrorMessage,
+                    // TriggerMetadata = execution.TriggerMetadata,
+                    AttemptNumber = execution.AttemptNumber,
+                    Context = BsonJsonConverter.ToJsonElement(execution.Context),
+                    ActiveNodeIds = execution.ActiveNodeIds,
+                    NodeExecutions = execution.NodeExecutions.Select(ne => new NodeExecutionResponseDto
+                    {
+                        Id = ne.Id,
+                        NodeId = ne.NodeId,
+                        NodeName = ne.NodeName,
+                        NodeType = ne.NodeType,
+                        NodeVersion = ne.NodeVersion,
+                        RunIndex = ne.RunIndex,
+                        Status = ne.Status,
+                        InputItemCount = ne.InputItemCount,
+                        OutputItemCount = ne.OutputItemCount,
+                        OutputCountsByBranch = ne.OutputCountsByBranch,
+                        StartedAt = ne.StartedAt,
+                        EndedAt = ne.EndedAt,
+                        Error = ne.Error,
+                        AttemptNumber = ne.AttemptNumber,
+                        Parameters = JsonDocument.Parse(workflow.Nodes.FirstOrDefault(n => n.Id == ne.NodeId)?.Parameters.ToJson() ?? "{}"),
+                        Input = new JsonArray(
+                            allItems
+                                .Where(p => allItems
+                                    .Where(i => i.NodeExecutionId == ne.Id)
+                                    .SelectMany(i => i.ParentItemIds ?? new List<string>())
+                                    .Contains(p.Id))
+                                .Select(p => JsonNode.Parse(p.Data.Output?.ToJson() ?? "null"))
+                                .ToArray()),
+                        Output = new JsonArray(
+                            allItems
+                                .Where(i => i.NodeExecutionId == ne.Id)
+                                .Select(i => JsonNode.Parse(i.Data.Output?.ToJson() ?? "null"))
+                                .ToArray()),
+                    }).ToList(),
+                    WorkflowSnapshot = workflow,
+                    Items = allItems.Select(i => new WorkflowItemExecutionDto
+                    {
+                        ItemId = i.Id!,
+                        NodeId = i.NodeId,
+                        NodeExecutionId = i.NodeExecutionId,
+                        Branch = i.Branch,
+                        Data = JsonDocument.Parse(i.Data.ToJson()),
+                        ParentItemIds = i.ParentItemIds,
+                        ItemIndex = i.ItemIndex,
+                        CreatedAt = i.CreatedAt
+                    }).ToList()
+                }
+            };
+        }
+        public async Task DataTriggerStartAsync(DataChangeEvent dataEvent)
+        {
+            _logger.LogInformation("Starting DataTriggerStartAsync for Collection: {CollectionName}, Operation: {Operation}",
+                dataEvent.CollectionName, dataEvent.Operation);
+
+            var tenantId = BlocksContext.GetContext()?.TenantId;
+            if (string.IsNullOrEmpty(tenantId))
+            {
+                _logger.LogError("TenantId (TenantId) is null or empty in BlocksContext");
+                return;
+            }
+
+            var operationStr = dataEvent.Operation.ToString();
+            var triggerData = BuildTriggerData(dataEvent, operationStr);
+            var isMockedData = triggerData.All(data => data.AsBsonDocument.Contains("Tags") && data.AsBsonDocument
+              ["Tags"].AsBsonArray.Contains("mock-data"));
+
+            List<WorkflowEntity> workflows = new List<WorkflowEntity>();
+            // If the data is mocked, we will use the workflow as is, otherwise we will only published workflows that are published.
+            if (isMockedData)
+            {
+                workflows = await _workflowRepository.GetWorkflowsByDataCollectionAsync(tenantId, dataEvent.CollectionName, operationStr);
+            }
+            else
+            {
+                var publishedWorkflows = await _workflowRepository.GetPublishWorkflowsByDataCollectionAsync(tenantId, dataEvent.CollectionName, operationStr);
+                var publishedWorkflowsId = publishedWorkflows.Where(item => item.IsPublished).Select(w => w.ItemId).ToList();
+
+                var versions = await _workflowVersionRepository.GetWorkflowVersionsAsync(tenantId, publishedWorkflowsId.ToArray());
+                var publishedVersionIds = publishedWorkflows.Select(item => item.PublishedVersionId).ToList();
+                workflows = versions.Where(v => publishedVersionIds.Contains(v.ItemId)).Select(item => item.Snapshot).ToList();
+            }
+
+
+
+            _logger.LogInformation("Found {Count} workflows for Collection: {CollectionName}, Operation: {Operation}",
+                workflows.Count, dataEvent.CollectionName, operationStr);
+
+
+
+            foreach (var workflow in workflows)
+            {
+                var executionMode = isMockedData ? WorkflowExecutionMode.Test : WorkflowExecutionMode.Production;
+                await QueueDataTriggerExecutionAsync(workflow, executionMode, dataEvent, operationStr, triggerData, tenantId);
+            }
+        }
+
+        public static BsonArray BuildTriggerData(DataChangeEvent dataEvent, string operationStr)
+        {
+            var timestamp = dataEvent.Timestamp.ToString("o");
+            var results = new BsonArray();
+
+            if (dataEvent.Operation == DataChangeOperation.Updated && dataEvent.UpdatedDocuments != null)
+            {
+                foreach (var updatedDoc in dataEvent.UpdatedDocuments)
+                {
+                    var doc = new BsonDocument
+                    {
+                        { "Operation", operationStr },
+                        { "CollectionName", dataEvent.CollectionName },
+                        { "SchemaName", dataEvent.SchemaName },
+                        { "DocumentId", updatedDoc.DocumentId },
+                        { "Timestamp", timestamp },
+                        { "UpdatedFields", new BsonArray(updatedDoc.UpdatedFields.Select(field => new BsonDocument
+                            {
+                                { "FieldName", field.FieldName },
+                                { "OldValue", field.OldValue?.ToString() ?? "" },
+                                { "NewValue", field.NewValue?.ToString() ?? "" }
+                            }))
+                        }
+                    };
+                    results.Add(doc);
+                }
+            }
+            else if (dataEvent.Data != null && dataEvent.Data.Count > 0)
+            {
+                foreach (var dataDoc in dataEvent.Data)
+                {
+                    var doc = new BsonDocument
+                    {
+                        { "Operation", operationStr },
+                        { "CollectionName", dataEvent.CollectionName },
+                        { "SchemaName", dataEvent.SchemaName },
+                        { "Timestamp", timestamp }
+                    };
+
+                    var bsonDoc = DictionaryToBsonDocument(dataDoc);
+                    if (bsonDoc.Contains("_id"))
+                    {
+                        doc["DocumentId"] = bsonDoc["_id"].ToString()!;
+                        bsonDoc.Remove("_id");
+                    }
+
+                    foreach (var element in bsonDoc)
+                    {
+                        doc[element.Name] = element.Value;
+                    }
+
+                    results.Add(doc);
+                }
+            }
+
+            if (results.Count == 0)
+            {
+                results.Add(new BsonDocument
+                {
+                    { "Operation", operationStr },
+                    { "CollectionName", dataEvent.CollectionName },
+                    { "SchemaName", dataEvent.SchemaName },
+                    { "Timestamp", timestamp }
+                });
+            }
+
+            return results;
+        }
+
+        private async Task QueueDataTriggerExecutionAsync(
+            WorkflowEntity workflow, WorkflowExecutionMode executionMode, DataChangeEvent dataEvent, string operationStr,
+            BsonArray triggerData, string tenantId)
+        {
+            try
+            {
+                var triggerNode = workflow.Nodes.FirstOrDefault(n =>
+                    n.Type == "dataGateway" &&
+                    n.Category == "trigger" &&
+                    n.Parameters != null &&
+                    n.Parameters.Contains("collectionName") &&
+                    n.Parameters["collectionName"].ToString() == dataEvent.CollectionName &&
+                    n.Parameters.Contains("operation") &&
+                    n.Parameters["operation"].ToString() == operationStr
+                );
+
+                if (triggerNode == null)
+                {
+                    _logger.LogWarning("No Data trigger node found for WorkflowId: {WorkflowId} with Collection: {CollectionName}",
+                        workflow.ItemId, dataEvent.CollectionName);
+                    return;
+                }
+
+                var triggerMetadata = new TriggerMetadata
+                {
+                    TriggerNodeId = triggerNode.Id,
+                    TriggerType = triggerNode.Type,
+                    TriggerData = triggerData
+                };
+                var execution = await CreateExecutionAsync(workflow, triggerMetadata, executionMode);
+                execution.Context["Input"] = triggerData;
+                execution.Status = WorkflowExecutionStatus.Queued;
+                execution.ActiveNodeIds.Add(triggerNode.Id);
+
+                await _executionRepository.UpdateAsync(execution);
+                await NotifyWorkflowStartedAsync(execution);
+                await _messageClient.SendToConsumerAsync(new ConsumerMessage<AddExcuationNodeEvent>
+                {
+                    ConsumerName = LogicConstants.NodeExecutionQueue,
+                    Payload = new AddExcuationNodeEvent
+                    {
+                        WorkflowId = workflow.ItemId,
+                        WorkflowExecutionId = execution.Id!,
+                        NodeId = triggerNode.Id,
+                    }
+                });
+
+                _logger.LogInformation("Queued execution {ExecutionId} for WorkflowId: {WorkflowId} (Data Trigger)",
+                    execution.Id, workflow.ItemId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to create execution for WorkflowId: {WorkflowId} (Data Trigger)",
+                    workflow.ItemId);
+            }
+        }
+
+        public async Task SchedulerTriggerStartAsync(SchedulerTriggerPayload payload)
+        {
+            _logger.LogInformation("Starting SchedulerTriggerStartAsync for WorkflowId: {WorkflowId}, TriggerId: {TriggerId}",
+                payload.WorkflowId, payload.TriggerId);
+
+            var tenantId = payload.TenantId;
+            if (string.IsNullOrEmpty(tenantId))
+            {
+                _logger.LogError("TenantId is null or empty in scheduler trigger payload for WorkflowId: {WorkflowId}", payload.WorkflowId);
+                return;
+            }
+
+            var workflow = await _workflowRepository.GetWorkflowAsync(tenantId, payload.WorkflowId);
+            if (workflow == null)
+            {
+                _logger.LogError("Workflow not found: {WorkflowId}, {TenantId}", payload.WorkflowId, tenantId);
+                return;
+            }
+
+            if (!workflow.IsPublished || string.IsNullOrWhiteSpace(workflow.PublishedVersionId))
+            {
+                _logger.LogWarning("Workflow is not published: {WorkflowId}, {TenantId}; skipping scheduler trigger", payload.WorkflowId, tenantId);
+                return;
+            }
+
+            var publishedVersion = await _workflowVersionRepository.GetWorkflowVersionAsync(tenantId, workflow.PublishedVersionId);
+            var workflowSnapshot = publishedVersion?.Snapshot;
+            if (workflowSnapshot == null)
+            {
+                _logger.LogError("Published version snapshot not found for WorkflowId: {WorkflowId}, Version: {VersionId}",
+                    payload.WorkflowId, workflow.PublishedVersionId);
+                return;
+            }
+
+            var triggerNode = workflowSnapshot.Nodes.FirstOrDefault(n =>
+                n.Id == payload.TriggerId &&
+                n.Type == "schedule" &&
+                n.Category == "trigger");
+
+            if (triggerNode == null)
+            {
+                _logger.LogWarning("No schedule trigger node {TriggerId} found in published snapshot for WorkflowId: {WorkflowId}",
+                    payload.TriggerId, payload.WorkflowId);
+                return;
+            }
+
+            var triggerData = new BsonArray
+            {
+                new BsonDocument
+                {
+                    { "WorkflowId", payload.WorkflowId },
+                    { "TriggerId", payload.TriggerId },
+                    { "TenantId", payload.TenantId },
+                    { "CronExpression", payload.CronExpression },
+                    { "FiredAt", (payload.FiredAt ?? DateTime.UtcNow).ToString("o") }
+                }
+            };
+
+            try
+            {
+                var triggerMetadata = new TriggerMetadata
+                {
+                    TriggerNodeId = triggerNode.Id,
+                    TriggerType = triggerNode.Type,
+                    TriggerData = triggerData
+                };
+                var execution = await CreateExecutionAsync(workflowSnapshot, triggerMetadata, WorkflowExecutionMode.Production);
+                execution.Context["Input"] = triggerData;
+                execution.Status = WorkflowExecutionStatus.Queued;
+                execution.ActiveNodeIds.Add(triggerNode.Id);
+
+                await _executionRepository.UpdateAsync(execution);
+                await NotifyWorkflowStartedAsync(execution);
+                await _messageClient.SendToConsumerAsync(new ConsumerMessage<AddExcuationNodeEvent>
+                {
+                    ConsumerName = LogicConstants.NodeExecutionQueue,
+                    Payload = new AddExcuationNodeEvent
+                    {
+                        WorkflowId = workflowSnapshot.ItemId,
+                        WorkflowExecutionId = execution.Id!,
+                        NodeId = triggerNode.Id,
+                    }
+                });
+
+                _logger.LogInformation("Queued execution {ExecutionId} for WorkflowId: {WorkflowId} (Scheduler Trigger)",
+                    execution.Id, workflowSnapshot.ItemId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to create execution for WorkflowId: {WorkflowId} (Scheduler Trigger)",
+                    workflowSnapshot.ItemId);
+            }
+        }
+
+
+
+        private static BsonDocument DictionaryToBsonDocument(Dictionary<string, object?> dict)
+        {
+            var doc = new BsonDocument();
+            foreach (var kv in dict)
+            {
+                doc[kv.Key] = ObjectToBsonValue(kv.Value);
+            }
+            return doc;
+        }
+
+        /// <summary>
+        /// Mints an ambient delegation grant for in-process ("last") webhook execution, where
+        /// Genesis never sees a bus send and therefore would not attach a grant header.
+        /// No-op when the factory returns null (no authenticated user / missing stamp claims).
+        /// </summary>
+        private async Task AttachDelegationGrantAsync()
+        {
+            var grantId = await _delegationGrantFactory.CreateForSendAsync();
+            DelegatedTokenContext.Set(grantId);
+        }
+
+        /// <summary>
+        /// Parses the workflow-layer BSON representation of a webhook trigger's authorization block
+        /// into the storage-agnostic <see cref="WorkflowAuthService.AuthorizationConfig"/> consumed by
+        /// <see cref="IWorkflowAuthService.IsAuthorized"/>.
+        /// <para>Returns <c>null</c> when the block is missing or malformed, or when
+        /// <c>authorizationMode</c> isn't one of the C# enum names.</para>
+        /// </summary>
+        private static WorkflowAuthService.AuthorizationConfig? ParseAuthorizationConfig(BsonDocument? doc)
+        {
+            if (doc is null) return null;
+
+            var organizationId = doc.Contains("organizationId") && doc["organizationId"].IsString
+                ? doc["organizationId"].AsString
+                : "";
+
+            var roles = ParseRule(doc.Contains("roles") && doc["roles"].IsBsonDocument ? doc["roles"].AsBsonDocument : null);
+            var permissions = ParseRule(doc.Contains("permissions") && doc["permissions"].IsBsonDocument ? doc["permissions"].AsBsonDocument : null);
+
+            var mode = doc.Contains("authorizationMode") && doc["authorizationMode"].IsString
+                ? WorkflowAuthService.AuthorizationConfig.TryParseAuthorizationMode(doc["authorizationMode"].AsString)
+                : null;
+
+            if (mode is null) return null;
+
+            return new WorkflowAuthService.AuthorizationConfig(organizationId, roles, permissions, mode.Value);
+        }
+
+        /// <summary>
+        /// Resolves a <c>{ mode: "all"|"any", values: string[] }</c> BSON doc into a <see cref="Rule"/>.
+        /// Accepts both the canonical wire keys (<c>mode</c>/<c>values</c>) and the legacy
+        /// (<c>operator</c>/<c>items</c>) shape. Empty or missing values -> <c>null</c> (no rule).
+        /// </summary>
+        private static WorkflowAuthService.Rule? ParseRule(BsonDocument? doc)
+        {
+            if (doc is null) return null;
+
+            var mode = doc.Contains("mode") && doc["mode"].IsString
+                ? doc["mode"].AsString
+                : doc.Contains("operator") && doc["operator"].IsString
+                    ? doc["operator"].AsString
+                    : null;
+
+            var values = new List<string>();
+            if (doc.Contains("values") && doc["values"].IsBsonArray)
+            {
+                foreach (var item in doc["values"].AsBsonArray)
+                {
+                    if (item.IsString) values.Add(item.AsString);
+                }
+            }
+            else if (doc.Contains("items") && doc["items"].IsBsonArray)
+            {
+                foreach (var item in doc["items"].AsBsonArray)
+                {
+                    if (item.IsString) values.Add(item.AsString);
+                }
+            }
+
+            return values.Count == 0 ? null : new WorkflowAuthService.Rule { Mode = mode, Values = values };
+        }
+
+        private static BsonValue ObjectToBsonValue(object? value)
+        {
+            if (value is null) return BsonNull.Value;
+
+            if (value is JsonElement je)
+            {
+                return je.ValueKind switch
+                {
+                    JsonValueKind.String => new BsonString(je.GetString()),
+                    JsonValueKind.Number => je.TryGetInt64(out var l) ? new BsonInt64(l) : new BsonDouble(je.GetDouble()),
+                    JsonValueKind.True => new BsonBoolean(true),
+                    JsonValueKind.False => new BsonBoolean(false),
+                    JsonValueKind.Null => BsonNull.Value,
+                    JsonValueKind.Object => JsonElementToBsonDocument(je),
+                    JsonValueKind.Array => new BsonArray(je.EnumerateArray().Select(e => ObjectToBsonValue(e))),
+                    _ => new BsonString(je.GetRawText())
+                };
+            }
+
+            return BsonValue.Create(value);
+        }
+
+        private static BsonDocument JsonElementToBsonDocument(JsonElement element)
+        {
+            var doc = new BsonDocument();
+            foreach (var prop in element.EnumerateObject())
+            {
+                doc[prop.Name] = ObjectToBsonValue(prop.Value);
+            }
+            return doc;
+        }
+
+        public async Task<StepExecuteResponseDto> StepExecuteAsync(string tenantId, StepExecuteRequestDto dto)
+        {
+            var workflow = await _workflowRepository.GetWorkflowAsync(tenantId, dto.WorkflowId);
+            if (workflow == null)
+            {
+                return new StepExecuteResponseDto
+                {
+                    IsSuccess = false,
+                    Errors = new Dictionary<string, string> { { "Workflow", "Workflow not found" } }
+                };
+            }
+            var targetNode = workflow.Nodes.FirstOrDefault(n => n.Id == dto.NodeId);
+            if (targetNode == null)
+            {
+                return new StepExecuteResponseDto
+                {
+                    IsSuccess = false,
+                    Errors = new Dictionary<string, string> { { "Node", "Node not found" } }
+                };
+            }
+
+            var oldExecution = await _executionRepository.GetByIdAsync(dto.SourceExecutionId, tenantId);
+            var ancestors = _workflowEngineService.GetTopologicalAncestorsAndTarget(workflow, dto.NodeId);
+            var triggerNodes = ancestors.Where(n => n.Category == "trigger").ToList();
+            var hasAnyPinnedTriggerData = triggerNodes.Any(n => n.PinData != null && n.PinData.Count > 0);
+
+
+            var currentTriggerNodeId = "";
+
+            if (String.IsNullOrWhiteSpace(dto.SourceExecutionId) && !hasAnyPinnedTriggerData)
+            {
+                workflow.TestMeta = new TestWorkflowMeta
+                {
+                    IsListening = true,
+                    ListenerTriggerNodes = triggerNodes,
+                    UserIds = BlocksContext.GetContext().UserId != null ? new List<string> { BlocksContext.GetContext().UserId } : new List<string>(),
+                    CompletionNodeId = dto.NodeId
+
+                };
+                await _workflowRepository.UpdateWorkflowAsync(workflow);
+                return new StepExecuteResponseDto
+                {
+                    IsSuccess = true,
+                    Message = "Trigger nodes Listining",
+                    Code = "101"
+                };
+
+            }
+
+            if (hasAnyPinnedTriggerData)
+            {
+                currentTriggerNodeId = triggerNodes.FirstOrDefault(n => n.PinData != null && n.PinData.Count > 0)?.Id;
+            }
+
+            if (oldExecution != null && oldExecution.TriggerMetadata != null && !String.IsNullOrWhiteSpace(oldExecution.TriggerMetadata.TriggerNodeId))
+            {
+                currentTriggerNodeId = oldExecution.TriggerMetadata.TriggerNodeId;
+            }
+
+            if (!String.IsNullOrWhiteSpace(dto.TriggerNodeId))
+            {
+                if (triggerNodes.Any(n => n.Id == dto.TriggerNodeId) || oldExecution?.TriggerMetadata?.TriggerNodeId == dto.TriggerNodeId)
+                {
+                    currentTriggerNodeId = dto.TriggerNodeId;
+                }
+                else
+                {
+                    return new StepExecuteResponseDto
+                    {
+                        IsSuccess = false,
+                        Errors = new Dictionary<string, string> { { "Message", "Trigger node not found in ancestors" } }
+                    };
+                }
+            }
+
+            var triggerNode = workflow.Nodes.FirstOrDefault(n => n.Id == currentTriggerNodeId);
+            if (triggerNode == null)
+            {
+                return new StepExecuteResponseDto
+                {
+                    IsSuccess = false,
+                    Errors = new Dictionary<string, string> { { "Message", "Trigger node not found" } }
+                };
+            }
+
+            TriggerMetadata triggerMetadata = new TriggerMetadata
+            {
+                TriggerNodeId = triggerNode.Id,
+                TriggerType = triggerNode.Type,
+                TriggerData = new BsonArray()
+            };
+            if (oldExecution != null && oldExecution.TriggerMetadata != null && !String.IsNullOrWhiteSpace(oldExecution.TriggerMetadata.TriggerNodeId))
+            {
+                triggerMetadata = oldExecution.TriggerMetadata;
+            }
+            else
+            {
+                triggerMetadata = new TriggerMetadata
+                {
+                    TriggerNodeId = triggerNode.Id,
+                    TriggerType = triggerNode.Type,
+                    TriggerData = new BsonArray()
+                };
+            }
+            if (triggerNode.PinData != null && triggerNode.PinData.Count > 0)
+            {
+                triggerMetadata = new TriggerMetadata
+                {
+                    TriggerNodeId = triggerNode.Id,
+                    TriggerType = triggerNode.Type,
+                    TriggerData = new BsonArray(triggerNode.PinData)
+                };
+            }
+
+
+            workflow.TestMeta = new TestWorkflowMeta
+            {
+                IsListening = true,
+                ListenerTriggerNodes = triggerNodes,
+                UserIds = BlocksContext.GetContext().UserId != null ? new List<string> { BlocksContext.GetContext().UserId } : new List<string>(),
+                CompletionNodeId = dto.NodeId
+
+            };
+            var execution = await CreateExecutionAsync(workflow, triggerMetadata, WorkflowExecutionMode.Test);
+            execution.Context["Input"] = triggerMetadata.TriggerData ?? new BsonArray();
+            execution.Status = WorkflowExecutionStatus.Queued;
+            execution.ActiveNodeIds.Add(triggerNode.Id);
+            await NotifyWorkflowStartedAsync(execution);
+            var result = await _workflowEngineService.ExecuteStepNodeAsync(tenantId, execution.Id, triggerNode.Id, dto.NodeId, dto.SourceExecutionId);
+            return new StepExecuteResponseDto
+            {
+                IsSuccess = true,
+                ItemId = result.Id,
+            };
+
+        }
+
+
+    }
+}

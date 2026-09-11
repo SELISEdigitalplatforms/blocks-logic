@@ -6,8 +6,8 @@ import { SecretListItem, SecretListItemDto, SecretListParams, SecretListResponse
  * picker, Workflow, and anything added later all read this same endpoint.
  *
  * One call is all there is: the server already narrows the list to the platform secrets a backend
- * module can resolve, so there is no type to filter on here and no separate tag endpoint — tag options
- * come from the rows themselves via {@link secretTagOptions}.
+ * module can resolve, so there is no type to filter on here and no separate tag endpoint — a caller
+ * that needs tag options derives them from the rows.
  */
 export const SECRET_ENDPOINTS = {
   GETS: "/api/Secret/GetAll",
@@ -29,10 +29,6 @@ export const mapSecretListItemDto = (dto: SecretListItemDto): SecretListItem => 
   name: dto.name,
   tags: Array.isArray(dto.tags) ? dto.tags : [],
 });
-
-/** The distinct tags present in a secret list, sorted — the picker's tag filter options. */
-export const secretTagOptions = (items: SecretListItem[]): string[] =>
-  [...new Set(items.flatMap((item) => item.tags))].sort((a, b) => a.localeCompare(b));
 
 export class SecretService {
   private readonly logicHttpClient = serviceInstances.logicService;

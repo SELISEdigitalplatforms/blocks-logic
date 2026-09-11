@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Blocks.Genesis;
-using DomainService.Workflow.Dtos;
-using DomainService.Workflow.Services;
+using Workflow.DomainService.Dtos;
+using Workflow.DomainService.Services;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 

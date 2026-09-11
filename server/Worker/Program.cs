@@ -1,10 +1,10 @@
 using Blocks.Extension.DependencyInjection;
 using Blocks.Genesis;
 using DomainService.Shared;
-using DomainService.Workflow;
-using DomainService.Workflow.Events;
-using DomainService.Workflow.Nodes.TriggerDataV1;
-using DomainService.Workflow.Utils;
+using Workflow.DomainService;
+using Workflow.DomainService.Events;
+using Workflow.DomainService.Nodes.TriggerDataV1;
+using Workflow.DomainService.Utils;
 using Mail.DomainService.Dtos;
 using Mail.DomainService.Mails;
 using Mail.DomainService.Shared.Utilities;

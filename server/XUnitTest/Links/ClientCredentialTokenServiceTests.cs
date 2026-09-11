@@ -1,7 +1,6 @@
 using System.Net;
 using System.Text;
-using DomainService.MagicLink.Models;
-using DomainService.MagicLink.Service;
+using Workflow.DomainService.Services;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;

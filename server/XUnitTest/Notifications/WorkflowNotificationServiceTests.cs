@@ -6,8 +6,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using INotificationService = global::DomainService.Notification.INotificationService;
-using NotificationData = global::DomainService.Workflow.Dtos.NotificationData;
-using WorkflowNotificationService = global::DomainService.Workflow.Services.WorkflowNotificationService;
+using NotificationData = global::Workflow.DomainService.Dtos.NotificationData;
+using WorkflowNotificationService = global::Workflow.DomainService.Services.WorkflowNotificationService;
 
 using XUnitTest.TestHelpers;
 

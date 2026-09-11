@@ -3,14 +3,14 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Blocks.Genesis;
-using DomainService.Workflow.Services;
+using Workflow.DomainService.Services;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Moq;
 using StackExchange.Redis;
-using static DomainService.Workflow.Services.WorkflowAuthService;
+using static Workflow.DomainService.Services.WorkflowAuthService;
 
 namespace XUnitTest.Workflow
 {

@@ -1,10 +1,10 @@
 using Blocks.Genesis;
-using DomainService.Workflow.Entities;
-using DomainService.Workflow.Enums;
-using DomainService.Workflow.Events;
-using DomainService.Workflow.Repositories;
-using DomainService.Workflow.Services;
-using DomainService.Workflow.Utils;
+using Workflow.DomainService.Entities;
+using Workflow.DomainService.Enums;
+using Workflow.DomainService.Events;
+using Workflow.DomainService.Repositories;
+using Workflow.DomainService.Services;
+using Workflow.DomainService.Utils;
 using FluentAssertions;
 using Mail.DomainService.Entities;
 using Mail.DomainService.Mails;
