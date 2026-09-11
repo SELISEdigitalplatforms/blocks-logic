@@ -5,11 +5,10 @@ using System.Text;
 
 namespace Cloud.LmtService.Models.Logs
 {
-    public class GetLogsRequest : BaseGetsRequest<GetLogsRequestFilter>, IProjectKey
+    public class GetLogsRequest : BaseGetsRequest<GetLogsRequestFilter>
     {
         public string? Search { get; set; }
         public required string ServiceName { get; set; }
-        public string? ProjectKey { get; set; }
     }
 
     public class GetLogsRequestFilter
@@ -25,12 +24,11 @@ namespace Cloud.LmtService.Models.Logs
     {
 
     }
-    public class GetRestoredLogsByTraceRequest : BaseGetsRequest<object>, IProjectKey
+    public class GetRestoredLogsByTraceRequest : BaseGetsRequest<object>
     {
         public required string RequestId { get; set; }
         public required string TraceId { get; set; }
         public string? SpanId { get; set; }
         public string? Level { get; set; }
-        public string? ProjectKey { get; set; }
     }
 }

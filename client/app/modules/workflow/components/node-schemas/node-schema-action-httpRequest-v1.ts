@@ -88,7 +88,7 @@ export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
         searchable: true,
         options: (_data, config) => {
           return authClientService.clients
-            .getClientCredentials({ projectKey: config.projectKey })
+            .getClientCredentials()
             .then((res) =>
               res
                 .filter((item) => item.isActive)

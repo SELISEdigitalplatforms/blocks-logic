@@ -25,7 +25,7 @@ namespace DomainService.Workflow.Services
 
         public async Task<BaseMutationResponse> CreateVersionAsync(string tenantId, WorkflowVersionCreateRequestDto dto)
         {
-            _logger.LogInformation("Creating workflow version for ProjectKey: {ProjectKey}, WorkflowId: {WorkflowId}", tenantId, dto.WorkflowId);
+            _logger.LogInformation("Creating workflow version for TenantId: {TenantId}, WorkflowId: {WorkflowId}", tenantId, dto.WorkflowId);
             var workflow = await _workflowRepository.GetWorkflowAsync(tenantId, dto.WorkflowId);
 
             if (workflow == null)
@@ -136,7 +136,7 @@ namespace DomainService.Workflow.Services
                 }
                 _logger.LogInformation($"Fetching workflow versions for tenantId: {tenantId}, WorkflowId: {dto.WorkflowId}");
                 var versions = await _workflowVersionRepository.GetWorkflowVersionsAsync(tenantId, dto.WorkflowId);
-                _logger.LogInformation("Successfully fetched {Count} workflow versions for ProjectKey: {ProjectKey}, WorkflowId: {WorkflowId}", versions.Count, tenantId, dto.WorkflowId);
+                _logger.LogInformation("Successfully fetched {Count} workflow versions for TenantId: {TenantId}, WorkflowId: {WorkflowId}", versions.Count, tenantId, dto.WorkflowId);
 
                 var versionSummaries = versions.Select(v => new WorkflowGetVersionSummary
                 {
@@ -161,7 +161,7 @@ namespace DomainService.Workflow.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError("Error fetching workflow versions for ProjectKey: {tenantId}, WorkflowId: {WorkflowId}: {Message}", tenantId, dto.WorkflowId, ex.Message);
+                _logger.LogError("Error fetching workflow versions for TenantId: {tenantId}, WorkflowId: {WorkflowId}: {Message}", tenantId, dto.WorkflowId, ex.Message);
                 return new WorkflowGetVersionsResponseDto
                 {
                     Data = null,

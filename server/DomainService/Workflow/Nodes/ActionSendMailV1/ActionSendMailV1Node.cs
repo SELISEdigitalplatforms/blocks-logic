@@ -42,10 +42,10 @@ namespace DomainService.Workflow.Nodes.ActionSendMailV1
                         .Select(a => parseExpression<string>(a, context.InputItems[i], context) ?? a)
                         .ToList();
 
-                    var projectkey = parameters.ProjectKey ?? "";
-                    var securityData = BlocksContext.Create(projectkey, [], "", false, "", "", DateTime.MinValue, "", [], "", "", "", "", "", projectkey);
+                    var tenantId = context.TenantId ?? "";
+                    var securityData = BlocksContext.Create(tenantId, [], "", false, "", "", DateTime.MinValue, "", [], "", "", "", "", "", tenantId);
                     BlocksContext.SetContext(securityData, false);
-                    var response = await SendMailAsync(projectkey, to, parameters.Template, parameters.Language, bodyDataContext, attachments);
+                    var response = await SendMailAsync(tenantId, to, parameters.Template, parameters.Language, bodyDataContext, attachments);
                     BlocksContext.SetContext(blocksContext, false);
                     // Built as a plain BsonDocument (not a Dictionary<string, object> run through
                     // ToBsonDocument()) so non-primitive values (the Errors document, the
@@ -100,7 +100,7 @@ namespace DomainService.Workflow.Nodes.ActionSendMailV1
         }
 
 
-        private async Task<BaseMutationResponse> SendMailAsync(string projectkey, string to, string template, string language, Dictionary<string, string> bodyDataContext, List<string> attachments)
+        private async Task<BaseMutationResponse> SendMailAsync(string tenantId, string to, string template, string language, Dictionary<string, string> bodyDataContext, List<string> attachments)
         {
             var email = new SendMailToAny
             {
@@ -111,7 +111,6 @@ namespace DomainService.Workflow.Nodes.ActionSendMailV1
                 Language = language ?? "en-US",
                 To = new List<string>() { to.Trim() },
                 Attachments = attachments,
-                ProjectKey = projectkey
             };
 
             var response = await _mailDriverService.ProcessMailToAnyAsync(email);

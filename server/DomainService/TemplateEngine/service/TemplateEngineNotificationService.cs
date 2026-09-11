@@ -30,7 +30,7 @@ namespace DomainService.TemplateEngine.service
             _httpHelperServices = httpHelperServices;
         }
 
-        public async Task NotifyRenderWithJsonEvent(bool success, string renderedFileId, string? subscriptionFilterId, string? projectKey)
+        public async Task NotifyRenderWithJsonEvent(bool success, string renderedFileId, string? subscriptionFilterId, string? tenantId)
         {
             _logger.LogInformation("NotifyRenderWithJsonEvent: Sending notification for renderedFileId={RenderedFileId}, success={Success}", renderedFileId, success);
 
@@ -47,7 +47,7 @@ namespace DomainService.TemplateEngine.service
             });
         }
 
-        public async Task NotifyRenderWithJsonBulkEvent(bool success, string referenceId, string? subscriptionFilterId, string? projectKey, int successCount, int failureCount)
+        public async Task NotifyRenderWithJsonBulkEvent(bool success, string referenceId, string? subscriptionFilterId, string? tenantId, int successCount, int failureCount)
         {
             _logger.LogInformation("NotifyRenderWithJsonBulkEvent: Sending notification for referenceId={ReferenceId}, success={Success}", referenceId, success);
 
@@ -65,7 +65,7 @@ namespace DomainService.TemplateEngine.service
             });
         }
 
-        public async Task NotifyGenerateRenderedFileEvent(bool success, string fileId, string? subscriptionFilterId, string? projectKey)
+        public async Task NotifyGenerateRenderedFileEvent(bool success, string fileId, string? subscriptionFilterId, string? tenantId)
         {
             _logger.LogInformation("NotifyGenerateRenderedFileEvent: Sending notification for fileId={FileId}, success={Success}", fileId, success);
 
@@ -82,7 +82,7 @@ namespace DomainService.TemplateEngine.service
             });
         }
 
-        public async Task NotifyGenerateRenderedFilesBulkEvent(bool success, string? bulkSubscriptionFilterId, string? projectKey, int successCount, int failureCount)
+        public async Task NotifyGenerateRenderedFilesBulkEvent(bool success, string? bulkSubscriptionFilterId, string? tenantId, int successCount, int failureCount)
         {
             _logger.LogInformation("NotifyGenerateRenderedFilesBulkEvent: Sending notification, success={Success}", success);
 
@@ -99,7 +99,7 @@ namespace DomainService.TemplateEngine.service
             });
         }
 
-        public async Task NotifyCreateFileWithFilteredMongoQueryEvent(bool success, string fileId, string? subscriptionFilterId, string? projectKey)
+        public async Task NotifyCreateFileWithFilteredMongoQueryEvent(bool success, string fileId, string? subscriptionFilterId, string? tenantId)
         {
             _logger.LogInformation("NotifyCreateFileWithFilteredMongoQueryEvent: Sending notification for fileId={FileId}, success={Success}", fileId, success);
 
@@ -116,7 +116,7 @@ namespace DomainService.TemplateEngine.service
             });
         }
 
-        public async Task NotifyCreateFileWithFilteredMongoQueryBulkEvent(bool success, string? subscriptionFilterId, string? projectKey, int successCount, int failureCount)
+        public async Task NotifyCreateFileWithFilteredMongoQueryBulkEvent(bool success, string? subscriptionFilterId, string? tenantId, int successCount, int failureCount)
         {
             _logger.LogInformation("NotifyCreateFileWithFilteredMongoQueryBulkEvent: Sending notification, success={Success}", success);
 
@@ -133,7 +133,7 @@ namespace DomainService.TemplateEngine.service
             });
         }
 
-        public async Task NotifyCreateMultipleFileWithFilteredMongoQueryEvent(bool success, string requestId, string? subscriptionFilterId, string? projectKey, string message)
+        public async Task NotifyCreateMultipleFileWithFilteredMongoQueryEvent(bool success, string requestId, string? subscriptionFilterId, string? tenantId, string message)
         {
             _logger.LogInformation("NotifyCreateMultipleFileWithFilteredMongoQueryEvent: Sending notification for requestId={RequestId}, success={Success}", requestId, success);
 
@@ -174,10 +174,9 @@ namespace DomainService.TemplateEngine.service
                     ResponseValue = success.ToString()
                 };
 
-                var blocksKey = _configuration["RootTenantId"];
-                var rootTenantId = _configuration["RootTenantId"];
-                var salt = _tenants.GetTenantByID(rootTenantId)?.TenantSalt;
-                var actualSecret = _cryptoService.Hash(rootTenantId, salt);
+                var blocksKey = BlocksContext.GetContext()?.TenantId;
+                var salt = _tenants.GetTenantByID(blocksKey)?.TenantSalt;
+                var actualSecret = _cryptoService.Hash(blocksKey, salt);
 
                 var url = _configuration["NotificationServiceUrl"];
                 var headers = new Dictionary<string, string>

@@ -50,7 +50,7 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
   displayValue?: (
     data: Whole,
     config: {
-      projectKey: string;
+      tenantId: string;
       workflowId: string;
       nodeId: string;
       store: WorkflowStore;
@@ -61,7 +61,7 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
     value: unknown,
     data: Whole,
     config: {
-      projectKey: string;
+      tenantId: string;
       workflowId: string;
       nodeId: string;
       store: WorkflowStore;
@@ -73,7 +73,7 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
     | ((
         data: Whole,
         config: {
-          projectKey: string;
+          tenantId: string;
           workflowId: string;
           store: WorkflowStore;
           executionMode?: number;
@@ -84,7 +84,7 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
     | ((
         data: Whole,
         config: {
-          projectKey: string;
+          tenantId: string;
           workflowId: string;
           nodeId: string;
           store: WorkflowStore;
@@ -121,7 +121,7 @@ export interface FieldProps<T = unknown> {
   onChange: (value: T) => void;
   data: Record<string, unknown>;
   config: {
-    projectKey: string;
+    tenantId: string;
     workflowId: string;
     nodeId: string;
     store: WorkflowStore;

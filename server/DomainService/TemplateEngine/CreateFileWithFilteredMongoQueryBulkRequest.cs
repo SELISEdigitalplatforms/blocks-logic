@@ -6,9 +6,8 @@ namespace DomainService.TemplateEngine
     /// Bulk request to create multiple files using filtered MongoDB queries
     /// </summary>
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
-    public class CreateFileWithFilteredMongoQueryBulkRequest : IProjectKey
+    public class CreateFileWithFilteredMongoQueryBulkRequest
     {
-        public string? ProjectKey { get; set; }
         public string? SubscriptionFilterId { get; set; }
         public bool NotifyOnProcessEnding { get; set; } = false;
         public bool RaiseEventOnProcessEnding { get; set; } = false;

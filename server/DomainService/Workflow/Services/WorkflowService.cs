@@ -34,7 +34,7 @@ namespace DomainService.Workflow.Services
         /// <summary>
         /// Creates an error response for project key not found exception
         /// </summary>
-        private BaseMutationResponse CreateProjectKeyNotFoundError(string tenantId, string context, string stackTrace)
+        private BaseMutationResponse CreateTenantNotFoundError(string tenantId, string context, string stackTrace)
         {
             _logger.LogError("Error {Context}: {StackTrace}", context, stackTrace);
             return new BaseMutationResponse
@@ -71,7 +71,7 @@ namespace DomainService.Workflow.Services
             }
             catch (InvalidOperationException ex) when (ex.InnerException is KeyNotFoundException)
             {
-                return (null, CreateProjectKeyNotFoundError(tenantId, context, ex.StackTrace ?? ""));
+                return (null, CreateTenantNotFoundError(tenantId, context, ex.StackTrace ?? ""));
             }
             catch (Exception ex)
             {
@@ -211,7 +211,7 @@ namespace DomainService.Workflow.Services
         public async Task<BaseMutationResponse> CreateAsync(string tenantId, WorkflowCreateRequestDto dto)
 
         {
-            _logger.LogInformation($"Creating workflow for ProjectKey: {tenantId}, Name: {dto.Name},");
+            _logger.LogInformation($"Creating workflow for TenantId: {tenantId}, Name: {dto.Name},");
             var model = new WorkflowEntity
             {
                 ItemId = Guid.NewGuid().ToString().Replace("-", ""),
@@ -238,7 +238,7 @@ namespace DomainService.Workflow.Services
             }
             catch (InvalidOperationException ex) when (ex.InnerException is KeyNotFoundException)
             {
-                return CreateProjectKeyNotFoundError(tenantId, "inserting workflow", ex.StackTrace ?? "");
+                return CreateTenantNotFoundError(tenantId, "inserting workflow", ex.StackTrace ?? "");
             }
             catch (Exception ex)
             {
@@ -307,7 +307,7 @@ namespace DomainService.Workflow.Services
         }
         public async Task<WorkflowGetsResponseDto> GetAllAsync(string tenantId, WorkflowGetsRequestDto dto)
         {
-            _logger.LogInformation($"Fetching workflows. ProjectKey: {tenantId}, Page: {dto.PageNumber}, PageSize: {dto.PageSize}, Search: {dto.Search}, IsPublished: {dto.IsPublished}");
+            _logger.LogInformation($"Fetching workflows. TenantId: {tenantId}, Page: {dto.PageNumber}, PageSize: {dto.PageSize}, Search: {dto.Search}, IsPublished: {dto.IsPublished}");
 
             var workflows = await _workflowRepository.GetAllWorkflowsAsync(tenantId, dto.PageSize, dto.PageNumber, dto.Search, dto.IsPublished);
             var totalCount = await _workflowRepository.GetWorkflowsCountAsync(tenantId, dto.Search, dto.IsPublished);
@@ -327,7 +327,7 @@ namespace DomainService.Workflow.Services
                 IsDirty = w.IsDirty
             }).ToList();
 
-            _logger.LogInformation("Completed fetching workflows. ProjectKey: {ProjectKey}, Page: {Page}, PageSize: {PageSize}, Search: {Search}, IsPublished: {IsPublished}", tenantId, dto.PageNumber, dto.PageSize, dto.Search, dto.IsPublished);
+            _logger.LogInformation("Completed fetching workflows. TenantId: {TenantId}, Page: {Page}, PageSize: {PageSize}, Search: {Search}, IsPublished: {IsPublished}", tenantId, dto.PageNumber, dto.PageSize, dto.Search, dto.IsPublished);
 
             return new WorkflowGetsResponseDto
             {
@@ -338,7 +338,7 @@ namespace DomainService.Workflow.Services
 
         public async Task<WorkflowGetResponseDto> GetAsync(string tenantId, WorkflowGetRequestDto dto)
         {
-            _logger.LogInformation($"Fetching workflow for ProjectKey: {tenantId}, WorkflowId: {dto.WorkflowId}");
+            _logger.LogInformation($"Fetching workflow for TenantId: {tenantId}, WorkflowId: {dto.WorkflowId}");
             WorkflowEntity workflow;
             try
             {
@@ -757,7 +757,7 @@ namespace DomainService.Workflow.Services
         {
             try
             {
-                _logger.LogInformation($"Unpublishing workflow workflowId: {dto.WorkflowId}, projectKey: {tenantId}");
+                _logger.LogInformation($"Unpublishing workflow workflowId: {dto.WorkflowId}, tenantId: {tenantId}");
                 var workflow = await _workflowRepository.GetWorkflowAsync(tenantId, dto.WorkflowId);
                 if (workflow == null)
                 {

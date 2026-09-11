@@ -2,10 +2,9 @@
 
 namespace Iam.DomainService.Users
 {
-    public class IsEmailAvaiableRequest : IProjectKey
+    public class IsEmailAvaiableRequest
     {
         public string Email { get; set; }
-        public string? ProjectKey { get; set; }
     }
 
     public class IsEmailAvaiableResponse

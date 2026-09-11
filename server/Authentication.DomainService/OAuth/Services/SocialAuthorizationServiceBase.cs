@@ -144,7 +144,6 @@ namespace DomainService.OAuth.Services
                 ProfileImageUrl = externalUser.ProfileImageUrl,
                 Memberships = [new OrganizationMembership { Roles = externalUser.Roles, OrganizationId = "default" }],
                 Permissions = externalUser.Permissions ?? [],
-                ProjectKey = blocksContext.TenantId,
                 DepartMent = externalUser.Department,
                 EmployeeId = externalUser.EmployeeId
             };

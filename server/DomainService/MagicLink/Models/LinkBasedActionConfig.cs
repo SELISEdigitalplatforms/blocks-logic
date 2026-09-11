@@ -9,7 +9,7 @@ namespace DomainService.MagicLink.Models
     /// Collection: LinkBasedActionConfigs
     /// </summary>
     [BsonIgnoreExtraElements]
-    public class LinkBasedActionConfig : IProjectKey
+    public class LinkBasedActionConfig
     {
         [BsonId]
         public string ItemId { get; set; } = string.Empty;
@@ -27,7 +27,6 @@ namespace DomainService.MagicLink.Models
         /// <summary>
         /// The project/tenant identifier
         /// </summary>
-        public string ProjectKey { get; set; } = string.Empty;
         
         /// <summary>
         /// Created date

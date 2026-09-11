@@ -2,7 +2,7 @@ using Blocks.Genesis;
 
 namespace DomainService.Geolocation
 {
-    public class LocateIpRequest : IProjectKey
+    public class LocateIpRequest
     {
         /// <summary>
         /// String representing the IP addresses to be located.
@@ -17,6 +17,5 @@ namespace DomainService.Geolocation
         /// <summary>
         /// Project key for tenant context.
         /// </summary>
-        public string? ProjectKey { get; set; }
     }
 }

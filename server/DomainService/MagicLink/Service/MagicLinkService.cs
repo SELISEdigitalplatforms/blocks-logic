@@ -44,13 +44,13 @@ namespace DomainService.MagicLink.Service
             {
                 _logger.LogInformation("CreateLinkAsync started for Type: {Type}, Uri: {Uri}", request.Type, request.Uri);
 
-                var projectKey = request.ProjectKey ?? _configuration["RootTenantId"] ?? "";
+                var tenantId = BlocksContext.GetContext()?.TenantId ?? "";
 
                 // Get configuration if specified (for Action type)
                 LinkBasedActionConfig? config = null;
                 if (!string.IsNullOrEmpty(request.LinkBasedActionConfigId))
                 {
-                    config = await _repository.GetLinkConfigAsync(request.LinkBasedActionConfigId, projectKey);
+                    config = await _repository.GetLinkConfigAsync(request.LinkBasedActionConfigId, tenantId);
                     if (config == null)
                     {
                         _logger.LogWarning("LinkBasedActionConfig not found: {ConfigId}", request.LinkBasedActionConfigId);
@@ -81,7 +81,6 @@ namespace DomainService.MagicLink.Service
                         : null,
                     IsExpired = false,
                     ExpiredReason = null,
-                    ProjectKey = projectKey,
                     ShortUri = BuildShortUri(linkId, config),
                     RequestByUserId = request.RequestByUserId,
                     UserCanLogin = request.UserCanLogin,
@@ -131,12 +130,6 @@ namespace DomainService.MagicLink.Service
 
                 foreach (var linkRequest in request.Requests)
                 {
-                    // Use the bulk request's ProjectKey if individual request doesn't have one
-                    if (string.IsNullOrEmpty(linkRequest.ProjectKey))
-                    {
-                        linkRequest.ProjectKey = request.ProjectKey;
-                    }
-
                     var result = await CreateLinkAsync(linkRequest);
 
                     results.Add(new MagicLinkResult
@@ -193,11 +186,11 @@ namespace DomainService.MagicLink.Service
                     };
                 }
 
-                var projectKey = request.ProjectKey ?? _configuration["RootTenantId"] ?? "";
+                var tenantId = BlocksContext.GetContext()?.TenantId ?? "";
                 var removedCount = 0;
 
                 // Get the links from database
-                var links = await _repository.GetMagicLinksByIdsAsync(request.LinkIds, projectKey);
+                var links = await _repository.GetMagicLinksByIdsAsync(request.LinkIds);
 
                 foreach (var link in links)
                 {
@@ -252,10 +245,9 @@ namespace DomainService.MagicLink.Service
         {
             try
             {
-                _logger.LogInformation("GetLinkAsync started for ItemId: {ItemId}, ProjectKey: {ProjectKey}",
-                    request.ItemId, request.ProjectKey);
+                _logger.LogInformation("GetLinkAsync started for ItemId: {ItemId}", request.ItemId);
 
-                var link = await _repository.GetMagicLinkAsync(request.ItemId, request.ProjectKey);
+                var link = await _repository.GetMagicLinkAsync(request.ItemId);
 
                 if (link == null)
                 {
@@ -281,8 +273,7 @@ namespace DomainService.MagicLink.Service
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "GetLinkAsync failed for ItemId: {ItemId}, ProjectKey: {ProjectKey}",
-                    request.ItemId, request.ProjectKey);
+                _logger.LogError(ex, "GetLinkAsync failed for ItemId: {ItemId}", request.ItemId);
                 return new GetMagicLinkResponse
                 {
                     Data = null,
@@ -296,8 +287,7 @@ namespace DomainService.MagicLink.Service
         {
             try
             {
-                _logger.LogInformation("GetLinksAsync started for ProjectKey: {ProjectKey}, Type: {Type}, PageSize: {PageSize}, PageNumber: {PageNumber}",
-                    request.ProjectKey, request.Type, request.PageSize, request.PageNumber);
+                _logger.LogInformation("GetLinksAsync started for Type: {Type}, PageSize: {PageSize}, PageNumber: {PageNumber}", request.Type, request.PageSize, request.PageNumber);
 
                 var (links, totalCount) = await _repository.GetMagicLinksAsync(request);
 
@@ -315,7 +305,7 @@ namespace DomainService.MagicLink.Service
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "GetLinksAsync failed for ProjectKey: {ProjectKey}", request.ProjectKey);
+                _logger.LogError(ex, "GetLinksAsync failed");
                 return new GetMagicLinksResponse
                 {
                     Data = new List<MagicLinkDto>(),
@@ -337,7 +327,7 @@ namespace DomainService.MagicLink.Service
                 _logger.LogInformation("InvokeLinkAsync started for LinkId: {LinkId}", request.LinkId);
 
                 // Get the link
-                var link = await _repository.GetMagicLinkAsync(request.LinkId, request.ProjectKey);
+                var link = await _repository.GetMagicLinkAsync(request.LinkId);
 
                 if (link == null)
                 {
@@ -394,7 +384,6 @@ namespace DomainService.MagicLink.Service
                     var usageEvent = new MagicLinkUsageEvent
                     {
                         LinkId = link.ItemId,
-                        ProjectKey = link.ProjectKey,
                         AccessedAt = DateTime.UtcNow,
                         VisitorIpAddress = request.VisitorIpAddress,
                         VisitorUserAgent = request.VisitorUserAgent,
@@ -420,7 +409,6 @@ namespace DomainService.MagicLink.Service
                     var actionEvent = new MagicLinkActionEvent
                     {
                         LinkId = link.ItemId,
-                        ProjectKey = link.ProjectKey,
                         SubscriptionFilterId = request.SubscriptionFilterId,
                         NotifyOnProcessEnding = request.NotifyOnProcessEnding,
                         RaiseEventOnProcessEnding = request.RaiseEventOnProcessEnding,
@@ -530,7 +518,8 @@ namespace DomainService.MagicLink.Service
                 ?? _configuration["MagicLinkBaseAddress"]?.TrimEnd('/')
                 ?? _configuration["ShortUrlBaseAddress"]?.TrimEnd('/');
 
-            return $"{baseUrl}/{linkId}";
+            var tenantId = BlocksContext.GetContext()?.TenantId;
+            return $"{baseUrl}/{tenantId}/{linkId}";
         }
 
         private async Task AddToCache(Models.MagicLink link)
@@ -538,7 +527,6 @@ namespace DomainService.MagicLink.Service
             // Cache the link data for quick access
             var cacheValue = new MagicLinkCacheValue
             {
-                ProjectKey = link.ProjectKey,
                 Type = link.Type.ToString()
             };
             var serializedValue = JsonSerializer.Serialize(cacheValue);
@@ -572,11 +560,11 @@ namespace DomainService.MagicLink.Service
         {
             try
             {
-                var projectKey = request.ProjectKey ?? _configuration["RootTenantId"] ?? "";
-                _logger.LogInformation("SaveLinkBasedActionConfigAsync started for ProjectKey: {ProjectKey}", projectKey);
+                var tenantId = BlocksContext.GetContext()?.TenantId ?? "";
+                _logger.LogInformation("SaveLinkBasedActionConfigAsync started for TenantId: {TenantId}", tenantId);
 
                 // Check if config already exists for this project
-                var existingConfig = await _repository.GetLinkBasedActionConfigAsync(projectKey);
+                var existingConfig = await _repository.GetLinkBasedActionConfigAsync();
 
                 if (existingConfig == null)
                 {
@@ -586,7 +574,6 @@ namespace DomainService.MagicLink.Service
                         ItemId = Guid.NewGuid().ToString(),
                         ContextName = request.ContextName,
                         ShortUrlBase = request.ShortUrlBase,
-                        ProjectKey = projectKey,
                         CreatedAt = DateTime.UtcNow
                     };
 
@@ -633,7 +620,7 @@ namespace DomainService.MagicLink.Service
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error in SaveLinkBasedActionConfigAsync for ProjectKey: {ProjectKey}", request.ProjectKey);
+                _logger.LogError(ex, "Error in SaveLinkBasedActionConfigAsync");
                 return new SaveLinkBasedActionConfigResponse
                 {
                     IsSuccess = false,
@@ -646,10 +633,10 @@ namespace DomainService.MagicLink.Service
         {
             try
             {
-                var projectKey = request.ProjectKey ?? _configuration["RootTenantId"] ?? "";
-                _logger.LogInformation("GetLinkBasedActionConfigAsync started for ProjectKey: {ProjectKey}", projectKey);
+                var tenantId = BlocksContext.GetContext()?.TenantId ?? "";
+                _logger.LogInformation("GetLinkBasedActionConfigAsync started for TenantId: {TenantId}", tenantId);
 
-                var config = await _repository.GetLinkBasedActionConfigAsync(projectKey);
+                var config = await _repository.GetLinkBasedActionConfigAsync();
 
                 return new GetLinkBasedActionConfigResponse
                 {
@@ -659,7 +646,7 @@ namespace DomainService.MagicLink.Service
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error in GetLinkBasedActionConfigAsync for ProjectKey: {ProjectKey}", request.ProjectKey);
+                _logger.LogError(ex, "Error in GetLinkBasedActionConfigAsync");
                 return new GetLinkBasedActionConfigResponse
                 {
                     IsSuccess = false,
@@ -676,7 +663,6 @@ namespace DomainService.MagicLink.Service
     /// </summary>
     public class MagicLinkCacheValue
     {
-        public string? ProjectKey { get; set; }
         public string? Type { get; set; }
     }
 }

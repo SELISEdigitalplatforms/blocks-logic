@@ -24,6 +24,5 @@ namespace DomainService.Workflow.Nodes.TriggerDataV1
         /// <summary>
         /// The project/tenant key
         /// </summary>
-        public string ProjectKey { get; set; } = string.Empty;
     }
 }

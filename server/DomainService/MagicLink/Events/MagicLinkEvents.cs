@@ -13,7 +13,6 @@ namespace DomainService.MagicLink.Events
         /// <summary>
         /// The project key for multi-tenancy
         /// </summary>
-        public string? ProjectKey { get; set; }
         
         /// <summary>
         /// Timestamp when the link was accessed
@@ -54,7 +53,6 @@ namespace DomainService.MagicLink.Events
         /// <summary>
         /// Project/tenant key for multi-tenancy
         /// </summary>
-        public string? ProjectKey { get; set; }
         
         /// <summary>
         /// Subscription filter ID for notifications

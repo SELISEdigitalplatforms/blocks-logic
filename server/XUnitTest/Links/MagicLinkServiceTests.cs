@@ -9,6 +9,8 @@ using Moq;
 using DomainService.MagicLink.Events;
 using MagicLinkEntity = DomainService.MagicLink.Models.MagicLink;
 
+using XUnitTest.TestHelpers;
+
 namespace XUnitTest.Links
 {
     /// <summary>
@@ -26,6 +28,7 @@ namespace XUnitTest.Links
 
         public MagicLinkServiceTests()
         {
+            TestBlocksContext.Set("tenant-1");
             var configuration = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?>
                 {
@@ -35,7 +38,7 @@ namespace XUnitTest.Links
                 .Build();
 
             // No stored link means the first generated id is accepted as unique.
-            _repo.Setup(r => r.GetMagicLinkAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            _repo.Setup(r => r.GetMagicLinkAsync(It.IsAny<string>()))
                  .ReturnsAsync((MagicLinkEntity?)null);
             _repo.Setup(r => r.CreateMagicLinkAsync(It.IsAny<MagicLinkEntity>()))
                  .ReturnsAsync("created");
@@ -51,14 +54,12 @@ namespace XUnitTest.Links
         private static CreateMagicLinkRequest Request(
             MagicLinkType type = MagicLinkType.Redirect,
             string uri = "https://target.example.com/page",
-            string? projectKey = null,
             long expiryLifeSpan = 0,
             string? configId = null,
             string? method = null) => new()
             {
                 Type = type,
                 Uri = uri,
-                ProjectKey = projectKey,
                 ExpiryLifeSpan = expiryLifeSpan,
                 LinkBasedActionConfigId = configId,
                 RequestMethod = method,
@@ -86,32 +87,14 @@ namespace XUnitTest.Links
 
             result.IsSuccess.Should().BeTrue();
             result.LinkId.Should().NotBeNullOrWhiteSpace();
-            result.ShortUri.Should().Be($"https://links.example.com/{result.LinkId}");
+            result.ShortUri.Should().Be($"https://links.example.com/tenant-1/{result.LinkId}");
             result.Type.Should().Be(nameof(MagicLinkType.Redirect));
 
             _repo.Verify(r => r.CreateMagicLinkAsync(It.IsAny<MagicLinkEntity>()), Times.Once);
             _cache.Verify(c => c.AddStringValueAsync(result.LinkId!, It.IsAny<string>(), It.IsAny<long>()), Times.Once);
         }
 
-        [Fact]
-        public async Task CreateLinkAsync_FallsBackToTheRootTenantWhenNoProjectKeyIsGiven()
-        {
-            CaptureCreates();
 
-            await _sut.CreateLinkAsync(Request(projectKey: null));
-
-            Created!.ProjectKey.Should().Be("root-tenant");
-        }
-
-        [Fact]
-        public async Task CreateLinkAsync_KeepsAnExplicitProjectKey()
-        {
-            CaptureCreates();
-
-            await _sut.CreateLinkAsync(Request(projectKey: "proj-9"));
-
-            Created!.ProjectKey.Should().Be("proj-9");
-        }
 
         [Fact]
         public async Task CreateLinkAsync_SetsAnExpiryOnlyWhenALifespanIsGiven()
@@ -176,7 +159,7 @@ namespace XUnitTest.Links
         {
             CaptureCreates();
             var calls = 0;
-            _repo.Setup(r => r.GetMagicLinkAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            _repo.Setup(r => r.GetMagicLinkAsync(It.IsAny<string>()))
                  .ReturnsAsync(() => ++calls == 1
                      ? new MagicLinkEntity { ItemId = "taken" }
                      : null);
@@ -207,7 +190,6 @@ namespace XUnitTest.Links
             var result = await _sut.CreateLinksAsync(new CreateMagicLinksRequest
             {
                 Requests = [Request(uri: "https://a.example.com"), Request(uri: "https://b.example.com")],
-                ProjectKey = "proj-1",
             });
 
             result.IsSuccess.Should().BeTrue();
@@ -217,7 +199,7 @@ namespace XUnitTest.Links
         [Fact]
         public async Task CreateLinksAsync_HandlesAnEmptyBatch()
         {
-            var result = await _sut.CreateLinksAsync(new CreateMagicLinksRequest { Requests = [], ProjectKey = "p" });
+            var result = await _sut.CreateLinksAsync(new CreateMagicLinksRequest { Requests = []});
 
             _repo.Verify(r => r.CreateMagicLinkAsync(It.IsAny<MagicLinkEntity>()), Times.Never);
             result.Should().NotBeNull();
@@ -226,16 +208,15 @@ namespace XUnitTest.Links
         [Fact]
         public async Task GetLinkAsync_ReturnsTheStoredLink()
         {
-            _repo.Setup(r => r.GetMagicLinkAsync("abc123", It.IsAny<string?>()))
+            _repo.Setup(r => r.GetMagicLinkAsync("abc123"))
                  .ReturnsAsync(new MagicLinkEntity
                  {
                      ItemId = "abc123",
                      Uri = "https://target.example.com",
                      Type = MagicLinkType.Redirect,
-                     ProjectKey = "proj-1",
                  });
 
-            var result = await _sut.GetLinkAsync(new GetMagicLinkRequest { ItemId = "abc123", ProjectKey = "proj-1" });
+            var result = await _sut.GetLinkAsync(new GetMagicLinkRequest { ItemId = "abc123"});
 
             result.IsSuccess.Should().BeTrue();
         }
@@ -243,10 +224,10 @@ namespace XUnitTest.Links
         [Fact]
         public async Task GetLinkAsync_ReportsAMissingLink()
         {
-            _repo.Setup(r => r.GetMagicLinkAsync("nope", It.IsAny<string?>()))
+            _repo.Setup(r => r.GetMagicLinkAsync("nope"))
                  .ReturnsAsync((MagicLinkEntity?)null);
 
-            var result = await _sut.GetLinkAsync(new GetMagicLinkRequest { ItemId = "nope", ProjectKey = "proj-1" });
+            var result = await _sut.GetLinkAsync(new GetMagicLinkRequest { ItemId = "nope"});
 
             result.IsSuccess.Should().BeFalse();
         }
@@ -257,7 +238,7 @@ namespace XUnitTest.Links
             _repo.Setup(r => r.GetMagicLinksAsync(It.IsAny<GetMagicLinksRequest>()))
                  .ReturnsAsync(([new MagicLinkEntity { ItemId = "a" }], 1));
 
-            var result = await _sut.GetLinksAsync(new GetMagicLinksRequest { ProjectKey = "proj-1" });
+            var result = await _sut.GetLinksAsync(new GetMagicLinksRequest());
 
             result.IsSuccess.Should().BeTrue();
         }
@@ -265,10 +246,10 @@ namespace XUnitTest.Links
         [Fact]
         public async Task RemoveLinksAsync_MarksEachRequestedLinkExpired()
         {
-            _repo.Setup(r => r.GetMagicLinksByIdsAsync(It.IsAny<List<string>>(), It.IsAny<string>()))
+            _repo.Setup(r => r.GetMagicLinksByIdsAsync(It.IsAny<List<string>>()))
                  .ReturnsAsync([
-                     new MagicLinkEntity { ItemId = "a", ProjectKey = "proj-1" },
-                     new MagicLinkEntity { ItemId = "b", ProjectKey = "proj-1" },
+                     new MagicLinkEntity { ItemId = "a"},
+                     new MagicLinkEntity { ItemId = "b"},
                  ]);
             _repo.Setup(r => r.MarkAsExpiredAsync(It.IsAny<string>(), It.IsAny<MagicLinkExpiredReason>()))
                  .ReturnsAsync(true);
@@ -277,7 +258,6 @@ namespace XUnitTest.Links
             var result = await _sut.RemoveLinksAsync(new RemoveMagicLinksRequest
             {
                 LinkIds = ["a", "b"],
-                ProjectKey = "proj-1",
             });
 
             result.Should().NotBeNull();
@@ -288,13 +268,13 @@ namespace XUnitTest.Links
         [Fact]
         public async Task RemoveLinksAsync_SkipsTheCacheWhenTheKeyIsNotThere()
         {
-            _repo.Setup(r => r.GetMagicLinksByIdsAsync(It.IsAny<List<string>>(), It.IsAny<string>()))
-                 .ReturnsAsync([new MagicLinkEntity { ItemId = "a", ProjectKey = "proj-1" }]);
+            _repo.Setup(r => r.GetMagicLinksByIdsAsync(It.IsAny<List<string>>()))
+                 .ReturnsAsync([new MagicLinkEntity { ItemId = "a"}]);
             _repo.Setup(r => r.MarkAsExpiredAsync(It.IsAny<string>(), It.IsAny<MagicLinkExpiredReason>()))
                  .ReturnsAsync(true);
             _cache.Setup(c => c.KeyExistsAsync("a")).ReturnsAsync(false);
 
-            await _sut.RemoveLinksAsync(new RemoveMagicLinksRequest { LinkIds = ["a"], ProjectKey = "proj-1" });
+            await _sut.RemoveLinksAsync(new RemoveMagicLinksRequest { LinkIds = ["a"]});
 
             _cache.Verify(c => c.RemoveKeyAsync("a"), Times.Never);
         }
@@ -302,10 +282,10 @@ namespace XUnitTest.Links
         [Fact]
         public async Task RemoveLinksAsync_ReportsTheFailureWhenTheLookupThrows()
         {
-            _repo.Setup(r => r.GetMagicLinksByIdsAsync(It.IsAny<List<string>>(), It.IsAny<string>()))
+            _repo.Setup(r => r.GetMagicLinksByIdsAsync(It.IsAny<List<string>>()))
                  .ThrowsAsync(new TimeoutException("mongo down"));
 
-            var result = await _sut.RemoveLinksAsync(new RemoveMagicLinksRequest { LinkIds = ["a"], ProjectKey = "p" });
+            var result = await _sut.RemoveLinksAsync(new RemoveMagicLinksRequest { LinkIds = ["a"]});
 
             result.IsSuccess.Should().BeFalse();
         }
@@ -313,11 +293,10 @@ namespace XUnitTest.Links
         [Fact]
         public async Task GetLinkBasedActionConfigAsync_ReturnsTheStoredConfig()
         {
-            _repo.Setup(r => r.GetLinkBasedActionConfigAsync("proj-1"))
+            _repo.Setup(r => r.GetLinkBasedActionConfigAsync())
                  .ReturnsAsync(new LinkBasedActionConfig { ShortUrlBase = "https://s.example.com" });
 
-            var result = await _sut.GetLinkBasedActionConfigAsync(
-                new GetLinkBasedActionConfigRequest { ProjectKey = "proj-1" });
+            var result = await _sut.GetLinkBasedActionConfigAsync(new GetLinkBasedActionConfigRequest());
 
             result.Should().NotBeNull();
         }
@@ -325,11 +304,10 @@ namespace XUnitTest.Links
         [Fact]
         public async Task GetLinkBasedActionConfigAsync_HandlesNoConfigAtAll()
         {
-            _repo.Setup(r => r.GetLinkBasedActionConfigAsync(It.IsAny<string>()))
+            _repo.Setup(r => r.GetLinkBasedActionConfigAsync())
                  .ReturnsAsync((LinkBasedActionConfig?)null);
 
-            var result = await _sut.GetLinkBasedActionConfigAsync(
-                new GetLinkBasedActionConfigRequest { ProjectKey = "proj-1" });
+            var result = await _sut.GetLinkBasedActionConfigAsync(new GetLinkBasedActionConfigRequest());
 
             result.Should().NotBeNull();
         }
@@ -340,7 +318,6 @@ namespace XUnitTest.Links
             await _sut.SendUsageEventAsync(new MagicLinkUsageEvent
             {
                 LinkId = "abc",
-                ProjectKey = "proj-1",
             });
 
             _messages.Invocations.Should().NotBeEmpty("the usage event has to reach the message client");
@@ -352,7 +329,6 @@ namespace XUnitTest.Links
             await _sut.SendActionEventAsync(new MagicLinkActionEvent
             {
                 LinkId = "abc",
-                ProjectKey = "proj-1",
             });
 
             _messages.Invocations.Should().NotBeEmpty("the action event has to reach the message client");

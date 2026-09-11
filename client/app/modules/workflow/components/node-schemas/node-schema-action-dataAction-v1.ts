@@ -72,7 +72,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
         searchable: true,
         options: (_data, config) => {
           return authClientService.clients
-            .getClientCredentials({ projectKey: config.projectKey })
+            .getClientCredentials()
             .then((res) =>
               res
                 .filter((item) => item.isActive)
@@ -121,7 +121,6 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
         options: (_data, config) => {
           return dataService
             .getSchemaList({
-              projectKey: config.projectKey,
               pageNo: 1,
               pageSize: 200,
               sortDescending: true,
@@ -142,15 +141,14 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
           const schemaName = parts[1] || "";
           const schemaId = parts[2] || "";
           const selectedProject = useProjectStore.getState().selectedProject;
-          const projectKey = selectedProject?.tenantId ?? "";
 
           // Auto-populate schemaFields from collection schema
-          if (schemaId && projectKey) {
+          if (schemaId) {
             dataService
-              .getSchemaDetails(schemaId, projectKey)
+              .getSchemaDetails(schemaId)
               .then(async (res) => {
                 const fields = res.data.fields ?? [];
-                const schemaFields = await resolveSchemaFields(fields, projectKey);
+                const schemaFields = await resolveSchemaFields(fields);
                 const fieldMapping = buildEmptyFieldMapping(schemaFields);
 
                 const store = config?.store;
@@ -176,7 +174,6 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
             collectionName_composite: value,
             collectionName,
             schemaName,
-            projectKey,
             projectShortKey: selectedProject?.tenantSlug ?? "",
             filter: {},
             fieldMapping: {},
@@ -254,7 +251,6 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
       collectionName_composite: "",
       collectionName: "",
       schemaName: "",
-      projectKey: "",
       projectShortKey: "",
       authenticationType: "",
       clientCredential_composite: "",
@@ -275,7 +271,6 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
       parameters: {
         ...node.parameters,
         apiBaseUrl: getRuntimeEnv("BLOCKS_DATA_BASE_URL") || "",
-        projectKey: selectedProject?.tenantId ?? "",
         projectShortKey: selectedProject?.tenantSlug ?? "",
       },
     };

@@ -113,7 +113,7 @@ describe("emailService", () => {
     http.logicService.get.mockResolvedValue([
       { itemId: "m1", name: "Inbox", isInbound: true, isDefault: true, provider: 0 },
     ]);
-    const result = await emailService.fetchEmailConfigs("pk", 0, 50);
+    const result = await emailService.fetchEmailConfigs(0, 50);
     expect(http.logicService.get).toHaveBeenCalledWith(
       expect.stringContaining("pageNumber=1"),
       undefined,
@@ -126,13 +126,13 @@ describe("emailService", () => {
 
   it("returns an empty list when Mail/Gets is not an array", async () => {
     http.logicService.get.mockResolvedValue(null);
-    await expect(emailService.fetchEmailConfigs("pk", 0, 50)).resolves.toEqual([]);
+    await expect(emailService.fetchEmailConfigs(0, 50)).resolves.toEqual([]);
   });
 
   it("fetches email templates", async () => {
-    await emailService.fetchEmailTemplates(0, 10, "pk", "", "Name", false, "", "");
+    await emailService.fetchEmailTemplates(0, 10, "", "Name", false, "", "");
     expect(http.logicService.get).toHaveBeenCalledWith(
-      expect.stringContaining("projectKey=pk"),
+      expect.stringContaining("pageSize=10"),
       undefined,
       { absoluteUrl: true },
     );
@@ -144,7 +144,6 @@ describe("agentService", () => {
     await agentService.getAgents({
       limit: 10,
       offset: 0,
-      project_key: "pk",
     });
     expect(http.agentsService.post).toHaveBeenCalled();
   });
@@ -153,7 +152,6 @@ describe("agentService", () => {
 describe("dataService", () => {
   it("gets the schema list", async () => {
     await dataService.getSchemaList({
-      projectKey: "pk",
       pageNo: 1,
       pageSize: 20,
       sortDescending: true,
@@ -162,14 +160,14 @@ describe("dataService", () => {
       schemaType: "",
     });
     expect(http.dataService.get).toHaveBeenCalledWith(
-      expect.stringContaining("ProjectKey=pk"),
+      expect.stringContaining("PageSize=20"),
       undefined,
       { absoluteUrl: true },
     );
   });
 
   it("gets schema details", async () => {
-    await dataService.getSchemaDetails("id1", "pk");
+    await dataService.getSchemaDetails("id1");
     expect(http.dataService.get).toHaveBeenCalledWith(
       expect.stringContaining("id=id1"),
       undefined,
@@ -180,9 +178,9 @@ describe("dataService", () => {
 
 describe("languageManagerService", () => {
   it("fetches languages for a project", async () => {
-    await languageManagerService.fetchBlocksLanguages("pk");
+    await languageManagerService.fetchBlocksLanguages();
     expect(http.logicService.get).toHaveBeenCalledWith(
-      expect.stringContaining("projectKey=pk"),
+      expect.stringContaining("/Gets"),
       undefined,
       { absoluteUrl: true },
     );
@@ -191,9 +189,9 @@ describe("languageManagerService", () => {
 
 describe("authClientService", () => {
   it("gets client credentials for a project", async () => {
-    await authClientService.clients.getClientCredentials({ projectKey: "pk" });
+    await authClientService.clients.getClientCredentials();
     expect(http.iamService.get).toHaveBeenCalledWith(
-      expect.stringContaining("ProjectKey=pk"),
+      expect.stringContaining("client-credentials"),
       undefined,
       { absoluteUrl: true },
     );
@@ -223,16 +221,14 @@ describe("iamService", () => {
     );
   });
 
-  it("lists permissions via POST with projectKey and roles", async () => {
+  it("lists permissions via POST with roles", async () => {
     await iamService.getPermissions({
-      projectKey: "pk1",
       roles: ["cloudadmin"],
       search: "user",
     });
     expect(http.iamService.post).toHaveBeenCalledWith(
       expect.stringContaining("/api/iam/permissions"),
       expect.objectContaining({
-        projectKey: "pk1",
         roles: ["cloudadmin"],
         filter: expect.objectContaining({ search: "user" }),
       }),

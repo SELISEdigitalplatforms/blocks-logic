@@ -56,7 +56,6 @@ namespace XUnitTest.Links
             var link = new MagicLinkEntity
             {
                 ItemId = "link-1",
-                ProjectKey = "tenant-1",
                 Uri = "https://api.example.com/do",
                 RequestMethod = method!,
             };

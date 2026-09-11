@@ -2,9 +2,8 @@
 
 namespace DomainService.RequestModel
 {
-    public class DeleteSsoCredentialRequest : IProjectKey
+    public class DeleteSsoCredentialRequest
     {
         public string ItemId { get; set; }
-        public string ProjectKey { get; set; }
     }
 }

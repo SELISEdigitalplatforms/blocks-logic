@@ -2,7 +2,6 @@ namespace Blocks.MailDriver;
 
 public class SendMail
 {
-    public string? ProjectKey { get; set; }
     public Dictionary<string, string> SubjectDataContext { get; set; } = [];
     public IEnumerable<string> To { get; set; }
     public IEnumerable<string> Bcc { get; set; } = [];

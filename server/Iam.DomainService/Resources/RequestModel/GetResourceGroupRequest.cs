@@ -2,9 +2,8 @@
 
 namespace Iam.DomainService.Resources
 {
-    public class GetResourceGroupRequest : IProjectKey
+    public class GetResourceGroupRequest
     {
-        public string ProjectKey { get ; set ; }
     }
     public class GetResourceGroupResponse
     { 

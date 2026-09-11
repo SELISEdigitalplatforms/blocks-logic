@@ -1,6 +1,5 @@
 using Blocks.Genesis;
 using DomainService.MagicLink.Models;
-using Microsoft.Extensions.Configuration;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
@@ -12,27 +11,26 @@ namespace DomainService.MagicLink.Service
     public class MagicLinkRepository : IMagicLinkRepository
     {
         private readonly IDbContextProvider _dbContextProvider;
-        private readonly IConfiguration _configuration;
 
-        public MagicLinkRepository(IDbContextProvider dbContextProvider, IConfiguration configuration)
+        public MagicLinkRepository(IDbContextProvider dbContextProvider)
         {
             _dbContextProvider = dbContextProvider;
-            _configuration = configuration;
         }
 
         /// <summary>
-        /// Gets a MongoDB collection using RootTenantId for all MagicLink operations.
-        /// Data isolation is achieved through ProjectKey filtering in queries.
+        /// Gets a MongoDB collection from the current tenant's database.
+        /// The tenant comes from BlocksContext (populated from the X-Blocks-Key header),
+        /// so the database itself provides isolation.
         /// </summary>
         private IMongoCollection<T> GetCollection<T>(string collectionName)
         {
-            var tenantId = _configuration["RootTenantId"];
+            var tenantId = BlocksContext.GetContext()?.TenantId;
             return _dbContextProvider.GetCollection<T>(tenantId, collectionName);
         }
 
         #region MagicLink Operations
 
-        public async Task<Models.MagicLink?> GetMagicLinkAsync(string itemId, string? projectKey = null)
+        public async Task<Models.MagicLink?> GetMagicLinkAsync(string itemId)
         {
             var collection = GetCollection<Models.MagicLink>(Utilities.Constants.MagicLinksCollection);
             var filterBuilder = Builders<Models.MagicLink>.Filter;
@@ -57,17 +55,11 @@ namespace DomainService.MagicLink.Service
             return result.ModifiedCount > 0;
         }
 
-        public async Task<List<Models.MagicLink>> GetMagicLinksByIdsAsync(List<string> itemIds, string projectKey)
+        public async Task<List<Models.MagicLink>> GetMagicLinksByIdsAsync(List<string> itemIds)
         {
             var collection = GetCollection<Models.MagicLink>(Utilities.Constants.MagicLinksCollection);
             var filterBuilder = Builders<Models.MagicLink>.Filter;
             var filter = filterBuilder.In(x => x.ItemId, itemIds);
-
-            // Filter by ProjectKey to ensure project-level data isolation
-            if (!string.IsNullOrEmpty(projectKey))
-            {
-                filter &= filterBuilder.Eq(x => x.ProjectKey, projectKey);
-            }
 
             return await collection.Find(filter).ToListAsync();
         }
@@ -77,9 +69,6 @@ namespace DomainService.MagicLink.Service
             var collection = GetCollection<Models.MagicLink>(Utilities.Constants.MagicLinksCollection);
             var filterBuilder = Builders<Models.MagicLink>.Filter;
             var filters = new List<FilterDefinition<Models.MagicLink>>();
-
-            // Required: Filter by ProjectKey to ensure project-level data isolation
-            filters.Add(filterBuilder.Eq(x => x.ProjectKey, request.ProjectKey));
 
             // Optional: Filter by Type
             if (request.Type.HasValue)
@@ -160,17 +149,17 @@ namespace DomainService.MagicLink.Service
 
         #region ClientCredentials and Config Operations
 
-        public async Task<ClientCredential?> GetClientCredentialsAsync(string clientCredentialId, string projectKey)
+        public async Task<ClientCredential?> GetClientCredentialsAsync(string clientCredentialId, string tenantId)
         {
-            var database = _dbContextProvider.GetDatabase(projectKey);
+            var database = _dbContextProvider.GetDatabase(tenantId);
             var collection = database.GetCollection<ClientCredential>(Utilities.Constants.ClientCredentialsCollection);
             var filter = Builders<ClientCredential>.Filter.Eq(x => x.ItemId, clientCredentialId);
             return await collection.Find(filter).FirstOrDefaultAsync();
         }
 
-        public async Task<LinkBasedActionConfig?> GetLinkConfigAsync(string configId, string projectKey)
+        public async Task<LinkBasedActionConfig?> GetLinkConfigAsync(string configId, string tenantId)
         {
-            var database = _dbContextProvider.GetDatabase(projectKey);
+            var database = _dbContextProvider.GetDatabase(tenantId);
             var collection = database.GetCollection<LinkBasedActionConfig>(Utilities.Constants.LinkBasedActionConfigsCollection);
             var filter = Builders<LinkBasedActionConfig>.Filter.Eq(x => x.ItemId, configId);
             return await collection.Find(filter).FirstOrDefaultAsync();
@@ -270,7 +259,7 @@ namespace DomainService.MagicLink.Service
 
         public async Task CreateVisitorUsageAsync(MagicLinkVisitorUsage visitorUsage)
         {
-            var database = _dbContextProvider.GetDatabase(visitorUsage.ProjectKey);
+            var database = _dbContextProvider.GetDatabase(BlocksContext.GetContext()?.TenantId);
             var collection = database.GetCollection<MagicLinkVisitorUsage>(Utilities.Constants.MagicLinkVisitorUsagesCollection);
             await collection.InsertOneAsync(visitorUsage);
         }
@@ -279,17 +268,16 @@ namespace DomainService.MagicLink.Service
 
         #region LinkBasedActionConfig Operations
 
-        public async Task<LinkBasedActionConfig?> GetLinkBasedActionConfigAsync(string projectKey)
+        public async Task<LinkBasedActionConfig?> GetLinkBasedActionConfigAsync()
         {
-            var database = _dbContextProvider.GetDatabase(projectKey);
+            var database = _dbContextProvider.GetDatabase(BlocksContext.GetContext()?.TenantId);
             var collection = database.GetCollection<LinkBasedActionConfig>(Utilities.Constants.LinkBasedActionConfigsCollection);
-            var filter = Builders<LinkBasedActionConfig>.Filter.Eq(x => x.ProjectKey, projectKey);
-            return await collection.Find(filter).FirstOrDefaultAsync();
+            return await collection.Find(Builders<LinkBasedActionConfig>.Filter.Empty).FirstOrDefaultAsync();
         }
 
         public async Task<string> CreateLinkBasedActionConfigAsync(LinkBasedActionConfig config)
         {
-            var database = _dbContextProvider.GetDatabase(config.ProjectKey);
+            var database = _dbContextProvider.GetDatabase(BlocksContext.GetContext()?.TenantId);
             var collection = database.GetCollection<LinkBasedActionConfig>(Utilities.Constants.LinkBasedActionConfigsCollection);
             await collection.InsertOneAsync(config);
             return config.ItemId;
@@ -297,7 +285,7 @@ namespace DomainService.MagicLink.Service
 
         public async Task<bool> UpdateLinkBasedActionConfigAsync(LinkBasedActionConfig config)
         {
-            var database = _dbContextProvider.GetDatabase(config.ProjectKey);
+            var database = _dbContextProvider.GetDatabase(BlocksContext.GetContext()?.TenantId);
             var collection = database.GetCollection<LinkBasedActionConfig>(Utilities.Constants.LinkBasedActionConfigsCollection);
             var filter = Builders<LinkBasedActionConfig>.Filter.Eq(x => x.ItemId, config.ItemId);
             config.UpdatedAt = DateTime.UtcNow;

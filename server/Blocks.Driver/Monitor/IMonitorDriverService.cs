@@ -7,8 +7,8 @@ namespace Blocks.Driver.Monitor;
 /// </summary>
 public interface IMonitorDriverService
 {
-    Task<PaginatedResponse> GetMonitorListAsync(string projectKey, string? monitorSourceType, int pageNumber = 0, int pageSize = 10);
-    Task<BaseApiResponse> GetMonitorListByRepoIdAsync(string projectKey, string repoId);
+    Task<PaginatedResponse> GetMonitorListAsync(string tenantId, string? monitorSourceType, int pageNumber = 0, int pageSize = 10);
+    Task<BaseApiResponse> GetMonitorListByRepoIdAsync(string tenantId, string repoId);
     Task<BaseApiResponse> GetMonitorByIdAsync(string monitorId);
     Task<BaseApiResponse> SaveMonitorAsync(SaveMonitorConfigurationRequest request);
     Task<BaseApiResponse> UpdateMonitorAsync(UpdateMonitorConfigurationRequest request);

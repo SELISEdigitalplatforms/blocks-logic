@@ -88,7 +88,6 @@ namespace DomainService.MagicLink.Models
         /// <summary>
         /// The project/tenant identifier
         /// </summary>
-        public string ProjectKey { get; set; } = string.Empty;
 
         /// <summary>
         /// The generated short URI (full URL)
@@ -173,7 +172,6 @@ namespace DomainService.MagicLink.Models
                 ExpiryDate = entity.ExpiryDate,
                 IsExpired = entity.IsExpired,
                 ExpiredReason = entity.ExpiredReason,
-                ProjectKey = entity.ProjectKey,
                 ShortUri = entity.ShortUri,
                 RequestByUserId = entity.RequestByUserId,
                 UserCanLogin = entity.UserCanLogin,

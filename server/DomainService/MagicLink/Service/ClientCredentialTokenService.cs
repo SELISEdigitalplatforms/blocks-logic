@@ -27,9 +27,9 @@ namespace DomainService.MagicLink.Service
         /// Gets an access token using client credentials
         /// </summary>
         /// <param name="clientCredentials">The client credentials entity</param>
-        /// <param name="projectKey">The project key (used as X-Blocks-Key header)</param>
+        /// <param name="tenantId">The project key (used as X-Blocks-Key header)</param>
         /// <returns>The access token or null if failed</returns>
-        Task<string?> GetTokenAsync(ClientCredential clientCredentials, string projectKey);
+        Task<string?> GetTokenAsync(ClientCredential clientCredentials, string tenantId);
     }
 
     /// <summary>
@@ -51,7 +51,7 @@ namespace DomainService.MagicLink.Service
             _configuration = configuration;
         }
 
-        public async Task<string?> GetTokenAsync(ClientCredential clientCredentials, string projectKey)
+        public async Task<string?> GetTokenAsync(ClientCredential clientCredentials, string tenantId)
         {
             try
             {
@@ -64,7 +64,7 @@ namespace DomainService.MagicLink.Service
                 using var client = _httpClientFactory.CreateClient();
 
                 // Set headers
-                client.DefaultRequestHeaders.Add("X-Blocks-Key", projectKey);
+                client.DefaultRequestHeaders.Add("X-Blocks-Key", tenantId);
 
                 // Prepare form data
                 var formData = new Dictionary<string, string>

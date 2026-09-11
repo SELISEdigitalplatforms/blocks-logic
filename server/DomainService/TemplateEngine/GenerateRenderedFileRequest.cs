@@ -6,9 +6,8 @@ namespace DomainService.TemplateEngine
     /// Request to generate a rendered file from template using entity data
     /// </summary>
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
-    public class GenerateRenderedFileRequest : IProjectKey
+    public class GenerateRenderedFileRequest
     {
-        public string? ProjectKey { get; set; }
         public string FileId { get; set; } = string.Empty;
         public string FileNameExtension { get; set; } = ".html";
         public string TemplateFileId { get; set; } = string.Empty;

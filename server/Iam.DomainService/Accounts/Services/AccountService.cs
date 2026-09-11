@@ -127,7 +127,7 @@ namespace Iam.DomainService.Accounts
                 };
             }
 
-            var result = await ProcessRecoverAccountAsync(user, recoveryRequest.MailPurpose, recoveryRequest.ProjectKey);
+            var result = await ProcessRecoverAccountAsync(user, recoveryRequest.MailPurpose, BlocksContext.GetContext()?.TenantId ?? "");
 
             return new BaseAccountResponse
             {
@@ -135,7 +135,7 @@ namespace Iam.DomainService.Accounts
             };
         }
 
-        public async Task<bool> ProcessRecoverAccountAsync(User user, string emailPurpose, string projectKey)
+        public async Task<bool> ProcessRecoverAccountAsync(User user, string emailPurpose, string tenantId)
         {
             var config = await _repository.GetIamConfigurationAsync();
             var key = Guid.NewGuid().ToString("n");
@@ -144,7 +144,7 @@ namespace Iam.DomainService.Accounts
             await _cacheClient.AddStringValueAsync(key, user.ItemId, config.RecoverAccountUrlLifetimeInMinutes * 60);
 
             emailPurpose = string.IsNullOrWhiteSpace(emailPurpose) ? "RecoverAccount" : emailPurpose;
-            var result = await SendActivationToEmailAsync(user, recoverAccountUrl, emailPurpose, projectKey);
+            var result = await SendActivationToEmailAsync(user, recoverAccountUrl, emailPurpose, tenantId);
 
             await _repository.InsertUserKeyMapAsync(new UserKeyMap
             {
@@ -160,7 +160,7 @@ namespace Iam.DomainService.Accounts
             return true;
         }
 
-        public async Task<bool> SendActivationToEmailAsync(User user, string recoverAccountUrl, string emailPurpose, string projectKey)
+        public async Task<bool> SendActivationToEmailAsync(User user, string recoverAccountUrl, string emailPurpose, string tenantId)
         {
             _logger.LogInformation("Sending recovery for {Aid} by email: {MPurpose}", user.ItemId, emailPurpose);
             var sendMailCommand = new SendMail
@@ -175,7 +175,6 @@ namespace Iam.DomainService.Accounts
                 Language = user.Language ?? "en-US",
                 Purpose = emailPurpose,
                 To = new string[] { user.Email.ToLower() },
-                ProjectKey = projectKey
             };
 
             return await _identityAccessManagementService.SendEmailAsync(sendMailCommand);
@@ -305,7 +304,7 @@ namespace Iam.DomainService.Accounts
                 return new BaseAccountResponse();
             }
 
-            var result = await SendReActivationAsync(user, resendActivationRequest.ProjectKey);
+            var result = await SendReActivationAsync(user, BlocksContext.GetContext()?.TenantId ?? "");
 
             return new BaseAccountResponse
             {
@@ -313,7 +312,7 @@ namespace Iam.DomainService.Accounts
             };
         }
 
-        public async Task<bool> SendReActivationAsync(User user, string projectKey)
+        public async Task<bool> SendReActivationAsync(User user, string tenantId)
         {
             var config = await _repository.GetIamConfigurationAsync();
             var key = Guid.NewGuid().ToString("n");
@@ -322,7 +321,7 @@ namespace Iam.DomainService.Accounts
             await _cacheClient.AddStringValueAsync(key, user.ItemId, config.ActivationUrlLifetimeInMinutes * 60);
 
             var emailPurpose = string.IsNullOrWhiteSpace(user.MailPurpose) ? "AccountActivation" : user.MailPurpose;
-            var result = await _identityAccessManagementService.SendActivationToEmailAsync(user, accountActivationUri, emailPurpose, projectKey);
+            var result = await _identityAccessManagementService.SendActivationToEmailAsync(user, accountActivationUri, emailPurpose, tenantId);
 
             await _repository.InsertUserKeyMapAsync(new UserKeyMap
             {

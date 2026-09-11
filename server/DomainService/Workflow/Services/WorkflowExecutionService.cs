@@ -235,7 +235,6 @@ namespace DomainService.Workflow.Services
                     WorkflowId = workflow.ItemId,
                     WorkflowExecutionId = execution.Id,
                     NodeId = triggerId,
-                    ProjectKey = workflow.TenantId,
                 };
 
                 var responseMode = triggerNode.Parameters.GetValue("httpResponseMode");
@@ -304,10 +303,10 @@ namespace DomainService.Workflow.Services
         public async Task EmailTriggerStartAsync(EmailTriggerEvent emailEvent)
         {
             _logger.LogInformation("Starting EmailTriggerStartAsync for MailServerConfigurationId: {MailServerConfigurationId} and status: {Status}", emailEvent.Mail.MailServerConfigurationId, emailEvent.Mail.Status);
-            var tenantId = emailEvent.ProjectKey;
+            var tenantId = BlocksContext.GetContext()?.TenantId;
             if (string.IsNullOrEmpty(tenantId))
             {
-                _logger.LogError("ProjectKey (TenantId) is null or empty in BlocksContext");
+                _logger.LogError("TenantId (TenantId) is null or empty in BlocksContext");
                 return;
             }
             if (string.IsNullOrEmpty(emailEvent.Mail.MailServerConfigurationId))
@@ -438,7 +437,6 @@ namespace DomainService.Workflow.Services
                         WorkflowId = workflow.ItemId,
                         WorkflowExecutionId = execution.Id!,
                         NodeId = triggerNode.Id,
-                        ProjectKey = tenantId
                     }
                 });
                 _logger.LogInformation("Queued execution {ExecutionId} for WorkflowId: {WorkflowId}", execution.Id, workflow.ItemId);
@@ -449,9 +447,9 @@ namespace DomainService.Workflow.Services
             }
         }
 
-        public async Task<WorkflowExecutionsGetResponseDto> GetExecutionsByWorkflowIdAsync(string projectKey, WorkflowExecutionsGetRequestDto dto)
+        public async Task<WorkflowExecutionsGetResponseDto> GetExecutionsByWorkflowIdAsync(string tenantId, WorkflowExecutionsGetRequestDto dto)
         {
-            var executions = await _executionRepository.GetByWorkflowIdAsync(dto.WorkflowId, projectKey);
+            var executions = await _executionRepository.GetByWorkflowIdAsync(dto.WorkflowId, tenantId);
 
             var executionItems = executions.Select(e => new WorkflowExecutionItemDto
             {
@@ -475,13 +473,13 @@ namespace DomainService.Workflow.Services
             };
         }
 
-        public async Task<WorkflowExecutionGetResponseDto> GetExecutionByIdAsync(string projectKey, WorkflowExecutionGetRequestDto dto)
+        public async Task<WorkflowExecutionGetResponseDto> GetExecutionByIdAsync(string tenantId, WorkflowExecutionGetRequestDto dto)
         {
-            var execution = await _executionRepository.GetByIdAsync(dto.ExecutionId, projectKey)
+            var execution = await _executionRepository.GetByIdAsync(dto.ExecutionId, tenantId)
                 ?? throw new InvalidOperationException($"Execution {dto.ExecutionId} not found");
 
             // Get all workflow items - frontend will organize them into input/output structure
-            var allItems = await _executionRepository.GetAllItemsByExecutionIdAsync(dto.ExecutionId, projectKey);
+            var allItems = await _executionRepository.GetAllItemsByExecutionIdAsync(dto.ExecutionId, tenantId);
 
             var nodes = execution.WorkflowSnapshot.Nodes.Select(item => new NodeDto
             {
@@ -574,9 +572,9 @@ namespace DomainService.Workflow.Services
             };
         }
 
-        public async Task<WorkflowExecutionGetResponseDto> LastSuccessfullExecutionAsync(string projectKey, LastSuccessfullExecutionRequestDto dto)
+        public async Task<WorkflowExecutionGetResponseDto> LastSuccessfullExecutionAsync(string tenantId, LastSuccessfullExecutionRequestDto dto)
         {
-            var execution = await _executionRepository.GetLastCompletedExecution(projectKey, dto.WorkflowId);
+            var execution = await _executionRepository.GetLastCompletedExecution(tenantId, dto.WorkflowId);
             if (execution == null)
             {
                 return new WorkflowExecutionGetResponseDto
@@ -586,7 +584,7 @@ namespace DomainService.Workflow.Services
                     Errors = new Dictionary<string, string> { { "Message", "No Execution" } }
                 };
             }
-            var allItems = await _executionRepository.GetAllItemsByExecutionIdAsync(execution.Id, projectKey);
+            var allItems = await _executionRepository.GetAllItemsByExecutionIdAsync(execution.Id, tenantId);
 
             var nodes = execution.WorkflowSnapshot.Nodes.Select(item => new NodeDto
             {
@@ -683,10 +681,10 @@ namespace DomainService.Workflow.Services
             _logger.LogInformation("Starting DataTriggerStartAsync for Collection: {CollectionName}, Operation: {Operation}",
                 dataEvent.CollectionName, dataEvent.Operation);
 
-            var tenantId = dataEvent.ProjectKey;
+            var tenantId = BlocksContext.GetContext()?.TenantId;
             if (string.IsNullOrEmpty(tenantId))
             {
-                _logger.LogError("ProjectKey (TenantId) is null or empty in BlocksContext");
+                _logger.LogError("TenantId (TenantId) is null or empty in BlocksContext");
                 return;
             }
 
@@ -796,7 +794,7 @@ namespace DomainService.Workflow.Services
 
         private async Task QueueDataTriggerExecutionAsync(
             WorkflowEntity workflow, WorkflowExecutionMode executionMode, DataChangeEvent dataEvent, string operationStr,
-            BsonArray triggerData, string projectKey)
+            BsonArray triggerData, string tenantId)
         {
             try
             {
@@ -838,7 +836,6 @@ namespace DomainService.Workflow.Services
                         WorkflowId = workflow.ItemId,
                         WorkflowExecutionId = execution.Id!,
                         NodeId = triggerNode.Id,
-                        ProjectKey = projectKey
                     }
                 });
 
@@ -933,7 +930,6 @@ namespace DomainService.Workflow.Services
                         WorkflowId = workflowSnapshot.ItemId,
                         WorkflowExecutionId = execution.Id!,
                         NodeId = triggerNode.Id,
-                        ProjectKey = tenantId
                     }
                 });
 

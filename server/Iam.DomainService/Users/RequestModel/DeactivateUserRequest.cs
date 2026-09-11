@@ -4,9 +4,8 @@ using Blocks.Genesis;
 
 namespace Iam.DomainService.Users
 {
-    public class DeactivateUserRequest : IProjectKey
+    public class DeactivateUserRequest
     {
         public string UserId { get; set; }
-        public string? ProjectKey { get ; set ; }
     }
 }

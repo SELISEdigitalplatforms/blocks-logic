@@ -1,3 +1,4 @@
+using Blocks.Genesis;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Renci.SshNet;
@@ -36,14 +37,14 @@ namespace Common.InternalService.Storage
             return new SftpClient(_sftpHost, port, _sftpUsername, _sftpPassword);
         }
 
-        public async Task<bool> UploadFileToSftpAsync(string fileName, string projectKey, string itemId, string versionId, IFormFile file)
+        public async Task<bool> UploadFileToSftpAsync(string fileName, string tenantId, string itemId, string versionId, IFormFile file)
         {
             try
             {
                 using var client = CreateSftpClient();
                 client.Connect();
 
-                string remoteDirectory = $"{_remoteBasePath.TrimEnd('/')}/{projectKey}/{itemId}/{versionId}";
+                string remoteDirectory = $"{_remoteBasePath.TrimEnd('/')}/{tenantId}/{itemId}/{versionId}";
                 string remoteFilePath = $"{remoteDirectory}/{fileName.TrimStart('/')}";
 
                 EnsureRemoteDirectoryExists(client, remoteDirectory);
@@ -82,9 +83,9 @@ namespace Common.InternalService.Storage
             }
         }
 
-        public async Task<Stream?> DownloadFileAsync(string fileName, string? projectKey = null, string? itemId = null, string? versionId = null)
+        public async Task<Stream?> DownloadFileAsync(string fileName, string? tenantId = null, string? itemId = null, string? versionId = null)
         {
-            if (projectKey == null)
+            if (tenantId == null)
             {
                 Console.WriteLine("Project key is null.");
                 return null;
@@ -95,7 +96,7 @@ namespace Common.InternalService.Storage
                 using var client = CreateSftpClient();
                 client.Connect();
 
-                string remoteFilePath = $"{_remoteBasePath.TrimEnd('/')}/{projectKey}/{itemId}/{versionId}/{fileName.TrimStart('/')}";
+                string remoteFilePath = $"{_remoteBasePath.TrimEnd('/')}/{tenantId}/{itemId}/{versionId}/{fileName.TrimStart('/')}";
 
                 var memoryStream = new MemoryStream();
 
@@ -196,7 +197,6 @@ namespace Common.InternalService.Storage
                 FileVersion = request.FileVersion,
                 ConfiguratioName = request.ConfigurationName,
                 AccessModifier = request.AccessModifier.ToString(),
-                ProjectKey = request.ProjectKey,
                 ExpiryUtc = expiryUtc.ToString("o", CultureInfo.InvariantCulture)
             };
 
@@ -206,8 +206,7 @@ namespace Common.InternalService.Storage
 
             var queryParams = new List<string>
             {
-                $"projectkey={Uri.EscapeDataString(request.ProjectKey ?? string.Empty)}",
-                $"x-blocks-key={Uri.EscapeDataString(request.ProjectKey ?? string.Empty)}",
+                $"x-blocks-key={Uri.EscapeDataString(BlocksContext.GetContext()?.TenantId ?? string.Empty)}",
                 $"configuratioName={Uri.EscapeDataString(request.ConfigurationName ?? string.Empty)}",
                 $"signature={Uri.EscapeDataString(signature)}"
             };

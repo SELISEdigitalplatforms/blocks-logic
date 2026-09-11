@@ -79,9 +79,9 @@ namespace Iam.DomainService.Accounts
             return true;
         }
 
-        public async Task<bool> HandlePostEventForActivation(User user, string mailPurpose, string projectKey)
+        public async Task<bool> HandlePostEventForActivation(User user, string mailPurpose, string tenantId)
         {
-            return await _identityAccessManagementService.SendAccountActivationEmailAsync(user, mailPurpose, projectKey);
+            return await _identityAccessManagementService.SendAccountActivationEmailAsync(user, mailPurpose, tenantId);
         }
 
         public async Task<bool> HandlePostEventForResetPassword(string userId)

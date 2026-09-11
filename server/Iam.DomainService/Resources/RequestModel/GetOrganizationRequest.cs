@@ -2,9 +2,8 @@
 
 namespace Iam.DomainService.Resources
 {
-    public class GetOrganizationRequest : IProjectKey
+    public class GetOrganizationRequest
     {
-        public string ProjectKey { get ; set ; }
         public string ItemId { get; set ; }
     }
 }

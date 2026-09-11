@@ -56,7 +56,6 @@ namespace XUnitTest.Links
             string? redirectUrl = null) => new()
             {
                 ItemId = "link-1",
-                ProjectKey = "project-1",
                 Type = type,
                 IsExpired = isExpired,
                 ExpiredReason = expiredReason,
@@ -68,13 +67,12 @@ namespace XUnitTest.Links
             };
 
         private void StoredLink(MagicLinkEntity? link) =>
-            _repo.Setup(r => r.GetMagicLinkAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            _repo.Setup(r => r.GetMagicLinkAsync(It.IsAny<string>()))
                  .ReturnsAsync(link);
 
         private static InvokeMagicLinkRequest InvokeRequest() => new()
         {
             LinkId = "link-1",
-            ProjectKey = "project-1",
             VisitorIpAddress = "203.0.113.7",
         };
 
@@ -205,7 +203,6 @@ namespace XUnitTest.Links
 
             captured.Should().NotBeNull();
             captured!.Payload.LinkId.Should().Be("link-1");
-            captured.Payload.ProjectKey.Should().Be("project-1");
             captured.Payload.VisitorIpAddress.Should().Be("203.0.113.7");
         }
 
@@ -214,7 +211,7 @@ namespace XUnitTest.Links
         {
             // Invocation sits behind a public endpoint, so an unhandled throw here would be a
             // stack trace to an anonymous caller. The service catches and reports instead.
-            _repo.Setup(r => r.GetMagicLinkAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            _repo.Setup(r => r.GetMagicLinkAsync(It.IsAny<string>()))
                  .ThrowsAsync(new InvalidOperationException("mongo unreachable"));
 
             var response = await _sut.InvokeLinkAsync(InvokeRequest());
@@ -227,17 +224,16 @@ namespace XUnitTest.Links
 
         #region SaveLinkBasedActionConfigAsync
 
-        private static SaveLinkBasedActionConfigRequest ConfigRequest(string? projectKey = "project-1") => new()
+        private static SaveLinkBasedActionConfigRequest ConfigRequest(string? tenantId = "project-1") => new()
         {
             ContextName = "orders",
             ShortUrlBase = "https://s.example.com",
-            ProjectKey = projectKey,
         };
 
         [Fact]
         public async Task A_project_without_a_config_gets_one_created()
         {
-            _repo.Setup(r => r.GetLinkBasedActionConfigAsync(It.IsAny<string>()))
+            _repo.Setup(r => r.GetLinkBasedActionConfigAsync())
                  .ReturnsAsync((LinkBasedActionConfig?)null);
 
             var response = await _sut.SaveLinkBasedActionConfigAsync(ConfigRequest());
@@ -246,23 +242,21 @@ namespace XUnitTest.Links
             response.WasCreated.Should().BeTrue();
             response.ConfigId.Should().NotBeNullOrWhiteSpace();
             response.Config!.ContextName.Should().Be("orders");
-            response.Config.ProjectKey.Should().Be("project-1");
             _repo.Verify(r => r.CreateLinkBasedActionConfigAsync(It.IsAny<LinkBasedActionConfig>()), Times.Once);
         }
 
         [Fact]
-        public async Task An_omitted_project_key_falls_back_to_the_root_tenant()
+        public async Task An_omitted_tenant_id_falls_back_to_the_root_tenant()
         {
             LinkBasedActionConfig? created = null;
-            _repo.Setup(r => r.GetLinkBasedActionConfigAsync(It.IsAny<string>()))
+            _repo.Setup(r => r.GetLinkBasedActionConfigAsync())
                  .ReturnsAsync((LinkBasedActionConfig?)null);
             _repo.Setup(r => r.CreateLinkBasedActionConfigAsync(It.IsAny<LinkBasedActionConfig>()))
                  .Callback<LinkBasedActionConfig>(c => created = c)
                  .ReturnsAsync("created");
 
-            await _sut.SaveLinkBasedActionConfigAsync(ConfigRequest(projectKey: null));
+            await _sut.SaveLinkBasedActionConfigAsync(ConfigRequest());
 
-            created!.ProjectKey.Should().Be("root-tenant");
         }
 
         [Fact]
@@ -273,10 +267,9 @@ namespace XUnitTest.Links
                 ItemId = "config-1",
                 ContextName = "old-context",
                 ShortUrlBase = "https://old.example.com",
-                ProjectKey = "project-1",
                 CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
             };
-            _repo.Setup(r => r.GetLinkBasedActionConfigAsync(It.IsAny<string>())).ReturnsAsync(existing);
+            _repo.Setup(r => r.GetLinkBasedActionConfigAsync()).ReturnsAsync(existing);
             _repo.Setup(r => r.UpdateLinkBasedActionConfigAsync(It.IsAny<LinkBasedActionConfig>()))
                  .ReturnsAsync(true);
 
@@ -295,7 +288,7 @@ namespace XUnitTest.Links
         [Fact]
         public async Task A_rejected_update_is_reported_as_a_failure()
         {
-            _repo.Setup(r => r.GetLinkBasedActionConfigAsync(It.IsAny<string>()))
+            _repo.Setup(r => r.GetLinkBasedActionConfigAsync())
                  .ReturnsAsync(new LinkBasedActionConfig { ItemId = "config-1" });
             _repo.Setup(r => r.UpdateLinkBasedActionConfigAsync(It.IsAny<LinkBasedActionConfig>()))
                  .ReturnsAsync(false);
@@ -309,7 +302,7 @@ namespace XUnitTest.Links
         [Fact]
         public async Task A_repository_failure_while_saving_is_reported_on_the_response()
         {
-            _repo.Setup(r => r.GetLinkBasedActionConfigAsync(It.IsAny<string>()))
+            _repo.Setup(r => r.GetLinkBasedActionConfigAsync())
                  .ThrowsAsync(new InvalidOperationException("mongo unreachable"));
 
             var response = await _sut.SaveLinkBasedActionConfigAsync(ConfigRequest());

@@ -31,7 +31,7 @@ namespace Cloud.DomainService.Services
         public async Task<BaseResponse> UpdateAsync(UpdateApiEndpointConfigRequest request)
         {
             var userId = BlocksContext.GetContext()?.UserId ?? string.Empty;
-            var success = await _repository.UpdateAsync(request.ProjectKey, request.ItemId,request.IsCaptchaRequired,request.IsMfaRequired,userId);
+            var success = await _repository.UpdateAsync(BlocksContext.GetContext()?.TenantId, request.ItemId,request.IsCaptchaRequired,request.IsMfaRequired,userId);
 
             return new BaseResponse
             {
@@ -50,7 +50,7 @@ namespace Cloud.DomainService.Services
             var isMfaRequired = request.DisableAll ? false : request.IsMfaRequired;
 
             var modifiedCount = await _repository.BulkUpdateAsync(
-                request.ProjectKey,
+                BlocksContext.GetContext()?.TenantId,
                 request.ItemIds,
                 isCaptchaRequired,
                 isMfaRequired,

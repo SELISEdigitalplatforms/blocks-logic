@@ -18,7 +18,6 @@ namespace DomainService.MagicLink.Models
         /// <summary>
         /// Project/tenant key for multi-tenancy
         /// </summary>
-        public string? ProjectKey { get; set; }
 
         /// <summary>
         /// IP address of the visitor

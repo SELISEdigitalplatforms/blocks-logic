@@ -6,7 +6,7 @@ namespace DomainService.MagicLink
     /// <summary>
     /// Request to invoke a magic link
     /// </summary>
-    public class InvokeMagicLinkRequest : IProjectKey
+    public class InvokeMagicLinkRequest
     {
         /// <summary>
         /// The magic link ID (short code) to invoke
@@ -16,7 +16,6 @@ namespace DomainService.MagicLink
         /// <summary>
         /// Project/tenant key for multi-tenancy
         /// </summary>
-        public string? ProjectKey { get; set; }
 
         /// <summary>
         /// Subscription filter ID for notifications

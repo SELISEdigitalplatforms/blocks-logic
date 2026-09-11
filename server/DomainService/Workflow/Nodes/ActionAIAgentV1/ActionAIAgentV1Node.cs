@@ -29,7 +29,7 @@ namespace DomainService.Workflow.Nodes.ActionAIAgentV1
                 for (int i = 0; i < context.IterationCount; i++)
                 {
                     var input = parseExpression<string>(parameters.Input, context.InputItems[i], context) ?? "";
-                    var response = await CallAIAgent(parameters.ApiBaseUrl, parameters.WidgetId, parameters.ProjectKey, input);
+                    var response = await CallAIAgent(parameters.ApiBaseUrl, parameters.WidgetId, context.TenantId, input);
 
                     outputItems.Add(new NodeOutputItem
                     {
@@ -58,8 +58,7 @@ namespace DomainService.Workflow.Nodes.ActionAIAgentV1
             {
                 var config = JsonSerializer.Deserialize<ActionAIAgentV1Parameters>(parameters);
                 var isValid = config != null &&
-                              !string.IsNullOrEmpty(config.WidgetId) &&
-                              !string.IsNullOrEmpty(config.ProjectKey);
+                              !string.IsNullOrEmpty(config.WidgetId);
                 return Task.FromResult(isValid);
             }
             catch
@@ -70,7 +69,7 @@ namespace DomainService.Workflow.Nodes.ActionAIAgentV1
 
 
 
-        private async Task<JsonElement> CallAIAgent(string apiBaseUrl, string widgetId, string projectKey, string message)
+        private async Task<JsonElement> CallAIAgent(string apiBaseUrl, string widgetId, string tenantId, string message)
         {
             try
             {
@@ -78,7 +77,7 @@ namespace DomainService.Workflow.Nodes.ActionAIAgentV1
                 var initiateUrl = $"{apiBaseUrl}/conversation/initiate?widget_id={widgetId}";
 
                 var initiateRequest = new HttpRequestMessage(HttpMethod.Get, initiateUrl);
-                initiateRequest.Headers.Add("X-Blocks-Key", projectKey);
+                initiateRequest.Headers.Add("X-Blocks-Key", tenantId);
 
                 var initiateResponse = await _httpClient.SendAsync(initiateRequest);
                 initiateResponse.EnsureSuccessStatusCode();
@@ -87,9 +86,9 @@ namespace DomainService.Workflow.Nodes.ActionAIAgentV1
                 var initiateData = JsonSerializer.Deserialize<AgentChatInitiateResponse>(initiateJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                     ?? throw new Exception("Invalid initiate response");
 
-                var chatRequestUrl = $"{apiBaseUrl}/chat/{initiateData.SessionId}?project_key={projectKey}&pg=false";
+                var chatRequestUrl = $"{apiBaseUrl}/chat/{initiateData.SessionId}?pg=false";
                 var chatRequest = new HttpRequestMessage(HttpMethod.Post, chatRequestUrl);
-                chatRequest.Headers.Add("X-Blocks-Key", projectKey);
+                chatRequest.Headers.Add("X-Blocks-Key", tenantId);
                 chatRequest.Headers.Add("X-Blocks-Token", initiateData.Token);
                 chatRequest.Content = new StringContent(JsonSerializer.Serialize(new { message }), Encoding.UTF8, "application/json");
                 var chatResponse = await _httpClient.SendAsync(chatRequest, HttpCompletionOption.ResponseHeadersRead);

@@ -3,12 +3,12 @@ namespace Common.InternalService.Monitor
     public interface IMonitorObservabilityService
     {
         Task<PaginatedResponse> GetMonitorListAsync(
-            string projectKey,
+            string tenantId,
             string? monitorSourceType,
             int pageNumber = 0,
             int pageSize = 10);
 
-        Task<BaseApiResponse> GetMonitorListByRepoIdAsync(string projectKey, string repoId);
+        Task<BaseApiResponse> GetMonitorListByRepoIdAsync(string tenantId, string repoId);
 
         Task<BaseApiResponse> GetMonitorByIdAsync(string monitorId);
 

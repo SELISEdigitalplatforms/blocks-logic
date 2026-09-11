@@ -228,11 +228,10 @@ namespace XUnitTest.Links
         }
 
         [Fact]
-        public async Task TheRequestCarriesTheProjectKeyAndAHashedSecret()
+        public async Task TheRequestCarriesTheCurrentTenantAndAHashedSecret()
         {
-            _tenants.Setup(t => t.GetTenantByID("root")).Returns(new Tenant
+            _tenants.Setup(t => t.GetTenantByID("tenant-1")).Returns(new Tenant
             {
-                TenantId = "root",
                 Name = "Root",
                 TenantSalt = "salt-1",
                 DbConnectionString = "mongodb://localhost",
@@ -245,10 +244,10 @@ namespace XUnitTest.Links
 
             await CreateService().NotifyLinkCreatedEvent(true, "link-1", "https://s.io/a", Filter, "tenant-1");
 
-            _posts[0].Headers["x-blocks-key"].Should().Be("root");
+            _posts[0].Headers["x-blocks-key"].Should().Be("tenant-1");
             _posts[0].Headers["Secret"].Should().Be("hashed-secret");
-            // The secret is derived with the root tenant's own salt.
-            _crypto.Verify(c => c.Hash("root", "salt-1"), Times.Once);
+            // The secret is derived with the current tenant's own salt.
+            _crypto.Verify(c => c.Hash("tenant-1", "salt-1"), Times.Once);
         }
 
         // ---- failures must not escape ----

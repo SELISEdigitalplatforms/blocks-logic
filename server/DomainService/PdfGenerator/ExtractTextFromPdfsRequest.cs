@@ -6,9 +6,8 @@ namespace DomainService.PdfGenerator
     /// Request to identify all text within a PDF file and store in database
     /// </summary>
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
-    public class ExtractTextFromPdfsRequest : IProjectKey
+    public class ExtractTextFromPdfsRequest
     {
-        public string? ProjectKey { get; set; }
         public string MessageCoRelationId { get; set; } = string.Empty;
         public Dictionary<string, string>? EventReferenceData { get; set; }
         public int Engine { get; set; }

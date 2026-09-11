@@ -7,8 +7,7 @@ using System.Threading.Tasks;
 
 namespace Iam.DomainService.Resources.RequestModel
 {
-    public class GetPermissionGroupBySeverityRequest : IProjectKey
+    public class GetPermissionGroupBySeverityRequest
     {
-        public string? ProjectKey { get ; set ; }
     }
 }

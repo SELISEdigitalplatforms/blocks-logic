@@ -62,7 +62,7 @@ namespace Iam.DomainService.Services
             return true;
         }
 
-        public async Task<bool> SendActivationToEmailAsync(User user, string accountActivationUri, string emailPurpose, string projectKey)
+        public async Task<bool> SendActivationToEmailAsync(User user, string accountActivationUri, string emailPurpose, string tenantId)
         {
             _logger.LogInformation("Sending Activation for {Id} by email: {MPurpose}", user.ItemId, emailPurpose);
 
@@ -76,7 +76,6 @@ namespace Iam.DomainService.Services
                 Language = user.Language ?? "en-US",
                 Purpose = emailPurpose,
                 To = [user.Email.ToLower()],
-                ProjectKey = projectKey
             };
 
             await SendToQueueAsync(Constants.MailQueue, sendMailCommand);
@@ -104,7 +103,7 @@ namespace Iam.DomainService.Services
         }
 
 
-        public async Task<bool> SendAccountActivationEmailAsync(User user, string mailPurpose, string projectKey)
+        public async Task<bool> SendAccountActivationEmailAsync(User user, string mailPurpose, string tenantId)
         {
             var sendMailCommand = new SendMail
             {
@@ -123,7 +122,6 @@ namespace Iam.DomainService.Services
                 Language = user.Language ?? "en-US",
                 Purpose = string.IsNullOrWhiteSpace(mailPurpose) ? "AccountActivated" : mailPurpose,
                 To = new string[] { user.Email.ToLower() },
-                ProjectKey = projectKey
             };
 
             return await SendEmailAsync(sendMailCommand);

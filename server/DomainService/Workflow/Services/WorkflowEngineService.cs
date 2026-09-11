@@ -51,7 +51,7 @@ namespace DomainService.Workflow.Services
         public async Task<WorkflowExecutionEntity?> RunNodeInProcessAsync(AddExcuationNodeEvent dto)
         {
             await ExecuteNodeAsync(dto, DispatchNodesImmediateAsync);
-            return await _workflowExecutionRepository.GetByIdAsync(dto.WorkflowExecutionId, dto.ProjectKey);
+            return await _workflowExecutionRepository.GetByIdAsync(dto.WorkflowExecutionId, BlocksContext.GetContext()?.TenantId);
         }
 
         /// <summary>
@@ -108,7 +108,7 @@ namespace DomainService.Workflow.Services
         /// </summary>
         private async Task<(WorkflowExecutionEntity execution, NodeEntity node, NodeExecutionEntity nodeExecution, NodeExecutionContext context, INodeExecutor executor)?> PrepareNodeForExecutionAsync(AddExcuationNodeEvent dto)
         {
-            var execution = await _workflowExecutionRepository.GetByIdAsync(dto.WorkflowExecutionId, dto.ProjectKey)
+            var execution = await _workflowExecutionRepository.GetByIdAsync(dto.WorkflowExecutionId, BlocksContext.GetContext()?.TenantId)
                 ?? throw new InvalidOperationException("Workflow execution not found");
 
             if (execution.Status == WorkflowExecutionStatus.Completed || execution.Status == WorkflowExecutionStatus.Failed) return null;
@@ -464,7 +464,6 @@ namespace DomainService.Workflow.Services
                 WorkflowExecutionId = execution.Id!,
                 WorkflowId = execution.WorkflowId,
                 NodeId = nextNodeId,
-                ProjectKey = execution.TenantId
             }).ToList();
 
             return nextEvents;
@@ -571,7 +570,6 @@ namespace DomainService.Workflow.Services
 
                 var evt = new AddExcuationNodeEvent
                 {
-                    ProjectKey = execution.TenantId,
                     WorkflowId = execution.WorkflowId,
                     WorkflowExecutionId = execution.Id,
                     NodeId = node.Id,

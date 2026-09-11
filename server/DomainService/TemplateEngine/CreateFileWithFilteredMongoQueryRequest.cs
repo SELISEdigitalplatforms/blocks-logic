@@ -6,9 +6,8 @@ namespace DomainService.TemplateEngine
     /// Request to create file using filtered MongoDB query
     /// </summary>
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
-    public class CreateFileWithFilteredMongoQueryRequest : IProjectKey
+    public class CreateFileWithFilteredMongoQueryRequest
     {
-        public string? ProjectKey { get; set; }
         public Guid FileId { get; set; }
         public Guid TemplateFileId { get; set; }
         public string? SubscriptionFilterId { get; set; }

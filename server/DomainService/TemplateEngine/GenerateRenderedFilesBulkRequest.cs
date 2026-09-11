@@ -6,9 +6,8 @@ namespace DomainService.TemplateEngine
     /// Bulk request to generate multiple rendered files
     /// </summary>
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
-    public class GenerateRenderedFilesBulkRequest : IProjectKey
+    public class GenerateRenderedFilesBulkRequest
     {
-        public string? ProjectKey { get; set; }
         public string? BulkSubscriptionFilterId { get; set; }
         public bool RaiseEventOnProcessEnding { get; set; } = false;
         public Dictionary<string, string>? EventReferenceData { get; set; }

@@ -1,29 +1,31 @@
 using Blocks.Secrets;
+using Common.InternalService.Secret;
+using Common.InternalService.Secret.Services;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
-using Proxy.DomainService.Services;
 
-namespace XUnitTest.Proxy
+namespace XUnitTest.Secret
 {
     /// <summary>
-    /// Covers <see cref="ProxyVariableCatalog"/>: the read-only list the console's <c>{{$VAR.name}}</c>
-    /// picker calls (<c>GET /api/Proxy/Variables</c>). Maps a Blocks Secrets <c>SecretResult</c> to the
-    /// trimmed picker row, passes the search term through, never surfaces a value, and degrades a
-    /// <see cref="SecretException"/> to an empty list rather than throwing.
+    /// Covers <see cref="SecretCatalogService"/>: the shared read-only list behind
+    /// <c>GET /api/Secret/GetAll</c>. Maps a Blocks Secrets <c>SecretResult</c> to the trimmed picker row
+    /// (<c>id</c> / <c>name</c> / <c>tags</c> only), narrows to the platform types, passes the name / tag /
+    /// search filters through, never surfaces a value or a type, and degrades a <see cref="SecretException"/>
+    /// to an empty list rather than throwing.
     /// </summary>
-    public class ProxyVariableCatalogTests
+    public class SecretCatalogServiceTests
     {
         private readonly FakeSecretService _secrets = new();
-        private readonly ProxyVariableCatalog _catalog;
+        private readonly SecretCatalogService _catalog;
 
-        public ProxyVariableCatalogTests()
+        public SecretCatalogServiceTests()
         {
-            _catalog = new ProxyVariableCatalog(_secrets, Mock.Of<ILogger<ProxyVariableCatalog>>());
+            _catalog = new SecretCatalogService(_secrets, Mock.Of<ILogger<SecretCatalogService>>());
         }
 
         [Fact]
-        public async Task ListAsync_MapsSecretRows_ToPickerRows()
+        public async Task GetAllAsync_MapsSecretRows_ToIdNameTagsOnly()
         {
             _secrets.Rows.Add(new SecretResult
             {
@@ -31,41 +33,67 @@ namespace XUnitTest.Proxy
             });
             _secrets.Rows.Add(new SecretResult
             {
-                SecretId = "id-2", Name = "sendgrid-api-key", Type = SecretTypes.Both, Tags = System.Array.Empty<string>(),
+                SecretId = "id-2", Name = "sendgrid-api-key", Type = SecretTypes.Both, Tags = Array.Empty<string>(),
             });
 
-            var result = await _catalog.ListAsync(null);
+            var result = await _catalog.GetAllAsync(new GetSecretsRequest());
 
             result.Data.Should().HaveCount(2);
             result.TotalCount.Should().Be(2);
-            result.Data[0].SecretId.Should().Be("id-1");
+            result.Data[0].Id.Should().Be("id-1");
             result.Data[0].Name.Should().Be("stripe-api-key");
-            result.Data[0].Type.Should().Be("service");
             result.Data[0].Tags.Should().Equal("payments");
+            result.Data[1].Tags.Should().BeEmpty();
         }
 
         [Fact]
-        public async Task ListAsync_PassesTrimmedSearch_ToTheFilter()
+        public async Task GetAllAsync_DropsNonPlatformTypes()
         {
-            await _catalog.ListAsync("  stripe  ");
+            _secrets.Rows.Add(new SecretResult { SecretId = "id-1", Name = "svc", Type = SecretTypes.Service });
+            _secrets.Rows.Add(new SecretResult { SecretId = "id-2", Name = "both", Type = SecretTypes.Both });
+            _secrets.Rows.Add(new SecretResult { SecretId = "id-3", Name = "api-only", Type = SecretTypes.Api });
+
+            var result = await _catalog.GetAllAsync(new GetSecretsRequest());
+
+            result.Data.Select(r => r.Id).Should().Equal("id-1", "id-2");
+            result.TotalCount.Should().Be(2);
+        }
+
+        [Fact]
+        public async Task GetAllAsync_PassesTrimmedSearchAndTag_ToTheFilter()
+        {
+            await _catalog.GetAllAsync(new GetSecretsRequest { Search = "  stripe  ", Tag = "  payments  " });
 
             _secrets.LastFilter!.Search.Should().Be("stripe");
+            _secrets.LastFilter.Tags.Should().Equal("payments");
         }
 
         [Fact]
-        public async Task ListAsync_BlankSearch_BecomesNullFilter()
+        public async Task GetAllAsync_BlankFilters_BecomeNull()
         {
-            await _catalog.ListAsync("   ");
+            await _catalog.GetAllAsync(new GetSecretsRequest { Search = "   ", Tag = "  " });
 
             _secrets.LastFilter!.Search.Should().BeNull();
+            _secrets.LastFilter.Tags.Should().BeNull();
         }
 
         [Fact]
-        public async Task ListAsync_SecretException_DegradesToEmptyList()
+        public async Task GetAllAsync_Name_MatchesExactlyAndIgnoresCase()
+        {
+            _secrets.Rows.Add(new SecretResult { SecretId = "id-1", Name = "stripe-key", Type = SecretTypes.Service });
+            _secrets.Rows.Add(new SecretResult { SecretId = "id-2", Name = "stripe-key-old", Type = SecretTypes.Service });
+
+            var result = await _catalog.GetAllAsync(new GetSecretsRequest { Name = " STRIPE-KEY " });
+
+            result.Data.Should().ContainSingle().Which.Id.Should().Be("id-1");
+        }
+
+        [Fact]
+        public async Task GetAllAsync_SecretException_DegradesToEmptyList()
         {
             _secrets.Throw = new SecretVaultException("kv down", "find", null, null);
 
-            var result = await _catalog.ListAsync(null);
+            var result = await _catalog.GetAllAsync(new GetSecretsRequest());
 
             result.Data.Should().BeEmpty();
             result.TotalCount.Should().Be(0);
@@ -92,10 +120,10 @@ namespace XUnitTest.Proxy
                 return Task.FromResult(new SecretListResult { Data = Rows, TotalCount = Rows.Count });
             }
 
-            public Task<IReadOnlyList<SecretTagEntry>> GetTagsAsync(CancellationToken cancellationToken = default) =>
-                Task.FromResult<IReadOnlyList<SecretTagEntry>>(new List<SecretTagEntry>());
-
             // ---- unused by the catalog ----
+            public Task<IReadOnlyList<SecretTagEntry>> GetTagsAsync(CancellationToken cancellationToken = default) =>
+                throw new NotSupportedException();
+
             public Task<string> SetAsync(SetSecretRequest request, CancellationToken cancellationToken = default) =>
                 throw new NotSupportedException();
 

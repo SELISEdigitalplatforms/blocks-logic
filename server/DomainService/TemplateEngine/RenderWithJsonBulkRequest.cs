@@ -6,9 +6,8 @@ namespace DomainService.TemplateEngine
     /// Bulk request to render multiple templates with JSON data
     /// </summary>
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
-    public class RenderWithJsonBulkRequest : IProjectKey
+    public class RenderWithJsonBulkRequest
     {
-        public string? ProjectKey { get; set; }
         public string ReferenceId { get; set; } = string.Empty;
         public string? SubscriptionFilterId { get; set; }
         public bool NotifyOnProcessEnding { get; set; } = false;

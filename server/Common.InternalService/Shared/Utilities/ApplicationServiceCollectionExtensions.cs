@@ -1,5 +1,6 @@
-using Common.InternalService.Language;
+﻿using Common.InternalService.Language;
 using Common.InternalService.Monitor;
+using Common.InternalService.Secret.Services;
 using Common.InternalService.Storage;
 using CloudConfiguration.DomainService.Shared.Services;
 using FluentValidation;
@@ -47,6 +48,14 @@ namespace Common.InternalService.Shared.Utilities
 
             serviceCollection.AddTransient<IValidator<SaveMonitorConfigurationRequest>, SaveMonitorConfigurationRequestValidator>();
             serviceCollection.AddTransient<IValidator<UpdateMonitorConfigurationRequest>, UpdateMonitorConfigurationRequestValidator>();
+            #endregion
+
+            #region Secret
+            // Read-only catalog of the tenant's platform secrets, shared by every module that offers a secret
+            // picker (Proxy, Workflow, ...). SeliseBlocks.Secrets.OS has no HTTP surface of its own, so this
+            // thin control-plane seam over the in-process ISecretService is what GET /api/Secret/GetAll calls.
+            // ISecretService itself is supplied by AddBlocksSecrets() in Program.cs.
+            serviceCollection.AddSingleton<ISecretCatalogService, SecretCatalogService>();
             #endregion
         }
     }

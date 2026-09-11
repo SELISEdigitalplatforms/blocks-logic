@@ -84,7 +84,7 @@ namespace Cloud.DomainService.Repositories
             return (mapped, count);
         }
 
-        public async Task<bool> UpdateAsync(string projectKey, string itemId, bool isCaptchaRequired, bool isMfaRequired, string updatedBy)
+        public async Task<bool> UpdateAsync(string tenantId, string itemId, bool isCaptchaRequired, bool isMfaRequired, string updatedBy)
         {
             var db = _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, _blocksSecret.RootDatabaseName);
             var collection = db.GetCollection<ApiEndpointConfig>(CollectionName);
@@ -100,7 +100,7 @@ namespace Cloud.DomainService.Repositories
             return result.ModifiedCount > 0;
         }
 
-        public async Task<long> BulkUpdateAsync(string projectKey, List<string> itemIds, bool isCaptchaRequired, bool isMfaRequired, string updatedBy)
+        public async Task<long> BulkUpdateAsync(string tenantId, List<string> itemIds, bool isCaptchaRequired, bool isMfaRequired, string updatedBy)
         {
             var db = _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, _blocksSecret.RootDatabaseName);
             var collection = db.GetCollection<ApiEndpointConfig>(CollectionName);

@@ -2,8 +2,7 @@
 
 namespace DomainService.Shared.RequestModel
 {
-    public class GetAllClientCredentialsRequest : IProjectKey
+    public class GetAllClientCredentialsRequest
     {
-        public string ProjectKey { get ; set ; }
     }
 }

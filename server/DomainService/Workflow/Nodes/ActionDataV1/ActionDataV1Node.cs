@@ -54,11 +54,6 @@ namespace DomainService.Workflow.Nodes.ActionDataV1
                 var parameters = nodeparameters ?? new ActionDataV1Parameters();
 
                 // Resolve missing parameters from execution context and configuration
-                if (string.IsNullOrEmpty(parameters.ProjectKey))
-                {
-                    parameters.ProjectKey = context.TenantId;
-                    _logger.LogInformation("ActionDataV1Node: Resolved ProjectKey from execution context: {ProjectKey}", parameters.ProjectKey);
-                }
 
                 if (string.IsNullOrEmpty(parameters.ApiBaseUrl))
                 {
@@ -380,11 +375,11 @@ namespace DomainService.Workflow.Nodes.ActionDataV1
                     ItemId = parameters.ClientId,
                     ClientSecret = parameters.ClientSecret
                 };
-                var token = await _clientCredentialTokenService.GetTokenAsync(clientCredentialEntity, parameters.ProjectKey);
+                var token = await _clientCredentialTokenService.GetTokenAsync(clientCredentialEntity, BlocksContext.GetContext()?.TenantId);
                 request.Headers.Add("Authorization", $"Bearer {token}");
             }
 
-            request.Headers.Add("x-blocks-key", parameters.ProjectKey);
+            request.Headers.Add("x-blocks-key", BlocksContext.GetContext()?.TenantId);
             request.Content = new StringContent(
                 JsonSerializer.Serialize(new { query = graphqlQuery, variables = new { } }),
                 System.Text.Encoding.UTF8,
@@ -396,7 +391,7 @@ namespace DomainService.Workflow.Nodes.ActionDataV1
         /// <summary>
         /// Gets an access token using a refresh token from the same auth endpoint.
         /// </summary>
-        private async Task<string?> GetTokenFromRefreshTokenAsync(string refreshToken, string projectKey)
+        private async Task<string?> GetTokenFromRefreshTokenAsync(string refreshToken, string tenantId)
         {
             try
             {
@@ -404,7 +399,7 @@ namespace DomainService.Workflow.Nodes.ActionDataV1
                     ?? "https://api.seliseblocks.com/idp/v1/Authentication/token";
 
                 using var client = _httpClientFactory.CreateClient();
-                client.DefaultRequestHeaders.Add("X-Blocks-Key", projectKey);
+                client.DefaultRequestHeaders.Add("X-Blocks-Key", tenantId);
 
                 var formData = new Dictionary<string, string>
                 {

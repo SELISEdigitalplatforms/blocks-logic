@@ -18,7 +18,7 @@ namespace XUnitTest.Workflow
                 {
                     { "CollectionName", "Orders" },
                     { "Operation", "Inserted" },
-                    { "ProjectKey", "pk" }
+                    { "TenantId", "pk" }
                 },
                 InputItems = new List<WorkflowItemExecutionEntity>(),
                 IterationCount = 0,

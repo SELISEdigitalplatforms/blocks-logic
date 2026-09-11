@@ -56,7 +56,6 @@ namespace DomainService.MagicLink.Models
         /// <summary>
         /// The project/tenant identifier
         /// </summary>
-        public string ProjectKey { get; set; } = string.Empty;
 
         /// <summary>
         /// The generated short URI (full URL)

@@ -36,7 +36,6 @@ namespace DomainService.Workflow.Nodes.TriggerDataV1
     /// </summary>
     public class DataChangeEvent
     {
-        public required string ProjectKey { get; set; }
         public required string CollectionName { get; set; }
         public required string SchemaName { get; set; }
         public required DataChangeOperation Operation { get; set; }

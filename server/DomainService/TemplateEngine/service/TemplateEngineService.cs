@@ -259,7 +259,6 @@ namespace DomainService.TemplateEngine
                         JSONString = request.JSONString,
                         FileNameExtension = request.FileNameExtension,
                         SubscriptionFilterId = request.SubscriptionFilterId,
-                        ProjectKey = request.ProjectKey,
                         NotifyOnProcessEnding = request.NotifyOnProcessEnding,
                         RaiseEventOnProcessEnding = request.RaiseEventOnProcessEnding,
                         EventReferenceData = request.EventReferenceData
@@ -278,7 +277,6 @@ namespace DomainService.TemplateEngine
                     {
                         ReferenceId = request.ReferenceId,
                         SubscriptionFilterId = request.SubscriptionFilterId,
-                        ProjectKey = request.ProjectKey,
                         Payloads = request.Payloads,
                         NotifyOnProcessEnding = request.NotifyOnProcessEnding,
                         RaiseEventOnProcessEnding = request.RaiseEventOnProcessEnding,
@@ -302,7 +300,6 @@ namespace DomainService.TemplateEngine
                         EntityIdentifierList = request.EntityIdentifierList.ToList(),
                         MetaDataList = request.MetaDataList.ToList(),
                         SubscriptionFilterId = request.SubscriptionFilterId,
-                        ProjectKey = request.ProjectKey,
                         RaiseEventOnProcessEnding = request.RaiseEventOnProcessEnding,
                         EventReferenceData = request.EventReferenceData
                     }
@@ -319,7 +316,6 @@ namespace DomainService.TemplateEngine
                     Payload = new GenerateRenderedFilesBulkEvent
                     {
                         BulkSubscriptionFilterId = request.BulkSubscriptionFilterId,
-                        ProjectKey = request.ProjectKey,
                         GenerateRenderedFileRequests = request.GenerateRenderedFileRequests,
                         RaiseEventOnProcessEnding = request.RaiseEventOnProcessEnding,
                         EventReferenceData = request.EventReferenceData
@@ -342,7 +338,6 @@ namespace DomainService.TemplateEngine
                         FilteredMongoQueryDatas = request.FilteredMongoQueryDatas,
                         MetaDataList = request.MetaDataList.ToList(),
                         SubscriptionFilterId = request.SubscriptionFilterId,
-                        ProjectKey = request.ProjectKey,
                         NotifyOnProcessEnding = request.NotifyOnProcessEnding,
                         RaiseEventOnProcessEnding = request.RaiseEventOnProcessEnding,
                         EventReferenceData = request.EventReferenceData
@@ -360,7 +355,6 @@ namespace DomainService.TemplateEngine
                     Payload = new CreateFileWithFilteredMongoQueryBulkEvent
                     {
                         SubscriptionFilterId = request.SubscriptionFilterId,
-                        ProjectKey = request.ProjectKey,
                         DataList = request.DataList,
                         NotifyOnProcessEnding = request.NotifyOnProcessEnding,
                         RaiseEventOnProcessEnding = request.RaiseEventOnProcessEnding,
@@ -382,7 +376,6 @@ namespace DomainService.TemplateEngine
                         TemplateFileId = request.TemplateFileId,
                         FileNameExtension = request.FileNameExtension,
                         SubscriptionFilterId = request.SubscriptionFilterId,
-                        ProjectKey = request.ProjectKey,
                         NotifyOnProcessEnding = request.NotifyOnProcessEnding,
                         RaiseEventOnProcessEnding = request.RaiseEventOnProcessEnding,
                         EventReferenceData = request.EventReferenceData

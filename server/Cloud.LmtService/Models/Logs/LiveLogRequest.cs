@@ -5,10 +5,9 @@ using System.Text;
 
 namespace Cloud.LmtService.Models.Logs
 {
-    public class LiveLogRequest : IProjectKey
+    public class LiveLogRequest
     {
         public required string Name { get; set; }
         public DateTime LastDate { get; set; }
-        public string? ProjectKey { get; set; }
     }
 }

@@ -197,23 +197,11 @@ namespace XUnitTest.Notification
                 NotificationType = NotificationReceiverTypes.BroadcastReceiverType,
                 NotifyMethod = "ReceiveNotification",
                 EnablePersistence = false,
-                ProjectKey = "project-1",
                 IsUpdateRequest = true,
             };
 
             request.IsUpdateRequest.Should().BeTrue();
-            request.ProjectKey.Should().Be("project-1");
             request.EnablePersistence.Should().BeFalse();
-        }
-
-        [Fact]
-        public void GetConfigurationsRequest_CarriesTheProjectItBelongsTo()
-        {
-            var request = new GetConfigurationsRequest { ProjectKey = "project-1", Page = 1, PageSize = 10 };
-
-            request.ProjectKey.Should().Be("project-1");
-            request.Page.Should().Be(1);
-            request.PageSize.Should().Be(10);
         }
 
         [Fact]

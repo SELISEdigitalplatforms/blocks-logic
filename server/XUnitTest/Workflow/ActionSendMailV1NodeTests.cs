@@ -45,7 +45,7 @@ namespace XUnitTest.Workflow
         {
             var parameters = new BsonDocument
             {
-                { "ProjectKey", "project-1" },
+                { "TenantId", "project-1" },
                 { "Template", "welcome" },
                 { "Language", "en-US" },
                 { "To", "user@example.com" },

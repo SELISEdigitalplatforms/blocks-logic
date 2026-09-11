@@ -2,9 +2,8 @@
 
 namespace DomainService.RequestModel
 {
-    public class GetSsoCredentialRequest : IProjectKey
+    public class GetSsoCredentialRequest
     {
-        public string ProjectKey { get; set; }
         public string ItemId { get; set; }
     }
 }

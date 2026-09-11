@@ -8,6 +8,8 @@
         <PackageReference Include="Azure.Storage.Blobs" />
         <PackageReference Include="AWSSDK.S3" />
         <PackageReference Include="SSH.NET" />
+        <!-- The shared read-only secret catalog (Secret/) wraps the in-process ISecretService. -->
+        <PackageReference Include="SeliseBlocks.Secrets.OS" />
     </ItemGroup>
 
     <ItemGroup>

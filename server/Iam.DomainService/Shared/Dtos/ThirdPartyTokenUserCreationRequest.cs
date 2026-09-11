@@ -13,7 +13,6 @@ namespace Iam.DomainService.Dtos
         public bool SendWelcomeMail { get; set; }
         public List<string> Roles { get; set; }
         public List<string> Permissions { get; set; } 
-        public required string ProjectKey { get; set; }
         public bool Active { get; set; }
         public bool IsVerified { get; set; } 
     }

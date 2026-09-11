@@ -308,8 +308,7 @@ namespace DomainService.PdfGenerator
                         PdfFilesToBeMerged = request.PdfFilesToBeMerged,
                         EventReferenceData = request.EventReferenceData,
                         OpenInBrowser = request.OpenInBrowser,
-                        HandleCorruptedPdf = request.HandleCorruptedPdf,
-                        ProjectKey = request.ProjectKey
+                        HandleCorruptedPdf = request.HandleCorruptedPdf
                     }
                 }
             );
@@ -326,8 +325,7 @@ namespace DomainService.PdfGenerator
                         MessageCoRelationId = request.MessageCoRelationId,
                         EventReferenceData = request.EventReferenceData,
                         CreateFromHtmlCommands = request.CreateFromHtmlCommands,
-                        Engine = (int)request.Engine,
-                        ProjectKey = request.ProjectKey
+                        Engine = (int)request.Engine
                     }
                 }
             );
@@ -344,8 +342,7 @@ namespace DomainService.PdfGenerator
                         MessageCoRelationId = request.MessageCoRelationId,
                         EventReferenceData = request.EventReferenceData,
                         Engine = request.Engine,
-                        ExtractTextCommands = request.ExtractTextCommands,
-                        ProjectKey = request.ProjectKey
+                        ExtractTextCommands = request.ExtractTextCommands
                     }
                 }
             );
@@ -362,8 +359,7 @@ namespace DomainService.PdfGenerator
                         MessageCoRelationId = request.MessageCoRelationId,
                         EventReferenceData = request.EventReferenceData,
                         CreateFromHtmlCommands = request.CreateFromHtmlCommands,
-                        Engine = (int)request.Engine,
-                        ProjectKey = request.ProjectKey
+                        Engine = (int)request.Engine
                     }
                 }
             );
@@ -382,8 +378,7 @@ namespace DomainService.PdfGenerator
                         CreateFromHtmlCommands = request.CreateFromHtmlCommands,
                         RaiseEventOnProcessEnding = request.RaiseEventOnProcessEnding,
                         NotifyOnProcessEnding = request.NotifyOnProcessEnding,
-                        Engine = (int)request.Engine,
-                        ProjectKey = request.ProjectKey
+                        Engine = (int)request.Engine
                     }
                 }
             );
@@ -398,8 +393,7 @@ namespace DomainService.PdfGenerator
                     Payload = new FixPdfsEvent
                     {
                         MessageCorrelationId = request.MessageCorrelationId,
-                        PdfInfos = request.PdfInfos,
-                        ProjectKey = request.ProjectKey
+                        PdfInfos = request.PdfInfos
                     }
                 }
             );
@@ -420,8 +414,7 @@ namespace DomainService.PdfGenerator
                         Stamps = request.Stamps,
                         Engine = (int)request.Engine,
                         EventReferenceData = request.EventReferenceData,
-                        OpenInBrowser = request.OpenInBrowser,
-                        ProjectKey = request.ProjectKey
+                        OpenInBrowser = request.OpenInBrowser
                     }
                 }
             );
@@ -442,8 +435,7 @@ namespace DomainService.PdfGenerator
                         Stamps = request.Stamps,
                         Engine = (int)request.Engine,
                         EventReferenceData = request.EventReferenceData,
-                        OpenInBrowser = request.OpenInBrowser,
-                        ProjectKey = request.ProjectKey
+                        OpenInBrowser = request.OpenInBrowser
                     }
                 }
             );
@@ -464,8 +456,7 @@ namespace DomainService.PdfGenerator
                         Stamps = request.Stamps,
                         Engine = (int)request.Engine,
                         EventReferenceData = request.EventReferenceData,
-                        OpenInBrowser = request.OpenInBrowser,
-                        ProjectKey = request.ProjectKey
+                        OpenInBrowser = request.OpenInBrowser
                     }
                 }
             );

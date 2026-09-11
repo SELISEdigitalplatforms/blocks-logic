@@ -6,9 +6,8 @@ namespace DomainService.TemplateEngine
     /// Request to render a template with JSON data
     /// </summary>
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
-    public class RenderWithJsonRequest : IProjectKey
+    public class RenderWithJsonRequest
     {
-        public string? ProjectKey { get; set; }
         public bool RaiseEventOnProcessEnding { get; set; } = false;
         public bool NotifyOnProcessEnding { get; set; } = false;
         public string? SubscriptionFilterId { get; set; }

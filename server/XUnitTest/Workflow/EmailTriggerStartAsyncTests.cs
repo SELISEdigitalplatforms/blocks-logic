@@ -16,6 +16,8 @@ using MongoDB.Bson;
 using Moq;
 using Worker.Consumers.Workflow;
 
+using XUnitTest.TestHelpers;
+
 namespace XUnitTest.Workflow
 {
     public class EmailTriggerStartAsyncTests
@@ -32,6 +34,7 @@ namespace XUnitTest.Workflow
 
         public EmailTriggerStartAsyncTests()
         {
+            TestBlocksContext.Set("tenant-1");
             _executions
                 .Setup(r => r.CreateAsync(It.IsAny<WorkflowExecutionEntity>()))
                 .ReturnsAsync((WorkflowExecutionEntity e) => e);
@@ -92,9 +95,9 @@ namespace XUnitTest.Workflow
                 {
                     new()
                     {
+                        TenantId = "tenant-1",
                         ItemId = "ver-1",
                         WorkflowId = "wf-1",
-                        TenantId = "tenant-1",
                         Name = "v1",
                         Snapshot = snapshot
                     }
@@ -137,9 +140,9 @@ namespace XUnitTest.Workflow
                 {
                     new()
                     {
+                        TenantId = "tenant-1",
                         ItemId = "ver-prod",
                         WorkflowId = "wf-prod",
-                        TenantId = "tenant-1",
                         Name = "v1",
                         Snapshot = snapshot
                     }
@@ -178,7 +181,6 @@ namespace XUnitTest.Workflow
             return new EmailTriggerEvent
             {
                 Type = EmailTriggerType.Inbound,
-                ProjectKey = "tenant-1",
                 Mail = new MailBoxEntity
                 {
                     ItemId = "mail-1",
@@ -204,8 +206,8 @@ namespace XUnitTest.Workflow
         {
             return new WorkflowEntity
             {
-                ItemId = itemId,
                 TenantId = "tenant-1",
+                ItemId = itemId,
                 Name = itemId,
                 IsPublished = isPublished,
                 PublishedVersionId = publishedVersionId,

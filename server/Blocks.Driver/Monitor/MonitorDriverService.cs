@@ -11,11 +11,11 @@ public class MonitorDriverService : IMonitorDriverService
         _monitorObservabilityService = monitorObservabilityService;
     }
 
-    public Task<PaginatedResponse> GetMonitorListAsync(string projectKey, string? monitorSourceType, int pageNumber = 0, int pageSize = 10)
-        => _monitorObservabilityService.GetMonitorListAsync(projectKey, monitorSourceType, pageNumber, pageSize);
+    public Task<PaginatedResponse> GetMonitorListAsync(string tenantId, string? monitorSourceType, int pageNumber = 0, int pageSize = 10)
+        => _monitorObservabilityService.GetMonitorListAsync(tenantId, monitorSourceType, pageNumber, pageSize);
 
-    public Task<BaseApiResponse> GetMonitorListByRepoIdAsync(string projectKey, string repoId)
-        => _monitorObservabilityService.GetMonitorListByRepoIdAsync(projectKey, repoId);
+    public Task<BaseApiResponse> GetMonitorListByRepoIdAsync(string tenantId, string repoId)
+        => _monitorObservabilityService.GetMonitorListByRepoIdAsync(tenantId, repoId);
 
     public Task<BaseApiResponse> GetMonitorByIdAsync(string monitorId)
         => _monitorObservabilityService.GetMonitorByIdAsync(monitorId);

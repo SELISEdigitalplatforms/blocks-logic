@@ -6,7 +6,7 @@ import { renderWithProviders } from "@/test-utils/test-providers/render";
 import { SchemaFieldsField } from "./schema-fields-field";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const cfg: any = { projectKey: "pk", workflowId: "wf", nodeId: "n1" };
+const cfg: any = { tenantId: "pk", workflowId: "wf", nodeId: "n1" };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const field = (extra: Record<string, unknown> = {}): any => ({
   id: "f",

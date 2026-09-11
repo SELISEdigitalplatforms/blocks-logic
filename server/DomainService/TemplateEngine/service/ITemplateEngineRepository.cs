@@ -31,7 +31,6 @@ namespace DomainService.TemplateEngine
         public string Name { get; set; } = string.Empty;
         public string Language { get; set; } = string.Empty;
         public string Content { get; set; } = string.Empty;
-        public string? ProjectKey { get; set; }
     }
 
     /// <summary>

@@ -11,37 +11,6 @@ export type ProxyKeyValue = {
 };
 
 /**
- * One row of `GET /api/Proxy/Variables` (the logic API's read-only wrapper over the in-process
- * Blocks Secrets `ISecretService` — `SeliseBlocks.Secrets.OS` has no HTTP surface of its own). Only
- * `service`- and `both`-typed secrets are usable from a proxy — an `api`-typed secret needs an access
- * list the proxy caller is not on — so those are filtered out of the picker.
- */
-export type SecretListItem = {
-  id: string;
-  name: string;
-  type: string;
-  tags: string[];
-};
-
-/** Response envelope of `GET /api/Proxy/Variables` (`ProxyVariableListResponseDto`). */
-export type SecretListResponseDto = {
-  data: SecretListItemDto[] | null;
-  totalCount: number;
-};
-
-export type SecretListItemDto = {
-  secretId: string;
-  name: string;
-  type: string;
-  tags?: string[] | null;
-};
-
-export type SecretListParams = {
-  /** Case-insensitive substring match on the variable name. The only filter `GET /api/Proxy/Variables` takes. */
-  search?: string;
-};
-
-/**
  * A per-method override of the shared config. A `null` member inherits the shared
  * value; a non-null member (including an empty list) replaces it for that method.
  */

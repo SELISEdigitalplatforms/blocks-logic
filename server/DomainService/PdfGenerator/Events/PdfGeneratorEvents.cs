@@ -14,7 +14,6 @@ namespace DomainService.PdfGenerator
         public Dictionary<string, string>? EventReferenceData { get; set; }
         public bool OpenInBrowser { get; set; } = false;
         public bool HandleCorruptedPdf { get; set; } = false;
-        public string? ProjectKey { get; set; }
     }
 
     /// <summary>
@@ -27,7 +26,6 @@ namespace DomainService.PdfGenerator
         public Dictionary<string, string>? EventReferenceData { get; set; }
         public List<CreateFromHtmlCommand> CreateFromHtmlCommands { get; set; } = new();
         public int Engine { get; set; }
-        public string? ProjectKey { get; set; }
     }
 
     /// <summary>
@@ -40,7 +38,6 @@ namespace DomainService.PdfGenerator
         public Dictionary<string, string>? EventReferenceData { get; set; }
         public int Engine { get; set; }
         public List<ExtractTextCommand> ExtractTextCommands { get; set; } = new();
-        public string? ProjectKey { get; set; }
     }
 
     /// <summary>
@@ -53,7 +50,6 @@ namespace DomainService.PdfGenerator
         public Dictionary<string, string>? EventReferenceData { get; set; }
         public List<CreateFromHtmlUsingTECommand> CreateFromHtmlCommands { get; set; } = new();
         public int Engine { get; set; }
-        public string? ProjectKey { get; set; }
     }
 
     /// <summary>
@@ -68,7 +64,6 @@ namespace DomainService.PdfGenerator
         public bool RaiseEventOnProcessEnding { get; set; } = true;
         public bool NotifyOnProcessEnding { get; set; } = false;
         public int Engine { get; set; }
-        public string? ProjectKey { get; set; }
     }
 
     /// <summary>
@@ -79,7 +74,6 @@ namespace DomainService.PdfGenerator
     {
         public string MessageCorrelationId { get; set; } = string.Empty;
         public List<FixPdfCommand> PdfInfos { get; set; } = new();
-        public string? ProjectKey { get; set; }
     }
 
     /// <summary>
@@ -96,7 +90,6 @@ namespace DomainService.PdfGenerator
         public int Engine { get; set; }
         public Dictionary<string, string>? EventReferenceData { get; set; }
         public bool OpenInBrowser { get; set; } = false;
-        public string? ProjectKey { get; set; }
     }
 
     /// <summary>
@@ -113,7 +106,6 @@ namespace DomainService.PdfGenerator
         public int Engine { get; set; }
         public Dictionary<string, string>? EventReferenceData { get; set; }
         public bool OpenInBrowser { get; set; } = false;
-        public string? ProjectKey { get; set; }
     }
 
     /// <summary>
@@ -130,7 +122,6 @@ namespace DomainService.PdfGenerator
         public int Engine { get; set; }
         public Dictionary<string, string>? EventReferenceData { get; set; }
         public bool OpenInBrowser { get; set; } = false;
-        public string? ProjectKey { get; set; }
     }
 }
 

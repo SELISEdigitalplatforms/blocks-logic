@@ -32,7 +32,7 @@ namespace DomainService.MagicLink.Service
             _httpHelperServices = httpHelperServices;
         }
 
-        public async Task NotifyLinkCreatedEvent(bool success, string linkId, string shortUri, string? subscriptionFilterId, string? projectKey)
+        public async Task NotifyLinkCreatedEvent(bool success, string linkId, string shortUri, string? subscriptionFilterId, string? tenantId)
         {
             _logger.LogInformation("NotifyLinkCreatedEvent: Sending notification for linkId={LinkId}, success={Success}", linkId, success);
 
@@ -50,7 +50,7 @@ namespace DomainService.MagicLink.Service
             });
         }
 
-        public async Task NotifyLinksCreatedEvent(bool success, int successCount, int failureCount, string? subscriptionFilterId, string? projectKey)
+        public async Task NotifyLinksCreatedEvent(bool success, int successCount, int failureCount, string? subscriptionFilterId, string? tenantId)
         {
             _logger.LogInformation("NotifyLinksCreatedEvent: Sending notification, success={Success}, successCount={SuccessCount}", success, successCount);
 
@@ -67,7 +67,7 @@ namespace DomainService.MagicLink.Service
             });
         }
 
-        public async Task NotifyLinksRemovedEvent(bool success, int removedCount, string? subscriptionFilterId, string? projectKey)
+        public async Task NotifyLinksRemovedEvent(bool success, int removedCount, string? subscriptionFilterId, string? tenantId)
         {
             _logger.LogInformation("NotifyLinksRemovedEvent: Sending notification, success={Success}, removedCount={RemovedCount}", success, removedCount);
 
@@ -83,7 +83,7 @@ namespace DomainService.MagicLink.Service
             });
         }
 
-        public async Task NotifyActionExecutedEvent(bool success, string linkId, int statusCode, string? errorMessage, string? subscriptionFilterId, string? projectKey)
+        public async Task NotifyActionExecutedEvent(bool success, string linkId, int statusCode, string? errorMessage, string? subscriptionFilterId, string? tenantId)
         {
             _logger.LogInformation("NotifyActionExecutedEvent: Sending notification for linkId={LinkId}, success={Success}, statusCode={StatusCode}", linkId, success, statusCode);
 
@@ -125,10 +125,9 @@ namespace DomainService.MagicLink.Service
                     ResponseValue = success.ToString()
                 };
 
-                var blocksKey = _configuration["RootTenantId"];
-                var rootTenantId = _configuration["RootTenantId"];
-                var salt = _tenants.GetTenantByID(rootTenantId)?.TenantSalt;
-                var actualSecret = _cryptoService.Hash(rootTenantId, salt);
+                var blocksKey = BlocksContext.GetContext()?.TenantId;
+                var salt = _tenants.GetTenantByID(blocksKey)?.TenantSalt;
+                var actualSecret = _cryptoService.Hash(blocksKey, salt);
 
                 var url = _configuration["NotificationServiceUrl"];
                 var headers = new Dictionary<string, string>

@@ -15,7 +15,6 @@ message SignupUserRequest {
   optional string LastName = 4;
   optional string MailPurpose = 5;
   optional string Platform = 6;
-  optional string ProjectKey = 7;
 }
 
 message SignupUserReply {

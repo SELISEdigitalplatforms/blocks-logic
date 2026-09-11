@@ -30,7 +30,7 @@ namespace DomainService.PdfGenerator.service
             _httpHelperServices = httpHelperServices;
         }
 
-        public async Task NotifyMergePdfsEvent(bool success, string outputPdfFileId, string messageCoRelationId, string? projectKey)
+        public async Task NotifyMergePdfsEvent(bool success, string outputPdfFileId, string messageCoRelationId, string? tenantId)
         {
             _logger.LogInformation("NotifyMergePdfsEvent: Sending notification for outputPdfFileId={OutputPdfFileId}, success={Success}", outputPdfFileId, success);
 
@@ -42,7 +42,7 @@ namespace DomainService.PdfGenerator.service
             });
         }
 
-        public async Task NotifyCreatePdfsFromHtmlEvent(bool success, string messageCoRelationId, string? projectKey, int successCount, int failureCount)
+        public async Task NotifyCreatePdfsFromHtmlEvent(bool success, string messageCoRelationId, string? tenantId, int successCount, int failureCount)
         {
             _logger.LogInformation("NotifyCreatePdfsFromHtmlEvent: Sending notification for messageCoRelationId={MessageCoRelationId}, success={Success}", messageCoRelationId, success);
 
@@ -54,7 +54,7 @@ namespace DomainService.PdfGenerator.service
             });
         }
 
-        public async Task NotifyExtractTextFromPdfsEvent(bool success, string messageCoRelationId, string? projectKey)
+        public async Task NotifyExtractTextFromPdfsEvent(bool success, string messageCoRelationId, string? tenantId)
         {
             _logger.LogInformation("NotifyExtractTextFromPdfsEvent: Sending notification for messageCoRelationId={MessageCoRelationId}, success={Success}", messageCoRelationId, success);
 
@@ -65,7 +65,7 @@ namespace DomainService.PdfGenerator.service
             });
         }
 
-        public async Task NotifyCreatePdfsFromHtmlUsingTEEvent(bool success, string messageCoRelationId, string? projectKey)
+        public async Task NotifyCreatePdfsFromHtmlUsingTEEvent(bool success, string messageCoRelationId, string? tenantId)
         {
             _logger.LogInformation("NotifyCreatePdfsFromHtmlUsingTEEvent: Sending notification for messageCoRelationId={MessageCoRelationId}, success={Success}", messageCoRelationId, success);
 
@@ -76,7 +76,7 @@ namespace DomainService.PdfGenerator.service
             });
         }
 
-        public async Task NotifyCreatePdfsFromHtmlUsingTEBulkEvent(bool success, string messageCoRelationId, string? projectKey, int successCount, int failureCount)
+        public async Task NotifyCreatePdfsFromHtmlUsingTEBulkEvent(bool success, string messageCoRelationId, string? tenantId, int successCount, int failureCount)
         {
             _logger.LogInformation("NotifyCreatePdfsFromHtmlUsingTEBulkEvent: Sending notification for messageCoRelationId={MessageCoRelationId}, success={Success}", messageCoRelationId, success);
 
@@ -88,7 +88,7 @@ namespace DomainService.PdfGenerator.service
             });
         }
 
-        public async Task NotifyFixPdfsEvent(bool success, string messageCorrelationId, string? projectKey)
+        public async Task NotifyFixPdfsEvent(bool success, string messageCorrelationId, string? tenantId)
         {
             _logger.LogInformation("NotifyFixPdfsEvent: Sending notification for messageCorrelationId={MessageCorrelationId}, success={Success}", messageCorrelationId, success);
 
@@ -99,7 +99,7 @@ namespace DomainService.PdfGenerator.service
             });
         }
 
-        public async Task NotifyStampImageToPdfEvent(bool success, string outputPdfFileId, string messageCoRelationId, string? projectKey)
+        public async Task NotifyStampImageToPdfEvent(bool success, string outputPdfFileId, string messageCoRelationId, string? tenantId)
         {
             _logger.LogInformation("NotifyStampImageToPdfEvent: Sending notification for outputPdfFileId={OutputPdfFileId}, success={Success}", outputPdfFileId, success);
 
@@ -111,7 +111,7 @@ namespace DomainService.PdfGenerator.service
             });
         }
 
-        public async Task NotifyStampTextToPdfEvent(bool success, string outputPdfFileId, string messageCoRelationId, string? projectKey)
+        public async Task NotifyStampTextToPdfEvent(bool success, string outputPdfFileId, string messageCoRelationId, string? tenantId)
         {
             _logger.LogInformation("NotifyStampTextToPdfEvent: Sending notification for outputPdfFileId={OutputPdfFileId}, success={Success}", outputPdfFileId, success);
 
@@ -123,7 +123,7 @@ namespace DomainService.PdfGenerator.service
             });
         }
 
-        public async Task NotifyStampIntoPdfEvent(bool success, string outputPdfFileId, string messageCoRelationId, string? projectKey)
+        public async Task NotifyStampIntoPdfEvent(bool success, string outputPdfFileId, string messageCoRelationId, string? tenantId)
         {
             _logger.LogInformation("NotifyStampIntoPdfEvent: Sending notification for outputPdfFileId={OutputPdfFileId}, success={Success}", outputPdfFileId, success);
 
@@ -164,10 +164,9 @@ namespace DomainService.PdfGenerator.service
                     ResponseValue = success.ToString()
                 };
 
-                var blocksKey = _configuration["RootTenantId"];
-                var rootTenantId = _configuration["RootTenantId"];
-                var salt = _tenants.GetTenantByID(rootTenantId)?.TenantSalt;
-                var actualSecret = _cryptoService.Hash(rootTenantId, salt);
+                var blocksKey = BlocksContext.GetContext()?.TenantId;
+                var salt = _tenants.GetTenantByID(blocksKey)?.TenantSalt;
+                var actualSecret = _cryptoService.Hash(blocksKey, salt);
 
                 var url = _configuration["NotificationServiceUrl"];
                 var headers = new Dictionary<string, string>

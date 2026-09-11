@@ -2,7 +2,7 @@
 
 namespace CloudConfiguration.DomainService.Authentication
 {
-    public class UpdateAuthenticationConfigurationRequest : IProjectKey
+    public class UpdateAuthenticationConfigurationRequest
     {
         public string ItemId { get; set; }
         public int RefreshTokenValidForNumberMinutes { get; set; }
@@ -11,6 +11,5 @@ namespace CloudConfiguration.DomainService.Authentication
         public int AccessTokenValidForNumberMinutes { get; set; }
         public int RememberMeRefreshTokenValidForNumberMinutes { get; set; }
         public List<string> AllowedGrantTypes { get; set; }
-        public string? ProjectKey { get; set; }
     }
 }

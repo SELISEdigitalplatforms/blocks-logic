@@ -11,7 +11,6 @@ namespace DomainService.TemplateEngine
         public string JSONString { get; set; } = string.Empty;
         public string FileNameExtension { get; set; } = ".html";
         public string? SubscriptionFilterId { get; set; }
-        public string? ProjectKey { get; set; }
         public bool NotifyOnProcessEnding { get; set; } = false;
         public bool RaiseEventOnProcessEnding { get; set; } = false;
         public Dictionary<string, string>? EventReferenceData { get; set; }
@@ -25,7 +24,6 @@ namespace DomainService.TemplateEngine
     {
         public string ReferenceId { get; set; } = string.Empty;
         public string? SubscriptionFilterId { get; set; }
-        public string? ProjectKey { get; set; }
         public List<RenderWithJsonPayload> Payloads { get; set; } = new();
         public bool NotifyOnProcessEnding { get; set; } = false;
         public bool RaiseEventOnProcessEnding { get; set; } = false;
@@ -44,7 +42,6 @@ namespace DomainService.TemplateEngine
         public List<EntityParams> EntityIdentifierList { get; set; } = new();
         public List<MetaData> MetaDataList { get; set; } = new();
         public string? SubscriptionFilterId { get; set; }
-        public string? ProjectKey { get; set; }
         public bool RaiseEventOnProcessEnding { get; set; } = false;
         public Dictionary<string, string>? EventReferenceData { get; set; }
     }
@@ -56,7 +53,6 @@ namespace DomainService.TemplateEngine
     public record GenerateRenderedFilesBulkEvent
     {
         public string? BulkSubscriptionFilterId { get; set; }
-        public string? ProjectKey { get; set; }
         public List<GenerateRenderedFileRequest> GenerateRenderedFileRequests { get; set; } = new();
         public bool RaiseEventOnProcessEnding { get; set; } = false;
         public Dictionary<string, string>? EventReferenceData { get; set; }
@@ -74,7 +70,6 @@ namespace DomainService.TemplateEngine
         public List<FilteredMongoQueryData> FilteredMongoQueryDatas { get; set; } = new();
         public List<MetaData> MetaDataList { get; set; } = new();
         public string? SubscriptionFilterId { get; set; }
-        public string? ProjectKey { get; set; }
         public bool NotifyOnProcessEnding { get; set; } = false;
         public bool RaiseEventOnProcessEnding { get; set; } = false;
         public Dictionary<string, string>? EventReferenceData { get; set; }
@@ -87,7 +82,6 @@ namespace DomainService.TemplateEngine
     public record CreateFileWithFilteredMongoQueryBulkEvent
     {
         public string? SubscriptionFilterId { get; set; }
-        public string? ProjectKey { get; set; }
         public List<CreateFileWithFilteredMongoQueryData> DataList { get; set; } = new();
         public bool NotifyOnProcessEnding { get; set; } = false;
         public bool RaiseEventOnProcessEnding { get; set; } = false;
@@ -104,7 +98,6 @@ namespace DomainService.TemplateEngine
         public Guid? TemplateFileId { get; set; }
         public string FileNameExtension { get; set; } = ".html";
         public string? SubscriptionFilterId { get; set; }
-        public string? ProjectKey { get; set; }
         public bool NotifyOnProcessEnding { get; set; } = false;
         public bool RaiseEventOnProcessEnding { get; set; } = false;
         public Dictionary<string, string>? EventReferenceData { get; set; }

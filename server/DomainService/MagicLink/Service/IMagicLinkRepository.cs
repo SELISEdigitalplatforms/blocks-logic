@@ -4,15 +4,14 @@ namespace DomainService.MagicLink.Service
 {
     /// <summary>
     /// Repository interface for MagicLink data operations.
-    /// All operations use RootTenantId for database access.
-    /// ProjectKey filtering is used to ensure project-level data isolation.
+    /// Each tenant has its own database, which provides isolation.
     /// </summary>
     public interface IMagicLinkRepository
     {
         /// <summary>
-        /// Gets a magic link by ID. ProjectKey is optional for anonymous invocations.
+        /// Gets a magic link by ID from the current tenant database.
         /// </summary>
-        Task<Models.MagicLink?> GetMagicLinkAsync(string itemId, string? projectKey = null);
+        Task<Models.MagicLink?> GetMagicLinkAsync(string itemId);
 
         /// <summary>
         /// Creates a new magic link
@@ -27,7 +26,7 @@ namespace DomainService.MagicLink.Service
         /// <summary>
         /// Gets multiple magic links by IDs
         /// </summary>
-        Task<List<Models.MagicLink>> GetMagicLinksByIdsAsync(List<string> itemIds, string projectKey);
+        Task<List<Models.MagicLink>> GetMagicLinksByIdsAsync(List<string> itemIds);
 
         /// <summary>
         /// Gets paginated list of magic links with optional filters
@@ -47,12 +46,12 @@ namespace DomainService.MagicLink.Service
         /// <summary>
         /// Gets client credentials by ID for authentication (Action type links)
         /// </summary>
-        Task<ClientCredential?> GetClientCredentialsAsync(string clientCredentialId, string projectKey);
+        Task<ClientCredential?> GetClientCredentialsAsync(string clientCredentialId, string tenantId);
 
         /// <summary>
         /// Gets link configuration by ID
         /// </summary>
-        Task<LinkBasedActionConfig?> GetLinkConfigAsync(string configId, string projectKey);
+        Task<LinkBasedActionConfig?> GetLinkConfigAsync(string configId, string tenantId);
 
         /// <summary>
         /// Creates a visitor usage record for tracking link access
@@ -64,7 +63,7 @@ namespace DomainService.MagicLink.Service
         /// <summary>
         /// Gets the first LinkBasedActionConfig for a project (if exists)
         /// </summary>
-        Task<LinkBasedActionConfig?> GetLinkBasedActionConfigAsync(string projectKey);
+        Task<LinkBasedActionConfig?> GetLinkBasedActionConfigAsync();
 
         /// <summary>
         /// Creates a new LinkBasedActionConfig

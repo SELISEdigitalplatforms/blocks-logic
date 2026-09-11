@@ -4,7 +4,7 @@ using Iam.DomainService.Shared.Entities;
 
 namespace Iam.DomainService.Users
 {
-    public class CreateUserRequest : IProjectKey
+    public class CreateUserRequest
     {
         public string? Language { get; set; } = "en-US";
         public List<string>? Tags { get; set; }
@@ -26,7 +26,6 @@ namespace Iam.DomainService.Users
         public bool MfaEnabled { get; set; }
         public List<UserLogInType> AllowedLogInType { get; set; } = new List<UserLogInType> { UserLogInType.Password };
         public List<OrganizationMembership> Memberships { get; set; } = [];
-        public string? ProjectKey { get; set; }
         public string? OrganizationId { get; set; }
     }
 

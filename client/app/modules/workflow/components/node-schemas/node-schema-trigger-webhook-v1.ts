@@ -58,9 +58,9 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
           const currentMode =
             data.executionMode !== undefined ? Number(data.executionMode) : config.executionMode;
           if (currentMode === WorkflowExecutionMode.Production) {
-            return `${API_BASES.LOGIC}/Workflow/webhook/${config.projectKey}/${config.workflowId}/${config.nodeId}`;
+            return `${API_BASES.LOGIC}/Workflow/webhook/${config.tenantId}/${config.workflowId}/${config.nodeId}`;
           }
-          return `${API_BASES.LOGIC}/Workflow/webhook-test/${config.projectKey}/${config.workflowId}/${config.nodeId}`;
+          return `${API_BASES.LOGIC}/Workflow/webhook-test/${config.tenantId}/${config.workflowId}/${config.nodeId}`;
         },
         copyable: true,
       },

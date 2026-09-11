@@ -2,8 +2,7 @@
 
 namespace DomainService.Configuration
 {
-    public class GetConfigurationsRequest : BaseGetsRequest<string>, IProjectKey
+    public class GetConfigurationsRequest : BaseGetsRequest<string>
     {
-        public string? ProjectKey { get ; set ; }
     }
 }

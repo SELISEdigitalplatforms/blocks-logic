@@ -15,7 +15,6 @@ public class MailDriverService : IMailDriverService
     {
         var mailRequest = new Mail.DomainService.Mails.SendMail
         {
-            ProjectKey = request.ProjectKey,
             SubjectDataContext = request.SubjectDataContext,
             To = request.To,
             Bcc = request.Bcc,
@@ -35,7 +34,6 @@ public class MailDriverService : IMailDriverService
     {
         var mailRequest = new Mail.DomainService.Mails.SendMailToAny
         {
-            ProjectKey = request.ProjectKey,
             SubjectDataContext = request.SubjectDataContext,
             To = request.To,
             Bcc = request.Bcc,
@@ -57,7 +55,6 @@ public class MailDriverService : IMailDriverService
         {
             PageNumber = request.PageNumber,
             PageSize = request.PageSize,
-            ProjectKey = request.ProjectKey,
             SearchKey = request.SearchKey,
             SortProperty = request.SortProperty,
             IsDescending = request.IsDescending,

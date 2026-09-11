@@ -5,7 +5,7 @@ import { renderWithProviders } from "@/test-utils/test-providers/render";
 import { ExpressionListField } from "./expression-list-field";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const cfg: any = { projectKey: "pk", workflowId: "wf", nodeId: "node-1" };
+const cfg: any = { tenantId: "pk", workflowId: "wf", nodeId: "node-1" };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const field = (extra: Record<string, unknown> = {}): any => ({
   id: "attachments",

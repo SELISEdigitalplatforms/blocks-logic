@@ -408,7 +408,6 @@ namespace Iam.DomainService.Users
                 Key = key,
                 UserId = userId,
                 EventType = @event.EventType,
-                ProjectKey = @event.ProjectKey,
             });
 
             return true;
@@ -452,8 +451,7 @@ namespace Iam.DomainService.Users
                         ItemId = itemId,
                         Action = MutationEventType.Create,
                         MailPurpose = command.MailPurpose,
-                        SendWelcomeMail = command.SendWelcomeMail,
-                        ProjectKey = command.ProjectKey
+                        SendWelcomeMail = command.SendWelcomeMail
                     }
                 }
             );
@@ -514,14 +512,14 @@ namespace Iam.DomainService.Users
             var user = await _userRepository.GetUserByIdAsync(command.ItemId);
             if (command.SendWelcomeMail)
             {
-                await SendPostEventAsync(user, command.MailPurpose, command.ProjectKey);
+                await SendPostEventAsync(user, command.MailPurpose, BlocksContext.GetContext()?.TenantId ?? "");
             }
             await SaveUserTimelineAsync(user);
         }
 
-        private async Task<bool> SendPostEventAsync(User user, string mailPurpose, string projectKey)
+        private async Task<bool> SendPostEventAsync(User user, string mailPurpose, string tenantId)
         {
-            return await _identityAccessManagementService.SendAccountActivationEmailAsync(user, mailPurpose, projectKey);
+            return await _identityAccessManagementService.SendAccountActivationEmailAsync(user, mailPurpose, tenantId);
         }
 
     }

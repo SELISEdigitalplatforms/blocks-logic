@@ -23,7 +23,6 @@ namespace DomainService.Workflow.Nodes.ActionDataV1
         /// <summary>
         /// The project/tenant key
         /// </summary>
-        public string ProjectKey { get; set; } = string.Empty;
 
         /// <summary>
         /// The project short key (slug) for UDS API calls

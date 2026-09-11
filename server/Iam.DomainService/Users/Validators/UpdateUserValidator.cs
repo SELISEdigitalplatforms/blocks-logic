@@ -21,7 +21,7 @@ namespace Iam.DomainService.Users
         private static bool HavePermissionToChange(UpdateUserRequest request, ITenants tenants)
         {
             var context = BlocksContext.GetContext();
-            var clientTenant = tenants.GetTenantByID(request?.ProjectKey ?? "");
+            var clientTenant = tenants.GetTenantByID(context.TenantId);
 
             if ((clientTenant?.CreatedBy == context.UserId) || (context.UserId == request.ItemId))
             {

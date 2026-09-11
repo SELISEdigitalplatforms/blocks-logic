@@ -7,18 +7,17 @@ namespace DomainService.MagicLink
     /// <summary>
     /// Request to create a single magic link
     /// </summary>
-    public class CreateMagicLinkRequest : MagicLinkData, IProjectKey
+    public class CreateMagicLinkRequest : MagicLinkData
     {
         /// <summary>
         /// Project/tenant key for multi-tenancy
         /// </summary>
-        public string? ProjectKey { get; set; }
     }
 
     /// <summary>
     /// Request to create multiple magic links
     /// </summary>
-    public class CreateMagicLinksRequest : IProjectKey
+    public class CreateMagicLinksRequest
     {
         /// <summary>
         /// List of magic link creation requests
@@ -28,7 +27,6 @@ namespace DomainService.MagicLink
         /// <summary>
         /// Project/tenant key for multi-tenancy
         /// </summary>
-        public string? ProjectKey { get; set; }
     }
 
     /// <summary>

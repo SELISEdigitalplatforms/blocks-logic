@@ -4,10 +4,9 @@ using Iam.DomainService.Shared.Entities;
 
 namespace Iam.DomainService.Users
 {
-    public class GetUserRequest : IProjectKey
+    public class GetUserRequest
     {
         public string? Id { get; set; }
-        public string? ProjectKey { get; set; }
     }
 
     public class GetUserResponse : BaseQueryResponse<GetUser>

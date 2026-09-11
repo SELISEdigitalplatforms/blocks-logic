@@ -6,9 +6,8 @@ namespace DomainService.TemplateEngine
     /// Request to create multiple files based on saved query configurations
     /// </summary>
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
-    public class CreateMultipleFileWithFilteredMongoQueryRequest : IProjectKey
+    public class CreateMultipleFileWithFilteredMongoQueryRequest
     {
-        public string? ProjectKey { get; set; }
         public Guid RequestId { get; set; }
         public Guid? TemplateFileId { get; set; }
         public string? SubscriptionFilterId { get; set; }
