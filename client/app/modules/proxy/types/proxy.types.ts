@@ -380,12 +380,6 @@ export type ProxyTestResponse = {
   responseBodyBytes: number;
 };
 
-export type ProxyCsvExport = {
-  fileName: string;
-  csv: string;
-  rowCount: number;
-};
-
 export type ProxyMutationResponse = {
   isSuccess: boolean;
   itemId?: string;

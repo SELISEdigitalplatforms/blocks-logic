@@ -134,7 +134,7 @@ POST {{Api_HostAddress}}/api/Proxies/{{proxyId}}/versions/{{versionId}}/revert
 Authorization: Bearer {{token}}
 
 # ---------------------------------------------------------------------------
-# Phase 3 (SPEC3): request logs / metrics / CSV export. Read-only over the
+# Phase 3 (SPEC3): request logs / metrics. Read-only over the
 # ProxyExecutions rows the Phase-2 data-plane forwarder writes. Generate some
 # traffic through /api/proxy/gateway/<slug>/... first.
 # ---------------------------------------------------------------------------
@@ -157,10 +157,6 @@ Authorization: Bearer {{token}}
 
 ### 18. Expanded row -> full detail incl. responseBody (clipped to 64 KB with responseBodyTruncatedForDisplay); unknown/mismatched -> 200 data:null
 GET {{Api_HostAddress}}/api/Proxies/{{proxyId}}/executions/PASTE_ITEM_ID
-Authorization: Bearer {{token}}
-
-### 19. Export CSV -> text/csv; charset=utf-8, BOM, header "Time,Method,Path,Status,LatencyMs,UpstreamHost,Outcome,Error", newest-first, <=50k rows (X-Proxy-Export-Truncated: true when more)
-GET {{Api_HostAddress}}/api/Proxies/{{proxyId}}/executions/export?statusClass=all
 Authorization: Bearer {{token}}
 
 ### 20. Unknown proxy id (no rows) -> 404 PROXY_NOT_FOUND

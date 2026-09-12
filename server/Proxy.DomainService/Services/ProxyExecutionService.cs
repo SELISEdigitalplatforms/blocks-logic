@@ -24,9 +24,6 @@ namespace Proxy.DomainService.Services
         /// <summary>Transport guard for <c>GetExecution.responseBody</c> (SPEC &sect;3.2 / C6). The stored row is untouched.</summary>
         internal const int ResponseBodyDisplayLimitBytes = 64 * 1024;
 
-        /// <summary>Hard row cap for the CSV export (SPEC &sect;3.4 / C5).</summary>
-        internal const int ExportRowCap = 50_000;
-
         private readonly IProxyExecutionRepository _executionRepository;
         private readonly IProxyRepository _proxyRepository;
         private readonly TimeProvider _timeProvider;
@@ -189,6 +186,18 @@ namespace Proxy.DomainService.Services
                     UpstreamHost = row.UpstreamHost,
                     InjectedHeaderKeys = new List<string>(row.InjectedHeaderKeys),
                     InjectedQueryKeys = new List<string>(row.InjectedQueryKeys),
+                    CallerKind = string.IsNullOrEmpty(row.CallerKind) ? ProxyCallerKind.Client : row.CallerKind,
+                    CallerUserId = row.CreatedBy,
+                    CallerUserName = row.CallerUserName,
+                    CallerIp = row.CallerIp,
+                    CallerUserAgent = row.CallerUserAgent,
+                    CallerOrigin = row.CallerOrigin,
+                    CorrelationId = row.CorrelationId,
+                    WorkflowId = row.WorkflowId,
+                    WorkflowRunId = row.WorkflowRunId,
+                    WorkflowNodeId = row.WorkflowNodeId,
+                    RoutePath = row.RoutePath,
+                    RouteUpstreamPath = row.RouteUpstreamPath,
                     StatusCode = row.StatusCode,
                     UpstreamStatusCode = row.UpstreamStatusCode,
                     Outcome = row.Outcome,
@@ -234,24 +243,39 @@ namespace Proxy.DomainService.Services
                 };
             }
 
-            var since = WindowStart();
-            var stats = await _executionRepository.GetStatsAsync(tenantId, proxyId, since);
-
-            var calls = stats.Count;
-            var avgLatency = calls > 0 ? (int)Math.Round(stats.AvgLatencyMs, MidpointRounding.AwayFromZero) : 0;
-            var errorRatePct = calls > 0
-                ? Math.Round(stats.ErrorCount * 100d / calls, 1, MidpointRounding.AwayFromZero)
-                : 0d;
+            // Read from the counters denormalized onto the proxy document: summing at most 25 hourly buckets
+            // already in hand beats an aggregation across ProxyExecutions, and costs no extra query at all
+            // since the document was loaded above. The counters lag by at most one flush interval, which is
+            // the trade this tile is happy to make; the logs tab still reads the rows themselves.
+            // A proxy deleted but still holding rows has no document to read, so it falls back to the
+            // aggregation rather than reporting zero.
+            var asOf = _timeProvider.GetUtcNow().UtcDateTime;
+            ProxyStatsRollup rollup;
+            if (proxy is not null)
+            {
+                rollup = ProxyStatsWindow.Rollup(proxy.Stats, asOf);
+            }
+            else
+            {
+                var stats = await _executionRepository.GetStatsAsync(tenantId, proxyId, WindowStart());
+                rollup = stats.Count > 0
+                    ? new ProxyStatsRollup(
+                        stats.Count,
+                        (int)Math.Round(stats.AvgLatencyMs, MidpointRounding.AwayFromZero),
+                        Math.Round(stats.ErrorCount * 100d / stats.Count, 1, MidpointRounding.AwayFromZero),
+                        stats.LastCallAtUtc)
+                    : ProxyStatsRollup.Empty;
+            }
 
             var dto = new ProxyOverviewDto
             {
-                Calls24h = calls,
-                AvgLatencyMs = avgLatency,
-                ErrorRatePct = errorRatePct,
-                ErrorRateIsHigh = errorRatePct > 5,
+                Calls24h = rollup.Calls,
+                AvgLatencyMs = rollup.AvgLatencyMs,
+                ErrorRatePct = rollup.ErrorRatePct,
+                ErrorRateIsHigh = rollup.ErrorRatePct > ProxyStatsWindow.HighErrorRatePct,
                 CredentialRefs = CredentialRefsOf(proxy),
                 Methods = proxy is null ? new List<string>() : proxy.Methods.Select(m => m.Wire()).ToList(),
-                LastCallAtUtc = calls > 0 ? stats.LastCallAtUtc : null,
+                LastCallAtUtc = rollup.Calls > 0 ? rollup.LastCallAtUtc : null,
             };
 
             _logger.LogInformation(
@@ -259,63 +283,6 @@ namespace Proxy.DomainService.Services
                 tenantId, proxyId, dto.Calls24h, dto.AvgLatencyMs, dto.ErrorRatePct);
 
             return new ProxyGetOverviewResponseDto { Data = dto };
-        }
-
-        public async Task<ProxyCsvExportResult> ExportExecutionsCsvAsync(
-            string tenantId, ProxyExportExecutionsRequestDto request)
-        {
-            var proxyId = (request.ProxyId ?? string.Empty).Trim();
-
-            var errors = new Dictionary<string, string>(StringComparer.Ordinal);
-            if (proxyId.Length == 0)
-            {
-                errors["proxyId"] = "proxyId is required.";
-            }
-
-            if (!ProxyStatusClassParser.TryParse(request.StatusClass, out var statusClass))
-            {
-                errors["statusClass"] = ProxyStatusClassParser.InvalidMessage;
-            }
-
-            if (errors.Count > 0)
-            {
-                _logger.LogWarning(
-                    "ExportExecutionsCsv for tenant {TenantId} rejected: {Errors}", tenantId, string.Join("; ", errors.Values));
-                return ProxyCsvExportResult.Failure(400, ProxyErrorCodes.Validation, "The request is invalid.", errors);
-            }
-
-            var proxy = await _proxyRepository.GetAsync(tenantId, proxyId);
-            if (proxy is null && !await _executionRepository.AnyForProxyAsync(tenantId, proxyId))
-            {
-                _logger.LogInformation(
-                    "ExportExecutionsCsv for tenant {TenantId}: proxy {ProxyId} is unknown and has no rows; 404.", tenantId, proxyId);
-                return ProxyCsvExportResult.Failure(404, ProxyErrorCodes.NotFound, $"Proxy '{proxyId}' was not found.");
-            }
-
-            var since = WindowStart();
-
-            // The export is a single shot, so there is no paging session to pin: "now" as the upper bound is
-            // the same set of rows an unbounded count would see (no row is written with a future timestamp),
-            // and it keeps the count aligned with the rows the export itself reads.
-            var matched = await _executionRepository.CountAsync(
-                tenantId, proxyId, statusClass, since, _timeProvider.GetUtcNow().UtcDateTime);
-            var rows = await _executionRepository.GetForExportAsync(tenantId, proxyId, statusClass, since, ExportRowCap);
-            var truncated = matched > ExportRowCap;
-
-            var slug = !string.IsNullOrEmpty(proxy?.Slug)
-                ? proxy!.Slug
-                : rows.FirstOrDefault()?.ProxySlug is { Length: > 0 } rowSlug
-                    ? rowSlug
-                    : proxyId;
-            var fileName = $"proxy-{slug}-logs-{_timeProvider.GetUtcNow().UtcDateTime:yyyyMMddHHmmss}.csv";
-
-            var content = ProxyCsvWriter.Write(rows);
-
-            _logger.LogInformation(
-                "ExportExecutionsCsv for tenant {TenantId} proxy {ProxyId}: wrote {Rows} of {Matched} rows (truncated: {Truncated}), {Bytes} bytes.",
-                tenantId, proxyId, rows.Count, matched, truncated, content.Length);
-
-            return ProxyCsvExportResult.Ok(content, fileName, truncated);
         }
 
         private DateTime WindowStart() => _timeProvider.GetUtcNow().UtcDateTime - Window;
@@ -411,6 +378,11 @@ namespace Proxy.DomainService.Services
         {
             ItemId = row.ItemId,
             StartedAtUtc = row.StartedAtUtc,
+            // Rows written before caller provenance existed have no CallerKind; they were all data-plane
+            // calls, so report them as such rather than leaving the column blank in the logs table.
+            CallerKind = string.IsNullOrEmpty(row.CallerKind) ? ProxyCallerKind.Client : row.CallerKind,
+            CallerUserName = row.CallerUserName,
+            RoutePath = row.RoutePath,
             RequestMethod = row.RequestMethod,
             RequestPath = row.RequestPath,
             StatusCode = row.StatusCode,

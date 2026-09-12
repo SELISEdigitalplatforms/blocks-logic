@@ -449,17 +449,6 @@
             works).
             </summary>
         </member>
-        <member name="M:Utilities.Api.Controllers.ProxiesController.ExportExecutionsCsv(System.String,Proxy.DomainService.Dtos.ProxyExportExecutionsRequestDto)">
-            <summary>
-            <c>GET /api/Proxies/{proxyId}/executions/export</c> — SPEC3 §3.4, the filtered last-24h log as a
-            UTF-8 (BOM) RFC 4180 CSV attachment, newest first, capped at 50,000 rows
-            (<c>X-Proxy-Export-Truncated: true</c> when more matched). Response bodies are never included.
-            <para>
-            Declared before <see cref="M:Utilities.Api.Controllers.ProxiesController.GetExecution(System.String,System.String)"/> for readability only — the literal <c>export</c> segment
-            outranks the <c>{executionId}</c> parameter in route precedence regardless of order.
-            </para>
-            </summary>
-        </member>
         <member name="M:Utilities.Api.Controllers.ProxiesController.GetExecution(System.String,System.String)">
             <summary>
             <c>GET /api/Proxies/{proxyId}/executions/{executionId}</c> — SPEC3 §3.2, one expanded request-log
@@ -500,6 +489,12 @@
         <member name="M:Utilities.Api.Controllers.ProxiesController.GatewayError(System.String,System.Int32,System.String,System.Nullable{System.Int32})">
             <summary>
             Blocks-generated error body (SPEC §3.4): <c>{ code: "PROXY_GATEWAY_&lt;OUTCOME&gt;", message, instance }</c>.
+            </summary>
+        </member>
+        <member name="F:Utilities.Api.Controllers.ProxiesController.MaxCallerFieldLength">
+            <summary>
+            Cap on a caller-supplied provenance header before it is stored. A User-Agent or Referer is
+            attacker-controlled and unbounded; the execution row is not the place to find that out.
             </summary>
         </member>
         <member name="T:Utilities.Api.Controllers.WorkflowController">

@@ -48,6 +48,37 @@ namespace Proxy.DomainService.Dtos
 
         public List<string> InjectedQueryKeys { get; set; } = new();
 
+        /// <summary><c>"Client"</c>, <c>"Workflow"</c> or <c>"Test"</c>.</summary>
+        public string CallerKind { get; set; } = string.Empty;
+
+        /// <summary>Calling user id; <c>null</c> when the credential carried none.</summary>
+        public string? CallerUserId { get; set; }
+
+        public string? CallerUserName { get; set; }
+
+        /// <summary>Remote IP of the caller; <c>null</c> for an in-process workflow forward.</summary>
+        public string? CallerIp { get; set; }
+
+        public string? CallerUserAgent { get; set; }
+
+        public string? CallerOrigin { get; set; }
+
+        /// <summary>Trace id joining this row to the surrounding application logs.</summary>
+        public string? CorrelationId { get; set; }
+
+        /// <summary>Set only when <see cref="CallerKind"/> is <c>"Workflow"</c>.</summary>
+        public string? WorkflowId { get; set; }
+
+        public string? WorkflowRunId { get; set; }
+
+        public string? WorkflowNodeId { get; set; }
+
+        /// <summary>Client-facing route template that matched, e.g. <c>"orders/{id}"</c>.</summary>
+        public string? RoutePath { get; set; }
+
+        /// <summary>Upstream template it rewrote to, or <c>null</c> when the route did not rewrite.</summary>
+        public string? RouteUpstreamPath { get; set; }
+
         public int StatusCode { get; set; }
 
         public int? UpstreamStatusCode { get; set; }

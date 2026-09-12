@@ -218,7 +218,7 @@ namespace XUnitTest.Proxy
             StatusOf(result).Should().Be(400);
         }
 
-        // ---------- Phase 3 : GetExecutions / GetExecution / GetOverview / ExportExecutionsCsv ----------
+        // ---------- Phase 3 : GetExecutions / GetExecution / GetOverview ----------
 
         [Fact]
         public async Task ListExecutions_ReturnsServiceHttpStatus()
@@ -254,40 +254,6 @@ namespace XUnitTest.Proxy
             var result = await _controller.GetOverview("p1");
 
             StatusOf(result).Should().Be(200);
-        }
-
-        [Fact]
-        public async Task ExportExecutionsCsv_Returns_CsvFile_WithTruncationHeader()
-        {
-            _controller.ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext
-            {
-                HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext(),
-            };
-            _executionService.Setup(s => s.ExportExecutionsCsvAsync("tenant-abc", It.IsAny<ProxyExportExecutionsRequestDto>()))
-                .ReturnsAsync(ProxyCsvExportResult.Ok(new byte[] { 1, 2, 3 }, "proxy-p-logs-20260907T000000.csv", truncated: true));
-
-            var result = await _controller.ExportExecutionsCsv("p1", new ProxyExportExecutionsRequestDto());
-
-            var file = result.Should().BeOfType<FileContentResult>().Which;
-            file.ContentType.Should().Be("text/csv; charset=utf-8");
-            file.FileDownloadName.Should().Be("proxy-p-logs-20260907T000000.csv");
-            _controller.Response.Headers["X-Proxy-Export-Truncated"].ToString().Should().Be("true");
-        }
-
-        [Fact]
-        public async Task ExportExecutionsCsv_Returns400_OnValidationFailure()
-        {
-            _controller.ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext
-            {
-                HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext(),
-            };
-            _executionService.Setup(s => s.ExportExecutionsCsvAsync("tenant-abc", It.IsAny<ProxyExportExecutionsRequestDto>()))
-                .ReturnsAsync(ProxyCsvExportResult.Failure(400, "PROXY_VALIDATION", "bad",
-                    new Dictionary<string, string> { ["statusClass"] = "Must be one of all, 2xx, 4xx, 5xx." }));
-
-            var result = await _controller.ExportExecutionsCsv("p1", new ProxyExportExecutionsRequestDto { StatusClass = "3xx" });
-
-            StatusOf(result).Should().Be(400);
         }
 
         // ---------- The URL identifies the resource: a route id always beats a payload id ----------

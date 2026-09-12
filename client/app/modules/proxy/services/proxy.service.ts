@@ -20,7 +20,6 @@ import {
   BaseQueryListResponse,
   BaseQueryResponse,
   Proxy,
-  ProxyCsvExport,
   ProxyDetailDto,
   ProxyExecutionDetailDto,
   ProxyExecutionListItemDto,
@@ -258,29 +257,6 @@ export class ProxyService {
         responseBodyBytes: 0,
       };
     }
-  };
-
-  exportExecutionsCsv = async ({
-    proxyId,
-    filter,
-  }: {
-    proxyId: string;
-    filter: ProxyLogFilter;
-  }): Promise<ProxyCsvExport> => {
-    const csv = await this.logicHttpClient.get<string>(
-      `${PROXY_ENDPOINTS.executionsExport(proxyId)}${buildQuery({
-        statusClass: mapLogFilterToStatusClass(filter),
-      })}`,
-    );
-    const rowCount = csv
-      .split(/\r?\n/)
-      .slice(1)
-      .filter((line) => line.trim().length > 0).length;
-    return {
-      fileName: `proxy-${proxyId}-executions.csv`,
-      csv,
-      rowCount,
-    };
   };
 }
 

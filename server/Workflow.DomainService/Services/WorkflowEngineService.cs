@@ -163,6 +163,8 @@ namespace Workflow.DomainService.Services
             var nodeExecutionContext = new NodeExecutionContext
             {
                 WorkflowExecutionId = dto.WorkflowExecutionId,
+                WorkflowId = execution.WorkflowId,
+                NodeId = node.Id,
                 TenantId = execution.TenantId,
                 Parameters = node.Parameters,
                 InputItems = inputItems,

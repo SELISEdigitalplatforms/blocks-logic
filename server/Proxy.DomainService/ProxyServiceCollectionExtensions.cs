@@ -47,6 +47,13 @@ namespace Proxy.DomainService
             // (post-DNS) just before the send.
             services.AddSingleton<IProxyUpstreamGuard, ProxyUpstreamGuard>();
 
+            // Denormalized traffic counters for the Overview tiles. The recorder must be a singleton: its
+            // buffer IS the batching, and a scoped instance would flush one call at a time. The hosted
+            // service drains it on a timer and once more on shutdown.
+            services.AddSingleton<IProxyStatsRecorder, ProxyStatsRecorder>();
+
+            services.AddHostedService<ProxyStatsFlushService>();
+
             // IHttpClientFactory + the buffered upstream client used by the forwarder.
             services.AddHttpClient();
             services.AddHttpClient(ProxyGatewayService.UpstreamClientName, client =>

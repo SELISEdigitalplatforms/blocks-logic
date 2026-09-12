@@ -51,25 +51,6 @@ describe("ProxyLogsTab", () => {
     expect(await screen.findByText(/Upstream timeout/)).toBeTruthy();
   });
 
-  it("exports filtered rows as CSV", async () => {
-    const user = userEvent.setup();
-    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:csv");
-    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
-
-    renderWithProviders(<ProxyLogsTab proxy={PROXY_MOCK_DATA[1]} active={true} />);
-
-    await screen.findByText("1 of 1 requests");
-    await user.click(screen.getByRole("button", { name: "5xx" }));
-    await screen.findByText("0 of 1 requests");
-    await user.click(screen.getByRole("button", { name: /export csv/i }));
-
-    await waitFor(() =>
-      expect(toasts.showSuccessToast).toHaveBeenCalledWith({
-        description: "0 requests exported as CSV.",
-      }),
-    );
-  });
-
   it("paginates the logs table through the Pagination component", async () => {
     const user = userEvent.setup();
     const rows = PROXY_MOCK_EXECUTION_LOGS.filter((log) => log.proxyId === PROXY_MOCK_DATA[0].id);
@@ -107,7 +88,6 @@ describe("ProxyLogsTab", () => {
     expect(await screen.findByText("No request logs yet")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "All" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Live" })).toBeNull();
-    expect(screen.queryByRole("button", { name: /export csv/i })).toBeNull();
     expect(screen.queryByRole("columnheader", { name: "TIME" })).toBeNull();
   });
 });

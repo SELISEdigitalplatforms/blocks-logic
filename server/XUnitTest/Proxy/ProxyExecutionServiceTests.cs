@@ -44,13 +44,36 @@ namespace XUnitTest.Proxy
             GC.SuppressFinalize(this);
         }
 
+        /// <summary>
+        /// Seeds the denormalized counters the Overview now reads. One bucket in the current hour is enough:
+        /// the rollup sums whatever is inside the window, and the window maths has its own tests.
+        /// </summary>
+        private void GivenStats(long calls, long errors, long latencyMsTotal, DateTime? lastCall, DateTime? at = null)
+        {
+            var proxy = Proxy();
+            proxy.Stats = new ProxyStats
+            {
+                Buckets =
+                {
+                    [ProxyStatsWindow.StampOf(at ?? Now)] = new ProxyStatsBucket
+                    {
+                        Calls = calls,
+                        Errors = errors,
+                        LatencyMsTotal = latencyMsTotal,
+                    },
+                },
+                LastCallAtUtc = lastCall,
+            };
+            _proxies.Setup(r => r.GetAsync(Tenant, ProxyId)).ReturnsAsync(proxy);
+        }
+
         // =========================== GetOverview ===========================
 
         [Fact] // H1
         public async Task GetOverview_ComputesRoundedMetrics_CredentialRefs_Methods_LastCall()
         {
-            _executions.Setup(r => r.GetStatsAsync(Tenant, ProxyId, Now.AddHours(-24)))
-                .ReturnsAsync(new ProxyExecutionStats(8, 131.6, 3, InWindow));
+            // 1053 / 8 = 131.625, which rounds to 132 the same way the old mean did.
+            GivenStats(calls: 8, errors: 3, latencyMsTotal: 1053, lastCall: InWindow);
 
             var result = await _service.GetOverviewAsync(Tenant, new ProxyGetOverviewRequestDto { ProxyId = ProxyId });
 
@@ -58,6 +81,10 @@ namespace XUnitTest.Proxy
             var dto = result.Data!;
             dto.Calls24h.Should().Be(8);
             dto.AvgLatencyMs.Should().Be(132);
+
+            // The tiles must not touch the executions collection any more.
+            _executions.Verify(
+                r => r.GetStatsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>()), Times.Never);
             dto.ErrorRatePct.Should().Be(37.5);
             dto.ErrorRateIsHigh.Should().BeTrue();
             dto.CredentialRefs.Should().Equal("{{$VAR.stripe-key}}");
@@ -68,8 +95,7 @@ namespace XUnitTest.Proxy
         [Fact] // H1 boundary: errorRatePct == 5 is NOT high (strictly greater than 5)
         public async Task GetOverview_ErrorRateExactlyFive_IsNotHigh()
         {
-            _executions.Setup(r => r.GetStatsAsync(Tenant, ProxyId, It.IsAny<DateTime>()))
-                .ReturnsAsync(new ProxyExecutionStats(100, 10, 5, InWindow));
+            GivenStats(calls: 100, errors: 5, latencyMsTotal: 1000, lastCall: InWindow);
 
             var result = await _service.GetOverviewAsync(Tenant, new ProxyGetOverviewRequestDto { ProxyId = ProxyId });
 
@@ -423,92 +449,6 @@ namespace XUnitTest.Proxy
 
             result.HttpStatus.Should().Be(400);
             result.Errors.Should().ContainKeys("itemId", "proxyId");
-        }
-
-        // =========================== ExportExecutionsCsv ===========================
-
-        [Fact] // H5
-        public async Task ExportExecutionsCsv_WritesBomHeaderAndNewestFirstRows_WithSluggedFilename()
-        {
-            _executions.Setup(r => r.CountAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), It.IsAny<DateTime>())).ReturnsAsync(2);
-            _executions.Setup(r => r.GetForExportAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), ProxyExecutionService.ExportRowCap))
-                .ReturnsAsync(new List<ProxyExecutionEntity>
-                {
-                    Row("e2", 500, "POST", 300, startedAt: Now.AddMinutes(-1)),
-                    Row("e1", 200, "GET", 150, startedAt: Now.AddMinutes(-2), path: "/api/proxy/gateway/stripe-payments/a,b"),
-                });
-
-            var result = await _service.ExportExecutionsCsvAsync(Tenant, new ProxyExportExecutionsRequestDto { ProxyId = ProxyId });
-
-            result.IsSuccess.Should().BeTrue();
-            result.Truncated.Should().BeFalse();
-            result.FileName.Should().Be("proxy-stripe-payments-logs-20260907101500.csv");
-
-            var text = Encoding.UTF8.GetString(result.Content);
-            text[0].Should().Be('﻿'); // BOM
-            var lines = text.TrimStart('﻿').Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
-            lines[0].Should().Be("Time,Method,Path,Status,LatencyMs,UpstreamHost,Outcome,Error");
-            lines[1].Should().StartWith("2026-09-07T10:14:00.000Z,POST,");
-            lines[2].Should().Contain("\"/api/proxy/gateway/stripe-payments/a,b\""); // RFC4180 quoting
-        }
-
-        [Fact] // C5
-        public async Task ExportExecutionsCsv_MoreThanCap_TruncatesAndSetsFlag()
-        {
-            _executions.Setup(r => r.CountAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), It.IsAny<DateTime>()))
-                .ReturnsAsync(ProxyExecutionService.ExportRowCap + 10_000);
-            _executions.Setup(r => r.GetForExportAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), ProxyExecutionService.ExportRowCap))
-                .ReturnsAsync(Enumerable.Range(0, ProxyExecutionService.ExportRowCap).Select(i => Row($"e{i}", 200, "GET", 1)).ToList());
-
-            var result = await _service.ExportExecutionsCsvAsync(Tenant, new ProxyExportExecutionsRequestDto { ProxyId = ProxyId });
-
-            result.IsSuccess.Should().BeTrue();
-            result.Truncated.Should().BeTrue();
-            var dataRows = Encoding.UTF8.GetString(result.Content)
-                .TrimStart('﻿')
-                .Split("\r\n", StringSplitOptions.RemoveEmptyEntries)
-                .Length - 1;
-            dataRows.Should().Be(ProxyExecutionService.ExportRowCap);
-        }
-
-        [Fact] // C4
-        public async Task ExportExecutionsCsv_NoRows_HeaderRowOnly()
-        {
-            _executions.Setup(r => r.CountAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), It.IsAny<DateTime>())).ReturnsAsync(0);
-            _executions.Setup(r => r.GetForExportAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), It.IsAny<int>()))
-                .ReturnsAsync(new List<ProxyExecutionEntity>());
-
-            var result = await _service.ExportExecutionsCsvAsync(Tenant, new ProxyExportExecutionsRequestDto { ProxyId = ProxyId });
-
-            var lines = Encoding.UTF8.GetString(result.Content).TrimStart('﻿').Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
-            lines.Should().ContainSingle().Which.Should().Be("Time,Method,Path,Status,LatencyMs,UpstreamHost,Outcome,Error");
-        }
-
-        [Fact] // C1
-        public async Task ExportExecutionsCsv_BadStatusClass_Returns400()
-        {
-            var result = await _service.ExportExecutionsCsvAsync(Tenant, new ProxyExportExecutionsRequestDto
-            {
-                ProxyId = ProxyId,
-                StatusClass = "3xx",
-            });
-
-            result.IsSuccess.Should().BeFalse();
-            result.HttpStatus.Should().Be(400);
-            result.Errors!["statusClass"].Should().Be("Must be one of all, 2xx, 4xx, 5xx.");
-        }
-
-        [Fact] // C2
-        public async Task ExportExecutionsCsv_UnknownProxy_Returns404()
-        {
-            _proxies.Setup(r => r.GetAsync(Tenant, "ghost")).ReturnsAsync((ProxyDetailEntity?)null);
-            _executions.Setup(r => r.AnyForProxyAsync(Tenant, "ghost")).ReturnsAsync(false);
-
-            var result = await _service.ExportExecutionsCsvAsync(Tenant, new ProxyExportExecutionsRequestDto { ProxyId = "ghost" });
-
-            result.IsSuccess.Should().BeFalse();
-            result.HttpStatus.Should().Be(404);
-            result.Code.Should().Be("PROXY_NOT_FOUND");
         }
 
         // =========================== helpers ===========================

@@ -132,10 +132,3 @@ export const useSendProxyTestRequest = () =>
     mutationKey: [...PROXY_QUERY_KEY, "test"],
     mutationFn: (request: ProxyTestRequest) => proxyService.test(request),
   });
-
-export const useExportProxyExecutionCsv = () =>
-  useMutation({
-    mutationKey: [...PROXY_QUERY_KEY, "export-executions"],
-    mutationFn: ({ proxyId, filter }: { proxyId: string; filter: ProxyLogFilter }) =>
-      proxyService.exportExecutionsCsv({ proxyId, filter }),
-  });

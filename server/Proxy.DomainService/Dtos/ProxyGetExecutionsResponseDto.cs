@@ -48,5 +48,14 @@ namespace Proxy.DomainService.Dtos
         public string Outcome { get; set; } = string.Empty;
 
         public string UpstreamHost { get; set; } = string.Empty;
+
+        /// <summary><c>"Client"</c>, <c>"Workflow"</c> or <c>"Test"</c> — where the call came from.</summary>
+        public string CallerKind { get; set; } = string.Empty;
+
+        /// <summary>Display name of the calling user at call time, or <c>null</c>.</summary>
+        public string? CallerUserName { get; set; }
+
+        /// <summary>The route template that matched, or <c>null</c> when the call was rejected before matching.</summary>
+        public string? RoutePath { get; set; }
     }
 }

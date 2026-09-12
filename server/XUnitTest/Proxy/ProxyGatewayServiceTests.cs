@@ -24,6 +24,7 @@ namespace XUnitTest.Proxy
         private readonly Mock<IProxyExecutionRepository> _executionRepo = new();
         private readonly StubHandler _handler = new();
         private readonly FakeUpstreamGuard _upstreamGuard = new();
+        private readonly RecordingStatsRecorder _statsRecorder = new();
         private readonly FakeVariableResolver _variables = new();
         private readonly ProxyGatewayService _service;
 
@@ -56,6 +57,7 @@ namespace XUnitTest.Proxy
                 _executionRepo.Object,
                 _variables,
                 _upstreamGuard,
+                _statsRecorder,
                 Mock.Of<ILogger<ProxyGatewayService>>());
         }
 
@@ -80,6 +82,21 @@ namespace XUnitTest.Proxy
             return entity;
         }
 
+        /// <summary>
+        /// Declares routes wide enough for a test that exercises the path suffix itself. The default fixture
+        /// leaves <c>Routes</c> empty on purpose — that is the strict "base path only" behaviour most tests
+        /// want — so a suffix test opts in explicitly, the way a tenant would.
+        /// </summary>
+        private static void AllowSuffixRoutes(ProxyDetailEntity proxy)
+        {
+            foreach (var method in new[] { HttpMethodType.Get, HttpMethodType.Post })
+            {
+                proxy.Routes.Add(new ProxyRouteConfig { Method = method, Path = string.Empty });
+                proxy.Routes.Add(new ProxyRouteConfig { Method = method, Path = "{p1}" });
+                proxy.Routes.Add(new ProxyRouteConfig { Method = method, Path = "{p1}/{p2}" });
+            }
+        }
+
         private static ProxyForwardRequest Request(string method = "GET", Action<ProxyForwardRequestBuilder>? mutate = null)
         {
             var builder = new ProxyForwardRequestBuilder { Method = method };
@@ -95,7 +112,11 @@ namespace XUnitTest.Proxy
         [Fact]
         public async Task Forward_HappyGet_RelaysResponse_InjectsOnlyConfiguredHeadersAndQuery_AndWritesRow()
         {
-            var proxy = Proxy(p => p.Query.Add(new ProxyKeyValue { Key = "tag", Value = "blocks" }));
+            var proxy = Proxy(p =>
+            {
+                p.Query.Add(new ProxyKeyValue { Key = "tag", Value = "blocks" });
+                AllowSuffixRoutes(p);
+            });
             GivenProxy(proxy);
             _handler.Respond = (_, _) => Json(HttpStatusCode.OK, "{\"id\":\"ch_123\"}");
 
@@ -275,7 +296,11 @@ namespace XUnitTest.Proxy
         [Fact]
         public async Task Forward_EmptyMethodConfigs_IsIdenticalToSharedConfig()
         {
-            var proxy = Proxy(p => p.Query.Add(new ProxyKeyValue { Key = "tag", Value = "blocks" }));
+            var proxy = Proxy(p =>
+            {
+                p.Query.Add(new ProxyKeyValue { Key = "tag", Value = "blocks" });
+                AllowSuffixRoutes(p);
+            });
             proxy.MethodConfigs.Should().BeEmpty();
             GivenProxy(proxy);
             _handler.Respond = (_, _) => Json(HttpStatusCode.OK, "{}");
@@ -692,7 +717,7 @@ namespace XUnitTest.Proxy
         [InlineData("a?b#c", "https://api.stripe.com/v1/charges/a%3Fb%23c")]
         public async Task Forward_EncodesPathSuffixPerSegment_NotMisreportedAs500(string pathSuffix, string expectedUrl)
         {
-            var proxy = Proxy();
+            var proxy = Proxy(AllowSuffixRoutes);
             GivenProxy(proxy);
             _handler.Respond = (_, _) => Json(HttpStatusCode.OK, "{}");
 
@@ -1089,6 +1114,240 @@ namespace XUnitTest.Proxy
             }
         }
 
+        // ---------- route allowlist (end to end through the forwarder) ----------
+
+        [Fact]
+        public async Task Forward_UndeclaredPath_Returns403_WritesRow_AndNeverCallsUpstream()
+        {
+            var proxy = Proxy(p => p.Routes.Add(new ProxyRouteConfig
+            {
+                Method = HttpMethodType.Get,
+                Path = "charges/{id}",
+            }));
+            GivenProxy(proxy);
+
+            ProxyExecutionEntity? row = null;
+            _executionRepo.Setup(r => r.InsertAsync(It.IsAny<ProxyExecutionEntity>()))
+                .Callback<ProxyExecutionEntity>(e => row = e).Returns(Task.CompletedTask);
+
+            var result = await _service.ForwardAsync(Request("GET", b =>
+            {
+                b.Slug = proxy.Slug;
+                b.PathSuffix = "customers/cus_1";
+            }));
+
+            result.Ok.Should().BeFalse();
+            result.StatusCode.Should().Be(403);
+            result.Outcome.Should().Be(ProxyExecutionOutcome.RouteNotAllowed);
+
+            // The credential must never leave the process for an endpoint nobody declared.
+            _handler.CallCount.Should().Be(0);
+
+            // A row is still written: probing for undeclared endpoints is exactly what the log is for.
+            row!.Outcome.Should().Be(ProxyExecutionOutcome.RouteNotAllowed);
+            row.RoutePath.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task Forward_DotSegments_CannotEscapeTheConfiguredUpstream()
+        {
+            var proxy = Proxy(p =>
+            {
+                p.Routes.Add(new ProxyRouteConfig { Method = HttpMethodType.Get, Path = "{a}" });
+                p.Routes.Add(new ProxyRouteConfig { Method = HttpMethodType.Get, Path = "{a}/{b}" });
+                p.Routes.Add(new ProxyRouteConfig { Method = HttpMethodType.Get, Path = "{a}/{b}/{c}" });
+            });
+            GivenProxy(proxy);
+
+            var result = await _service.ForwardAsync(Request("GET", b =>
+            {
+                b.Slug = proxy.Slug;
+                b.PathSuffix = "../../v1/customers";
+            }));
+
+            result.Outcome.Should().Be(ProxyExecutionOutcome.RouteNotAllowed);
+            _handler.CallCount.Should().Be(0);
+        }
+
+        [Fact]
+        public async Task Forward_RewritesTheClientPathToTheRoutesUpstreamPath()
+        {
+            var proxy = Proxy(p => p.Routes.Add(new ProxyRouteConfig
+            {
+                Method = HttpMethodType.Get,
+                Path = "orders/{id}",
+                UpstreamPath = "refunds/{id}",
+            }));
+            GivenProxy(proxy);
+            _handler.Respond = (_, _) => Json(HttpStatusCode.OK, "{}");
+
+            ProxyExecutionEntity? row = null;
+            _executionRepo.Setup(r => r.InsertAsync(It.IsAny<ProxyExecutionEntity>()))
+                .Callback<ProxyExecutionEntity>(e => row = e).Returns(Task.CompletedTask);
+
+            var result = await _service.ForwardAsync(Request("GET", b =>
+            {
+                b.Slug = proxy.Slug;
+                b.PathSuffix = "orders/ch_123";
+                b.RequestPath = "/api/proxy/gateway/stripe-payments/orders/ch_123";
+            }));
+
+            result.Ok.Should().BeTrue();
+
+            // The vendor sees its own URL shape; the client never had to know it.
+            _handler.LastRequestUri!.AbsoluteUri
+                .Should().Be("https://api.stripe.com/v1/charges/refunds/ch_123");
+
+            // Both halves of the mapping are on the row, so the log says where the call came from and went.
+            row!.RequestPath.Should().Be("/api/proxy/gateway/stripe-payments/orders/ch_123");
+            row.RoutePath.Should().Be("orders/{id}");
+            row.RouteUpstreamPath.Should().Be("refunds/{id}");
+        }
+
+        [Fact]
+        public async Task Forward_PathDeclaredForAnotherMethod_Returns405_ListingThatPathsMethods()
+        {
+            var proxy = Proxy(p => p.Routes.Add(new ProxyRouteConfig
+            {
+                Method = HttpMethodType.Post,
+                Path = "charges/{id}",
+            }));
+            GivenProxy(proxy);
+
+            var result = await _service.ForwardAsync(Request("GET", b =>
+            {
+                b.Slug = proxy.Slug;
+                b.PathSuffix = "charges/ch_1";
+            }));
+
+            result.StatusCode.Should().Be(405);
+            result.Outcome.Should().Be(ProxyExecutionOutcome.MethodNotAllowed);
+
+            // The proxy allows GET overall, so the Allow header must reflect this PATH, not the proxy.
+            result.AllowedMethods.Should().Equal("POST");
+            _handler.CallCount.Should().Be(0);
+        }
+
+        [Fact]
+        public async Task Forward_RouteBodyMerge_OverridesTheProxyWideOne()
+        {
+            // The reason routes carry their own config: two POST endpoints on one vendor rarely take the
+            // same payload, and a proxy-wide merge would put fields where they do not belong.
+            var proxy = Proxy(p =>
+            {
+                p.BodyMerge.Add(new ProxyKeyValue { Key = "account", Value = "acct_shared" });
+                p.Routes.Add(new ProxyRouteConfig
+                {
+                    Method = HttpMethodType.Post,
+                    Path = "refunds",
+                    BodyMerge = new List<ProxyKeyValue> { new() { Key = "reason", Value = "requested_by_customer" } },
+                });
+            });
+            GivenProxy(proxy);
+
+            string? sentBody = null;
+            _handler.Respond = (req, _) =>
+            {
+                sentBody = req.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+                return Json(HttpStatusCode.OK, "{}");
+            };
+
+            var result = await _service.ForwardAsync(Request("POST", b =>
+            {
+                b.Slug = proxy.Slug;
+                b.PathSuffix = "refunds";
+                b.Body = Encoding.UTF8.GetBytes("{\"amount\":100}");
+                b.ContentType = "application/json";
+            }));
+
+            result.Ok.Should().BeTrue();
+            sentBody.Should().Contain("\"reason\":\"requested_by_customer\"");
+            sentBody.Should().NotContain("account");
+        }
+
+        [Fact]
+        public async Task Forward_RouteWithEmptyBodyMerge_OptsOutOfTheProxyWideMerge()
+        {
+            var proxy = Proxy(p =>
+            {
+                p.BodyMerge.Add(new ProxyKeyValue { Key = "account", Value = "acct_shared" });
+                p.Routes.Add(new ProxyRouteConfig
+                {
+                    Method = HttpMethodType.Post,
+                    Path = "refunds",
+                    BodyMerge = new List<ProxyKeyValue>(),
+                });
+            });
+            GivenProxy(proxy);
+
+            string? sentBody = null;
+            _handler.Respond = (req, _) =>
+            {
+                sentBody = req.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+                return Json(HttpStatusCode.OK, "{}");
+            };
+
+            await _service.ForwardAsync(Request("POST", b =>
+            {
+                b.Slug = proxy.Slug;
+                b.PathSuffix = "refunds";
+                b.Body = Encoding.UTF8.GetBytes("{\"amount\":100}");
+                b.ContentType = "application/json";
+            }));
+
+            sentBody.Should().Be("{\"amount\":100}");
+        }
+
+        // ---------- denormalized counters ----------
+
+        [Fact]
+        public async Task Forward_RecordsCountersForTheTiles_WithoutTouchingTheProxyDocument()
+        {
+            var proxy = Proxy();
+            GivenProxy(proxy);
+            _handler.Respond = (_, _) => Json(HttpStatusCode.OK, "{}");
+
+            await _service.ForwardAsync(Request("GET", b => b.Slug = proxy.Slug));
+
+            var recorded = _statsRecorder.Recorded.Should().ContainSingle().Subject;
+            recorded.TenantId.Should().Be(Tenant);
+            recorded.ProxyId.Should().Be(proxy.ItemId);
+            recorded.StatusCode.Should().Be(200);
+        }
+
+        [Fact]
+        public async Task Forward_PreflightRejection_IsStillCounted()
+        {
+            // A 403 the tiles never saw would make the error rate read better than reality.
+            var proxy = Proxy();
+            GivenProxy(proxy);
+
+            await _service.ForwardAsync(Request("GET", b =>
+            {
+                b.Slug = proxy.Slug;
+                b.PathSuffix = "not-declared";
+            }));
+
+            _statsRecorder.Recorded.Should().ContainSingle().Which.StatusCode.Should().Be(403);
+        }
+
+        [Fact]
+        public async Task Forward_TestMode_RecordsNoCountersAndNoRow()
+        {
+            var proxy = Proxy();
+            _handler.Respond = (_, _) => Json(HttpStatusCode.OK, "{}");
+
+            await _service.ForwardAsync(Request("GET", b =>
+            {
+                b.Slug = proxy.Slug;
+                b.IsTest = true;
+                b.ResolvedConfig = ProxyResolvedConfig.FromEntity(proxy);
+            }));
+
+            _statsRecorder.Recorded.Should().BeEmpty();
+            _executionRepo.Verify(r => r.InsertAsync(It.IsAny<ProxyExecutionEntity>()), Times.Never);
+        }
+
         internal sealed class ProxyForwardRequestBuilder
         {
             public string Method { get; set; } = "GET";
@@ -1137,4 +1396,20 @@ namespace XUnitTest.Proxy
             }
         }
     }
+
+    /// <summary>
+    /// Captures what the forwarder hands the stats recorder, so a test can assert the counters a call feeds
+    /// the Overview tiles without reaching the database or the flush timer.
+    /// </summary>
+    internal sealed class RecordingStatsRecorder : IProxyStatsRecorder
+    {
+        public List<(string TenantId, string ProxyId, int StatusCode, int LatencyMs, DateTime StartedAtUtc)> Recorded { get; }
+            = new();
+
+        public void Record(string tenantId, string proxyId, int statusCode, int latencyMs, DateTime startedAtUtc) =>
+            Recorded.Add((tenantId, proxyId, statusCode, latencyMs, startedAtUtc));
+
+        public Task FlushAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
 }

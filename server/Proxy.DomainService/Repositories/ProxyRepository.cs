@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using Proxy.DomainService.Entities;
+using Proxy.DomainService.Utils;
 
 namespace Proxy.DomainService.Repositories
 {
@@ -141,6 +142,50 @@ namespace Proxy.DomainService.Repositories
             var filter = Builders<ProxyDetailEntity>.Filter.Eq(p => p.TenantId, tenantId)
                          & Builders<ProxyDetailEntity>.Filter.Eq(p => p.ItemId, itemId);
             await collection.DeleteOneAsync(filter);
+        }
+
+        public async Task ApplyStatsDeltasAsync(
+            string tenantId, IReadOnlyList<ProxyStatsDelta> deltas, CancellationToken cancellationToken = default)
+        {
+            if (deltas.Count == 0)
+            {
+                return;
+            }
+
+            var collection = GetCollection(tenantId);
+
+            // Computed once per batch, not per delta: every document in this flush prunes the same two hours.
+            var expiredStamps = ProxyStatsWindow.ExpiredStamps(DateTime.UtcNow).ToList();
+
+            var models = new List<WriteModel<ProxyDetailEntity>>(deltas.Count);
+            foreach (var delta in deltas)
+            {
+                var filter = Builders<ProxyDetailEntity>.Filter.Eq(p => p.TenantId, tenantId)
+                             & Builders<ProxyDetailEntity>.Filter.Eq(p => p.ItemId, delta.ProxyId);
+
+                // Dotted paths into the bucket map: $inc creates the hour's sub-document and its fields when
+                // they are missing, so the first call of an hour needs no separate insert and no upsert race.
+                var bucket = $"{nameof(ProxyDetailEntity.Stats)}.{nameof(ProxyStats.Buckets)}.{delta.Stamp}";
+                var update = Builders<ProxyDetailEntity>.Update
+                    .Inc($"{bucket}.{nameof(ProxyStatsBucket.Calls)}", delta.Calls)
+                    .Inc($"{bucket}.{nameof(ProxyStatsBucket.Errors)}", delta.Errors)
+                    .Inc($"{bucket}.{nameof(ProxyStatsBucket.LatencyMsTotal)}", delta.LatencyMsTotal)
+                    .Max(
+                        $"{nameof(ProxyDetailEntity.Stats)}.{nameof(ProxyStats.LastCallAtUtc)}",
+                        delta.LastCallAtUtc);
+
+                foreach (var stamp in expiredStamps)
+                {
+                    update = update.Unset(
+                        $"{nameof(ProxyDetailEntity.Stats)}.{nameof(ProxyStats.Buckets)}.{stamp}");
+                }
+
+                // IsUpsert stays false: counters must never create a proxy document.
+                models.Add(new UpdateOneModel<ProxyDetailEntity>(filter, update));
+            }
+
+            await collection.BulkWriteAsync(
+                models, new BulkWriteOptions { IsOrdered = false }, cancellationToken);
         }
     }
 }

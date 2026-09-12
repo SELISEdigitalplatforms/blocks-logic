@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
@@ -70,6 +71,15 @@ namespace Workflow.DomainService.Nodes.ActionProxy
                     {
                         TenantId = context.TenantId,
                         UserId = BlocksContext.GetContext()?.UserId,
+                        UserName = BlocksContext.GetContext()?.UserName,
+                        // Provenance for the proxy's execution log. There is no HttpContext here (the forward
+                        // is in-process), so the row is attributed to the run and node instead of to an IP,
+                        // and the logs can tell a workflow call apart from a front-end one.
+                        CallerKind = ProxyCallerKind.Workflow,
+                        CorrelationId = Activity.Current?.TraceId.ToString(),
+                        WorkflowId = context.WorkflowId,
+                        WorkflowRunId = context.WorkflowExecutionId,
+                        WorkflowNodeId = context.NodeId,
                         Slug = parameters.Slug,
                         Method = method,
                         PathSuffix = pathSuffix,

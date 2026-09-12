@@ -211,13 +211,4 @@ describe("ProxyService HTTP wiring", () => {
       }),
     ).resolves.toMatchObject({ ok: false, status: 400 });
   });
-
-  it("builds a CSV export result from the text body", async () => {
-    logicService.get.mockResolvedValueOnce("Time,Method\n2026,GET\n2026,POST\n");
-    const csv = await proxyService.exportExecutionsCsv({ proxyId: "p1", filter: "ok" });
-    expect(logicService.get).toHaveBeenCalledWith(
-      "/api/Proxies/p1/executions/export?statusClass=2xx",
-    );
-    expect(csv).toMatchObject({ fileName: "proxy-p1-executions.csv", rowCount: 2 });
-  });
 });

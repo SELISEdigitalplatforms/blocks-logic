@@ -49,6 +49,12 @@ namespace Proxy.DomainService.Dtos
         /// <summary>Per-method overrides for the unsaved draft. Same rules as Create / Update.</summary>
         public List<ProxyMethodConfigInputDto>? MethodConfigs { get; set; }
 
+        /// <summary>
+        /// The endpoints the draft proxy may reach. Omitted / empty ⇒ base path only, so a Test that sends a
+        /// path suffix is refused exactly as the live gateway would refuse it.
+        /// </summary>
+        public List<ProxyRouteConfigInputDto>? Routes { get; set; }
+
         /// <summary><c>"All"</c> (default) or <c>"Select"</c>. Same rules as Create / Update.</summary>
         public string? ResponseMode { get; set; }
 

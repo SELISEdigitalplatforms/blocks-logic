@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Activity, Check, Copy, Download, Loader2, Pause, Play } from "lucide-react";
+import { Activity, Check, Copy, Loader2, Pause, Play } from "lucide-react";
 import { Badge } from "@/components/ui-kits/badge/badge";
 import { Button } from "@/components/ui-kits/button/button";
 import { Card, CardContent } from "@/components/ui-kits/card/card";
@@ -9,7 +9,7 @@ import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { PROXY_LOG_PAGE_SIZE, PROXY_LOG_PAGE_SIZE_OPTIONS } from "../constants";
-import { useExportProxyExecutionCsv, useGetProxyExecution, useGetProxyExecutions } from "../hooks";
+import { useGetProxyExecution, useGetProxyExecutions } from "../hooks";
 import { Proxy, ProxyExecutionLog, ProxyLogFilter } from "../types";
 import { buildProxyCurl } from "../utils";
 import { ProxyMethodBadge } from "./proxy-method-badge";
@@ -263,7 +263,6 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
     isLoading: isLoadingAllRows,
   } = useGetProxyExecutions(proxy.id, "all", { enabled: active, pageSize: 1 });
   const totalAllCount = allRowsPage?.totalCount ?? 0;
-  const exportCsv = useExportProxyExecutionCsv();
 
   const handleFilter = (next: ProxyLogFilter) => {
     setFilter(next);
@@ -276,22 +275,6 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
     setPageSize(next);
     setPage(0);
     setAsOfUtc(undefined);
-  };
-
-  const handleExport = async () => {
-    try {
-      const res = await exportCsv.mutateAsync({ proxyId: proxy.id, filter });
-      const blob = new Blob([res.csv], { type: "text/csv;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = res.fileName;
-      link.click();
-      URL.revokeObjectURL(url);
-      showSuccessToast({ description: `${res.rowCount} requests exported as CSV.` });
-    } catch {
-      showErrorToast({ errors: "Failed to export proxy requests." });
-    }
   };
 
   if (active && (isLoading || isLoadingAllRows)) {
@@ -348,10 +331,6 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
           >
             {live ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
             {live ? "Paused" : "Live"}
-          </Button>
-          <Button variant="outline" size="xs" className="gap-1.5" onClick={handleExport}>
-            <Download className="h-3.5 w-3.5" />
-            Export CSV
           </Button>
         </div>
       </div>

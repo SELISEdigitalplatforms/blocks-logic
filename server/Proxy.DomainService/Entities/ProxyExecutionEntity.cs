@@ -31,6 +31,49 @@ namespace Proxy.DomainService.Entities
         /// </summary>
         public bool IsTest { get; set; }
 
+        /// <summary>
+        /// Where the call originated: <c>"Client"</c> (a front end through the gateway route),
+        /// <c>"Workflow"</c> (an in-process forward from a proxy node) or <c>"Test"</c> (the console's Test
+        /// action). The single field that answers "who called this" at a glance in the logs list.
+        /// </summary>
+        public string CallerKind { get; set; } = ProxyCallerKind.Client;
+
+        /// <summary>Display name of the calling user at call time, or <c>null</c>. <c>CreatedBy</c> holds the id.</summary>
+        public string? CallerUserName { get; set; }
+
+        /// <summary>Remote IP of the calling client, or <c>null</c> for an in-process workflow forward.</summary>
+        public string? CallerIp { get; set; }
+
+        /// <summary>Calling client's <c>User-Agent</c>, or <c>null</c>.</summary>
+        public string? CallerUserAgent { get; set; }
+
+        /// <summary>Calling client's <c>Origin</c> (falling back to <c>Referer</c>), or <c>null</c>.</summary>
+        public string? CallerOrigin { get; set; }
+
+        /// <summary>
+        /// Trace / correlation id shared with the rest of the request's telemetry, so one proxy row can be
+        /// joined to the surrounding application logs.
+        /// </summary>
+        public string? CorrelationId { get; set; }
+
+        /// <summary>Workflow that issued the call, when <see cref="CallerKind"/> is <c>"Workflow"</c>.</summary>
+        public string? WorkflowId { get; set; }
+
+        /// <summary>The specific workflow run, when <see cref="CallerKind"/> is <c>"Workflow"</c>.</summary>
+        public string? WorkflowRunId { get; set; }
+
+        /// <summary>The proxy node inside that workflow, when <see cref="CallerKind"/> is <c>"Workflow"</c>.</summary>
+        public string? WorkflowNodeId { get; set; }
+
+        /// <summary>
+        /// The client-facing route template that matched, e.g. <c>"orders/{id}"</c> (<c>""</c> for the base
+        /// path). <c>null</c> when no route matched or the proxy was rejected before matching.
+        /// </summary>
+        public string? RoutePath { get; set; }
+
+        /// <summary>The upstream template that route rewrote to, or <c>null</c> when it did not rewrite.</summary>
+        public string? RouteUpstreamPath { get; set; }
+
         /// <summary>Upper-case HTTP method received from the client.</summary>
         public required string RequestMethod { get; set; }
 

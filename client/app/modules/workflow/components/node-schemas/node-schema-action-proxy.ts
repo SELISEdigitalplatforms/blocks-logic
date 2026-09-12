@@ -11,6 +11,12 @@ const PROXY_VALUE_SEPARATOR = ":::";
 
 const ALL_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 
+const splitMethods = (methods: string) =>
+  methods
+    .split(",")
+    .map((method) => method.trim().toUpperCase())
+    .filter(Boolean);
+
 export const NodeSchemaActionProxy: NodeSchemaDefinition = {
   guide: NodeGuideActionProxy,
   schema: {
@@ -40,13 +46,17 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
           const [proxyId = "", slug = "", methods = ""] = String(value).split(
             PROXY_VALUE_SEPARATOR,
           );
+          const allowed = splitMethods(methods);
           return {
             proxy_composite: value,
             proxyId,
             slug,
             allowedMethods: methods,
-            // The previously picked method may not exist on the newly picked proxy.
-            httpMethod: "",
+            // Asking for a method is only meaningful when the proxy allows more than one. With a
+            // single allowed method the field is noise, so take it and hide the control.
+            hasMethodChoice: allowed.length > 1,
+            // Any previously picked method may not exist on the newly picked proxy.
+            httpMethod: allowed.length === 1 ? allowed[0] : "",
           };
         },
       },
@@ -57,13 +67,14 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
         info: "Restricted to the methods the selected proxy allows. Sending anything else is rejected by the gateway with 405.",
         key: "httpMethod",
         required: true,
+        dependsOn: {
+          key: "hasMethodChoice",
+          value: true,
+        },
         // Re-runs whenever the picked proxy changes so the list tracks that proxy's methods.
         optionsDependencies: ["allowedMethods"],
         options: (data) => {
-          const allowed = String(data.allowedMethods ?? "")
-            .split(",")
-            .map((method) => method.trim().toUpperCase())
-            .filter(Boolean);
+          const allowed = splitMethods(String(data.allowedMethods ?? ""));
           const usable = allowed.length > 0 ? allowed : ALL_METHODS;
           return Promise.resolve(usable.map((method) => ({ value: method, label: method })));
         },
@@ -120,6 +131,7 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
       proxyId: "",
       slug: "",
       allowedMethods: "",
+      hasMethodChoice: false,
       httpMethod: "",
       path: "",
       havebody: false,

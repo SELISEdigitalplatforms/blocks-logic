@@ -11,6 +11,7 @@ using Proxy.DomainService.Dtos;
 using Proxy.DomainService.Entities;
 using Proxy.DomainService.Repositories;
 using Proxy.DomainService.Services;
+using Proxy.DomainService.Utils;
 using XUnitTest.TestHelpers;
 
 namespace XUnitTest.Proxy
@@ -224,36 +225,50 @@ namespace XUnitTest.Proxy
         [Fact]
         public async Task GetAll_PopulatesCalls24h_PerProxy_ZeroWhenAbsent()
         {
-            var p1 = Existing(e => e.ItemId = "p1");
+            // p1 carries counters for two hours inside the window; p2 has never been called, so its Stats
+            // is the default empty instance and its card must read 0 rather than blank or stale.
+            var now = DateTime.UtcNow;
+            var p1 = Existing(e =>
+            {
+                e.ItemId = "p1";
+                e.Stats.Buckets[ProxyStatsWindow.StampOf(now)] = new ProxyStatsBucket { Calls = 5 };
+                e.Stats.Buckets[ProxyStatsWindow.StampOf(now.AddHours(-1))] = new ProxyStatsBucket { Calls = 4 };
+            });
             var p2 = Existing(e => { e.ItemId = "p2"; e.Slug = "other"; });
             _proxyRepo.Setup(r => r.GetAllAsync(Tenant, null, null, 20, 0))
                 .ReturnsAsync(new List<ProxyDetailEntity> { p1, p2 });
             _proxyRepo.Setup(r => r.CountAsync(Tenant, null, null)).ReturnsAsync(2);
-            _executionRepo
-                .Setup(r => r.CountByProxyAsync(Tenant, It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>()))
-                .ReturnsAsync((IReadOnlyDictionary<string, long>)new Dictionary<string, long> { ["p1"] = 9 });
 
             var result = await _service.GetAllAsync(Tenant, new ProxyGetAllRequestDto());
 
             result.Data!.Single(r => r.ItemId == "p1").Calls24h.Should().Be(9);
             result.Data!.Single(r => r.ItemId == "p2").Calls24h.Should().Be(0);
+
+            // The list page no longer aggregates ProxyExecutions at all.
+            _executionRepo.Verify(
+                r => r.CountByProxyAsync(It.IsAny<string>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>()),
+                Times.Never);
         }
 
         // ---------- GetAll : C9 (aggregation failure still returns the list, calls24h=0) ----------
         [Fact]
-        public async Task GetAll_WhenCalls24hAggregationThrows_ReturnsListWithZeroCounts()
+        public async Task GetAll_Calls24h_IgnoresBucketsOlderThanTheWindow()
         {
+            // The flush prunes expired hours, but a proxy that went quiet may still carry one: a bucket
+            // outside the window must not be counted just because nothing has swept it yet.
+            var now = DateTime.UtcNow;
+            var proxy = Existing(e =>
+            {
+                e.Stats.Buckets[ProxyStatsWindow.StampOf(now)] = new ProxyStatsBucket { Calls = 2 };
+                e.Stats.Buckets[ProxyStatsWindow.StampOf(now.AddHours(-40))] = new ProxyStatsBucket { Calls = 100 };
+            });
             _proxyRepo.Setup(r => r.GetAllAsync(Tenant, null, null, 20, 0))
-                .ReturnsAsync(new List<ProxyDetailEntity> { Existing() });
+                .ReturnsAsync(new List<ProxyDetailEntity> { proxy });
             _proxyRepo.Setup(r => r.CountAsync(Tenant, null, null)).ReturnsAsync(1);
-            _executionRepo
-                .Setup(r => r.CountByProxyAsync(Tenant, It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>()))
-                .ThrowsAsync(new TimeoutException("mongo timed out"));
 
             var result = await _service.GetAllAsync(Tenant, new ProxyGetAllRequestDto());
 
-            result.Data.Should().HaveCount(1);
-            result.Data!.Single().Calls24h.Should().Be(0);
+            result.Data!.Single().Calls24h.Should().Be(2);
             result.TotalCount.Should().Be(1);
         }
 

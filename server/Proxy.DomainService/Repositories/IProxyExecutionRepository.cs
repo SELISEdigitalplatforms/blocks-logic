@@ -71,13 +71,6 @@ namespace Proxy.DomainService.Repositories
         Task<IReadOnlyDictionary<string, long>> CountByProxyAsync(
             string tenantId, IReadOnlyCollection<string> proxyIds, DateTime sinceUtc);
 
-        /// <summary>
-        /// Up to <paramref name="limit"/> rows for the CSV export: the proxy's window rows matching
-        /// <paramref name="statusClass"/>, newest-first. The caller compares a separate
-        /// <see cref="CountAsync"/> against <paramref name="limit"/> to set the truncation header (C5).
-        /// </summary>
-        Task<List<ProxyExecutionEntity>> GetForExportAsync(
-            string tenantId, string proxyId, ProxyStatusClass statusClass, DateTime sinceUtc, int limit);
     }
 
     /// <summary>Result of the Overview aggregation (SPEC &sect;3.3). All figures are over the 24 h window.</summary>

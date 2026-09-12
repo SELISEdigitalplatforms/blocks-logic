@@ -47,7 +47,9 @@ namespace Proxy.DomainService.Services
             var proxies = await _proxyRepository.GetAllAsync(tenantId, request.Search, request.Enabled, pageSize, pageNumber);
             var totalCount = await _proxyRepository.CountAsync(tenantId, request.Search, request.Enabled);
 
-            var calls24h = await CountCalls24hForPageAsync(tenantId, proxies.Select(p => p.ItemId).ToList());
+            // Read from each proxy document's own counters instead of aggregating ProxyExecutions for the
+            // whole page: the documents are already loaded, so the card count now costs no query at all.
+            var asOf = _timeProvider.GetUtcNow().UtcDateTime;
 
             var data = proxies.Select(p => new ProxyListItemDto
             {
@@ -61,7 +63,7 @@ namespace Proxy.DomainService.Services
                     .Any(kv => ProxyVarRef.ContainsRef(kv.Value)),
                 HeaderCount = p.Headers.Count,
                 QueryCount = p.Query.Count,
-                Calls24h = calls24h.TryGetValue(p.ItemId, out var count) ? count : 0,
+                Calls24h = ProxyStatsWindow.Rollup(p.Stats, asOf).Calls,
                 CreatedDate = p.CreatedDate,
                 LastUpdatedDate = p.LastUpdatedDate,
             }).ToList();
@@ -98,6 +100,7 @@ namespace Proxy.DomainService.Services
                 Query = proxy.Query.Select(ToKeyValueDto).ToList(),
                 BodyMerge = proxy.BodyMerge.Select(ToKeyValueDto).ToList(),
                 MethodConfigs = proxy.MethodConfigs.Select(ToMethodConfigDto).ToList(),
+                Routes = proxy.Routes.Select(ToRouteDto).ToList(),
                 ResponseMode = proxy.ResponseMode.ToString(),
                 ResponseInclude = proxy.ResponseInclude.ToList(),
                 CurrentVersion = proxy.CurrentVersion,
@@ -117,7 +120,7 @@ namespace Proxy.DomainService.Services
 
             var validation = ProxyConfigValidator.Validate(
                 request.Name, request.Upstream, request.Methods, request.Headers, request.Query, request.MethodConfigs,
-                request.BodyMerge, request.ResponseMode, request.ResponseInclude);
+                request.BodyMerge, request.ResponseMode, request.ResponseInclude, request.Routes);
             if (!validation.IsValid)
             {
                 _logger.LogWarning(
@@ -153,6 +156,7 @@ namespace Proxy.DomainService.Services
                 Query = validation.Query,
                 BodyMerge = validation.BodyMerge,
                 MethodConfigs = validation.MethodConfigs,
+                Routes = validation.Routes,
                 ResponseMode = validation.ResponseMode,
                 ResponseInclude = validation.ResponseInclude,
                 CurrentVersion = 1,
@@ -194,7 +198,7 @@ namespace Proxy.DomainService.Services
 
             var validation = ProxyConfigValidator.Validate(
                 request.Name, request.Upstream, request.Methods, request.Headers, request.Query, request.MethodConfigs,
-                request.BodyMerge, request.ResponseMode, request.ResponseInclude);
+                request.BodyMerge, request.ResponseMode, request.ResponseInclude, request.Routes);
             if (!validation.IsValid)
             {
                 _logger.LogWarning(
@@ -245,6 +249,7 @@ namespace Proxy.DomainService.Services
                 Query = validation.Query.Select(ProxyVersionFactory.CloneKeyValue).ToList(),
                 BodyMerge = validation.BodyMerge.Select(ProxyVersionFactory.CloneKeyValue).ToList(),
                 MethodConfigs = validation.MethodConfigs.Select(ProxyVersionFactory.CloneMethodConfig).ToList(),
+                Routes = validation.Routes.Select(ProxyVersionFactory.CloneRoute).ToList(),
                 ResponseMode = validation.ResponseMode,
                 ResponseInclude = new List<string>(validation.ResponseInclude),
             };
@@ -264,6 +269,7 @@ namespace Proxy.DomainService.Services
             proxy.Query = validation.Query;
             proxy.BodyMerge = validation.BodyMerge;
             proxy.MethodConfigs = validation.MethodConfigs;
+            proxy.Routes = validation.Routes;
             proxy.ResponseMode = validation.ResponseMode;
             proxy.ResponseInclude = validation.ResponseInclude;
             proxy.LastUpdatedDate = DateTime.UtcNow;
@@ -367,38 +373,22 @@ namespace Proxy.DomainService.Services
             return ProxyMutationResponse.Success(proxy.ItemId, 200);
         }
 
-        /// <summary>
-        /// Rolling-24h execution count per proxy id for a <c>GetAll</c> page, in a single grouped aggregation
-        /// (SPEC3 &sect;3.5 / H6). If the aggregation fails or times out the whole list still returns, with
-        /// <c>calls24h = 0</c> for every card on the page, and the failure is logged (C9).
-        /// </summary>
-        private async Task<IReadOnlyDictionary<string, long>> CountCalls24hForPageAsync(
-            string tenantId, IReadOnlyCollection<string> proxyIds)
-        {
-            if (proxyIds.Count == 0)
-            {
-                return new Dictionary<string, long>();
-            }
-
-            try
-            {
-                var since = _timeProvider.GetUtcNow().UtcDateTime - TimeSpan.FromHours(24);
-                return await _proxyExecutionRepository.CountByProxyAsync(tenantId, proxyIds, since)
-                       ?? new Dictionary<string, long>();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(
-                    ex, "calls24h aggregation failed for tenant {TenantId} ({Count} proxies on the page); returning 0 for all.",
-                    tenantId, proxyIds.Count);
-                return new Dictionary<string, long>();
-            }
-        }
-
         private static ProxyKeyValueDto ToKeyValueDto(ProxyKeyValue source) => new()
         {
             Key = source.Key,
             Value = source.Value,
+        };
+
+        private static ProxyRouteConfigDto ToRouteDto(ProxyRouteConfig source) => new()
+        {
+            Method = source.Method.Wire(),
+            Path = source.Path,
+            UpstreamPath = source.UpstreamPath,
+            Headers = source.Headers?.Select(ToKeyValueDto).ToList(),
+            Query = source.Query?.Select(ToKeyValueDto).ToList(),
+            BodyMerge = source.BodyMerge?.Select(ToKeyValueDto).ToList(),
+            ResponseMode = source.ResponseMode?.ToString(),
+            ResponseInclude = source.ResponseInclude is null ? null : new List<string>(source.ResponseInclude),
         };
 
         private static ProxyMethodConfigDto ToMethodConfigDto(ProxyMethodConfig source) => new()

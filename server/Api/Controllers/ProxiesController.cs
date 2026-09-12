@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Blocks.Genesis;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -218,34 +219,6 @@ namespace Utilities.Api.Controllers
         }
 
         /// <summary>
-        /// <c>GET /api/Proxies/{proxyId}/executions/export</c> — SPEC3 §3.4, the filtered last-24h log as a
-        /// UTF-8 (BOM) RFC 4180 CSV attachment, newest first, capped at 50,000 rows
-        /// (<c>X-Proxy-Export-Truncated: true</c> when more matched). Response bodies are never included.
-        /// <para>
-        /// Declared before <see cref="GetExecution"/> for readability only — the literal <c>export</c> segment
-        /// outranks the <c>{executionId}</c> parameter in route precedence regardless of order.
-        /// </para>
-        /// </summary>
-        [Authorize]
-        [HttpGet("{proxyId}/executions/export")]
-        public async Task<IActionResult> ExportExecutionsCsv(string proxyId, [FromQuery] ProxyExportExecutionsRequestDto dto)
-        {
-            dto.ProxyId = proxyId;
-            var result = await _proxyExecutionService.ExportExecutionsCsvAsync(GetTenantId(), dto);
-            if (!result.IsSuccess)
-            {
-                return StatusCode(result.HttpStatus, new { code = result.Code, message = result.Message, errors = result.Errors });
-            }
-
-            if (result.Truncated)
-            {
-                Response.Headers["X-Proxy-Export-Truncated"] = "true";
-            }
-
-            return File(result.Content, "text/csv; charset=utf-8", result.FileName);
-        }
-
-        /// <summary>
         /// <c>GET /api/Proxies/{proxyId}/executions/{executionId}</c> — SPEC3 §3.2, one expanded request-log
         /// row including the full stored response body, clipped to 64 KB for transport (the stored row is
         /// untouched). An unknown id, an id whose proxy differs, or another tenant's row all return 200 with
@@ -314,6 +287,19 @@ namespace Utilities.Api.Controllers
             {
                 TenantId = auth.TenantId,
                 UserId = auth.UserId,
+                UserName = BlocksContext.GetContext()?.UserName,
+                // Provenance for the execution row: who called, from where, and under which trace. Read from
+                // the connection and headers here rather than in the forwarder, which also serves in-process
+                // workflow calls that have no HttpContext.
+                CallerKind = ProxyCallerKind.Client,
+                CallerIp = HttpContext.Connection.RemoteIpAddress?.ToString(),
+                CallerUserAgent = Truncate(Request.Headers.UserAgent.ToString(), MaxCallerFieldLength),
+                CallerOrigin = Truncate(
+                    Request.Headers.Origin.ToString() is { Length: > 0 } origin
+                        ? origin
+                        : Request.Headers.Referer.ToString(),
+                    MaxCallerFieldLength),
+                CorrelationId = Activity.Current?.TraceId.ToString() ?? HttpContext.TraceIdentifier,
                 Slug = slug,
                 Method = method,
                 PathSuffix = path ?? string.Empty,
@@ -374,11 +360,25 @@ namespace Utilities.Api.Controllers
             return StatusCode(statusCode, body);
         }
 
+        /// <summary>
+        /// Cap on a caller-supplied provenance header before it is stored. A User-Agent or Referer is
+        /// attacker-controlled and unbounded; the execution row is not the place to find that out.
+        /// </summary>
+        private const int MaxCallerFieldLength = 512;
+
+        private static string? Truncate(string? value, int maxLength) =>
+            string.IsNullOrEmpty(value) ? null
+            : value.Length <= maxLength ? value
+            : value[..maxLength];
+
         private static string SafeMessage(string outcome) => outcome switch
         {
             ProxyExecutionOutcome.Unauthorized => "Missing or invalid credentials for this tenant.",
             ProxyExecutionOutcome.ProxyNotFound => "No enabled proxy is configured for this path.",
             ProxyExecutionOutcome.MethodNotAllowed => "This HTTP method is not allowed for this proxy.",
+            // Deliberately does not say whether the path exists upstream: the caller may not know the
+            // vendor's URL shape, and this response must not become a way to discover it.
+            ProxyExecutionOutcome.RouteNotAllowed => "This path is not a configured route on this proxy.",
             ProxyExecutionOutcome.RequestTooLarge => "The request body exceeds the 10 MB limit.",
             ProxyExecutionOutcome.Timeout => "The upstream endpoint did not respond within 30 seconds.",
             ProxyExecutionOutcome.UpstreamUnreachable => "The upstream endpoint could not be reached.",

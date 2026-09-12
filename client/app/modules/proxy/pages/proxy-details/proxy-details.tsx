@@ -221,9 +221,6 @@ const ConfigurationStepCard = ({
   </div>
 );
 
-const tabClass =
-  "rounded-none border-b-2 border-transparent px-0 pb-2 pt-0 text-base data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none";
-
 const proxyDetailTabs = [
   { value: "overview", label: "Overview" },
   { value: "logs", label: "Request logs" },
@@ -471,9 +468,9 @@ export const ProxyDetails = () => {
                 </SelectContent>
               </Select>
             </div>
-            <TabsList className="hidden h-auto justify-start gap-8 rounded-none border-b border-border bg-transparent p-0 sm:inline-flex">
+            <TabsList className="hidden sm:inline-flex">
               {proxyDetailTabs.map((tab) => (
-                <TabsTrigger key={tab.value} value={tab.value} className={tabClass}>
+                <TabsTrigger key={tab.value} value={tab.value}>
                   {tab.label}
                 </TabsTrigger>
               ))}

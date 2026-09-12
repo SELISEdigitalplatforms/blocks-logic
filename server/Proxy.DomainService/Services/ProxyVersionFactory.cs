@@ -24,6 +24,19 @@ namespace Proxy.DomainService.Services
             Upstream = source.Upstream,
         };
 
+        /// <summary>Deep-copies a route so a snapshot never aliases the live entity's list.</summary>
+        public static ProxyRouteConfig CloneRoute(ProxyRouteConfig source) => new()
+        {
+            Method = source.Method,
+            Path = source.Path,
+            UpstreamPath = source.UpstreamPath,
+            Headers = source.Headers?.Select(CloneKeyValue).ToList(),
+            Query = source.Query?.Select(CloneKeyValue).ToList(),
+            BodyMerge = source.BodyMerge?.Select(CloneKeyValue).ToList(),
+            ResponseMode = source.ResponseMode,
+            ResponseInclude = source.ResponseInclude is null ? null : new List<string>(source.ResponseInclude),
+        };
+
         /// <summary>Captures the full effective configuration of <paramref name="proxy"/> as an independent snapshot.</summary>
         public static ProxyConfigSnapshot SnapshotOf(ProxyDetailEntity proxy) => new()
         {
@@ -36,6 +49,7 @@ namespace Proxy.DomainService.Services
             Query = proxy.Query.Select(CloneKeyValue).ToList(),
             BodyMerge = proxy.BodyMerge.Select(CloneKeyValue).ToList(),
             MethodConfigs = proxy.MethodConfigs.Select(CloneMethodConfig).ToList(),
+            Routes = proxy.Routes.Select(CloneRoute).ToList(),
             ResponseMode = proxy.ResponseMode,
             ResponseInclude = new List<string>(proxy.ResponseInclude),
         };

@@ -31,7 +31,6 @@ export const PROXY_ENDPOINTS = {
   execution: (proxyId: string, executionId: string) =>
     `${PROXY_BASE}/${id(proxyId)}/executions/${id(executionId)}`,
   /** `GET` — the filtered log as a CSV attachment. */
-  executionsExport: (proxyId: string) => `${PROXY_BASE}/${id(proxyId)}/executions/export`,
   /** `GET` — the Overview tiles. */
   overview: (proxyId: string) => `${PROXY_BASE}/${id(proxyId)}/overview`,
 } as const;

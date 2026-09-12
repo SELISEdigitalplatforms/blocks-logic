@@ -11,6 +11,13 @@ namespace Workflow.DomainService.Nodes
     public class NodeExecutionContext
     {
         public required string WorkflowExecutionId { get; set; }
+
+        /// <summary>The workflow definition this run belongs to. Carried so a node can attribute an
+        /// outbound side effect to the workflow, not just to the run.</summary>
+        public string WorkflowId { get; set; } = string.Empty;
+
+        /// <summary>Id of the node being executed, for the same reason.</summary>
+        public string NodeId { get; set; } = string.Empty;
         public required string TenantId { get; set; }
         public required BsonDocument Parameters { get; set; }
         public required IReadOnlyList<WorkflowItemExecutionEntity> InputItems { get; set; }

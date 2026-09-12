@@ -145,33 +145,6 @@ describe("Proxy feature", () => {
     expect(screen.getByText(/Authorization/i)).toBeTruthy();
   });
 
-  it("exports empty filtered logs without throwing", async () => {
-    const user = userEvent.setup();
-    const createObjectUrl = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:proxy-csv");
-    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
-    renderWithProviders(
-      <MemoryRouter initialEntries={["/proxy/p2"]}>
-        <Routes>
-          <Route path="/proxy/:proxyId" element={<ProxyDetails />} />
-        </Routes>
-      </MemoryRouter>,
-    );
-
-    await waitFor(() =>
-      expect(screen.getByRole("heading", { name: "SendGrid Mail" })).toBeTruthy(),
-    );
-    await user.click(screen.getByRole("tab", { name: /request logs/i }));
-    await user.click(await screen.findByRole("button", { name: "5xx" }));
-    await user.click(screen.getByRole("button", { name: /export csv/i }));
-
-    await waitFor(() =>
-      expect(toasts.showSuccessToast).toHaveBeenCalledWith({
-        description: "0 requests exported as CSV.",
-      }),
-    );
-    expect(createObjectUrl).toHaveBeenCalled();
-  });
-
   it("renders change history and reverts a version", async () => {
     const user = userEvent.setup();
     renderWithProviders(

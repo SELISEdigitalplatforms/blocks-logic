@@ -232,16 +232,6 @@ namespace Proxy.DomainService.Repositories
             return map;
         }
 
-        public async Task<List<ProxyExecutionEntity>> GetForExportAsync(
-            string tenantId, string proxyId, ProxyStatusClass statusClass, DateTime sinceUtc, int limit)
-        {
-            return await GetCollection(tenantId)
-                .Find(WindowFilter(tenantId, proxyId, statusClass, sinceUtc))
-                .Sort(NewestFirst)
-                .Limit(limit)
-                .ToListAsync();
-        }
-
         private static SortDefinition<ProxyExecutionEntity> NewestFirst =>
             Builders<ProxyExecutionEntity>.Sort
                 .Descending(e => e.StartedAtUtc)

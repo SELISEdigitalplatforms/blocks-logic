@@ -37,6 +37,12 @@ namespace Proxy.DomainService.Services
         public IReadOnlyList<ProxyMethodConfig> MethodConfigs { get; init; } = Array.Empty<ProxyMethodConfig>();
 
         /// <summary>
+        /// The endpoints this proxy may reach. Empty ⇒ only the bare <see cref="Upstream"/> is callable and
+        /// any path suffix is refused with <see cref="ProxyExecutionOutcome.RouteNotAllowed"/>.
+        /// </summary>
+        public IReadOnlyList<ProxyRouteConfig> Routes { get; init; } = Array.Empty<ProxyRouteConfig>();
+
+        /// <summary>
         /// How the upstream response body is treated on forward. <see cref="ProxyResponseMode.All"/> ⇒ relayed
         /// byte-for-byte (today's behaviour). <see cref="ProxyResponseMode.Select"/> ⇒ projected to
         /// <see cref="ResponseInclude"/>, fail-closed (see ProxyResponseProjector).
@@ -57,6 +63,7 @@ namespace Proxy.DomainService.Services
             Query = proxy.Query,
             BodyMerge = proxy.BodyMerge,
             MethodConfigs = proxy.MethodConfigs,
+            Routes = proxy.Routes,
             ResponseMode = proxy.ResponseMode,
             ResponseInclude = proxy.ResponseInclude,
         };
@@ -69,6 +76,36 @@ namespace Proxy.DomainService.Services
 
         /// <summary>Calling user id when resolvable from the bearer, else <c>null</c> (&rarr; <c>CreatedBy</c>).</summary>
         public string? UserId { get; init; }
+
+        /// <summary>
+        /// Where this call came from, one of <see cref="ProxyCallerKind"/>. Copied onto the execution row so
+        /// the logs distinguish a front-end call from a workflow forward without inferring it from the path.
+        /// </summary>
+        public string CallerKind { get; init; } = ProxyCallerKind.Client;
+
+        /// <summary>Calling user's display name at call time, or <c>null</c>.</summary>
+        public string? UserName { get; init; }
+
+        /// <summary>Remote IP of the calling client; <c>null</c> for an in-process workflow forward.</summary>
+        public string? CallerIp { get; init; }
+
+        /// <summary>Calling client's <c>User-Agent</c>, or <c>null</c>.</summary>
+        public string? CallerUserAgent { get; init; }
+
+        /// <summary>Calling client's <c>Origin</c> / <c>Referer</c>, or <c>null</c>.</summary>
+        public string? CallerOrigin { get; init; }
+
+        /// <summary>Trace id tying this row to the surrounding request telemetry.</summary>
+        public string? CorrelationId { get; init; }
+
+        /// <summary>Workflow that issued the call, when <see cref="CallerKind"/> is <c>Workflow</c>.</summary>
+        public string? WorkflowId { get; init; }
+
+        /// <summary>The workflow run, when <see cref="CallerKind"/> is <c>Workflow</c>.</summary>
+        public string? WorkflowRunId { get; init; }
+
+        /// <summary>The proxy node inside that workflow, when <see cref="CallerKind"/> is <c>Workflow</c>.</summary>
+        public string? WorkflowNodeId { get; init; }
 
         /// <summary>Proxy slug from the route. Ignored when <see cref="ResolvedConfig"/> is supplied.</summary>
         public string Slug { get; init; } = string.Empty;
@@ -152,6 +189,12 @@ namespace Proxy.DomainService.Services
 
         /// <summary>Configured methods, for the <c>Allow</c> header on a 405.</summary>
         public IReadOnlyList<string> AllowedMethods { get; init; } = Array.Empty<string>();
+
+        /// <summary>Client-facing template of the route that matched, or <c>null</c> when none did.</summary>
+        public string? RoutePath { get; init; }
+
+        /// <summary>Upstream template that route rewrote to, or <c>null</c> when it did not rewrite.</summary>
+        public string? RouteUpstreamPath { get; init; }
 
         public DateTime StartedAtUtc { get; init; }
 

@@ -10,7 +10,6 @@ import {
 } from "../constants";
 import {
   Proxy,
-  ProxyCsvExport,
   ProxyExecutionLog,
   ProxyExecutionPage,
   ProxyFieldChange,
@@ -171,16 +170,6 @@ const matchesLogFilter = (status: number, filter: ProxyLogFilter) => {
   if (filter === "client") return status >= 400 && status < 500;
   if (filter === "server") return status >= 500 && status < 600;
   return true;
-};
-
-const toCsv = (rows: ProxyExecutionLog[]) => {
-  const headers = ["TIME", "METH", "PATH", "STATUS", "LATENCY", "UPSTREAM"];
-  const values = rows.map((row) =>
-    [row.timeUtc, row.method, row.path, row.status, row.latencyMs, row.upstreamUrl]
-      .map((value) => `"${String(value).replace(/"/g, '""')}"`)
-      .join(","),
-  );
-  return [headers.join(","), ...values].join("\n");
 };
 
 export const mockProxyService = {
@@ -369,26 +358,6 @@ export const mockProxyService = {
       responseFilterNote: null,
       responseFilterApplied: false,
       responseBodyBytes: responseBody.length,
-    };
-  },
-
-  exportExecutionsCsv: async ({
-    proxyId,
-    filter,
-  }: {
-    proxyId: string;
-    filter: ProxyLogFilter;
-  }): Promise<ProxyCsvExport> => {
-    await waitForMock();
-    const proxy = proxyStore.find((item) => item.id === proxyId);
-    if (!proxy) throw new Error("Proxy not found");
-    const rows = proxyLogs.filter(
-      (log) => log.proxyId === proxyId && matchesLogFilter(log.status, filter),
-    );
-    return {
-      fileName: `proxy-${proxy.slug}-executions.csv`,
-      csv: toCsv(rows),
-      rowCount: rows.length,
     };
   },
 };

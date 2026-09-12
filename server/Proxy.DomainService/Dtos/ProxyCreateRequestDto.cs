@@ -22,6 +22,12 @@ namespace Proxy.DomainService.Dtos
         /// <summary>Per-method overrides. Reserved for Phase D-feature; a non-empty value is rejected today.</summary>
         public List<ProxyMethodConfigInputDto>? MethodConfigs { get; set; }
 
+        /// <summary>
+        /// The endpoints this proxy may reach. Omitted / empty ⇒ the proxy accepts its base path only and
+        /// any path suffix is refused, which keeps it one-to-one with a single upstream endpoint.
+        /// </summary>
+        public List<ProxyRouteConfigInputDto>? Routes { get; set; }
+
         /// <summary><c>"All"</c> (default) or <c>"Select"</c>. See <c>ProxyResponseProjector</c>.</summary>
         public string? ResponseMode { get; set; }
 
