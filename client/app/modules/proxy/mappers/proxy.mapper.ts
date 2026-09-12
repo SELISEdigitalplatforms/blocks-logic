@@ -19,6 +19,8 @@ import {
   ProxyFieldChange,
   ProxyOverview,
   ProxyOverviewDto,
+  ProxyRoute,
+  ProxyRouteDto,
   ProxyStatusClass,
   ProxyTestRequest,
   ProxyTestResponse,
@@ -207,6 +209,16 @@ const toMethodOverrides = (
     }));
 
 /** One row of `GET /api/Proxies` (no full upstream / header rows in the list projection). */
+const toRoutes = (value: ProxyRouteDto[] | null | undefined): ProxyRoute[] =>
+  Array.isArray(value)
+    ? value
+        .filter((route) => typeof route?.method === "string")
+        .map((route) => ({
+          method: route.method.toUpperCase() as ProxyMethod,
+          path: (route.path ?? "").replace(/^\/+|\/+$/g, ""),
+        }))
+    : [];
+
 export const mapProxyListItemDtoToProxy = (dto: ProxyListItemDto): Proxy => ({
   id: dto.itemId,
   name: dto.name,
@@ -219,6 +231,7 @@ export const mapProxyListItemDtoToProxy = (dto: ProxyListItemDto): Proxy => ({
   query: [],
   bodyMerge: [],
   methodConfigs: [],
+  routes: [],
   responseMode: "all",
   responseInclude: [],
   calls24h: Number(dto.calls24h ?? 0),
@@ -239,6 +252,7 @@ export const mapProxyDetailDtoToProxy = (dto: ProxyDetailDto): Proxy => ({
   query: toKeyValues(dto.query),
   bodyMerge: toKeyValues(dto.bodyMerge),
   methodConfigs: toMethodOverrides(dto.methodConfigs),
+  routes: toRoutes(dto.routes),
   responseMode: dto.responseMode?.toLowerCase() === "select" ? "select" : "all",
   responseInclude: Array.isArray(dto.responseInclude) ? dto.responseInclude : [],
   calls24h: 0,

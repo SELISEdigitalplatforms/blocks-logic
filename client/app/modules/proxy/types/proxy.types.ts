@@ -31,6 +31,17 @@ export type ProxyStatus = "live" | "paused";
  */
 export type ProxyResponseMode = "all" | "select";
 
+/**
+ * One endpoint a proxy is allowed to reach. `path` is the client-facing template appended after
+ * `/api/proxy/gateway/{slug}`; `{name}` segments are parameters the caller must supply. The gateway
+ * refuses any path not matching a declared route, so this list is what a consumer may call.
+ */
+export type ProxyRoute = {
+  method: ProxyMethod;
+  /** Client-facing template, no leading slash. `""` is the base path. e.g. `orders/{id}/refunds`. */
+  path: string;
+};
+
 export type Proxy = {
   id: string;
   name: string;
@@ -48,6 +59,8 @@ export type Proxy = {
    */
   bodyMerge: ProxyKeyValue[];
   methodConfigs: ProxyMethodOverride[];
+  /** The endpoint allowlist. Empty ⇒ the base path only. Populated by the detail read, not the list. */
+  routes: ProxyRoute[];
   /** Persisted. `"all"` ⇒ relay the upstream response unchanged. */
   responseMode: ProxyResponseMode;
   /** Field-path expressions kept when {@link responseMode} is `"select"` (`data.user.email`, `items[].id`). */
@@ -173,6 +186,12 @@ export type ProxyKeyValueInputDto = {
 };
 
 /** Mirrors server `ProxyMethodConfigDto` / `ProxyMethodConfigInputDto`. */
+export type ProxyRouteDto = {
+  method: string;
+  path: string;
+  upstreamPath?: string | null;
+};
+
 export type ProxyMethodConfigDto = {
   method: string;
   upstream?: string | null;
@@ -208,6 +227,7 @@ export type ProxyDetailDto = {
   query: ProxyKeyValueDto[];
   bodyMerge?: ProxyKeyValueDto[] | null;
   methodConfigs: ProxyMethodConfigDto[];
+  routes?: ProxyRouteDto[] | null;
   responseMode?: string | null;
   responseInclude?: string[] | null;
   currentVersion: number;

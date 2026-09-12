@@ -1,7 +1,7 @@
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Blocks.Genesis;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
@@ -13,18 +13,24 @@ using Workflow.DomainService.Utils;
 namespace Workflow.DomainService.Nodes.ActionProxy
 {
     /// <summary>
-    /// Calls a proxy configured in the Proxy module. The forward runs in-process through
+    /// Calls one of a proxy's declared routes. The forward runs in-process through
     /// <see cref="IProxyGatewayService"/> rather than over the public
     /// <c>/api/proxy/gateway/{slug}/{**path}</c> route, so there is no HTTP hop and no inbound
-    /// credential to assemble: the run's tenant is trusted directly. The proxy still owns the
-    /// upstream URL, header and query injection, secret resolution and response shaping, and the
-    /// call is recorded in that proxy's execution log exactly like a data-plane call.
+    /// credential to assemble: the run's tenant is trusted directly. The proxy still owns the upstream
+    /// URL, header and query injection, secret resolution and response shaping, and the call is
+    /// recorded in that proxy's execution log attributed to the workflow, run and node that issued it.
     /// </summary>
     [ExcludeFromCodeCoverage]
     public class ActionProxyNode : NodeExecutorBase<ActionProxyParameters>
     {
         public override string NodeType => "proxy";
         public override string Version => "v1";
+
+        private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(2);
+
+        /// <summary>A <c>{name}</c> segment of a client-facing route template.</summary>
+        private static readonly Regex RouteParameter =
+            new(@"\{([^}/]+)\}", RegexOptions.Compiled, RegexTimeout);
 
         private static readonly HashSet<string> MethodsWithBody =
             new(StringComparer.OrdinalIgnoreCase) { "POST", "PUT", "PATCH" };
@@ -48,35 +54,33 @@ namespace Workflow.DomainService.Nodes.ActionProxy
                 var parameters = nodeparameters ?? new ActionProxyParameters();
                 if (string.IsNullOrWhiteSpace(parameters.Slug))
                     return NodeExecutionResult.Failed("No proxy is selected on this node.");
+                if (string.IsNullOrWhiteSpace(parameters.RouteMethod))
+                    return NodeExecutionResult.Failed("No endpoint is selected on this node.");
 
-                var method = string.IsNullOrWhiteSpace(parameters.HttpMethod)
-                    ? "GET"
-                    : parameters.HttpMethod.Trim().ToUpperInvariant();
-
+                var method = parameters.RouteMethod.Trim().ToUpperInvariant();
+                var blocksContext = BlocksContext.GetContext();
                 var outputItems = new List<NodeOutputItem>();
 
                 for (int i = 0; i < context.IterationCount; i++)
                 {
                     var inputItem = context.InputItems[i];
 
+                    var (pathSuffix, pathError) = BuildPathSuffix(parameters, inputItem, context);
+                    if (pathError != null)
+                        return NodeExecutionResult.Failed(pathError);
+
                     var (body, contentType, bodyError) = PrepareBody(parameters, method, inputItem, context);
                     if (bodyError != null)
                         return NodeExecutionResult.Failed(bodyError);
 
-                    var pathSuffix = (parseExpression<string>(parameters.Path, inputItem, context) ?? string.Empty)
-                        .Trim()
-                        .TrimStart('/');
-
                     var result = await _gatewayService.ForwardAsync(new ProxyForwardRequest
                     {
                         TenantId = context.TenantId,
-                        UserId = BlocksContext.GetContext()?.UserId,
-                        UserName = BlocksContext.GetContext()?.UserName,
-                        // Provenance for the proxy's execution log. There is no HttpContext here (the forward
-                        // is in-process), so the row is attributed to the run and node instead of to an IP,
-                        // and the logs can tell a workflow call apart from a front-end one.
+                        UserId = blocksContext?.UserId,
+                        UserName = blocksContext?.UserName,
+                        // Marks the row as a workflow forward so the proxy log can tell it apart from a
+                        // front-end call without inferring it from the path.
                         CallerKind = ProxyCallerKind.Workflow,
-                        CorrelationId = Activity.Current?.TraceId.ToString(),
                         WorkflowId = context.WorkflowId,
                         WorkflowRunId = context.WorkflowExecutionId,
                         WorkflowNodeId = context.NodeId,
@@ -90,7 +94,7 @@ namespace Workflow.DomainService.Nodes.ActionProxy
                     }, context.CancellationToken);
 
                     if (!result.Ok)
-                        return NodeExecutionResult.Failed(DescribeFailure(parameters.Slug, method, result));
+                        return NodeExecutionResult.Failed(DescribeFailure(parameters, method, result));
 
                     var (responseBody, parseError) = ParseResponse(result);
                     if (parseError != null)
@@ -112,6 +116,54 @@ namespace Workflow.DomainService.Nodes.ActionProxy
         }
 
         /// <summary>
+        /// Substitutes the configured values into the route's <c>{name}</c> segments to produce the
+        /// concrete path the gateway matches against the allowlist. Each value fills exactly one segment,
+        /// so it is escaped as a single segment: an unescaped <c>/</c> would otherwise widen the path and
+        /// land on an endpoint no route declared. A missing or empty value fails the node here rather
+        /// than sending a path containing a literal <c>{name}</c> that could only be refused as unlisted.
+        /// </summary>
+        private (string path, string? error) BuildPathSuffix(
+            ActionProxyParameters parameters,
+            WorkflowItemExecutionEntity inputItem,
+            NodeExecutionContext context)
+        {
+            var template = (parameters.RoutePath ?? string.Empty).Trim().Trim('/');
+            if (template.Length == 0)
+                return (string.Empty, null);
+
+            string? missing = null;
+
+            var resolved = RouteParameter.Replace(template, match =>
+            {
+                var name = match.Groups[1].Value.Trim();
+                if (!parameters.PathParams.TryGetValue(name, out var raw))
+                {
+                    missing ??= name;
+                    return match.Value;
+                }
+
+                var value = parseExpression<string>(raw, inputItem, context);
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    missing ??= name;
+                    return match.Value;
+                }
+
+                return Uri.EscapeDataString(value);
+            });
+
+            if (missing != null)
+            {
+                _logger.LogWarning(
+                    "Proxy node: path parameter {Parameter} is missing for proxy {Slug} route {Route}.",
+                    missing, parameters.Slug, template);
+                return (string.Empty, $"Path parameter '{missing}' has no value for endpoint '{template}'.");
+            }
+
+            return (resolved, null);
+        }
+
+        /// <summary>
         /// Resolves expressions in the configured body and validates it as JSON before any upstream
         /// connection. Returns a non-null error when the body is enabled but not parseable.
         /// </summary>
@@ -128,21 +180,17 @@ namespace Workflow.DomainService.Nodes.ActionProxy
             if (string.IsNullOrWhiteSpace(bodyContent))
                 return (null, null, null);
 
-            var contentType = GetContentType(parameters.BodyContentType);
-            if (contentType == "application/json")
+            try
             {
-                try
-                {
-                    JsonDocument.Parse(bodyContent);
-                }
-                catch (JsonException ex)
-                {
-                    _logger.LogError("Proxy node: body is not valid JSON for proxy {Slug}.", parameters.Slug);
-                    return (null, null, $"Invalid JSON body: {ex.Message}");
-                }
+                JsonDocument.Parse(bodyContent);
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogError("Proxy node: body is not valid JSON for proxy {Slug}.", parameters.Slug);
+                return (null, null, $"Invalid JSON body: {ex.Message}");
             }
 
-            return (Encoding.UTF8.GetBytes(bodyContent), contentType, null);
+            return (Encoding.UTF8.GetBytes(bodyContent), "application/json", null);
         }
 
         /// <summary>
@@ -156,12 +204,22 @@ namespace Workflow.DomainService.Nodes.ActionProxy
 
         /// <summary>
         /// Turns a non-success forward into a message that says what the proxy decided, rather than
-        /// surfacing a bare status code. A 405 also lists the methods the proxy actually allows,
-        /// which is the failure most likely to follow an edit to the proxy after the node was saved.
+        /// surfacing a bare status code. The two failures a saved node is most likely to hit are an
+        /// endpoint removed from the allowlist and a method no longer accepted, so both name what the
+        /// proxy allows now.
         /// </summary>
-        private static string DescribeFailure(string slug, string method, ProxyForwardResult result)
+        private static string DescribeFailure(
+            ActionProxyParameters parameters, string method, ProxyForwardResult result)
         {
+            var slug = parameters.Slug;
+            var route = string.IsNullOrEmpty(parameters.RoutePath) ? "/" : parameters.RoutePath;
             var detail = string.IsNullOrWhiteSpace(result.ErrorMessage) ? "" : $" {result.ErrorMessage}";
+
+            if (result.Outcome == ProxyExecutionOutcome.RouteNotAllowed)
+            {
+                return $"Proxy '{slug}' does not declare the endpoint {method} {route}. "
+                     + "It may have been removed from the proxy's allowed routes; re-select the endpoint on this node.";
+            }
 
             if (result.Outcome == ProxyExecutionOutcome.MethodNotAllowed)
             {
@@ -175,7 +233,7 @@ namespace Workflow.DomainService.Nodes.ActionProxy
                 ? $" Upstream returned {result.UpstreamStatusCode.Value}."
                 : "";
 
-            return $"Proxy '{slug}' call failed with {result.Outcome} ({result.StatusCode}).{upstream}{detail}";
+            return $"Proxy '{slug}' call to {method} {route} failed with {result.Outcome} ({result.StatusCode}).{upstream}{detail}";
         }
 
         /// <summary>
@@ -224,15 +282,5 @@ namespace Workflow.DomainService.Nodes.ActionProxy
                 });
             }
         }
-
-        private static string GetContentType(string bodyContentType) =>
-            bodyContentType.ToLower() switch
-            {
-                "json" => "application/json",
-                "xml" => "application/xml",
-                "text" => "text/plain",
-                "html" => "text/html",
-                _ => string.IsNullOrWhiteSpace(bodyContentType) ? "application/json" : bodyContentType
-            };
     }
 }
