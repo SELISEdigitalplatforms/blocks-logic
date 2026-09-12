@@ -26,8 +26,9 @@ import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { getProxyClientUrl } from "../../constants";
 import { useGetProxyById, useGetProxyOverview, useToggleProxy } from "../../hooks";
-import { Proxy, ProxyKeyValue, ResponseFieldNode } from "../../types";
+import { Proxy, ProxyKeyValue, ProxyRoute, ResponseFieldNode } from "../../types";
 import { containsVarRef, pathsToTree } from "../../utils";
+import { ProxyMethodBadge } from "../../components/proxy-method-badge";
 import { ProxyMethodChips } from "../../components/proxy-method-chips";
 import { ProxyStatusBadge } from "../../components/proxy-status-badge";
 import { ProxyLogsTab } from "../../components/proxy-logs-tab";
@@ -106,29 +107,100 @@ const ResponseFilterTree = ({
   </ul>
 );
 
-const ResponseFilterSection = ({ proxy }: { proxy: Proxy }) => {
-  const isSelect = proxy.responseMode === "select";
-  const paths = proxy.responseInclude ?? [];
+/** One endpoint as the read side shows it: what the client calls, what we forward, what it carries back. */
+const EndpointRow = ({
+  route,
+  clientUrl,
+  upstreamUrl,
+}: {
+  route: ProxyRoute;
+  clientUrl: string;
+  upstreamUrl: string;
+}) => {
+  const forwardPath = (route.upstreamPath ?? route.path).replace(/^\/+|\/+$/g, "");
+  const forwardsTo = forwardPath ? `${upstreamUrl.replace(/\/+$/, "")}/${forwardPath}` : upstreamUrl;
+  const filters = route.responseMode === "select";
+  const paths = route.responseInclude ?? [];
   const { tree } = pathsToTree(paths);
+  const extras = [
+    route.bodyMerge?.length ? pluralize(route.bodyMerge.length, "body field") : null,
+    route.headers?.length ? pluralize(route.headers.length, "extra header") : null,
+    route.query?.length ? pluralize(route.query.length, "extra query param") : null,
+  ].filter(Boolean);
+
+  return (
+    <li className="rounded-lg border bg-card p-4 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <ProxyMethodBadge method={route.method} />
+        <code className="font-mono text-xs">{route.path ? route.path : "base path"}</code>
+      </div>
+      <dl className="mt-3 grid gap-x-4 gap-y-1 text-xs sm:grid-cols-[max-content_1fr]">
+        <dt className="text-muted-foreground">Your client calls</dt>
+        <dd className="break-all font-mono">{clientUrl}</dd>
+        <dt className="text-muted-foreground">Forwards to</dt>
+        <dd className="break-all font-mono">{forwardsTo}</dd>
+        <dt className="text-muted-foreground">Sends</dt>
+        <dd>{extras.length ? extras.join(" · ") : "Only the connection’s headers and query"}</dd>
+        <dt className="text-muted-foreground">Returns</dt>
+        <dd>
+          {!filters ? (
+            "The vendor’s whole response"
+          ) : paths.length ? (
+            <div className="space-y-1">
+              <span>Only {pluralize(paths.length, "field")}:</span>
+              <ResponseFilterTree nodes={tree} />
+            </div>
+          ) : (
+            <>
+              An empty object (<code>{"{}"}</code>) — no fields selected yet
+            </>
+          )}
+        </dd>
+      </dl>
+    </li>
+  );
+};
+
+const EndpointsSection = ({
+  proxy,
+  clientUrlFor,
+}: {
+  proxy: Proxy;
+  clientUrlFor: (routePath: string) => string;
+}) => {
+  // A saved proxy with no routes is callable at its base path only; show that as the one endpoint
+  // rather than an empty list that reads as "cannot be called".
+  const routes: ProxyRoute[] = proxy.routes.length
+    ? proxy.routes
+    : proxy.methods.map((method) => ({
+        method,
+        path: "",
+        upstreamPath: null,
+        headers: null,
+        query: null,
+        bodyMerge: null,
+        responseMode: null,
+        responseInclude: null,
+      }));
+
   return (
     <div>
       <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Response filtering
+        Endpoints
       </h3>
-      <div className="mt-3 rounded-lg border bg-card p-4 text-sm">
-        {!isSelect ? (
-          <p className="text-muted-foreground">Sends the full upstream response.</p>
-        ) : paths.length ? (
-          <div className="space-y-2">
-            <p className="text-muted-foreground">Forwards {pluralize(paths.length, "field")}:</p>
-            <ResponseFilterTree nodes={tree} />
-          </div>
-        ) : (
-          <p className="text-muted-foreground">
-            Forwards an empty object (<code>{"{}"}</code>) — no fields selected yet.
-          </p>
-        )}
-      </div>
+      <p className="mt-1 text-xs text-muted-foreground">
+        What your client can call through this proxy. Anything else is refused.
+      </p>
+      <ul className="mt-3 space-y-3">
+        {routes.map((route, index) => (
+          <EndpointRow
+            key={`${route.method}-${route.path}-${index}`}
+            route={route}
+            clientUrl={clientUrlFor(route.path)}
+            upstreamUrl={proxy.upstreamUrl}
+          />
+        ))}
+      </ul>
     </div>
   );
 };
@@ -281,12 +353,12 @@ export const ProxyDetails = () => {
   const averageLatency = overview?.avgLatencyMs ?? 0;
   const errorRate = (overview?.errorRatePct ?? 0).toFixed(1);
   const errorRateIsHigh = overview?.errorRateIsHigh ?? false;
-  const addedCount = proxy.headers.length + proxy.query.length + proxy.bodyMerge.length;
+  const addedCount = proxy.headers.length + proxy.query.length;
   const addedSummary = [
     pluralize(proxy.headers.length, "header"),
     pluralize(proxy.query.length, "param"),
-    pluralize(proxy.bodyMerge.length, "body field"),
   ].join(" · ");
+  const clientUrlFor = (routePath: string) => getProxyClientUrl(selectedProject, proxy.slug, routePath);
 
   const handleToggleEnabled = async () => {
     const enabled = !proxy.enabled;
@@ -459,7 +531,10 @@ export const ProxyDetails = () => {
                           <ProxyMethodChips methods={proxy.methods} />
                         </div>
                         <p className="break-all font-mono text-sm text-foreground">
-                          {getProxyClientUrl(selectedProject, proxy.slug)}
+                          {clientUrlFor("")}
+                        </p>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          {pluralize(proxy.routes.length || proxy.methods.length, "endpoint")} — listed below
                         </p>
                       </ConfigurationStepCard>
                       <ConfigurationStepCard eyebrow="→ Blocks adds" active>
@@ -487,23 +562,19 @@ export const ProxyDetails = () => {
                             )}
                           </Button>
                         </div>
-                        <p className="mt-3 text-sm text-muted-foreground">
-                          Body: {pluralize(proxy.bodyMerge.length, "field")} merged server-side
-                        </p>
                       </ConfigurationStepCard>
                     </div>
-                    <KeyValueRows title="Headers" rows={proxy.headers} empty="No headers added." />
                     <KeyValueRows
-                      title="Query parameters"
+                      title="Connection headers"
+                      rows={proxy.headers}
+                      empty="No headers added. The credential usually goes here."
+                    />
+                    <KeyValueRows
+                      title="Connection query parameters"
                       rows={proxy.query}
                       empty="No query parameters added."
                     />
-                    <KeyValueRows
-                      title="Body fields"
-                      rows={proxy.bodyMerge}
-                      empty="No body fields merged."
-                    />
-                    <ResponseFilterSection proxy={proxy} />
+                    <EndpointsSection proxy={proxy} clientUrlFor={clientUrlFor} />
                   </CardContent>
                 </Card>
               </>

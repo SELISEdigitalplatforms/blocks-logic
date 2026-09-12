@@ -68,13 +68,14 @@ describe("Proxy feature", () => {
     expect(screen.getByText("Live")).toBeTruthy();
     // No trailing "/*": the gateway forwards only the endpoints the proxy declares, so advertising
     // a wildcard would promise paths that are refused.
-    expect(await screen.findByText("/logic/v4/proxy/gateway/stripe-payments")).toBeTruthy();
+    // The base URL appears once in the summary card and once per base-path endpoint (p1 has two).
+    expect((await screen.findAllByText("/logic/v4/proxy/gateway/stripe-payments")).length).toBeGreaterThan(0);
     expect(screen.getByText("Authorization")).toBeTruthy();
     expect(screen.getAllByText("variable").length).toBeGreaterThan(0);
 
     // The upstream endpoint is the only masked value on the page; header/query values render as-is.
     await user.click(screen.getByRole("button", { name: /reveal third party endpoint/i }));
-    expect(screen.getByText("https://api.stripe.com/v1/charges")).toBeTruthy();
+    expect(screen.getAllByText("https://api.stripe.com/v1/charges").length).toBeGreaterThan(0);
   });
 
   it("blocks create when name is blank and keeps the mock store unchanged", async () => {
@@ -87,25 +88,13 @@ describe("Proxy feature", () => {
     );
 
     await user.type(
-      screen.getByPlaceholderText("Enter third-party endpoint"),
+      screen.getByPlaceholderText("https://api.vendor.com"),
       "https://api.stripe.com/v1/charges",
     );
     await user.click(screen.getByRole("button", { name: "Create" }));
 
     expect(await screen.findByText("Give the proxy a name - it becomes the path.")).toBeTruthy();
     expect(createSpy).not.toHaveBeenCalled();
-  });
-
-  it("keeps the last selected method enabled when toggled off", async () => {
-    const user = userEvent.setup();
-    renderWithProviders(
-      <MemoryRouter>
-        <ProxyForm mode="create" />
-      </MemoryRouter>,
-    );
-
-    await user.click(screen.getByText("GET"));
-    expect(await screen.findByText("Select at least one method.")).toBeTruthy();
   });
 
   it("shows a not-found toast and returns to the proxy list for unknown ids", async () => {
@@ -169,32 +158,5 @@ describe("Proxy feature", () => {
         description: "Proxy version reverted.",
       }),
     );
-  });
-
-  it("returns a mock 502 test response for invalid draft upstreams", async () => {
-    const user = userEvent.setup();
-    renderWithProviders(
-      <MemoryRouter>
-        <ProxyForm
-          mode="create"
-          proxy={{
-            id: "draft",
-            name: "Draft",
-            slug: "draft",
-            upstreamUrl: "http://example.com",
-            upstreamMasked: "http://example.com",
-            methods: ["GET"],
-            enabled: true,
-            headers: [],
-            query: [],
-            calls24h: 0,
-          }}
-        />
-      </MemoryRouter>,
-    );
-
-    await user.click(screen.getByRole("button", { name: /^test run$/i }));
-    expect(await screen.findByText("502 Bad Gateway")).toBeTruthy();
-    expect(screen.getAllByText(/Invalid upstream/i).length).toBeGreaterThan(0);
   });
 });

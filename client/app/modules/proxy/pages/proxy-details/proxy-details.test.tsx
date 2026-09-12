@@ -90,7 +90,7 @@ describe("ProxyDetails page", () => {
     );
 
     expect(await screen.findByRole("heading", { name: "Weather Lookup" })).toBeTruthy();
-    expect(await screen.findByText(/Forwards 3 fields/)).toBeTruthy();
+    expect(await screen.findByText(/Only 3 fields/)).toBeTruthy();
     expect(screen.getByText("location")).toBeTruthy();
     expect(screen.getByText("name")).toBeTruthy();
     expect(screen.getByText("current")).toBeTruthy();

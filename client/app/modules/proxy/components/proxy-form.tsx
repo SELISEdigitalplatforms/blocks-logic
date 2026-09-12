@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
@@ -15,25 +15,19 @@ import { Input } from "@/components/ui-kits/input/input";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { getProxyClientUrl } from "../constants";
 import { useCreateProxy, useSecrets, useSendProxyTestRequest, useUpdateProxy } from "../hooks";
-import { Proxy, ProxyFormValues, ProxyMethod, ProxyTestResponse, SampleResult } from "../types";
+import { Proxy, ProxyFormValues, ProxyRoute, ProxyTestResponse } from "../types";
 import {
-  compactKeyValues,
+  deriveProxyMethods,
   proxyFormDefaultValues,
   proxyFormSchema,
   slugifyProxyName,
+  splitCredentialRows,
+  toCredentialRows,
 } from "../utils";
 import { KeyValueFieldArray } from "./key-value-field-array";
 import { ProxyFormHeader } from "./proxy-form-header";
-import { ProxyMethodOverrides } from "./proxy-method-overrides";
-import { ProxyMethodSelector } from "./proxy-method-selector";
-import { ProxyRequestBodyCard } from "./proxy-request-body-card";
-import { ProxyRoutesCard } from "./proxy-routes-card";
-import { ProxyResponseCard } from "./proxy-response-card";
-import { ProxyTestPanel } from "./proxy-test-panel";
+import { ProxyRoutesCard, blankRoute } from "./proxy-routes-card";
 import { useProjectStore } from "@seliseblocks/genesis-os";
-
-const isBodyMethod = (method: ProxyMethod) =>
-  method === "POST" || method === "PUT" || method === "PATCH";
 
 type Props = {
   mode: "create" | "edit";
@@ -44,6 +38,19 @@ type Props = {
   onCancel?: () => void;
 };
 
+const sameMethods = (a: readonly string[], b: readonly string[]) =>
+  a.length === b.length && a.every((method, i) => method === b[i]);
+
+/**
+ * A proxy is a Connection to a vendor exposing one or more Endpoints. The Connection holds what is
+ * genuinely shared — the base URL and the credential — and every per-call setting lives on the
+ * endpoint that makes the call. The single-endpoint proxy is just the case where there is one row.
+ *
+ * `methods` is derived from the endpoints rather than edited: the server needs the list for the
+ * 405 `Allow` header, but there is nothing for the user to decide that the endpoints do not already
+ * say. Body-merge and response filtering exist only per endpoint, so the proxy-level fields are sent
+ * empty; `methodConfigs` is superseded by endpoints and sent empty too.
+ */
 export const ProxyForm = ({
   mode,
   proxy,
@@ -71,78 +78,51 @@ export const ProxyForm = ({
   });
 
   const name = useWatch({ control: form.control, name: "name" });
-  const selectedMethods = useWatch({ control: form.control, name: "methods" });
+  const upstreamUrl = useWatch({ control: form.control, name: "upstreamUrl" }) ?? "";
+  const watchedRoutes = useWatch({ control: form.control, name: "routes" }) as ProxyRoute[] | undefined;
   const selectedProject = useProjectStore().selectedProject;
   const slug = slugifyProxyName(name);
-  const clientUrl = getProxyClientUrl(selectedProject, slug);
-  const routeValues = useWatch({ control: form.control, name: "routes" }) ?? [];
-  const draft = useWatch({ control: form.control });
-  const draftValues: ProxyFormValues = {
-    name: draft.name ?? "",
-    upstreamUrl: draft.upstreamUrl ?? "",
-    methods: draft.methods ?? ["GET"],
-    headers:
-      draft.headers?.map((row) => ({
-        key: row.key ?? "",
-        value: row.value ?? "",
-      })) ?? [],
-    query:
-      draft.query?.map((row) => ({
-        key: row.key ?? "",
-        value: row.value ?? "",
-      })) ?? [],
-    bodyMerge:
-      draft.bodyMerge?.map((row) => ({
-        key: row.key ?? "",
-        value: row.value ?? "",
-      })) ?? [],
-    bodyMode: draft.bodyMode ?? "passthrough",
-    methodConfigs: (draft.methodConfigs ?? []) as ProxyFormValues["methodConfigs"],
-    routes: (draft.routes ?? []) as ProxyFormValues["routes"],
-    responseMode: draft.responseMode ?? "all",
-    responseInclude: (draft.responseInclude ?? []).filter(Boolean),
-  };
+  const clientUrlFor = (routePath: string) => getProxyClientUrl(selectedProject, slug, routePath);
 
-  // The Test panel's inputs live here so the Response card's "Fill from test connection" can
-  // reuse them (SPEC §5.4). One Test hook instance backs both the normal Send and the sample run.
-  const [testPathSuffix, setTestPathSuffix] = useState("/");
-  const [testBody, setTestBody] = useState("");
-  const [testResponse, setTestResponse] = useState<ProxyTestResponse | null>(null);
-  const sendTest = useSendProxyTestRequest();
-  const primaryMethod = selectedMethods?.[0] ?? "GET";
+  // Keep the derived method list in step with the endpoints, so validation and the payload agree.
+  useEffect(() => {
+    const derived = deriveProxyMethods(watchedRoutes ?? []);
+    if (!sameMethods(form.getValues("methods") ?? [], derived)) {
+      form.setValue("methods", derived, { shouldDirty: true });
+    }
+  }, [form, watchedRoutes]);
 
-  const runTest = async () => {
-    const res = await sendTest.mutateAsync({
-      proxyId: proxy?.id,
-      draft: proxy?.id ? undefined : draftValues,
-      method: primaryMethod,
-      pathSuffix: testPathSuffix,
-      body: testBody,
-      contentType: "application/json",
-    });
-    setTestResponse(res);
-  };
-
-  const runSample = async (): Promise<SampleResult> => {
-    // Always send a draft with filtering forced off so the sample is the full response shape.
-    const res = await sendTest.mutateAsync({
-      draft: { ...draftValues, responseMode: "all", responseInclude: [] },
-      method: primaryMethod,
-      pathSuffix: testPathSuffix,
-      body: testBody,
-      contentType: "application/json",
-    });
-    // "Fill from test run" doubles as a Test — surface the raw result in the Test panel too.
-    setTestResponse(res);
+  /** The current form state in the shape the API and the Test endpoint expect. */
+  const toApiValues = (values: ProxyFormValues): ProxyFormValues => {
+    const { headers, query } = splitCredentialRows(values.credentials);
     return {
-      ok: res.ok,
-      status: res.status,
-      contentType: res.contentType,
-      body: res.responseBody,
-      bytes: res.responseBodyBytes,
-      error: res.ok ? undefined : res.meta,
+      ...values,
+      name: values.name ?? "",
+      upstreamUrl: values.upstreamUrl ?? "",
+      headers,
+      query,
+      methods: deriveProxyMethods(values.routes ?? []),
+      routes: values.routes ?? [],
+      // Per-endpoint only; nothing at proxy level.
+      bodyMerge: [],
+      bodyMode: "passthrough",
+      methodConfigs: [],
+      responseMode: "all",
+      responseInclude: [],
     };
   };
+
+  const sendTest = useSendProxyTestRequest();
+  const runTest = (route: ProxyRoute, pathSuffix: string, body: string): Promise<ProxyTestResponse> =>
+    // Always the draft, never the saved proxy: the point of Test is to check what you are about
+    // to save.
+    sendTest.mutateAsync({
+      draft: toApiValues(form.getValues()),
+      method: route.method,
+      pathSuffix,
+      body,
+      contentType: "application/json",
+    });
 
   // Seed the form from the loaded proxy exactly once per identity. A bare `proxy` dependency
   // would re-run on every React Query background refetch (the query has no `staleTime`), and each
@@ -151,18 +131,16 @@ export const ProxyForm = ({
   useEffect(() => {
     if (isEdit && proxy && seededForId.current !== proxy.id) {
       seededForId.current = proxy.id;
+      const routes = proxy.routes?.length ? proxy.routes : [blankRoute(proxy.methods[0] ?? "GET")];
       form.reset({
+        ...proxyFormDefaultValues,
         name: proxy.name,
         upstreamUrl: proxy.upstreamUrl,
-        methods: proxy.methods,
+        methods: deriveProxyMethods(routes),
         headers: proxy.headers,
         query: proxy.query,
-        bodyMerge: proxy.bodyMerge,
-        bodyMode: proxy.bodyMerge.length ? "merge" : "passthrough",
-        methodConfigs: proxy.methodConfigs ?? [],
-        routes: proxy.routes ?? [],
-        responseMode: proxy.responseMode,
-        responseInclude: proxy.responseInclude,
+        credentials: toCredentialRows(proxy.headers, proxy.query),
+        routes,
       });
     } else if (!isEdit && seededForId.current !== "new") {
       seededForId.current = "new";
@@ -170,22 +148,8 @@ export const ProxyForm = ({
     }
   }, [form, isEdit, proxy]);
 
-  const toggleMethod = (method: ProxyMethod, checked: boolean) => {
-    const next = checked ? [method] : selectedMethods.filter((item) => item !== method);
-    if (!next.length) {
-      form.setError("methods", { message: "Select at least one method." });
-      return;
-    }
-    form.clearErrors("methods");
-    form.setValue("methods", next, { shouldDirty: true, shouldValidate: true });
-  };
-
   const handleSubmit = async (values: ProxyFormValues) => {
-    const payload = {
-      ...values,
-      headers: compactKeyValues(values.headers),
-      query: compactKeyValues(values.query),
-    };
+    const payload = toApiValues(values);
 
     if (isEdit && proxy) {
       const res = await updateProxy.mutateAsync({ id: proxy.id, values: payload });
@@ -217,8 +181,15 @@ export const ProxyForm = ({
           <ProxyFormHeader isEdit={isEdit} isPending={isPending} onCancel={onCancel} />
         </div>
 
+        {/* Connection: the vendor, and the credential that never reaches the client. */}
         <Card className="rounded-xl !mt-0">
           <CardContent className="space-y-6 p-0">
+            <div>
+              <p className="text-sm font-semibold">Connection</p>
+              <p className="text-xs text-muted-foreground">
+                The vendor this proxy talks to, and what every request to it carries.
+              </p>
+            </div>
             <div className="grid gap-5 lg:grid-cols-[minmax(260px,0.8fr)_minmax(320px,1.2fr)]">
               <FormField
                 control={form.control}
@@ -238,107 +209,51 @@ export const ProxyForm = ({
                 name="upstreamUrl"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Third-party endpoint</FormLabel>
+                    <FormLabel>Vendor base URL</FormLabel>
                     <FormControl>
                       <Input
                         type="text"
                         inputMode="url"
-                        placeholder="Enter third-party endpoint"
+                        placeholder="https://api.vendor.com"
                         {...field}
                       />
                     </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      Endpoint paths below are appended to this.
+                    </p>
                     <FormMessage />
                   </FormItem>
                 )}
               />
             </div>
-            <ProxyMethodSelector
+            <KeyValueFieldArray
               control={form.control}
-              selectedMethods={selectedMethods}
-              onToggle={toggleMethod}
+              name="credentials"
+              label="Sent with every request"
+              addLabel="Add"
+              sendAsColumn
+              description={
+                <>
+                  The credential lives here, never in your client. Headers cover almost every
+                  vendor; choose a query parameter only when the vendor takes its key in the URL.
+                </>
+              }
+              {...variableProps}
             />
-<div className="space-y-2 rounded-lg border border-primary/25 bg-primary/5 p-4 text-primary">
-              <span className="text-xs font-semibold uppercase tracking-wide">
-                Your client calls this
-              </span>
-              {routeValues.length ? (
-                <div className="space-y-1">
-                  {routeValues.map((route, index) => (
-                    <p key={`client-url-${index}`} className="break-all font-mono text-sm">
-                      {route.method} {getProxyClientUrl(selectedProject, slug, route.path)}
-                    </p>
-                  ))}
-                </div>
-              ) : (
-                <p className="break-all font-mono text-sm">
-                  {selectedMethods[0] ?? "GET"} {clientUrl}
-                </p>
-              )}
-              <p className="text-sm text-primary/80">
-                Send X-Blocks-Key. Body and extra query string pass straight through.{" "}
-                {routeValues.length
-                  ? "Only the endpoints listed above are forwarded; any other path is refused."
-                  : "Only this exact path is forwarded — add an endpoint below to allow paths under it."}
-              </p>
-            </div>
           </CardContent>
         </Card>
 
-        <div className="grid gap-6">
-          <Card className="rounded-xl">
-            <CardContent className="p-0">
-              <KeyValueFieldArray
-                control={form.control}
-                name="headers"
-                label="Header rows"
-                addLabel="Add header"
-                {...variableProps}
-              />
-            </CardContent>
-          </Card>
-          <Card className="rounded-xl">
-            <CardContent className="p-0">
-              <KeyValueFieldArray
-                control={form.control}
-                name="query"
-                label="Query parameter rows"
-                addLabel="Add query"
-                {...variableProps}
-              />
-            </CardContent>
-          </Card>
-          {selectedMethods.some(isBodyMethod) ? (
-            <ProxyRequestBodyCard control={form.control} {...variableProps} />
-          ) : null}
-          <ProxyResponseCard
-            control={form.control}
-            draft={draftValues}
-            method={primaryMethod}
-            runSample={runSample}
-            seedKey={proxy?.id ?? "new"}
-          />
-          <Card className="rounded-xl">
-            <CardContent className="p-4">
-              <ProxyRoutesCard selectedMethods={selectedMethods} {...variableProps} />
-            </CardContent>
-          </Card>
-          {selectedMethods.length > 1 ? (
-            <Card className="rounded-xl">
-              <CardContent className="p-0">
-                <ProxyMethodOverrides selectedMethods={selectedMethods} {...variableProps} />
-              </CardContent>
-            </Card>
-          ) : null}
-          <ProxyTestPanel
-            pathSuffix={testPathSuffix}
-            onPathSuffixChange={setTestPathSuffix}
-            body={testBody}
-            onBodyChange={setTestBody}
-            onSend={runTest}
-            sending={sendTest.isPending}
-            response={testResponse}
-          />
-        </div>
+        {/* Endpoints: every per-call setting, on the call it belongs to. */}
+        <Card className="rounded-xl">
+          <CardContent className="p-4">
+            <ProxyRoutesCard
+              upstreamUrl={upstreamUrl}
+              clientUrlFor={clientUrlFor}
+              onTest={runTest}
+              {...variableProps}
+            />
+          </CardContent>
+        </Card>
       </form>
     </Form>
   );

@@ -178,6 +178,9 @@ export const mapProxyTestRequestToPayload = (request: ProxyTestRequest) => ({
         query: toKeyValueInputs(request.draft.query),
         bodyMerge: toBodyMergeInputs(request.draft),
         methodConfigs: toMethodConfigInputs(request.draft.methodConfigs, request.draft.methods),
+        // Without the routes the server tests against the base path only, and a Test of any other
+        // endpoint is refused as unlisted before it ever reaches the vendor.
+        routes: toRouteInputs(request.draft.routes),
         ...toResponseFilter(request.draft),
       }
     : undefined,
@@ -233,7 +236,12 @@ const toRoutes = (value: ProxyRouteDto[] | null | undefined): ProxyRoute[] =>
           headers: toRouteOverride(route.headers),
           query: toRouteOverride(route.query),
           bodyMerge: toRouteOverride(route.bodyMerge),
-          responseMode: route.responseMode?.toLowerCase() === "select" ? "select" : null,
+          responseMode:
+            route.responseMode?.toLowerCase() === "select"
+              ? "select"
+              : route.responseMode?.toLowerCase() === "all"
+                ? "all"
+                : null,
           responseInclude: Array.isArray(route.responseInclude) ? [...route.responseInclude] : null,
         }))
     : [];
@@ -251,7 +259,9 @@ const toRouteInputs = (routes: ProxyRoute[] | undefined): ProxyRouteDto[] =>
     query: route.query ? compactKeyValues(route.query) : null,
     bodyMerge: route.bodyMerge ? compactKeyValues(route.bodyMerge) : null,
     responseMode: route.responseMode === "select" ? "Select" : route.responseMode === "all" ? "All" : null,
-    responseInclude: route.responseInclude ? [...route.responseInclude] : null,
+    responseInclude: route.responseInclude
+      ? route.responseInclude.map((path) => path.trim()).filter((path) => path.length > 0)
+      : null,
   }));
 
 export const mapProxyListItemDtoToProxy = (dto: ProxyListItemDto): Proxy => ({

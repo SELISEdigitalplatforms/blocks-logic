@@ -411,7 +411,8 @@ namespace Proxy.DomainService.Services
 
         /// <summary>
         /// Resolves the configuration for this call. Precedence is route &rarr; per-method override &rarr;
-        /// shared, field by field; a <c>null</c> member inherits the next level down. The route layer is what
+        /// shared, field by field; a <c>null</c> member inherits the next level down. Headers and query are the
+        /// exception: they merge across layers rather than replace (see <see cref="Merge"/>). The route layer is what
         /// lets two POST endpoints on one proxy carry different body-merge fields and response shapes.
         /// <para>
         /// An explicitly empty <c>BodyMerge</c> / <c>ResponseInclude</c> on a route is an override, not an
@@ -423,12 +424,37 @@ namespace Proxy.DomainService.Services
         {
             var over = config.MethodConfigs.FirstOrDefault(c => c.Method == method);
             return new EffectiveConfig(
-                route?.Headers ?? over?.Headers ?? config.Headers,
-                route?.Query ?? over?.Query ?? config.Query,
+                // Headers and query are additive: the connection's rows always go (that is where the
+                // credential lives), and a route adds its own on top, winning on a same-name key. Replace
+                // semantics would force every route that adds one header to re-declare the credential.
+                Merge(StringComparer.OrdinalIgnoreCase, config.Headers, over?.Headers, route?.Headers),
+                Merge(StringComparer.Ordinal, config.Query, over?.Query, route?.Query),
                 over?.Upstream ?? config.Upstream,
                 route?.BodyMerge ?? config.BodyMerge,
                 route?.ResponseMode ?? config.ResponseMode,
                 route?.ResponseInclude ?? config.ResponseInclude);
+        }
+
+        /// <summary>
+        /// Layers key/value rows lowest-precedence first. Every row from every layer is kept; a later layer
+        /// with the same key replaces the earlier row in place, so order stays stable and the credential
+        /// declared on the connection reaches the vendor unless a route deliberately re-declares it.
+        /// </summary>
+        private static IReadOnlyList<ProxyKeyValue> Merge(
+            StringComparer keyComparer, params IReadOnlyList<ProxyKeyValue>?[] layers)
+        {
+            var merged = new List<ProxyKeyValue>();
+            foreach (var layer in layers)
+            {
+                if (layer is null) continue;
+                foreach (var row in layer)
+                {
+                    var existing = merged.FindIndex(m => keyComparer.Equals(m.Key, row.Key));
+                    if (existing >= 0) merged[existing] = row;
+                    else merged.Add(row);
+                }
+            }
+            return merged;
         }
 
         private static HttpRequestMessage BuildUpstreamRequest(

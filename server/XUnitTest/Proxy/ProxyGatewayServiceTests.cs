@@ -347,6 +347,42 @@ namespace XUnitTest.Proxy
             _handler.LastRequestUri!.ToString().Should().Be("https://api.stripe.com/v1/charges?tag=shared");
         }
 
+        [Fact]
+        public async Task Forward_RouteHeadersAndQuery_AddToTheConnections_RouteWinsOnSameKey()
+        {
+            var proxy = Proxy(p =>
+            {
+                p.Query.Add(new ProxyKeyValue { Key = "tag", Value = "shared" });
+                p.Routes.Add(new ProxyRouteConfig
+                {
+                    Method = HttpMethodType.Get,
+                    Path = string.Empty,
+                    Headers = new List<ProxyKeyValue> { new() { Key = "X-Scope", Value = "orders" } },
+                    Query = new List<ProxyKeyValue>
+                    {
+                        new() { Key = "expand", Value = "customer" },
+                        // Same key as the connection: the route's value is the one that goes.
+                        new() { Key = "tag", Value = "route" },
+                    },
+                });
+            });
+            GivenProxy(proxy);
+            _handler.Respond = (_, _) => Json(HttpStatusCode.OK, "{}");
+
+            var result = await _service.ForwardAsync(Request("GET", b => b.Slug = proxy.Slug));
+
+            result.Ok.Should().BeTrue();
+            // The credential declared on the connection still reaches the vendor; the route adds beside it
+            // instead of replacing it, so no endpoint ever has to re-declare the secret.
+            _handler.LastRequest!.Headers.Contains("Authorization").Should().BeTrue();
+            _handler.LastRequest!.Headers.GetValues("X-Scope").Single().Should().Be("orders");
+            var query = _handler.LastRequestUri!.Query;
+            query.Should().Contain("expand=customer");
+            query.Should().Contain("tag=route");
+            query.Should().NotContain("tag=shared");
+            result.InjectedHeaderKeys.Should().BeEquivalentTo(new[] { "Authorization", "X-Scope" });
+        }
+
         // ---------- H4 ----------
 
         [Fact]

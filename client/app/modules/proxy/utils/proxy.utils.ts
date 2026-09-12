@@ -1,5 +1,12 @@
 import { z } from "zod";
-import { ProxyExecutionLog, ProxyFormValues, ResponseFieldNode } from "../types";
+import {
+  ProxyCredentialRow,
+  ProxyExecutionLog,
+  ProxyFormValues,
+  ProxyKeyValue,
+  ProxyMethod,
+  ResponseFieldNode,
+} from "../types";
 
 export const slugifyProxyName = (name: string) =>
   name
@@ -450,6 +457,12 @@ export const parseRouteTemplate = (
 /** The address a route is unique by. Two routes sharing it would make matching order-dependent. */
 export const routeAddress = (method: string, path: string) => `${method} ${trimRoutePath(path)}`;
 
+const credentialSchema = z.object({
+  key: z.string(),
+  value: z.string(),
+  sendAs: z.enum(["header", "query"]),
+});
+
 const routeSchema = z.object({
   method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
   path: z.string(),
@@ -478,6 +491,7 @@ export const proxyFormSchema = z
     bodyMode: z.enum(["passthrough", "merge"]),
     methodConfigs: z.array(methodOverrideSchema),
     routes: z.array(routeSchema).default([]),
+    credentials: z.array(credentialSchema).optional(),
     responseMode: z.enum(["all", "select"]).default("all"),
     responseInclude: z.array(z.string()).default([]),
   })
@@ -608,9 +622,48 @@ export const proxyFormDefaultValues: ProxyFormValues = {
   bodyMerge: [],
   bodyMode: "passthrough",
   methodConfigs: [],
-  routes: [],
+  routes: [
+    {
+      method: "GET",
+      path: "",
+      upstreamPath: null,
+      headers: null,
+      query: null,
+      bodyMerge: null,
+      responseMode: null,
+      responseInclude: null,
+    },
+  ],
   responseMode: "all",
   responseInclude: [],
+  credentials: [],
+};
+
+/** The methods a proxy accepts are exactly the methods its endpoints use. */
+export const deriveProxyMethods = (routes: ProxyFormValues["routes"]): ProxyMethod[] => {
+  const seen = new Set<ProxyMethod>();
+  routes.forEach((route) => seen.add(route.method));
+  return seen.size ? [...seen] : ["GET"];
+};
+
+/** Header and query lists as one credential list, headers first. */
+export const toCredentialRows = (
+  headers: ProxyKeyValue[],
+  query: ProxyKeyValue[],
+): ProxyCredentialRow[] => [
+  ...headers.map((row) => ({ ...row, sendAs: "header" as const })),
+  ...query.map((row) => ({ ...row, sendAs: "query" as const })),
+];
+
+/** The credential list back into the two lists the server stores, blank rows dropped. */
+export const splitCredentialRows = (rows: ProxyCredentialRow[] | undefined) => {
+  const kept = (rows ?? [])
+    .map((row) => ({ ...row, key: row.key.trim(), value: row.value.trim() }))
+    .filter((row) => row.key || row.value);
+  return {
+    headers: kept.filter((row) => row.sendAs === "header").map(({ key, value }) => ({ key, value })),
+    query: kept.filter((row) => row.sendAs === "query").map(({ key, value }) => ({ key, value })),
+  };
 };
 
 export const compactKeyValues = (rows: ProxyFormValues["headers"]) =>

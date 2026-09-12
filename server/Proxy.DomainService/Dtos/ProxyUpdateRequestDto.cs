@@ -25,7 +25,10 @@ namespace Proxy.DomainService.Dtos
         /// </summary>
         public List<ProxyKeyValueInputDto>? BodyMerge { get; set; }
 
-        /// <summary>Per-method overrides. Reserved for Phase D-feature; a non-empty value is rejected today.</summary>
+        /// <summary>
+        /// Per-method overrides. Superseded by <see cref="Routes"/>, which carry their own method; the console
+        /// no longer writes this and sends it empty. Still accepted and applied so stored values keep working.
+        /// </summary>
         public List<ProxyMethodConfigInputDto>? MethodConfigs { get; set; }
 
         /// <summary>

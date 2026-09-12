@@ -106,6 +106,15 @@ export type ResponseFieldNode = {
  */
 export type ProxyBodyMode = "passthrough" | "merge";
 
+/** Where a connection credential row is delivered. Headers cover almost every vendor. */
+export type ProxyCredentialSendAs = "header" | "query";
+
+/**
+ * One row of the connection's "sent with every request" list. The server keeps headers and query
+ * as two lists; the form shows them as one so the credential has a single home.
+ */
+export type ProxyCredentialRow = ProxyKeyValue & { sendAs: ProxyCredentialSendAs };
+
 export type ProxyFormValues = Pick<
   Proxy,
   | "name"
@@ -118,7 +127,11 @@ export type ProxyFormValues = Pick<
   | "routes"
   | "responseMode"
   | "responseInclude"
-> & { bodyMode: ProxyBodyMode };
+> & {
+  bodyMode: ProxyBodyMode;
+  /** Form-only. When present it is the source of truth for `headers` and `query`. */
+  credentials?: ProxyCredentialRow[];
+};
 
 /**
  * The result of a "Fill from test connection" run — a Test executed with filtering forced off
