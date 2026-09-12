@@ -23,9 +23,9 @@ namespace Utilities.Api.Controllers
     /// <item><b>Data plane</b> (Phase 2) — <see cref="Gateway"/> at
     /// <c>{METHOD} /api/proxy/gateway/{slug}/{**path}</c>, the path a tenant's client calls instead of the
     /// vendor. That route is pinned absolutely rather than derived from the convention, because it is a
-    /// published contract (see the remarks on <see cref="Gateway"/>). It is
-    /// <see cref="AllowAnonymousAttribute"/> at the framework level because the credential is the
-    /// <c>X-Blocks-Key</c> header rather than the standard scheme.</item>
+    /// published contract (see the remarks on <see cref="Gateway"/>). Like every other action it is
+    /// <see cref="AuthorizeAttribute"/>: the framework's bearer handler already resolves the tenant from the
+    /// <c>x-blocks-key</c> header and validates the token against that tenant's certificate.</item>
     /// </list>
     /// <para>
     /// A route id always wins over the same id supplied in the body or query string: the URL identifies the
@@ -53,17 +53,15 @@ namespace Utilities.Api.Controllers
         private readonly IProxyVersionService _proxyVersionService;
         private readonly IProxyTestService _proxyTestService;
         private readonly IProxyExecutionService _proxyExecutionService;
-        private readonly IProxyGatewayAuthService _gatewayAuthService;
         private readonly IProxyGatewayService _gatewayService;
         private readonly ILogger<ProxiesController> _logger;
 
-        /// <summary>Takes the four control-plane services plus the two data-plane gateway services.</summary>
+        /// <summary>Takes the four control-plane services plus the data-plane gateway service.</summary>
         public ProxiesController(
             IProxyService proxyService,
             IProxyVersionService proxyVersionService,
             IProxyTestService proxyTestService,
             IProxyExecutionService proxyExecutionService,
-            IProxyGatewayAuthService gatewayAuthService,
             IProxyGatewayService gatewayService,
             ILogger<ProxiesController> logger)
         {
@@ -71,7 +69,6 @@ namespace Utilities.Api.Controllers
             _proxyVersionService = proxyVersionService;
             _proxyTestService = proxyTestService;
             _proxyExecutionService = proxyExecutionService;
-            _gatewayAuthService = gatewayAuthService;
             _gatewayService = gatewayService;
             _logger = logger;
         }
@@ -250,10 +247,12 @@ namespace Utilities.Api.Controllers
 
         /// <summary>
         /// Data plane (Phase 2). A tenant's client calls <c>{METHOD} /api/proxy/gateway/{slug}/{**path}</c>
-        /// instead of the vendor; Blocks authenticates the caller with the <c>X-Blocks-Key</c> tenant header +
-        /// a bearer valid for that tenant, rebuilds the request against the stored upstream, attaches ONLY the
-        /// configured headers / query params, calls the third party server-side, relays the response, and
-        /// records one <see cref="ProxyExecutionEntity"/> per attempt.
+        /// instead of the vendor; the framework's bearer handler authenticates the caller (tenant from the
+        /// <c>x-blocks-key</c> header, token validated against that tenant's certificate) before this action
+        /// runs, so an unauthenticated call is answered 401 and writes NO execution row (C1). Blocks then
+        /// rebuilds the request against the stored upstream, attaches ONLY the configured headers / query
+        /// params, calls the third party server-side, relays the response, and records one
+        /// <see cref="ProxyExecutionEntity"/> per attempt.
         /// <para>
         /// Unlike the control-plane actions above, this route is <b>pinned absolutely</b> (<c>~/</c>) instead of
         /// being derived from <c>[controller]</c>. The path is a published contract that third-party clients
@@ -264,7 +263,7 @@ namespace Utilities.Api.Controllers
         /// here once and never doubled.
         /// </para>
         /// </summary>
-        [AllowAnonymous]
+        [Authorize]
         [RequestSizeLimit(GatewayHardBodyLimitBytes)]
         [AcceptVerbs("GET", "POST", "PUT", "PATCH", "DELETE", Route = "~/api/proxy/gateway/{slug}/{**path}")]
         public async Task<IActionResult> Gateway(string slug, string? path)
@@ -272,9 +271,11 @@ namespace Utilities.Api.Controllers
             var method = Request.Method.ToUpperInvariant();
             var requestPath = Request.Path.Value ?? $"/api/proxy/gateway/{slug}/{path}";
 
-            // Step 1 — authenticate. A failure returns 401 and writes NO execution row (C1).
-            var auth = await _gatewayAuthService.AuthenticateAsync(Request);
-            if (!auth.IsAuthenticated)
+            // Step 1 — identify the caller. [Authorize] has already rejected anyone without a valid bearer
+            // for the tenant, so the context is populated here; the guard only covers a misconfigured
+            // pipeline and still writes NO execution row (C1).
+            var context = BlocksContext.GetContext();
+            if (context is null || !context.IsAuthenticated || string.IsNullOrEmpty(context.TenantId))
             {
                 _logger.LogWarning("Proxy gateway: rejected unauthenticated {Method} {Path}.", method, requestPath);
                 return GatewayError(ProxyExecutionOutcome.Unauthorized, 401, requestPath);
@@ -285,9 +286,9 @@ namespace Utilities.Api.Controllers
 
             var result = await _gatewayService.ForwardAsync(new ProxyForwardRequest
             {
-                TenantId = auth.TenantId,
-                UserId = auth.UserId,
-                UserName = BlocksContext.GetContext()?.UserName,
+                TenantId = context.TenantId,
+                UserId = string.IsNullOrEmpty(context.UserId) ? null : context.UserId,
+                UserName = context.UserName,
                 // Provenance for the execution row: who called, from where, and under which trace. Read from
                 // the connection and headers here rather than in the forwarder, which also serves in-process
                 // workflow calls that have no HttpContext.

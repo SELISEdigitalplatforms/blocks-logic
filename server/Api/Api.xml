@@ -351,9 +351,9 @@
             <item><b>Data plane</b> (Phase 2) — <see cref="M:Utilities.Api.Controllers.ProxiesController.Gateway(System.String,System.String)"/> at
             <c>{METHOD} /api/proxy/gateway/{slug}/{**path}</c>, the path a tenant's client calls instead of the
             vendor. That route is pinned absolutely rather than derived from the convention, because it is a
-            published contract (see the remarks on <see cref="M:Utilities.Api.Controllers.ProxiesController.Gateway(System.String,System.String)"/>). It is
-            <see cref="T:Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute"/> at the framework level because the credential is the
-            <c>X-Blocks-Key</c> header rather than the standard scheme.</item>
+            published contract (see the remarks on <see cref="M:Utilities.Api.Controllers.ProxiesController.Gateway(System.String,System.String)"/>). Like every other action it is
+            <see cref="T:Microsoft.AspNetCore.Authorization.AuthorizeAttribute"/>: the framework's bearer handler already resolves the tenant from the
+            <c>x-blocks-key</c> header and validates the token against that tenant's certificate.</item>
             </list>
             <para>
             A route id always wins over the same id supplied in the body or query string: the URL identifies the
@@ -374,8 +374,8 @@
             </para>
             </summary>
         </member>
-        <member name="M:Utilities.Api.Controllers.ProxiesController.#ctor(Proxy.DomainService.Services.IProxyService,Proxy.DomainService.Services.IProxyVersionService,Proxy.DomainService.Services.IProxyTestService,Proxy.DomainService.Services.IProxyExecutionService,Proxy.DomainService.Services.IProxyGatewayAuthService,Proxy.DomainService.Services.IProxyGatewayService,Microsoft.Extensions.Logging.ILogger{Utilities.Api.Controllers.ProxiesController})">
-            <summary>Takes the four control-plane services plus the two data-plane gateway services.</summary>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.#ctor(Proxy.DomainService.Services.IProxyService,Proxy.DomainService.Services.IProxyVersionService,Proxy.DomainService.Services.IProxyTestService,Proxy.DomainService.Services.IProxyExecutionService,Proxy.DomainService.Services.IProxyGatewayService,Microsoft.Extensions.Logging.ILogger{Utilities.Api.Controllers.ProxiesController})">
+            <summary>Takes the four control-plane services plus the data-plane gateway service.</summary>
         </member>
         <member name="M:Utilities.Api.Controllers.ProxiesController.List(Proxy.DomainService.Dtos.ProxyGetAllRequestDto)">
             <summary>
@@ -468,10 +468,12 @@
         <member name="M:Utilities.Api.Controllers.ProxiesController.Gateway(System.String,System.String)">
             <summary>
             Data plane (Phase 2). A tenant's client calls <c>{METHOD} /api/proxy/gateway/{slug}/{**path}</c>
-            instead of the vendor; Blocks authenticates the caller with the <c>X-Blocks-Key</c> tenant header +
-            a bearer valid for that tenant, rebuilds the request against the stored upstream, attaches ONLY the
-            configured headers / query params, calls the third party server-side, relays the response, and
-            records one <see cref="T:Proxy.DomainService.Entities.ProxyExecutionEntity"/> per attempt.
+            instead of the vendor; the framework's bearer handler authenticates the caller (tenant from the
+            <c>x-blocks-key</c> header, token validated against that tenant's certificate) before this action
+            runs, so an unauthenticated call is answered 401 and writes NO execution row (C1). Blocks then
+            rebuilds the request against the stored upstream, attaches ONLY the configured headers / query
+            params, calls the third party server-side, relays the response, and records one
+            <see cref="T:Proxy.DomainService.Entities.ProxyExecutionEntity"/> per attempt.
             <para>
             Unlike the control-plane actions above, this route is <b>pinned absolutely</b> (<c>~/</c>) instead of
             being derived from <c>[controller]</c>. The path is a published contract that third-party clients

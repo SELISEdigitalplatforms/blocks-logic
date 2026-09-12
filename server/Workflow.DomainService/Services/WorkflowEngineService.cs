@@ -171,6 +171,7 @@ namespace Workflow.DomainService.Services
                 WorkflowContext = execution.Context,
                 AncestorNodeOutputs = ancestorOutputs,
                 IterationCount = inputItems.Count,
+                HasUpstream = execution.WorkflowSnapshot.Edges.Any(e => e.Target == node.Id),
             };
 
             return (execution, node, nodeExecution, nodeExecutionContext, executor);

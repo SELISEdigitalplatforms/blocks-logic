@@ -27,7 +27,6 @@ namespace Proxy.DomainService
             services.AddSingleton<IProxyService, ProxyService>();
             services.AddSingleton<IProxyVersionService, ProxyVersionService>();
             services.AddSingleton<IProxyGatewayService, ProxyGatewayService>();
-            services.AddSingleton<IProxyGatewayAuthService, ProxyGatewayAuthService>();
             services.AddSingleton<IProxyTestService, ProxyTestService>();
             services.AddSingleton<IProxyExecutionService, ProxyExecutionService>();
 

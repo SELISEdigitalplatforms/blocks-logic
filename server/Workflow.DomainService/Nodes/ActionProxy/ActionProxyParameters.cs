@@ -28,6 +28,16 @@ namespace Workflow.DomainService.Nodes.ActionProxy
         /// </summary>
         public Dictionary<string, string> PathParams { get; set; } = new();
 
+        /// <summary>Whether the call carries query-string parameters.</summary>
+        public bool HaveQuery { get; set; } = false;
+
+        /// <summary>
+        /// Query-string parameters sent with the call, keyed by name. Values support expressions and are
+        /// resolved per input item. The proxy's own configured query values still override any key that
+        /// collides, exactly as they do for a client call.
+        /// </summary>
+        public Dictionary<string, string> QueryParams { get; set; } = new();
+
         public bool HaveBody { get; set; } = false;
 
         /// <summary>JSON body forwarded to the upstream. Supports expressions.</summary>

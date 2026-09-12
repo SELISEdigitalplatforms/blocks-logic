@@ -22,6 +22,15 @@ namespace Workflow.DomainService.Nodes
         public required BsonDocument Parameters { get; set; }
         public required IReadOnlyList<WorkflowItemExecutionEntity> InputItems { get; set; }
         public required int IterationCount { get; init; }
+
+        /// <summary>
+        /// Whether any edge targets this node. This is the only way a node can tell "nothing is wired to me"
+        /// from "my upstream ran and produced no items" — both arrive as an empty <see cref="InputItems"/>,
+        /// but they mean opposite things. The second case is how an untaken branch is pruned (the engine
+        /// dispatches to every outgoing edge and lets the zero-item node do nothing), so a node must never
+        /// act on an empty input unless this is <c>false</c>.
+        /// </summary>
+        public bool HasUpstream { get; init; }
         public required BsonDocument WorkflowContext { get; init; }
         public IReadOnlyDictionary<string, List<WorkflowItemExecutionEntity>> AncestorNodeOutputs { get; set; } = new Dictionary<string, List<WorkflowItemExecutionEntity>>();
         public bool IsRetry { get; set; }

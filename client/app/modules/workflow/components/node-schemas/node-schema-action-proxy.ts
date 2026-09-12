@@ -51,6 +51,8 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
             routePath: "",
             hasPathParams: false,
             pathParams: {},
+            haveQuery: false,
+            queryParams: {},
           };
         },
       },
@@ -117,6 +119,30 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
         fixedKeys: (data) => Promise.resolve(routeParams(String(data.routePath ?? ""))),
       },
       {
+        id: "haveQuery",
+        type: "switch",
+        label: "Send Query Parameters",
+        info: "Whether the call carries query-string parameters. The proxy's own configured query values override any key that collides.",
+        key: "haveQuery",
+        dependsOn: {
+          key: "route_composite",
+          value: "",
+          operator: "notEquals",
+        },
+      },
+      {
+        id: "queryParams",
+        type: "key-value-pairs",
+        dependsOn: {
+          key: "haveQuery",
+          value: true,
+        },
+        label: "Query Parameters",
+        info: "Sent with the call as the query string. Values accept expressions; a key whose value resolves to empty is dropped.",
+        key: "queryParams",
+        defaultValue: {},
+      },
+      {
         id: "haveBody",
         type: "switch",
         label: "Send Body",
@@ -152,6 +178,8 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
       routePath: "",
       hasPathParams: false,
       pathParams: {},
+      haveQuery: false,
+      queryParams: {},
       havebody: false,
       body: "",
     },

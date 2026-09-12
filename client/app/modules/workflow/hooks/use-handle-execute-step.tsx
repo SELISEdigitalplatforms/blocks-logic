@@ -23,15 +23,37 @@ export const useHandleExecuteStep = () => {
   const [triggerSelectionNodes, setTriggerSelectionNodes] = useState<EditorNode[]>([]);
   const [triggerSelectionCompletionNodeId, setTriggerSelectionCompletionNodeId] = useState<string | null>(null);
 
+  /**
+   * Turns on the trigger listener and only shows the node as listening if the server accepted it.
+   * `triggerListener` answers 200 with `isSuccess: false` when the id is not a trigger it knows, so a
+   * failure here is invisible unless the envelope is read.
+   */
+  const startListening = async (triggerId: string, completionNodeId: string) => {
+    setIsListening(true, triggerId);
+    const response = (await executeTriggerListener({
+      triggerId,
+      enableListener: true,
+      completionNodeId,
+    })) as { isSuccess?: boolean; errors?: Record<string, string> | string | null } | undefined;
+
+    if (response && response.isSuccess === false) {
+      setIsListening(false);
+      const errors = response.errors;
+      const detail =
+        typeof errors === "string"
+          ? errors
+          : Object.values(errors ?? {}).join(" ") || "Could not listen for this trigger.";
+      showErrorToast({ title: "Error", errors: detail });
+      return false;
+    }
+
+    return true;
+  };
+
   const handleSelectTrigger = async (triggerId: string) => {
     if (!triggerSelectionCompletionNodeId) return;
     const nodeId = triggerSelectionCompletionNodeId;
-    setIsListening(true, triggerId);
-    await executeTriggerListener({
-      triggerId,
-      enableListener: true,
-      completionNodeId: nodeId,
-    });
+    await startListening(triggerId, nodeId);
     setTriggerSelectionNodes([]);
     setTriggerSelectionCompletionNodeId(null);
   };
@@ -57,23 +79,16 @@ export const useHandleExecuteStep = () => {
         const triggerPredecessors = predecessors.filter((node) => node.category === "trigger");
 
         if (triggerPredecessors.length === 1) {
-          const triggerNodeId = triggerPredecessors[0].id;
-          setIsListening(true, triggerNodeId);
-          await executeTriggerListener({
-            triggerId: triggerNodeId,
-            enableListener: true,
-            completionNodeId: nodeId,
-          });
+          await startListening(triggerPredecessors[0].id, nodeId);
         } else if (triggerPredecessors.length > 1) {
           setTriggerSelectionNodes(triggerPredecessors);
           setTriggerSelectionCompletionNodeId(nodeId);
         } else {
-          setIsListening(true, nodeId);
-          await executeTriggerListener({
-            triggerId: nodeId,
-            enableListener: true,
-            completionNodeId: nodeId,
-          });
+          // The server only asks us to listen when the target has a trigger ancestor, so reaching
+          // this with none means the two disagree about the graph. Registering the action node itself
+          // as the trigger is rejected server-side, and swallowing that used to leave the node
+          // spinning until the two-minute listen timeout.
+          await startListening(nodeId, nodeId);
         }
       }
       

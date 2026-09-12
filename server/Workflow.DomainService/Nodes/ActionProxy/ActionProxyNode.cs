@@ -61,9 +61,22 @@ namespace Workflow.DomainService.Nodes.ActionProxy
                 var blocksContext = BlocksContext.GetContext();
                 var outputItems = new List<NodeOutputItem>();
 
-                for (int i = 0; i < context.IterationCount; i++)
+                // A proxy call is self-contained: the proxy, endpoint, path parameters, query and body all
+                // live on the node, so there is nothing an input item has to supply. With nothing wired to
+                // this node there is no producer to take items from, and iterating zero times would make the
+                // node silently succeed without ever calling the proxy — which is what makes a single-node
+                // test of a lone proxy node look like it does nothing.
+                //
+                // A node that DOES have an upstream keeps the zero-iteration behaviour exactly. An empty
+                // input there means an upstream branch that was not taken (the engine dispatches down every
+                // outgoing edge and relies on the zero-item node to prune), and firing anyway would call the
+                // third party on a path the workflow deliberately did not choose.
+                var standalone = context.IterationCount == 0 && !context.HasUpstream;
+                var iterations = standalone ? 1 : context.IterationCount;
+
+                for (int i = 0; i < iterations; i++)
                 {
-                    var inputItem = context.InputItems[i];
+                    var inputItem = standalone ? StandaloneInputItem(context) : context.InputItems[i];
 
                     var (pathSuffix, pathError) = BuildPathSuffix(parameters, inputItem, context);
                     if (pathError != null)
@@ -72,6 +85,8 @@ namespace Workflow.DomainService.Nodes.ActionProxy
                     var (body, contentType, bodyError) = PrepareBody(parameters, method, inputItem, context);
                     if (bodyError != null)
                         return NodeExecutionResult.Failed(bodyError);
+
+                    var query = BuildQuery(parameters, inputItem, context);
 
                     var result = await _gatewayService.ForwardAsync(new ProxyForwardRequest
                     {
@@ -87,6 +102,7 @@ namespace Workflow.DomainService.Nodes.ActionProxy
                         Slug = parameters.Slug,
                         Method = method,
                         PathSuffix = pathSuffix,
+                        IncomingQuery = query,
                         RequestPath = BuildRequestPath(parameters.Slug, pathSuffix),
                         Body = body,
                         ContentType = contentType,
@@ -100,7 +116,7 @@ namespace Workflow.DomainService.Nodes.ActionProxy
                     if (parseError != null)
                         return NodeExecutionResult.Failed(parseError);
 
-                    BuildOutputItems(outputItems, responseBody, context, parameters, i);
+                    BuildOutputItems(outputItems, responseBody, inputItem, parameters, standalone);
                 }
 
                 return NodeExecutionResult.Successful(outputItems);
@@ -117,10 +133,17 @@ namespace Workflow.DomainService.Nodes.ActionProxy
 
         /// <summary>
         /// Substitutes the configured values into the route's <c>{name}</c> segments to produce the
-        /// concrete path the gateway matches against the allowlist. Each value fills exactly one segment,
-        /// so it is escaped as a single segment: an unescaped <c>/</c> would otherwise widen the path and
-        /// land on an endpoint no route declared. A missing or empty value fails the node here rather
-        /// than sending a path containing a literal <c>{name}</c> that could only be refused as unlisted.
+        /// concrete path the gateway matches against the allowlist.
+        /// <para>
+        /// Values are substituted <b>raw</b>, exactly as the data plane hands routing's decoded
+        /// <c>{**path}</c> to the gateway: percent-encoding is the gateway's job and it does it per segment
+        /// when it builds the outbound URL. Encoding here as well would double-encode, so a value of
+        /// <c>John Doe</c> would reach the upstream as the literal text <c>John%20Doe</c>.
+        /// </para>
+        /// A value must therefore fill exactly one segment on its own terms: a <c>/</c> would widen the path
+        /// and land on an endpoint no route declared, and a dot segment would walk out of the matched route
+        /// once <see cref="Uri"/> normalizes it. Both are refused here, as is a missing or empty value, rather
+        /// than sending a path that could only be refused downstream as unlisted.
         /// </summary>
         private (string path, string? error) BuildPathSuffix(
             ActionProxyParameters parameters,
@@ -132,6 +155,8 @@ namespace Workflow.DomainService.Nodes.ActionProxy
                 return (string.Empty, null);
 
             string? missing = null;
+            string? invalid = null;
+            string? invalidReason = null;
 
             var resolved = RouteParameter.Replace(template, match =>
             {
@@ -149,7 +174,21 @@ namespace Workflow.DomainService.Nodes.ActionProxy
                     return match.Value;
                 }
 
-                return Uri.EscapeDataString(value);
+                if (value.Contains('/'))
+                {
+                    invalid ??= name;
+                    invalidReason ??= "it must fill a single path segment, so it cannot contain '/'";
+                    return match.Value;
+                }
+
+                if (value is "." or "..")
+                {
+                    invalid ??= name;
+                    invalidReason ??= "'.' and '..' are not valid path segments";
+                    return match.Value;
+                }
+
+                return value;
             });
 
             if (missing != null)
@@ -158,6 +197,14 @@ namespace Workflow.DomainService.Nodes.ActionProxy
                     "Proxy node: path parameter {Parameter} is missing for proxy {Slug} route {Route}.",
                     missing, parameters.Slug, template);
                 return (string.Empty, $"Path parameter '{missing}' has no value for endpoint '{template}'.");
+            }
+
+            if (invalid != null)
+            {
+                _logger.LogWarning(
+                    "Proxy node: path parameter {Parameter} is not a usable segment for proxy {Slug} route {Route}.",
+                    invalid, parameters.Slug, template);
+                return (string.Empty, $"Path parameter '{invalid}' is not valid: {invalidReason}.");
             }
 
             return (resolved, null);
@@ -191,6 +238,38 @@ namespace Workflow.DomainService.Nodes.ActionProxy
             }
 
             return (Encoding.UTF8.GetBytes(bodyContent), "application/json", null);
+        }
+
+        /// <summary>
+        /// Builds the raw query string the gateway parses, in the same wire form a client would have sent:
+        /// percent-encoded, with no leading <c>?</c>. Unlike the path, encoding IS this node's job here —
+        /// the gateway runs <c>QueryHelpers.ParseQuery</c> over this string and re-encodes each pair, so a
+        /// value must arrive already escaped or an <c>&amp;</c> inside it would split into another parameter.
+        /// A key whose value resolves to empty is dropped rather than sent bare.
+        /// </summary>
+        private string BuildQuery(
+            ActionProxyParameters parameters,
+            WorkflowItemExecutionEntity inputItem,
+            NodeExecutionContext context)
+        {
+            if (!parameters.HaveQuery || parameters.QueryParams.Count == 0)
+                return string.Empty;
+
+            var parts = new List<string>(parameters.QueryParams.Count);
+            foreach (var (key, raw) in parameters.QueryParams)
+            {
+                var name = (key ?? string.Empty).Trim();
+                if (name.Length == 0)
+                    continue;
+
+                var value = parseExpression<string>(raw ?? string.Empty, inputItem, context);
+                if (string.IsNullOrEmpty(value))
+                    continue;
+
+                parts.Add($"{Uri.EscapeDataString(name)}={Uri.EscapeDataString(value)}");
+            }
+
+            return string.Join("&", parts);
         }
 
         /// <summary>
@@ -259,9 +338,28 @@ namespace Workflow.DomainService.Nodes.ActionProxy
             }
         }
 
+        /// <summary>
+        /// The stand-in input item a standalone run resolves expressions against: an empty object, so
+        /// <c>{{$json...}}</c> yields nothing instead of throwing. It is never added to
+        /// <see cref="NodeExecutionContext.InputItems"/> and never persisted — the engine builds the run's
+        /// lineage from that list, and a synthetic entry in it would put a parent in the ancestor map that
+        /// no item ever wrote.
+        /// </summary>
+        private static WorkflowItemExecutionEntity StandaloneInputItem(NodeExecutionContext context) => new()
+        {
+            Id = string.Empty,
+            WorkflowExecutionId = context.WorkflowExecutionId,
+            TenantId = context.TenantId,
+            NodeId = context.NodeId,
+            NodeExecutionId = string.Empty,
+            NodeName = string.Empty,
+            Branch = "source",
+            Data = new NodeOutputItemData(),
+        };
+
         private static void BuildOutputItems(
             List<NodeOutputItem> outputItems, JsonElement responseBody,
-            NodeExecutionContext context, ActionProxyParameters parameters, int index)
+            WorkflowItemExecutionEntity inputItem, ActionProxyParameters parameters, bool standalone)
         {
             var bodyItems = responseBody.ValueKind == JsonValueKind.Array
                 ? responseBody.EnumerateArray().ToList()
@@ -273,12 +371,14 @@ namespace Workflow.DomainService.Nodes.ActionProxy
                 {
                     Data = new NodeOutputItemData
                     {
-                        Input = context.InputItems[index].Data.Output,
+                        Input = inputItem.Data.Output,
                         Output = BsonJsonConverter.ToBsonValue(bodyItem),
                         Parameters = parameters.ToBsonDocument(),
                     },
                     Branch = "source",
-                    ParentItemIds = new List<string> { context.InputItems[index].Id }
+                    // A standalone run has no parent item, so it claims none: the engine reads these ids back
+                    // out of InputItems to build the ancestor map.
+                    ParentItemIds = standalone ? new List<string>() : new List<string> { inputItem.Id }
                 });
             }
         }
