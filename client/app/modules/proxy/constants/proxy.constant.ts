@@ -1,3 +1,5 @@
+import { getProjectBlocksApiUrl, getRuntimeEnv, type IProject } from "@seliseblocks/genesis-os";
+
 import { ProxyMethod } from "../types";
 
 /** Control-plane resource root. One proxy is `${PROXY_BASE}/{proxyId}`; everything else hangs off that. */
@@ -46,7 +48,47 @@ export const PROXY_LOG_PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 export const PROXY_LOG_PAGE_SIZE = PROXY_LOG_PAGE_SIZE_OPTIONS[0];
 
 /**
- * The Phase 2 data-plane route a tenant's client actually calls (see `ProxiesController.Gateway`). This one
- * is deliberately lowercase and pinned server-side: it is a published contract, not a convention-derived URL.
+ * Service and version segment the public API gateway routes on. The service's own route is
+ * `~/api/proxy/gateway/{slug}/{**path}`; the public gateway addresses it under this prefix instead,
+ * so the `/api` segment never appears in a URL we hand to a tenant.
  */
-export const getProxyClientPath = (slug: string) => `/api/proxy/gateway/${slug || "proxy-name"}/*`;
+const PUBLIC_GATEWAY_PREFIX = "/logic/v4";
+
+/**
+ * The data-plane path a tenant's client actually calls (see `ProxiesController.Gateway`). Pinned
+ * server-side: it is a published contract, not a convention-derived URL.
+ */
+export const getProxyClientPath = (slug: string, routePath?: string) => {
+  const root = `${PUBLIC_GATEWAY_PREFIX}/proxy/gateway/${slug || "proxy-name"}`;
+  const suffix = (routePath ?? "").replace(/^\/+|\/+$/g, "");
+  return suffix ? `${root}/${suffix}` : root;
+};
+
+/**
+ * The host a tenant's own client calls, which is per app rather than per environment:
+ * `blocksapi.<custom domain>` once the project has one, else the shared public API host. Never the
+ * console's own `BLOCKS_LOGIC_BASE_URL`, which is identical for every tenant in an environment and so
+ * is wrong to publish as a customer-facing address.
+ *
+ * `getProjectBlocksApiUrl` reads `window.process.env` directly rather than going through
+ * `getRuntimeEnv`, so it returns `""` in any app that only populates `window.__BLOCKS_ENV__`. The
+ * `getRuntimeEnv` fallback covers that; both read the same key.
+ */
+export const getProxyPublicHost = (project?: IProject | null): string => {
+  // `getProjectBlocksApiUrl` builds `"blocksapi." + getDomain(customDomain)`, and `getDomain` only
+  // accepts a URL carrying a scheme: a bare `acme.com` yields `""`, leaving the truthy but unusable
+  // host `"blocksapi."`. Require a real dotted hostname before trusting it, so that case falls back
+  // to the shared public host instead of publishing a broken address.
+  const fromProject = getProjectBlocksApiUrl(project ?? undefined);
+  const usable = /\.[a-z]{2,}$/i.test(fromProject.replace(/\/+$/, "")) ? fromProject : "";
+  const host = usable || getRuntimeEnv("BLOCKS_PUBLIC_API_BASE_URL");
+  if (!host) return "";
+  return /^https?:\/\//i.test(host) ? host : `https://${host}`;
+};
+
+/** Full customer-facing URL for one proxy, or just the path when no public host is configured yet. */
+export const getProxyClientUrl = (
+  project: IProject | null | undefined,
+  slug: string,
+  routePath?: string,
+) => `${getProxyPublicHost(project)}${getProxyClientPath(slug, routePath)}`;

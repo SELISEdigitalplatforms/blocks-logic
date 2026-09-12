@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { useScopedPath } from "@seliseblocks/genesis-os";
+import { useProjectStore, useScopedPath } from "@seliseblocks/genesis-os";
 import {
   Activity,
   ArrowRightFromLine,
@@ -25,7 +25,7 @@ import { Switch } from "@/components/ui-kits/switch/switch";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { Proxy } from "../types";
 import { useToggleProxy } from "../hooks";
-import { getProxyClientPath } from "../constants";
+import { getProxyClientUrl } from "../constants";
 import { DeleteProxyDialog } from "./delete-proxy-dialog";
 import { ProxyMethodChips } from "./proxy-method-chips";
 import { ProxyStatusBadge } from "./proxy-status-badge";
@@ -64,6 +64,7 @@ const ProxyListSkeleton = () => (
 
 export const ProxyList = ({ proxies, isLoading }: Props) => {
   const navigate = useNavigate();
+  const selectedProject = useProjectStore().selectedProject;
   const scoped = useScopedPath();
   const toggleProxy = useToggleProxy();
   const [proxyToDelete, setProxyToDelete] = useState<Proxy | null>(null);
@@ -124,7 +125,7 @@ export const ProxyList = ({ proxies, isLoading }: Props) => {
                     <ProxyStatusBadge proxy={proxy} />
                   </div>
                   <p className="truncate font-mono text-xs text-muted-foreground">
-                    {getProxyClientPath(proxy.slug)}
+                    {getProxyClientUrl(selectedProject, proxy.slug)}
                   </p>
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <ProxyMethodChips methods={proxy.methods} />

@@ -36,10 +36,25 @@ export type ProxyResponseMode = "all" | "select";
  * `/api/proxy/gateway/{slug}`; `{name}` segments are parameters the caller must supply. The gateway
  * refuses any path not matching a declared route, so this list is what a consumer may call.
  */
+/**
+ * One endpoint a proxy is allowed to reach. Mirrors the server's `ProxyRouteConfig` field for field,
+ * including the members the form does not yet edit: a route read off the wire must be able to go back
+ * unchanged, or saving an unrelated field would quietly drop configuration the console cannot show.
+ *
+ * A `null` override means "inherit the proxy-wide value". An empty array is NOT the same thing: it is
+ * an explicit "none", which is how a route opts out of a proxy-wide body merge.
+ */
 export type ProxyRoute = {
   method: ProxyMethod;
   /** Client-facing template, no leading slash. `""` is the base path. e.g. `orders/{id}/refunds`. */
   path: string;
+  /** Template appended to the upstream. `null` ⇒ no rewrite; {@link path} is used verbatim. */
+  upstreamPath: string | null;
+  headers: ProxyKeyValue[] | null;
+  query: ProxyKeyValue[] | null;
+  bodyMerge: ProxyKeyValue[] | null;
+  responseMode: ProxyResponseMode | null;
+  responseInclude: string[] | null;
 };
 
 export type Proxy = {
@@ -100,6 +115,7 @@ export type ProxyFormValues = Pick<
   | "query"
   | "bodyMerge"
   | "methodConfigs"
+  | "routes"
   | "responseMode"
   | "responseInclude"
 > & { bodyMode: ProxyBodyMode };
@@ -190,6 +206,11 @@ export type ProxyRouteDto = {
   method: string;
   path: string;
   upstreamPath?: string | null;
+  headers?: ProxyKeyValueDto[] | null;
+  query?: ProxyKeyValueDto[] | null;
+  bodyMerge?: ProxyKeyValueDto[] | null;
+  responseMode?: string | null;
+  responseInclude?: string[] | null;
 };
 
 export type ProxyMethodConfigDto = {

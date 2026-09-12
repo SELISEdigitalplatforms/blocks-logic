@@ -13,7 +13,7 @@ import {
 } from "@/components/ui-kits/form/form";
 import { Input } from "@/components/ui-kits/input/input";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
-import { getProxyClientPath } from "../constants";
+import { getProxyClientUrl } from "../constants";
 import { useCreateProxy, useSecrets, useSendProxyTestRequest, useUpdateProxy } from "../hooks";
 import { Proxy, ProxyFormValues, ProxyMethod, ProxyTestResponse, SampleResult } from "../types";
 import {
@@ -27,9 +27,10 @@ import { ProxyFormHeader } from "./proxy-form-header";
 import { ProxyMethodOverrides } from "./proxy-method-overrides";
 import { ProxyMethodSelector } from "./proxy-method-selector";
 import { ProxyRequestBodyCard } from "./proxy-request-body-card";
+import { ProxyRoutesCard } from "./proxy-routes-card";
 import { ProxyResponseCard } from "./proxy-response-card";
 import { ProxyTestPanel } from "./proxy-test-panel";
-import { getRuntimeEnv } from "@seliseblocks/genesis-os";
+import { useProjectStore } from "@seliseblocks/genesis-os";
 
 const isBodyMethod = (method: ProxyMethod) =>
   method === "POST" || method === "PUT" || method === "PATCH";
@@ -71,7 +72,10 @@ export const ProxyForm = ({
 
   const name = useWatch({ control: form.control, name: "name" });
   const selectedMethods = useWatch({ control: form.control, name: "methods" });
-  const clientPath = getProxyClientPath(slugifyProxyName(name));
+  const selectedProject = useProjectStore().selectedProject;
+  const slug = slugifyProxyName(name);
+  const clientUrl = getProxyClientUrl(selectedProject, slug);
+  const routeValues = useWatch({ control: form.control, name: "routes" }) ?? [];
   const draft = useWatch({ control: form.control });
   const draftValues: ProxyFormValues = {
     name: draft.name ?? "",
@@ -94,6 +98,7 @@ export const ProxyForm = ({
       })) ?? [],
     bodyMode: draft.bodyMode ?? "passthrough",
     methodConfigs: (draft.methodConfigs ?? []) as ProxyFormValues["methodConfigs"],
+    routes: (draft.routes ?? []) as ProxyFormValues["routes"],
     responseMode: draft.responseMode ?? "all",
     responseInclude: (draft.responseInclude ?? []).filter(Boolean),
   };
@@ -155,6 +160,7 @@ export const ProxyForm = ({
         bodyMerge: proxy.bodyMerge,
         bodyMode: proxy.bodyMerge.length ? "merge" : "passthrough",
         methodConfigs: proxy.methodConfigs ?? [],
+        routes: proxy.routes ?? [],
         responseMode: proxy.responseMode,
         responseInclude: proxy.responseInclude,
       });
@@ -251,16 +257,28 @@ export const ProxyForm = ({
               selectedMethods={selectedMethods}
               onToggle={toggleMethod}
             />
-            <div className="space-y-2 rounded-lg border border-primary/25 bg-primary/5 p-4 text-primary">
+<div className="space-y-2 rounded-lg border border-primary/25 bg-primary/5 p-4 text-primary">
               <span className="text-xs font-semibold uppercase tracking-wide">
                 Your client calls this
               </span>
-              <p className="break-all font-mono text-sm">
-                {selectedMethods[0] ?? "GET"} {getRuntimeEnv("BLOCKS_LOGIC_BASE_URL")}
-                {clientPath}
-              </p>
+              {routeValues.length ? (
+                <div className="space-y-1">
+                  {routeValues.map((route, index) => (
+                    <p key={`client-url-${index}`} className="break-all font-mono text-sm">
+                      {route.method} {getProxyClientUrl(selectedProject, slug, route.path)}
+                    </p>
+                  ))}
+                </div>
+              ) : (
+                <p className="break-all font-mono text-sm">
+                  {selectedMethods[0] ?? "GET"} {clientUrl}
+                </p>
+              )}
               <p className="text-sm text-primary/80">
-                Send X-Blocks-Key. Path, body and extra query string pass straight through.
+                Send X-Blocks-Key. Body and extra query string pass straight through.{" "}
+                {routeValues.length
+                  ? "Only the endpoints listed above are forwarded; any other path is refused."
+                  : "Only this exact path is forwarded — add an endpoint below to allow paths under it."}
               </p>
             </div>
           </CardContent>
@@ -299,6 +317,11 @@ export const ProxyForm = ({
             runSample={runSample}
             seedKey={proxy?.id ?? "new"}
           />
+          <Card className="rounded-xl">
+            <CardContent className="p-4">
+              <ProxyRoutesCard selectedMethods={selectedMethods} {...variableProps} />
+            </CardContent>
+          </Card>
           {selectedMethods.length > 1 ? (
             <Card className="rounded-xl">
               <CardContent className="p-0">

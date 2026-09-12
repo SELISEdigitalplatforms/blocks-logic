@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
-import { useScopedPath } from "@seliseblocks/genesis-os";
+import { useProjectStore, useScopedPath } from "@seliseblocks/genesis-os";
 import { EllipsisVertical, Eye, EyeOff, Loader2, Pause, Pen, Play, Trash2 } from "lucide-react";
 import PageBreadcrumb from "@/components/breadcrumb/breadcrumb";
 import { BREADCRUMB_CUSTOM_TITLES } from "@/constants/breadcrumb-custom-title";
@@ -24,7 +24,7 @@ import { Skeleton } from "@/components/ui-kits/skeleton/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui-kits/tabs/tabs";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { getProxyClientPath } from "../../constants";
+import { getProxyClientUrl } from "../../constants";
 import { useGetProxyById, useGetProxyOverview, useToggleProxy } from "../../hooks";
 import { Proxy, ProxyKeyValue, ResponseFieldNode } from "../../types";
 import { containsVarRef, pathsToTree } from "../../utils";
@@ -32,52 +32,20 @@ import { ProxyMethodChips } from "../../components/proxy-method-chips";
 import { ProxyStatusBadge } from "../../components/proxy-status-badge";
 import { ProxyLogsTab } from "../../components/proxy-logs-tab";
 import { ProxyHistoryTab } from "../../components/proxy-history-tab";
+import { ProxyTestTab } from "../../components/proxy-test-tab";
 import { DeleteProxyDialog } from "../../components/delete-proxy-dialog";
-
-type ProxyValueSection = "headers" | "query" | "body";
-type RevealedValues = Partial<Record<ProxyValueSection, Record<string, boolean>>>;
-
-const bulletMask = "••••••••••••";
 
 const pluralize = (count: number, singular: string, plural = `${singular}s`) =>
   `${count} ${count === 1 ? singular : plural}`;
 
-const ValueRevealButton = ({
-  shown,
-  label,
-  onClick,
-}: {
-  shown: boolean;
-  label: string;
-  onClick: () => void;
-}) => (
-  <Button
-    type="button"
-    variant="ghost"
-    size="icon"
-    className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
-    aria-label={`${shown ? "Hide" : "Reveal"} ${label}`}
-    title={`${shown ? "Hide" : "Reveal"} ${label}`}
-    onClick={onClick}
-  >
-    {shown ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-  </Button>
-);
-
 const KeyValueRows = ({
-  section,
   title,
   rows,
   empty,
-  revealed,
-  onToggle,
 }: {
-  section: ProxyValueSection;
   title: string;
   rows: ProxyKeyValue[];
   empty: string;
-  revealed: RevealedValues;
-  onToggle: (section: ProxyValueSection, id: string) => void;
 }) => (
   <div>
     <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
@@ -87,35 +55,23 @@ const KeyValueRows = ({
       </div>
       {rows.length ? (
         <div className="divide-y">
-          {rows.map((row, index) => {
-            const id = `${row.key}-${index}`;
-            const shown = Boolean(revealed[section]?.[id]);
-            return (
-              <div
-                key={id}
-                className="grid gap-3 px-4 py-3 text-sm sm:grid-cols-[minmax(160px,0.4fr)_minmax(0,1fr)_auto] sm:items-center"
-              >
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="truncate font-mono font-semibold text-foreground">
-                    {row.key}
-                  </span>
-                  {containsVarRef(row.value) ? (
-                    <Badge variant="success" className="w-fit shrink-0 lowercase">
-                      variable
-                    </Badge>
-                  ) : null}
-                </div>
-                <span className="min-w-0 truncate font-mono text-muted-foreground">
-                  {shown ? row.value : bulletMask}
-                </span>
-                <ValueRevealButton
-                  shown={shown}
-                  label={`${title.toLowerCase()} value ${row.key}`}
-                  onClick={() => onToggle(section, id)}
-                />
+          {rows.map((row, index) => (
+            <div
+              key={`${row.key}-${index}`}
+              className="grid gap-3 px-4 py-3 text-sm sm:grid-cols-[minmax(160px,0.4fr)_minmax(0,1fr)] sm:items-center"
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="truncate font-mono font-semibold text-foreground">{row.key}</span>
+                {containsVarRef(row.value) ? (
+                  <Badge variant="success" className="w-fit shrink-0 lowercase">
+                    variable
+                  </Badge>
+                ) : null}
               </div>
-            );
-          })}
+              {/* Values are shown as configured: a variable reference already hides the secret behind its name. */}
+              <span className="min-w-0 break-all font-mono text-muted-foreground">{row.value}</span>
+            </div>
+          ))}
         </div>
       ) : (
         <p className="px-4 py-3 text-sm text-muted-foreground">{empty}</p>
@@ -223,6 +179,7 @@ const ConfigurationStepCard = ({
 
 const proxyDetailTabs = [
   { value: "overview", label: "Overview" },
+  { value: "test", label: "Test" },
   { value: "logs", label: "Request logs" },
   { value: "history", label: "Change history" },
 ];
@@ -288,12 +245,12 @@ const ProxyDetailsSkeleton = () => (
 
 export const ProxyDetails = () => {
   const navigate = useNavigate();
+  const selectedProject = useProjectStore().selectedProject;
   const scoped = useScopedPath();
   const { pathname } = useLocation();
   const params = useParams<{ proxyId?: string }>();
   const proxyId = params.proxyId;
   const [showUpstream, setShowUpstream] = useState(false);
-  const [revealedValues, setRevealedValues] = useState<RevealedValues>({});
   const [activeTab, setActiveTab] = useState("overview");
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const { data: proxy, isLoading, isFetched } = useGetProxyById(proxyId);
@@ -330,16 +287,6 @@ export const ProxyDetails = () => {
     pluralize(proxy.query.length, "param"),
     pluralize(proxy.bodyMerge.length, "body field"),
   ].join(" · ");
-
-  const toggleRevealedValue = (section: ProxyValueSection, id: string) => {
-    setRevealedValues((current) => ({
-      ...current,
-      [section]: {
-        ...current[section],
-        [id]: !current[section]?.[id],
-      },
-    }));
-  };
 
   const handleToggleEnabled = async () => {
     const enabled = !proxy.enabled;
@@ -512,7 +459,7 @@ export const ProxyDetails = () => {
                           <ProxyMethodChips methods={proxy.methods} />
                         </div>
                         <p className="break-all font-mono text-sm text-foreground">
-                          {getProxyClientPath(proxy.slug)}
+                          {getProxyClientUrl(selectedProject, proxy.slug)}
                         </p>
                       </ConfigurationStepCard>
                       <ConfigurationStepCard eyebrow="→ Blocks adds" active>
@@ -545,35 +492,25 @@ export const ProxyDetails = () => {
                         </p>
                       </ConfigurationStepCard>
                     </div>
+                    <KeyValueRows title="Headers" rows={proxy.headers} empty="No headers added." />
                     <KeyValueRows
-                      section="headers"
-                      title="Headers"
-                      rows={proxy.headers}
-                      empty="No headers added."
-                      revealed={revealedValues}
-                      onToggle={toggleRevealedValue}
-                    />
-                    <KeyValueRows
-                      section="query"
                       title="Query parameters"
                       rows={proxy.query}
                       empty="No query parameters added."
-                      revealed={revealedValues}
-                      onToggle={toggleRevealedValue}
                     />
                     <KeyValueRows
-                      section="body"
                       title="Body fields"
                       rows={proxy.bodyMerge}
                       empty="No body fields merged."
-                      revealed={revealedValues}
-                      onToggle={toggleRevealedValue}
                     />
                     <ResponseFilterSection proxy={proxy} />
                   </CardContent>
                 </Card>
               </>
             )}
+          </TabsContent>
+          <TabsContent value="test">
+            <ProxyTestTab proxy={proxy} />
           </TabsContent>
           <TabsContent value="logs">
             <ProxyLogsTab proxy={proxy} active={activeTab === "logs"} />

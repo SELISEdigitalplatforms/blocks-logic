@@ -5,11 +5,13 @@ import {
   compactKeyValues,
   containsVarRef,
   countResponseLeaves,
+  fillRouteParams,
   deriveResponseSchema,
   insertToken,
   isResponsePath,
   maskUpstreamUrl,
   mergeSchemaIntoTree,
+  routeParamNames,
   pathsToTree,
   projectSample,
   proxyFormSchema,
@@ -307,5 +309,27 @@ describe("buildProxyCurl", () => {
     const curl = buildProxyCurl(base, "https://x.test");
     expect(curl).not.toContain("Authorization: Bearer sk_");
     expect(curl.match(/-H /g)).toHaveLength(2);
+  });
+});
+
+describe("route templates", () => {
+  it("lists each {name} segment once, in order", () => {
+    expect(routeParamNames("orders/{orderId}/refunds/{refundId}")).toEqual([
+      "orderId",
+      "refundId",
+    ]);
+    expect(routeParamNames("orders/{id}/related/{id}")).toEqual(["id"]);
+    expect(routeParamNames("charges")).toEqual([]);
+  });
+
+  it("substitutes supplied values and URL-encodes them", () => {
+    expect(fillRouteParams("orders/{id}/refunds", { id: "ch 12/3" })).toBe(
+      "orders/ch%2012%2F3/refunds",
+    );
+  });
+
+  it("leaves an unfilled segment as its template so the caller can refuse to send", () => {
+    expect(fillRouteParams("orders/{id}", {})).toBe("orders/{id}");
+    expect(fillRouteParams("orders/{id}", { id: "   " })).toBe("orders/{id}");
   });
 });

@@ -66,11 +66,13 @@ describe("Proxy feature", () => {
     );
 
     expect(screen.getByText("Live")).toBeTruthy();
-    expect(await screen.findByText("/api/proxy/gateway/stripe-payments/*")).toBeTruthy();
+    // No trailing "/*": the gateway forwards only the endpoints the proxy declares, so advertising
+    // a wildcard would promise paths that are refused.
+    expect(await screen.findByText("/logic/v4/proxy/gateway/stripe-payments")).toBeTruthy();
     expect(screen.getByText("Authorization")).toBeTruthy();
     expect(screen.getAllByText("variable").length).toBeGreaterThan(0);
 
-    // Header/query values each have their own reveal now, so target the upstream one.
+    // The upstream endpoint is the only masked value on the page; header/query values render as-is.
     await user.click(screen.getByRole("button", { name: /reveal third party endpoint/i }));
     expect(screen.getByText("https://api.stripe.com/v1/charges")).toBeTruthy();
   });

@@ -1,4 +1,4 @@
-import { isResponsePath, maskUpstreamUrl } from "../utils";
+import { compactKeyValues, isResponsePath, maskUpstreamUrl } from "../utils";
 import {
   BaseMutationResponseDto,
   Proxy,
@@ -150,6 +150,7 @@ export const mapProxyToCreatePayload = (values: ProxyFormValues) => ({
   query: toKeyValueInputs(values.query),
   bodyMerge: toBodyMergeInputs(values),
   methodConfigs: toMethodConfigInputs(values.methodConfigs, values.methods),
+  routes: toRouteInputs(values.routes),
   ...toResponseFilter(values),
   enabled: true,
 });
@@ -163,6 +164,7 @@ export const mapProxyToUpdatePayload = (id: string, values: ProxyFormValues) => 
   query: toKeyValueInputs(values.query),
   bodyMerge: toBodyMergeInputs(values),
   methodConfigs: toMethodConfigInputs(values.methodConfigs, values.methods),
+  routes: toRouteInputs(values.routes),
   ...toResponseFilter(values),
 });
 
@@ -209,15 +211,48 @@ const toMethodOverrides = (
     }));
 
 /** One row of `GET /api/Proxies` (no full upstream / header rows in the list projection). */
+/** Strips leading and trailing slashes; the server stores and matches templates without them. */
+const trimSlashes = (value: string | null | undefined) => (value ?? "").replace(/^\/+|\/+$/g, "");
+
+/**
+ * `null` and `[]` are different on a route override: `null` inherits the proxy-wide value, `[]` is an
+ * explicit "none". Collapsing them would turn a route that opted out of the body merge back into one
+ * that inherits it, so the distinction is preserved in both directions.
+ */
+const toRouteOverride = (value: ProxyKeyValueDto[] | null | undefined): ProxyKeyValue[] | null =>
+  Array.isArray(value) ? value.map((row) => ({ key: row.key ?? "", value: row.value ?? "" })) : null;
+
 const toRoutes = (value: ProxyRouteDto[] | null | undefined): ProxyRoute[] =>
   Array.isArray(value)
     ? value
         .filter((route) => typeof route?.method === "string")
         .map((route) => ({
           method: route.method.toUpperCase() as ProxyMethod,
-          path: (route.path ?? "").replace(/^\/+|\/+$/g, ""),
+          path: trimSlashes(route.path),
+          upstreamPath: typeof route.upstreamPath === "string" ? trimSlashes(route.upstreamPath) : null,
+          headers: toRouteOverride(route.headers),
+          query: toRouteOverride(route.query),
+          bodyMerge: toRouteOverride(route.bodyMerge),
+          responseMode: route.responseMode?.toLowerCase() === "select" ? "select" : null,
+          responseInclude: Array.isArray(route.responseInclude) ? [...route.responseInclude] : null,
         }))
     : [];
+
+/**
+ * Route payload. Sent on every create and update, including routes the form cannot edit: the server
+ * replaces the whole list, so an omitted `routes` narrows the proxy to its base path.
+ */
+const toRouteInputs = (routes: ProxyRoute[] | undefined): ProxyRouteDto[] =>
+  (routes ?? []).map((route) => ({
+    method: route.method,
+    path: trimSlashes(route.path),
+    upstreamPath: route.upstreamPath ? trimSlashes(route.upstreamPath) : null,
+    headers: route.headers ? compactKeyValues(route.headers) : null,
+    query: route.query ? compactKeyValues(route.query) : null,
+    bodyMerge: route.bodyMerge ? compactKeyValues(route.bodyMerge) : null,
+    responseMode: route.responseMode === "select" ? "Select" : route.responseMode === "all" ? "All" : null,
+    responseInclude: route.responseInclude ? [...route.responseInclude] : null,
+  }));
 
 export const mapProxyListItemDtoToProxy = (dto: ProxyListItemDto): Proxy => ({
   id: dto.itemId,

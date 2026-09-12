@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import { PROXY_LOG_PAGE_SIZE, PROXY_LOG_PAGE_SIZE_OPTIONS } from "../constants";
 import { useGetProxyExecution, useGetProxyExecutions } from "../hooks";
 import { Proxy, ProxyExecutionLog, ProxyLogFilter } from "../types";
-import { buildProxyCurl } from "../utils";
+import { buildProxyCurl, formatProxyBody } from "../utils";
 import { ProxyMethodBadge } from "./proxy-method-badge";
 
 const FILTERS: { value: ProxyLogFilter; label: string }[] = [
@@ -42,21 +42,6 @@ const OUTCOME_LABELS: Record<string, string> = {
 
 const outcomeLabel = (outcome?: string) =>
   outcome && outcome !== "Success" ? (OUTCOME_LABELS[outcome] ?? outcome) : "";
-
-/** Pretty-print a JSON body; return the text unchanged when it is not JSON. */
-const formatResponseBody = (body: string, contentType?: string) => {
-  const trimmed = body.trim();
-  const looksJson =
-    (contentType?.toLowerCase().includes("json") ?? false) ||
-    trimmed.startsWith("{") ||
-    trimmed.startsWith("[");
-  if (!looksJson) return body;
-  try {
-    return JSON.stringify(JSON.parse(trimmed), null, 2);
-  } catch {
-    return body;
-  }
-};
 
 const logSkeletonClass = "bg-slate-200 dark:bg-muted";
 const logTableGridClass = "grid-cols-[170px_96px_minmax(300px,1fr)_96px_112px]";
@@ -217,7 +202,7 @@ const LogDetails = ({ proxyId, log }: { proxyId: string; log: ProxyExecutionLog 
         ) : (
           <pre className="mt-1 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-background p-3 text-xs">
             {detail.responseBody
-              ? formatResponseBody(detail.responseBody, detail.responseContentType)
+              ? formatProxyBody(detail.responseBody, detail.responseContentType)
               : "(empty response body)"}
           </pre>
         )}

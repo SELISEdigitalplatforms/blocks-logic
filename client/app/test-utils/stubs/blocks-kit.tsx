@@ -18,6 +18,13 @@ export type RuntimeKey = string;
  */
 export const getRuntimeEnv = (_key?: RuntimeKey): string => "";
 
+/**
+ * Mirrors the SDK helper: a project carrying its own custom domain resolves to that app's
+ * `blocksapi.` host; anything else falls back to the shared public host, which is unset here.
+ */
+export const getProjectBlocksApiUrl = (project?: { customDomain?: string | null } | null): string =>
+  project?.customDomain ? `blocksapi.${project.customDomain}` : "";
+
 type HttpClientOptions = {
   baseURL?: string;
   blocksKey?: string;
