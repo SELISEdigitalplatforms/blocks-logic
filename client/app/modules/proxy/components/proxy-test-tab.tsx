@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 import { getProxyClientUrl } from "../constants";
 import { useSendProxyTestRequest } from "../hooks";
 import { Proxy, ProxyMethod, ProxyRoute, ProxyTestResponse } from "../types";
-import { fillRouteParams, formatProxyBody, routeParamNames } from "../utils";
+import { fillRouteParams, formatProxyBody, parseRouteTemplate } from "../utils";
 import { ProxyMethodBadge } from "./proxy-method-badge";
 
 type Props = {
@@ -96,7 +96,8 @@ export const ProxyTestTab = ({ proxy }: Props) => {
   );
 
   const route = routes.find((candidate) => routeKey(candidate) === selectedRoute) ?? routes[0];
-  const paramNames = route ? routeParamNames(route.path) : [];
+  const parsedRoute = parseRouteTemplate(route?.path ?? "");
+  const paramNames = parsedRoute.ok ? parsedRoute.params : [];
   const missingParams = paramNames.filter((name) => !params[name]?.trim());
   const pathSuffix = route ? fillRouteParams(route.path, params) : "";
   const trimmedQuery = query.trim().replace(/^\?/, "");

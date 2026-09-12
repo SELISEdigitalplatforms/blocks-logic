@@ -654,11 +654,6 @@ export const buildProxyCurl = (
   return lines.join(" \\\n");
 };
 
-/** `{name}` segments of a route template, in order and de-duplicated. */
-export const routeParamNames = (path: string): string[] => [
-  ...new Set([...path.matchAll(/\{([^{}/]+)\}/g)].map((match) => match[1])),
-];
-
 /**
  * Substitute a route template's `{name}` segments with caller-supplied values. A segment with no
  * value is left as-is, so the caller can show the unresolved template and refuse to send.

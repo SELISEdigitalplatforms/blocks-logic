@@ -11,7 +11,6 @@ import {
   isResponsePath,
   maskUpstreamUrl,
   mergeSchemaIntoTree,
-  routeParamNames,
   pathsToTree,
   projectSample,
   proxyFormSchema,
@@ -313,15 +312,6 @@ describe("buildProxyCurl", () => {
 });
 
 describe("route templates", () => {
-  it("lists each {name} segment once, in order", () => {
-    expect(routeParamNames("orders/{orderId}/refunds/{refundId}")).toEqual([
-      "orderId",
-      "refundId",
-    ]);
-    expect(routeParamNames("orders/{id}/related/{id}")).toEqual(["id"]);
-    expect(routeParamNames("charges")).toEqual([]);
-  });
-
   it("substitutes supplied values and URL-encodes them", () => {
     expect(fillRouteParams("orders/{id}/refunds", { id: "ch 12/3" })).toBe(
       "orders/ch%2012%2F3/refunds",
