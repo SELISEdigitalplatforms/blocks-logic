@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui-kits/select/select";
-import { ProxyFormValues, SecretListItem } from "../types";
+import { ProxyCredentialRow, ProxyFormValues, SecretListItem } from "../types";
 import { buildVarToken, containsVarRef, insertToken } from "../utils";
 import { VariableInsertMenu } from "./variable-insert-menu";
 import { VariablesButton } from "./variables-button";
@@ -133,7 +133,15 @@ export const KeyValueFieldArray = ({
       variant="outline"
       size="xs"
       className="gap-1.5 border-dashed bg-background shadow-sm hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
-      onClick={() => append(sendAsColumn ? { key: "", value: "", sendAs: "header" } : { key: "", value: "" })}
+      onClick={() => {
+        if (sendAsColumn) {
+          const credential: ProxyCredentialRow = { key: "", value: "", sendAs: "header" };
+          append(credential);
+          return;
+        }
+
+        append({ key: "", value: "" });
+      }}
     >
       <Plus className="h-3.5 w-3.5" />
       {addLabel}
