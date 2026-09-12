@@ -11,6 +11,7 @@ import {
 	Clock,
 	DatabaseZap,
 	Code2,
+	Waypoints,
 } from "lucide-react";
 
 export const NodeDefinitions: WorkflowNodeDefinition[] = [
@@ -110,6 +111,21 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		type: "httpRequest",
 		version: "v1",
 		defaultName: "HTTP Request",
+		handleSpec: {
+			source: ["source"],
+			target: ["target"],
+		},
+	},
+	{
+		id: "action-proxy-v1",
+		icon: <Waypoints className="h-5 w-5 text-teal-500" />,
+		title: "Proxy",
+		description:
+			"Call a configured proxy. The upstream URL and its credentials stay in the proxy, never in the workflow.",
+		type: "proxy",
+		category: "action",
+		version: "v1",
+		defaultName: "Proxy",
 		handleSpec: {
 			source: ["source"],
 			target: ["target"],

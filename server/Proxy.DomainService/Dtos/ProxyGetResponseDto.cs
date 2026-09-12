@@ -2,7 +2,7 @@ using Blocks.Genesis;
 
 namespace Proxy.DomainService.Dtos
 {
-    /// <summary>Response of <c>GET /api/Proxy/Get</c>. <c>Data</c> is <c>null</c> for an unknown item id.</summary>
+    /// <summary>Response of <c>GET /api/Proxies/{proxyId}</c>. <c>Data</c> is <c>null</c> for an unknown item id.</summary>
     public sealed class ProxyGetResponseDto : BaseQueryResponse<ProxyDetailDto?>
     {
     }

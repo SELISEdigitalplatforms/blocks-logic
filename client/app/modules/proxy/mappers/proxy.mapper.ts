@@ -82,7 +82,7 @@ export const mapLogFilterToStatusClass = (filter: ProxyLogFilter): ProxyStatusCl
 };
 
 // ---------------------------------------------------------------------------
-// Request payloads (ProxyController Create / Update / Test)
+// Request payloads (ProxiesController Create / Update / Test)
 // ---------------------------------------------------------------------------
 
 const toKeyValueInputs = (rows: ProxyKeyValue[]): ProxyKeyValueInputDto[] =>
@@ -206,7 +206,7 @@ const toMethodOverrides = (
       query: dto.query ? toKeyValues(dto.query) : null,
     }));
 
-/** One row of `POST /api/Proxy/GetAll` (no full upstream / header rows in the list projection). */
+/** One row of `GET /api/Proxies` (no full upstream / header rows in the list projection). */
 export const mapProxyListItemDtoToProxy = (dto: ProxyListItemDto): Proxy => ({
   id: dto.itemId,
   name: dto.name,
@@ -226,7 +226,7 @@ export const mapProxyListItemDtoToProxy = (dto: ProxyListItemDto): Proxy => ({
   updatedAt: dto.lastUpdatedDate,
 });
 
-/** `GET /api/Proxy/Get` — the full configuration for the form / detail view. */
+/** `GET /api/Proxies/{proxyId}` — the full configuration for the form / detail view. */
 export const mapProxyDetailDtoToProxy = (dto: ProxyDetailDto): Proxy => ({
   id: dto.itemId,
   name: dto.name,
@@ -266,7 +266,7 @@ const VERSION_KIND: Record<string, ProxyVersionHistory["kind"]> = {
   Delete: "delete",
 };
 
-/** One row of `POST /api/Proxy/GetVersions`. `proxyId` comes from the request, not the DTO. */
+/** One row of `GET /api/Proxies/{proxyId}/versions`. `proxyId` comes from the request, not the DTO. */
 export const mapProxyVersionDtoToHistory = (
   dto: ProxyVersionDto,
   proxyId: string,
@@ -284,7 +284,7 @@ export const mapProxyVersionDtoToHistory = (
 });
 
 /**
- * One row of `POST /api/Proxy/GetExecutions`. The list projection carries no upstream URL,
+ * One row of `GET /api/Proxies/{proxyId}/executions`. The list projection carries no upstream URL,
  * injected keys or body — those arrive via {@link mapProxyExecutionDetailDtoToLog}.
  */
 export const mapProxyExecutionListItemDtoToLog = (
@@ -308,7 +308,7 @@ export const mapProxyExecutionListItemDtoToLog = (
   outcome: dto.outcome ?? undefined,
 });
 
-/** `GET /api/Proxy/GetExecution` — the expanded row with the display-clipped response body. */
+/** `GET /api/Proxies/{proxyId}/executions/{executionId}` — the expanded row with the display-clipped response body. */
 export const mapProxyExecutionDetailDtoToLog = (
   dto: ProxyExecutionDetailDto,
 ): ProxyExecutionLog => ({
@@ -317,6 +317,7 @@ export const mapProxyExecutionDetailDtoToLog = (
   timeUtc: dto.startedAtUtc,
   method: isMethod(dto.requestMethod) ? dto.requestMethod : "GET",
   path: dto.requestPath,
+  requestQuery: dto.requestQuery || undefined,
   status: Number(dto.statusCode ?? 0),
   statusText: statusText(Number(dto.statusCode ?? 0)),
   latencyMs: Number(dto.latencyMs ?? 0),
@@ -330,7 +331,7 @@ export const mapProxyExecutionDetailDtoToLog = (
   errorMessage: dto.errorMessage ?? undefined,
 });
 
-/** `POST /api/Proxy/GetOverview` — the rolling 24h tiles for the detail view. */
+/** `GET /api/Proxies/{proxyId}/overview` — the rolling 24h tiles for the detail view. */
 export const mapProxyOverviewDtoToOverview = (dto: ProxyOverviewDto): ProxyOverview => ({
   calls24h: Number(dto.calls24h ?? 0),
   avgLatencyMs: Number(dto.avgLatencyMs ?? 0),
@@ -341,7 +342,7 @@ export const mapProxyOverviewDtoToOverview = (dto: ProxyOverviewDto): ProxyOverv
   lastCallAtUtc: dto.lastCallAtUtc ?? null,
 });
 
-/** 200 body of `POST /api/Proxy/Test` -> the shape the test panel renders. */
+/** 200 body of `POST /api/Proxies/test` -> the shape the test panel renders. */
 export const mapProxyTestResponseDtoToResponse = (
   dto: ProxyTestResponseDto,
   request: ProxyTestRequest,

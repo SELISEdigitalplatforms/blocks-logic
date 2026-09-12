@@ -4,7 +4,7 @@ using Blocks.Genesis;
 namespace Proxy.DomainService.Dtos
 {
     /// <summary>
-    /// Response of <c>POST /api/Proxy/GetOverview</c>. <c>Data</c> carries the rolling 24 h metrics; on an
+    /// Response of <c>GET /api/Proxies/{proxyId}/overview</c>. <c>Data</c> carries the rolling 24 h metrics; on an
     /// unknown proxy that also has no execution rows, <see cref="HttpStatus"/> is 404 and <see cref="Code"/>
     /// is <c>PROXY_NOT_FOUND</c> (SPEC &sect;3.3 / C2). A missing <c>proxyId</c> is a 400 (<c>PROXY_VALIDATION</c>).
     /// </summary>

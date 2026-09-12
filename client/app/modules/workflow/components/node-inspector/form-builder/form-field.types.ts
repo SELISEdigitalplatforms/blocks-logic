@@ -92,6 +92,12 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
         },
       ) => Promise<string[]>);
   fixedKeysDependencies?: string[];
+  /**
+   * Parameter keys whose value changes should re-run an async `options` function. Without this an
+   * async option list is fetched once per mount, which is wrong for a dropdown that narrows itself
+   * from another field. Mirrors `fixedKeysDependencies`.
+   */
+  optionsDependencies?: string[];
   copyable?: boolean;
   maxLength?: number;
   minLength?: number;

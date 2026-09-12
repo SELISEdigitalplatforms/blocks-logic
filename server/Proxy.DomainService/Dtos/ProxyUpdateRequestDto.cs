@@ -1,7 +1,7 @@
 namespace Proxy.DomainService.Dtos
 {
     /// <summary>
-    /// Body of <c>PUT /api/Proxy/Update</c>. Replaces name / upstream / methods / headers / query only.
+    /// Body of <c>PUT /api/Proxies/{proxyId}</c>. Replaces name / upstream / methods / headers / query only.
     /// <c>Slug</c> is immutable and not accepted; a <c>slug</c> field in the payload is ignored.
     /// <c>Enabled</c> is unchanged by Update (use Toggle).
     /// </summary>

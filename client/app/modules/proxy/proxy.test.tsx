@@ -66,11 +66,12 @@ describe("Proxy feature", () => {
     );
 
     expect(screen.getByText("Live")).toBeTruthy();
-    expect(screen.getByText("/api/proxy/gateway/stripe-payments/*")).toBeTruthy();
+    expect(await screen.findByText("/api/proxy/gateway/stripe-payments/*")).toBeTruthy();
     expect(screen.getByText("Authorization")).toBeTruthy();
     expect(screen.getAllByText("variable").length).toBeGreaterThan(0);
 
-    await user.click(screen.getByRole("button", { name: /reveal/i }));
+    // Header/query values each have their own reveal now, so target the upstream one.
+    await user.click(screen.getByRole("button", { name: /reveal third party endpoint/i }));
     expect(screen.getByText("https://api.stripe.com/v1/charges")).toBeTruthy();
   });
 
@@ -84,7 +85,7 @@ describe("Proxy feature", () => {
     );
 
     await user.type(
-      screen.getByPlaceholderText("https://api.example.com/v1/resource"),
+      screen.getByPlaceholderText("Enter third-party endpoint"),
       "https://api.stripe.com/v1/charges",
     );
     await user.click(screen.getByRole("button", { name: "Create" }));

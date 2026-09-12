@@ -74,10 +74,23 @@ namespace Proxy.DomainService.Services
         /// <summary>
         /// Display name of the current user, or <c>null</c> when the ambient context carries none. Kept nullable
         /// (no <c>"system"</c> sentinel) so the console can fall back to resolving <c>CreatedBy</c> against IAM.
+        /// <para>
+        /// <see cref="BlocksContext.DisplayName"/> first, <see cref="BlocksContext.UserName"/> only as a
+        /// fallback: the stored value is rendered verbatim in the console's <em>Change history</em> column, and
+        /// <c>UserName</c> is the login handle ("mjones") where <c>DisplayName</c> is the human name
+        /// ("Mary Jones"). Change history rows are written once and never recomputed, so picking the wrong one
+        /// here is permanent for every row it writes.
+        /// </para>
         /// </summary>
         public static string? CurrentUserName()
         {
-            var name = BlocksContext.GetContext()?.UserName;
+            var context = BlocksContext.GetContext();
+            var name = context?.DisplayName;
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                name = context?.UserName;
+            }
+
             return string.IsNullOrWhiteSpace(name) ? null : name;
         }
     }

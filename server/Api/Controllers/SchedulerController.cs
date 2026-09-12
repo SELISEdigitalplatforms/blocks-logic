@@ -7,12 +7,14 @@ using Scheduler.DomainService.Services;
 
 namespace BlocksTemplate.Api.Controllers
 {
+    /// <summary>Scheduled-job management, routed as <c>/api/Scheduler/{action}</c>.</summary>
     [ApiController]
     [Route("[controller]/[action]")]
     public class SchedulerController : ControllerBase
     {
         private readonly IScheduleService _scheduleService;
 
+        /// <summary>Takes the schedule service.</summary>
         public SchedulerController(IScheduleService scheduleService)
         {
             _scheduleService = scheduleService;

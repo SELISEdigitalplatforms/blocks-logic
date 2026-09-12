@@ -208,29 +208,32 @@ describe("iamService", () => {
     );
   });
 
-  it("lists roles via POST with body containing organizationId", async () => {
-    await iamService.getRoles({ organizationId: "default", search: "adm" });
+  // getRoles/getPermissions take no filter arguments: the webhook RBAC picker loads the full
+  // first page and filters client-side, so the request body is a fixed paging + sort envelope.
+  it("lists roles via POST against the absolute IAM base url", async () => {
+    await iamService.getRoles();
     expect(http.iamService.post).toHaveBeenCalledWith(
       expect.stringContaining("/api/iam/roles"),
       expect.objectContaining({
-        organizationId: "default",
-        filter: { search: "adm" },
+        page: 0,
+        pageSize: 100,
+        filter: { search: "" },
+        sort: { property: "Name", isDescending: false },
       }),
       undefined,
       { absoluteUrl: true },
     );
   });
 
-  it("lists permissions via POST with roles", async () => {
-    await iamService.getPermissions({
-      roles: ["cloudadmin"],
-      search: "user",
-    });
+  it("lists permissions via POST, honouring caller paging but not filtering", async () => {
+    await iamService.getPermissions({ pageSize: 200 });
     expect(http.iamService.post).toHaveBeenCalledWith(
       expect.stringContaining("/api/iam/permissions"),
       expect.objectContaining({
-        roles: ["cloudadmin"],
-        filter: expect.objectContaining({ search: "user" }),
+        page: 0,
+        pageSize: 200,
+        filter: { search: "", isBuiltIn: "", resourceGroup: "" },
+        sort: { property: "Name", isDescending: false },
       }),
       undefined,
       { absoluteUrl: true },

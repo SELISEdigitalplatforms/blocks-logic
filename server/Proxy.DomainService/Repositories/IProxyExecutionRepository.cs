@@ -15,11 +15,18 @@ namespace Proxy.DomainService.Repositories
         Task InsertAsync(ProxyExecutionEntity execution);
 
         /// <summary>
-        /// One page of the proxy's executions with <c>StartedAtUtc &gt;= sinceUtc</c> matching
+        /// One page of the proxy's executions with <c>sinceUtc &lt;= StartedAtUtc &lt;= asOfUtc</c> matching
         /// <paramref name="statusClass"/>, newest-first (<c>StartedAtUtc</c> desc, then <c>ItemId</c> desc).
+        /// <para>
+        /// <paramref name="asOfUtc"/> freezes the top of the window for the duration of a paging session.
+        /// Without it, rows arriving between page 1 and page 2 shift every later row down by their count, so
+        /// the reader sees rows repeat and rows vanish — the standard failure of offset paging over a
+        /// collection that is appended to at the head.
+        /// </para>
         /// </summary>
         Task<List<ProxyExecutionEntity>> GetPageAsync(
-            string tenantId, string proxyId, ProxyStatusClass statusClass, DateTime sinceUtc, int pageSize, int pageNumber);
+            string tenantId, string proxyId, ProxyStatusClass statusClass, DateTime sinceUtc, DateTime asOfUtc,
+            int pageSize, int pageNumber);
 
         /// <summary>
         /// Up to <paramref name="pageSize"/> rows STRICTLY NEWER than <c>(afterStartedAtUtc, afterItemId)</c>
@@ -29,8 +36,13 @@ namespace Proxy.DomainService.Repositories
             string tenantId, string proxyId, ProxyStatusClass statusClass, DateTime sinceUtc,
             DateTime afterStartedAtUtc, string afterItemId, int pageSize);
 
-        /// <summary>Unpaged count of the proxy's rows in the window matching <paramref name="statusClass"/>.</summary>
-        Task<long> CountAsync(string tenantId, string proxyId, ProxyStatusClass statusClass, DateTime sinceUtc);
+        /// <summary>
+        /// Unpaged count of the proxy's rows in the window matching <paramref name="statusClass"/>, bounded
+        /// above by <paramref name="asOfUtc"/> so the total agrees with what <see cref="GetPageAsync"/> pages
+        /// through.
+        /// </summary>
+        Task<long> CountAsync(
+            string tenantId, string proxyId, ProxyStatusClass statusClass, DateTime sinceUtc, DateTime asOfUtc);
 
         /// <summary>The row for <c>(proxyId, itemId)</c> in this tenant, or <c>null</c> (SPEC &sect;3.2 / C3).</summary>
         Task<ProxyExecutionEntity?> GetByIdAsync(string tenantId, string proxyId, string itemId);

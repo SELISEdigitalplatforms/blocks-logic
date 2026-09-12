@@ -57,7 +57,13 @@ export const useDeleteProxy = () => {
 export const useGetProxyExecutions = (
   proxyId?: string,
   filter: ProxyLogFilter = "all",
-  options: { live?: boolean; enabled?: boolean; page?: number; pageSize?: number } = {},
+  options: {
+    live?: boolean;
+    enabled?: boolean;
+    page?: number;
+    pageSize?: number;
+    asOfUtc?: string;
+  } = {},
 ) =>
   useQuery({
     queryKey: [
@@ -68,12 +74,16 @@ export const useGetProxyExecutions = (
       options.page ?? 0,
       options.pageSize ?? null,
       options.live,
+      // Part of the key: two pages of the same session must not share a cache entry with the same
+      // pages of a re-pinned session, or paging would serve rows from the older window.
+      options.asOfUtc ?? null,
     ],
     queryFn: () =>
       proxyService.getExecutions(proxyId!, filter, {
         live: options.live,
         page: options.page,
         pageSize: options.pageSize,
+        asOfUtc: options.asOfUtc,
       }),
     enabled: Boolean(proxyId) && (options.enabled ?? true),
     refetchInterval: options.live ? 3000 : false,

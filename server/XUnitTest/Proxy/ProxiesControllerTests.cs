@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Proxy.DomainService.Dtos;
 using Proxy.DomainService.Services;
@@ -8,19 +9,22 @@ using XUnitTest.TestHelpers;
 
 namespace XUnitTest.Proxy
 {
-    public class ProxyControllerTests : IDisposable
+    public class ProxiesControllerTests : IDisposable
     {
         private readonly Mock<IProxyService> _proxyService = new();
         private readonly Mock<IProxyVersionService> _versionService = new();
         private readonly Mock<IProxyTestService> _testService = new();
         private readonly Mock<IProxyExecutionService> _executionService = new();
-        private readonly ProxyController _controller;
+        private readonly Mock<IProxyGatewayAuthService> _gatewayAuthService = new();
+        private readonly Mock<IProxyGatewayService> _gatewayService = new();
+        private readonly ProxiesController _controller;
 
-        public ProxyControllerTests()
+        public ProxiesControllerTests()
         {
             TestBlocksContext.Set("tenant-abc");
-            _controller = new ProxyController(
-                _proxyService.Object, _versionService.Object, _testService.Object, _executionService.Object);
+            _controller = new ProxiesController(
+                _proxyService.Object, _versionService.Object, _testService.Object, _executionService.Object,
+                _gatewayAuthService.Object, _gatewayService.Object, NullLogger<ProxiesController>.Instance);
         }
 
         public void Dispose()
@@ -38,12 +42,12 @@ namespace XUnitTest.Proxy
             };
 
         [Fact]
-        public async Task GetAll_ReturnsOk_WithServiceResult()
+        public async Task List_ReturnsOk_WithServiceResult()
         {
             var expected = new ProxyGetAllResponseDto();
             _proxyService.Setup(s => s.GetAllAsync("tenant-abc", It.IsAny<ProxyGetAllRequestDto>())).ReturnsAsync(expected);
 
-            var result = await _controller.GetAll(new ProxyGetAllRequestDto());
+            var result = await _controller.List(new ProxyGetAllRequestDto());
 
             result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeSameAs(expected);
         }
@@ -54,7 +58,7 @@ namespace XUnitTest.Proxy
             var expected = new ProxyGetResponseDto();
             _proxyService.Setup(s => s.GetAsync("tenant-abc", It.IsAny<ProxyGetRequestDto>())).ReturnsAsync(expected);
 
-            var result = await _controller.Get(new ProxyGetRequestDto { ItemId = "p1" });
+            var result = await _controller.Get("p1");
 
             result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeSameAs(expected);
         }
@@ -98,7 +102,7 @@ namespace XUnitTest.Proxy
             _proxyService.Setup(s => s.UpdateAsync("tenant-abc", It.IsAny<ProxyUpdateRequestDto>()))
                 .ReturnsAsync(ProxyMutationResponse.Success("p1"));
 
-            var result = await _controller.Update(new ProxyUpdateRequestDto { ItemId = "p1" });
+            var result = await _controller.Update("p1", new ProxyUpdateRequestDto());
 
             StatusOf(result).Should().Be(200);
         }
@@ -109,18 +113,18 @@ namespace XUnitTest.Proxy
             _proxyService.Setup(s => s.UpdateAsync("tenant-abc", It.IsAny<ProxyUpdateRequestDto>()))
                 .ReturnsAsync(ProxyMutationResponse.Failure(404, "PROXY_NOT_FOUND", "missing"));
 
-            var result = await _controller.Update(new ProxyUpdateRequestDto { ItemId = "p1" });
+            var result = await _controller.Update("p1", new ProxyUpdateRequestDto());
 
             StatusOf(result).Should().Be(404);
         }
 
         [Fact]
-        public async Task UpdateState_Returns200_WhenServiceSucceeds()
+        public async Task SetEnabled_Returns200_WhenServiceSucceeds()
         {
             _proxyService.Setup(s => s.ToggleAsync("tenant-abc", It.IsAny<ProxyToggleRequestDto>()))
                 .ReturnsAsync(ProxyMutationResponse.Success("p1"));
 
-            var result = await _controller.UpdateState(new ProxyToggleRequestDto { ItemId = "p1", Enabled = false });
+            var result = await _controller.SetEnabled("p1", new ProxyToggleRequestDto { Enabled = false });
 
             StatusOf(result).Should().Be(200);
         }
@@ -131,7 +135,7 @@ namespace XUnitTest.Proxy
             _proxyService.Setup(s => s.DeleteAsync("tenant-abc", It.IsAny<ProxyDeleteRequestDto>()))
                 .ReturnsAsync(ProxyMutationResponse.Success("p1"));
 
-            var result = await _controller.Delete(new ProxyDeleteRequestDto { ItemId = "p1" });
+            var result = await _controller.Delete("p1");
 
             StatusOf(result).Should().Be(200);
         }
@@ -142,29 +146,29 @@ namespace XUnitTest.Proxy
             _proxyService.Setup(s => s.DeleteAsync("tenant-abc", It.IsAny<ProxyDeleteRequestDto>()))
                 .ReturnsAsync(ProxyMutationResponse.Failure(404, "PROXY_NOT_FOUND", "missing"));
 
-            var result = await _controller.Delete(new ProxyDeleteRequestDto { ItemId = "p1" });
+            var result = await _controller.Delete("p1");
 
             StatusOf(result).Should().Be(404);
         }
 
         [Fact]
-        public async Task GetVersions_Returns200_WhenServiceSucceeds()
+        public async Task ListVersions_Returns200_WhenServiceSucceeds()
         {
             _versionService.Setup(s => s.GetVersionsAsync("tenant-abc", It.IsAny<ProxyGetVersionsRequestDto>()))
                 .ReturnsAsync(new ProxyGetVersionsResponseDto());
 
-            var result = await _controller.GetVersions(new ProxyGetVersionsRequestDto { ProxyId = "p1" });
+            var result = await _controller.ListVersions("p1", new ProxyGetVersionsRequestDto());
 
             StatusOf(result).Should().Be(200);
         }
 
         [Fact]
-        public async Task GetVersions_Returns404_WhenServiceReportsUnknownProxy()
+        public async Task ListVersions_Returns404_WhenServiceReportsUnknownProxy()
         {
             _versionService.Setup(s => s.GetVersionsAsync("tenant-abc", It.IsAny<ProxyGetVersionsRequestDto>()))
                 .ReturnsAsync(new ProxyGetVersionsResponseDto { HttpStatus = 404, Code = "PROXY_NOT_FOUND" });
 
-            var result = await _controller.GetVersions(new ProxyGetVersionsRequestDto { ProxyId = "p1" });
+            var result = await _controller.ListVersions("p1", new ProxyGetVersionsRequestDto());
 
             StatusOf(result).Should().Be(404);
         }
@@ -175,7 +179,7 @@ namespace XUnitTest.Proxy
             _versionService.Setup(s => s.RevertAsync("tenant-abc", It.IsAny<ProxyRevertRequestDto>()))
                 .ReturnsAsync(ProxyMutationResponse.Success("p1"));
 
-            var result = await _controller.Revert(new ProxyRevertRequestDto { ProxyId = "p1", VersionId = "v1" });
+            var result = await _controller.Revert("p1", "v1");
 
             StatusOf(result).Should().Be(200);
         }
@@ -186,7 +190,7 @@ namespace XUnitTest.Proxy
             _versionService.Setup(s => s.RevertAsync("tenant-abc", It.IsAny<ProxyRevertRequestDto>()))
                 .ReturnsAsync(ProxyMutationResponse.Failure(409, "PROXY_DELETED", "gone"));
 
-            var result = await _controller.Revert(new ProxyRevertRequestDto { ProxyId = "p1", VersionId = "v1" });
+            var result = await _controller.Revert("p1", "v1");
 
             StatusOf(result).Should().Be(409);
         }
@@ -217,12 +221,12 @@ namespace XUnitTest.Proxy
         // ---------- Phase 3 : GetExecutions / GetExecution / GetOverview / ExportExecutionsCsv ----------
 
         [Fact]
-        public async Task GetExecutions_ReturnsServiceHttpStatus()
+        public async Task ListExecutions_ReturnsServiceHttpStatus()
         {
             _executionService.Setup(s => s.GetExecutionsAsync("tenant-abc", It.IsAny<ProxyGetExecutionsRequestDto>()))
                 .ReturnsAsync(new ProxyGetExecutionsResponseDto { HttpStatus = 404, Code = "PROXY_NOT_FOUND" });
 
-            var result = await _controller.GetExecutions(new ProxyGetExecutionsRequestDto { ProxyId = "ghost" });
+            var result = await _controller.ListExecutions("ghost", new ProxyGetExecutionsRequestDto());
 
             StatusOf(result).Should().Be(404);
         }
@@ -233,7 +237,7 @@ namespace XUnitTest.Proxy
             _executionService.Setup(s => s.GetExecutionAsync("tenant-abc", It.IsAny<ProxyGetExecutionRequestDto>()))
                 .ReturnsAsync(new ProxyGetExecutionResponseDto { Data = null });
 
-            var result = await _controller.GetExecution(new ProxyGetExecutionRequestDto { ItemId = "e1", ProxyId = "p1" });
+            var result = await _controller.GetExecution("p1", "e1");
 
             StatusOf(result).Should().Be(200);
             result.Should().BeOfType<ObjectResult>()
@@ -247,7 +251,7 @@ namespace XUnitTest.Proxy
             _executionService.Setup(s => s.GetOverviewAsync("tenant-abc", It.IsAny<ProxyGetOverviewRequestDto>()))
                 .ReturnsAsync(new ProxyGetOverviewResponseDto { Data = new ProxyOverviewDto() });
 
-            var result = await _controller.GetOverview(new ProxyGetOverviewRequestDto { ProxyId = "p1" });
+            var result = await _controller.GetOverview("p1");
 
             StatusOf(result).Should().Be(200);
         }
@@ -262,7 +266,7 @@ namespace XUnitTest.Proxy
             _executionService.Setup(s => s.ExportExecutionsCsvAsync("tenant-abc", It.IsAny<ProxyExportExecutionsRequestDto>()))
                 .ReturnsAsync(ProxyCsvExportResult.Ok(new byte[] { 1, 2, 3 }, "proxy-p-logs-20260907T000000.csv", truncated: true));
 
-            var result = await _controller.ExportExecutionsCsv(new ProxyExportExecutionsRequestDto { ProxyId = "p1" });
+            var result = await _controller.ExportExecutionsCsv("p1", new ProxyExportExecutionsRequestDto());
 
             var file = result.Should().BeOfType<FileContentResult>().Which;
             file.ContentType.Should().Be("text/csv; charset=utf-8");
@@ -281,9 +285,67 @@ namespace XUnitTest.Proxy
                 .ReturnsAsync(ProxyCsvExportResult.Failure(400, "PROXY_VALIDATION", "bad",
                     new Dictionary<string, string> { ["statusClass"] = "Must be one of all, 2xx, 4xx, 5xx." }));
 
-            var result = await _controller.ExportExecutionsCsv(new ProxyExportExecutionsRequestDto { ProxyId = "p1", StatusClass = "3xx" });
+            var result = await _controller.ExportExecutionsCsv("p1", new ProxyExportExecutionsRequestDto { StatusClass = "3xx" });
 
             StatusOf(result).Should().Be(400);
+        }
+
+        // ---------- The URL identifies the resource: a route id always beats a payload id ----------
+
+        [Fact]
+        public async Task Update_TakesTheProxyIdFromTheRoute_NotTheBody()
+        {
+            ProxyUpdateRequestDto? seen = null;
+            _proxyService.Setup(s => s.UpdateAsync("tenant-abc", It.IsAny<ProxyUpdateRequestDto>()))
+                .Callback<string, ProxyUpdateRequestDto>((_, dto) => seen = dto)
+                .ReturnsAsync(ProxyMutationResponse.Success("from-route"));
+
+            await _controller.Update("from-route", new ProxyUpdateRequestDto { ItemId = "from-body" });
+
+            seen!.ItemId.Should().Be("from-route");
+        }
+
+        [Fact]
+        public async Task SetEnabled_TakesTheProxyIdFromTheRoute_NotTheBody()
+        {
+            ProxyToggleRequestDto? seen = null;
+            _proxyService.Setup(s => s.ToggleAsync("tenant-abc", It.IsAny<ProxyToggleRequestDto>()))
+                .Callback<string, ProxyToggleRequestDto>((_, dto) => seen = dto)
+                .ReturnsAsync(ProxyMutationResponse.Success("from-route"));
+
+            await _controller.SetEnabled("from-route", new ProxyToggleRequestDto { ItemId = "from-body", Enabled = false });
+
+            seen!.ItemId.Should().Be("from-route");
+            seen.Enabled.Should().BeFalse();
+        }
+
+        [Fact]
+        public async Task ListExecutions_TakesTheProxyIdFromTheRoute_NotTheQueryString()
+        {
+            ProxyGetExecutionsRequestDto? seen = null;
+            _executionService.Setup(s => s.GetExecutionsAsync("tenant-abc", It.IsAny<ProxyGetExecutionsRequestDto>()))
+                .Callback<string, ProxyGetExecutionsRequestDto>((_, dto) => seen = dto)
+                .ReturnsAsync(new ProxyGetExecutionsResponseDto());
+
+            await _controller.ListExecutions(
+                "from-route",
+                new ProxyGetExecutionsRequestDto { ProxyId = "from-query", StatusClass = "4xx" });
+
+            seen!.ProxyId.Should().Be("from-route");
+            seen.StatusClass.Should().Be("4xx");
+        }
+
+        [Fact]
+        public async Task ListVersions_TakesTheProxyIdFromTheRoute_NotTheQueryString()
+        {
+            ProxyGetVersionsRequestDto? seen = null;
+            _versionService.Setup(s => s.GetVersionsAsync("tenant-abc", It.IsAny<ProxyGetVersionsRequestDto>()))
+                .Callback<string, ProxyGetVersionsRequestDto>((_, dto) => seen = dto)
+                .ReturnsAsync(new ProxyGetVersionsResponseDto());
+
+            await _controller.ListVersions("from-route", new ProxyGetVersionsRequestDto { ProxyId = "from-query" });
+
+            seen!.ProxyId.Should().Be("from-route");
         }
     }
 }

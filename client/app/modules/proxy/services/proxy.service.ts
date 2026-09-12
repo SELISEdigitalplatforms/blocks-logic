@@ -91,21 +91,20 @@ export class ProxyService {
   endpoints = PROXY_ENDPOINTS;
 
   getAll = async (params: ProxyListParams = {}): Promise<Proxy[]> => {
-    const response = await this.logicHttpClient.post<BaseQueryListResponse<ProxyListItemDto[]>>(
-      PROXY_ENDPOINTS.GET_ALL,
-      {
+    const response = await this.logicHttpClient.get<BaseQueryListResponse<ProxyListItemDto[]>>(
+      `${PROXY_ENDPOINTS.COLLECTION}${buildQuery({
         search: params.searchKey?.trim() || undefined,
         enabled: params.enabled,
         pageSize: params.pageSize ?? 200,
         pageNumber: params.pageNumber ?? 0,
-      },
+      })}`,
     );
     return (response.data ?? []).map(mapProxyListItemDtoToProxy);
   };
 
   get = async (id: string): Promise<Proxy | null> => {
     const response = await this.logicHttpClient.get<BaseQueryResponse<ProxyDetailDto | null>>(
-      `${PROXY_ENDPOINTS.GET}${buildQuery({ itemId: id })}`,
+      PROXY_ENDPOINTS.byId(id),
     );
     return response.data ? mapProxyDetailDtoToProxy(response.data) : null;
   };
@@ -113,7 +112,7 @@ export class ProxyService {
   create = async (values: ProxyFormValues): Promise<ProxyMutationResponse> => {
     try {
       const response = await this.logicHttpClient.post<BaseMutationResponseDto>(
-        PROXY_ENDPOINTS.CREATE,
+        PROXY_ENDPOINTS.COLLECTION,
         mapProxyToCreatePayload(values),
       );
       return mapMutationResponse(response);
@@ -131,7 +130,7 @@ export class ProxyService {
   }): Promise<ProxyMutationResponse> => {
     try {
       const response = await this.logicHttpClient.put<BaseMutationResponseDto>(
-        PROXY_ENDPOINTS.UPDATE,
+        PROXY_ENDPOINTS.byId(id),
         mapProxyToUpdatePayload(id, values),
       );
       return mapMutationResponse(response);
@@ -148,9 +147,9 @@ export class ProxyService {
     enabled: boolean;
   }): Promise<ProxyMutationResponse> => {
     try {
-      const response = await this.logicHttpClient.post<BaseMutationResponseDto>(
-        PROXY_ENDPOINTS.UPDATE_STATE,
-        { itemId: id, enabled },
+      const response = await this.logicHttpClient.patch<BaseMutationResponseDto>(
+        PROXY_ENDPOINTS.byId(id),
+        { enabled },
       );
       return mapMutationResponse(response);
     } catch (error) {
@@ -161,7 +160,7 @@ export class ProxyService {
   delete = async (id: string): Promise<ProxyMutationResponse> => {
     try {
       const response = await this.logicHttpClient.delete<BaseMutationResponseDto>(
-        `${PROXY_ENDPOINTS.DELETE}${buildQuery({ itemId: id })}`,
+        PROXY_ENDPOINTS.byId(id),
       );
       return mapMutationResponse(response);
     } catch (error) {
@@ -172,20 +171,29 @@ export class ProxyService {
   getExecutions = async (
     proxyId: string,
     filter: ProxyLogFilter,
-    options: { live?: boolean; afterId?: string; page?: number; pageSize?: number } = {},
+    options: {
+      live?: boolean;
+      afterId?: string;
+      page?: number;
+      pageSize?: number;
+      asOfUtc?: string;
+    } = {},
   ): Promise<ProxyExecutionPage> => {
-    const response = await this.logicHttpClient.post<
-      BaseQueryListResponse<ProxyExecutionListItemDto[]>
-    >(PROXY_ENDPOINTS.GET_EXECUTIONS, {
-      proxyId,
-      statusClass: mapLogFilterToStatusClass(filter),
-      afterId: options.afterId,
-      pageSize: options.pageSize ?? PROXY_LOG_PAGE_SIZE,
-      pageNumber: options.page ?? 0,
-    });
+    const response = await this.logicHttpClient.get<
+      BaseQueryListResponse<ProxyExecutionListItemDto[]> & { asOfUtc?: string }
+    >(
+      `${PROXY_ENDPOINTS.executions(proxyId)}${buildQuery({
+        statusClass: mapLogFilterToStatusClass(filter),
+        afterId: options.afterId,
+        pageSize: options.pageSize ?? PROXY_LOG_PAGE_SIZE,
+        pageNumber: options.page ?? 0,
+        asOfUtc: options.asOfUtc,
+      })}`,
+    );
     return {
       rows: (response.data ?? []).map((row) => mapProxyExecutionListItemDtoToLog(row, proxyId)),
       totalCount: response.totalCount ?? 0,
+      asOfUtc: response.asOfUtc,
     };
   };
 
@@ -195,22 +203,20 @@ export class ProxyService {
   ): Promise<ProxyExecutionLog | null> => {
     const response = await this.logicHttpClient.get<
       BaseQueryResponse<ProxyExecutionDetailDto | null>
-    >(`${PROXY_ENDPOINTS.GET_EXECUTION}${buildQuery({ itemId: executionId, proxyId })}`);
+    >(PROXY_ENDPOINTS.execution(proxyId, executionId));
     return response.data ? mapProxyExecutionDetailDtoToLog(response.data) : null;
   };
 
   getOverview = async (proxyId: string): Promise<ProxyOverview | null> => {
-    const response = await this.logicHttpClient.post<BaseQueryResponse<ProxyOverviewDto | null>>(
-      PROXY_ENDPOINTS.GET_OVERVIEW,
-      { proxyId },
+    const response = await this.logicHttpClient.get<BaseQueryResponse<ProxyOverviewDto | null>>(
+      PROXY_ENDPOINTS.overview(proxyId),
     );
     return response.data ? mapProxyOverviewDtoToOverview(response.data) : null;
   };
 
   getVersions = async (proxyId: string): Promise<ProxyVersionHistory[]> => {
-    const response = await this.logicHttpClient.post<BaseQueryListResponse<ProxyVersionDto[]>>(
-      PROXY_ENDPOINTS.GET_VERSIONS,
-      { proxyId, pageSize: 200, pageNumber: 0 },
+    const response = await this.logicHttpClient.get<BaseQueryListResponse<ProxyVersionDto[]>>(
+      `${PROXY_ENDPOINTS.versions(proxyId)}${buildQuery({ pageSize: 200, pageNumber: 0 })}`,
     );
     return (response.data ?? []).map((row) => mapProxyVersionDtoToHistory(row, proxyId));
   };
@@ -224,8 +230,8 @@ export class ProxyService {
   }): Promise<ProxyMutationResponse> => {
     try {
       const response = await this.logicHttpClient.post<BaseMutationResponseDto>(
-        PROXY_ENDPOINTS.REVERT,
-        { proxyId, versionId },
+        PROXY_ENDPOINTS.revert(proxyId, versionId),
+        null,
       );
       return mapMutationResponse(response);
     } catch (error) {
@@ -262,8 +268,7 @@ export class ProxyService {
     filter: ProxyLogFilter;
   }): Promise<ProxyCsvExport> => {
     const csv = await this.logicHttpClient.get<string>(
-      `${PROXY_ENDPOINTS.EXPORT_EXECUTIONS_CSV}${buildQuery({
-        proxyId,
+      `${PROXY_ENDPOINTS.executionsExport(proxyId)}${buildQuery({
         statusClass: mapLogFilterToStatusClass(filter),
       })}`,
     );

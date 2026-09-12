@@ -560,6 +560,8 @@ describe("data gateway trigger v1", () => {
 describe("data action v1", () => {
   it("puts raw query mode first and defaults new nodes to raw mode", () => {
     expect(NodeSchemaActionDataActionV1.schema.parameters.map((param) => param.key)).toEqual([
+      // Deprecation notice for the guided query fields; renders above the mode switch.
+      "queryModeNotes",
       "rawQueryMode",
       "authenticationType",
       "clientCredential_composite",

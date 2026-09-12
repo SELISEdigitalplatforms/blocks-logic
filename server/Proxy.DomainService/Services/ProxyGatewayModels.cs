@@ -98,7 +98,7 @@ namespace Proxy.DomainService.Services
         public string? ContentType { get; init; }
 
         /// <summary>
-        /// <c>true</c> for <c>POST /api/Proxy/Test</c>: run the identical pipeline but write NO execution row.
+        /// <c>true</c> for <c>POST /api/Proxies/test</c>: run the identical pipeline but write NO execution row.
         /// </summary>
         public bool IsTest { get; init; }
     }

@@ -1,6 +1,6 @@
 namespace Proxy.DomainService.Dtos
 {
-    /// <summary>Query string of <c>DELETE /api/Proxy/Delete</c>.</summary>
+    /// <summary>Route id of <c>DELETE /api/Proxies/{proxyId}</c>.</summary>
     public sealed class ProxyDeleteRequestDto
     {
         public string? ItemId { get; set; }

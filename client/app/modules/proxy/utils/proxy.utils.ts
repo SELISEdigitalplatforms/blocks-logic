@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ProxyFormValues, ResponseFieldNode } from "../types";
+import { ProxyExecutionLog, ProxyFormValues, ResponseFieldNode } from "../types";
 
 export const slugifyProxyName = (name: string) =>
   name
@@ -507,3 +507,39 @@ export const compactKeyValues = (rows: ProxyFormValues["headers"]) =>
   rows
     .map((row) => ({ ...row, key: row.key.trim(), value: row.value.trim() }))
     .filter((row) => row.key || row.value);
+
+/**
+ * Shell-quote a value for a POSIX `curl` line. Single quotes are the only safe wrapper for
+ * arbitrary URLs and header values; an embedded `'` is closed, escaped, and reopened.
+ */
+const shellQuote = (value: string) => `'${value.replace(/'/g, String.raw`'\''`)}'`;
+
+/**
+ * Rebuild a request log row as a runnable `curl` for the **client-facing gateway call** — what the
+ * tenant's own client sent, not what Blocks forwarded upstream.
+ *
+ * Two deliberate omissions, both of which would make the command wrong rather than merely
+ * incomplete:
+ *
+ * - **Injected headers / query params are not included.** Blocks attaches those server-side from the
+ *   proxy configuration; a client that sent them itself would be duplicating credentials it is not
+ *   supposed to hold. `injectedHeaderKeys` are also keys only — the values are never stored.
+ * - **The real credentials are placeholders.** Execution rows store no request headers or body, so
+ *   the tenant key and bearer cannot be recovered from a log; they have to be filled in by hand.
+ */
+export const buildProxyCurl = (
+  log: Pick<ProxyExecutionLog, "method" | "path" | "requestQuery">,
+  origin: string,
+) => {
+  const query = log.requestQuery ? `?${log.requestQuery}` : "";
+  const url = `${origin.replace(/\/+$/, "")}${log.path}${query}`;
+
+  const lines = [
+    `curl -X ${log.method} ${shellQuote(url)}`,
+    `  -H ${shellQuote("x-blocks-key: <your tenant id>")}`,
+    `  -H ${shellQuote("Authorization: Bearer <token issued for that tenant>")}`,
+  ];
+
+  // Trailing backslash + real newline: a multi-line command the shell reads as one line.
+  return lines.join(" \\\n");
+};

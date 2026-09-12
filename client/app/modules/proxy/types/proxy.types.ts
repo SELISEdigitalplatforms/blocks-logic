@@ -309,6 +309,8 @@ export type ProxyExecutionLog = {
   timeUtc: string;
   method: ProxyMethod;
   path: string;
+  /** Raw client query string without the leading `?`; only on the on-demand detail row. */
+  requestQuery?: string;
   status: number;
   statusText: string;
   latencyMs: number;
@@ -328,6 +330,12 @@ export type ProxyExecutionLog = {
 export type ProxyExecutionPage = {
   rows: ProxyExecutionLog[];
   totalCount: number;
+  /**
+   * The window top the server computed this page against. Send it back with the next page so the
+   * offsets keep addressing the same rows; rows arriving in between would otherwise shift every
+   * later row down and make the reader see duplicates and gaps.
+   */
+  asOfUtc?: string;
 };
 
 export type ProxyVersionHistory = {

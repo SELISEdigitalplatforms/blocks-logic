@@ -4,7 +4,7 @@ using Blocks.Genesis;
 namespace Proxy.DomainService.Dtos
 {
     /// <summary>
-    /// Response of <c>GET /api/Proxy/GetExecution</c>. <c>Data</c> is <c>null</c> for an unknown id, an id
+    /// Response of <c>GET /api/Proxies/{proxyId}/executions/{executionId}</c>. <c>Data</c> is <c>null</c> for an unknown id, an id
     /// whose <c>ProxyId</c> differs, or a row from another tenant (SPEC &sect;3.2 / C3) &mdash; never a 404.
     /// A missing <c>itemId</c>/<c>proxyId</c> is the only 400 (<see cref="Code"/> <c>PROXY_VALIDATION</c>).
     /// </summary>

@@ -7,6 +7,11 @@ using Microsoft.AspNetCore.Authorization;
 
 namespace Utilities.Api.Controllers
 {
+    /// <summary>
+    /// Management API for workflows, their versions and their executions, routed as
+    /// <c>/api/Workflow/{action}</c>. Every action except the two webhook entry points requires a bearer
+    /// token; the tenant always comes from <see cref="BlocksContext"/> and is never taken from the payload.
+    /// </summary>
     [ApiController]
     [Route("[controller]/[action]")]
     public class WorkflowController : ControllerBase
@@ -16,6 +21,7 @@ namespace Utilities.Api.Controllers
         private readonly IWorkflowVersionService _workflowVersionService;
         private readonly IWorkflowExecutionService _workflowExecutionService;
 
+        /// <summary>Takes the workflow, version and execution services.</summary>
         public WorkflowController(
             IWorkflowService workflowService,
             IWorkflowVersionService workflowVersionService,
@@ -26,6 +32,7 @@ namespace Utilities.Api.Controllers
             _workflowExecutionService = workflowExecutionService;
         }
 
+        /// <summary><c>POST</c> — the tenant's workflows, filtered and paged by the request body.</summary>
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> GetAll([FromBody] WorkflowGetsRequestDto dto)
@@ -35,6 +42,7 @@ namespace Utilities.Api.Controllers
             return Ok(workflows);
         }
 
+        /// <summary><c>GET</c> — one workflow by id, including its node graph.</summary>
         [Authorize]
         [HttpGet]
         public async Task<IActionResult> Get([FromQuery] WorkflowGetRequestDto dto)
@@ -44,6 +52,7 @@ namespace Utilities.Api.Controllers
             return Ok(workflow);
         }
 
+        /// <summary><c>POST</c> — creates a workflow. 201 on success.</summary>
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] WorkflowCreateRequestDto dto)
@@ -53,6 +62,7 @@ namespace Utilities.Api.Controllers
             return StatusCode(StatusCodes.Status201Created, result);
         }
 
+        /// <summary><c>POST</c> — copies an existing workflow into a new one. 201 on success.</summary>
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> Duplicate([FromBody] WorkflowDuplicateRequestDto dto)
@@ -62,6 +72,7 @@ namespace Utilities.Api.Controllers
             return StatusCode(StatusCodes.Status201Created, result);
         }
 
+        /// <summary><c>PUT</c> — rewrites a workflow's name, description and node graph.</summary>
         [Authorize]
         [HttpPut]
         public async Task<IActionResult> Update([FromBody] WorkflowUpdateRequestDto dto)
@@ -71,6 +82,7 @@ namespace Utilities.Api.Controllers
             return Ok(result);
         }
 
+        /// <summary><c>DELETE</c> — removes a workflow by id.</summary>
         [Authorize]
         [HttpDelete]
         public async Task<IActionResult> Delete([FromQuery] WorkflowDeleteRequestDto dto)
@@ -80,6 +92,7 @@ namespace Utilities.Api.Controllers
             return Ok(result);
         }
 
+        /// <summary><c>POST</c> — snapshots the working workflow as a new version row. 201 on success.</summary>
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> CreateVersion([FromBody] WorkflowVersionCreateRequestDto dto)
@@ -89,6 +102,7 @@ namespace Utilities.Api.Controllers
             return StatusCode(StatusCodes.Status201Created, result);
         }
 
+        /// <summary><c>POST</c> — edits an existing version's metadata.</summary>
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> UpdateVersion([FromBody] WorkflowVersionUpdateRequestDto dto)
@@ -99,6 +113,7 @@ namespace Utilities.Api.Controllers
         }
 
 
+        /// <summary><c>POST</c> — the version history for one workflow.</summary>
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> GetVersions([FromBody] WorkflowGetVersionsRequestDto dto)
@@ -108,6 +123,7 @@ namespace Utilities.Api.Controllers
             return Ok(result);
         }
 
+        /// <summary><c>POST</c> — the workflow graph as captured by a specific version.</summary>
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> GetWorkflowByVersion([FromBody] GetWorkflowByVersionRequestDto dto)
@@ -117,6 +133,7 @@ namespace Utilities.Api.Controllers
             return Ok(result);
         }
 
+        /// <summary><c>POST</c> — snapshots the current graph as a new version and publishes it in one step.</summary>
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> PublishNewVersion([FromBody] WorkflowPublishNewVersionRequestDto dto)
@@ -126,6 +143,7 @@ namespace Utilities.Api.Controllers
             return Ok(result);
         }
 
+        /// <summary><c>POST</c> — publishes an existing version, making it the one webhooks execute.</summary>
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> PublishVersion([FromBody] WorkflowPublishVersionRequestDto dto)
@@ -135,6 +153,7 @@ namespace Utilities.Api.Controllers
             return Ok(result);
         }
 
+        /// <summary><c>POST</c> — takes the workflow out of service; its webhooks stop executing.</summary>
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> Unpublish([FromBody] WorkflowUnpublishRequestDto dto)
@@ -144,6 +163,7 @@ namespace Utilities.Api.Controllers
             return Ok(result);
         }
 
+        /// <summary><c>POST</c> — restores a soft-deleted workflow.</summary>
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> Restore([FromBody] WorkflowRestoreRequestDto dto)
@@ -155,6 +175,12 @@ namespace Utilities.Api.Controllers
 
 
 
+        /// <summary>
+        /// Data-plane entry point: runs the published workflow behind a webhook trigger.
+        /// <c>POST /api/Workflow/Webhook/{tenantId}/{workflowId}/{webhookId}</c>. Anonymous at the framework
+        /// level — the trigger's own <c>authType</c> decides whether a caller must be authenticated or
+        /// authorized, and a failure surfaces here as 401.
+        /// </summary>
         [HttpPost("{tenantId}/{workflowId}/{webhookId}")]
         public async Task<IActionResult> Webhook(string tenantId, string workflowId, string webhookId, [FromBody] JsonElement input)
         {
@@ -176,6 +202,10 @@ namespace Utilities.Api.Controllers
 
         }
 
+        /// <summary>
+        /// The <c>webhook-test</c> twin of <see cref="Webhook"/>: runs the DRAFT graph rather than the
+        /// published version, for the console's test panel. Same route shape, same 401 behaviour.
+        /// </summary>
         [ActionName("webhook-test")]
         [HttpPost("{tenantId}/{workflowId}/{webhookId}")]
         public async Task<IActionResult> TestWebhook(string tenantId, string workflowId, string webhookId, [FromBody] JsonElement input)
@@ -197,6 +227,7 @@ namespace Utilities.Api.Controllers
             }
 
         }
+        /// <summary><c>POST</c> — executes a single node in isolation and returns its output, for the node inspector.</summary>
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> StepExecute([FromBody] StepExecuteRequestDto dto)
@@ -206,6 +237,7 @@ namespace Utilities.Api.Controllers
             return Ok(executions);
         }
 
+        /// <summary><c>POST</c> — fires a listener-type trigger by hand.</summary>
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> TriggerListener([FromBody] TriggerListenerRequestDto dto)
@@ -216,6 +248,7 @@ namespace Utilities.Api.Controllers
         }
 
 
+        /// <summary><c>GET</c> — the execution history for one workflow.</summary>
         [Authorize]
         [HttpGet]
         public async Task<IActionResult> GetExecutions([FromQuery] WorkflowExecutionsGetRequestDto dto)
@@ -225,6 +258,7 @@ namespace Utilities.Api.Controllers
             return Ok(executions);
         }
 
+        /// <summary><c>GET</c> — one execution, including per-node results.</summary>
         [Authorize]
         [HttpGet]
         public async Task<IActionResult> GetExecution([FromQuery] WorkflowExecutionGetRequestDto dto)
@@ -234,6 +268,7 @@ namespace Utilities.Api.Controllers
             return Ok(execution);
         }
 
+        /// <summary><c>GET</c> — the most recent successful execution, used to prefill node inputs from real data.</summary>
         [Authorize]
         [HttpGet]
         public async Task<IActionResult> LastSuccessfullExecution([FromQuery] LastSuccessfullExecutionRequestDto dto)

@@ -47,14 +47,11 @@ user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 x-blocks-key: D2d61e575239647a9820d1a44e398f52c
 
 ### 1. List (empty first run) -> 200 { data: [], totalCount: 0 }
-POST {{Api_HostAddress}}/api/Proxy/GetAll
+GET {{Api_HostAddress}}/api/Proxies
 Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{}
 
 ### 2. Create -> 201 { itemId }
-POST {{Api_HostAddress}}/api/Proxy/Create
+POST {{Api_HostAddress}}/api/Proxies
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -66,32 +63,29 @@ Content-Type: application/json
 }
 
 ### 3. Get -> methods ["GET","POST"], slug "stripe-payments", path "/api/proxy/gateway/stripe-payments/*", headers[0].isSecretRef true, upstreamMasked "api.st****.com/***"
-GET {{Api_HostAddress}}/api/Proxy/Get?itemId={{proxyId}}
+GET {{Api_HostAddress}}/api/Proxies/{{proxyId}}
 Authorization: Bearer {{token}}
 
 ### 4. List -> one item, injectedCredential true, totalCount 1
-POST {{Api_HostAddress}}/api/Proxy/GetAll
+GET {{Api_HostAddress}}/api/Proxies
 Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{}
 
 ### 5. Slug collision -> 409 PROXY_SLUG_CONFLICT
-POST {{Api_HostAddress}}/api/Proxy/Create
+POST {{Api_HostAddress}}/api/Proxies
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "name": "Stripe  Payments!", "upstream": "https://api.stripe.com", "methods": ["GET"] }
 
 ### 6. Non-https upstream -> 400 PROXY_VALIDATION with errors.upstream
-POST {{Api_HostAddress}}/api/Proxy/Create
+POST {{Api_HostAddress}}/api/Proxies
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "name": "Bad", "upstream": "ftp://x", "methods": ["GET"] }
 
-### 7. Update (changed) -> 200; GetVersions shows v2 ConfigUpdate
-PUT {{Api_HostAddress}}/api/Proxy/Update
+### 7. Update (changed) -> 200; the versions list shows v2 ConfigUpdate
+PUT {{Api_HostAddress}}/api/Proxies/{{proxyId}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -103,8 +97,8 @@ Content-Type: application/json
   "headers": [{ "key": "Authorization", "value": "Bearer ${SECRET.STRIPE_KEY}" }]
 }
 
-### 8. Update (verbatim repeat) -> 200 no-op; GetVersions still tops out at v2
-PUT {{Api_HostAddress}}/api/Proxy/Update
+### 8. Update (verbatim repeat) -> 200 no-op; the versions list still tops out at v2
+PUT {{Api_HostAddress}}/api/Proxies/{{proxyId}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -116,37 +110,28 @@ Content-Type: application/json
   "headers": [{ "key": "Authorization", "value": "Bearer ${SECRET.STRIPE_KEY}" }]
 }
 
-### 9. Update state disabled -> 200; GetVersions shows v3 Toggle "Proxy disabled"
-POST {{Api_HostAddress}}/api/Proxy/UpdateState
+### 9. Update state disabled -> 200; the versions list shows v3 Toggle "Proxy disabled"
+PATCH {{Api_HostAddress}}/api/Proxies/{{proxyId}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{ "itemId": "{{proxyId}}", "enabled": false }
+{ "enabled": false }
 
 ### 10. Change history
-POST {{Api_HostAddress}}/api/Proxy/GetVersions
+GET {{Api_HostAddress}}/api/Proxies/{{proxyId}}/versions
 Authorization: Bearer {{token}}
-Content-Type: application/json
 
-{ "proxyId": "{{proxyId}}" }
-
-### 11. Revert to v1 -> 200; Get shows original upstream + enabled true, slug unchanged; GetVersions shows v4 Revert "Reverted to v1"
-POST {{Api_HostAddress}}/api/Proxy/Revert
+### 11. Revert to v1 -> 200; Get shows original upstream + enabled true, slug unchanged; the versions list shows v4 Revert "Reverted to v1"
+POST {{Api_HostAddress}}/api/Proxies/{{proxyId}}/versions/{{versionId}}/revert
 Authorization: Bearer {{token}}
-Content-Type: application/json
 
-{ "proxyId": "{{proxyId}}", "versionId": "{{versionId}}" }
-
-### 12. Delete -> 200; GetAll totalCount 0; GetVersions still returns history with a top Delete row
-DELETE {{Api_HostAddress}}/api/Proxy/Delete?itemId={{proxyId}}
+### 12. Delete -> 200; the list totalCount 0; the versions list still returns history with a top Delete row
+DELETE {{Api_HostAddress}}/api/Proxies/{{proxyId}}
 Authorization: Bearer {{token}}
 
 ### 13. Revert after delete -> 409 PROXY_DELETED
-POST {{Api_HostAddress}}/api/Proxy/Revert
+POST {{Api_HostAddress}}/api/Proxies/{{proxyId}}/versions/{{versionId}}/revert
 Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{ "proxyId": "{{proxyId}}", "versionId": "{{versionId}}" }
 
 # ---------------------------------------------------------------------------
 # Phase 3 (SPEC3): request logs / metrics / CSV export. Read-only over the
@@ -155,89 +140,59 @@ Content-Type: application/json
 # ---------------------------------------------------------------------------
 
 ### 14. Overview tiles -> calls24h / avgLatencyMs / errorRatePct / errorRateIsHigh / credentialRefs / methods / lastCallAtUtc (rolling 24h)
-POST {{Api_HostAddress}}/api/Proxy/GetOverview
+GET {{Api_HostAddress}}/api/Proxies/{{proxyId}}/overview
 Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{ "proxyId": "{{proxyId}}" }
 
 ### 15. Request logs, filtered + paged -> BaseQueryListResponse; totalCount is the unpaged 24h count for the statusClass
-POST {{Api_HostAddress}}/api/Proxy/GetExecutions
+GET {{Api_HostAddress}}/api/Proxies/{{proxyId}}/executions?statusClass=5xx&pageSize=25&pageNumber=0
 Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{ "proxyId": "{{proxyId}}", "statusClass": "5xx", "pageSize": 25, "pageNumber": 0 }
 
 ### 16. Live tail -> only rows strictly newer than afterId; pageNumber ignored; totalCount still the full 24h count
-POST {{Api_HostAddress}}/api/Proxy/GetExecutions
+GET {{Api_HostAddress}}/api/Proxies/{{proxyId}}/executions?afterId=PASTE_NEWEST_ITEM_ID&pageSize=25
 Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{ "proxyId": "{{proxyId}}", "afterId": "PASTE_NEWEST_ITEM_ID", "pageSize": 25 }
 
 ### 17. Bad status class -> 400 PROXY_VALIDATION { errors.statusClass: "Must be one of all, 2xx, 4xx, 5xx." }
-POST {{Api_HostAddress}}/api/Proxy/GetExecutions
+GET {{Api_HostAddress}}/api/Proxies/{{proxyId}}/executions?statusClass=3xx
 Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{ "proxyId": "{{proxyId}}", "statusClass": "3xx" }
 
 ### 18. Expanded row -> full detail incl. responseBody (clipped to 64 KB with responseBodyTruncatedForDisplay); unknown/mismatched -> 200 data:null
-GET {{Api_HostAddress}}/api/Proxy/GetExecution?itemId=PASTE_ITEM_ID&proxyId={{proxyId}}
+GET {{Api_HostAddress}}/api/Proxies/{{proxyId}}/executions/PASTE_ITEM_ID
 Authorization: Bearer {{token}}
 
 ### 19. Export CSV -> text/csv; charset=utf-8, BOM, header "Time,Method,Path,Status,LatencyMs,UpstreamHost,Outcome,Error", newest-first, <=50k rows (X-Proxy-Export-Truncated: true when more)
-GET {{Api_HostAddress}}/api/Proxy/ExportExecutionsCsv?proxyId={{proxyId}}&statusClass=all
+GET {{Api_HostAddress}}/api/Proxies/{{proxyId}}/executions/export?statusClass=all
 Authorization: Bearer {{token}}
 
 ### 20. Unknown proxy id (no rows) -> 404 PROXY_NOT_FOUND
-POST {{Api_HostAddress}}/api/Proxy/GetOverview
+GET {{Api_HostAddress}}/api/Proxies/does-not-exist/overview
 Authorization: Bearer {{token}}
-Content-Type: application/json
 
-{ "proxyId": "does-not-exist" }
-
-### 21. GetAll now carries additive calls24h per card (0 when no executions in the window); every other field + totalCount unchanged
-POST {{Api_HostAddress}}/api/Proxy/GetAll
+### 21. The list now carries additive calls24h per card (0 when no executions in the window); every other field + totalCount unchanged
+GET {{Api_HostAddress}}/api/Proxies
 Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{}
 
 ### 22. Structured history -> each ConfigUpdate row carries `changes[]` (one { field, label, before, after } per edited field); Create/Delete rows have `changes: []`
-POST {{Api_HostAddress}}/api/Proxy/GetVersions
+GET {{Api_HostAddress}}/api/Proxies/{{proxyId}}/versions?pageSize=50&pageNumber=0
 Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{ "proxyId": "{{proxyId}}", "pageSize": 50, "pageNumber": 0 }
 
 ### 23. Update touching 2 fields -> one new version whose `changes` has 2 entries (see #22 to confirm)
-PUT {{Api_HostAddress}}/api/Proxy/Update
+PUT {{Api_HostAddress}}/api/Proxies/{{proxyId}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "itemId": "{{proxyId}}", "name": "Renamed Proxy", "upstream": "https://api.stripe.com/v2/charges", "methods": ["GET", "POST"], "headers": [], "query": [] }
 
 ### 24. Revert this change -> undoes only the fields version {{versionId}} moved; appends a Revert row; 200
-POST {{Api_HostAddress}}/api/Proxy/Revert
+POST {{Api_HostAddress}}/api/Proxies/{{proxyId}}/versions/{{versionId}}/revert
 Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{ "proxyId": "{{proxyId}}", "versionId": "{{versionId}}" }
 
 ### 25. Revert an older version after a field it touched moved again -> 409 PROXY_REVERT_CONFLICT { errors: { "<field>": "This field was changed again by a later version." } }
-POST {{Api_HostAddress}}/api/Proxy/Revert
+POST {{Api_HostAddress}}/api/Proxies/{{proxyId}}/versions/PASTE_OLDER_VERSION_ID/revert
 Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{ "proxyId": "{{proxyId}}", "versionId": "PASTE_OLDER_VERSION_ID" }
 
 ### 26. Revert a Create / Delete / no-op version -> 400 PROXY_VERSION_NOT_REVERTABLE
-POST {{Api_HostAddress}}/api/Proxy/Revert
+POST {{Api_HostAddress}}/api/Proxies/{{proxyId}}/versions/PASTE_CREATE_VERSION_ID/revert
 Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{ "proxyId": "{{proxyId}}", "versionId": "PASTE_CREATE_VERSION_ID" }
 
 # ---------------------------------------------------------------------------
 # Phase D-feature (PROXY-PLAN-per-method-feature.md): per-method overrides.
@@ -247,8 +202,8 @@ Content-Type: application/json
 # addresses `method:<M>:upstream | header:<key> | query:<key>`.
 # ---------------------------------------------------------------------------
 
-### 27. Update adding a POST override (different upstream + one header) -> 200; GetVersions (#22) shows a row whose `changes` carry `method:POST:upstream` and `method:POST:header:X-Trace`
-PUT {{Api_HostAddress}}/api/Proxy/Update
+### 27. Update adding a POST override (different upstream + one header) -> 200; the versions list (#22) shows a row whose `changes` carry `method:POST:upstream` and `method:POST:header:X-Trace`
+PUT {{Api_HostAddress}}/api/Proxies/{{proxyId}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -264,11 +219,11 @@ Content-Type: application/json
 }
 
 ### 28. Get -> `methodConfigs` echoes the POST override; the shared config is unchanged
-GET {{Api_HostAddress}}/api/Proxy/Get?itemId={{proxyId}}
+GET {{Api_HostAddress}}/api/Proxies/{{proxyId}}
 Authorization: Bearer {{token}}
 
 ### 29. Override for a method not in `methods` -> 400 PROXY_VALIDATION { errors.methodConfigs }
-PUT {{Api_HostAddress}}/api/Proxy/Update
+PUT {{Api_HostAddress}}/api/Proxies/{{proxyId}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -281,8 +236,8 @@ Content-Type: application/json
   "methodConfigs": [{ "method": "POST", "upstream": "https://api.stripe.com/v3/charges" }]
 }
 
-### 30. Update removing the override -> 200; GetVersions shows a row with `method:POST:upstream` (before set, after null) and `method:POST:header:X-Trace` (removed)
-PUT {{Api_HostAddress}}/api/Proxy/Update
+### 30. Update removing the override -> 200; the versions list shows a row with `method:POST:upstream` (before set, after null) and `method:POST:header:X-Trace` (removed)
+PUT {{Api_HostAddress}}/api/Proxies/{{proxyId}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -296,21 +251,15 @@ Content-Type: application/json
 }
 
 ### 31. Revert the removal from #30 -> 200; the POST override is restored
-POST {{Api_HostAddress}}/api/Proxy/Revert
+POST {{Api_HostAddress}}/api/Proxies/{{proxyId}}/versions/PASTE_VERSION_ID_FROM_30/revert
 Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{ "proxyId": "{{proxyId}}", "versionId": "PASTE_VERSION_ID_FROM_30" }
 
 ### 32. Change the override again, then Revert the older (#27) row -> 409 PROXY_REVERT_CONFLICT { errors: { "method:POST:upstream": "..." } }
-POST {{Api_HostAddress}}/api/Proxy/Revert
+POST {{Api_HostAddress}}/api/Proxies/{{proxyId}}/versions/PASTE_VERSION_ID_FROM_27/revert
 Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{ "proxyId": "{{proxyId}}", "versionId": "PASTE_VERSION_ID_FROM_27" }
 
 ### 33. Test an unsaved draft with a per-method override -> 200; the forward uses the POST override's upstream
-POST {{Api_HostAddress}}/api/Proxy/Test
+POST {{Api_HostAddress}}/api/Proxies/test
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -328,7 +277,7 @@ Content-Type: application/json
 ###############################################################################
 
 ### 34. Create a merge-demo proxy (POST only, one plain + one secret-ref body field) -> 201 { itemId }
-POST {{Api_HostAddress}}/api/Proxy/Create
+POST {{Api_HostAddress}}/api/Proxies
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -344,11 +293,11 @@ Content-Type: application/json
 }
 
 ### 35. Get -> `bodyMerge` echoes both rows; bodyMerge[1].isSecretRef == true
-GET {{Api_HostAddress}}/api/Proxy/Get?itemId={{proxyId}}
+GET {{Api_HostAddress}}/api/Proxies/{{proxyId}}
 Authorization: Bearer {{token}}
 
 ### 36. Test POST with a JSON object body -> 200; forwarded body is {"amount":10,"account":"acct_123","api_key":"<resolved>"}
-POST {{Api_HostAddress}}/api/Proxy/Test
+POST {{Api_HostAddress}}/api/Proxies/test
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -360,7 +309,7 @@ Content-Type: application/json
 }
 
 ### 37. Test POST with a top-level array body -> 422 RequestBodyNotMergeable, no upstream call
-POST {{Api_HostAddress}}/api/Proxy/Test
+POST {{Api_HostAddress}}/api/Proxies/test
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -372,7 +321,7 @@ Content-Type: application/json
 }
 
 ### 38. Test POST with an empty body -> 200; forwarded body is {"account":"acct_123","api_key":"<resolved>"}
-POST {{Api_HostAddress}}/api/Proxy/Test
+POST {{Api_HostAddress}}/api/Proxies/test
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -381,8 +330,8 @@ Content-Type: application/json
   "method": "POST"
 }
 
-### 39. Update adding a third body field -> 200; GetVersions shows a `body:currency` change pair (before null, after set)
-PUT {{Api_HostAddress}}/api/Proxy/Update
+### 39. Update adding a third body field -> 200; the versions list shows a `body:currency` change pair (before null, after set)
+PUT {{Api_HostAddress}}/api/Proxies/{{proxyId}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -400,14 +349,11 @@ Content-Type: application/json
 }
 
 ### 40. Revert the add from #39 -> 200; the `currency` body field is gone again
-POST {{Api_HostAddress}}/api/Proxy/Revert
+POST {{Api_HostAddress}}/api/Proxies/{{proxyId}}/versions/PASTE_VERSION_ID_FROM_39/revert
 Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{ "proxyId": "{{proxyId}}", "versionId": "PASTE_VERSION_ID_FROM_39" }
 
 ### 41. Create with duplicate body field keys -> 400 PROXY_VALIDATION { errors.bodyMerge: "Each body field key must be unique." }
-POST {{Api_HostAddress}}/api/Proxy/Create
+POST {{Api_HostAddress}}/api/Proxies
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -432,7 +378,7 @@ Content-Type: application/json
 ###############################################################################
 
 ### 42. Create a proxy whose Authorization header references a variable -> 201 { itemId }
-POST {{Api_HostAddress}}/api/Proxy/Create
+POST {{Api_HostAddress}}/api/Proxies
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -444,18 +390,18 @@ Content-Type: application/json
 }
 
 ### 43. Get -> headers[0].value is the verbatim "Bearer {{$VAR.stripe-key}}" (no isSecretRef field); GetOverview.credentialRefs lists "{{$VAR.stripe-key}}"
-GET {{Api_HostAddress}}/api/Proxy/Get?itemId={{proxyId}}
+GET {{Api_HostAddress}}/api/Proxies/{{proxyId}}
 Authorization: Bearer {{token}}
 
 ### 44. Test the proxy -> 200; the upstream (httpbin) echoes header "Authorization: Bearer <resolved value>", and the response body / execution row never contain that value
-POST {{Api_HostAddress}}/api/Proxy/Test
+POST {{Api_HostAddress}}/api/Proxies/test
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "proxyId": "{{proxyId}}", "method": "GET" }
 
 ### 45. Test a draft that references an unknown variable -> 502 { code: "PROXY_GATEWAY_VARIABLERESOLUTIONFAILED" }, no upstream call
-POST {{Api_HostAddress}}/api/Proxy/Test
+POST {{Api_HostAddress}}/api/Proxies/test
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -478,7 +424,7 @@ Content-Type: application/json
 ###############################################################################
 
 ### 46. Create a Select proxy that keeps only two fields -> 201 { itemId }
-POST {{Api_HostAddress}}/api/Proxy/Create
+POST {{Api_HostAddress}}/api/Proxies
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -491,18 +437,18 @@ Content-Type: application/json
 }
 
 ### 47. Get -> responseMode "Select", responseInclude ["data.id","data.items[].sku"]
-GET {{Api_HostAddress}}/api/Proxy/Get?itemId={{proxyId}}
+GET {{Api_HostAddress}}/api/Proxies/{{proxyId}}
 Authorization: Bearer {{token}}
 
 ### 48. Test -> 200; response body is the trimmed subset; responseFilterApplied true, responseFilterNote "Applied"
-POST {{Api_HostAddress}}/api/Proxy/Test
+POST {{Api_HostAddress}}/api/Proxies/test
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "proxyId": "{{proxyId}}", "method": "GET" }
 
 ### 49. Update to an empty include list -> 200; a live/Test call now relays {} (responseFilterNote "EmptyResult")
-PUT {{Api_HostAddress}}/api/Proxy/Update
+PUT {{Api_HostAddress}}/api/Proxies/{{proxyId}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -516,7 +462,7 @@ Content-Type: application/json
 }
 
 ### 50. Test a Select draft against a primitive 2xx JSON body -> 200, body relayed whole, responseFilterNote "WholePrimitive"
-POST {{Api_HostAddress}}/api/Proxy/Test
+POST {{Api_HostAddress}}/api/Proxies/test
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -531,7 +477,7 @@ Content-Type: application/json
 }
 
 ### 51. Test a Select draft against an upstream 503 -> 502 { code: "PROXY_GATEWAY_RESPONSEFILTERFAILED", upstreamStatusCode: 503 }
-POST {{Api_HostAddress}}/api/Proxy/Test
+POST {{Api_HostAddress}}/api/Proxies/test
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -546,7 +492,7 @@ Content-Type: application/json
 }
 
 ### 52. Test a Select draft against a text/html 2xx -> 502 PROXY_GATEWAY_RESPONSEFILTERFAILED ("...was not JSON (text/html)")
-POST {{Api_HostAddress}}/api/Proxy/Test
+POST {{Api_HostAddress}}/api/Proxies/test
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -561,7 +507,7 @@ Content-Type: application/json
 }
 
 ### 53. Create with an invalid field path -> 400 PROXY_VALIDATION { errors.responseInclude: "'items[0]' is not a valid field path." }
-POST {{Api_HostAddress}}/api/Proxy/Create
+POST {{Api_HostAddress}}/api/Proxies
 Authorization: Bearer {{token}}
 Content-Type: application/json
 

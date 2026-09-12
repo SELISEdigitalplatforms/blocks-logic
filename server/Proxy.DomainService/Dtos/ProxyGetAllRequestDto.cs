@@ -1,6 +1,6 @@
 namespace Proxy.DomainService.Dtos
 {
-    /// <summary>Body of <c>POST /api/Proxy/GetAll</c>. All fields optional; paging is clamped by the service.</summary>
+    /// <summary>Query string of <c>GET /api/Proxies</c>. All fields optional; paging is clamped by the service.</summary>
     public sealed class ProxyGetAllRequestDto
     {
         /// <summary>Case-insensitive substring match on name and slug.</summary>

@@ -3,7 +3,7 @@ using Blocks.Genesis;
 namespace Proxy.DomainService.Dtos
 {
     /// <summary>
-    /// Response of <c>POST /api/Proxy/GetAll</c>. <c>TotalCount</c> is the unpaged match count for the filter.
+    /// Response of <c>GET /api/Proxies</c>. <c>TotalCount</c> is the unpaged match count for the filter.
     /// </summary>
     public sealed class ProxyGetAllResponseDto : BaseQueryListResponse<List<ProxyListItemDto>>
     {

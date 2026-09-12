@@ -1,6 +1,6 @@
 namespace Proxy.DomainService.Dtos
 {
-    /// <summary>Body of <c>POST /api/Proxy/Create</c>.</summary>
+    /// <summary>Body of <c>POST /api/Proxies</c>.</summary>
     public sealed class ProxyCreateRequestDto
     {
         public string? Name { get; set; }

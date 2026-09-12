@@ -21,6 +21,7 @@ namespace BlocksTemplate.Api.Controllers
     {
         private readonly ISecretCatalogService _secretCatalogService;
 
+        /// <summary>Takes the secret catalog service.</summary>
         public SecretController(ISecretCatalogService secretCatalogService)
         {
             _secretCatalogService = secretCatalogService;

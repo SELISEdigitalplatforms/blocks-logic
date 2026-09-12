@@ -95,7 +95,8 @@ namespace Proxy.DomainService.Services
             }
 
             var since = WindowStart();
-            var totalCount = await _executionRepository.CountAsync(tenantId, proxyId, statusClass, since);
+            var asOf = ResolveAsOf(request.AsOfUtc, since);
+            var totalCount = await _executionRepository.CountAsync(tenantId, proxyId, statusClass, since, asOf);
 
             List<ProxyExecutionEntity> rows;
             var tail = await ResolveTailCursorAsync(tenantId, proxyId, request.AfterId, since);
@@ -109,7 +110,8 @@ namespace Proxy.DomainService.Services
                 // No afterId, or an unknown / out-of-window afterId (C8): serve the newest page. pageNumber is
                 // ignored whenever afterId was supplied at all (H3).
                 var effectivePage = string.IsNullOrWhiteSpace(request.AfterId) ? pageNumber : 0;
-                rows = await _executionRepository.GetPageAsync(tenantId, proxyId, statusClass, since, pageSize, effectivePage);
+                rows = await _executionRepository.GetPageAsync(
+                    tenantId, proxyId, statusClass, since, asOf, pageSize, effectivePage);
             }
 
             _logger.LogInformation(
@@ -120,6 +122,7 @@ namespace Proxy.DomainService.Services
             {
                 Data = rows.Select(ToListItem).ToList(),
                 TotalCount = totalCount,
+                AsOfUtc = asOf,
             };
         }
 
@@ -290,7 +293,12 @@ namespace Proxy.DomainService.Services
             }
 
             var since = WindowStart();
-            var matched = await _executionRepository.CountAsync(tenantId, proxyId, statusClass, since);
+
+            // The export is a single shot, so there is no paging session to pin: "now" as the upper bound is
+            // the same set of rows an unbounded count would see (no row is written with a future timestamp),
+            // and it keeps the count aligned with the rows the export itself reads.
+            var matched = await _executionRepository.CountAsync(
+                tenantId, proxyId, statusClass, since, _timeProvider.GetUtcNow().UtcDateTime);
             var rows = await _executionRepository.GetForExportAsync(tenantId, proxyId, statusClass, since, ExportRowCap);
             var truncated = matched > ExportRowCap;
 
@@ -311,6 +319,29 @@ namespace Proxy.DomainService.Services
         }
 
         private DateTime WindowStart() => _timeProvider.GetUtcNow().UtcDateTime - Window;
+
+        /// <summary>
+        /// The upper bound for a paging session: the caller's <c>asOfUtc</c> when it is usable, otherwise now.
+        /// A value in the future would let newly written rows leak in and reintroduce the drift it exists to
+        /// prevent; one older than the window start would return nothing at all. Both are clamped rather than
+        /// rejected — a stale pin from a tab left open overnight should quietly behave like a refresh, not 400.
+        /// </summary>
+        private DateTime ResolveAsOf(DateTime? requested, DateTime windowStart)
+        {
+            var now = _timeProvider.GetUtcNow().UtcDateTime;
+            if (requested is not { } asOf)
+            {
+                return now;
+            }
+
+            if (asOf.Kind != DateTimeKind.Utc)
+            {
+                asOf = asOf.Kind == DateTimeKind.Local ? asOf.ToUniversalTime() : DateTime.SpecifyKind(asOf, DateTimeKind.Utc);
+            }
+
+            if (asOf > now) return now;
+            return asOf < windowStart ? now : asOf;
+        }
 
         private async Task<bool> ProxyExistsOrHasRowsAsync(string tenantId, string proxyId)
         {

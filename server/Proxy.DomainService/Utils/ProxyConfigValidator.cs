@@ -16,6 +16,12 @@ namespace Proxy.DomainService.Utils
 
         public string Name { get; set; } = string.Empty;
 
+        /// <summary>
+        /// The slug <see cref="Name"/> derives to, via <see cref="ProxySlug"/>. Populated only when the name
+        /// is valid, so a caller can persist it without re-deriving. Never empty on a valid result.
+        /// </summary>
+        public string Slug { get; set; } = string.Empty;
+
         public string Upstream { get; set; } = string.Empty;
 
         public List<HttpMethodType> Methods { get; set; } = new();
@@ -132,6 +138,13 @@ namespace Proxy.DomainService.Utils
             result.ResponseInclude = normalized;
         }
 
+        /// <summary>
+        /// Trims the name, then checks it derives to a usable slug. The gateway route is
+        /// <c>/api/proxy/gateway/{slug}/{**path}</c>, so a name with no <c>[a-z0-9]</c> character at all
+        /// (<c>"!!!"</c>, or a fully non-Latin name) would yield an empty slug and create a proxy that no
+        /// client can ever reach &mdash; and the next such name would collide with it on the unique slug
+        /// index, surfacing as a <c>PROXY_SLUG_CONFLICT</c> naming an unrelated proxy. Reject it here instead.
+        /// </summary>
         private static void ValidateName(string? name, ProxyConfigValidationResult result)
         {
             var trimmed = (name ?? string.Empty).Trim();
@@ -139,6 +152,13 @@ namespace Proxy.DomainService.Utils
             if (trimmed.Length == 0 || trimmed.Length > MaxNameLength)
             {
                 result.Errors["name"] = $"Name is required and must be {MaxNameLength} characters or fewer.";
+                return;
+            }
+
+            result.Slug = ProxySlug.From(trimmed);
+            if (result.Slug.Length == 0)
+            {
+                result.Errors["name"] = "Name must contain at least one letter (a-z) or digit (0-9).";
             }
         }
 

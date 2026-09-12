@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
 using Blocks.Genesis;
+using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using Proxy.DomainService.Entities;
@@ -19,11 +20,13 @@ namespace Proxy.DomainService.Repositories
         private const string CollectionName = "Proxies";
 
         private readonly IDbContextProvider _dbContextProvider;
+        private readonly ILogger<ProxyRepository> _logger;
         private readonly ConcurrentDictionary<string, byte> _indexedTenants = new(StringComparer.Ordinal);
 
-        public ProxyRepository(IDbContextProvider dbContextProvider)
+        public ProxyRepository(IDbContextProvider dbContextProvider, ILogger<ProxyRepository> logger)
         {
             _dbContextProvider = dbContextProvider;
+            _logger = logger;
         }
 
         private IMongoCollection<ProxyDetailEntity> GetCollection(string tenantId)
@@ -49,8 +52,16 @@ namespace Proxy.DomainService.Repositories
                     new CreateIndexModel<ProxyDetailEntity>(
                         keys, new CreateIndexOptions { Unique = true, Name = "ux_proxy_slug" }));
             }
-            catch (MongoCommandException)
+            catch (MongoCommandException ex)
             {
+                // Swallowed so an index problem never blocks a write, but NOT silently: while this keeps
+                // failing, slug uniqueness rests on the check-then-write in ProxyService alone and the
+                // concurrent-create race is open again. That has to be diagnosable.
+                _logger.LogWarning(
+                    ex,
+                    "Proxy repository: could not create the unique slug index 'ux_proxy_slug' for tenant {TenantId}. "
+                    + "Slug uniqueness is not enforced by the database until this succeeds.",
+                    tenantId);
                 _indexedTenants.TryRemove(tenantId, out _);
             }
         }

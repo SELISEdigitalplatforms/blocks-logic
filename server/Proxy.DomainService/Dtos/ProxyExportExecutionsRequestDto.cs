@@ -1,6 +1,6 @@
 namespace Proxy.DomainService.Dtos
 {
-    /// <summary>Query string of <c>GET /api/Proxy/ExportExecutionsCsv</c> (SPEC &sect;3.4).</summary>
+    /// <summary>Query string of <c>GET /api/Proxies/{proxyId}/executions/export</c> (SPEC &sect;3.4).</summary>
     public sealed class ProxyExportExecutionsRequestDto
     {
         /// <summary>Required. The proxy whose last-24 h log to export.</summary>

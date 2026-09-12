@@ -126,7 +126,8 @@ namespace Proxy.DomainService.Services
                     400, ProxyErrorCodes.Validation, "The proxy configuration is invalid.", validation.Errors);
             }
 
-            var slug = ProxySlug.From(validation.Name);
+            // Derived by the validator, which has already rejected any name that yields an empty slug.
+            var slug = validation.Slug;
             var existing = await _proxyRepository.GetBySlugAsync(tenantId, slug);
             if (existing != null)
             {
@@ -209,6 +210,24 @@ namespace Proxy.DomainService.Services
                 _logger.LogWarning("Proxy update rejected: {ItemId} not found for tenant {TenantId}.", itemId, tenantId);
                 return ProxyMutationResponse.Failure(
                     404, ProxyErrorCodes.NotFound, $"Proxy '{itemId}' was not found.");
+            }
+
+            // The slug itself is immutable — the gateway path is a contract third-party clients hard-code, so
+            // a rename never moves it. But a rename INTO another proxy's slug would leave two rows whose names
+            // collapse to the same identity while the URL belongs to the other one, which is only confusing.
+            // Reject that the way Create does. A rename to a slug nobody owns is fine: name and slug are then
+            // allowed to drift, which is the price of immutability.
+            if (!string.Equals(validation.Slug, proxy.Slug, StringComparison.Ordinal))
+            {
+                var slugOwner = await _proxyRepository.GetBySlugAsync(tenantId, validation.Slug);
+                if (slugOwner != null && !string.Equals(slugOwner.ItemId, proxy.ItemId, StringComparison.Ordinal))
+                {
+                    _logger.LogWarning(
+                        "Proxy update {ItemId} for tenant {TenantId} rejected: name derives to slug '{Slug}', owned by {OwnerItemId}.",
+                        itemId, tenantId, validation.Slug, slugOwner.ItemId);
+                    return ProxyMutationResponse.Failure(
+                        409, ProxyErrorCodes.SlugConflict, $"A proxy named '{request.Name}' already exists.");
+                }
             }
 
             var beforeSnapshot = ProxyVersionFactory.SnapshotOf(proxy);

@@ -1,6 +1,6 @@
 namespace Proxy.DomainService.Dtos
 {
-    /// <summary>Query string of <c>GET /api/Proxy/GetExecution</c> (SPEC &sect;3.2) &mdash; one expanded row.</summary>
+    /// <summary>Query string of <c>GET /api/Proxies/{proxyId}/executions/{executionId}</c> (SPEC &sect;3.2) &mdash; one expanded row.</summary>
     public sealed class ProxyGetExecutionRequestDto
     {
         /// <summary>Required. The execution row's <see cref="Entities.ProxyExecutionEntity.ItemId"/>.</summary>

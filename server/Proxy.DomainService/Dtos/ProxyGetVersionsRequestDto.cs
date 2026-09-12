@@ -1,6 +1,6 @@
 namespace Proxy.DomainService.Dtos
 {
-    /// <summary>Body of <c>POST /api/Proxy/GetVersions</c> (the Change history tab).</summary>
+    /// <summary>Query string of <c>GET /api/Proxies/{proxyId}/versions</c> (the Change history tab).</summary>
     public sealed class ProxyGetVersionsRequestDto
     {
         public string? ProxyId { get; set; }

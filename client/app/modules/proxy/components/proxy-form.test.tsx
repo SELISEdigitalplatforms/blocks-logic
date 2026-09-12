@@ -20,6 +20,10 @@ const toasts = vi.hoisted(() => ({
 
 vi.mock("@/hooks/use-toast", () => toasts);
 
+/** See proxy-response-card.test.tsx: the name input is nested a level below its row. */
+const rowOf = (input: HTMLElement) =>
+  input.closest("[data-testid='response-field-row']") as HTMLElement;
+
 describe("ProxyForm", () => {
   beforeEach(() => {
     mockProxyService.resetMockStore();
@@ -103,7 +107,7 @@ describe("ProxyForm", () => {
 
     // tree seeds from responseInclude: location.name / current.temp_c / current.condition.text
     const nameInput = await screen.findByDisplayValue("name");
-    await user.click(within(nameInput.closest("div")!).getByRole("checkbox"));
+    await user.click(within(rowOf(nameInput)).getByRole("checkbox"));
 
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(onSuccess).toHaveBeenCalled());
@@ -135,7 +139,7 @@ describe("ProxyForm", () => {
     renderWithProviders(<Wrapper />);
 
     const nameInput = await screen.findByDisplayValue("name");
-    await user.click(within(nameInput.closest("div")!).getByRole("checkbox"));
+    await user.click(within(rowOf(nameInput)).getByRole("checkbox"));
 
     // simulate a background refetch handing down a new object with identical content
     await user.click(screen.getByRole("button", { name: "refetch" }));

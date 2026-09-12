@@ -53,22 +53,22 @@ describe("Scheduler Feature", () => {
   });
 
   describe("ScheduleForm Component", () => {
-    it("renders create mode with empty default fields and Save Job button", () => {
+    it("renders create mode with empty default fields and a Create button", () => {
       renderWithProviders(
         <MemoryRouter>
           <ScheduleForm mode="create" />
         </MemoryRouter>,
       );
 
-      expect(screen.getByRole("heading", { name: "Schedule Job" })).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "Create Schedule" })).toBeTruthy();
       expect((screen.getByPlaceholderText("Schedule name") as HTMLInputElement).value).toBe("");
       expect(
         (screen.getByPlaceholderText("https://api.example.com/webhook") as HTMLInputElement).value,
       ).toBe("");
-      expect(screen.getByRole("button", { name: /save job/i })).toBeTruthy();
+      expect(screen.getByRole("button", { name: /^create$/i })).toBeTruthy();
     });
 
-    it("renders edit mode with pre-populated values and Save Job button", () => {
+    it("renders edit mode with pre-populated values and a Save Changes button", () => {
       renderWithProviders(
         <MemoryRouter>
           <ScheduleForm mode="edit" schedule={mockSchedule} />
@@ -87,7 +87,7 @@ describe("Scheduler Feature", () => {
         (screen.getByPlaceholderText("https://api.example.com/webhook") as HTMLInputElement).value,
       ).toBe("https://example.com/api/webhook");
       expect(screen.getByDisplayValue("0 9 * * *")).toBeTruthy();
-      expect(screen.getByRole("button", { name: /save job/i })).toBeTruthy();
+      expect(screen.getByRole("button", { name: /save changes/i })).toBeTruthy();
     });
 
     it("updates cron expression when preset chips are clicked", async () => {
@@ -203,7 +203,7 @@ describe("Scheduler Feature", () => {
         </MemoryRouter>,
       );
 
-      expect(screen.getByRole("heading", { name: "Schedule Job" })).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "Create Schedule" })).toBeTruthy();
     });
 
     it("renders edit form on edit mode after fetching schedule", async () => {
