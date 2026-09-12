@@ -62,6 +62,9 @@ const buildProxy = (values: ProxyFormValues, existing?: Proxy): Proxy => {
         };
       })
       .filter((entry) => entry.upstream || entry.headers || entry.query),
+    // The form has no route editor yet, so a save carries the proxy's existing routes through
+    // untouched. Defaulting to [] here would silently narrow an existing proxy to its base path.
+    routes: existing?.routes ?? [],
     responseMode: values.responseMode === "select" ? "select" : "all",
     responseInclude:
       values.responseMode === "select"
