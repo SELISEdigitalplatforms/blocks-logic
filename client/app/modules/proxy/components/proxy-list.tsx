@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { useProjectStore, useScopedPath } from "@seliseblocks/genesis-os";
 import {
   Activity,
+  ArrowRight,
   ArrowRightFromLine,
   EllipsisVertical,
   Pause,
@@ -34,27 +35,29 @@ import { VariablesButton } from "./variables-button";
 type Props = {
   proxies: Proxy[];
   isLoading: boolean;
+  /** Lets the list screen step back a page when the deleted row was the page's last one. */
+  onProxyDeleted?: () => void;
 };
 
 const ProxyListSkeleton = () => (
-  <div className="grid gap-3">
+  <div className="grid gap-2">
     {Array.from({ length: 4 }).map((_, index) => (
       <Card key={index} className="p-0">
-        <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0 flex-1 space-y-3">
+        <CardContent className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0 flex-1 space-y-2">
             <div className="flex items-center gap-2">
               <Skeleton className="h-5 w-40" />
-              <Skeleton className="h-5 w-16" />
+              <Skeleton className="h-5 w-14" />
             </div>
-            <Skeleton className="h-4 w-full max-w-sm" />
             <div className="flex items-center gap-2">
-              <Skeleton className="h-6 w-12" />
+              <Skeleton className="h-4 w-12" />
               <Skeleton className="h-4 w-full max-w-md" />
             </div>
           </div>
-          <div className="flex items-center justify-between gap-5 lg:justify-end">
-            <Skeleton className="h-4 w-24" />
-            <Skeleton className="h-6 w-10 rounded-full" />
+          <div className="flex items-center justify-between gap-4 lg:justify-end">
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-5 w-9 rounded-full" />
+            <Skeleton className="h-8 w-8" />
           </div>
         </CardContent>
       </Card>
@@ -62,7 +65,7 @@ const ProxyListSkeleton = () => (
   </div>
 );
 
-export const ProxyList = ({ proxies, isLoading }: Props) => {
+export const ProxyList = ({ proxies, isLoading, onProxyDeleted }: Props) => {
   const navigate = useNavigate();
   const selectedProject = useProjectStore().selectedProject;
   const scoped = useScopedPath();
@@ -105,39 +108,36 @@ export const ProxyList = ({ proxies, isLoading }: Props) => {
 
   return (
     <>
-      <div className="grid gap-3">
+      <div className="grid gap-2">
         {proxies.map((proxy) => (
           <Card
             key={proxy.id}
-            className="group rounded-xl p-0 transition-all duration-200 hover:border-primary/40 hover:bg-card hover:shadow-[0_8px_24px_rgba(59,130,246,0.18)] focus-within:border-primary/40 focus-within:bg-card focus-within:shadow-[0_8px_24px_rgba(59,130,246,0.18)]"
+            className="group rounded-lg p-0 transition-colors duration-150 hover:border-primary/40 focus-within:border-primary/40"
           >
-            <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
+            <CardContent className="flex flex-col gap-2 px-4 py-3 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
               <button
                 type="button"
-                className="min-w-0 flex-1 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="min-w-0 flex-1 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={() => navigate(scoped(`proxy/${proxy.id}`))}
               >
-                <div className="min-w-0 space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-base font-semibold transition-colors group-hover:text-primary group-focus-within:text-primary">
-                      {proxy.name}
-                    </h3>
-                    <ProxyStatusBadge proxy={proxy} />
-                  </div>
-                  <p className="truncate font-mono text-xs text-muted-foreground">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <h3 className="truncate text-sm font-semibold transition-colors group-hover:text-primary group-focus-within:text-primary">
+                    {proxy.name}
+                  </h3>
+                  <ProxyStatusBadge proxy={proxy} />
+                </div>
+                <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                  <ProxyMethodChips methods={proxy.methods} />
+                  <span className="min-w-0 truncate font-mono">
                     {getProxyClientUrl(selectedProject, proxy.slug)}
-                  </p>
-                  <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <ProxyMethodChips methods={proxy.methods} />
-                    <p className="min-w-0 truncate text-sm text-muted-foreground">
-                      {proxy.upstreamMasked}
-                    </p>
-                  </div>
+                  </span>
+                  <ArrowRight className="h-3 w-3 shrink-0 opacity-60" aria-hidden="true" />
+                  <span className="min-w-0 truncate">{proxy.upstreamMasked}</span>
                 </div>
               </button>
-              <div className="flex items-center justify-between gap-5 lg:justify-end">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Activity className="h-4 w-4" />
+              <div className="flex shrink-0 items-center justify-between gap-4 lg:justify-end">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Activity className="h-3.5 w-3.5" />
                   <span>{proxy.calls24h.toLocaleString()} calls 24h</span>
                 </div>
                 <Switch
@@ -203,6 +203,7 @@ export const ProxyList = ({ proxies, isLoading }: Props) => {
           if (!value) setProxyToDelete(null);
         }}
         proxy={proxyToDelete}
+        onDeleted={onProxyDeleted}
       />
     </>
   );
