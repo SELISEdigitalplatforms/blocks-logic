@@ -5,8 +5,9 @@ export const NodeGuideTriggerWebhookV1 = () => (
     title="Webhook trigger"
     description="Use this trigger to start a workflow when another app sends JSON to the webhook URL. The incoming body becomes the data passed to the next node."
     steps={[
-      "Use the Test URL while building the workflow, or the Production URL after the workflow is published.",
-      "Send a POST request with a JSON body. A JSON object creates one workflow item, and a JSON array creates one item per array entry.",
+      "Use the Webhook URL: Test while building the workflow, or Production after the workflow is published.",
+      "Send a POST request with a JSON body and include header x-blocks-key set to your project key. A JSON object creates one workflow item, and a JSON array creates one item per array entry. The header name is case-insensitive.",
+      "The Deprecated Webhook URL still works and embeds the project key in the path, so it does not need x-blocks-key. Prefer the Webhook URL for new integrations.",
       "Choose the authentication level: None for open webhooks, Blocks Authentication for signed-in callers, or Blocks Authorization when roles or permissions must be checked.",
       "For Blocks Authorization, choose the organization, authorization mode, and any required roles or permissions.",
       "Choose whether the webhook should respond immediately or wait until the last node finishes.",
