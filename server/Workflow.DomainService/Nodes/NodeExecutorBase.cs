@@ -13,12 +13,21 @@ namespace Workflow.DomainService.Nodes
 
         private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(2);
 
+        // Saved node parameters can carry an explicit JSON null for a field that used to be, or was
+        // never, set (e.g. an older workflow saved before a "haveQuery" toggle existed). Newtonsoft
+        // cannot assign null to a non-nullable value type (bool, int, ...) and throws instead of
+        // falling back to the property's declared default, so nulls are ignored on read here.
+        private static readonly Newtonsoft.Json.JsonSerializerSettings ParameterDeserializationSettings = new()
+        {
+            NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore,
+        };
+
         protected abstract Task<NodeExecutionResult> ExecuteAsync(NodeExecutionContext context, TParameters? parameters);
 
         public async Task<NodeExecutionResult> RunAsync(NodeExecutionContext context)
         {
             var json = context.Parameters.ToJson();
-            var parameters = Newtonsoft.Json.JsonConvert.DeserializeObject<TParameters>(json);
+            var parameters = Newtonsoft.Json.JsonConvert.DeserializeObject<TParameters>(json, ParameterDeserializationSettings);
             return await ExecuteAsync(context, parameters);
         }
 
