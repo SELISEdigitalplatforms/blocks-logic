@@ -134,9 +134,12 @@ namespace Workflow.DomainService.Services
         }
 
         /// <summary>
-        /// Fetches execution, validates status, checks readiness, creates node metadata,
-        /// resolves inputs/ancestors, selects executor, and builds execution context.
-        /// Returns null if the node should be skipped.
+        /// Fetches execution, validates status, checks readiness, and creates + persists the node's
+        /// "Running" execution row. Returns null if the node should be skipped. Deliberately does nothing
+        /// past the point a node execution row could plausibly exist in the DB: anything riskier (input /
+        /// ancestor resolution, executor lookup) lives in <see cref="BuildNodeExecutionContextAsync"/>, which
+        /// runs inside <see cref="ExecuteNodeAsync"/>'s try/catch so a failure there still marks the node
+        /// Failed instead of leaving it orphaned at Running.
         /// </summary>
         private async Task<(WorkflowExecutionEntity execution, NodeEntity node, NodeExecutionEntity nodeExecution)?> PrepareNodeRowAsync(AddExcuationNodeEvent dto)
         {
@@ -273,7 +276,10 @@ namespace Workflow.DomainService.Services
 
             var incomingEdges = execution.WorkflowSnapshot.Edges.Where(e => e.Target == node.Id).ToList();
             // Fetch parent items from repository
-            var parentNodeIds = incomingEdges.Select(e => new Dictionary<string, string> { { "NodeId", e.Source }, { "Branch", e.SourceHandle ?? "main" } }).Distinct().ToList();
+            var parentNodeIds = incomingEdges
+                .Select(e => new Dictionary<string, string> { { "NodeId", e.Source }, { "Branch", ResolveEdgeBranch(e.SourceHandle) } })
+                .Distinct()
+                .ToList();
 
             var parentItems = await _workflowExecutionRepository.GetItemsByNodeIdsAsync(
                 execution.Id,
@@ -305,7 +311,7 @@ namespace Workflow.DomainService.Services
 
             // seed with direct incoming edges
             var queue = new Queue<(string NodeId, string Branch)>(
-                incomingEdges.Select(e => (e.Source, e.SourceHandle ?? "main"))
+                incomingEdges.Select(e => (e.Source, ResolveEdgeBranch(e.SourceHandle)))
             );
 
             while (queue.Count > 0)
@@ -327,7 +333,7 @@ namespace Workflow.DomainService.Services
                     .Where(e => e.Target == currentNode)
                     .Select(e => (
                         NodeId: e.Source,
-                        Branch: e.SourceHandle ?? "main"
+                        Branch: ResolveEdgeBranch(e.SourceHandle)
                     ));
 
                 foreach (var p in parents)
@@ -364,6 +370,11 @@ namespace Workflow.DomainService.Services
 
             }
             return result;
+        }
+
+        private static string ResolveEdgeBranch(string? sourceHandle)
+        {
+            return string.IsNullOrWhiteSpace(sourceHandle) ? "source" : sourceHandle;
         }
 
         /// <summary>
