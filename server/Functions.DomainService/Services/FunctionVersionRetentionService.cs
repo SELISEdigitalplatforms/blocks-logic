@@ -53,20 +53,20 @@ namespace Functions.DomainService.Services
 
         private readonly IFunctionVersionRepository _versionRepository;
         private readonly IFunctionRunRepository _runRepository;
-        private readonly IDatabase _db;
+        private readonly IFunctionImagePinService _imagePins;
         private readonly IConfiguration _configuration;
         private readonly ILogger<FunctionVersionRetentionService> _logger;
 
         public FunctionVersionRetentionService(
             IFunctionVersionRepository versionRepository,
             IFunctionRunRepository runRepository,
-            ICacheClient cache,
+            IFunctionImagePinService imagePins,
             IConfiguration configuration,
             ILogger<FunctionVersionRetentionService> logger)
         {
             _versionRepository = versionRepository;
             _runRepository = runRepository;
-            _db = cache.CacheDatabase();
+            _imagePins = imagePins;
             _configuration = configuration;
             _logger = logger;
         }
@@ -127,13 +127,7 @@ namespace Functions.DomainService.Services
                 .Where(d => !string.IsNullOrEmpty(d))
                 .ToHashSet(StringComparer.Ordinal);
 
-            foreach (var digest in doomed
-                .Select(v => v.ImageDigest)
-                .Where(d => !string.IsNullOrEmpty(d) && !stillReferenced.Contains(d))
-                .Distinct(StringComparer.Ordinal))
-            {
-                await _db.SetRemoveAsync(FunctionQueueKeys.ImagesKeep, digest);
-            }
+            await _imagePins.ReleaseAsync(doomed.Select(v => v.ImageDigest), stillReferenced);
         }
     }
 }

@@ -49,6 +49,9 @@ namespace Functions.DomainService.Dtos.Requests
 
     public sealed class TestFunctionRequestDto
     {
+        /// <summary>Builds again even when this source has a successful build, for a cached image that is missing or wrong.</summary>
+        public bool Rebuild { get; set; }
+
         public string FunctionId { get; set; } = string.Empty;
         public string? InputJson { get; set; }
         public int? WaitTimeoutSeconds { get; set; }
@@ -56,6 +59,9 @@ namespace Functions.DomainService.Dtos.Requests
 
     public sealed class DeployFunctionRequestDto
     {
+        /// <summary>Builds again even when this source has a successful build, rather than deploying the cached image.</summary>
+        public bool Rebuild { get; set; }
+
         public string FunctionId { get; set; } = string.Empty;
         public string? Note { get; set; }
     }

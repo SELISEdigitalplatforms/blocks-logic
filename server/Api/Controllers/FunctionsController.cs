@@ -60,9 +60,12 @@ namespace BlocksTemplate.Api.Controllers
 
         [HttpDelete]
         [ProtectedEndPoint("blocks-logic::function::manage")]
-        public async Task<BaseResponse> Delete([FromQuery] string functionId)
+        public async Task<BaseResponse> Delete([FromQuery] string functionId, [FromQuery] bool force = false)
         {
-            var deleted = await _functionService.DeleteAsync(GetTenantId(), functionId, GetUserId(), GetEmail());
+            // force: delete even though workflows still have a step pointing at this function.
+            // Those steps then fail at their next run, which is the caller's decision to make.
+            var deleted = await _functionService.DeleteAsync(
+                GetTenantId(), functionId, GetUserId(), GetEmail(), force);
             return new BaseResponse { IsSuccess = deleted };
         }
 

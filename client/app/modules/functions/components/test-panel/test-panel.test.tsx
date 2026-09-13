@@ -68,6 +68,59 @@ describe("TestPanel", () => {
     expect(testFunction).not.toHaveBeenCalled();
   });
 
+  it("shows the run's own error message, not only the code's friendly summary", async () => {
+    const raw =
+      "the function module failed to load: Cannot find package 'ky' imported from /function/index.js";
+    testFunction.mockResolvedValue({ runId: "run_1", status: "Queued" });
+    getRun.mockResolvedValue({
+      id: "run_1",
+      status: "Failed",
+      errorCode: "UserRuntimeError",
+      errorMessage: raw,
+      attempts: [],
+    });
+
+    renderPanel();
+    await userEvent.click(screen.getByRole("button", { name: /run test/i }));
+
+    await waitFor(() => expect(screen.getByText(raw)).toBeTruthy());
+    expect(screen.getByText("UserRuntimeError")).toBeTruthy();
+  });
+
+  it("asks for a rebuild only when Rebuild image is used", async () => {
+    testFunction.mockResolvedValue({ runId: "run_1", status: "Queued" });
+
+    renderPanel();
+    await userEvent.click(screen.getByRole("button", { name: /run test/i }));
+
+    // A plain test reuses the cached image; that is what makes Test then Deploy cheap.
+    expect(testFunction).toHaveBeenLastCalledWith(
+      expect.objectContaining({ functionId: "fn_1", rebuild: false }),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /rebuild image/i }));
+
+    expect(testFunction).toHaveBeenLastCalledWith(
+      expect.objectContaining({ functionId: "fn_1", rebuild: true }),
+    );
+  });
+
+  it("does not keep rebuilding when it re-runs itself after a build", async () => {
+    // The rebuild is the request, not a mode: repeating it on the automatic re-run would build
+    // the same source twice for one click, and again after that one.
+    testFunction
+      .mockResolvedValueOnce({ runId: "", status: "", buildId: "build_1" })
+      .mockResolvedValueOnce({ runId: "run_1", status: "Queued" });
+    getBuild.mockResolvedValue({ itemId: "build_1", status: "Succeeded" });
+
+    renderPanel();
+    await userEvent.click(screen.getByRole("button", { name: /rebuild image/i }));
+
+    await waitFor(() => expect(testFunction).toHaveBeenCalledTimes(2));
+    expect(testFunction).toHaveBeenNthCalledWith(1, expect.objectContaining({ rebuild: true }));
+    expect(testFunction).toHaveBeenNthCalledWith(2, expect.objectContaining({ rebuild: false }));
+  });
+
   it("runs the test again by itself once the build succeeds", async () => {
     testFunction
       .mockResolvedValueOnce({ runId: "", status: "", buildId: "build_1" })

@@ -75,7 +75,13 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
     isBuildInFlight ||
     (!!run && !TERMINAL_RUN_STATUSES.includes(run.status));
 
-  const handleRun = useCallback(async () => {
+  /**
+   * `rebuild` builds the image again instead of reusing the one cached for this source. Needed
+   * because a successful build is reused for ever for the same source hash: with no lockfile, a
+   * dependency's newer patch is only picked up by a build, and a cached image that is broken
+   * rather than missing has no other way out than editing the source until its hash changes.
+   */
+  const handleRun = useCallback(async ({ rebuild = false }: { rebuild?: boolean } = {}) => {
     try {
       JSON.parse(testInput || "{}");
     } catch {
@@ -88,7 +94,7 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
         const saved = await onBeforeRun();
         if (!saved) return;
       }
-      const response = await mutateAsync({ functionId, inputJson: testInput });
+      const response = await mutateAsync({ functionId, inputJson: testInput, rebuild });
       if (response.runId) {
         setBuildId(null);
         setRunId(response.runId);
@@ -149,7 +155,7 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
   ]
     .filter(Boolean)
     .join(" · ");
-  const explanation = explainRunError(run?.errorCode, run?.errorMessage);
+  const explanation = explainRunError(run?.errorCode);
 
   return (
     <div className="flex flex-col gap-3">
@@ -181,6 +187,16 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
               Use last run input
             </Button>
           </div>
+          <Button
+            variant="ghost"
+            size="xs"
+            className="px-2 text-xs"
+            disabled={isActive}
+            title="Resolve dependencies and build the image again instead of reusing the cached one"
+            onClick={() => void handleRun({ rebuild: true })}
+          >
+            Rebuild image
+          </Button>
         </div>
         <div className="border-t px-4 py-3">
           <Button className="w-full gap-1.5" disabled={isActive} onClick={() => void handleRun()}>
@@ -238,11 +254,22 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
             ))}
           </div>
 
-          {explanation && (
-            <p className="border-b bg-error/5 px-4 py-2.5 text-xs leading-relaxed text-error">
-              {run?.errorCode && <span className="font-mono font-semibold">{run.errorCode}</span>}{" "}
-              {explanation}
-            </p>
+          {(run?.errorCode || run?.errorMessage) && (
+            <div className="flex flex-col gap-1.5 border-b bg-error/5 px-4 py-2.5">
+              {run?.errorCode && (
+                <span className="font-mono text-xs font-semibold text-error">{run.errorCode}</span>
+              )}
+              {/* Verbatim, wrapped and selectable: the message the runner sent is the thing worth
+                  reading, and the hint under it is only a hint. */}
+              {run?.errorMessage && (
+                <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-error">
+                  {run.errorMessage}
+                </pre>
+              )}
+              {explanation && (
+                <p className="text-xs leading-relaxed text-medium-emphasis">{explanation}</p>
+              )}
+            </div>
           )}
 
           <CardContent className="max-h-52 overflow-auto bg-surface-app p-4">
@@ -260,7 +287,15 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
                     >
                       {line.level}
                     </span>
-                    <span className="min-w-0 break-words">{line.message}</span>
+                    <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">
+                      {line.message}
+                      {/* ctx.log's structured payload, which was being dropped on the floor. */}
+                      {line.data && (
+                        <span className="mt-0.5 block whitespace-pre-wrap break-words text-low-emphasis">
+                          {line.data}
+                        </span>
+                      )}
+                    </span>
                   </div>
                 ))}
               </div>

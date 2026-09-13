@@ -195,7 +195,7 @@ namespace Functions.DomainService.Services
             // handing back the build id — the client polls it and shows the build's own progress.
             var testWaitSeconds = _configuration.GetValue("Functions:TestBuildWaitSeconds", 5);
             var build = await _buildService.EnsureImageAsync(
-                tenantId, function, cancellationToken, testWaitSeconds);
+                tenantId, function, cancellationToken, testWaitSeconds, request.Rebuild);
 
             if (build.Status is BuildStatus.Queued or BuildStatus.Building)
             {
@@ -322,6 +322,7 @@ namespace Functions.DomainService.Services
                 FunctionId = function.ItemId,
                 VersionId = version?.ItemId,
                 VersionNumber = version?.Number ?? 0,
+                ImageDigest = image,
                 TenantId = tenantId,
                 Status = RunStatus.Queued,
                 InvokedBy = invokedBy,

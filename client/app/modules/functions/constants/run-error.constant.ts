@@ -14,17 +14,23 @@ export const RUN_ERROR_EXPLANATIONS: Record<RunErrorCode, string> = {
   ResultTooLarge: "The returned value is over 5 MB. Return a reference instead of the payload.",
   ResultNotSerializable:
     "The returned value could not be turned into JSON. Return plain objects, arrays and primitives.",
-  ImagePullFailed: "The deployed image could not be pulled. Deploy again to rebuild it.",
+  ImagePullFailed:
+    "The image could not be pulled — it is no longer on the registry. The build behind it has been invalidated, so testing or deploying again builds a new one.",
   TimedOut:
     "The run passed its timeout and was stopped. Raise the timeout (max 60 s) or do less work per call.",
   SandboxStartFailed: "The sandbox failed to start. Nothing ran, so a replay is safe.",
   OutputActionFailed: "The function returned successfully, but an output action did not deliver.",
 };
 
-export const explainRunError = (
-  errorCode?: RunErrorCode | string | null,
-  errorMessage?: string | null,
-) => {
-  if (!errorCode) return errorMessage ?? null;
-  return RUN_ERROR_EXPLANATIONS[errorCode as RunErrorCode] ?? errorMessage ?? null;
+/**
+ * The hint for a code, or null when there is no hint to add.
+ *
+ * It deliberately no longer falls back to the raw message: callers render that themselves, and
+ * returning it here made the two indistinguishable — a known code showed the friendly sentence
+ * *instead of* what actually happened, so "Cannot find package 'ky' imported from /function/index.js"
+ * could only be read in the network tab.
+ */
+export const explainRunError = (errorCode?: RunErrorCode | string | null) => {
+  if (!errorCode) return null;
+  return RUN_ERROR_EXPLANATIONS[errorCode as RunErrorCode] ?? null;
 };

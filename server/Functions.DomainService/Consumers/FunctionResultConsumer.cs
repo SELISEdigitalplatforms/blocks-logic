@@ -36,6 +36,7 @@ namespace Functions.DomainService.Consumers
         private readonly IFunctionRunRepository _runRepository;
         private readonly IFunctionRunLogRepository _logRepository;
         private readonly IFunctionVersionRepository _versionRepository;
+        private readonly Services.IFunctionImageRecoveryService _imageRecovery;
         private readonly IFunctionRepository _functionRepository;
         private readonly Services.IOutputActionProcessor _outputActionProcessor;
         private readonly ILogger<FunctionResultConsumer> _logger;
@@ -45,6 +46,7 @@ namespace Functions.DomainService.Consumers
             IFunctionRunRepository runRepository,
             IFunctionRunLogRepository logRepository,
             IFunctionVersionRepository versionRepository,
+            Services.IFunctionImageRecoveryService imageRecovery,
             IFunctionRepository functionRepository,
             Services.IOutputActionProcessor outputActionProcessor,
             ILogger<FunctionResultConsumer> logger)
@@ -53,6 +55,7 @@ namespace Functions.DomainService.Consumers
             _runRepository = runRepository;
             _logRepository = logRepository;
             _versionRepository = versionRepository;
+            _imageRecovery = imageRecovery;
             _functionRepository = functionRepository;
             _outputActionProcessor = outputActionProcessor;
             _logger = logger;
@@ -179,11 +182,14 @@ namespace Functions.DomainService.Consumers
             await _runRepository.ApplyResultAsync(
                 tenantId, runId, attempt, status, errorCode, entry.Get("errorMessage"),
                 result, ParseNullableInt(entry.Get("exitCode")), ParseNullableLong(entry.Get("durationMs")),
-                ParseNullableLong(entry.Get("peakMemoryBytes")), entry.Get("runnerId"), startedAt, completedAt,
+                ParseNullableLong(entry.Get("peakMemoryBytes")), ParseNullableLong(entry.Get("cpuUsageMs")),
+                entry.Get("runnerId"), startedAt, completedAt,
                 entry.GetBool("truncated"), cancellationToken);
 
             var run = await _runRepository.GetByIdAsync(tenantId, runId, cancellationToken);
             if (run is null) return;
+
+            await _imageRecovery.HandleRunOutcomeAsync(tenantId, run, errorCode, cancellationToken);
 
             if (status == RunStatus.Succeeded)
             {

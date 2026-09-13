@@ -80,6 +80,43 @@ namespace Functions.DomainService.Repositories
                 .FirstOrDefaultAsync(cancellationToken);
         }
 
+        public async Task<IReadOnlyList<FunctionBuildEntity>> GetAllForFunctionAsync(
+            string tenantId, string functionId, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(functionId)) return [];
+
+            return await Collection(tenantId)
+                .Find(b => b.FunctionId == functionId)
+                .SortByDescending(b => b.CreatedDate)
+                .ToListAsync(cancellationToken);
+        }
+
+        public async Task<long> DeleteAllForFunctionAsync(
+            string tenantId, string functionId, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(functionId)) return 0;
+
+            var result = await Collection(tenantId).DeleteManyAsync(b => b.FunctionId == functionId, cancellationToken);
+            return result.DeletedCount;
+        }
+
+        public async Task<long> InvalidateByImageDigestAsync(
+            string tenantId, string imageDigest, string reason, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(imageDigest)) return 0;
+
+            var filter = Builders<FunctionBuildEntity>.Filter.Eq(b => b.ImageDigest, imageDigest)
+                       & Builders<FunctionBuildEntity>.Filter.Eq(b => b.Status, BuildStatus.Succeeded);
+
+            var update = Builders<FunctionBuildEntity>.Update
+                .Set(b => b.Status, BuildStatus.Failed)
+                .Set(b => b.ErrorMessage, reason)
+                .Set(b => b.LastUpdatedDate, DateTime.UtcNow);
+
+            var result = await Collection(tenantId).UpdateManyAsync(filter, update, cancellationToken: cancellationToken);
+            return result.ModifiedCount;
+        }
+
         public async Task CreateAsync(string tenantId, FunctionBuildEntity build, CancellationToken cancellationToken = default)
         {
             await EnsureIndexesAsync(tenantId, cancellationToken);

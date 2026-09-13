@@ -52,6 +52,9 @@ namespace Functions.DomainService.Repositories
             string tenantId, IReadOnlyCollection<string> functionIds, DateTime since,
             CancellationToken cancellationToken = default);
 
+        /// <summary>Removes every run of one function. Returns how many went.</summary>
+        Task<long> DeleteAllForFunctionAsync(string tenantId, string functionId, CancellationToken cancellationToken = default);
+
         Task CreateAsync(string tenantId, FunctionRunEntity run, CancellationToken cancellationToken = default);
 
 
@@ -71,6 +74,7 @@ namespace Functions.DomainService.Repositories
             int? exitCode,
             long? durationMs,
             long? peakMemoryBytes,
+            long? cpuUsageMs,
             string? runnerId,
             DateTime? startedAt,
             DateTime completedAt,

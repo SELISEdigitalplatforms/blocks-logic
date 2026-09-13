@@ -87,6 +87,8 @@ export interface IRunDetail {
   completedAt?: string | null;
   durationMs?: number | null;
   peakMemoryBytes?: number | null;
+  /** Total CPU time the sandbox consumed for the run, in milliseconds — cumulative, not a percentage. */
+  cpuUsageMs?: number | null;
   exitCode?: number | null;
   logsTruncated: boolean;
   attempts: IRunAttempt[];
@@ -144,4 +146,6 @@ export interface ITestFunctionPayload {
   functionId: string;
   inputJson?: string | null;
   waitTimeoutSeconds?: number | null;
+  /** Build again instead of reusing this source's cached image — for one that is missing or wrong. */
+  rebuild?: boolean;
 }

@@ -48,6 +48,26 @@ export const formatDuration = (durationMs?: number | null): string => {
   return `${Math.floor(durationMs / 60_000)} min ${Math.round((durationMs % 60_000) / 1000)} s`;
 };
 
+/**
+ * How long the runner had the run in hand, start to finish.
+ *
+ * Deliberately wider than `durationMs`, which is the sandbox's own stopwatch — the runner
+ * stamps `startedAt` when it picks the run up, then resolves the image and creates the
+ * container before that stopwatch starts. Without this the run detail page shows a duration
+ * visibly narrower than the gap between its own RUNNING and terminal markers, and the two look
+ * like a contradiction rather than two different spans.
+ *
+ * Null unless both stamps are present and parse to a span that moves forward.
+ */
+export const runnerSpanMs = (
+  startedAt?: string | null,
+  completedAt?: string | null,
+): number | null => {
+  if (!startedAt || !completedAt) return null;
+  const span = new Date(completedAt).getTime() - new Date(startedAt).getTime();
+  return Number.isFinite(span) && span > 0 ? span : null;
+};
+
 export const formatMegabytes = (bytes?: number | null): string =>
   bytes == null ? "—" : `${Math.round(bytes / (1024 * 1024))} MB`;
 

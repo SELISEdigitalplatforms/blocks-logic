@@ -1,6 +1,7 @@
 using Blocks.Secrets;
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -24,8 +25,15 @@ namespace XUnitTest.Proxy
 
         public ProxyVariableResolverTests()
         {
+            // ProxyVariableResolver takes IServiceScopeFactory (it's a singleton resolving the scoped
+            // ISecretService per call) — a tiny DI container stands in for the app's, same as production
+            // wires ISecretService.
+            var services = new ServiceCollection();
+            services.AddSingleton<ISecretService>(_secrets);
+            var provider = services.BuildServiceProvider();
+
             _resolver = new ProxyVariableResolver(
-                _secrets,
+                provider.GetRequiredService<IServiceScopeFactory>(),
                 _cache,
                 Options.Create(new ProxyVariableResolverOptions()),
                 Mock.Of<ILogger<ProxyVariableResolver>>());

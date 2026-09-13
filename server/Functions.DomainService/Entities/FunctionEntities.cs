@@ -82,7 +82,10 @@ namespace Functions.DomainService.Entities
         public List<OutputAction> OutputActions { get; set; } = [];
         public List<VariableBinding> Variables { get; set; } = [];
 
-        /// <summary>Resolved dependency list from the lockfile, as reported by the builder.</summary>
+        /// <summary>
+        /// The dependency versions the builder actually resolved, as reported when the build
+        /// finished. There is no lockfile to read them from: the build records what npm installed.
+        /// </summary>
         public string? Packages { get; set; }
 
         public string? Note { get; set; }
@@ -95,6 +98,13 @@ namespace Functions.DomainService.Entities
     {
         public string FunctionId { get; set; } = string.Empty;
         public string? VersionId { get; set; }
+
+        /// <summary>
+        /// The image this run was dispatched against. Recorded so a pull failure can say which
+        /// image is missing and invalidate the build that produced it — without it, an image
+        /// reclaimed from a runner leaves a succeeded build no one can identify as unusable.
+        /// </summary>
+        public string? ImageDigest { get; set; }
         public int VersionNumber { get; set; }
 
         /// <summary>
@@ -125,6 +135,9 @@ namespace Functions.DomainService.Entities
         public DateTime? CompletedAt { get; set; }
         public long? DurationMs { get; set; }
         public long? PeakMemoryBytes { get; set; }
+
+        /// <summary>Total CPU time the sandbox consumed for the run, in milliseconds — a cumulative counter, not a percentage.</summary>
+        public long? CpuUsageMs { get; set; }
         public int? ExitCode { get; set; }
         public string? RunnerId { get; set; }
 

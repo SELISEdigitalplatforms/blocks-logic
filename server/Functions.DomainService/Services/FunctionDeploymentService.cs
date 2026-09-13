@@ -38,6 +38,7 @@ namespace Functions.DomainService.Services
         private readonly IFunctionVersionRepository _versionRepository;
         private readonly IFunctionBuildService _buildService;
         private readonly IFunctionVersionRetentionService _retentionService;
+        private readonly IFunctionImagePinService _imagePins;
         private readonly IFunctionAuditService _auditService;
         private readonly IValidator<DeployFunctionRequestDto> _deployValidator;
         private readonly IValidator<RollbackFunctionRequestDto> _rollbackValidator;
@@ -48,6 +49,7 @@ namespace Functions.DomainService.Services
             IFunctionVersionRepository versionRepository,
             IFunctionBuildService buildService,
             IFunctionVersionRetentionService retentionService,
+            IFunctionImagePinService imagePins,
             IFunctionAuditService auditService,
             IValidator<DeployFunctionRequestDto> deployValidator,
             IValidator<RollbackFunctionRequestDto> rollbackValidator,
@@ -57,6 +59,7 @@ namespace Functions.DomainService.Services
             _versionRepository = versionRepository;
             _buildService = buildService;
             _retentionService = retentionService;
+            _imagePins = imagePins;
             _auditService = auditService;
             _deployValidator = deployValidator;
             _rollbackValidator = rollbackValidator;
@@ -72,7 +75,8 @@ namespace Functions.DomainService.Services
             var function = await _functionRepository.GetByIdAsync(tenantId, request.FunctionId, cancellationToken)
                 ?? throw new FunctionNotFoundException($"function '{request.FunctionId}' was not found");
 
-            var build = await _buildService.EnsureImageAsync(tenantId, function, cancellationToken);
+            var build = await _buildService.EnsureImageAsync(
+                tenantId, function, cancellationToken, waitSecondsOverride: null, request.Rebuild);
             if (build.Status != BuildStatus.Succeeded || string.IsNullOrEmpty(build.ImageDigest))
             {
                 throw new FunctionValidationException(
@@ -126,6 +130,12 @@ namespace Functions.DomainService.Services
             {
                 throw new FunctionValidationException("could not deploy: too many concurrent deployments of this function");
             }
+
+            // Pinned here rather than when the image was built: a build is not a promise that
+            // anything will use its image, but a version is. Until this point the image is kept
+            // alive only by Image GC's grace window, and a version whose image was reclaimed
+            // before it got here would be rebuilt rather than lost.
+            await _imagePins.PinAsync(created.ImageDigest, cancellationToken);
 
             function.ActiveVersionId = created.ItemId;
             function.LastVersionNumber = created.Number;

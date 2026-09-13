@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Ban, Copy, Download, Loader2, RotateCcw, Search } from "lucide-react";
+import { Ban, Braces, Copy, Download, Loader2, RotateCcw, Search } from "lucide-react";
 import { Card, CardContent } from "@/components/ui-kits/card/card";
 import { Button } from "@/components/ui-kits/button/button";
 import { Input } from "@/components/ui-kits/input/input";
@@ -15,6 +15,7 @@ import {
   formatMemoryAgainstLimit,
   formatRelativeTime,
   formatTimeOfDay,
+  runnerSpanMs,
 } from "../../utils/format";
 import { RunStatusChip } from "../run-status-chip";
 
@@ -69,43 +70,70 @@ const JsonPane = ({
   value?: string | null;
   emptyText: string;
   onUseAsTestInput?: (value: string) => void;
-}) => (
-  <Card className="min-w-0 flex-1 basis-[320px] overflow-hidden">
-    <div className="flex items-center justify-between gap-3 border-b px-4 py-2.5">
-      <span className="text-xs font-semibold">{title}</span>
-      {value && (
-        <div className="flex items-center gap-1">
-          {onUseAsTestInput && (
+}) => {
+  const [isPretty, setIsPretty] = useState(false);
+
+  // Not every value is valid JSON (or even present) — fall back to the raw string rather than
+  // blowing up the pane when a run's input/result isn't parseable.
+  const displayValue = useMemo(() => {
+    if (!value || !isPretty) return value;
+    try {
+      return JSON.stringify(JSON.parse(value), null, 2);
+    } catch {
+      return value;
+    }
+  }, [value, isPretty]);
+
+  return (
+    <Card className="min-w-0 flex-1 basis-[320px] overflow-hidden">
+      <div className="flex items-center justify-between gap-3 border-b px-4 py-2.5">
+        <span className="text-xs font-semibold">{title}</span>
+        {value && (
+          <div className="flex items-center gap-1">
+            {onUseAsTestInput && (
+              <Button
+                variant="ghost"
+                size="xs"
+                className="px-2 text-xs"
+                onClick={() => onUseAsTestInput(value)}
+              >
+                Use as test input
+              </Button>
+            )}
             <Button
               variant="ghost"
-              size="xs"
-              className="px-2 text-xs"
-              onClick={() => onUseAsTestInput(value)}
+              size="icon"
+              aria-label={
+                isPretty ? `Show raw ${title.toLowerCase()}` : `Pretty-print ${title.toLowerCase()}`
+              }
+              aria-pressed={isPretty}
+              className={cn("h-7 w-7", isPretty ? "text-primary" : "text-medium-emphasis")}
+              onClick={() => setIsPretty((prev) => !prev)}
             >
-              Use as test input
+              <Braces className="h-3.5 w-3.5" />
             </Button>
-          )}
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={`Copy ${title.toLowerCase()}`}
-            className="h-7 w-7 text-medium-emphasis"
-            onClick={() => navigator.clipboard.writeText(value)}
-          >
-            <Copy className="h-3.5 w-3.5" />
-          </Button>
-        </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={`Copy ${title.toLowerCase()}`}
+              className="h-7 w-7 text-medium-emphasis"
+              onClick={() => navigator.clipboard.writeText(displayValue ?? value)}
+            >
+              <Copy className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        )}
+      </div>
+      {value ? (
+        <pre className="max-h-64 overflow-auto bg-surface-app px-4 py-3 font-mono text-xs leading-relaxed">
+          {displayValue}
+        </pre>
+      ) : (
+        <p className="px-4 py-6 text-center text-xs text-medium-emphasis">{emptyText}</p>
       )}
-    </div>
-    {value ? (
-      <pre className="max-h-64 overflow-auto bg-surface-app px-4 py-3 font-mono text-xs leading-relaxed">
-        {value}
-      </pre>
-    ) : (
-      <p className="px-4 py-6 text-center text-xs text-medium-emphasis">{emptyText}</p>
-    )}
-  </Card>
-);
+    </Card>
+  );
+};
 
 type RunDetailProps = {
   runId: string;
@@ -113,9 +141,11 @@ type RunDetailProps = {
   memoryLimitMb?: number | null;
   /** Loads a run's input into the Code tab's test panel. */
   onUseAsTestInput?: (input: string) => void;
+  /** Renders the "‹ All runs" back-link in the same row as Replay/Cancel. */
+  onBack?: () => void;
 };
 
-export const RunDetail = ({ runId, memoryLimitMb, onUseAsTestInput }: RunDetailProps) => {
+export const RunDetail = ({ runId, memoryLimitMb, onUseAsTestInput, onBack }: RunDetailProps) => {
   const { data: run, isLoading } = useGetRun({ runId });
   const { data: logsData, isLoading: isLogsLoading } = useGetRunLogs(runId, 0, 500);
   const { mutateAsync: replayAsync, isPending: isReplaying } = useReplayRun();
@@ -142,15 +172,31 @@ export const RunDetail = ({ runId, memoryLimitMb, onUseAsTestInput }: RunDetailP
   }
 
   const isActive = !TERMINAL_RUN_STATUSES.includes(run.status);
-  const explanation = explainRunError(run.errorCode, run.errorMessage);
+  const explanation = explainRunError(run.errorCode);
   const stages = buildStages(run);
 
-  const metrics = [
-    { label: "Duration", value: formatDuration(run.durationMs) },
+  // The sandbox stopwatch and the runner's own span are different measurements, and the page
+  // shows both — the timeline gap and the duration would otherwise read as one of them being
+  // wrong. Under a quarter second apart they are the same story twice, so the hint stays off.
+  const span = runnerSpanMs(run.startedAt, run.completedAt);
+  const durationHint =
+    span != null && run.durationMs != null && span - run.durationMs >= 250
+      ? `${formatDuration(span)} incl. startup`
+      : undefined;
+
+  const metrics: {
+    label: string;
+    value: string;
+    hint?: string;
+    isPrimary?: boolean;
+    isWarning?: boolean;
+  }[] = [
+    { label: "Duration", value: formatDuration(run.durationMs), hint: durationHint },
     {
       label: "Peak memory",
       value: formatMemoryAgainstLimit(run.peakMemoryBytes, memoryLimitMb),
     },
+    { label: "CPU time", value: formatDuration(run.cpuUsageMs) },
     {
       label: "Attempts",
       value: `${run.attempt} / ${run.maxAttempts}`,
@@ -194,30 +240,44 @@ export const RunDetail = ({ runId, memoryLimitMb, onUseAsTestInput }: RunDetailP
 
   return (
     <div className="flex flex-col gap-3.5">
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        {isActive ? (
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            disabled={isCancelling}
-            onClick={() => void handleCancel()}
-          >
-            <Ban className="h-3.5 w-3.5" />
-            Cancel
-          </Button>
-        ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            disabled={isReplaying}
-            onClick={() => void handleReplay()}
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            Replay
-          </Button>
-        )}
+      <div className="flex flex-nowrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          {onBack && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-fit px-2 text-primary hover:text-primary"
+              onClick={onBack}
+            >
+              ‹ All runs
+            </Button>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {isActive ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              disabled={isCancelling}
+              onClick={() => void handleCancel()}
+            >
+              <Ban className="h-3.5 w-3.5" />
+              Cancel
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              disabled={isReplaying}
+              onClick={() => void handleReplay()}
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Replay
+            </Button>
+          )}
+        </div>
       </div>
 
       <Card>
@@ -269,19 +329,32 @@ export const RunDetail = ({ runId, memoryLimitMb, onUseAsTestInput }: RunDetailP
                 >
                   {metric.value}
                 </span>
+                {metric.hint && (
+                  <span className="text-[10px] text-low-emphasis">{metric.hint}</span>
+                )}
               </div>
             ))}
           </div>
         </CardContent>
       </Card>
 
-      {explanation && (
+      {(run.errorCode || run.errorMessage) && (
         <Card className="border-error/30 bg-error/5">
-          <CardContent className="flex flex-col gap-1 p-4">
+          <CardContent className="flex flex-col gap-2 p-4">
             {run.errorCode && (
               <code className="font-mono text-xs font-semibold text-error">{run.errorCode}</code>
             )}
-            <p className="text-xs leading-relaxed text-error">{explanation}</p>
+            {/* What actually happened, verbatim and selectable. The friendly sentence below used
+                to be shown *instead* of this, which left the real message — the missing package,
+                the offending line — readable only in the network tab. */}
+            {run.errorMessage && (
+              <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-error">
+                {run.errorMessage}
+              </pre>
+            )}
+            {explanation && (
+              <p className="text-xs leading-relaxed text-medium-emphasis">{explanation}</p>
+            )}
           </CardContent>
         </Card>
       )}
@@ -372,7 +445,16 @@ export const RunDetail = ({ runId, memoryLimitMb, onUseAsTestInput }: RunDetailP
               >
                 {line.level}
               </span>
-              <span className="min-w-0 whitespace-pre-wrap break-words">{line.message}</span>
+              <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">
+                {line.message}
+                {/* ctx.log's second argument. Dropping it hid exactly the structured detail a
+                    developer logs it for. */}
+                {line.data && (
+                  <span className="mt-0.5 block whitespace-pre-wrap break-words text-low-emphasis">
+                    {line.data}
+                  </span>
+                )}
+              </span>
             </div>
           ))}
         </div>

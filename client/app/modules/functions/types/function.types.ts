@@ -164,6 +164,8 @@ export interface IBaseResponse {
 export interface IDeployFunctionPayload {
   functionId: string;
   note?: string | null;
+  /** Build again instead of deploying this source's cached image. */
+  rebuild?: boolean;
 }
 
 export interface IRollbackFunctionPayload {

@@ -510,24 +510,15 @@ export const FunctionDetailPage = () => {
 
           <TabsContent value="runs" className="flex flex-col gap-4">
             {queryParams.runId ? (
-              <>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-fit px-2 text-primary hover:text-primary"
-                  onClick={() => setQueryParams({ runId: "" })}
-                >
-                  ‹ All runs
-                </Button>
-                <RunDetail
-                  runId={queryParams.runId}
-                  memoryLimitMb={limits.memoryMb}
-                  onUseAsTestInput={(input) => {
-                    setTestInput(input);
-                    setQueryParams({ tab: "code", runId: "" });
-                  }}
-                />
-              </>
+              <RunDetail
+                runId={queryParams.runId}
+                memoryLimitMb={limits.memoryMb}
+                onBack={() => setQueryParams({ runId: "" })}
+                onUseAsTestInput={(input) => {
+                  setTestInput(input);
+                  setQueryParams({ tab: "code", runId: "" });
+                }}
+              />
             ) : (
               <>
                 <Card>

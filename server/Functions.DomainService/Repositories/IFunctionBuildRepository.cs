@@ -21,6 +21,22 @@ namespace Functions.DomainService.Repositories
         Task<FunctionBuildEntity?> GetInProgressBySourceHashAsync(
             string tenantId, string functionId, string sourceHash, CancellationToken cancellationToken = default);
 
+        /// <summary>Every build recorded for one function — for cleanup, which needs their image digests.</summary>
+        Task<IReadOnlyList<FunctionBuildEntity>> GetAllForFunctionAsync(
+            string tenantId, string functionId, CancellationToken cancellationToken = default);
+
+        /// <summary>Removes every build record of one function. Returns how many went.</summary>
+        Task<long> DeleteAllForFunctionAsync(string tenantId, string functionId, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Marks succeeded builds pointing at an image that is no longer there as failed, so the
+        /// cache stops handing it out and the next Test or Deploy builds again. Without this a
+        /// reclaimed image is a dead end: the record still succeeds, every run fails to pull it,
+        /// and nothing in the product can force a rebuild.
+        /// </summary>
+        Task<long> InvalidateByImageDigestAsync(
+            string tenantId, string imageDigest, string reason, CancellationToken cancellationToken = default);
+
         Task CreateAsync(string tenantId, FunctionBuildEntity build, CancellationToken cancellationToken = default);
 
         Task<bool> ApplyResultAsync(

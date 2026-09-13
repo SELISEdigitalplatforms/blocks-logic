@@ -21,6 +21,50 @@
             parameter; it is ignored, because the tenant comes from the request context.
             </remarks>
         </member>
+        <member name="T:BlocksTemplate.Api.Controllers.DeploymentController">
+            <summary>
+            Source-control integration behind the deployment feature, routed as
+            <c>/api/Deployment/{action}</c>. Every action requires a bearer token and delegates straight to
+            <see cref="T:DeploymentDriver.IDeploymentDriverService"/>, which talks to the connected provider.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.#ctor(DeploymentDriver.IDeploymentDriverService)">
+            <summary>
+            Source-control integration behind the deployment feature, routed as
+            <c>/api/Deployment/{action}</c>. Every action requires a bearer token and delegates straight to
+            <see cref="T:DeploymentDriver.IDeploymentDriverService"/>, which talks to the connected provider.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.IsAuthorized">
+            <summary><c>GET</c> — whether this tenant has a working provider authorization.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.AccessToken(System.String)">
+            <summary><c>GET</c> — exchanges an OAuth callback <paramref name="code"/> for an access token and stores it.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.RemoveAuthorization">
+            <summary><c>POST</c> — revokes the stored authorization, leaving the connection record in place.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.DeleteAuthorization">
+            <summary><c>DELETE</c> — removes the stored authorization outright.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.GetReposList">
+            <summary><c>GET</c> — every repository the authorization can see.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.GetUser">
+            <summary><c>GET</c> — the provider account the authorization belongs to.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.GetRepos(System.String,System.Int32,System.Int32)">
+            <summary><c>GET</c> — repository search, paged (1-based <paramref name="PageNumber"/>, default 30 per page).</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.GetBranches(System.String)">
+            <summary><c>GET</c> — the branches of one repository.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.GithubBranchExists(System.String)">
+            <summary><c>GET</c> — whether the expected branch exists on the given GitHub repository.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.UpdateRepoDomain(Devops.DomainService.Deployment.Models.Request.RepoDomainUpdateRequest)">
+            <summary><c>POST</c> — points a repository at a different deployment domain.</summary>
+        </member>
         <member name="T:BlocksTemplate.Api.Controllers.FunctionInvokeController">
             <summary>
             The public function endpoint (DECISIONS D5): <c>POST /api/fn/{functionId}</c>.
@@ -67,50 +111,6 @@
             necessarily Blocks users at all, and carries none of the assumptions this controller
             makes about an authenticated, already-authorized caller.
             </summary>
-        </member>
-        <member name="T:BlocksTemplate.Api.Controllers.DeploymentController">
-            <summary>
-            Source-control integration behind the deployment feature, routed as
-            <c>/api/Deployment/{action}</c>. Every action requires a bearer token and delegates straight to
-            <see cref="T:DeploymentDriver.IDeploymentDriverService"/>, which talks to the connected provider.
-            </summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.#ctor(DeploymentDriver.IDeploymentDriverService)">
-            <summary>
-            Source-control integration behind the deployment feature, routed as
-            <c>/api/Deployment/{action}</c>. Every action requires a bearer token and delegates straight to
-            <see cref="T:DeploymentDriver.IDeploymentDriverService"/>, which talks to the connected provider.
-            </summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.IsAuthorized">
-            <summary><c>GET</c> — whether this tenant has a working provider authorization.</summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.AccessToken(System.String)">
-            <summary><c>GET</c> — exchanges an OAuth callback <paramref name="code"/> for an access token and stores it.</summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.RemoveAuthorization">
-            <summary><c>POST</c> — revokes the stored authorization, leaving the connection record in place.</summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.DeleteAuthorization">
-            <summary><c>DELETE</c> — removes the stored authorization outright.</summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.GetReposList">
-            <summary><c>GET</c> — every repository the authorization can see.</summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.GetUser">
-            <summary><c>GET</c> — the provider account the authorization belongs to.</summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.GetRepos(System.String,System.Int32,System.Int32)">
-            <summary><c>GET</c> — repository search, paged (1-based <paramref name="PageNumber"/>, default 30 per page).</summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.GetBranches(System.String)">
-            <summary><c>GET</c> — the branches of one repository.</summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.GithubBranchExists(System.String)">
-            <summary><c>GET</c> — whether the expected branch exists on the given GitHub repository.</summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.UpdateRepoDomain(Devops.DomainService.Deployment.Models.Request.RepoDomainUpdateRequest)">
-            <summary><c>POST</c> — points a repository at a different deployment domain.</summary>
         </member>
         <member name="T:BlocksTemplate.Api.Controllers.HealthController">
             <summary>

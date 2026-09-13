@@ -16,6 +16,13 @@ namespace Workflow.DomainService.Repositories
 
         Task<long> GetWorkflowsCountAsync(string tenantId, string? search, bool? isPublished);
 
+        /// <summary>
+        /// Workflows with a function step pointing at <paramref name="functionId"/>, so deleting a
+        /// function can say what it would break. Projected to identity only — the caller wants
+        /// names, not definitions.
+        /// </summary>
+        Task<List<WorkflowEntity>> GetWorkflowsUsingFunctionAsync(string tenantId, string functionId, int limit = 50);
+
         Task<WorkflowEntity> GetWorkflowAsync(string tenantId, string workflowId);
 
         Task UpdateWorkflowAsync(WorkflowEntity workflow);

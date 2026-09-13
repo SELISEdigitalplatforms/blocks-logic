@@ -160,6 +160,9 @@ namespace Functions.DomainService.Dtos.Responses
         public DateTime? CompletedAt { get; set; }
         public long? DurationMs { get; set; }
         public long? PeakMemoryBytes { get; set; }
+
+        /// <summary>Total CPU time the sandbox consumed for the run, in milliseconds — a cumulative counter, not a percentage.</summary>
+        public long? CpuUsageMs { get; set; }
         public int? ExitCode { get; set; }
         public bool LogsTruncated { get; set; }
         public List<RunAttempt> Attempts { get; set; } = [];
@@ -184,6 +187,7 @@ namespace Functions.DomainService.Dtos.Responses
             CompletedAt = run.CompletedAt,
             DurationMs = run.DurationMs,
             PeakMemoryBytes = run.PeakMemoryBytes,
+            CpuUsageMs = run.CpuUsageMs,
             ExitCode = run.ExitCode,
             LogsTruncated = run.LogsTruncated,
             Attempts = run.Attempts,

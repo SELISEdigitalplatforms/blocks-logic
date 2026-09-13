@@ -37,6 +37,10 @@ namespace Functions.DomainService.Utils
 
             services.AddSingleton<ITenantAccessor, TenantAccessor>();
             services.AddSingleton<IFunctionAuditService, FunctionAuditService>();
+            services.AddSingleton<IFunctionImagePinService, FunctionImagePinService>();
+            services.AddSingleton<IFunctionPurgeService, FunctionPurgeService>();
+            services.AddSingleton<IFunctionUsageService, FunctionUsageService>();
+            services.AddSingleton<IFunctionImageRecoveryService, FunctionImageRecoveryService>();
             services.AddSingleton<IFunctionAdmissionService, FunctionAdmissionService>();
             services.AddSingleton<IFunctionAuthorizationService, FunctionAuthorizationService>();
             services.AddSingleton<IFunctionBuildService, FunctionBuildService>();

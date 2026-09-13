@@ -144,6 +144,13 @@ namespace Functions.DomainService.Models
     {
         public string IndexJs { get; set; } = string.Empty;
         public string PackageJson { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Retained so stored documents and existing API callers keep round-tripping, but no
+        /// longer used for anything: builds resolve package.json fresh and no lockfile is sent to
+        /// the builder. It stays in the source hash because removing a field from that hash would
+        /// change every existing hash and show every function as having unsaved changes.
+        /// </summary>
         public string? LockJson { get; set; }
     }
 

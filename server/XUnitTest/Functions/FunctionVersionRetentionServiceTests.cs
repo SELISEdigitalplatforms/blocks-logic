@@ -63,8 +63,12 @@ namespace XUnitTest.Functions
             var settings = new Dictionary<string, string?>();
             if (cap.HasValue) settings["Functions:MaxVersionsPerFunction"] = cap.Value.ToString();
 
+            // The real pin service over the mocked cache: the keep set is the contract under test
+            // here, and a stub of the pin service would assert against a stub of itself.
+            var imagePins = new FunctionImagePinService(cache.Object, NullLogger<FunctionImagePinService>.Instance);
+
             return new FunctionVersionRetentionService(
-                _versions.Object, _runs.Object, cache.Object,
+                _versions.Object, _runs.Object, imagePins,
                 new ConfigurationBuilder().AddInMemoryCollection(settings).Build(),
                 NullLogger<FunctionVersionRetentionService>.Instance);
         }

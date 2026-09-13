@@ -52,6 +52,15 @@ namespace Functions.DomainService.Repositories
                 logs, new InsertManyOptions { IsOrdered = true }, cancellationToken);
         }
 
+        public async Task<long> DeleteAllForFunctionAsync(
+            string tenantId, string functionId, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(functionId)) return 0;
+
+            var result = await Collection(tenantId).DeleteManyAsync(l => l.FunctionId == functionId, cancellationToken);
+            return result.DeletedCount;
+        }
+
         public async Task<(IReadOnlyList<FunctionRunLogEntity> Items, long TotalCount)> GetByRunAsync(
             string tenantId, string runId, int pageNumber, int pageSize, CancellationToken cancellationToken = default)
         {

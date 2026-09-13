@@ -17,6 +17,13 @@ namespace Functions.DomainService.Services
         /// current source, reusing a cached build when one exists (DECISIONS D3). Waits up to
         /// <c>Functions:BuildWaitSeconds</c> (default 300 s) for an in-flight build to finish.
         /// <para>
+        /// <paramref name="forceRebuild"/> ignores a cached success and builds again. A succeeded
+        /// build is otherwise permanent, so an image that is broken rather than missing — one
+        /// built by a builder with a bug in it, say — could not be replaced without editing the
+        /// source to change its hash. An in-flight build for the same source is still joined
+        /// rather than duplicated: it is already building what this asked for.
+        /// </para>
+        /// <para>
         /// <paramref name="waitSecondsOverride"/> shortens that wait. Test passes a few seconds:
         /// holding an editor's request open for five minutes and then answering "still building"
         /// tells the caller nothing it could not have polled for, so it takes the build back
@@ -27,7 +34,8 @@ namespace Functions.DomainService.Services
             string tenantId,
             FunctionEntity function,
             CancellationToken cancellationToken = default,
-            int? waitSecondsOverride = null);
+            int? waitSecondsOverride = null,
+            bool forceRebuild = false);
 
         /// <summary>A single build's current state — for the editor's build-progress indicator to poll.</summary>
         Task<FunctionBuildEntity> GetAsync(string tenantId, string buildId, CancellationToken cancellationToken = default);
@@ -43,7 +51,8 @@ namespace Functions.DomainService.Services
     /// <c>FunctionBuildResultConsumer</c> updates when the runner reports back on
     /// <c>functions:build-results</c>. It never talks to Docker or the registry directly —
     /// that machinery, and the untrusted <c>npm install</c> it runs, lives entirely on the
-    /// other side of the Redis contract (plan/PROTOCOL.md), on purpose.
+    /// other side of the Redis contract (plan/PROTOCOL.md), on purpose. That install resolves
+    /// package.json fresh every time; no lockfile is sent or honoured.
     /// </para>
     /// </summary>
     public class FunctionBuildService : IFunctionBuildService
@@ -78,13 +87,23 @@ namespace Functions.DomainService.Services
             string tenantId,
             FunctionEntity function,
             CancellationToken cancellationToken = default,
-            int? waitSecondsOverride = null)
+            int? waitSecondsOverride = null,
+            bool forceRebuild = false)
         {
             var sourceHash = function.SourceHash;
 
-            var succeeded = await _buildRepository.GetSucceededBySourceHashAsync(
-                tenantId, function.ItemId, sourceHash, cancellationToken);
-            if (succeeded is not null) return succeeded;
+            if (forceRebuild)
+            {
+                _logger.LogInformation(
+                    "Rebuild requested for function {FunctionId}; ignoring any cached build of source hash {SourceHash}",
+                    function.ItemId, sourceHash);
+            }
+            else
+            {
+                var succeeded = await _buildRepository.GetSucceededBySourceHashAsync(
+                    tenantId, function.ItemId, sourceHash, cancellationToken);
+                if (succeeded is not null) return succeeded;
+            }
 
             var inProgress = await _buildRepository.GetInProgressBySourceHashAsync(
                 tenantId, function.ItemId, sourceHash, cancellationToken);
@@ -148,6 +167,14 @@ namespace Functions.DomainService.Services
             };
             await _buildRepository.CreateAsync(tenantId, build, cancellationToken);
 
+            if (!string.IsNullOrEmpty(function.Source.LockJson))
+            {
+                _logger.LogWarning(
+                    "Function {FunctionId} carries a stored lockfile; it is not sent to the builder. " +
+                    "Dependencies are resolved fresh from package.json on every build",
+                    function.ItemId);
+            }
+
             var sourceBundle = JsonSerializer.Serialize(new
             {
                 files = BuildFileMap(function.Source),
@@ -175,19 +202,22 @@ namespace Functions.DomainService.Services
             return build;
         }
 
-        private static Dictionary<string, string> BuildFileMap(Models.FunctionSource source)
-        {
-            var files = new Dictionary<string, string>(StringComparer.Ordinal)
+        /// <summary>
+        /// The files a build is made from: the entry point and the manifest, and nothing else.
+        /// <para>
+        /// No lockfile is sent, even when one is stored on the source. Dependencies are resolved
+        /// fresh from package.json at every build: <c>npm ci</c> needs a lockfile and, when none
+        /// was sent, the builder used to skip the install altogether and still report success —
+        /// producing an image with no node_modules that failed at its first import. A build that
+        /// always installs either installs or fails out loud.
+        /// </para>
+        /// </summary>
+        internal static Dictionary<string, string> BuildFileMap(Models.FunctionSource source)
+            => new(StringComparer.Ordinal)
             {
                 ["index.js"] = source.IndexJs,
                 ["package.json"] = source.PackageJson,
             };
-            if (!string.IsNullOrEmpty(source.LockJson))
-            {
-                files["package-lock.json"] = source.LockJson;
-            }
-            return files;
-        }
 
         /// <summary>
         /// A queued or building record that has not been touched within

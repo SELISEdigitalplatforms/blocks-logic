@@ -180,6 +180,15 @@ namespace Functions.DomainService.Repositories
             return await Collection(tenantId).Find(r => r.ItemId == runId).FirstOrDefaultAsync(cancellationToken);
         }
 
+        public async Task<long> DeleteAllForFunctionAsync(
+            string tenantId, string functionId, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(functionId)) return 0;
+
+            var result = await Collection(tenantId).DeleteManyAsync(r => r.FunctionId == functionId, cancellationToken);
+            return result.DeletedCount;
+        }
+
         public async Task CreateAsync(string tenantId, FunctionRunEntity run, CancellationToken cancellationToken = default)
         {
             await EnsureIndexesAsync(tenantId, cancellationToken);
@@ -198,6 +207,7 @@ namespace Functions.DomainService.Repositories
             int? exitCode,
             long? durationMs,
             long? peakMemoryBytes,
+            long? cpuUsageMs,
             string? runnerId,
             DateTime? startedAt,
             DateTime completedAt,
@@ -212,6 +222,7 @@ namespace Functions.DomainService.Repositories
                 .Set(r => r.ExitCode, exitCode)
                 .Set(r => r.DurationMs, durationMs)
                 .Set(r => r.PeakMemoryBytes, peakMemoryBytes)
+                .Set(r => r.CpuUsageMs, cpuUsageMs)
                 .Set(r => r.RunnerId, runnerId)
                 .Set(r => r.CompletedAt, completedAt)
                 .Set(r => r.LogsTruncated, logsTruncated)
@@ -249,6 +260,7 @@ namespace Functions.DomainService.Repositories
                 .Set(r => r.ExitCode, (int?)null)
                 .Set(r => r.DurationMs, (long?)null)
                 .Set(r => r.PeakMemoryBytes, (long?)null)
+                .Set(r => r.CpuUsageMs, (long?)null)
                 .Set(r => r.RunnerId, (string?)null)
                 .Set(r => r.StartedAt, (DateTime?)null)
                 .Set(r => r.CompletedAt, (DateTime?)null)
