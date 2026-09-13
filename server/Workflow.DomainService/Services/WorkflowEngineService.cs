@@ -51,7 +51,7 @@ namespace Workflow.DomainService.Services
         public async Task<WorkflowExecutionEntity?> RunNodeInProcessAsync(AddExcuationNodeEvent dto)
         {
             await ExecuteNodeAsync(dto, DispatchNodesImmediateAsync);
-            return await _workflowExecutionRepository.GetByIdAsync(dto.WorkflowExecutionId, BlocksContext.GetContext()?.TenantId);
+            return await _workflowExecutionRepository.GetByIdAsync(dto.WorkflowExecutionId, dto.TenantId);
         }
 
         /// <summary>
@@ -108,7 +108,7 @@ namespace Workflow.DomainService.Services
         /// </summary>
         private async Task<(WorkflowExecutionEntity execution, NodeEntity node, NodeExecutionEntity nodeExecution, NodeExecutionContext context, INodeExecutor executor)?> PrepareNodeForExecutionAsync(AddExcuationNodeEvent dto)
         {
-            var execution = await _workflowExecutionRepository.GetByIdAsync(dto.WorkflowExecutionId, BlocksContext.GetContext()?.TenantId)
+            var execution = await _workflowExecutionRepository.GetByIdAsync(dto.WorkflowExecutionId, dto.TenantId)
                 ?? throw new InvalidOperationException("Workflow execution not found");
 
             if (execution.Status == WorkflowExecutionStatus.Completed || execution.Status == WorkflowExecutionStatus.Failed) return null;
@@ -464,6 +464,7 @@ namespace Workflow.DomainService.Services
             // Build next node events
             var nextEvents = nextNodeIds.Select(nextNodeId => new AddExcuationNodeEvent
             {
+                TenantId = execution.TenantId,
                 WorkflowExecutionId = execution.Id!,
                 WorkflowId = execution.WorkflowId,
                 NodeId = nextNodeId,
@@ -573,6 +574,7 @@ namespace Workflow.DomainService.Services
 
                 var evt = new AddExcuationNodeEvent
                 {
+                    TenantId = execution.TenantId,
                     WorkflowId = execution.WorkflowId,
                     WorkflowExecutionId = execution.Id,
                     NodeId = node.Id,
