@@ -31,6 +31,8 @@ import { VariablesButton } from "./variables-button";
 type Props = {
   proxies: Proxy[];
   isLoading: boolean;
+  /** Lets the list screen step back a page when the deleted row was the page's last one. */
+  onProxyDeleted?: () => void;
 };
 
 const VISIBLE_METHOD_COUNT = 2;
@@ -47,7 +49,7 @@ const ProxyListSkeleton = () => (
   </>
 );
 
-export const ProxyList = ({ proxies, isLoading }: Props) => {
+export const ProxyList = ({ proxies, isLoading, onProxyDeleted }: Props) => {
   const navigate = useNavigate();
   const selectedProject = useProjectStore().selectedProject;
   const scoped = useScopedPath();
@@ -154,7 +156,7 @@ export const ProxyList = ({ proxies, isLoading }: Props) => {
               </TableCell>
               <TableCell className="border-y border-border bg-background px-6 py-5 text-base transition-colors group-hover:bg-muted/50">
                 <span className="whitespace-nowrap text-sm text-muted-foreground">
-                  {proxy.calls24h.toLocaleString()} calls in 24h
+                  {proxy.calls24h.toLocaleString()} calls 24h
                 </span>
               </TableCell>
               <TableCell className="w-[160px] rounded-r-lg border-y border-r border-border bg-background px-6 py-5 text-base transition-colors group-hover:bg-muted/50">
@@ -228,6 +230,7 @@ export const ProxyList = ({ proxies, isLoading }: Props) => {
           if (!value) setProxyToDelete(null);
         }}
         proxy={proxyToDelete}
+        onDeleted={onProxyDeleted}
       />
     </>
   );

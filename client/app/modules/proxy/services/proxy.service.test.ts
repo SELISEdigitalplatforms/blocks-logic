@@ -58,12 +58,13 @@ describe("ProxyService HTTP wiring", () => {
       totalCount: 1,
     });
 
-    const proxies = await proxyService.getAll({ searchKey: "stri" });
+    const page = await proxyService.getAll({ searchKey: "stri" });
 
     expect(logicService.get).toHaveBeenCalledWith(
       "/api/Proxies?search=stri&pageSize=200&pageNumber=0",
     );
-    expect(proxies).toEqual([expect.objectContaining({ id: "p1", calls24h: 5, headers: [] })]);
+    expect(page.totalCount).toBe(1);
+    expect(page.items).toEqual([expect.objectContaining({ id: "p1", calls24h: 5, headers: [] })]);
   });
 
   it("gets a proxy by id from the path and maps null to null", async () => {

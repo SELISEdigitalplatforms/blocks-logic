@@ -7,6 +7,8 @@ export const useGetProxies = (params: ProxyListParams = {}) =>
   useQuery({
     queryKey: [...PROXY_QUERY_KEY, params],
     queryFn: () => proxyService.getAll(params),
+    // Keeps the current page on screen while the next one loads, so paging never flashes empty.
+    placeholderData: keepPreviousData,
   });
 
 export const useGetProxyById = (id?: string) =>

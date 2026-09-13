@@ -29,7 +29,8 @@ describe("use-proxy-api hooks", () => {
     const list = renderHook(() => useGetProxies(), { wrapper });
     const create = renderHook(() => useCreateProxy(), { wrapper });
 
-    await waitFor(() => expect(list.result.current.data).toHaveLength(3));
+    await waitFor(() => expect(list.result.current.data?.items).toHaveLength(3));
+    expect(list.result.current.data?.totalCount).toBe(3);
 
     await act(async () => {
       await create.result.current.mutateAsync({
@@ -41,7 +42,7 @@ describe("use-proxy-api hooks", () => {
       });
     });
 
-    await waitFor(() => expect(list.result.current.data?.[0].name).toBe("Docs API"));
+    await waitFor(() => expect(list.result.current.data?.items[0].name).toBe("Docs API"));
   });
 
   it("uses dedicated hooks for logs, revert, and test", async () => {
