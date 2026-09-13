@@ -953,9 +953,9 @@ namespace Workflow.DomainService.Services
             return true;
         }
 
-        private static BsonValue DeepCopyBson(BsonValue value)
+        private static BsonValue? DeepCopyBson(BsonValue? value)
         {
-            return BsonSerializer.Deserialize<BsonValue>(value.ToBson());
+            return value?.DeepClone();
         }
 
         private static bool NodesAreEquivalent(NodeEntity source, NodeEntity current)
