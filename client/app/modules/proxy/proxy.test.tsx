@@ -91,7 +91,7 @@ describe("Proxy feature", () => {
       screen.getByPlaceholderText("https://api.vendor.com"),
       "https://api.stripe.com/v1/charges",
     );
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByText("Give the proxy a name - it becomes the path.")).toBeTruthy();
     expect(createSpy).not.toHaveBeenCalled();
@@ -126,7 +126,7 @@ describe("Proxy feature", () => {
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "Stripe Payments" })).toBeTruthy(),
     );
-    await user.click(screen.getByRole("tab", { name: /request logs/i }));
+    await user.click(screen.getByRole("tab", { name: /logs/i }));
 
     expect(await screen.findByText("3 of 3 requests")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "4xx" }));
@@ -149,7 +149,7 @@ describe("Proxy feature", () => {
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "Stripe Payments" })).toBeTruthy(),
     );
-    await user.click(screen.getByRole("tab", { name: /change history/i }));
+    await user.click(screen.getByRole("tab", { name: /history/i }));
 
     expect(await screen.findByText("Added payment intent expansion query")).toBeTruthy();
     await user.click(screen.getAllByRole("button", { name: /revert/i })[0]);

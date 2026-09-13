@@ -2,6 +2,7 @@ import { useNavigate } from "react-router";
 import { useScopedPath } from "@seliseblocks/genesis-os";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui-kits/button/button";
+import { Card, CardContent } from "@/components/ui-kits/card/card";
 import { useGetProxies } from "../../hooks";
 import { ProxyList } from "../../components/proxy-list";
 import { VariablesButton } from "../../components/variables-button";
@@ -34,9 +35,11 @@ export const Proxies = () => {
           </div>
         )}
       </div>
-      <div>
-        <ProxyList proxies={proxies} isLoading={isListLoading} />
-      </div>
+      <Card>
+        <CardContent>
+          <ProxyList proxies={proxies} isLoading={isListLoading} />
+        </CardContent>
+      </Card>
     </section>
   );
 };

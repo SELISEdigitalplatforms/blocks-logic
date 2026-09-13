@@ -64,7 +64,10 @@ const KeyValueRows = ({
               <div className="flex min-w-0 items-center gap-2">
                 <span className="truncate font-mono font-semibold text-foreground">{row.key}</span>
                 {containsVarRef(row.value) ? (
-                  <Badge variant="success" className="w-fit shrink-0 lowercase">
+                  <Badge
+                    variant="success"
+                    className="w-fit shrink-0 font-mono text-[11px] font-bold leading-none tracking-normal lowercase"
+                  >
                     variable
                   </Badge>
                 ) : null}
@@ -118,7 +121,9 @@ const EndpointRow = ({
   upstreamUrl: string;
 }) => {
   const forwardPath = (route.upstreamPath ?? route.path).replace(/^\/+|\/+$/g, "");
-  const forwardsTo = forwardPath ? `${upstreamUrl.replace(/\/+$/, "")}/${forwardPath}` : upstreamUrl;
+  const forwardsTo = forwardPath
+    ? `${upstreamUrl.replace(/\/+$/, "")}/${forwardPath}`
+    : upstreamUrl;
   const filters = route.responseMode === "select";
   const paths = route.responseInclude ?? [];
   const { tree } = pathsToTree(paths);
@@ -252,8 +257,8 @@ const ConfigurationStepCard = ({
 const proxyDetailTabs = [
   { value: "overview", label: "Overview" },
   { value: "test", label: "Test" },
-  { value: "logs", label: "Request logs" },
-  { value: "history", label: "Change history" },
+  { value: "logs", label: "Logs" },
+  { value: "history", label: "History" },
 ];
 
 const ProxyOverviewSkeleton = () => (
@@ -358,7 +363,8 @@ export const ProxyDetails = () => {
     pluralize(proxy.headers.length, "header"),
     pluralize(proxy.query.length, "param"),
   ].join(" · ");
-  const clientUrlFor = (routePath: string) => getProxyClientUrl(selectedProject, proxy.slug, routePath);
+  const clientUrlFor = (routePath: string) =>
+    getProxyClientUrl(selectedProject, proxy.slug, routePath);
 
   const handleToggleEnabled = async () => {
     const enabled = !proxy.enabled;
@@ -534,7 +540,8 @@ export const ProxyDetails = () => {
                           {clientUrlFor("")}
                         </p>
                         <p className="mt-2 text-xs text-muted-foreground">
-                          {pluralize(proxy.routes.length || proxy.methods.length, "endpoint")} — listed below
+                          {pluralize(proxy.routes.length || proxy.methods.length, "endpoint")} —
+                          listed below
                         </p>
                       </ConfigurationStepCard>
                       <ConfigurationStepCard eyebrow="→ Blocks adds" active>

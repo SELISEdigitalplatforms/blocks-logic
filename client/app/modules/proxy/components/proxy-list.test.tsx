@@ -71,6 +71,28 @@ describe("ProxyList", () => {
     expect(screen.getByText("Stripe detail")).toBeTruthy();
   });
 
+  it("summarizes extra methods when a proxy has more than two", () => {
+    renderWithProviders(
+      <MemoryRouter>
+        <ProxyList
+          proxies={[
+            {
+              ...PROXY_MOCK_DATA[0],
+              methods: ["GET", "POST", "PUT", "PATCH"],
+            },
+          ]}
+          isLoading={false}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("GET")).toBeTruthy();
+    expect(screen.getByText("POST")).toBeTruthy();
+    expect(screen.getByText("+2 more")).toBeTruthy();
+    expect(screen.queryByText("PUT")).toBeNull();
+    expect(screen.queryByText("PATCH")).toBeNull();
+  });
+
   it("toggles proxy status", async () => {
     const user = userEvent.setup();
     renderWithProviders(

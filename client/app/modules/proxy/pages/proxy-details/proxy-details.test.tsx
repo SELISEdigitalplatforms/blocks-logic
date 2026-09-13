@@ -74,10 +74,10 @@ describe("ProxyDetails page", () => {
 
     expect(await screen.findByRole("heading", { name: "Stripe Payments" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Overview" })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: "Request logs" })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: "Change history" })).toBeTruthy();
-    expect(screen.queryByRole("tab", { name: /Request logs\s+\d+/i })).toBeNull();
-    expect(screen.queryByRole("tab", { name: /Change history\s+\d+/i })).toBeNull();
+    expect(screen.getByRole("tab", { name: "Logs" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "History" })).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: /Logs\s+\d+/i })).toBeNull();
+    expect(screen.queryByRole("tab", { name: /History\s+\d+/i })).toBeNull();
   });
 
   it("shows selected response fields as a nested tree", async () => {
