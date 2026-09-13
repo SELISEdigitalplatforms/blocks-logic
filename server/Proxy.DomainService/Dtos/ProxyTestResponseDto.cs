@@ -1,7 +1,7 @@
 namespace Proxy.DomainService.Dtos
 {
     /// <summary>
-    /// 200 body of <c>POST /api/Proxy/Test</c> (SPEC &sect;3.3): the result of running the identical forward
+    /// 200 body of <c>POST /api/Proxies/test</c> (SPEC &sect;3.3): the result of running the identical forward
     /// pipeline against a saved proxy or a draft, WITHOUT writing a <c>ProxyExecutions</c> row and WITHOUT
     /// touching any <c>Proxies</c> / <c>ProxyVersions</c> data.
     /// </summary>

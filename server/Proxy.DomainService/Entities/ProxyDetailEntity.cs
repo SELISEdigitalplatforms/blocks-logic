@@ -54,6 +54,19 @@ namespace Proxy.DomainService.Entities
         public List<ProxyMethodConfig> MethodConfigs { get; set; } = new();
 
         /// <summary>
+        /// The endpoints this proxy may reach, as an allowlist. Empty ⇒ only the bare
+        /// <see cref="Upstream"/> is callable and any path suffix is refused with
+        /// <see cref="ProxyExecutionOutcome.RouteNotAllowed"/>, so a proxy is one-to-one with a single
+        /// endpoint until its owner declares otherwise.
+        /// <para>
+        /// Each route maps a client-facing path template to an upstream one and may override the shared
+        /// headers / query / body-merge / response filter, which is what lets one proxy serve several
+        /// endpoints of the same vendor API whose payloads differ.
+        /// </para>
+        /// </summary>
+        public List<ProxyRouteConfig> Routes { get; set; } = new();
+
+        /// <summary>
         /// How the upstream response body is treated on forward. <see cref="ProxyResponseMode.All"/> ⇒ relayed
         /// unchanged. <see cref="ProxyResponseMode.Select"/> ⇒ projected to <see cref="ResponseInclude"/>; a
         /// non-JSON / 4xx-5xx / oversized response then fails the call with 502 ResponseFilterFailed.
@@ -70,5 +83,13 @@ namespace Proxy.DomainService.Entities
 
         /// <summary>Monotonic; equals the highest <see cref="ProxyVersionEntity.VersionNumber"/> written for this proxy.</summary>
         public int CurrentVersion { get; set; }
+
+        /// <summary>
+        /// Denormalized rolling traffic counters, written by batched atomic <c>$inc</c> updates rather than
+        /// by the request that generated them. Read by the Overview tiles and the per-card call count so
+        /// neither has to aggregate <c>ProxyExecutions</c>. Eventually consistent by design; never part of a
+        /// config version, a change set, or a Revert.
+        /// </summary>
+        public ProxyStats Stats { get; set; } = new();
     }
 }

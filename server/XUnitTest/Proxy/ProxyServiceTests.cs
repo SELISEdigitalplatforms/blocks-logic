@@ -11,6 +11,7 @@ using Proxy.DomainService.Dtos;
 using Proxy.DomainService.Entities;
 using Proxy.DomainService.Repositories;
 using Proxy.DomainService.Services;
+using Proxy.DomainService.Utils;
 using XUnitTest.TestHelpers;
 
 namespace XUnitTest.Proxy
@@ -180,6 +181,27 @@ namespace XUnitTest.Proxy
             _versionRepo.Verify(r => r.InsertAsync(It.IsAny<ProxyVersionEntity>()), Times.Never);
         }
 
+        // ---------- Create : a name that derives to no slug is unroutable, so it is rejected up front ----------
+        [Theory]
+        [InlineData("!!!")]
+        [InlineData("___")]
+        [InlineData("こんにちは")]
+        public async Task Create_NameWithNoSlugCharacters_Returns400_WithoutTouchingTheRepository(string name)
+        {
+            var result = await _service.CreateAsync(Tenant, new ProxyCreateRequestDto
+            {
+                Name = name,
+                Upstream = "https://api.stripe.com",
+                Methods = new List<string> { "GET" },
+            });
+
+            result.HttpStatus.Should().Be(400);
+            result.Code.Should().Be("PROXY_VALIDATION");
+            result.Errors!["name"].Should().Be("Name must contain at least one letter (a-z) or digit (0-9).");
+            _proxyRepo.Verify(r => r.GetBySlugAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+            _proxyRepo.Verify(r => r.InsertAsync(It.IsAny<ProxyDetailEntity>()), Times.Never);
+        }
+
         // ---------- GetAll : H3 ----------
         [Fact]
         public async Task GetAll_MapsRows_WithMaskAndCredentialFlagAndUnpagedCount()
@@ -203,36 +225,50 @@ namespace XUnitTest.Proxy
         [Fact]
         public async Task GetAll_PopulatesCalls24h_PerProxy_ZeroWhenAbsent()
         {
-            var p1 = Existing(e => e.ItemId = "p1");
+            // p1 carries counters for two hours inside the window; p2 has never been called, so its Stats
+            // is the default empty instance and its card must read 0 rather than blank or stale.
+            var now = DateTime.UtcNow;
+            var p1 = Existing(e =>
+            {
+                e.ItemId = "p1";
+                e.Stats.Buckets[ProxyStatsWindow.StampOf(now)] = new ProxyStatsBucket { Calls = 5 };
+                e.Stats.Buckets[ProxyStatsWindow.StampOf(now.AddHours(-1))] = new ProxyStatsBucket { Calls = 4 };
+            });
             var p2 = Existing(e => { e.ItemId = "p2"; e.Slug = "other"; });
             _proxyRepo.Setup(r => r.GetAllAsync(Tenant, null, null, 20, 0))
                 .ReturnsAsync(new List<ProxyDetailEntity> { p1, p2 });
             _proxyRepo.Setup(r => r.CountAsync(Tenant, null, null)).ReturnsAsync(2);
-            _executionRepo
-                .Setup(r => r.CountByProxyAsync(Tenant, It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>()))
-                .ReturnsAsync((IReadOnlyDictionary<string, long>)new Dictionary<string, long> { ["p1"] = 9 });
 
             var result = await _service.GetAllAsync(Tenant, new ProxyGetAllRequestDto());
 
             result.Data!.Single(r => r.ItemId == "p1").Calls24h.Should().Be(9);
             result.Data!.Single(r => r.ItemId == "p2").Calls24h.Should().Be(0);
+
+            // The list page no longer aggregates ProxyExecutions at all.
+            _executionRepo.Verify(
+                r => r.CountByProxyAsync(It.IsAny<string>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>()),
+                Times.Never);
         }
 
         // ---------- GetAll : C9 (aggregation failure still returns the list, calls24h=0) ----------
         [Fact]
-        public async Task GetAll_WhenCalls24hAggregationThrows_ReturnsListWithZeroCounts()
+        public async Task GetAll_Calls24h_IgnoresBucketsOlderThanTheWindow()
         {
+            // The flush prunes expired hours, but a proxy that went quiet may still carry one: a bucket
+            // outside the window must not be counted just because nothing has swept it yet.
+            var now = DateTime.UtcNow;
+            var proxy = Existing(e =>
+            {
+                e.Stats.Buckets[ProxyStatsWindow.StampOf(now)] = new ProxyStatsBucket { Calls = 2 };
+                e.Stats.Buckets[ProxyStatsWindow.StampOf(now.AddHours(-40))] = new ProxyStatsBucket { Calls = 100 };
+            });
             _proxyRepo.Setup(r => r.GetAllAsync(Tenant, null, null, 20, 0))
-                .ReturnsAsync(new List<ProxyDetailEntity> { Existing() });
+                .ReturnsAsync(new List<ProxyDetailEntity> { proxy });
             _proxyRepo.Setup(r => r.CountAsync(Tenant, null, null)).ReturnsAsync(1);
-            _executionRepo
-                .Setup(r => r.CountByProxyAsync(Tenant, It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>()))
-                .ThrowsAsync(new TimeoutException("mongo timed out"));
 
             var result = await _service.GetAllAsync(Tenant, new ProxyGetAllRequestDto());
 
-            result.Data.Should().HaveCount(1);
-            result.Data!.Single().Calls24h.Should().Be(0);
+            result.Data!.Single().Calls24h.Should().Be(2);
             result.TotalCount.Should().Be(1);
         }
 
@@ -308,6 +344,79 @@ namespace XUnitTest.Proxy
             upstreamChange.Before.Should().Be("https://api.stripe.com/v1/charges");
             upstreamChange.After.Should().Be("https://api.stripe.com/v2/charges");
             _proxyRepo.Verify(r => r.ReplaceAsync(entity), Times.Once);
+        }
+
+        // ---------- Update : a rename must not collide with another proxy's published identity ----------
+        [Fact]
+        public async Task Update_RenameIntoAnotherProxysSlug_Returns409_AndReplacesNothing()
+        {
+            var entity = Existing(e =>
+            {
+                e.ItemId = "p2";
+                e.Name = "Weather Lookup";
+                e.Slug = "weather-lookup";
+            });
+            _proxyRepo.Setup(r => r.GetAsync(Tenant, "p2")).ReturnsAsync(entity);
+            // "stripe-payments" already belongs to p1.
+            _proxyRepo.Setup(r => r.GetBySlugAsync(Tenant, "stripe-payments")).ReturnsAsync(Existing());
+
+            var result = await _service.UpdateAsync(Tenant, new ProxyUpdateRequestDto
+            {
+                ItemId = "p2",
+                Name = "Stripe  Payments!",
+                Upstream = "https://api.stripe.com",
+                Methods = new List<string> { "GET" },
+            });
+
+            result.HttpStatus.Should().Be(409);
+            result.Code.Should().Be("PROXY_SLUG_CONFLICT");
+            entity.Name.Should().Be("Weather Lookup");
+            entity.Slug.Should().Be("weather-lookup");
+            _proxyRepo.Verify(r => r.ReplaceAsync(It.IsAny<ProxyDetailEntity>()), Times.Never);
+            _versionRepo.Verify(r => r.InsertAsync(It.IsAny<ProxyVersionEntity>()), Times.Never);
+        }
+
+        // ---------- Update : renaming to an unclaimed slug is allowed; the slug itself never moves ----------
+        [Fact]
+        public async Task Update_RenameToFreeSlug_Succeeds_AndLeavesSlugUntouched()
+        {
+            var entity = Existing();
+            _proxyRepo.Setup(r => r.GetAsync(Tenant, "p1")).ReturnsAsync(entity);
+            _proxyRepo.Setup(r => r.GetBySlugAsync(Tenant, "stripe-billing")).ReturnsAsync((ProxyDetailEntity?)null);
+
+            var result = await _service.UpdateAsync(Tenant, new ProxyUpdateRequestDto
+            {
+                ItemId = "p1",
+                Name = "Stripe Billing",
+                Upstream = "https://api.stripe.com/v1/charges",
+                Methods = new List<string> { "GET", "POST" },
+                Headers = new List<ProxyKeyValueInputDto> { Header() },
+            });
+
+            result.HttpStatus.Should().Be(200);
+            entity.Name.Should().Be("Stripe Billing");
+            entity.Slug.Should().Be("stripe-payments");
+            _proxyRepo.Verify(r => r.ReplaceAsync(entity), Times.Once);
+        }
+
+        // ---------- Update : a proxy whose own slug matches its name is not self-conflicted ----------
+        [Fact]
+        public async Task Update_SameName_DoesNotProbeForSlugConflict()
+        {
+            var entity = Existing();
+            _proxyRepo.Setup(r => r.GetAsync(Tenant, "p1")).ReturnsAsync(entity);
+
+            var result = await _service.UpdateAsync(Tenant, new ProxyUpdateRequestDto
+            {
+                ItemId = "p1",
+                Name = "Stripe Payments",
+                Upstream = "https://api.stripe.com/v2/charges",
+                Methods = new List<string> { "GET", "POST" },
+                Headers = new List<ProxyKeyValueInputDto> { Header() },
+            });
+
+            result.HttpStatus.Should().Be(200);
+            _proxyRepo.Verify(r => r.GetBySlugAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
         }
 
         // ---------- Update : multi-field Save -> one row, several Changes ----------

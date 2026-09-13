@@ -49,6 +49,14 @@ namespace Proxy.DomainService.Entities
         /// </summary>
         public const string ResponseFilterFailed = "ResponseFilterFailed";
         public const string MethodNotAllowed = "MethodNotAllowed";
+
+        /// <summary>
+        /// The requested path is not one of the proxy's declared <c>Routes</c> (or contains a <c>.</c> /
+        /// <c>..</c> segment). Returned as <c>403</c> with no upstream call; an execution row is still
+        /// written so a caller probing for undeclared endpoints is visible in the logs. A proxy with an
+        /// empty route list accepts only its base path, so any suffix lands here.
+        /// </summary>
+        public const string RouteNotAllowed = "RouteNotAllowed";
         public const string ProxyNotFound = "ProxyNotFound";
         public const string Unauthorized = "Unauthorized";
         public const string InternalError = "InternalError";

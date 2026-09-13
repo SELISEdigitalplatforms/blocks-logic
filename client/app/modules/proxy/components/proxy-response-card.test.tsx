@@ -93,6 +93,14 @@ const EditHarness = ({ resetTo }: { resetTo: string[] }) => {
 const paths = () => JSON.parse(screen.getByTestId("paths").textContent || "[]") as string[];
 const mode = () => screen.getByTestId("mode").textContent;
 
+/**
+ * The row wrapper for a field, found from its name input. The input sits inside its own
+ * label/error column, so `closest("div")` lands on that column rather than the row that also
+ * holds the checkbox and the add/remove buttons — scope by the row's test id instead.
+ */
+const rowOf = (value: string) =>
+  screen.getByDisplayValue(value).closest("[data-testid='response-field-row']") as HTMLElement;
+
 describe("ProxyResponseCard", () => {
   it("shows the passthrough panel on 'All fields' and keeps the tree lossless across tabs", async () => {
     const user = userEvent.setup();
@@ -126,7 +134,7 @@ describe("ProxyResponseCard", () => {
 
     // "data" covers its whole subtree. Adding an explicit child must narrow to that child's
     // path instead of the encoding swallowing it back into ["data"].
-    const dataRow = screen.getByDisplayValue("data").closest("div")!;
+    const dataRow = rowOf("data");
     await user.click(within(dataRow).getByRole("button", { name: /add child field/i }));
     const blank = screen
       .getAllByPlaceholderText("field name")
@@ -142,7 +150,7 @@ describe("ProxyResponseCard", () => {
     renderWithProviders(<Harness responseInclude={["data.id", "data.name"]} />);
 
     expect(paths().sort()).toEqual(["data.id", "data.name"]);
-    const dataRow = screen.getByDisplayValue("data").closest("div")!;
+    const dataRow = rowOf("data");
 
     // Parent reads as selected (children checked) — one click clears the whole subtree.
     await user.click(within(dataRow).getByRole("checkbox"));
@@ -157,7 +165,7 @@ describe("ProxyResponseCard", () => {
     const user = userEvent.setup();
     renderWithProviders(<Harness responseInclude={["data.id"]} />);
 
-    const idRow = screen.getByDisplayValue("id").closest("div")!;
+    const idRow = rowOf("id");
     await user.click(within(idRow).getByRole("checkbox"));
 
     expect(paths()).toEqual([]);
@@ -231,7 +239,7 @@ describe("ProxyResponseCard", () => {
     await screen.findByDisplayValue("name");
     await waitFor(() => expect(paths().sort()).toEqual(["data.id", "data.name"]));
 
-    const nameRow = screen.getByDisplayValue("name").closest("div")!;
+    const nameRow = rowOf("name");
     await user.click(within(nameRow).getByRole("checkbox"));
 
     await waitFor(() => expect(paths()).toEqual(["data.id"]));

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildProxyCurl,
   buildVarToken,
   compactKeyValues,
   containsVarRef,
   countResponseLeaves,
+  fillRouteParams,
   deriveResponseSchema,
   insertToken,
   isResponsePath,
@@ -273,3 +275,51 @@ describe("response field filtering helpers", () => {
   });
 });
 
+describe("buildProxyCurl", () => {
+  const base = { method: "GET" as const, path: "/api/proxy/gateway/search-tickets" };
+
+  it("rebuilds the client-facing call with placeholder credentials", () => {
+    expect(buildProxyCurl(base, "https://dev-logic.blocksdevelopers.com")).toBe(
+      [
+        "curl -X GET 'https://dev-logic.blocksdevelopers.com/api/proxy/gateway/search-tickets' \\",
+        "  -H 'x-blocks-key: <your tenant id>' \\",
+        "  -H 'Authorization: Bearer <token issued for that tenant>'",
+      ].join("\n"),
+    );
+  });
+
+  it("appends the recorded query string", () => {
+    expect(buildProxyCurl({ ...base, requestQuery: "q=open&page=2" }, "https://x.test")).toContain(
+      "'https://x.test/api/proxy/gateway/search-tickets?q=open&page=2'",
+    );
+  });
+
+  it("does not duplicate the slash between origin and path", () => {
+    expect(buildProxyCurl(base, "https://x.test/")).toContain("'https://x.test/api/proxy/gateway/");
+  });
+
+  it("escapes a single quote so the command cannot break out of its own quoting", () => {
+    const curl = buildProxyCurl({ ...base, requestQuery: "name=o'brien" }, "https://x.test");
+    // The ' is closed, backslash-escaped, and reopened: o'\''brien
+    expect(curl).toContain(String.raw`name=o'\''brien'`);
+  });
+
+  it("never leaks injected credential keys into the client command", () => {
+    const curl = buildProxyCurl(base, "https://x.test");
+    expect(curl).not.toContain("Authorization: Bearer sk_");
+    expect(curl.match(/-H /g)).toHaveLength(2);
+  });
+});
+
+describe("route templates", () => {
+  it("substitutes supplied values and URL-encodes them", () => {
+    expect(fillRouteParams("orders/{id}/refunds", { id: "ch 12/3" })).toBe(
+      "orders/ch%2012%2F3/refunds",
+    );
+  });
+
+  it("leaves an unfilled segment as its template so the caller can refuse to send", () => {
+    expect(fillRouteParams("orders/{id}", {})).toBe("orders/{id}");
+    expect(fillRouteParams("orders/{id}", { id: "   " })).toBe("orders/{id}");
+  });
+});

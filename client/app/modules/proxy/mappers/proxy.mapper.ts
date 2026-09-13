@@ -1,4 +1,4 @@
-import { isResponsePath, maskUpstreamUrl } from "../utils";
+import { compactKeyValues, isResponsePath, maskUpstreamUrl } from "../utils";
 import {
   BaseMutationResponseDto,
   Proxy,
@@ -19,6 +19,8 @@ import {
   ProxyFieldChange,
   ProxyOverview,
   ProxyOverviewDto,
+  ProxyRoute,
+  ProxyRouteDto,
   ProxyStatusClass,
   ProxyTestRequest,
   ProxyTestResponse,
@@ -82,7 +84,7 @@ export const mapLogFilterToStatusClass = (filter: ProxyLogFilter): ProxyStatusCl
 };
 
 // ---------------------------------------------------------------------------
-// Request payloads (ProxyController Create / Update / Test)
+// Request payloads (ProxiesController Create / Update / Test)
 // ---------------------------------------------------------------------------
 
 const toKeyValueInputs = (rows: ProxyKeyValue[]): ProxyKeyValueInputDto[] =>
@@ -148,6 +150,7 @@ export const mapProxyToCreatePayload = (values: ProxyFormValues) => ({
   query: toKeyValueInputs(values.query),
   bodyMerge: toBodyMergeInputs(values),
   methodConfigs: toMethodConfigInputs(values.methodConfigs, values.methods),
+  routes: toRouteInputs(values.routes),
   ...toResponseFilter(values),
   enabled: true,
 });
@@ -161,6 +164,7 @@ export const mapProxyToUpdatePayload = (id: string, values: ProxyFormValues) => 
   query: toKeyValueInputs(values.query),
   bodyMerge: toBodyMergeInputs(values),
   methodConfigs: toMethodConfigInputs(values.methodConfigs, values.methods),
+  routes: toRouteInputs(values.routes),
   ...toResponseFilter(values),
 });
 
@@ -174,6 +178,9 @@ export const mapProxyTestRequestToPayload = (request: ProxyTestRequest) => ({
         query: toKeyValueInputs(request.draft.query),
         bodyMerge: toBodyMergeInputs(request.draft),
         methodConfigs: toMethodConfigInputs(request.draft.methodConfigs, request.draft.methods),
+        // Without the routes the server tests against the base path only, and a Test of any other
+        // endpoint is refused as unlisted before it ever reaches the vendor.
+        routes: toRouteInputs(request.draft.routes),
         ...toResponseFilter(request.draft),
       }
     : undefined,
@@ -206,7 +213,57 @@ const toMethodOverrides = (
       query: dto.query ? toKeyValues(dto.query) : null,
     }));
 
-/** One row of `POST /api/Proxy/GetAll` (no full upstream / header rows in the list projection). */
+/** One row of `GET /api/Proxies` (no full upstream / header rows in the list projection). */
+/** Strips leading and trailing slashes; the server stores and matches templates without them. */
+const trimSlashes = (value: string | null | undefined) => (value ?? "").replace(/^\/+|\/+$/g, "");
+
+/**
+ * `null` and `[]` are different on a route override: `null` inherits the proxy-wide value, `[]` is an
+ * explicit "none". Collapsing them would turn a route that opted out of the body merge back into one
+ * that inherits it, so the distinction is preserved in both directions.
+ */
+const toRouteOverride = (value: ProxyKeyValueDto[] | null | undefined): ProxyKeyValue[] | null =>
+  Array.isArray(value) ? value.map((row) => ({ key: row.key ?? "", value: row.value ?? "" })) : null;
+
+const toRoutes = (value: ProxyRouteDto[] | null | undefined): ProxyRoute[] =>
+  Array.isArray(value)
+    ? value
+        .filter((route) => typeof route?.method === "string")
+        .map((route) => ({
+          method: route.method.toUpperCase() as ProxyMethod,
+          path: trimSlashes(route.path),
+          upstreamPath: typeof route.upstreamPath === "string" ? trimSlashes(route.upstreamPath) : null,
+          headers: toRouteOverride(route.headers),
+          query: toRouteOverride(route.query),
+          bodyMerge: toRouteOverride(route.bodyMerge),
+          responseMode:
+            route.responseMode?.toLowerCase() === "select"
+              ? "select"
+              : route.responseMode?.toLowerCase() === "all"
+                ? "all"
+                : null,
+          responseInclude: Array.isArray(route.responseInclude) ? [...route.responseInclude] : null,
+        }))
+    : [];
+
+/**
+ * Route payload. Sent on every create and update, including routes the form cannot edit: the server
+ * replaces the whole list, so an omitted `routes` narrows the proxy to its base path.
+ */
+const toRouteInputs = (routes: ProxyRoute[] | undefined): ProxyRouteDto[] =>
+  (routes ?? []).map((route) => ({
+    method: route.method,
+    path: trimSlashes(route.path),
+    upstreamPath: route.upstreamPath ? trimSlashes(route.upstreamPath) : null,
+    headers: route.headers ? compactKeyValues(route.headers) : null,
+    query: route.query ? compactKeyValues(route.query) : null,
+    bodyMerge: route.bodyMerge ? compactKeyValues(route.bodyMerge) : null,
+    responseMode: route.responseMode === "select" ? "Select" : route.responseMode === "all" ? "All" : null,
+    responseInclude: route.responseInclude
+      ? route.responseInclude.map((path) => path.trim()).filter((path) => path.length > 0)
+      : null,
+  }));
+
 export const mapProxyListItemDtoToProxy = (dto: ProxyListItemDto): Proxy => ({
   id: dto.itemId,
   name: dto.name,
@@ -219,6 +276,7 @@ export const mapProxyListItemDtoToProxy = (dto: ProxyListItemDto): Proxy => ({
   query: [],
   bodyMerge: [],
   methodConfigs: [],
+  routes: [],
   responseMode: "all",
   responseInclude: [],
   calls24h: Number(dto.calls24h ?? 0),
@@ -226,7 +284,7 @@ export const mapProxyListItemDtoToProxy = (dto: ProxyListItemDto): Proxy => ({
   updatedAt: dto.lastUpdatedDate,
 });
 
-/** `GET /api/Proxy/Get` — the full configuration for the form / detail view. */
+/** `GET /api/Proxies/{proxyId}` — the full configuration for the form / detail view. */
 export const mapProxyDetailDtoToProxy = (dto: ProxyDetailDto): Proxy => ({
   id: dto.itemId,
   name: dto.name,
@@ -239,6 +297,7 @@ export const mapProxyDetailDtoToProxy = (dto: ProxyDetailDto): Proxy => ({
   query: toKeyValues(dto.query),
   bodyMerge: toKeyValues(dto.bodyMerge),
   methodConfigs: toMethodOverrides(dto.methodConfigs),
+  routes: toRoutes(dto.routes),
   responseMode: dto.responseMode?.toLowerCase() === "select" ? "select" : "all",
   responseInclude: Array.isArray(dto.responseInclude) ? dto.responseInclude : [],
   calls24h: 0,
@@ -266,7 +325,7 @@ const VERSION_KIND: Record<string, ProxyVersionHistory["kind"]> = {
   Delete: "delete",
 };
 
-/** One row of `POST /api/Proxy/GetVersions`. `proxyId` comes from the request, not the DTO. */
+/** One row of `GET /api/Proxies/{proxyId}/versions`. `proxyId` comes from the request, not the DTO. */
 export const mapProxyVersionDtoToHistory = (
   dto: ProxyVersionDto,
   proxyId: string,
@@ -284,7 +343,7 @@ export const mapProxyVersionDtoToHistory = (
 });
 
 /**
- * One row of `POST /api/Proxy/GetExecutions`. The list projection carries no upstream URL,
+ * One row of `GET /api/Proxies/{proxyId}/executions`. The list projection carries no upstream URL,
  * injected keys or body — those arrive via {@link mapProxyExecutionDetailDtoToLog}.
  */
 export const mapProxyExecutionListItemDtoToLog = (
@@ -308,7 +367,7 @@ export const mapProxyExecutionListItemDtoToLog = (
   outcome: dto.outcome ?? undefined,
 });
 
-/** `GET /api/Proxy/GetExecution` — the expanded row with the display-clipped response body. */
+/** `GET /api/Proxies/{proxyId}/executions/{executionId}` — the expanded row with the display-clipped response body. */
 export const mapProxyExecutionDetailDtoToLog = (
   dto: ProxyExecutionDetailDto,
 ): ProxyExecutionLog => ({
@@ -317,6 +376,7 @@ export const mapProxyExecutionDetailDtoToLog = (
   timeUtc: dto.startedAtUtc,
   method: isMethod(dto.requestMethod) ? dto.requestMethod : "GET",
   path: dto.requestPath,
+  requestQuery: dto.requestQuery || undefined,
   status: Number(dto.statusCode ?? 0),
   statusText: statusText(Number(dto.statusCode ?? 0)),
   latencyMs: Number(dto.latencyMs ?? 0),
@@ -330,7 +390,7 @@ export const mapProxyExecutionDetailDtoToLog = (
   errorMessage: dto.errorMessage ?? undefined,
 });
 
-/** `POST /api/Proxy/GetOverview` — the rolling 24h tiles for the detail view. */
+/** `GET /api/Proxies/{proxyId}/overview` — the rolling 24h tiles for the detail view. */
 export const mapProxyOverviewDtoToOverview = (dto: ProxyOverviewDto): ProxyOverview => ({
   calls24h: Number(dto.calls24h ?? 0),
   avgLatencyMs: Number(dto.avgLatencyMs ?? 0),
@@ -341,7 +401,7 @@ export const mapProxyOverviewDtoToOverview = (dto: ProxyOverviewDto): ProxyOverv
   lastCallAtUtc: dto.lastCallAtUtc ?? null,
 });
 
-/** 200 body of `POST /api/Proxy/Test` -> the shape the test panel renders. */
+/** 200 body of `POST /api/Proxies/test` -> the shape the test panel renders. */
 export const mapProxyTestResponseDtoToResponse = (
   dto: ProxyTestResponseDto,
   request: ProxyTestRequest,

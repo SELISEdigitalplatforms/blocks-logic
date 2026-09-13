@@ -27,7 +27,6 @@ namespace Proxy.DomainService
             services.AddSingleton<IProxyService, ProxyService>();
             services.AddSingleton<IProxyVersionService, ProxyVersionService>();
             services.AddSingleton<IProxyGatewayService, ProxyGatewayService>();
-            services.AddSingleton<IProxyGatewayAuthService, ProxyGatewayAuthService>();
             services.AddSingleton<IProxyTestService, ProxyTestService>();
             services.AddSingleton<IProxyExecutionService, ProxyExecutionService>();
 
@@ -46,6 +45,13 @@ namespace Proxy.DomainService
             // SSRF guard: rejects private / loopback / link-local upstream targets at config-write and again
             // (post-DNS) just before the send.
             services.AddSingleton<IProxyUpstreamGuard, ProxyUpstreamGuard>();
+
+            // Denormalized traffic counters for the Overview tiles. The recorder must be a singleton: its
+            // buffer IS the batching, and a scoped instance would flush one call at a time. The hosted
+            // service drains it on a timer and once more on shutdown.
+            services.AddSingleton<IProxyStatsRecorder, ProxyStatsRecorder>();
+
+            services.AddHostedService<ProxyStatsFlushService>();
 
             // IHttpClientFactory + the buffered upstream client used by the forwarder.
             services.AddHttpClient();

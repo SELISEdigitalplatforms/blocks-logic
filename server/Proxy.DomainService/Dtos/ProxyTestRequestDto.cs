@@ -1,7 +1,7 @@
 namespace Proxy.DomainService.Dtos
 {
     /// <summary>
-    /// Body of <c>POST /api/Proxy/Test</c> (SPEC &sect;3.3). Exactly one of <see cref="ProxyId"/> /
+    /// Body of <c>POST /api/Proxies/test</c> (SPEC &sect;3.3). Exactly one of <see cref="ProxyId"/> /
     /// <see cref="Draft"/> must be present: reference a saved proxy, or supply a full draft used before the
     /// first save in the console form.
     /// </summary>
@@ -29,7 +29,7 @@ namespace Proxy.DomainService.Dtos
         public string? ContentType { get; set; }
     }
 
-    /// <summary>An unsaved proxy configuration supplied to <c>POST /api/Proxy/Test</c>.</summary>
+    /// <summary>An unsaved proxy configuration supplied to <c>POST /api/Proxies/test</c>.</summary>
     public sealed class ProxyTestDraftDto
     {
         public string? Upstream { get; set; }
@@ -48,6 +48,12 @@ namespace Proxy.DomainService.Dtos
 
         /// <summary>Per-method overrides for the unsaved draft. Same rules as Create / Update.</summary>
         public List<ProxyMethodConfigInputDto>? MethodConfigs { get; set; }
+
+        /// <summary>
+        /// The endpoints the draft proxy may reach. Omitted / empty ⇒ base path only, so a Test that sends a
+        /// path suffix is refused exactly as the live gateway would refuse it.
+        /// </summary>
+        public List<ProxyRouteConfigInputDto>? Routes { get; set; }
 
         /// <summary><c>"All"</c> (default) or <c>"Select"</c>. Same rules as Create / Update.</summary>
         public string? ResponseMode { get; set; }

@@ -32,6 +32,7 @@ namespace Proxy.DomainService.Services
         private readonly IProxyExecutionRepository _executionRepository;
         private readonly IProxyVariableResolver _variableResolver;
         private readonly IProxyUpstreamGuard _upstreamGuard;
+        private readonly IProxyStatsRecorder _statsRecorder;
         private readonly ILogger<ProxyGatewayService> _logger;
 
         public ProxyGatewayService(
@@ -40,6 +41,7 @@ namespace Proxy.DomainService.Services
             IProxyExecutionRepository executionRepository,
             IProxyVariableResolver variableResolver,
             IProxyUpstreamGuard upstreamGuard,
+            IProxyStatsRecorder statsRecorder,
             ILogger<ProxyGatewayService> logger)
         {
             _httpClientFactory = httpClientFactory;
@@ -47,6 +49,7 @@ namespace Proxy.DomainService.Services
             _executionRepository = executionRepository;
             _variableResolver = variableResolver;
             _upstreamGuard = upstreamGuard;
+            _statsRecorder = statsRecorder;
             _logger = logger;
         }
 
@@ -79,7 +82,7 @@ namespace Proxy.DomainService.Services
                 _logger.LogWarning(
                     "Proxy gateway: slug '{Slug}' not found or disabled for tenant {TenantId}; returning 404.",
                     request.Slug, request.TenantId);
-                return await FinalizeAsync(request, config, BuildPreflight(
+                return await FinalizeAsync(request, config, null, BuildPreflight(
                     ProxyExecutionOutcome.ProxyNotFound, 404, startedAt));
             }
 
@@ -90,7 +93,7 @@ namespace Proxy.DomainService.Services
                 _logger.LogWarning(
                     "Proxy gateway: method {Method} not in [{Allowed}] for slug '{Slug}' (tenant {TenantId}); returning 405.",
                     request.Method, string.Join(", ", allowedWire), config.Slug, request.TenantId);
-                return await FinalizeAsync(request, config, BuildPreflight(
+                return await FinalizeAsync(request, config, null, BuildPreflight(
                     ProxyExecutionOutcome.MethodNotAllowed, 405, startedAt, allowedMethods: allowedWire));
             }
 
@@ -99,23 +102,51 @@ namespace Proxy.DomainService.Services
                 _logger.LogWarning(
                     "Proxy gateway: request body exceeds {Cap} bytes for slug '{Slug}' (tenant {TenantId}); returning 413, no upstream call.",
                     MaxBodyBytes, config.Slug, request.TenantId);
-                return await FinalizeAsync(request, config, BuildPreflight(
+                return await FinalizeAsync(request, config, null, BuildPreflight(
                     ProxyExecutionOutcome.RequestTooLarge, 413, startedAt));
+            }
+
+            // Route allowlist. The caller never holds the upstream credential, so the set of endpoints that
+            // credential can be pointed at has to be declared by the tenant rather than chosen by the caller.
+            // An empty route list means "base path only", which keeps a proxy one-to-one with one endpoint.
+            var route = ProxyRouteResolver.Resolve(config.Routes, requestedMethod, request.PathSuffix);
+
+            if (route.Status == ProxyRouteStatus.MethodMismatch)
+            {
+                _logger.LogWarning(
+                    "Proxy gateway: path '{Path}' on slug '{Slug}' (tenant {TenantId}) is declared for [{Allowed}], not {Method}; returning 405.",
+                    request.PathSuffix, config.Slug, request.TenantId, string.Join(", ", route.AllowedMethods), request.Method);
+                return await FinalizeAsync(request, config, route, BuildPreflight(
+                    ProxyExecutionOutcome.MethodNotAllowed, 405, startedAt, allowedMethods: route.AllowedMethods));
+            }
+
+            if (route.Status == ProxyRouteStatus.NotAllowed)
+            {
+                _logger.LogWarning(
+                    "Proxy gateway: path '{Path}' is not a declared route on slug '{Slug}' (tenant {TenantId}); returning 403, no upstream call.",
+                    request.PathSuffix, config.Slug, request.TenantId);
+                return await FinalizeAsync(request, config, route, BuildPreflight(
+                    ProxyExecutionOutcome.RouteNotAllowed, 403, startedAt,
+                    errorMessage: config.Routes.Count == 0
+                        ? "This proxy accepts its base path only; no routes are configured."
+                        : "The requested path is not a configured route on this proxy."));
             }
 
             // --- forward ---
 
-            // Resolve the effective config for this method: a per-method override wins field-by-field, a null
-            // member inherits the shared value. With MethodConfigs empty this is exactly config.* (today).
-            var (effHeaders, effQuery, effUpstream) = ResolveEffective(config, requestedMethod);
+            // Resolve the effective config for this call: the matched route wins field-by-field, then the
+            // per-method override, then the shared value. With no routes and no MethodConfigs this is exactly
+            // config.* (today's behaviour).
+            var effective = ResolveEffective(config, requestedMethod, route.Route);
+            var (effHeaders, effQuery, effUpstream) = (effective.Headers, effective.Query, effective.Upstream);
 
             // Collect every {{$VAR.name}} across the fields we will actually send and resolve them once,
             // batched, from Blocks Secrets. The resolved values are substituted into the outbound request in
             // memory only — never stored, logged, or returned. A resolution failure fails the call before any
             // upstream connection (an execution row is still written).
             var bodyMergeForVars = requestedMethod is HttpMethodType.Post or HttpMethodType.Put or HttpMethodType.Patch
-                && config.BodyMerge.Count > 0
-                    ? config.BodyMerge
+                && effective.BodyMerge.Count > 0
+                    ? effective.BodyMerge
                     : null;
             var varNames = ProxyVarRef.Names(effHeaders, effQuery, bodyMergeForVars).ToArray();
 
@@ -131,7 +162,7 @@ namespace Proxy.DomainService.Services
                     _logger.LogWarning(
                         "Proxy gateway: could not resolve configuration variable(s) [{Names}] for slug '{Slug}' (tenant {TenantId}); returning 502, no upstream call.",
                         string.Join(", ", ex.Names), config.Slug, request.TenantId);
-                    return await FinalizeAsync(request, config, BuildPreflight(
+                    return await FinalizeAsync(request, config, route, BuildPreflight(
                         ProxyExecutionOutcome.VariableResolutionFailed, 502, startedAt,
                         errorMessage: $"Could not resolve configuration variable(s): {string.Join(", ", ex.Names)}"));
                 }
@@ -143,18 +174,18 @@ namespace Proxy.DomainService.Services
             var effBody = request.Body;
             var effContentType = request.ContentType;
 
-            var mergeApplies = config.BodyMerge.Count > 0
+            var mergeApplies = effective.BodyMerge.Count > 0
                 && requestedMethod is HttpMethodType.Post or HttpMethodType.Put or HttpMethodType.Patch;
 
             if (mergeApplies)
             {
-                var merge = ProxyBodyMerger.Merge(request.Body, config.BodyMerge, vars);
+                var merge = ProxyBodyMerger.Merge(request.Body, effective.BodyMerge, vars);
                 if (merge.NotMergeable)
                 {
                     _logger.LogWarning(
                         "Proxy gateway: request body for slug '{Slug}' (tenant {TenantId}) is not a JSON object; returning 422, no upstream call.",
                         config.Slug, request.TenantId);
-                    return await FinalizeAsync(request, config, BuildPreflight(
+                    return await FinalizeAsync(request, config, route, BuildPreflight(
                         ProxyExecutionOutcome.RequestBodyNotMergeable, 422, startedAt));
                 }
 
@@ -163,7 +194,7 @@ namespace Proxy.DomainService.Services
                     _logger.LogWarning(
                         "Proxy gateway: merged request body exceeds {Cap} bytes for slug '{Slug}' (tenant {TenantId}); returning 413, no upstream call.",
                         MaxBodyBytes, config.Slug, request.TenantId);
-                    return await FinalizeAsync(request, config, BuildPreflight(
+                    return await FinalizeAsync(request, config, route, BuildPreflight(
                         ProxyExecutionOutcome.RequestTooLarge, 413, startedAt));
                 }
 
@@ -171,7 +202,8 @@ namespace Proxy.DomainService.Services
                 effContentType = "application/json";
             }
 
-            var (storedUrl, outboundUrl, injectedQueryKeys) = BuildUrls(effUpstream, effQuery, request, vars);
+            var (storedUrl, outboundUrl, injectedQueryKeys) = BuildUrls(
+                effUpstream, effQuery, route.UpstreamPathSuffix, request, vars);
             var upstreamHost = SafeHost(outboundUrl);
             // Best-effort list for failure rows; replaced with the keys that actually attached once the
             // request message is built (a malformed key is dropped rather than sent).
@@ -187,7 +219,7 @@ namespace Proxy.DomainService.Services
                 _logger.LogWarning(
                     "Proxy gateway: upstream {Host} for slug '{Slug}' (tenant {TenantId}) resolves to a blocked address; returning 502.",
                     upstreamHost, config.Slug, request.TenantId);
-                return await FinalizeAsync(request, config, BuildFailure(
+                return await FinalizeAsync(request, config, route, BuildFailure(
                     ProxyExecutionOutcome.UpstreamBlocked, 502, startedAt, stopwatch, storedUrl, upstreamHost,
                     injectedHeaderKeys, injectedQueryKeys, "The upstream endpoint is not an allowed destination"));
             }
@@ -216,7 +248,7 @@ namespace Proxy.DomainService.Services
                 _logger.LogWarning(
                     "Proxy gateway: upstream {Host} did not respond within 30s for slug '{Slug}' (tenant {TenantId}); returning 504.",
                     upstreamHost, config.Slug, request.TenantId);
-                return await FinalizeAsync(request, config, BuildFailure(
+                return await FinalizeAsync(request, config, route, BuildFailure(
                     ProxyExecutionOutcome.Timeout, 504, startedAt, stopwatch, storedUrl, upstreamHost,
                     injectedHeaderKeys, injectedQueryKeys, "Upstream did not respond within 30s"));
             }
@@ -226,7 +258,7 @@ namespace Proxy.DomainService.Services
                 _logger.LogWarning(
                     "Proxy gateway: upstream {Host} response exceeded the {Cap} byte cap for slug '{Slug}' (tenant {TenantId}); returning 502.",
                     upstreamHost, MaxResponseBodyBytes, config.Slug, request.TenantId);
-                return await FinalizeAsync(request, config, BuildFailure(
+                return await FinalizeAsync(request, config, route, BuildFailure(
                     ProxyExecutionOutcome.UpstreamResponseTooLarge, 502, startedAt, stopwatch, storedUrl, upstreamHost,
                     injectedHeaderKeys, injectedQueryKeys, "Upstream response exceeded the 10 MB limit"));
             }
@@ -236,7 +268,7 @@ namespace Proxy.DomainService.Services
                 _logger.LogWarning(ex,
                     "Proxy gateway: upstream {Host} unreachable for slug '{Slug}' (tenant {TenantId}); returning 502.",
                     upstreamHost, config.Slug, request.TenantId);
-                return await FinalizeAsync(request, config, BuildFailure(
+                return await FinalizeAsync(request, config, route, BuildFailure(
                     ProxyExecutionOutcome.UpstreamUnreachable, 502, startedAt, stopwatch, storedUrl, upstreamHost,
                     injectedHeaderKeys, injectedQueryKeys, "Could not connect to the upstream endpoint"));
             }
@@ -246,7 +278,7 @@ namespace Proxy.DomainService.Services
                 _logger.LogError(ex,
                     "Proxy gateway: unexpected forwarder error for slug '{Slug}' (tenant {TenantId}); returning 500.",
                     config.Slug, request.TenantId);
-                return await FinalizeAsync(request, config, BuildFailure(
+                return await FinalizeAsync(request, config, route, BuildFailure(
                     ProxyExecutionOutcome.InternalError, 500, startedAt, stopwatch, storedUrl, upstreamHost,
                     injectedHeaderKeys, injectedQueryKeys, "The proxy forwarder encountered an unexpected error"));
             }
@@ -262,7 +294,7 @@ namespace Proxy.DomainService.Services
                     _logger.LogWarning(
                         "Proxy gateway: upstream {Host} declared a {Declared} byte body over the {Cap} byte cap for slug '{Slug}' (tenant {TenantId}); returning 502.",
                         upstreamHost, response.Content.Headers.ContentLength, MaxResponseBodyBytes, config.Slug, request.TenantId);
-                    return await FinalizeAsync(request, config, BuildFailure(
+                    return await FinalizeAsync(request, config, route, BuildFailure(
                         ProxyExecutionOutcome.UpstreamResponseTooLarge, 502, startedAt, stopwatch, storedUrl, upstreamHost,
                         injectedHeaderKeys, injectedQueryKeys, "Upstream response exceeded the 10 MB limit"));
                 }
@@ -278,7 +310,7 @@ namespace Proxy.DomainService.Services
                     _logger.LogWarning(
                         "Proxy gateway: upstream {Host} body passed the {Cap} byte cap for slug '{Slug}' (tenant {TenantId}); returning 502.",
                         upstreamHost, MaxResponseBodyBytes, config.Slug, request.TenantId);
-                    return await FinalizeAsync(request, config, BuildFailure(
+                    return await FinalizeAsync(request, config, route, BuildFailure(
                         ProxyExecutionOutcome.UpstreamResponseTooLarge, 502, startedAt, stopwatch, storedUrl, upstreamHost,
                         injectedHeaderKeys, injectedQueryKeys, "Upstream response exceeded the 10 MB limit"));
                 }
@@ -296,7 +328,7 @@ namespace Proxy.DomainService.Services
                     _logger.LogWarning(
                         "Proxy gateway: reading the upstream body from {Host} timed out for slug '{Slug}' (tenant {TenantId}); returning 504.",
                         upstreamHost, config.Slug, request.TenantId);
-                    return await FinalizeAsync(request, config, BuildFailure(
+                    return await FinalizeAsync(request, config, route, BuildFailure(
                         ProxyExecutionOutcome.Timeout, 504, startedAt, stopwatch, storedUrl, upstreamHost,
                         injectedHeaderKeys, injectedQueryKeys, "Upstream did not respond within 30s"));
                 }
@@ -309,7 +341,7 @@ namespace Proxy.DomainService.Services
                     _logger.LogWarning(
                         "Proxy gateway: upstream {Host} returned {Bytes} B over the {Cap} byte cap for slug '{Slug}' (tenant {TenantId}); returning 502.",
                         upstreamHost, bytes.LongLength, MaxResponseBodyBytes, config.Slug, request.TenantId);
-                    return await FinalizeAsync(request, config, BuildFailure(
+                    return await FinalizeAsync(request, config, route, BuildFailure(
                         ProxyExecutionOutcome.UpstreamResponseTooLarge, 502, startedAt, stopwatch, storedUrl, upstreamHost,
                         injectedHeaderKeys, injectedQueryKeys, "Upstream response exceeded the 10 MB limit"));
                 }
@@ -323,14 +355,14 @@ namespace Proxy.DomainService.Services
                 // change on the default path. Under Select the policy is fail-closed: a non-2xx / non-JSON /
                 // unparseable / oversized upstream fails the call with 502, relaying nothing.
                 var (relayBytes, relayCt, filterNote, failReason) = ProxyResponseProjector.Project(
-                    bytes, contentType, status, config.ResponseMode, config.ResponseInclude);
+                    bytes, contentType, status, effective.ResponseMode, effective.ResponseInclude);
 
                 if (filterNote == ProxyResponseFilterNote.Failed)
                 {
                     _logger.LogWarning(
                         "Proxy gateway: response filter failed for slug '{Slug}' (tenant {TenantId}): {Reason}; returning 502.",
                         config.Slug, request.TenantId, failReason);
-                    return await FinalizeAsync(request, config, BuildFailure(
+                    return await FinalizeAsync(request, config, route, BuildFailure(
                         ProxyExecutionOutcome.ResponseFilterFailed, 502, startedAt, stopwatch, storedUrl, upstreamHost,
                         injectedHeaderKeys, injectedQueryKeys,
                         failReason ?? "The upstream response could not be filtered",
@@ -360,7 +392,7 @@ namespace Proxy.DomainService.Services
                     FinishedAtUtc = finishedAt,
                 };
 
-                var persisted = await FinalizeAsync(request, config, result);
+                var persisted = await FinalizeAsync(request, config, route, result);
                 _logger.LogInformation(
                     "Proxy gateway: relayed {Method} {Host} slug '{Slug}' (tenant {TenantId}) -> {Status}, {Bytes} B in {LatencyMs} ms.",
                     request.Method, upstreamHost, config.Slug, request.TenantId, status, bytes.LongLength, result.LatencyMs);
@@ -368,16 +400,61 @@ namespace Proxy.DomainService.Services
             }
         }
 
-        /// <summary>Resolves the effective headers / query / upstream for <paramref name="method"/>: a
-        /// per-method override wins field-by-field, a <c>null</c> member inherits the shared value.</summary>
-        private static (IReadOnlyList<ProxyKeyValue> Headers, IReadOnlyList<ProxyKeyValue> Query, string Upstream) ResolveEffective(
-            ProxyResolvedConfig config, HttpMethodType method)
+        /// <summary>The configuration one forward actually runs against, after route and method overrides.</summary>
+        private sealed record EffectiveConfig(
+            IReadOnlyList<ProxyKeyValue> Headers,
+            IReadOnlyList<ProxyKeyValue> Query,
+            string Upstream,
+            IReadOnlyList<ProxyKeyValue> BodyMerge,
+            ProxyResponseMode ResponseMode,
+            IReadOnlyList<string> ResponseInclude);
+
+        /// <summary>
+        /// Resolves the configuration for this call. Precedence is route &rarr; per-method override &rarr;
+        /// shared, field by field; a <c>null</c> member inherits the next level down. Headers and query are the
+        /// exception: they merge across layers rather than replace (see <see cref="Merge"/>). The route layer is what
+        /// lets two POST endpoints on one proxy carry different body-merge fields and response shapes.
+        /// <para>
+        /// An explicitly empty <c>BodyMerge</c> / <c>ResponseInclude</c> on a route is an override, not an
+        /// inherit: a route can opt out of a proxy-wide body merge that does not belong in its payload.
+        /// </para>
+        /// </summary>
+        private static EffectiveConfig ResolveEffective(
+            ProxyResolvedConfig config, HttpMethodType method, ProxyRouteConfig? route)
         {
             var over = config.MethodConfigs.FirstOrDefault(c => c.Method == method);
-            return (
-                over?.Headers ?? config.Headers,
-                over?.Query ?? config.Query,
-                over?.Upstream ?? config.Upstream);
+            return new EffectiveConfig(
+                // Headers and query are additive: the connection's rows always go (that is where the
+                // credential lives), and a route adds its own on top, winning on a same-name key. Replace
+                // semantics would force every route that adds one header to re-declare the credential.
+                Merge(StringComparer.OrdinalIgnoreCase, config.Headers, over?.Headers, route?.Headers),
+                Merge(StringComparer.Ordinal, config.Query, over?.Query, route?.Query),
+                over?.Upstream ?? config.Upstream,
+                route?.BodyMerge ?? config.BodyMerge,
+                route?.ResponseMode ?? config.ResponseMode,
+                route?.ResponseInclude ?? config.ResponseInclude);
+        }
+
+        /// <summary>
+        /// Layers key/value rows lowest-precedence first. Every row from every layer is kept; a later layer
+        /// with the same key replaces the earlier row in place, so order stays stable and the credential
+        /// declared on the connection reaches the vendor unless a route deliberately re-declares it.
+        /// </summary>
+        private static IReadOnlyList<ProxyKeyValue> Merge(
+            StringComparer keyComparer, params IReadOnlyList<ProxyKeyValue>?[] layers)
+        {
+            var merged = new List<ProxyKeyValue>();
+            foreach (var layer in layers)
+            {
+                if (layer is null) continue;
+                foreach (var row in layer)
+                {
+                    var existing = merged.FindIndex(m => keyComparer.Equals(m.Key, row.Key));
+                    if (existing >= 0) merged[existing] = row;
+                    else merged.Add(row);
+                }
+            }
+            return merged;
         }
 
         private static HttpRequestMessage BuildUpstreamRequest(
@@ -433,18 +510,20 @@ namespace Proxy.DomainService.Services
         /// the list of query keys Blocks injected.
         /// </summary>
         private static (string StoredUrl, string OutboundUrl, List<string> InjectedQueryKeys) BuildUrls(
-            string upstream, IReadOnlyList<ProxyKeyValue> query, ProxyForwardRequest request,
+            string upstream, IReadOnlyList<ProxyKeyValue> query, string pathSuffix, ProxyForwardRequest request,
             IReadOnlyDictionary<string, string> variables)
         {
             var target = upstream.TrimEnd('/');
-            if (!string.IsNullOrEmpty(request.PathSuffix))
+            if (!string.IsNullOrEmpty(pathSuffix))
             {
-                // {**path} arrives URL-decoded from routing. Re-encode per segment so a space / unicode /
-                // reserved char yields a valid URI (symmetric with the query handling below) instead of
-                // throwing in the HttpRequestMessage ctor and being misreported as 500 with a row.
+                // The suffix is the matched route's upstream template with its parameters substituted, so it
+                // is already known to be free of dot segments. {**path} arrives URL-decoded from routing, so
+                // re-encode per segment: a space / unicode / reserved char then yields a valid URI (symmetric
+                // with the query handling below) instead of throwing in the HttpRequestMessage ctor and being
+                // misreported as 500 with a row.
                 // Limitation: a literal %2F in the inbound raw path has already been decoded to '/' by
                 // routing, so encoded slashes cannot be round-tripped from the action arg alone.
-                var encodedSuffix = string.Join('/', request.PathSuffix
+                var encodedSuffix = string.Join('/', pathSuffix
                     .Split('/')
                     .Select(Uri.EscapeDataString));
                 target += "/" + encodedSuffix.TrimStart('/');
@@ -571,7 +650,8 @@ namespace Proxy.DomainService.Services
         /// round-trip is never sacrificed to logging (C9).
         /// </summary>
         private async Task<ProxyForwardResult> FinalizeAsync(
-            ProxyForwardRequest request, ProxyResolvedConfig? config, ProxyForwardResult result)
+            ProxyForwardRequest request, ProxyResolvedConfig? config, ProxyRouteResolution? route,
+            ProxyForwardResult result)
         {
             if (request.IsTest)
             {
@@ -585,6 +665,19 @@ namespace Proxy.DomainService.Services
                 ProxyId = config?.ProxyId ?? string.Empty,
                 ProxySlug = config?.Slug is { Length: > 0 } slug ? slug : request.Slug,
                 IsTest = false,
+                CallerKind = request.CallerKind,
+                CallerUserName = request.UserName,
+                CallerIp = request.CallerIp,
+                CallerUserAgent = request.CallerUserAgent,
+                CallerOrigin = request.CallerOrigin,
+                CorrelationId = request.CorrelationId,
+                WorkflowId = request.WorkflowId,
+                WorkflowRunId = request.WorkflowRunId,
+                WorkflowNodeId = request.WorkflowNodeId,
+                RoutePath = route?.Route is null ? null : ProxyRoutePath.Normalize(route.Route.Path),
+                RouteUpstreamPath = route?.Route?.UpstreamPath is null
+                    ? null
+                    : ProxyRoutePath.Normalize(route.Route.UpstreamPath),
                 RequestMethod = request.Method,
                 RequestPath = request.RequestPath,
                 RequestQuery = request.IncomingQuery ?? string.Empty,
@@ -609,6 +702,15 @@ namespace Proxy.DomainService.Services
                 CreatedBy = request.UserId,
                 LastUpdatedBy = request.UserId,
             };
+
+            // Buffered in memory and flushed on a timer, so the tiles cost this request nothing and the
+            // Overview never aggregates the executions collection. Recorded before the insert because the
+            // counters are independent of whether the row persists.
+            if (entity.ProxyId.Length > 0)
+            {
+                _statsRecorder.Record(
+                    request.TenantId, entity.ProxyId, result.StatusCode, result.LatencyMs, result.StartedAtUtc);
+            }
 
             try
             {

@@ -1,6 +1,6 @@
 namespace Proxy.DomainService.Dtos
 {
-    /// <summary>Body of <c>POST /api/Proxy/Create</c>.</summary>
+    /// <summary>Body of <c>POST /api/Proxies</c>.</summary>
     public sealed class ProxyCreateRequestDto
     {
         public string? Name { get; set; }
@@ -19,8 +19,17 @@ namespace Proxy.DomainService.Dtos
         /// </summary>
         public List<ProxyKeyValueInputDto>? BodyMerge { get; set; }
 
-        /// <summary>Per-method overrides. Reserved for Phase D-feature; a non-empty value is rejected today.</summary>
+        /// <summary>
+        /// Per-method overrides. Superseded by <see cref="Routes"/>, which carry their own method; the console
+        /// no longer writes this and sends it empty. Still accepted and applied so stored values keep working.
+        /// </summary>
         public List<ProxyMethodConfigInputDto>? MethodConfigs { get; set; }
+
+        /// <summary>
+        /// The endpoints this proxy may reach. Omitted / empty ⇒ the proxy accepts its base path only and
+        /// any path suffix is refused, which keeps it one-to-one with a single upstream endpoint.
+        /// </summary>
+        public List<ProxyRouteConfigInputDto>? Routes { get; set; }
 
         /// <summary><c>"All"</c> (default) or <c>"Select"</c>. See <c>ProxyResponseProjector</c>.</summary>
         public string? ResponseMode { get; set; }

@@ -11,8 +11,8 @@ namespace Proxy.DomainService.Repositories
     /// <summary>
     /// MongoDB-backed <see cref="IProxyExecutionRepository"/>. Collections are resolved per tenant by
     /// <see cref="IDbContextProvider"/>, exactly as <see cref="ProxyRepository"/> and the Workflow domain do.
-    /// The <c>{ ProxyId: 1, StartedAtUtc: -1 }</c>, <c>{ TenantId: 1, StartedAtUtc: -1 }</c> and
-    /// <c>{ ProxyId: 1, StatusCode: 1, StartedAtUtc: -1 }</c> indexes are created once per tenant,
+    /// The <c>{ ProxyId: 1, StartedAtUtc: -1, ItemId: -1 }</c>, <c>{ TenantId: 1, StartedAtUtc: -1 }</c> and
+    /// <c>{ ProxyId: 1, StatusCode: 1, StartedAtUtc: -1, ItemId: -1 }</c> indexes are created once per tenant,
     /// best-effort, on first write. Phase 3's read methods rely on them but never create them.
     /// </summary>
     [ExcludeFromCodeCoverage]
@@ -36,6 +36,15 @@ namespace Proxy.DomainService.Repositories
         /// <summary>
         /// Creates the recommended indexes once per tenant database. Failures (for example an existing
         /// incompatible index) are swallowed so they never block a write, mirroring the other domains.
+        /// <para>
+        /// The <c>_item</c> suffixed names supersede the earlier <c>ix_proxyexec_proxy_started</c> and
+        /// <c>ix_proxyexec_proxy_status_started</c>, which are strict prefixes of them and so carry write cost
+        /// for no read benefit. They are intentionally NOT dropped here — dropping indexes as a side effect of
+        /// a write path is not something this should decide on its own. Drop them per tenant database when
+        /// convenient:
+        /// <c>db.ProxyExecutions.dropIndex("ix_proxyexec_proxy_started")</c> and
+        /// <c>db.ProxyExecutions.dropIndex("ix_proxyexec_proxy_status_started")</c>.
+        /// </para>
         /// </summary>
         private async Task EnsureIndexesAsync(string tenantId, IMongoCollection<ProxyExecutionEntity> collection)
         {
@@ -46,22 +55,34 @@ namespace Proxy.DomainService.Repositories
 
             try
             {
+                // Every read sorts by NewestFirst — StartedAtUtc desc THEN ItemId desc. The tiebreaker has to
+                // be in the index too: an index that only covers the first sort key still forces Mongo into a
+                // blocking in-memory SORT over the whole 24h match set to resolve ties, which is exactly the
+                // query that grows without bound on a busy proxy.
                 var byProxy = Builders<ProxyExecutionEntity>.IndexKeys
                     .Ascending(e => e.ProxyId)
-                    .Descending(e => e.StartedAtUtc);
+                    .Descending(e => e.StartedAtUtc)
+                    .Descending(e => e.ItemId);
                 var byTenant = Builders<ProxyExecutionEntity>.IndexKeys
                     .Ascending(e => e.TenantId)
                     .Descending(e => e.StartedAtUtc);
+
+                // NOTE: this one still cannot serve the sort. `statusClass` is applied as a RANGE on
+                // StatusCode (>= 400 && <= 499), and a range on a middle key voids the ordering guarantee for
+                // every key after it. It stays because it still narrows the candidate set cheaply; removing
+                // the blocking sort for filtered views needs a denormalised equality field (a stored
+                // "2xx"/"4xx"/"5xx" StatusClass), which is a schema change plus a backfill.
                 var byProxyStatus = Builders<ProxyExecutionEntity>.IndexKeys
                     .Ascending(e => e.ProxyId)
                     .Ascending(e => e.StatusCode)
-                    .Descending(e => e.StartedAtUtc);
+                    .Descending(e => e.StartedAtUtc)
+                    .Descending(e => e.ItemId);
 
                 await collection.Indexes.CreateManyAsync(new[]
                 {
-                    new CreateIndexModel<ProxyExecutionEntity>(byProxy, new CreateIndexOptions { Name = "ix_proxyexec_proxy_started" }),
+                    new CreateIndexModel<ProxyExecutionEntity>(byProxy, new CreateIndexOptions { Name = "ix_proxyexec_proxy_started_item" }),
                     new CreateIndexModel<ProxyExecutionEntity>(byTenant, new CreateIndexOptions { Name = "ix_proxyexec_tenant_started" }),
-                    new CreateIndexModel<ProxyExecutionEntity>(byProxyStatus, new CreateIndexOptions { Name = "ix_proxyexec_proxy_status_started" }),
+                    new CreateIndexModel<ProxyExecutionEntity>(byProxyStatus, new CreateIndexOptions { Name = "ix_proxyexec_proxy_status_started_item" }),
                 });
             }
             catch (MongoCommandException)
@@ -85,10 +106,11 @@ namespace Proxy.DomainService.Repositories
         // ---------- Phase 3 reads ----------
 
         public async Task<List<ProxyExecutionEntity>> GetPageAsync(
-            string tenantId, string proxyId, ProxyStatusClass statusClass, DateTime sinceUtc, int pageSize, int pageNumber)
+            string tenantId, string proxyId, ProxyStatusClass statusClass, DateTime sinceUtc, DateTime asOfUtc,
+            int pageSize, int pageNumber)
         {
             return await GetCollection(tenantId)
-                .Find(WindowFilter(tenantId, proxyId, statusClass, sinceUtc))
+                .Find(WindowFilter(tenantId, proxyId, statusClass, sinceUtc, asOfUtc))
                 .Sort(NewestFirst)
                 .Skip(pageNumber * pageSize)
                 .Limit(pageSize)
@@ -113,10 +135,11 @@ namespace Proxy.DomainService.Repositories
                 .ToListAsync();
         }
 
-        public async Task<long> CountAsync(string tenantId, string proxyId, ProxyStatusClass statusClass, DateTime sinceUtc)
+        public async Task<long> CountAsync(
+            string tenantId, string proxyId, ProxyStatusClass statusClass, DateTime sinceUtc, DateTime asOfUtc)
         {
             return await GetCollection(tenantId)
-                .CountDocumentsAsync(WindowFilter(tenantId, proxyId, statusClass, sinceUtc));
+                .CountDocumentsAsync(WindowFilter(tenantId, proxyId, statusClass, sinceUtc, asOfUtc));
         }
 
         public async Task<ProxyExecutionEntity?> GetByIdAsync(string tenantId, string proxyId, string itemId)
@@ -209,16 +232,6 @@ namespace Proxy.DomainService.Repositories
             return map;
         }
 
-        public async Task<List<ProxyExecutionEntity>> GetForExportAsync(
-            string tenantId, string proxyId, ProxyStatusClass statusClass, DateTime sinceUtc, int limit)
-        {
-            return await GetCollection(tenantId)
-                .Find(WindowFilter(tenantId, proxyId, statusClass, sinceUtc))
-                .Sort(NewestFirst)
-                .Limit(limit)
-                .ToListAsync();
-        }
-
         private static SortDefinition<ProxyExecutionEntity> NewestFirst =>
             Builders<ProxyExecutionEntity>.Sort
                 .Descending(e => e.StartedAtUtc)
@@ -228,13 +241,24 @@ namespace Proxy.DomainService.Repositories
         /// <c>TenantId</c> + <c>ProxyId</c> + <c>StartedAtUtc &gt;= sinceUtc</c> + the status-class band. The
         /// <c>TenantId</c> clause is defence-in-depth on top of the per-tenant collection.
         /// </summary>
+        /// <summary>
+        /// The 24h window for one proxy, narrowed to a status class. <paramref name="asOfUtc"/> bounds the
+        /// window above so a paging session sees a fixed set of rows; the Live tail passes <c>null</c>, since
+        /// its whole job is to pick up rows newer than everything it has seen.
+        /// </summary>
         private static FilterDefinition<ProxyExecutionEntity> WindowFilter(
-            string tenantId, string proxyId, ProxyStatusClass statusClass, DateTime sinceUtc)
+            string tenantId, string proxyId, ProxyStatusClass statusClass, DateTime sinceUtc,
+            DateTime? asOfUtc = null)
         {
             var builder = Builders<ProxyExecutionEntity>.Filter;
             var filter = builder.Eq(e => e.TenantId, tenantId)
                          & builder.Eq(e => e.ProxyId, proxyId)
                          & builder.Gte(e => e.StartedAtUtc, sinceUtc);
+
+            if (asOfUtc is { } asOf)
+            {
+                filter &= builder.Lte(e => e.StartedAtUtc, asOf);
+            }
 
             return statusClass switch
             {

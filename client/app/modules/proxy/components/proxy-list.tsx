@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { useScopedPath } from "@seliseblocks/genesis-os";
+import { useProjectStore, useScopedPath } from "@seliseblocks/genesis-os";
 import {
   Activity,
   ArrowRight,
@@ -26,7 +26,7 @@ import { Switch } from "@/components/ui-kits/switch/switch";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { Proxy } from "../types";
 import { useToggleProxy } from "../hooks";
-import { getProxyClientPath } from "../constants";
+import { getProxyClientUrl } from "../constants";
 import { DeleteProxyDialog } from "./delete-proxy-dialog";
 import { ProxyMethodChips } from "./proxy-method-chips";
 import { ProxyStatusBadge } from "./proxy-status-badge";
@@ -67,6 +67,7 @@ const ProxyListSkeleton = () => (
 
 export const ProxyList = ({ proxies, isLoading, onProxyDeleted }: Props) => {
   const navigate = useNavigate();
+  const selectedProject = useProjectStore().selectedProject;
   const scoped = useScopedPath();
   const toggleProxy = useToggleProxy();
   const [proxyToDelete, setProxyToDelete] = useState<Proxy | null>(null);
@@ -128,7 +129,7 @@ export const ProxyList = ({ proxies, isLoading, onProxyDeleted }: Props) => {
                 <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                   <ProxyMethodChips methods={proxy.methods} />
                   <span className="min-w-0 truncate font-mono">
-                    {getProxyClientPath(proxy.slug)}
+                    {getProxyClientUrl(selectedProject, proxy.slug)}
                   </span>
                   <ArrowRight className="h-3 w-3 shrink-0 opacity-60" aria-hidden="true" />
                   <span className="min-w-0 truncate">{proxy.upstreamMasked}</span>

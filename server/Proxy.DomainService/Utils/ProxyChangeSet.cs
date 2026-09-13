@@ -16,6 +16,7 @@ namespace Proxy.DomainService.Utils
         private const string BodyPrefix = "body:";
         private const string MethodPrefix = "method:";
         private const string ResponsePrefix = "response:";
+        private const string RoutePrefix = "route:";
         private const string ResponseModeField = "responseMode";
         private const string ResponseModeAll = "All";
         private const string ResponseModeSelect = "Select";
@@ -77,9 +78,46 @@ namespace Proxy.DomainService.Utils
             DiffPairs(before.Query, after.Query, QueryPrefix, "query", changes);
             DiffPairs(before.BodyMerge, after.BodyMerge, BodyPrefix, "body field", changes);
             DiffMethodConfigs(before.MethodConfigs, after.MethodConfigs, changes);
+            DiffRoutes(before.Routes, after.Routes, changes);
             DiffResponseInclude(before.ResponseInclude, after.ResponseInclude, changes);
 
             return changes;
+        }
+
+        /// <summary>
+        /// Route allowlist diff. A route is compared as a whole under its <c>route:&lt;METHOD&gt; &lt;path&gt;</c>
+        /// address: an added route has a null Before, a removed one a null After, and an edited one differing
+        /// JSON on both sides. Changing a route's method or path is therefore a remove plus an add, which is
+        /// what it actually is — the pair is the route's identity.
+        /// </summary>
+        private static void DiffRoutes(
+            IReadOnlyList<ProxyRouteConfig> before,
+            IReadOnlyList<ProxyRouteConfig> after,
+            List<ProxyFieldChange> changes)
+        {
+            var beforeMap = before.ToDictionary(ProxyRouteCodec.AddressOf, r => r, StringComparer.Ordinal);
+            var afterMap = after.ToDictionary(ProxyRouteCodec.AddressOf, r => r, StringComparer.Ordinal);
+
+            // Ordered so the change set reads the same for the same edit, whatever order the console sent.
+            foreach (var address in beforeMap.Keys.Union(afterMap.Keys, StringComparer.Ordinal)
+                         .OrderBy(a => a, StringComparer.Ordinal))
+            {
+                var hasBefore = beforeMap.TryGetValue(address, out var b);
+                var hasAfter = afterMap.TryGetValue(address, out var a);
+
+                if (hasBefore && hasAfter && ProxyRouteCodec.OverridesEqual(b!, a!))
+                {
+                    continue;
+                }
+
+                changes.Add(new ProxyFieldChange
+                {
+                    Field = $"{RoutePrefix}{address}",
+                    Label = ProxyRouteCodec.LabelOf(hasAfter ? a! : b!),
+                    Before = hasBefore ? ProxyRouteCodec.Encode(b!) : null,
+                    After = hasAfter ? ProxyRouteCodec.Encode(a!) : null,
+                });
+            }
         }
 
         /// <summary>
@@ -186,6 +224,21 @@ namespace Proxy.DomainService.Utils
                         : $"response field {responsePath} added";
                 }
 
+                // Which endpoints a proxy can reach is the most security-relevant thing about it, so the
+                // history says so outright rather than falling through to "Configuration updated".
+                if (TrySplitRouteField(change.Field, out var routeAddress))
+                {
+                    var readable = routeAddress.Replace(" ", " /", StringComparison.Ordinal);
+                    if (change.Before is null)
+                    {
+                        return $"Route {readable} added";
+                    }
+
+                    return change.After is null
+                        ? $"Route {readable} removed"
+                        : $"Route {readable} updated";
+                }
+
                 if (TrySplitBodyField(change.Field, out var bodyKey))
                 {
                     if (change.Before is null)
@@ -253,6 +306,13 @@ namespace Proxy.DomainService.Utils
             if (TrySplitResponseField(field, out var responsePath))
             {
                 return proxy.ResponseInclude.Contains(responsePath, StringComparer.Ordinal) ? responsePath : null;
+            }
+
+            if (TrySplitRouteField(field, out var routeAddress))
+            {
+                var existing = proxy.Routes.FirstOrDefault(
+                    r => string.Equals(ProxyRouteCodec.AddressOf(r), routeAddress, StringComparison.Ordinal));
+                return existing is null ? null : ProxyRouteCodec.Encode(existing);
             }
 
             if (TryParseMethodField(field, out var method, out var tail))
@@ -336,6 +396,32 @@ namespace Proxy.DomainService.Utils
                     proxy.ResponseInclude.Add(responsePath);
                 }
 
+                return;
+            }
+
+            if (TrySplitRouteField(field, out var routeAddress))
+            {
+                // Replace-or-remove by address. A decode failure leaves the list untouched rather than
+                // dropping the route: a history row this build cannot read must not silently widen or
+                // narrow what the proxy can reach.
+                var remaining = proxy.Routes
+                    .Where(r => !string.Equals(ProxyRouteCodec.AddressOf(r), routeAddress, StringComparison.Ordinal))
+                    .ToList();
+
+                if (rawValue is null)
+                {
+                    proxy.Routes = remaining;
+                    return;
+                }
+
+                var decoded = ProxyRouteCodec.Decode(routeAddress, rawValue);
+                if (decoded is null)
+                {
+                    return;
+                }
+
+                remaining.Add(decoded);
+                proxy.Routes = remaining;
                 return;
             }
 
@@ -627,6 +713,20 @@ namespace Proxy.DomainService.Utils
             }
 
             key = string.Empty;
+            return false;
+        }
+
+        /// <summary>Splits a <c>response:&lt;path&gt;</c> address into its field-path expression.</summary>
+        /// <summary>Splits a <c>route:&lt;METHOD&gt; &lt;path&gt;</c> address into its method-and-path key.</summary>
+        private static bool TrySplitRouteField(string field, out string address)
+        {
+            if (field.StartsWith(RoutePrefix, StringComparison.Ordinal))
+            {
+                address = field[RoutePrefix.Length..];
+                return address.Length > 0;
+            }
+
+            address = string.Empty;
             return false;
         }
 

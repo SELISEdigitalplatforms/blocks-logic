@@ -11,6 +11,7 @@ import { NodeSchemaTriggerScheduleV1 } from "./node-schema-trigger-schedule-v1";
 import { NodeSchemaActionDataActionV1 } from "./node-schema-action-dataAction-v1";
 import { NodeSchemaActionFunction } from "./node-schema-action-function";
 import { NodeSchemaLogicIfV1 } from "./node-schema-logic-if-v1";
+import { NodeSchemaActionProxy } from "./node-schema-action-proxy";
 
 export const NodeSchemasDefinition: Record<string, NodeSchemaDefinition> = {
   triggerwebhookv1: NodeSchemaTriggerWebhookV1,
@@ -24,5 +25,6 @@ export const NodeSchemasDefinition: Record<string, NodeSchemaDefinition> = {
   actionhttpRequestv1: NodeSchemaActionHttpRequestV1,
   actiondataActionv1: NodeSchemaActionDataActionV1,
   actionfunctionv1: NodeSchemaActionFunction,
+  actionproxyv1: NodeSchemaActionProxy,
   logicifv1: NodeSchemaLogicIfV1,
 };

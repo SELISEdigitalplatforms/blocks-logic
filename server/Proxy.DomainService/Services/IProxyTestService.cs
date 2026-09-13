@@ -4,7 +4,7 @@ using Proxy.DomainService.Utils;
 namespace Proxy.DomainService.Services
 {
     /// <summary>
-    /// Backs the console-only <c>POST /api/Proxy/Test</c> action: validate the request (exactly one of
+    /// Backs the console-only <c>POST /api/Proxies/test</c> action: validate the request (exactly one of
     /// proxyId / draft; method enabled; draft passes Phase-1 rules), then run the identical forward pipeline
     /// via <see cref="IProxyGatewayService"/> with <c>IsTest = true</c> so NO execution row is written and NO
     /// <c>Proxies</c> / <c>ProxyVersions</c> data is created or mutated.

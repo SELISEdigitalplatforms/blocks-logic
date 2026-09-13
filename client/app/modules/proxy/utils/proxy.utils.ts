@@ -1,5 +1,12 @@
 import { z } from "zod";
-import { ProxyFormValues, ResponseFieldNode } from "../types";
+import {
+  ProxyCredentialRow,
+  ProxyExecutionLog,
+  ProxyFormValues,
+  ProxyKeyValue,
+  ProxyMethod,
+  ResponseFieldNode,
+} from "../types";
 
 export const slugifyProxyName = (name: string) =>
   name
@@ -404,6 +411,69 @@ export const projectSample = (sample: unknown, paths: string[]): unknown => {
   return project(sample, cursors);
 };
 
+/** A `{name}` parameter occupying a whole segment, matching the server's `ProxyRoutePath` grammar. */
+const ROUTE_PARAM = /^\{[A-Za-z_][A-Za-z0-9_]*\}$/;
+
+export const trimRoutePath = (value: string | null | undefined) =>
+  (value ?? "").trim().replace(/^\/+|\/+$/g, "");
+
+/**
+ * Validates a route template and returns its parameter names, or a human reason. `""` is the base
+ * path and is valid. A `.` / `..` segment is refused: the server collapses them after building the
+ * URL, so they would land the call on an endpoint no route declared.
+ *
+ * The console must reject exactly what the API rejects — otherwise a save fails with a field error
+ * the form has no input to point at.
+ */
+export const parseRouteTemplate = (
+  template: string,
+): { ok: true; params: string[] } | { ok: false; reason: string } => {
+  const trimmed = trimRoutePath(template);
+  if (trimmed.length === 0) return { ok: true, params: [] };
+  if (trimmed.length > 512) return { ok: false, reason: "Path must be 512 characters or fewer." };
+
+  const segments = trimmed.split("/");
+  if (segments.length > 20) return { ok: false, reason: "Path must have 20 segments or fewer." };
+
+  const params: string[] = [];
+  for (const segment of segments) {
+    if (segment.length === 0) return { ok: false, reason: "Path must not contain an empty segment." };
+    if (segment === "." || segment === "..")
+      return { ok: false, reason: "Path must not contain a '.' or '..' segment." };
+    if (!segment.includes("{") && !segment.includes("}")) continue;
+    if (!ROUTE_PARAM.test(segment))
+      return {
+        ok: false,
+        reason: `'${segment}' is not a valid parameter. Use {name} as a whole segment.`,
+      };
+    const name = segment.slice(1, -1);
+    if (params.includes(name)) return { ok: false, reason: `Parameter '${name}' is declared twice.` };
+    params.push(name);
+  }
+
+  return { ok: true, params };
+};
+
+/** The address a route is unique by. Two routes sharing it would make matching order-dependent. */
+export const routeAddress = (method: string, path: string) => `${method} ${trimRoutePath(path)}`;
+
+const credentialSchema = z.object({
+  key: z.string(),
+  value: z.string(),
+  sendAs: z.enum(["header", "query"]),
+});
+
+const routeSchema = z.object({
+  method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
+  path: z.string(),
+  upstreamPath: z.string().nullable().default(null),
+  headers: keyValueSchema.nullable().default(null),
+  query: keyValueSchema.nullable().default(null),
+  bodyMerge: keyValueSchema.nullable().default(null),
+  responseMode: z.enum(["all", "select"]).nullable().default(null),
+  responseInclude: z.array(z.string()).nullable().default(null),
+});
+
 export const proxyFormSchema = z
   .object({
     name: z.string().trim().min(1, "Give the proxy a name - it becomes the path."),
@@ -420,10 +490,63 @@ export const proxyFormSchema = z
     bodyMerge: keyValueSchema,
     bodyMode: z.enum(["passthrough", "merge"]),
     methodConfigs: z.array(methodOverrideSchema),
+    routes: z.array(routeSchema).default([]),
+    credentials: z.array(credentialSchema).optional(),
     responseMode: z.enum(["all", "select"]).default("all"),
     responseInclude: z.array(z.string()).default([]),
   })
   .superRefine((values, ctx) => {
+    const seenRoutes = new Set<string>();
+    values.routes?.forEach((route, index) => {
+      const parsed = parseRouteTemplate(route.path);
+      if (!parsed.ok) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["routes", index, "path"], message: parsed.reason });
+        return;
+      }
+
+      // A route for a method the proxy does not allow can never be reached, and the API rejects it.
+      if (!values.methods.includes(route.method)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["routes", index, "method"],
+          message: `This proxy does not allow ${route.method}.`,
+        });
+      }
+
+      const address = routeAddress(route.method, route.path);
+      if (seenRoutes.has(address)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["routes", index, "path"],
+          message: "This endpoint is already defined.",
+        });
+      }
+      seenRoutes.add(address);
+
+      if (route.upstreamPath == null || trimRoutePath(route.upstreamPath).length === 0) return;
+
+      const upstream = parseRouteTemplate(route.upstreamPath);
+      if (!upstream.ok) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["routes", index, "upstreamPath"],
+          message: upstream.reason,
+        });
+        return;
+      }
+
+      // Rewriting to a parameter the client path does not declare would send a literal "{name}"
+      // segment to the vendor.
+      const undeclared = upstream.params.find((param) => !parsed.params.includes(param));
+      if (undeclared) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["routes", index, "upstreamPath"],
+          message: `{${undeclared}} is not a parameter of the client path.`,
+        });
+      }
+    });
+
     if (values.responseMode === "select") {
       if (values.responseInclude.length > MAX_RESPONSE_PATHS) {
         ctx.addIssue({
@@ -499,11 +622,112 @@ export const proxyFormDefaultValues: ProxyFormValues = {
   bodyMerge: [],
   bodyMode: "passthrough",
   methodConfigs: [],
+  routes: [
+    {
+      method: "GET",
+      path: "",
+      upstreamPath: null,
+      headers: null,
+      query: null,
+      bodyMerge: null,
+      responseMode: null,
+      responseInclude: null,
+    },
+  ],
   responseMode: "all",
   responseInclude: [],
+  credentials: [],
+};
+
+/** The methods a proxy accepts are exactly the methods its endpoints use. */
+export const deriveProxyMethods = (routes: ProxyFormValues["routes"]): ProxyMethod[] => {
+  const seen = new Set<ProxyMethod>();
+  routes.forEach((route) => seen.add(route.method));
+  return seen.size ? [...seen] : ["GET"];
+};
+
+/** Header and query lists as one credential list, headers first. */
+export const toCredentialRows = (
+  headers: ProxyKeyValue[],
+  query: ProxyKeyValue[],
+): ProxyCredentialRow[] => [
+  ...headers.map((row) => ({ ...row, sendAs: "header" as const })),
+  ...query.map((row) => ({ ...row, sendAs: "query" as const })),
+];
+
+/** The credential list back into the two lists the server stores, blank rows dropped. */
+export const splitCredentialRows = (rows: ProxyCredentialRow[] | undefined) => {
+  const kept = (rows ?? [])
+    .map((row) => ({ ...row, key: row.key.trim(), value: row.value.trim() }))
+    .filter((row) => row.key || row.value);
+  return {
+    headers: kept.filter((row) => row.sendAs === "header").map(({ key, value }) => ({ key, value })),
+    query: kept.filter((row) => row.sendAs === "query").map(({ key, value }) => ({ key, value })),
+  };
 };
 
 export const compactKeyValues = (rows: ProxyFormValues["headers"]) =>
   rows
     .map((row) => ({ ...row, key: row.key.trim(), value: row.value.trim() }))
     .filter((row) => row.key || row.value);
+
+/**
+ * Shell-quote a value for a POSIX `curl` line. Single quotes are the only safe wrapper for
+ * arbitrary URLs and header values; an embedded `'` is closed, escaped, and reopened.
+ */
+const shellQuote = (value: string) => `'${value.replace(/'/g, String.raw`'\''`)}'`;
+
+/**
+ * Rebuild a request log row as a runnable `curl` for the **client-facing gateway call** — what the
+ * tenant's own client sent, not what Blocks forwarded upstream.
+ *
+ * Two deliberate omissions, both of which would make the command wrong rather than merely
+ * incomplete:
+ *
+ * - **Injected headers / query params are not included.** Blocks attaches those server-side from the
+ *   proxy configuration; a client that sent them itself would be duplicating credentials it is not
+ *   supposed to hold. `injectedHeaderKeys` are also keys only — the values are never stored.
+ * - **The real credentials are placeholders.** Execution rows store no request headers or body, so
+ *   the tenant key and bearer cannot be recovered from a log; they have to be filled in by hand.
+ */
+export const buildProxyCurl = (
+  log: Pick<ProxyExecutionLog, "method" | "path" | "requestQuery">,
+  origin: string,
+) => {
+  const query = log.requestQuery ? `?${log.requestQuery}` : "";
+  const url = `${origin.replace(/\/+$/, "")}${log.path}${query}`;
+
+  const lines = [
+    `curl -X ${log.method} ${shellQuote(url)}`,
+    `  -H ${shellQuote("x-blocks-key: <your tenant id>")}`,
+    `  -H ${shellQuote("Authorization: Bearer <token issued for that tenant>")}`,
+  ];
+
+  // Trailing backslash + real newline: a multi-line command the shell reads as one line.
+  return lines.join(" \\\n");
+};
+
+/**
+ * Substitute a route template's `{name}` segments with caller-supplied values. A segment with no
+ * value is left as-is, so the caller can show the unresolved template and refuse to send.
+ */
+export const fillRouteParams = (path: string, values: Record<string, string>): string =>
+  path.replace(/\{([^{}/]+)\}/g, (token, name: string) => {
+    const value = values[name]?.trim();
+    return value ? encodeURIComponent(value) : token;
+  });
+
+/** Pretty-print a JSON body; return the text unchanged when it is not JSON. */
+export const formatProxyBody = (body: string, contentType?: string) => {
+  const trimmed = body.trim();
+  const looksJson =
+    (contentType?.toLowerCase().includes("json") ?? false) ||
+    trimmed.startsWith("{") ||
+    trimmed.startsWith("[");
+  if (!looksJson) return body;
+  try {
+    return JSON.stringify(JSON.parse(trimmed), null, 2);
+  } catch {
+    return body;
+  }
+};

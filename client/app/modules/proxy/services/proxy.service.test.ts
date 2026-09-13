@@ -5,6 +5,7 @@ const http = vi.hoisted(() => {
     get: vi.fn().mockResolvedValue({ data: null }),
     post: vi.fn().mockResolvedValue({ data: null }),
     put: vi.fn().mockResolvedValue({ isSuccess: true }),
+    patch: vi.fn().mockResolvedValue({ isSuccess: true }),
     delete: vi.fn().mockResolvedValue({ isSuccess: true }),
   });
   return { logicService: make(), agentsService: make(), dataService: make(), iamService: make() };
@@ -36,8 +37,8 @@ beforeEach(() => {
 });
 
 describe("ProxyService HTTP wiring", () => {
-  it("posts GetAll and maps the list projection", async () => {
-    logicService.post.mockResolvedValueOnce({
+  it("lists proxies with GET on the collection and maps the list projection", async () => {
+    logicService.get.mockResolvedValueOnce({
       data: [
         {
           itemId: "p1",
@@ -59,18 +60,23 @@ describe("ProxyService HTTP wiring", () => {
 
     const page = await proxyService.getAll({ searchKey: "stri" });
 
-    expect(logicService.post).toHaveBeenCalledWith(
-      "/api/Proxy/GetAll",
-      expect.objectContaining({ search: "stri", pageNumber: 0 }),
+    expect(logicService.get).toHaveBeenCalledWith(
+      "/api/Proxies?search=stri&pageSize=200&pageNumber=0",
     );
     expect(page.totalCount).toBe(1);
     expect(page.items).toEqual([expect.objectContaining({ id: "p1", calls24h: 5, headers: [] })]);
   });
 
-  it("gets a proxy by id via query string and maps null to null", async () => {
+  it("gets a proxy by id from the path and maps null to null", async () => {
     logicService.get.mockResolvedValueOnce({ data: null });
     expect(await proxyService.get("missing")).toBeNull();
-    expect(logicService.get).toHaveBeenCalledWith("/api/Proxy/Get?itemId=missing");
+    expect(logicService.get).toHaveBeenCalledWith("/api/Proxies/missing");
+  });
+
+  it("percent-encodes an id before putting it in the path", async () => {
+    logicService.get.mockResolvedValueOnce({ data: null });
+    await proxyService.get("a/b?c");
+    expect(logicService.get).toHaveBeenCalledWith("/api/Proxies/a%2Fb%3Fc");
   });
 
   it("sends Create as { name, upstream, methods, headers, query, enabled }", async () => {
@@ -87,7 +93,7 @@ describe("ProxyService HTTP wiring", () => {
       methodConfigs: [],
     });
 
-    expect(logicService.post).toHaveBeenCalledWith("/api/Proxy/Create", {
+    expect(logicService.post).toHaveBeenCalledWith("/api/Proxies", {
       name: "GitHub Proxy",
       upstream: "https://api.github.com/repos",
       methods: ["GET"],
@@ -95,6 +101,7 @@ describe("ProxyService HTTP wiring", () => {
       query: [],
       bodyMerge: [],
       methodConfigs: [],
+      routes: [],
       responseMode: "All",
       responseInclude: [],
       enabled: true,
@@ -127,7 +134,7 @@ describe("ProxyService HTTP wiring", () => {
     });
   });
 
-  it("PUTs Update and DELETEs by query string", async () => {
+  it("PUTs and DELETEs one proxy by its path", async () => {
     await proxyService.update({
       id: "p1",
       values: {
@@ -139,32 +146,35 @@ describe("ProxyService HTTP wiring", () => {
       },
     });
     expect(logicService.put).toHaveBeenCalledWith(
-      "/api/Proxy/Update",
+      "/api/Proxies/p1",
       expect.objectContaining({ itemId: "p1", methods: ["GET", "POST"] }),
     );
 
     await proxyService.delete("p1");
-    expect(logicService.delete).toHaveBeenCalledWith("/api/Proxy/Delete?itemId=p1");
+    expect(logicService.delete).toHaveBeenCalledWith("/api/Proxies/p1");
   });
 
-  it("maps ProxyLogFilter to statusClass on GetExecutions", async () => {
-    logicService.post.mockResolvedValueOnce({ data: [], totalCount: 0 });
+  it("PATCHes only the enabled flag, with the id in the path rather than the body", async () => {
+    await proxyService.toggle({ id: "p1", enabled: false });
+    expect(logicService.patch).toHaveBeenCalledWith("/api/Proxies/p1", { enabled: false });
+  });
+
+  it("maps ProxyLogFilter to a statusClass query param on the executions sub-resource", async () => {
+    logicService.get.mockResolvedValueOnce({ data: [], totalCount: 0 });
     await proxyService.getExecutions("p1", "server", {});
-    expect(logicService.post).toHaveBeenCalledWith(
-      "/api/Proxy/GetExecutions",
-      expect.objectContaining({ proxyId: "p1", statusClass: "5xx", pageSize: 10, pageNumber: 0 }),
+    expect(logicService.get).toHaveBeenCalledWith(
+      "/api/Proxies/p1/executions?statusClass=5xx&pageSize=10&pageNumber=0",
     );
   });
 
-  it("forwards the requested page and page size on GetExecutions", async () => {
-    logicService.post.mockResolvedValueOnce({
+  it("forwards the requested page and page size on the executions sub-resource", async () => {
+    logicService.get.mockResolvedValueOnce({
       data: [],
       totalCount: 42,
     });
     const result = await proxyService.getExecutions("p1", "all", { page: 2, pageSize: 20 });
-    expect(logicService.post).toHaveBeenCalledWith(
-      "/api/Proxy/GetExecutions",
-      expect.objectContaining({ pageSize: 20, pageNumber: 2 }),
+    expect(logicService.get).toHaveBeenCalledWith(
+      "/api/Proxies/p1/executions?statusClass=all&pageSize=20&pageNumber=2",
     );
     expect(result).toEqual({ rows: [], totalCount: 42 });
   });
@@ -202,14 +212,5 @@ describe("ProxyService HTTP wiring", () => {
         },
       }),
     ).resolves.toMatchObject({ ok: false, status: 400 });
-  });
-
-  it("builds a CSV export result from the text body", async () => {
-    logicService.get.mockResolvedValueOnce("Time,Method\n2026,GET\n2026,POST\n");
-    const csv = await proxyService.exportExecutionsCsv({ proxyId: "p1", filter: "ok" });
-    expect(logicService.get).toHaveBeenCalledWith(
-      "/api/Proxy/ExportExecutionsCsv?proxyId=p1&statusClass=2xx",
-    );
-    expect(csv).toMatchObject({ fileName: "proxy-p1-executions.csv", rowCount: 2 });
   });
 });

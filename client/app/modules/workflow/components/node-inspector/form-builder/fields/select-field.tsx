@@ -8,7 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui-kits/select/select";
 import { FieldProps, SelectOption } from "../form-field.types";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { Loader2 } from "lucide-react";
 
 /** Radix SelectItem rejects "". Map empty stored values to this sentinel. */
@@ -34,9 +34,27 @@ export const SelectField = ({
   const [isLoading, setIsLoading] = useState(false);
   const hasCalledRef = useRef(false);
 
+  // Serialised values of the declared dependency keys. Undefined when the field declares none,
+  // which preserves the fetch-once behaviour every existing async dropdown relies on.
+  const depString = useMemo(
+    () =>
+      field.optionsDependencies
+        ? JSON.stringify(field.optionsDependencies.map((key) => data[key]))
+        : undefined,
+    [data, field.optionsDependencies],
+  );
+  const lastDepRef = useRef<string | undefined>(undefined);
+
   useEffect(() => {
-    if (typeof field.options === "function" && !hasCalledRef.current) {
+    if (typeof field.options !== "function") return;
+
+    const isFirstCall = !hasCalledRef.current;
+    const depsChanged = depString !== undefined && lastDepRef.current !== depString;
+    if (!isFirstCall && !depsChanged) return;
+
+    {
       hasCalledRef.current = true;
+      lastDepRef.current = depString;
       setIsLoading(true);
       field
         .options(data, config)
@@ -56,7 +74,7 @@ export const SelectField = ({
         })
         .finally(() => setIsLoading(false));
     }
-  }, [config, data, field, onChange, readOnly, value]);
+  }, [config, data, depString, field, onChange, readOnly, value]);
 
   const options = isStaticOptions ? staticOptions : asyncOptions;
 

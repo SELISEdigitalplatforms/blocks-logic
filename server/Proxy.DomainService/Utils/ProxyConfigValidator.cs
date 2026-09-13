@@ -16,6 +16,12 @@ namespace Proxy.DomainService.Utils
 
         public string Name { get; set; } = string.Empty;
 
+        /// <summary>
+        /// The slug <see cref="Name"/> derives to, via <see cref="ProxySlug"/>. Populated only when the name
+        /// is valid, so a caller can persist it without re-deriving. Never empty on a valid result.
+        /// </summary>
+        public string Slug { get; set; } = string.Empty;
+
         public string Upstream { get; set; } = string.Empty;
 
         public List<HttpMethodType> Methods { get; set; } = new();
@@ -27,6 +33,12 @@ namespace Proxy.DomainService.Utils
         public List<ProxyKeyValue> BodyMerge { get; set; } = new();
 
         public List<ProxyMethodConfig> MethodConfigs { get; set; } = new();
+
+        /// <summary>
+        /// Normalized route allowlist: paths trimmed of surrounding slashes, blank overrides collapsed to
+        /// <c>null</c> (inherit). Empty ⇒ the proxy accepts its base path only.
+        /// </summary>
+        public List<ProxyRouteConfig> Routes { get; set; } = new();
 
         /// <summary>Normalized response-body treatment. Defaults to <see cref="ProxyResponseMode.All"/>.</summary>
         public ProxyResponseMode ResponseMode { get; set; } = ProxyResponseMode.All;
@@ -62,7 +74,8 @@ namespace Proxy.DomainService.Utils
             IEnumerable<ProxyMethodConfigInputDto>? methodConfigs = null,
             IEnumerable<ProxyKeyValueInputDto>? bodyMerge = null,
             string? responseMode = null,
-            IEnumerable<string>? responseInclude = null)
+            IEnumerable<string>? responseInclude = null,
+            IEnumerable<ProxyRouteConfigInputDto>? routes = null)
         {
             var result = new ProxyConfigValidationResult();
 
@@ -74,8 +87,188 @@ namespace Proxy.DomainService.Utils
             result.BodyMerge = NormalizePairs(bodyMerge, "bodyMerge", result);
             result.MethodConfigs = NormalizeMethodConfigs(methodConfigs, result);
             NormalizeResponseFilter(responseMode, responseInclude, result);
+            result.Routes = NormalizeRoutes(routes, result);
 
             return result;
+        }
+
+        /// <summary>
+        /// Normalizes the route allowlist. Each route must target an allowed method and carry a well-formed
+        /// path template; <c>(method, path)</c> must be unique, since two routes matching the same call would
+        /// make the forward's behaviour depend on declaration order. Every parameter the upstream template
+        /// uses must be declared by the client-facing one, or the rewrite would emit a literal <c>{name}</c>
+        /// segment to the third party.
+        /// <para>
+        /// An override member is either <c>null</c> (inherit the shared value) or a value. Unlike headers and
+        /// query, an explicitly empty <c>bodyMerge</c> / <c>responseInclude</c> is preserved as an override:
+        /// "merge nothing" and "keep no fields" are meaningful for a route whose payload differs from the
+        /// proxy-wide default, which is the case this whole layer exists to serve.
+        /// </para>
+        /// </summary>
+        private static List<ProxyRouteConfig> NormalizeRoutes(
+            IEnumerable<ProxyRouteConfigInputDto>? routes, ProxyConfigValidationResult result)
+        {
+            var normalized = new List<ProxyRouteConfig>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (var entry in routes ?? Enumerable.Empty<ProxyRouteConfigInputDto>())
+            {
+                if (entry is null)
+                {
+                    continue;
+                }
+
+                if (!HttpMethodTypeExtensions.TryParse(entry.Method, out var method)
+                    || !result.Methods.Contains(method))
+                {
+                    result.Errors["routes"] = "Each route must target a method the proxy allows.";
+                    continue;
+                }
+
+                var path = ProxyRoutePath.Normalize(entry.Path);
+                if (!ProxyRoutePath.TryParseTemplate(path, out var parameters, out var pathReason))
+                {
+                    result.Errors["routes"] = pathReason;
+                    continue;
+                }
+
+                if (!seen.Add($"{method.Wire()} {path}"))
+                {
+                    result.Errors["routes"] = $"Route '{method.Wire()} /{path}' is declared more than once.";
+                    continue;
+                }
+
+                string? upstreamPath = null;
+                if (entry.UpstreamPath is not null)
+                {
+                    upstreamPath = ProxyRoutePath.Normalize(entry.UpstreamPath);
+                    if (!ProxyRoutePath.TryParseTemplate(upstreamPath, out var upstreamParameters, out var upstreamReason))
+                    {
+                        result.Errors["routes"] = upstreamReason;
+                        continue;
+                    }
+
+                    var undeclared = upstreamParameters.FirstOrDefault(p => !parameters.Contains(p, StringComparer.Ordinal));
+                    if (undeclared is not null)
+                    {
+                        result.Errors["routes"] =
+                            $"Route '{method.Wire()} /{path}' rewrites to a parameter '{undeclared}' its path does not declare.";
+                        continue;
+                    }
+                }
+
+                // Validated under the route's own field kind so the dedupe and length rules still apply,
+                // then re-filed under "routes": an error on a route's header must not light up the
+                // proxy-wide Headers input in the console.
+                var routeHeaders = entry.Headers is null ? null : NormalizeRoutePairs(entry.Headers, "headers", method, path, result);
+                var routeQuery = entry.Query is null ? null : NormalizeRoutePairs(entry.Query, "query", method, path, result);
+                var routeBodyMerge = entry.BodyMerge is null ? null : NormalizeRoutePairs(entry.BodyMerge, "bodyMerge", method, path, result);
+
+                if (routeHeaders is { Count: 0 })
+                {
+                    routeHeaders = null;
+                }
+
+                if (routeQuery is { Count: 0 })
+                {
+                    routeQuery = null;
+                }
+
+                ProxyResponseMode? routeResponseMode = null;
+                if (!string.IsNullOrWhiteSpace(entry.ResponseMode))
+                {
+                    if (Enum.TryParse<ProxyResponseMode>(entry.ResponseMode.Trim(), ignoreCase: true, out var parsedMode))
+                    {
+                        routeResponseMode = parsedMode;
+                    }
+                    else
+                    {
+                        result.Errors["routes"] = "A route responseMode must be 'All' or 'Select'.";
+                        continue;
+                    }
+                }
+
+                var routeResponseInclude = NormalizeRouteResponseInclude(entry.ResponseInclude, method, path, result);
+
+                normalized.Add(new ProxyRouteConfig
+                {
+                    Method = method,
+                    Path = path,
+                    UpstreamPath = upstreamPath,
+                    Headers = routeHeaders,
+                    Query = routeQuery,
+                    BodyMerge = routeBodyMerge,
+                    ResponseMode = routeResponseMode,
+                    ResponseInclude = routeResponseInclude,
+                });
+            }
+
+            if (normalized.Count > ProxyRoutePath.MaxRoutes)
+            {
+                result.Errors["routes"] = $"At most {ProxyRoutePath.MaxRoutes} routes.";
+            }
+
+            return normalized;
+        }
+
+        /// <summary>
+        /// Applies the shared key/value rules to a route's pairs, but reports any failure against
+        /// <c>routes</c> (naming the route) instead of the proxy-wide field the rule is borrowed from.
+        /// </summary>
+        private static List<ProxyKeyValue> NormalizeRoutePairs(
+            IEnumerable<ProxyKeyValueInputDto> pairs, string field, HttpMethodType method, string path,
+            ProxyConfigValidationResult result)
+        {
+            var scratch = new ProxyConfigValidationResult();
+            var normalized = NormalizePairs(pairs, field, scratch);
+
+            if (scratch.Errors.TryGetValue(field, out var reason))
+            {
+                result.Errors["routes"] = $"Route '{method.Wire()} /{path}': {reason}";
+            }
+
+            return normalized;
+        }
+
+        /// <summary>
+        /// Trims, blank-drops and ordinal-dedupes a route's response paths, applying the same cap and path
+        /// grammar as the proxy-wide list. <c>null</c> in ⇒ <c>null</c> out (inherit).
+        /// </summary>
+        private static List<string>? NormalizeRouteResponseInclude(
+            IEnumerable<string>? responseInclude, HttpMethodType method, string path,
+            ProxyConfigValidationResult result)
+        {
+            if (responseInclude is null)
+            {
+                return null;
+            }
+
+            var normalized = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var raw in responseInclude)
+            {
+                var fieldPath = (raw ?? string.Empty).Trim();
+                if (fieldPath.Length == 0 || !seen.Add(fieldPath))
+                {
+                    continue;
+                }
+
+                normalized.Add(fieldPath);
+            }
+
+            if (normalized.Count > ProxyResponsePath.MaxPaths)
+            {
+                result.Errors["routes"] = $"At most {ProxyResponsePath.MaxPaths} response fields on a route.";
+                return normalized;
+            }
+
+            var invalid = normalized.FirstOrDefault(p => !ProxyResponsePath.IsValid(p));
+            if (invalid is not null)
+            {
+                result.Errors["routes"] = $"Route '{method.Wire()} /{path}' has an invalid response field path '{invalid}'.";
+            }
+
+            return normalized;
         }
 
         /// <summary>
@@ -132,6 +325,13 @@ namespace Proxy.DomainService.Utils
             result.ResponseInclude = normalized;
         }
 
+        /// <summary>
+        /// Trims the name, then checks it derives to a usable slug. The gateway route is
+        /// <c>/api/proxy/gateway/{slug}/{**path}</c>, so a name with no <c>[a-z0-9]</c> character at all
+        /// (<c>"!!!"</c>, or a fully non-Latin name) would yield an empty slug and create a proxy that no
+        /// client can ever reach &mdash; and the next such name would collide with it on the unique slug
+        /// index, surfacing as a <c>PROXY_SLUG_CONFLICT</c> naming an unrelated proxy. Reject it here instead.
+        /// </summary>
         private static void ValidateName(string? name, ProxyConfigValidationResult result)
         {
             var trimmed = (name ?? string.Empty).Trim();
@@ -139,6 +339,13 @@ namespace Proxy.DomainService.Utils
             if (trimmed.Length == 0 || trimmed.Length > MaxNameLength)
             {
                 result.Errors["name"] = $"Name is required and must be {MaxNameLength} characters or fewer.";
+                return;
+            }
+
+            result.Slug = ProxySlug.From(trimmed);
+            if (result.Slug.Length == 0)
+            {
+                result.Errors["name"] = "Name must contain at least one letter (a-z) or digit (0-9).";
             }
         }
 

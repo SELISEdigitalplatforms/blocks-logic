@@ -87,7 +87,7 @@ namespace Proxy.DomainService.Services
                 return EmptyMap;
             }
 
-            // The data-plane path (ProxyGatewayController) authenticates with X-Blocks-Key and is
+            // The data-plane path (ProxiesController.Gateway) authenticates with X-Blocks-Key and is
             // [AllowAnonymous], so the ambient BlocksContext is not tenant-scoped. ISecretService reads the
             // tenant (and caller identity for access checks) from that context, so set it for the scope of
             // the resolve and restore afterwards. On the Test path the context is already the caller's.

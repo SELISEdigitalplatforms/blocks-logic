@@ -31,6 +31,32 @@ export type ProxyStatus = "live" | "paused";
  */
 export type ProxyResponseMode = "all" | "select";
 
+/**
+ * One endpoint a proxy is allowed to reach. `path` is the client-facing template appended after
+ * `/api/proxy/gateway/{slug}`; `{name}` segments are parameters the caller must supply. The gateway
+ * refuses any path not matching a declared route, so this list is what a consumer may call.
+ */
+/**
+ * One endpoint a proxy is allowed to reach. Mirrors the server's `ProxyRouteConfig` field for field,
+ * including the members the form does not yet edit: a route read off the wire must be able to go back
+ * unchanged, or saving an unrelated field would quietly drop configuration the console cannot show.
+ *
+ * A `null` override means "inherit the proxy-wide value". An empty array is NOT the same thing: it is
+ * an explicit "none", which is how a route opts out of a proxy-wide body merge.
+ */
+export type ProxyRoute = {
+  method: ProxyMethod;
+  /** Client-facing template, no leading slash. `""` is the base path. e.g. `orders/{id}/refunds`. */
+  path: string;
+  /** Template appended to the upstream. `null` ⇒ no rewrite; {@link path} is used verbatim. */
+  upstreamPath: string | null;
+  headers: ProxyKeyValue[] | null;
+  query: ProxyKeyValue[] | null;
+  bodyMerge: ProxyKeyValue[] | null;
+  responseMode: ProxyResponseMode | null;
+  responseInclude: string[] | null;
+};
+
 export type Proxy = {
   id: string;
   name: string;
@@ -48,6 +74,8 @@ export type Proxy = {
    */
   bodyMerge: ProxyKeyValue[];
   methodConfigs: ProxyMethodOverride[];
+  /** The endpoint allowlist. Empty ⇒ the base path only. Populated by the detail read, not the list. */
+  routes: ProxyRoute[];
   /** Persisted. `"all"` ⇒ relay the upstream response unchanged. */
   responseMode: ProxyResponseMode;
   /** Field-path expressions kept when {@link responseMode} is `"select"` (`data.user.email`, `items[].id`). */
@@ -78,6 +106,15 @@ export type ResponseFieldNode = {
  */
 export type ProxyBodyMode = "passthrough" | "merge";
 
+/** Where a connection credential row is delivered. Headers cover almost every vendor. */
+export type ProxyCredentialSendAs = "header" | "query";
+
+/**
+ * One row of the connection's "sent with every request" list. The server keeps headers and query
+ * as two lists; the form shows them as one so the credential has a single home.
+ */
+export type ProxyCredentialRow = ProxyKeyValue & { sendAs: ProxyCredentialSendAs };
+
 export type ProxyFormValues = Pick<
   Proxy,
   | "name"
@@ -87,9 +124,14 @@ export type ProxyFormValues = Pick<
   | "query"
   | "bodyMerge"
   | "methodConfigs"
+  | "routes"
   | "responseMode"
   | "responseInclude"
-> & { bodyMode: ProxyBodyMode };
+> & {
+  bodyMode: ProxyBodyMode;
+  /** Form-only. When present it is the source of truth for `headers` and `query`. */
+  credentials?: ProxyCredentialRow[];
+};
 
 /**
  * The result of a "Fill from test connection" run — a Test executed with filtering forced off
@@ -179,6 +221,17 @@ export type ProxyKeyValueInputDto = {
 };
 
 /** Mirrors server `ProxyMethodConfigDto` / `ProxyMethodConfigInputDto`. */
+export type ProxyRouteDto = {
+  method: string;
+  path: string;
+  upstreamPath?: string | null;
+  headers?: ProxyKeyValueDto[] | null;
+  query?: ProxyKeyValueDto[] | null;
+  bodyMerge?: ProxyKeyValueDto[] | null;
+  responseMode?: string | null;
+  responseInclude?: string[] | null;
+};
+
 export type ProxyMethodConfigDto = {
   method: string;
   upstream?: string | null;
@@ -214,6 +267,7 @@ export type ProxyDetailDto = {
   query: ProxyKeyValueDto[];
   bodyMerge?: ProxyKeyValueDto[] | null;
   methodConfigs: ProxyMethodConfigDto[];
+  routes?: ProxyRouteDto[] | null;
   responseMode?: string | null;
   responseInclude?: string[] | null;
   currentVersion: number;
@@ -315,6 +369,8 @@ export type ProxyExecutionLog = {
   timeUtc: string;
   method: ProxyMethod;
   path: string;
+  /** Raw client query string without the leading `?`; only on the on-demand detail row. */
+  requestQuery?: string;
   status: number;
   statusText: string;
   latencyMs: number;
@@ -334,6 +390,12 @@ export type ProxyExecutionLog = {
 export type ProxyExecutionPage = {
   rows: ProxyExecutionLog[];
   totalCount: number;
+  /**
+   * The window top the server computed this page against. Send it back with the next page so the
+   * offsets keep addressing the same rows; rows arriving in between would otherwise shift every
+   * later row down and make the reader see duplicates and gaps.
+   */
+  asOfUtc?: string;
 };
 
 export type ProxyVersionHistory = {
@@ -376,12 +438,6 @@ export type ProxyTestResponse = {
   responseFilterApplied?: boolean;
   /** Size of the body relayed to the client, in bytes (post-projection under Select). */
   responseBodyBytes: number;
-};
-
-export type ProxyCsvExport = {
-  fileName: string;
-  csv: string;
-  rowCount: number;
 };
 
 export type ProxyMutationResponse = {

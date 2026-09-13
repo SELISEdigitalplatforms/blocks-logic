@@ -9,6 +9,10 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BlocksTemplate.Api.Controllers
 {
+    /// <summary>
+    /// Mail sending and mailbox reads, routed as <c>/api/Mail/{action}</c>. Failures surface as 400 with
+    /// the service result as the body rather than as an exception.
+    /// </summary>
     [ApiController]
     [Route("[controller]/[action]")]
 
@@ -16,6 +20,7 @@ namespace BlocksTemplate.Api.Controllers
     {
         //private readonly IConfigurationService _configurationService;
         private readonly IMailService _mailService;
+        /// <summary>Takes the mail and configuration services.</summary>
         public MailController(
             //IConfigurationService configurationService,
             IMailService mailService )
@@ -128,6 +133,7 @@ namespace BlocksTemplate.Api.Controllers
 
         #region Mail Send
 
+        /// <summary><c>POST</c> — sends a mail to arbitrary recipients, bypassing the stored recipient lists.</summary>
         [HttpPost]
         [Authorize]
         public async Task<IActionResult> SendToAny ( [FromBody] SendMailToAny request )
@@ -136,6 +142,7 @@ namespace BlocksTemplate.Api.Controllers
             return result.IsSuccess ? Ok(result) : BadRequest(result);
         }
 
+        /// <summary><c>POST</c> — sends a mail through the configured mail server.</summary>
         [HttpPost]
         [Authorize]
         public async Task<IActionResult> Send ( [FromBody] SendMail request )
@@ -144,6 +151,10 @@ namespace BlocksTemplate.Api.Controllers
             return result.IsSuccess ? Ok(result) : BadRequest(result);
         }
 
+        /// <summary>
+        /// <c>GET</c> — the messages in a synced mailbox. Anonymous, unlike its single-message twin
+        /// <see cref="GetMailBoxMail"/>.
+        /// </summary>
         [HttpGet]
         public async Task<IActionResult> GetMailBoxMails ( [FromQuery] GetMailBoxMails request )
         {
@@ -151,6 +162,7 @@ namespace BlocksTemplate.Api.Controllers
             return result.IsSuccess ? Ok(result) : BadRequest(result);
         }
 
+        /// <summary><c>GET</c> — one message from a synced mailbox.</summary>
         [HttpGet]
         [Authorize]
         public async Task<IActionResult> GetMailBoxMail ( [FromQuery] GetMailBoxMail request )
@@ -159,6 +171,10 @@ namespace BlocksTemplate.Api.Controllers
             return result.IsSuccess ? Ok(result) : BadRequest(result);
         }
 
+        /// <summary>
+        /// <c>GET</c> — summaries of the configured mail servers. The request object is accepted for
+        /// signature symmetry with the other reads and is deliberately unused.
+        /// </summary>
         [HttpGet]
         [Authorize]
         public async Task<IActionResult> Gets([FromQuery] GetMailConfigurationsRequest request)

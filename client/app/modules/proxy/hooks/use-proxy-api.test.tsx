@@ -8,7 +8,6 @@ vi.mock("../services", async () => ({
 
 import {
   useCreateProxy,
-  useExportProxyExecutionCsv,
   useGetProxies,
   useGetProxyExecutions,
   useRevertProxyVersion,
@@ -46,12 +45,11 @@ describe("use-proxy-api hooks", () => {
     await waitFor(() => expect(list.result.current.data?.items[0].name).toBe("Docs API"));
   });
 
-  it("uses dedicated hooks for logs, revert, test, and CSV export", async () => {
+  it("uses dedicated hooks for logs, revert, and test", async () => {
     const wrapper = makeHookWrapper();
     const logs = renderHook(() => useGetProxyExecutions("p1", "client"), { wrapper });
     const revert = renderHook(() => useRevertProxyVersion(), { wrapper });
     const testRequest = renderHook(() => useSendProxyTestRequest(), { wrapper });
-    const exportCsv = renderHook(() => useExportProxyExecutionCsv(), { wrapper });
 
     await waitFor(() => expect(logs.result.current.data?.rows[0].status).toBe(404));
 
@@ -62,9 +60,5 @@ describe("use-proxy-api hooks", () => {
     await expect(
       testRequest.result.current.mutateAsync({ proxyId: "p1", method: "POST" }),
     ).resolves.toMatchObject({ ok: true, status: 200 });
-
-    await expect(
-      exportCsv.result.current.mutateAsync({ proxyId: "p1", filter: "all" }),
-    ).resolves.toMatchObject({ rowCount: 3 });
   });
 });

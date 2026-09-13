@@ -2,64 +2,82 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
-import { PROXY_MOCK_DATA } from "../constants";
-
 vi.mock("../services", async () => ({
   proxyService: (await import("../test-support/mock-proxy-service")).mockProxyService,
 }));
 
 import { proxyService } from "../services";
+import { PROXY_MOCK_DATA } from "../constants";
+import { Proxy } from "../types";
 import { ProxyTestTab } from "./proxy-test-tab";
 
-const mockProxyService = proxyService as unknown as {
-  resetMockStore: () => void;
-  test: (request: unknown) => Promise<unknown>;
-};
+const testSpy = vi.spyOn(proxyService, "test");
+
+const stripe = () => ({ ...(PROXY_MOCK_DATA[0] as Proxy) });
 
 describe("ProxyTestTab", () => {
   beforeEach(() => {
-    mockProxyService.resetMockStore();
     vi.clearAllMocks();
   });
 
-  it("tests the saved proxy with the picked method and shows the response", async () => {
+  it("sends the selected route as a path suffix and renders the result", async () => {
     const user = userEvent.setup();
-    const testSpy = vi.spyOn(mockProxyService, "test");
+    renderWithProviders(<ProxyTestTab proxy={stripe()} />);
 
-    renderWithProviders(<ProxyTestTab proxy={PROXY_MOCK_DATA[0]} />);
-
-    expect(screen.getByText("/api/proxy/gateway/stripe-payments")).toBeTruthy();
-    await user.clear(screen.getByLabelText("Test request path"));
-    await user.type(screen.getByLabelText("Test request path"), "/charges");
-    await user.click(screen.getByRole("button", { name: /test run/i }));
+    await user.type(screen.getByLabelText("Query string"), "limit=10");
+    await user.click(screen.getByRole("button", { name: /send test request/i }));
 
     await waitFor(() =>
       expect(testSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ proxyId: "p1", method: "GET", pathSuffix: "/charges" }),
+        expect.objectContaining({
+          proxyId: "p1",
+          method: "GET",
+          pathSuffix: "",
+          query: "limit=10",
+        }),
       ),
     );
-    expect(await screen.findByText("200 OK")).toBeTruthy();
+    expect(await screen.findByText("200")).toBeTruthy();
+    expect(screen.getByText("OK")).toBeTruthy();
   });
 
-  it("offers only the proxy's own methods and hides the body for GET", async () => {
+  it("requires a route parameter before it will send", async () => {
     const user = userEvent.setup();
+    renderWithProviders(<ProxyTestTab proxy={stripe()} />);
 
-    renderWithProviders(<ProxyTestTab proxy={PROXY_MOCK_DATA[0]} />);
+    await user.click(screen.getByLabelText("Test route"));
+    await user.click(await screen.findByRole("option", { name: "/{id}" }));
 
-    // p1 allows GET and POST — the server rejects anything else.
-    expect(screen.queryByLabelText("Test request body")).toBeNull();
-    await user.click(screen.getByRole("combobox", { name: "Method" }));
-    const options = await screen.findAllByRole("option");
-    expect(options.map((option) => option.textContent)).toEqual(["GET", "POST"]);
+    const send = screen.getByRole("button", { name: /send test request/i });
+    expect(send.hasAttribute("disabled")).toBe(true);
+    expect(screen.getByText("Fill in {id} to send.")).toBeTruthy();
 
-    await user.click(screen.getByRole("option", { name: "POST" }));
-    expect(await screen.findByLabelText("Test request body")).toBeTruthy();
+    await user.type(screen.getByLabelText("{id}"), "ch_123");
+    await user.click(send);
+
+    await waitFor(() =>
+      expect(testSpy).toHaveBeenCalledWith(expect.objectContaining({ pathSuffix: "ch_123" })),
+    );
   });
 
-  it("renders a single-method proxy as a badge instead of a picker", async () => {
-    renderWithProviders(<ProxyTestTab proxy={PROXY_MOCK_DATA[2]} />);
+  it("offers a body only on body-carrying methods", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ProxyTestTab proxy={stripe()} />);
 
-    expect(screen.queryByRole("combobox", { name: "Method" })).toBeNull();
-    expect(screen.getByText("GET")).toBeTruthy();
+    expect(screen.queryByLabelText(/request body/i)).toBeNull();
+
+    await user.click(screen.getByLabelText("Test method"));
+    await user.click(await screen.findByRole("option", { name: "POST" }));
+
+    expect(screen.getByLabelText(/request body/i)).toBeTruthy();
+  });
+
+  it("refuses to send while the proxy is paused", () => {
+    renderWithProviders(<ProxyTestTab proxy={{ ...stripe(), enabled: false }} />);
+
+    expect(
+      screen.getByRole("button", { name: /send test request/i }).hasAttribute("disabled"),
+    ).toBe(true);
+    expect(screen.getByText(/paused/i)).toBeTruthy();
   });
 });

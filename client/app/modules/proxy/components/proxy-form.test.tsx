@@ -1,6 +1,5 @@
-import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
@@ -20,13 +19,20 @@ const toasts = vi.hoisted(() => ({
 
 vi.mock("@/hooks/use-toast", () => toasts);
 
+const fillConnection = (name: string, url: string) => {
+  fireEvent.change(screen.getByPlaceholderText("Enter name"), { target: { value: name } });
+  fireEvent.change(screen.getByPlaceholderText("https://api.vendor.com"), {
+    target: { value: url },
+  });
+};
+
 describe("ProxyForm", () => {
   beforeEach(() => {
     mockProxyService.resetMockStore();
     vi.clearAllMocks();
   });
 
-  it("creates a valid proxy and calls onSuccess", async () => {
+  it("creates a proxy with one base-path endpoint and methods derived from it", async () => {
     const user = userEvent.setup();
     const onSuccess = vi.fn();
     renderWithProviders(
@@ -35,21 +41,27 @@ describe("ProxyForm", () => {
       </MemoryRouter>,
     );
 
-    fireEvent.change(screen.getByPlaceholderText("Enter name"), {
-      target: { value: "Docs Proxy" },
-    });
-    fireEvent.change(screen.getByPlaceholderText("Enter third-party endpoint"), {
-      target: { value: "https://api.example.com/docs" },
-    });
+    fillConnection("Docs Proxy", "https://api.example.com/docs");
     await user.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalled());
     expect(toasts.showSuccessToast).toHaveBeenCalledWith({
       description: "Proxy created successfully.",
     });
+
+    const saved = await proxyService.get(onSuccess.mock.calls[0][0]);
+    // The simple case needs no endpoint setup: a proxy starts one-to-one with its base path.
+    expect(saved?.routes).toHaveLength(1);
+    expect(saved?.routes[0]).toMatchObject({ method: "GET", path: "" });
+    // Methods are not chosen; they are whatever the endpoints use.
+    expect(saved?.methods).toEqual(["GET"]);
+    // Nothing is configured at proxy level any more.
+    expect(saved?.bodyMerge).toEqual([]);
+    expect(saved?.responseMode).toBe("all");
+    expect(saved?.methodConfigs).toEqual([]);
   });
 
-  it("keeps only one selected method when creating a proxy", async () => {
+  it("stores credential rows as headers or query by their delivery slot", async () => {
     const user = userEvent.setup();
     const onSuccess = vi.fn();
     renderWithProviders(
@@ -58,21 +70,51 @@ describe("ProxyForm", () => {
       </MemoryRouter>,
     );
 
-    fireEvent.change(screen.getByPlaceholderText("Enter name"), {
-      target: { value: "Docs Proxy" },
+    fillConnection("Keyed Proxy", "https://api.example.com");
+    // "Add" is the credential list's button; the endpoint card's is "Add endpoint".
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    fireEvent.change(screen.getByPlaceholderText("Enter key"), {
+      target: { value: "Authorization" },
     });
-    fireEvent.change(screen.getByPlaceholderText("Enter third-party endpoint"), {
-      target: { value: "https://api.example.com/docs" },
+    fireEvent.change(screen.getByPlaceholderText("Enter value"), {
+      target: { value: "Bearer secret" },
     });
-    await user.click(screen.getByRole("button", { name: "POST" }));
     await user.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalled());
-    const proxy = await proxyService.get(onSuccess.mock.calls[0][0]);
-    expect(proxy?.methods).toEqual(["POST"]);
+    const saved = await proxyService.get(onSuccess.mock.calls[0][0]);
+    // Default delivery slot is a header, which is what almost every vendor takes.
+    expect(saved?.headers).toEqual([{ key: "Authorization", value: "Bearer secret" }]);
+    expect(saved?.query).toEqual([]);
   });
 
-  it("edits an existing proxy and has no delete action", async () => {
+  it("filters response fields per endpoint, not per proxy", async () => {
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+    renderWithProviders(
+      <MemoryRouter>
+        <ProxyForm mode="create" onSuccess={onSuccess} />
+      </MemoryRouter>,
+    );
+
+    fillConnection("Filtered Proxy", "https://api.example.com");
+    await user.click(screen.getByRole("button", { name: "What this endpoint sends and returns" }));
+    await user.click(screen.getByRole("switch", { name: "Filter response fields for endpoint 1" }));
+    await user.click(screen.getByRole("button", { name: "Add field" }));
+    fireEvent.change(screen.getByLabelText("Response field 1 for endpoint 1"), {
+      target: { value: "data.id" },
+    });
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+    const saved = await proxyService.get(onSuccess.mock.calls[0][0]);
+    expect(saved?.routes[0]).toMatchObject({ responseMode: "select", responseInclude: ["data.id"] });
+    // The proxy-level filter stays off: the endpoint owns this decision.
+    expect(saved?.responseMode).toBe("all");
+    expect(saved?.responseInclude).toEqual([]);
+  });
+
+  it("edits an existing proxy, seeding its credential from headers, and has no delete action", async () => {
     const user = userEvent.setup();
     const onSuccess = vi.fn();
     const proxy = (await proxyService.get("p1"))!;
@@ -84,128 +126,23 @@ describe("ProxyForm", () => {
     );
 
     expect(screen.getByDisplayValue("Stripe Payments")).toBeTruthy();
+    // The connection's stored headers come back as credential rows.
+    expect(screen.getByDisplayValue("Authorization")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(onSuccess).toHaveBeenCalled());
   });
 
-  it("edits response fields and saves the NEW selection, not the originally loaded one", async () => {
-    const user = userEvent.setup();
-    const onSuccess = vi.fn();
-    const proxy = (await proxyService.get("p3"))!; // select mode, 3 response paths
-
-    renderWithProviders(
-      <MemoryRouter>
-        <ProxyForm mode="edit" proxy={proxy} onSuccess={onSuccess} />
-      </MemoryRouter>,
-    );
-
-    // tree seeds from responseInclude: location.name / current.temp_c / current.condition.text
-    const nameInput = await screen.findByDisplayValue("name");
-    await user.click(within(nameInput.closest("div")!).getByRole("checkbox"));
-
-    await user.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
-
-    const saved = await proxyService.get("p3");
-    expect(saved?.responseInclude).toEqual(
-      expect.arrayContaining(["current.temp_c", "current.condition.text"]),
-    );
-    expect(saved?.responseInclude).not.toContain("location.name");
-  });
-
-  it("keeps response edits when the proxy prop gets a fresh reference (React Query refetch)", async () => {
-    const user = userEvent.setup();
-    const onSuccess = vi.fn();
-    const base = (await proxyService.get("p3"))!;
-
-    const Wrapper = () => {
-      const [proxy, setProxy] = useState(base);
-      return (
-        <MemoryRouter>
-          <button type="button" onClick={() => setProxy({ ...base })}>
-            refetch
-          </button>
-          <ProxyForm mode="edit" proxy={proxy} onSuccess={onSuccess} />
-        </MemoryRouter>
-      );
-    };
-
-    renderWithProviders(<Wrapper />);
-
-    const nameInput = await screen.findByDisplayValue("name");
-    await user.click(within(nameInput.closest("div")!).getByRole("checkbox"));
-
-    // simulate a background refetch handing down a new object with identical content
-    await user.click(screen.getByRole("button", { name: "refetch" }));
-
-    // the unchecked field must NOT come back
-    expect(screen.queryByDisplayValue("name")).toBeTruthy(); // row still there
-    await user.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
-
-    const saved = await proxyService.get("p3");
-    expect(saved?.responseInclude).not.toContain("location.name");
-  });
-
-  it("shows the Request body card only when a POST/PUT/PATCH method is selected", async () => {
-    const user = userEvent.setup();
+  it("will not remove the last endpoint", async () => {
     renderWithProviders(
       <MemoryRouter>
         <ProxyForm mode="create" onSuccess={vi.fn()} />
       </MemoryRouter>,
     );
 
-    // default methods === ["GET"] -> no card
-    expect(screen.queryByText("Request body")).toBeNull();
-
-    await user.click(screen.getByRole("button", { name: "POST" }));
-    expect(screen.getByText("Request body")).toBeTruthy();
-
-    await user.click(screen.getByRole("button", { name: "GET" }));
-    expect(screen.queryByText("Request body")).toBeNull();
-  });
-
-  it("seeds the body tab to merge when editing a proxy that has body fields", async () => {
-    const proxy = (await proxyService.get("p1"))!; // p1 mock has a non-empty bodyMerge
-
-    renderWithProviders(
-      <MemoryRouter>
-        <ProxyForm mode="edit" proxy={proxy} />
-      </MemoryRouter>,
-    );
-
-    // merge tab active -> the existing body rows are rendered
-    expect(await screen.findByDisplayValue("account")).toBeTruthy();
-  });
-
-  it("persists bodyMerge: [] when body fields are typed then the tab is switched to Pass through", async () => {
-    const user = userEvent.setup();
-    const onSuccess = vi.fn();
-    renderWithProviders(
-      <MemoryRouter>
-        <ProxyForm mode="create" onSuccess={onSuccess} />
-      </MemoryRouter>,
-    );
-
-    fireEvent.change(screen.getByPlaceholderText("Enter name"), {
-      target: { value: "Body Proxy" },
-    });
-    fireEvent.change(screen.getByPlaceholderText("Enter third-party endpoint"), {
-      target: { value: "https://api.example.com/x" },
-    });
-    await user.click(screen.getByRole("button", { name: "POST" }));
-    await user.click(screen.getByRole("tab", { name: "Merge fields" }));
-    await user.click(screen.getByRole("button", { name: /add field/i }));
-    fireEvent.change(screen.getByPlaceholderText("Enter key"), { target: { value: "account" } });
-    fireEvent.change(screen.getByPlaceholderText("Enter value"), { target: { value: "acct_1" } });
-    await user.click(screen.getByRole("tab", { name: "Pass through" }));
-    await user.click(screen.getByRole("button", { name: "Create" }));
-
-    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
-    const saved = await proxyService.get(onSuccess.mock.calls[0][0]);
-    expect(saved?.bodyMerge).toEqual([]);
+    // No jest-dom in this project, so read the property rather than using toBeDisabled.
+    expect(screen.getByRole("button", { name: "Remove endpoint 1" })).toHaveProperty("disabled", true);
   });
 
   it("shows an inline url validation message instead of relying on native validation", async () => {
@@ -217,12 +154,7 @@ describe("ProxyForm", () => {
       </MemoryRouter>,
     );
 
-    fireEvent.change(screen.getByPlaceholderText("Enter name"), {
-      target: { value: "Docs Proxy" },
-    });
-    fireEvent.change(screen.getByPlaceholderText("Enter third-party endpoint"), {
-      target: { value: "jsonplaceholder.typicode.com/users" },
-    });
+    fillConnection("Docs Proxy", "jsonplaceholder.typicode.com/users");
     await user.click(screen.getByRole("button", { name: "Create" }));
 
     expect(await screen.findByText("Please enter a valid url")).toBeTruthy();

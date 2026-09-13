@@ -1,15 +1,17 @@
-import { useState } from "react";
-import { Activity, Download, Loader2, Pause, Play } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Activity, Check, Copy, Loader2, Pause, Play } from "lucide-react";
 import { Badge } from "@/components/ui-kits/badge/badge";
 import { Button } from "@/components/ui-kits/button/button";
 import { Card, CardContent } from "@/components/ui-kits/card/card";
 import { Pagination } from "@/components/ui-kits/pagination/pagination";
 import { Skeleton } from "@/components/ui-kits/skeleton/skeleton";
+import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { PROXY_LOG_PAGE_SIZE, PROXY_LOG_PAGE_SIZE_OPTIONS } from "../constants";
-import { useExportProxyExecutionCsv, useGetProxyExecution, useGetProxyExecutions } from "../hooks";
+import { useGetProxyExecution, useGetProxyExecutions } from "../hooks";
 import { Proxy, ProxyExecutionLog, ProxyLogFilter } from "../types";
+import { buildProxyCurl, formatProxyBody } from "../utils";
 import { ProxyMethodBadge } from "./proxy-method-badge";
 
 const FILTERS: { value: ProxyLogFilter; label: string }[] = [
@@ -40,21 +42,6 @@ const OUTCOME_LABELS: Record<string, string> = {
 
 const outcomeLabel = (outcome?: string) =>
   outcome && outcome !== "Success" ? (OUTCOME_LABELS[outcome] ?? outcome) : "";
-
-/** Pretty-print a JSON body; return the text unchanged when it is not JSON. */
-const formatResponseBody = (body: string, contentType?: string) => {
-  const trimmed = body.trim();
-  const looksJson =
-    (contentType?.toLowerCase().includes("json") ?? false) ||
-    trimmed.startsWith("{") ||
-    trimmed.startsWith("[");
-  if (!looksJson) return body;
-  try {
-    return JSON.stringify(JSON.parse(trimmed), null, 2);
-  } catch {
-    return body;
-  }
-};
 
 const logSkeletonClass = "bg-slate-200 dark:bg-muted";
 const logTableGridClass = "grid-cols-[170px_96px_minmax(300px,1fr)_96px_112px]";
@@ -91,9 +78,50 @@ const ProxyLogsSkeleton = () => (
   </div>
 );
 
+/**
+ * One labelled copy action. Swaps to a tick for the duration of the hook's cooldown so a click on a
+ * value that looks identical to the last one still reads as having done something.
+ */
+const CopyButton = ({
+  label,
+  value,
+  title,
+}: {
+  label: string;
+  value: string;
+  title: string;
+}) => {
+  const { isCopying, copy } = useCopyToClipboard();
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className="h-7 gap-1.5 px-2 text-xs font-medium"
+      title={title}
+      aria-label={title}
+      onClick={() =>
+        copy(
+          value,
+          () => showSuccessToast({ description: `${label} copied to clipboard.` }),
+          () => showErrorToast({ errors: `Could not copy the ${label.toLowerCase()}.` }),
+        )
+      }
+    >
+      {isCopying ? (
+        <Check className="h-3.5 w-3.5 text-green-600" />
+      ) : (
+        <Copy className="h-3.5 w-3.5" />
+      )}
+      {label}
+    </Button>
+  );
+};
+
 const LogDetails = ({ proxyId, log }: { proxyId: string; log: ProxyExecutionLog }) => {
   // The list row carries only summary fields; the upstream response body, forwarded
-  // URL and injected keys are fetched on demand from `GET /api/Proxy/GetExecution`.
+  // URL and injected keys are fetched on demand from `GET /api/Proxies/{proxyId}/executions/{executionId}`.
   const { data, isLoading, isError } = useGetProxyExecution(proxyId, log.id);
   const detail = data ?? log;
   const errorText = detail.errorMessage || outcomeLabel(detail.outcome);
@@ -108,11 +136,37 @@ const LogDetails = ({ proxyId, log }: { proxyId: string; log: ProxyExecutionLog 
     );
   }
 
+  const curl = buildProxyCurl(
+    detail,
+    typeof window === "undefined" ? "" : window.location.origin,
+  );
+
   return (
     <div className="grid gap-3 border-t bg-muted/20 px-4 py-3 text-sm lg:grid-cols-2">
+      <div className="flex flex-wrap items-center justify-end gap-2 lg:col-span-2">
+        <CopyButton
+          label="cURL"
+          value={curl}
+          title="Copy this call as a curl command (credentials left as placeholders)"
+        />
+        <CopyButton
+          label="JSON"
+          value={JSON.stringify(detail, null, 2)}
+          title="Copy the whole log row as JSON"
+        />
+      </div>
       <div>
         <span className="text-xs font-medium uppercase text-muted-foreground">Forwarded to</span>
-        <p className="break-all font-mono">{detail.upstreamUrl || detail.upstreamHost || "—"}</p>
+        <div className="flex items-start gap-2">
+          <p className="break-all font-mono">{detail.upstreamUrl || detail.upstreamHost || "—"}</p>
+          {detail.upstreamUrl || detail.upstreamHost ? (
+            <CopyButton
+              label="URL"
+              value={detail.upstreamUrl || detail.upstreamHost}
+              title="Copy the forwarded upstream URL"
+            />
+          ) : null}
+        </div>
       </div>
       <div>
         <span className="text-xs font-medium uppercase text-muted-foreground">Result</span>
@@ -133,13 +187,22 @@ const LogDetails = ({ proxyId, log }: { proxyId: string; log: ProxyExecutionLog 
         </div>
       ) : null}
       <div className="lg:col-span-2">
-        <span className="text-xs font-medium uppercase text-muted-foreground">Response body</span>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-medium uppercase text-muted-foreground">Response body</span>
+          {detail.responseBody ? (
+            <CopyButton
+              label="Body"
+              value={detail.responseBody}
+              title="Copy the stored response body"
+            />
+          ) : null}
+        </div>
         {isError ? (
           <p className="mt-1 text-red-700">Failed to load the response body.</p>
         ) : (
           <pre className="mt-1 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-background p-3 text-xs">
             {detail.responseBody
-              ? formatResponseBody(detail.responseBody, detail.responseContentType)
+              ? formatProxyBody(detail.responseBody, detail.responseContentType)
               : "(empty response body)"}
           </pre>
         )}
@@ -154,6 +217,12 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState<number>(PROXY_LOG_PAGE_SIZE);
+  /**
+   * Window top for the current paging session, pinned from the first response and sent with every
+   * later page. Cleared whenever the result set is redefined (filter, page size, Live) so the next
+   * fetch re-pins to "now" — a session only needs to be stable while the reader pages through it.
+   */
+  const [asOfUtc, setAsOfUtc] = useState<string | undefined>(undefined);
   const {
     data: logPage,
     isFetching,
@@ -163,42 +232,34 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
     enabled: active,
     page,
     pageSize,
+    // Live mode is cursor-based and always wants the newest rows, so it never pins.
+    asOfUtc: live ? undefined : asOfUtc,
   });
   const data = logPage?.rows ?? [];
   const totalCount = logPage?.totalCount ?? 0;
+  const servedAsOf = logPage?.asOfUtc;
+
+  useEffect(() => {
+    if (!live && !asOfUtc && servedAsOf) setAsOfUtc(servedAsOf);
+  }, [live, asOfUtc, servedAsOf]);
   const {
     data: allRowsPage,
     isFetched: hasFetchedAllRows,
     isLoading: isLoadingAllRows,
   } = useGetProxyExecutions(proxy.id, "all", { enabled: active, pageSize: 1 });
   const totalAllCount = allRowsPage?.totalCount ?? 0;
-  const exportCsv = useExportProxyExecutionCsv();
 
   const handleFilter = (next: ProxyLogFilter) => {
     setFilter(next);
     setExpandedId(null);
     setPage(0);
+    setAsOfUtc(undefined);
   };
 
   const handlePageSizeChange = (next: number) => {
     setPageSize(next);
     setPage(0);
-  };
-
-  const handleExport = async () => {
-    try {
-      const res = await exportCsv.mutateAsync({ proxyId: proxy.id, filter });
-      const blob = new Blob([res.csv], { type: "text/csv;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = res.fileName;
-      link.click();
-      URL.revokeObjectURL(url);
-      showSuccessToast({ description: `${res.rowCount} requests exported as CSV.` });
-    } catch {
-      showErrorToast({ errors: "Failed to export proxy requests." });
-    }
+    setAsOfUtc(undefined);
   };
 
   if (active && (isLoading || isLoadingAllRows)) {
@@ -245,14 +306,16 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
             variant="outline"
             size="xs"
             className="gap-1.5"
-            onClick={() => setLive((value) => !value)}
+            onClick={() => {
+              // Leaving Live drops back into a fresh paging session rather than one pinned to
+              // whenever the tab was first opened.
+              setLive((value) => !value);
+              setAsOfUtc(undefined);
+              setPage(0);
+            }}
           >
             {live ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
             {live ? "Paused" : "Live"}
-          </Button>
-          <Button variant="outline" size="xs" className="gap-1.5" onClick={handleExport}>
-            <Download className="h-3.5 w-3.5" />
-            Export CSV
           </Button>
         </div>
       </div>

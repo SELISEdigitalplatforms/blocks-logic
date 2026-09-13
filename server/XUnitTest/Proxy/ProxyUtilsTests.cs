@@ -131,42 +131,86 @@ namespace XUnitTest.Proxy
             ProxyStatusClassParser.InvalidMessage.Should().Be("Must be one of all, 2xx, 4xx, 5xx.");
         }
 
-        // ---------- ProxyCsvWriter ----------
-        [Fact]
-        public void ProxyCsvWriter_Write_EmitsBomHeaderAndCrlf()
-        {
-            var bytes = ProxyCsvWriter.Write(Array.Empty<ProxyExecutionEntity>());
+        // ---------- routes: error reporting and change history ----------
 
-            bytes.Take(3).Should().Equal(0xEF, 0xBB, 0xBF); // UTF-8 BOM
-            Encoding.UTF8.GetString(bytes).TrimStart('﻿')
-                .Should().Be("Time,Method,Path,Status,LatencyMs,UpstreamHost,Outcome,Error\r\n");
+        [Fact]
+        public void Validator_RouteHeaderError_IsReportedAgainstRoutes_NotTheProxyWideHeaders()
+        {
+            // Reporting this under "headers" would light up the wrong input in the console.
+            var result = ProxyConfigValidator.Validate(
+                "Stripe",
+                "https://api.stripe.com/v1/charges",
+                new[] { "GET" },
+                headers: null,
+                query: null,
+                routes: new[]
+                {
+                    new ProxyRouteConfigInputDto
+                    {
+                        Method = "GET",
+                        Path = "charges/{id}",
+                        Headers = new List<ProxyKeyValueInputDto>
+                        {
+                            new() { Key = "X-A", Value = "1" },
+                            new() { Key = "x-a", Value = "2" },
+                        },
+                    },
+                });
+
+            result.IsValid.Should().BeFalse();
+            result.Errors.Should().ContainKey("routes");
+            result.Errors.Should().NotContainKey("headers");
+            result.Errors["routes"].Should().Contain("GET /charges/{id}");
         }
 
         [Fact]
-        public void ProxyCsvWriter_Write_QuotesFieldsWithSeparatorsAndDoublesQuotes()
+        public void Validator_RouteTargetingAMethodTheProxyDoesNotAllow_IsRejected()
         {
-            var row = new ProxyExecutionEntity
+            var result = ProxyConfigValidator.Validate(
+                "Stripe",
+                "https://api.stripe.com/v1/charges",
+                new[] { "GET" },
+                headers: null,
+                query: null,
+                routes: new[] { new ProxyRouteConfigInputDto { Method = "DELETE", Path = "charges/{id}" } });
+
+            result.IsValid.Should().BeFalse();
+            result.Errors.Should().ContainKey("routes");
+        }
+
+        [Fact]
+        public void Validator_DuplicateRoute_IsRejected()
+        {
+            // Two routes matching the same call would make the forward depend on declaration order.
+            var route = new ProxyRouteConfigInputDto { Method = "GET", Path = "charges/{id}" };
+            var duplicate = new ProxyRouteConfigInputDto { Method = "GET", Path = "/charges/{id}/" };
+
+            var result = ProxyConfigValidator.Validate(
+                "Stripe",
+                "https://api.stripe.com/v1/charges",
+                new[] { "GET" },
+                headers: null,
+                query: null,
+                routes: new[] { route, duplicate });
+
+            result.IsValid.Should().BeFalse();
+            result.Errors["routes"].Should().Contain("more than once");
+        }
+
+        [Fact]
+        public void Summarize_RouteChange_NamesTheEndpoint()
+        {
+            var added = new List<ProxyFieldChange>
             {
-                TenantId = "t",
-                ProxyId = "p",
-                ProxySlug = "s",
-                RequestMethod = "GET",
-                RequestPath = "/a,b",
-                RequestQuery = string.Empty,
-                UpstreamUrl = "https://x",
-                UpstreamHost = "x",
-                Outcome = "Success",
-                StatusCode = 200,
-                LatencyMs = 5,
-                StartedAtUtc = new DateTime(2026, 9, 7, 10, 15, 0, DateTimeKind.Utc),
-                ErrorMessage = "he said \"hi\"",
+                new() { Field = "route:GET charges/{id}", Label = "route GET /charges/{id}", Before = null, After = "{}" },
+            };
+            var removed = new List<ProxyFieldChange>
+            {
+                new() { Field = "route:POST refunds", Label = "route POST /refunds", Before = "{}", After = null },
             };
 
-            var line = Encoding.UTF8.GetString(ProxyCsvWriter.Write(new[] { row }))
-                .TrimStart('﻿')
-                .Split("\r\n", StringSplitOptions.RemoveEmptyEntries)[1];
-
-            line.Should().Be("2026-09-07T10:15:00.000Z,GET,\"/a,b\",200,5,x,Success,\"he said \"\"hi\"\"\"");
+            ProxyChangeSet.Summarize(added).Should().Be("Route GET /charges/{id} added");
+            ProxyChangeSet.Summarize(removed).Should().Be("Route POST /refunds removed");
         }
 
         // ---------- ProxyConfigValidator ----------

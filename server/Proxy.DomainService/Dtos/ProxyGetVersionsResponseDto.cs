@@ -4,7 +4,7 @@ using Blocks.Genesis;
 namespace Proxy.DomainService.Dtos
 {
     /// <summary>
-    /// Response of <c>POST /api/Proxy/GetVersions</c>, newest version first. Works even after the proxy is
+    /// Response of <c>GET /api/Proxies/{proxyId}/versions</c>, newest version first. Works even after the proxy is
     /// deleted. When the proxy never existed for the tenant, <see cref="HttpStatus"/> is 404 and
     /// <see cref="Code"/> is <c>PROXY_NOT_FOUND</c>.
     /// </summary>

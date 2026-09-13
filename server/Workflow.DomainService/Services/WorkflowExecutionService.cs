@@ -1088,6 +1088,48 @@ namespace Workflow.DomainService.Services
 
             var currentTriggerNodeId = "";
 
+            // Nothing in this node's ancestry is a trigger, so there is no event to wait for: parking the
+            // run in the listening state below would block on something that can never arrive, which is what
+            // makes "Execute Step" on a standalone action node appear to do nothing. Run the ancestry
+            // directly instead. Only this shape is affected — as soon as one trigger is present the original
+            // listen / pin-data path below is taken unchanged.
+            if (triggerNodes.Count == 0)
+            {
+                workflow.TestMeta = new TestWorkflowMeta
+                {
+                    // Not persisted (no UpdateWorkflowAsync on this path): it rides along on the execution's
+                    // snapshot purely so the engine can read CompletionNodeId, and leaves the saved workflow
+                    // out of the listening state entirely.
+                    IsListening = false,
+                    ListenerTriggerNodes = new List<NodeEntity>(),
+                    UserIds = BlocksContext.GetContext().UserId != null ? new List<string> { BlocksContext.GetContext().UserId } : new List<string>(),
+                    CompletionNodeId = dto.NodeId
+                };
+
+                var triggerlessExecution = await CreateExecutionAsync(
+                    workflow,
+                    new TriggerMetadata
+                    {
+                        TriggerNodeId = string.Empty,
+                        TriggerType = string.Empty,
+                        TriggerData = new BsonArray()
+                    },
+                    WorkflowExecutionMode.Test);
+
+                triggerlessExecution.Context["Input"] = new BsonArray();
+                triggerlessExecution.Status = WorkflowExecutionStatus.Queued;
+                await NotifyWorkflowStartedAsync(triggerlessExecution);
+
+                var triggerlessResult = await _workflowEngineService.ExecuteStepNodeAsync(
+                    tenantId, triggerlessExecution.Id, string.Empty, dto.NodeId, dto.SourceExecutionId);
+
+                return new StepExecuteResponseDto
+                {
+                    IsSuccess = true,
+                    ItemId = triggerlessResult?.Id,
+                };
+            }
+
             if (String.IsNullOrWhiteSpace(dto.SourceExecutionId) && !hasAnyPinnedTriggerData)
             {
                 workflow.TestMeta = new TestWorkflowMeta

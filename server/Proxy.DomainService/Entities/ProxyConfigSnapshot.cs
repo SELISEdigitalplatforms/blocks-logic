@@ -36,6 +36,12 @@ namespace Proxy.DomainService.Entities
         public List<ProxyMethodConfig> MethodConfigs { get; set; } = new();
 
         /// <summary>
+        /// The route allowlist captured per version, so Revert round-trips a <c>route:&lt;METHOD&gt; &lt;path&gt;</c>
+        /// change and the change history shows exactly which endpoints a version could reach.
+        /// </summary>
+        public List<ProxyRouteConfig> Routes { get; set; } = new();
+
+        /// <summary>
         /// Response-body treatment on forward, captured per version so Revert round-trips a
         /// <c>responseMode</c> change. <see cref="ProxyResponseMode.All"/> ⇒ relayed unchanged.
         /// </summary>

@@ -93,10 +93,10 @@ describe("ProxyDetails page", () => {
     );
 
     await user.click(await screen.findByRole("tab", { name: "Test" }));
-    expect(await screen.findByText("Test this proxy")).toBeTruthy();
+    expect(await screen.findByLabelText("Test method")).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: /test run/i }));
-    expect(await screen.findByText("200 OK")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /send test request/i }));
+    expect(await screen.findByText("200")).toBeTruthy();
   });
 
   it("shows selected response fields as a nested tree", async () => {
@@ -109,7 +109,7 @@ describe("ProxyDetails page", () => {
     );
 
     expect(await screen.findByRole("heading", { name: "Weather Lookup" })).toBeTruthy();
-    expect(await screen.findByText(/Forwards 3 fields/)).toBeTruthy();
+    expect(await screen.findByText(/Only 3 fields/)).toBeTruthy();
     expect(screen.getByText("location")).toBeTruthy();
     expect(screen.getByText("name")).toBeTruthy();
     expect(screen.getByText("current")).toBeTruthy();

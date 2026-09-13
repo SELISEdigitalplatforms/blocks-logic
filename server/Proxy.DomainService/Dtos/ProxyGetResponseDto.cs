@@ -2,7 +2,7 @@ using Blocks.Genesis;
 
 namespace Proxy.DomainService.Dtos
 {
-    /// <summary>Response of <c>GET /api/Proxy/Get</c>. <c>Data</c> is <c>null</c> for an unknown item id.</summary>
+    /// <summary>Response of <c>GET /api/Proxies/{proxyId}</c>. <c>Data</c> is <c>null</c> for an unknown item id.</summary>
     public sealed class ProxyGetResponseDto : BaseQueryResponse<ProxyDetailDto?>
     {
     }
@@ -40,6 +40,12 @@ namespace Proxy.DomainService.Dtos
 
         /// <summary>Per-method overrides. Always empty until Phase D-feature; wired so the form can round-trip it.</summary>
         public List<ProxyMethodConfigDto> MethodConfigs { get; set; } = new();
+
+        /// <summary>
+        /// The endpoints this proxy may reach. Empty ⇒ base path only. The console must send this back on
+        /// Update: an omitted list is an empty list, which narrows the proxy to its base path.
+        /// </summary>
+        public List<ProxyRouteConfigDto> Routes { get; set; } = new();
 
         /// <summary><c>"All"</c> or <c>"Select"</c> — how the upstream response body is treated on forward.</summary>
         public string ResponseMode { get; set; } = "All";

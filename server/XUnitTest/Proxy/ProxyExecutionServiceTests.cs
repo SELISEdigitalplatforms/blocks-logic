@@ -44,13 +44,36 @@ namespace XUnitTest.Proxy
             GC.SuppressFinalize(this);
         }
 
+        /// <summary>
+        /// Seeds the denormalized counters the Overview now reads. One bucket in the current hour is enough:
+        /// the rollup sums whatever is inside the window, and the window maths has its own tests.
+        /// </summary>
+        private void GivenStats(long calls, long errors, long latencyMsTotal, DateTime? lastCall, DateTime? at = null)
+        {
+            var proxy = Proxy();
+            proxy.Stats = new ProxyStats
+            {
+                Buckets =
+                {
+                    [ProxyStatsWindow.StampOf(at ?? Now)] = new ProxyStatsBucket
+                    {
+                        Calls = calls,
+                        Errors = errors,
+                        LatencyMsTotal = latencyMsTotal,
+                    },
+                },
+                LastCallAtUtc = lastCall,
+            };
+            _proxies.Setup(r => r.GetAsync(Tenant, ProxyId)).ReturnsAsync(proxy);
+        }
+
         // =========================== GetOverview ===========================
 
         [Fact] // H1
         public async Task GetOverview_ComputesRoundedMetrics_CredentialRefs_Methods_LastCall()
         {
-            _executions.Setup(r => r.GetStatsAsync(Tenant, ProxyId, Now.AddHours(-24)))
-                .ReturnsAsync(new ProxyExecutionStats(8, 131.6, 3, InWindow));
+            // 1053 / 8 = 131.625, which rounds to 132 the same way the old mean did.
+            GivenStats(calls: 8, errors: 3, latencyMsTotal: 1053, lastCall: InWindow);
 
             var result = await _service.GetOverviewAsync(Tenant, new ProxyGetOverviewRequestDto { ProxyId = ProxyId });
 
@@ -58,6 +81,10 @@ namespace XUnitTest.Proxy
             var dto = result.Data!;
             dto.Calls24h.Should().Be(8);
             dto.AvgLatencyMs.Should().Be(132);
+
+            // The tiles must not touch the executions collection any more.
+            _executions.Verify(
+                r => r.GetStatsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>()), Times.Never);
             dto.ErrorRatePct.Should().Be(37.5);
             dto.ErrorRateIsHigh.Should().BeTrue();
             dto.CredentialRefs.Should().Equal("{{$VAR.stripe-key}}");
@@ -68,8 +95,7 @@ namespace XUnitTest.Proxy
         [Fact] // H1 boundary: errorRatePct == 5 is NOT high (strictly greater than 5)
         public async Task GetOverview_ErrorRateExactlyFive_IsNotHigh()
         {
-            _executions.Setup(r => r.GetStatsAsync(Tenant, ProxyId, It.IsAny<DateTime>()))
-                .ReturnsAsync(new ProxyExecutionStats(100, 10, 5, InWindow));
+            GivenStats(calls: 100, errors: 5, latencyMsTotal: 1000, lastCall: InWindow);
 
             var result = await _service.GetOverviewAsync(Tenant, new ProxyGetOverviewRequestDto { ProxyId = ProxyId });
 
@@ -136,12 +162,76 @@ namespace XUnitTest.Proxy
 
         // =========================== GetExecutions ===========================
 
+        [Fact] // Paging session: no asOfUtc supplied pins the window top to now and echoes it back.
+        public async Task GetExecutions_WithoutAsOf_PinsTheWindowTopToNowAndEchoesIt()
+        {
+            DateTime? seenAsOf = null;
+            _executions.Setup(r => r.CountAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), It.IsAny<DateTime>()))
+                .ReturnsAsync(0);
+            _executions.Setup(r => r.GetPageAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), It.IsAny<DateTime>(), 25, 0))
+                .Callback<string, string, ProxyStatusClass, DateTime, DateTime, int, int>(
+                    (_, _, _, _, asOf, _, _) => seenAsOf = asOf)
+                .ReturnsAsync(new List<ProxyExecutionEntity>());
+
+            var result = await _service.GetExecutionsAsync(Tenant, new ProxyGetExecutionsRequestDto { ProxyId = ProxyId });
+
+            seenAsOf.Should().Be(Now);
+            result.AsOfUtc.Should().Be(Now);
+        }
+
+        [Fact] // Paging session: a caller-supplied asOfUtc inside the window is honoured verbatim.
+        public async Task GetExecutions_WithAsOfInsideTheWindow_UsesItAsTheUpperBound()
+        {
+            var pinned = Now.AddMinutes(-5);
+            DateTime? seenAsOf = null;
+            _executions.Setup(r => r.CountAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), It.IsAny<DateTime>()))
+                .ReturnsAsync(0);
+            _executions.Setup(r => r.GetPageAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), It.IsAny<DateTime>(), 25, 1))
+                .Callback<string, string, ProxyStatusClass, DateTime, DateTime, int, int>(
+                    (_, _, _, _, asOf, _, _) => seenAsOf = asOf)
+                .ReturnsAsync(new List<ProxyExecutionEntity>());
+
+            var result = await _service.GetExecutionsAsync(Tenant, new ProxyGetExecutionsRequestDto
+            {
+                ProxyId = ProxyId,
+                PageNumber = 1,
+                AsOfUtc = pinned,
+            });
+
+            seenAsOf.Should().Be(pinned);
+            result.AsOfUtc.Should().Be(pinned);
+        }
+
+        [Theory] // A future pin would let new rows leak in; one older than the window would return nothing.
+        [InlineData(60)]      // minutes into the future
+        [InlineData(-60 * 48)] // two days ago, well outside the 24h window
+        public async Task GetExecutions_WithAsOfOutOfRange_ClampsToNowInsteadOfFailing(int offsetMinutes)
+        {
+            DateTime? seenAsOf = null;
+            _executions.Setup(r => r.CountAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), It.IsAny<DateTime>()))
+                .ReturnsAsync(0);
+            _executions.Setup(r => r.GetPageAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), It.IsAny<DateTime>(), 25, 0))
+                .Callback<string, string, ProxyStatusClass, DateTime, DateTime, int, int>(
+                    (_, _, _, _, asOf, _, _) => seenAsOf = asOf)
+                .ReturnsAsync(new List<ProxyExecutionEntity>());
+
+            var result = await _service.GetExecutionsAsync(Tenant, new ProxyGetExecutionsRequestDto
+            {
+                ProxyId = ProxyId,
+                AsOfUtc = Now.AddMinutes(offsetMinutes),
+            });
+
+            result.HttpStatus.Should().Be(200);
+            seenAsOf.Should().Be(Now);
+        }
+
+
         [Fact] // H2
         public async Task GetExecutions_FiltersPagesAndReportsUnpagedTotal()
         {
-            _executions.Setup(r => r.CountAsync(Tenant, ProxyId, ProxyStatusClass.FiveXx, Now.AddHours(-24)))
+            _executions.Setup(r => r.CountAsync(Tenant, ProxyId, ProxyStatusClass.FiveXx, Now.AddHours(-24), It.IsAny<DateTime>()))
                 .ReturnsAsync(1);
-            _executions.Setup(r => r.GetPageAsync(Tenant, ProxyId, ProxyStatusClass.FiveXx, Now.AddHours(-24), 25, 0))
+            _executions.Setup(r => r.GetPageAsync(Tenant, ProxyId, ProxyStatusClass.FiveXx, Now.AddHours(-24), It.IsAny<DateTime>(), 25, 0))
                 .ReturnsAsync(new List<ProxyExecutionEntity> { Row("e4", 500, "POST", 300) });
 
             var result = await _service.GetExecutionsAsync(Tenant, new ProxyGetExecutionsRequestDto
@@ -165,8 +255,8 @@ namespace XUnitTest.Proxy
         [Fact] // H2 — the DTO's default pageSize (25) is used when the field is omitted
         public async Task GetExecutions_DefaultRequest_Uses25RowPage()
         {
-            _executions.Setup(r => r.CountAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>())).ReturnsAsync(0);
-            _executions.Setup(r => r.GetPageAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), 25, 0))
+            _executions.Setup(r => r.CountAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), It.IsAny<DateTime>())).ReturnsAsync(0);
+            _executions.Setup(r => r.GetPageAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), It.IsAny<DateTime>(), 25, 0))
                 .ReturnsAsync(new List<ProxyExecutionEntity>());
 
             var result = await _service.GetExecutionsAsync(Tenant, new ProxyGetExecutionsRequestDto { ProxyId = ProxyId });
@@ -174,7 +264,7 @@ namespace XUnitTest.Proxy
             result.HttpStatus.Should().Be(200);
             result.Data.Should().BeEmpty();
             result.TotalCount.Should().Be(0);
-            _executions.Verify(r => r.GetPageAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), 25, 0), Times.Once);
+            _executions.Verify(r => r.GetPageAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), It.IsAny<DateTime>(), 25, 0), Times.Once);
         }
 
         [Fact] // H3 — afterId valid: tail query, pageNumber ignored, TotalCount is the full count
@@ -182,7 +272,7 @@ namespace XUnitTest.Proxy
         {
             var reference = Row("e5", 200, "GET", 120, startedAt: InWindow);
             _executions.Setup(r => r.FindByItemIdAsync(Tenant, "e5")).ReturnsAsync(reference);
-            _executions.Setup(r => r.CountAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>())).ReturnsAsync(6);
+            _executions.Setup(r => r.CountAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), It.IsAny<DateTime>())).ReturnsAsync(6);
             _executions.Setup(r => r.GetNewerThanAsync(
                     Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), reference.StartedAtUtc, "e5", 25))
                 .ReturnsAsync(new List<ProxyExecutionEntity> { Row("e6", 201, "GET", 40) });
@@ -198,7 +288,7 @@ namespace XUnitTest.Proxy
             result.Data!.Single().ItemId.Should().Be("e6");
             result.TotalCount.Should().Be(6);
             _executions.Verify(r => r.GetPageAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<ProxyStatusClass>(),
-                It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<int>()), Times.Never);
         }
 
         [Fact] // C8 — afterId out of window / unknown: treat as no afterId, newest page, no error
@@ -206,8 +296,8 @@ namespace XUnitTest.Proxy
         {
             _executions.Setup(r => r.FindByItemIdAsync(Tenant, "old"))
                 .ReturnsAsync(Row("old", 200, "GET", 10, startedAt: OutOfWindow));
-            _executions.Setup(r => r.CountAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>())).ReturnsAsync(3);
-            _executions.Setup(r => r.GetPageAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), 25, 0))
+            _executions.Setup(r => r.CountAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), It.IsAny<DateTime>())).ReturnsAsync(3);
+            _executions.Setup(r => r.GetPageAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), It.IsAny<DateTime>(), 25, 0))
                 .ReturnsAsync(new List<ProxyExecutionEntity> { Row("e3", 200, "GET", 90) });
 
             var result = await _service.GetExecutionsAsync(Tenant, new ProxyGetExecutionsRequestDto
@@ -235,7 +325,7 @@ namespace XUnitTest.Proxy
             result.HttpStatus.Should().Be(400);
             result.Code.Should().Be("PROXY_VALIDATION");
             result.Errors!["statusClass"].Should().Be("Must be one of all, 2xx, 4xx, 5xx.");
-            _executions.Verify(r => r.CountAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<ProxyStatusClass>(), It.IsAny<DateTime>()), Times.Never);
+            _executions.Verify(r => r.CountAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<ProxyStatusClass>(), It.IsAny<DateTime>(), It.IsAny<DateTime>()), Times.Never);
         }
 
         [Theory] // C1
@@ -284,8 +374,8 @@ namespace XUnitTest.Proxy
         {
             _proxies.Setup(r => r.GetAsync(Tenant, ProxyId)).ReturnsAsync((ProxyDetailEntity?)null);
             _executions.Setup(r => r.AnyForProxyAsync(Tenant, ProxyId)).ReturnsAsync(true);
-            _executions.Setup(r => r.CountAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>())).ReturnsAsync(2);
-            _executions.Setup(r => r.GetPageAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), 25, 0))
+            _executions.Setup(r => r.CountAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), It.IsAny<DateTime>())).ReturnsAsync(2);
+            _executions.Setup(r => r.GetPageAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), It.IsAny<DateTime>(), 25, 0))
                 .ReturnsAsync(new List<ProxyExecutionEntity> { Row("e1", 200, "GET", 150), Row("e2", 404, "GET", 0) });
 
             var result = await _service.GetExecutionsAsync(Tenant, new ProxyGetExecutionsRequestDto { ProxyId = ProxyId });
@@ -359,92 +449,6 @@ namespace XUnitTest.Proxy
 
             result.HttpStatus.Should().Be(400);
             result.Errors.Should().ContainKeys("itemId", "proxyId");
-        }
-
-        // =========================== ExportExecutionsCsv ===========================
-
-        [Fact] // H5
-        public async Task ExportExecutionsCsv_WritesBomHeaderAndNewestFirstRows_WithSluggedFilename()
-        {
-            _executions.Setup(r => r.CountAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>())).ReturnsAsync(2);
-            _executions.Setup(r => r.GetForExportAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), ProxyExecutionService.ExportRowCap))
-                .ReturnsAsync(new List<ProxyExecutionEntity>
-                {
-                    Row("e2", 500, "POST", 300, startedAt: Now.AddMinutes(-1)),
-                    Row("e1", 200, "GET", 150, startedAt: Now.AddMinutes(-2), path: "/api/proxy/gateway/stripe-payments/a,b"),
-                });
-
-            var result = await _service.ExportExecutionsCsvAsync(Tenant, new ProxyExportExecutionsRequestDto { ProxyId = ProxyId });
-
-            result.IsSuccess.Should().BeTrue();
-            result.Truncated.Should().BeFalse();
-            result.FileName.Should().Be("proxy-stripe-payments-logs-20260907101500.csv");
-
-            var text = Encoding.UTF8.GetString(result.Content);
-            text[0].Should().Be('﻿'); // BOM
-            var lines = text.TrimStart('﻿').Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
-            lines[0].Should().Be("Time,Method,Path,Status,LatencyMs,UpstreamHost,Outcome,Error");
-            lines[1].Should().StartWith("2026-09-07T10:14:00.000Z,POST,");
-            lines[2].Should().Contain("\"/api/proxy/gateway/stripe-payments/a,b\""); // RFC4180 quoting
-        }
-
-        [Fact] // C5
-        public async Task ExportExecutionsCsv_MoreThanCap_TruncatesAndSetsFlag()
-        {
-            _executions.Setup(r => r.CountAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>()))
-                .ReturnsAsync(ProxyExecutionService.ExportRowCap + 10_000);
-            _executions.Setup(r => r.GetForExportAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), ProxyExecutionService.ExportRowCap))
-                .ReturnsAsync(Enumerable.Range(0, ProxyExecutionService.ExportRowCap).Select(i => Row($"e{i}", 200, "GET", 1)).ToList());
-
-            var result = await _service.ExportExecutionsCsvAsync(Tenant, new ProxyExportExecutionsRequestDto { ProxyId = ProxyId });
-
-            result.IsSuccess.Should().BeTrue();
-            result.Truncated.Should().BeTrue();
-            var dataRows = Encoding.UTF8.GetString(result.Content)
-                .TrimStart('﻿')
-                .Split("\r\n", StringSplitOptions.RemoveEmptyEntries)
-                .Length - 1;
-            dataRows.Should().Be(ProxyExecutionService.ExportRowCap);
-        }
-
-        [Fact] // C4
-        public async Task ExportExecutionsCsv_NoRows_HeaderRowOnly()
-        {
-            _executions.Setup(r => r.CountAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>())).ReturnsAsync(0);
-            _executions.Setup(r => r.GetForExportAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), It.IsAny<int>()))
-                .ReturnsAsync(new List<ProxyExecutionEntity>());
-
-            var result = await _service.ExportExecutionsCsvAsync(Tenant, new ProxyExportExecutionsRequestDto { ProxyId = ProxyId });
-
-            var lines = Encoding.UTF8.GetString(result.Content).TrimStart('﻿').Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
-            lines.Should().ContainSingle().Which.Should().Be("Time,Method,Path,Status,LatencyMs,UpstreamHost,Outcome,Error");
-        }
-
-        [Fact] // C1
-        public async Task ExportExecutionsCsv_BadStatusClass_Returns400()
-        {
-            var result = await _service.ExportExecutionsCsvAsync(Tenant, new ProxyExportExecutionsRequestDto
-            {
-                ProxyId = ProxyId,
-                StatusClass = "3xx",
-            });
-
-            result.IsSuccess.Should().BeFalse();
-            result.HttpStatus.Should().Be(400);
-            result.Errors!["statusClass"].Should().Be("Must be one of all, 2xx, 4xx, 5xx.");
-        }
-
-        [Fact] // C2
-        public async Task ExportExecutionsCsv_UnknownProxy_Returns404()
-        {
-            _proxies.Setup(r => r.GetAsync(Tenant, "ghost")).ReturnsAsync((ProxyDetailEntity?)null);
-            _executions.Setup(r => r.AnyForProxyAsync(Tenant, "ghost")).ReturnsAsync(false);
-
-            var result = await _service.ExportExecutionsCsvAsync(Tenant, new ProxyExportExecutionsRequestDto { ProxyId = "ghost" });
-
-            result.IsSuccess.Should().BeFalse();
-            result.HttpStatus.Should().Be(404);
-            result.Code.Should().Be("PROXY_NOT_FOUND");
         }
 
         // =========================== helpers ===========================

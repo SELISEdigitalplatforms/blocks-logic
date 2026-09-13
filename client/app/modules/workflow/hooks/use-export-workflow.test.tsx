@@ -48,9 +48,9 @@ describe("useExportWorkflow", () => {
     expect(download.downloadJson).toHaveBeenCalledTimes(1);
     const [filename, payload] = download.downloadJson.mock.calls[0];
     expect(filename).toMatch(/^my-wf-\d{4}-\d{2}-\d{2}\.json$/);
-    expect(Object.keys(payload).sort()).toEqual(
-      ["description", "edges", "name", "nodes", "settings"].sort(),
-    );
+    // The export shape is deliberately these four keys (see buildWorkflowExport): every
+    // itemId / tenantId / publish / audit / execution field is stripped.
+    expect(Object.keys(payload).sort()).toEqual(["edges", "name", "nodes", "settings"].sort());
     expect(payload.nodes[0].pinData).toEqual([{ json: 1 }]);
     expect(toasts.showErrorToast).not.toHaveBeenCalled();
   });

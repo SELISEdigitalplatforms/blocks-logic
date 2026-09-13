@@ -112,7 +112,11 @@ const ResponseFieldRow = ({
 
   return (
     <li>
-      <div className="flex items-center gap-1.5 py-0.5" style={{ paddingLeft: depth * 16 }}>
+      <div
+        data-testid="response-field-row"
+        className="flex items-center gap-1.5 py-0.5"
+        style={{ paddingLeft: depth * 16 }}
+      >
         {hasChildren ? (
           <button
             type="button"

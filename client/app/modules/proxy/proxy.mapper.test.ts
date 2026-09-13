@@ -94,6 +94,7 @@ describe("proxy mapper", () => {
       query: [],
       bodyMerge: [],
       methodConfigs: [],
+      routes: [],
       responseMode: "All",
       responseInclude: [],
       enabled: true,

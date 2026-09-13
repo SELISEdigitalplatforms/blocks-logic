@@ -224,11 +224,19 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
   },
   transform: (node) => {
     const params = (node.parameters as Record<string, unknown>) ?? {};
+    const mode = typeof params.authorizationMode === "string" ? params.authorizationMode : "";
+
     return {
       ...node,
       parameters: {
         ...params,
         path: node.id,
+        // The server parses this into WorkflowAuthService.AuthorizationMode and treats an absent or
+        // unparseable value as "no authorization config", which makes the trigger throw
+        // UnauthorizedAccessException on every call. The node defaults this to "", so a webhook set to
+        // `blocksAuthorization` with roles picked but no mode chosen would reject all traffic. Normalising
+        // to the server's own default (RolesOnly = 0) here keeps the wire value always valid.
+        authorizationMode: mode || "RolesOnly",
       },
     };
   },

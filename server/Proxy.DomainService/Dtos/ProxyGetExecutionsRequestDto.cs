@@ -1,7 +1,7 @@
 namespace Proxy.DomainService.Dtos
 {
     /// <summary>
-    /// Body of <c>POST /api/Proxy/GetExecutions</c> (SPEC &sect;3.1) &mdash; the <em>Request logs</em> list.
+    /// Query string of <c>GET /api/Proxies/{proxyId}/executions</c> (SPEC &sect;3.1) &mdash; the <em>Request logs</em> list.
     /// Only rows from the rolling last 24 h are ever returned.
     /// </summary>
     public sealed class ProxyGetExecutionsRequestDto
@@ -23,5 +23,17 @@ namespace Proxy.DomainService.Dtos
 
         /// <summary>Zero-based, default 0. Ignored when <see cref="AfterId"/> is supplied.</summary>
         public int PageNumber { get; set; }
+
+        /// <summary>
+        /// Freezes the top of the window for a paging session. Echoed back on every response: send the value
+        /// from the first page with each subsequent page so the offsets keep addressing the same rows.
+        /// <para>
+        /// Without it, page 2 is computed against a list that has grown at the head since page 1 was served,
+        /// so rows repeat and rows are skipped. Absent (first page, or a filter change), the server pins it to
+        /// "now"; a value in the future, or older than the 24 h window, is clamped back into range.
+        /// Ignored in Live mode, which is cursor-based and wants the newest rows by definition.
+        /// </para>
+        /// </summary>
+        public DateTime? AsOfUtc { get; set; }
     }
 }

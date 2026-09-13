@@ -1,6 +1,6 @@
 namespace Proxy.DomainService.Dtos
 {
-    /// <summary>Query string of <c>GET /api/Proxy/Get</c>.</summary>
+    /// <summary>Route id of <c>GET /api/Proxies/{proxyId}</c>.</summary>
     public sealed class ProxyGetRequestDto
     {
         public string? ItemId { get; set; }

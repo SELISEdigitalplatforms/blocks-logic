@@ -1,6 +1,6 @@
 namespace Proxy.DomainService.Dtos
 {
-    /// <summary>Body of <c>POST /api/Proxy/Revert</c>.</summary>
+    /// <summary>Route ids of <c>POST /api/Proxies/{proxyId}/versions/{versionId}/revert</c>.</summary>
     public sealed class ProxyRevertRequestDto
     {
         public string? ProxyId { get; set; }

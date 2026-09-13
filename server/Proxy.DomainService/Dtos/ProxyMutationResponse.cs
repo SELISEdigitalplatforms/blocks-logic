@@ -6,7 +6,7 @@ namespace Proxy.DomainService.Dtos
     /// <summary>
     /// Result of a proxy control-plane mutation. Extends <see cref="BaseMutationResponse"/> (<c>itemId</c>,
     /// <c>errors</c>, <c>isSuccess</c>) with the stable <c>code</c> and human <c>message</c> from SPEC &sect;3.4.
-    /// <see cref="HttpStatus"/> is consumed by <c>ProxyController</c> to choose the response status code and is
+    /// <see cref="HttpStatus"/> is consumed by <c>ProxiesController</c> to choose the response status code and is
     /// not serialized.
     /// </summary>
     public sealed class ProxyMutationResponse : BaseMutationResponse

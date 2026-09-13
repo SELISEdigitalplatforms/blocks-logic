@@ -21,14 +21,14 @@ export const Proxies = () => {
   // A single page of results needs no pager.
   const showPagination = !isLoading && totalCount > pageSize;
 
-  // Deleting the last row of a page would otherwise strand the user on an empty page.
-  const handleProxyDeleted = () => {
-    if (page > 0 && proxies.length === 1) setPage(page - 1);
-  };
-
   const handlePageSizeChange = (size: number) => {
     setPageSize(size);
     setPage(0);
+  };
+
+  // Deleting the last row of a page would otherwise strand the user on an empty page.
+  const handleProxyDeleted = () => {
+    if (page > 0 && proxies.length === 1) setPage(page - 1);
   };
 
   return (
