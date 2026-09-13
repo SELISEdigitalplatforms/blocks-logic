@@ -7,6 +7,10 @@ vi.mock("../services", async () => ({
   proxyService: (await import("../test-support/mock-proxy-service")).mockProxyService,
 }));
 
+vi.mock("@/services/secret.service", async () => ({
+  secretService: (await import("../test-support/mock-secret-service")).mockSecretService,
+}));
+
 import { proxyService } from "../services";
 import { ProxyForm } from "./proxy-form";
 
@@ -42,7 +46,7 @@ describe("ProxyForm", () => {
     );
 
     fillConnection("Docs Proxy", "https://api.example.com/docs");
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalled());
     expect(toasts.showSuccessToast).toHaveBeenCalledWith({
@@ -79,7 +83,7 @@ describe("ProxyForm", () => {
     fireEvent.change(screen.getByPlaceholderText("Enter value"), {
       target: { value: "Bearer secret" },
     });
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalled());
     const saved = await proxyService.get(onSuccess.mock.calls[0][0]);
@@ -104,11 +108,14 @@ describe("ProxyForm", () => {
     fireEvent.change(screen.getByLabelText("Response field 1 for endpoint 1"), {
       target: { value: "data.id" },
     });
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalled());
     const saved = await proxyService.get(onSuccess.mock.calls[0][0]);
-    expect(saved?.routes[0]).toMatchObject({ responseMode: "select", responseInclude: ["data.id"] });
+    expect(saved?.routes[0]).toMatchObject({
+      responseMode: "select",
+      responseInclude: ["data.id"],
+    });
     // The proxy-level filter stays off: the endpoint owns this decision.
     expect(saved?.responseMode).toBe("all");
     expect(saved?.responseInclude).toEqual([]);
@@ -142,7 +149,31 @@ describe("ProxyForm", () => {
     );
 
     // No jest-dom in this project, so read the property rather than using toBeDisabled.
-    expect(screen.getByRole("button", { name: "Remove endpoint 1" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Remove endpoint 1" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+  });
+
+  it("inserts configuration variables into endpoint override values", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <MemoryRouter>
+        <ProxyForm mode="create" onSuccess={vi.fn()} />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "What this endpoint sends and returns" }));
+    await user.click(screen.getByRole("switch", { name: "Extra headers for endpoint 1" }));
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Insert a configuration variable into extra headers value",
+      }),
+    );
+    await user.click(await screen.findByRole("menuitem", { name: "stripe-api-key" }));
+
+    expect(screen.getByDisplayValue("{{$VAR.stripe-api-key}}")).toBeTruthy();
+    expect(screen.getByText("variable")).toBeTruthy();
   });
 
   it("shows an inline url validation message instead of relying on native validation", async () => {
@@ -155,7 +186,7 @@ describe("ProxyForm", () => {
     );
 
     fillConnection("Docs Proxy", "jsonplaceholder.typicode.com/users");
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByText("Please enter a valid url")).toBeTruthy();
     expect(onSuccess).not.toHaveBeenCalled();

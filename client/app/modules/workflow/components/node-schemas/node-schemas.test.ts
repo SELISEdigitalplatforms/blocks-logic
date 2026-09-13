@@ -62,6 +62,9 @@ type AnyRec = Record<string, unknown>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const field = (schema: { schema: { parameters: any[]; settings: any[] } }, key: string) =>
   [...schema.schema.parameters, ...schema.schema.settings].find((f) => f.key === key);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const fieldById = (schema: { schema: { parameters: any[]; settings: any[] } }, id: string) =>
+  [...schema.schema.parameters, ...schema.schema.settings].find((f) => f.id === id);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -331,21 +334,38 @@ describe("send mail v1", () => {
 });
 
 describe("webhook trigger v1", () => {
-  it("displayValue builds the production URL when mode is production", () => {
-    const f = field(NodeSchemaTriggerWebhookV1, "executionMode");
-    const url = f.displayValue(
-      { executionMode: 1 },
-      { tenantId: "pk", workflowId: "wf", nodeId: "nd", executionMode: 0 },
+  const urlConfig = { tenantId: "pk", workflowId: "wf", nodeId: "nd", executionMode: 0 };
+
+  it("labels the header-based URL and the deprecated path URL", () => {
+    expect(fieldById(NodeSchemaTriggerWebhookV1, "webhook-url").label).toBe("Webhook URL");
+    expect(fieldById(NodeSchemaTriggerWebhookV1, "webhook-url-deprecated").label).toBe(
+      "Deprecated Webhook URL",
     );
+  });
+
+  it("displayValue builds the production URL without project key", () => {
+    const f = fieldById(NodeSchemaTriggerWebhookV1, "webhook-url");
+    const url = f.displayValue({ executionMode: 1 }, urlConfig);
+    expect(url).toContain("/Workflow/webhook/wf/nd");
+    expect(url).not.toContain("/pk/");
+  });
+
+  it("displayValue builds the test URL without project key and falls back to config mode", () => {
+    const f = fieldById(NodeSchemaTriggerWebhookV1, "webhook-url");
+    const url = f.displayValue({}, urlConfig);
+    expect(url).toContain("/Workflow/webhook-test/wf/nd");
+    expect(url).not.toContain("/pk/");
+  });
+
+  it("deprecated displayValue builds the production URL with project key", () => {
+    const f = fieldById(NodeSchemaTriggerWebhookV1, "webhook-url-deprecated");
+    const url = f.displayValue({ executionMode: 1 }, urlConfig);
     expect(url).toContain("/Workflow/webhook/pk/wf/nd");
   });
 
-  it("displayValue builds the test URL and falls back to config mode", () => {
-    const f = field(NodeSchemaTriggerWebhookV1, "executionMode");
-    const url = f.displayValue(
-      {},
-      { tenantId: "pk", workflowId: "wf", nodeId: "nd", executionMode: 0 },
-    );
+  it("deprecated displayValue builds the test URL with project key and falls back to config mode", () => {
+    const f = fieldById(NodeSchemaTriggerWebhookV1, "webhook-url-deprecated");
+    const url = f.displayValue({}, urlConfig);
     expect(url).toContain("/Workflow/webhook-test/pk/wf/nd");
   });
 

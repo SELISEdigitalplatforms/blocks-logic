@@ -21,19 +21,20 @@ namespace XUnitTest.Proxy
 
         private readonly FakeSecretService _secrets = new();
         private readonly MemoryCache _cache = new(new MemoryCacheOptions());
+        private readonly ServiceProvider _services;
         private readonly ProxyVariableResolver _resolver;
 
         public ProxyVariableResolverTests()
         {
             // ProxyVariableResolver takes IServiceScopeFactory (it's a singleton resolving the scoped
             // ISecretService per call) — a tiny DI container stands in for the app's, same as production
-            // wires ISecretService.
-            var services = new ServiceCollection();
-            services.AddSingleton<ISecretService>(_secrets);
-            var provider = services.BuildServiceProvider();
+            // wires ISecretService. Held in a field so the provider outlives the constructor.
+            _services = new ServiceCollection()
+                .AddSingleton<ISecretService>(_secrets)
+                .BuildServiceProvider();
 
             _resolver = new ProxyVariableResolver(
-                provider.GetRequiredService<IServiceScopeFactory>(),
+                _services.GetRequiredService<IServiceScopeFactory>(),
                 _cache,
                 Options.Create(new ProxyVariableResolverOptions()),
                 Mock.Of<ILogger<ProxyVariableResolver>>());

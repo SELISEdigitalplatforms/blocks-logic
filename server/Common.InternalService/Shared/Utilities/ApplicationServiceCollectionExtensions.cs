@@ -54,8 +54,9 @@ namespace Common.InternalService.Shared.Utilities
             // Read-only catalog of the tenant's platform secrets, shared by every module that offers a secret
             // picker (Proxy, Workflow, ...). SeliseBlocks.Secrets.OS has no HTTP surface of its own, so this
             // thin control-plane seam over the in-process ISecretService is what GET /api/Secret/GetAll calls.
-            // ISecretService itself is supplied by AddBlocksSecrets() in Program.cs.
-            serviceCollection.AddSingleton<ISecretCatalogService, SecretCatalogService>();
+            // ISecretService (and SecretStoreContext) are scoped from AddBlocksSecrets(), so this wrapper is
+            // scoped too — a singleton would fail Development's ValidateScopes check at host build.
+            serviceCollection.AddScoped<ISecretCatalogService, SecretCatalogService>();
             #endregion
         }
     }

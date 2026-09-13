@@ -47,7 +47,28 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         id: "webhook-url",
         type: "tab-with-text",
         label: "Webhook URL",
-        info: "Copy this URL to trigger the workflow",
+        info: "Copy this URL to trigger the workflow. Send your project key in the x-blocks-key header.",
+        key: "executionMode",
+        transient: true,
+        options: [
+          { label: "Test", value: String(WorkflowExecutionMode.Test) },
+          { label: "Production", value: String(WorkflowExecutionMode.Production) },
+        ],
+        displayValue: (data: Record<string, unknown>, config) => {
+          const currentMode =
+            data.executionMode !== undefined ? Number(data.executionMode) : config.executionMode;
+          if (currentMode === WorkflowExecutionMode.Production) {
+            return `${API_BASES.LOGIC}/Workflow/webhook/${config.workflowId}/${config.nodeId}`;
+          }
+          return `${API_BASES.LOGIC}/Workflow/webhook-test/${config.workflowId}/${config.nodeId}`;
+        },
+        copyable: true,
+      },
+      {
+        id: "webhook-url-deprecated",
+        type: "tab-with-text",
+        label: "Deprecated Webhook URL",
+        info: "Legacy URL with the project key in the path. Prefer Webhook URL above.",
         key: "executionMode",
         transient: true,
         options: [

@@ -36,8 +36,9 @@ namespace Proxy.DomainService
             services.AddSingleton<IProxyExecutionRepository, ProxyExecutionRepository>();
 
             // {{$VAR.name}} configuration-variable resolution: name -> id -> Key Vault value at forward time,
-            // behind a short-TTL per-tenant cache. ISecretService is supplied by AddBlocksSecrets() in
-            // Program.cs; if AddProxyServices() is ever used without it, this resolver throws at first use.
+            // behind a short-TTL per-tenant cache. AddBlocksSecrets() registers ISecretService as scoped, so
+            // the singleton resolver opens a scope per ResolveAsync rather than capturing SecretStoreContext.
+            // If AddProxyServices() is ever used without AddBlocksSecrets(), the first resolve throws.
             services.AddMemoryCache();
             services.AddSingleton<IProxyVariableResolver, ProxyVariableResolver>();
             services.AddOptions<ProxyVariableResolverOptions>();

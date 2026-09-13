@@ -36,7 +36,7 @@ export const ProxyFormHeader = ({ isEdit, isPending, onCancel }: Props) => (
         ) : (
           <Plus className="h-4 w-4" />
         )}
-        {isEdit ? "Save" : "Create"}
+        Save
       </Button>
     </div>
   </div>

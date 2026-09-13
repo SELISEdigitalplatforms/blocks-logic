@@ -232,6 +232,7 @@ namespace Workflow.DomainService.Services
 
                 var payload = new AddExcuationNodeEvent
                 {
+                    TenantId = workflow.TenantId,
                     WorkflowId = workflow.ItemId,
                     WorkflowExecutionId = execution.Id,
                     NodeId = triggerId,
@@ -434,6 +435,7 @@ namespace Workflow.DomainService.Services
                     ConsumerName = LogicConstants.NodeExecutionQueue,
                     Payload = new AddExcuationNodeEvent
                     {
+                        TenantId = workflow.TenantId,
                         WorkflowId = workflow.ItemId,
                         WorkflowExecutionId = execution.Id!,
                         NodeId = triggerNode.Id,
@@ -833,6 +835,7 @@ namespace Workflow.DomainService.Services
                     ConsumerName = LogicConstants.NodeExecutionQueue,
                     Payload = new AddExcuationNodeEvent
                     {
+                        TenantId = workflow.TenantId,
                         WorkflowId = workflow.ItemId,
                         WorkflowExecutionId = execution.Id!,
                         NodeId = triggerNode.Id,
@@ -927,6 +930,7 @@ namespace Workflow.DomainService.Services
                     ConsumerName = LogicConstants.NodeExecutionQueue,
                     Payload = new AddExcuationNodeEvent
                     {
+                        TenantId = workflowSnapshot.TenantId,
                         WorkflowId = workflowSnapshot.ItemId,
                         WorkflowExecutionId = execution.Id!,
                         NodeId = triggerNode.Id,

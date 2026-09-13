@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { useScopedPath } from "@seliseblocks/genesis-os";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui-kits/button/button";
+import { Card, CardContent } from "@/components/ui-kits/card/card";
 import { Pagination } from "@/components/ui-kits/pagination/pagination";
 import { PROXY_PAGE_SIZE, PROXY_PAGE_SIZE_OPTIONS } from "../../constants";
 import { useGetProxies } from "../../hooks";
@@ -18,7 +19,6 @@ export const Proxies = () => {
   const proxies = data?.items ?? [];
   const totalCount = data?.totalCount ?? 0;
   const shouldShowAddProxyButton = !isLoading && totalCount > 0;
-  // A single page of results needs no pager.
   const showPagination = !isLoading && totalCount > pageSize;
 
   const handlePageSizeChange = (size: number) => {
@@ -26,7 +26,6 @@ export const Proxies = () => {
     setPage(0);
   };
 
-  // Deleting the last row of a page would otherwise strand the user on an empty page.
   const handleProxyDeleted = () => {
     if (page > 0 && proxies.length === 1) setPage(page - 1);
   };
@@ -51,24 +50,29 @@ export const Proxies = () => {
           </div>
         )}
       </div>
-      <div className="space-y-4">
-        {/* Paging keeps the previous page mounted (keepPreviousData); dim it while the next loads. */}
-        <div className={isFetching && !isLoading ? "opacity-60 transition-opacity" : undefined}>
-          <ProxyList proxies={proxies} isLoading={isLoading} onProxyDeleted={handleProxyDeleted} />
-        </div>
-        {showPagination ? (
-          <div className="flex justify-end">
-            <Pagination
-              totalCount={totalCount}
-              page={page}
-              pageSize={pageSize}
-              pageSizeOptions={[...PROXY_PAGE_SIZE_OPTIONS]}
-              onChange={setPage}
-              onPageSizeChange={handlePageSizeChange}
+      <Card>
+        <CardContent>
+          <div className={isFetching && !isLoading ? "opacity-60 transition-opacity" : undefined}>
+            <ProxyList
+              proxies={proxies}
+              isLoading={isLoading}
+              onProxyDeleted={handleProxyDeleted}
             />
           </div>
-        ) : null}
-      </div>
+          {showPagination ? (
+            <div className="mt-5 flex justify-end">
+              <Pagination
+                totalCount={totalCount}
+                page={page}
+                pageSize={pageSize}
+                pageSizeOptions={[...PROXY_PAGE_SIZE_OPTIONS]}
+                onChange={setPage}
+                onPageSizeChange={handlePageSizeChange}
+              />
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
     </section>
   );
 };

@@ -9,7 +9,7 @@ namespace Utilities.Api.Controllers
 {
     /// <summary>
     /// Management API for workflows, their versions and their executions, routed as
-    /// <c>/api/Workflow/{action}</c>. Every action except the two webhook entry points requires a bearer
+    /// <c>/api/Workflow/{action}</c>. Every action except the webhook entry points requires a bearer
     /// token; the tenant always comes from <see cref="BlocksContext"/> and is never taken from the payload.
     /// </summary>
     [ApiController]
@@ -227,6 +227,69 @@ namespace Utilities.Api.Controllers
             }
 
         }
+
+        /// <summary>
+        /// Header-based twin of <see cref="Webhook"/>: tenant comes from <c>x-blocks-key</c> rather than the
+        /// path. <c>POST /api/Workflow/Webhook/{workflowId}/{webhookId}</c>. Anonymous at the framework
+        /// level — missing or blank header is 400; trigger <c>authType</c> failures still surface as 401.
+        /// </summary>
+        [ActionName("Webhook")]
+        [HttpPost("{workflowId}/{webhookId}")]
+        public async Task<IActionResult> WebhookByHeader(string workflowId, string webhookId, [FromBody] JsonElement input)
+        {
+            if (!TryGetTenantIdFromBlocksKey(out var tenantId, out var error))
+            {
+                return error;
+            }
+
+            try
+            {
+                var response = await _workflowExecutionService.TriggerWebhookAsync(
+                    workflowId,
+                    webhookId,
+                    tenantId,
+                    input
+                );
+
+                return Ok(response);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return StatusCode(401, new { message = "Unauthorized" });
+            }
+        }
+
+        /// <summary>
+        /// Header-based twin of <see cref="TestWebhook"/>: tenant comes from <c>x-blocks-key</c> rather than
+        /// the path. <c>POST /api/Workflow/webhook-test/{workflowId}/{webhookId}</c>. Same 400/401 behaviour
+        /// as <see cref="WebhookByHeader"/>.
+        /// </summary>
+        [ActionName("webhook-test")]
+        [HttpPost("{workflowId}/{webhookId}")]
+        public async Task<IActionResult> TestWebhookByHeader(string workflowId, string webhookId, [FromBody] JsonElement input)
+        {
+            if (!TryGetTenantIdFromBlocksKey(out var tenantId, out var error))
+            {
+                return error;
+            }
+
+            try
+            {
+                var response = await _workflowExecutionService.TriggerTestWebhookAsync(
+                    workflowId,
+                    webhookId,
+                    tenantId,
+                    input
+                );
+
+                return Ok(response);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return StatusCode(401, new { message = "Unauthorized" });
+            }
+        }
+
         /// <summary><c>POST</c> — executes a single node in isolation and returns its output, for the node inspector.</summary>
         [Authorize]
         [HttpPost]
@@ -283,6 +346,18 @@ namespace Utilities.Api.Controllers
             var context = BlocksContext.GetContext();
             if (context == null) return "";
             return context.TenantId;
+        }
+
+        private bool TryGetTenantIdFromBlocksKey(out string tenantId, out IActionResult error)
+        {
+            tenantId = Request.Headers["x-blocks-key"].ToString().Trim();
+            if (string.IsNullOrWhiteSpace(tenantId))
+            {
+                error = BadRequest(new { message = "x-blocks-key header is required" });
+                return false;
+            }
+            error = null!;
+            return true;
         }
     }
 }

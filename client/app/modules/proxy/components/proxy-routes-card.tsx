@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useFormContext } from "react-hook-form";
 import { FlaskConical, Plus, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui-kits/badge/badge";
 import {
   Accordion,
   AccordionContent,
@@ -28,8 +29,15 @@ import {
   ProxyTestResponse,
   SecretListItem,
 } from "../types";
-import { parseRouteTemplate, trimRoutePath } from "../utils";
+import {
+  buildVarToken,
+  containsVarRef,
+  insertToken,
+  parseRouteTemplate,
+  trimRoutePath,
+} from "../utils";
 import { ProxyTestPanel } from "./proxy-test-panel";
+import { VariableInsertMenu } from "./variable-insert-menu";
 
 type VariablePickerProps = {
   variables?: SecretListItem[];
@@ -59,7 +67,8 @@ export const blankRoute = (method: ProxyMethod = "GET"): ProxyRoute => ({
 
 const emptyRow = (): ProxyKeyValue => ({ key: "", value: "" });
 
-const hasBody = (method: ProxyMethod) => method === "POST" || method === "PUT" || method === "PATCH";
+const hasBody = (method: ProxyMethod) =>
+  method === "POST" || method === "PUT" || method === "PATCH";
 
 /**
  * The key/value slots an endpoint can add. Response is handled separately below: it is two
@@ -105,6 +114,9 @@ export const ProxyRoutesCard = ({
   upstreamUrl,
   clientUrlFor,
   onTest,
+  variables,
+  variablesLoading,
+  variablesError,
 }: Props) => {
   const { watch, setValue, getValues, formState } = useFormContext<ProxyFormValues>();
   const routes = watch("routes") ?? [];
@@ -126,8 +138,7 @@ export const ProxyRoutesCard = ({
 
   const errorAt = (index: number, field: string): string | undefined => {
     const routeErrors = formState.errors.routes as
-      | Record<number, Record<string, { message?: string }>>
-      | undefined;
+      Record<number, Record<string, { message?: string }>> | undefined;
     return routeErrors?.[index]?.[field]?.message;
   };
 
@@ -189,7 +200,9 @@ export const ProxyRoutesCard = ({
           variant="outline"
           size="xs"
           className="shrink-0 gap-1.5 border-dashed bg-background shadow-sm hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
-          onClick={() => commit([...routes, blankRoute(routes[routes.length - 1]?.method ?? "GET")])}
+          onClick={() =>
+            commit([...routes, blankRoute(routes[routes.length - 1]?.method ?? "GET")])
+          }
         >
           <Plus className="h-3.5 w-3.5" />
           Add endpoint
@@ -237,7 +250,10 @@ export const ProxyRoutesCard = ({
                   value={route.method}
                   onValueChange={(value) => patch(index, { method: value as ProxyMethod })}
                 >
-                  <SelectTrigger className="mt-1 h-9" aria-label={`Method for endpoint ${index + 1}`}>
+                  <SelectTrigger
+                    className="mt-1 h-9"
+                    aria-label={`Method for endpoint ${index + 1}`}
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -273,7 +289,9 @@ export const ProxyRoutesCard = ({
                 </Label>
                 <Input
                   className="mt-1 h-9 font-mono text-xs"
-                  placeholder={template ? `same as client path (${template})` : "same as client path"}
+                  placeholder={
+                    template ? `same as client path (${template})` : "same as client path"
+                  }
                   aria-label={`Upstream path for endpoint ${index + 1}`}
                   value={route.upstreamPath ?? ""}
                   onChange={(event) =>
@@ -357,6 +375,9 @@ export const ProxyRoutesCard = ({
                       toggleOverride={toggleOverride}
                       patchRow={patchRow}
                       patch={patch}
+                      variables={variables}
+                      variablesLoading={variablesLoading}
+                      variablesError={variablesError}
                       note="On with no rows means this endpoint merges nothing."
                     />
                   ) : null}
@@ -459,7 +480,8 @@ export const ProxyRoutesCard = ({
                             </Button>
                             {(route.responseInclude ?? []).length === 0 ? (
                               <p className="text-[11px] text-muted-foreground">
-                                No fields listed means nothing reaches your client. Add at least one.
+                                No fields listed means nothing reaches your client. Add at least
+                                one.
                               </p>
                             ) : null}
                           </div>
@@ -476,6 +498,9 @@ export const ProxyRoutesCard = ({
                     toggleOverride={toggleOverride}
                     patchRow={patchRow}
                     patch={patch}
+                    variables={variables}
+                    variablesLoading={variablesLoading}
+                    variablesError={variablesError}
                   />
                   <OverrideRows
                     index={index}
@@ -484,6 +509,9 @@ export const ProxyRoutesCard = ({
                     toggleOverride={toggleOverride}
                     patchRow={patchRow}
                     patch={patch}
+                    variables={variables}
+                    variablesLoading={variablesLoading}
+                    variablesError={variablesError}
                   />
                 </AccordionContent>
               </AccordionItem>
@@ -523,10 +551,86 @@ type OverrideRowsProps = {
   patch: (index: number, changes: Partial<ProxyRoute>) => void;
   /** Shown when the slot is on but empty, for the one slot where that means something. */
   note?: string;
+} & VariablePickerProps;
+
+type RouteValueCellProps = VariablePickerProps & {
+  index: number;
+  name: RowOverrideName;
+  rowIndex: number;
+  row: ProxyKeyValue;
+  label: string;
+  patchRow: OverrideRowsProps["patchRow"];
+};
+
+const RouteValueCell = ({
+  index,
+  name,
+  rowIndex,
+  row,
+  label,
+  patchRow,
+  variables,
+  variablesLoading,
+  variablesError,
+}: RouteValueCellProps) => {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const caretRef = useRef<number | null>(null);
+
+  const rememberCaret = () => {
+    caretRef.current = inputRef.current?.selectionStart ?? null;
+  };
+
+  const insert = (variableName: string) => {
+    const current = row.value ?? "";
+    const caret = caretRef.current ?? current.length;
+    patchRow(index, name, rowIndex, {
+      value: insertToken(current, caret, buildVarToken(variableName)),
+    });
+  };
+
+  return (
+    <div className="min-w-0 flex-1">
+      <div className="flex items-center gap-1.5">
+        <Input
+          ref={inputRef}
+          className="h-8 font-mono text-xs"
+          placeholder="Enter value"
+          value={row.value}
+          onChange={(event) => patchRow(index, name, rowIndex, { value: event.target.value })}
+          onClick={rememberCaret}
+          onKeyUp={rememberCaret}
+          onSelect={rememberCaret}
+        />
+        <VariableInsertMenu
+          variables={variables}
+          variablesLoading={variablesLoading}
+          variablesError={variablesError}
+          onPick={insert}
+          ariaLabel={`Insert a configuration variable into ${label.toLowerCase()} value`}
+        />
+      </div>
+      {containsVarRef(row.value ?? "") ? (
+        <Badge variant="secondary" className="mt-1 w-fit rounded px-1.5 py-0 text-[10px]">
+          variable
+        </Badge>
+      ) : null}
+    </div>
+  );
 };
 
 /** One key/value override slot: a switch that says what on and off mean, then the rows. */
-const OverrideRows = ({ index, name, route, toggleOverride, patchRow, patch, note }: OverrideRowsProps) => {
+const OverrideRows = ({
+  index,
+  name,
+  route,
+  toggleOverride,
+  patchRow,
+  patch,
+  note,
+  variables,
+  variablesLoading,
+  variablesError,
+}: OverrideRowsProps) => {
   // A route read from an older payload may omit the key entirely; treat a missing override
   // exactly like an explicit null, i.e. inherit.
   const rows = route[name] ?? null;
@@ -552,16 +656,21 @@ const OverrideRows = ({ index, name, route, toggleOverride, patchRow, patch, not
           {(rows ?? []).map((row, rowIndex) => (
             <div key={`${name}-${rowIndex}`} className="flex items-center gap-2">
               <Input
-                className="h-8 text-xs"
+                className="h-8 flex-1 text-xs"
                 placeholder="Enter key"
                 value={row.key}
                 onChange={(event) => patchRow(index, name, rowIndex, { key: event.target.value })}
               />
-              <Input
-                className="h-8 font-mono text-xs"
-                placeholder="Enter value"
-                value={row.value}
-                onChange={(event) => patchRow(index, name, rowIndex, { value: event.target.value })}
+              <RouteValueCell
+                index={index}
+                name={name}
+                rowIndex={rowIndex}
+                row={row}
+                label={labels.title}
+                patchRow={patchRow}
+                variables={variables}
+                variablesLoading={variablesLoading}
+                variablesError={variablesError}
               />
               <Button
                 type="button"
