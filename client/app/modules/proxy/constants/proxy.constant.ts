@@ -20,6 +20,12 @@ export const PROXY_METHODS: ProxyMethod[] = ["GET", "POST", "PUT", "PATCH", "DEL
 
 export const PROXY_QUERY_KEY = ["proxies"] as const;
 
+/** Page sizes offered on the proxy list. */
+export const PROXY_PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
+
+/** Default `pageSize` for the proxy list — the first option above. */
+export const PROXY_PAGE_SIZE = PROXY_PAGE_SIZE_OPTIONS[0];
+
 /** Page sizes offered on the Request logs table (mirrors the server's 1..200 cap). */
 export const PROXY_LOG_PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 
@@ -27,4 +33,7 @@ export const PROXY_LOG_PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 export const PROXY_LOG_PAGE_SIZE = PROXY_LOG_PAGE_SIZE_OPTIONS[0];
 
 /** The Phase 2 data-plane route a tenant's client actually calls (see ProxyGatewayController). */
-export const getProxyClientPath = (slug: string) => `/api/proxy/gateway/${slug || "proxy-name"}/*`;
+export const getProxyGatewayPath = (slug: string) => `/api/proxy/gateway/${slug || "proxy-name"}`;
+
+/** The same route as shown on config screens, with the wildcard suffix clients append to. */
+export const getProxyClientPath = (slug: string) => `${getProxyGatewayPath(slug)}/*`;

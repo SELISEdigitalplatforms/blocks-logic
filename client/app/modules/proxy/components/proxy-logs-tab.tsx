@@ -303,7 +303,8 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
           </tbody>
         </table>
       </div>
-      {totalCount > 0 ? (
+      {/* A single page of rows needs no pager. */}
+      {totalCount > pageSize ? (
         <div className="flex justify-end">
           <Pagination
             totalCount={totalCount}

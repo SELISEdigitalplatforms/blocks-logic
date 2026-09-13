@@ -15,6 +15,7 @@ import {
   ProxyExecutionPage,
   ProxyFieldChange,
   ProxyFormValues,
+  ProxyListPage,
   ProxyListParams,
   ProxyLogFilter,
   ProxyMethod,
@@ -190,15 +191,22 @@ export const mockProxyService = {
     proxyVersions = PROXY_MOCK_VERSION_HISTORY.map((version) => ({ ...version }));
   },
 
-  getAll: async (params: ProxyListParams = {}): Promise<Proxy[]> => {
+  getAll: async (params: ProxyListParams = {}): Promise<ProxyListPage> => {
     await waitForMock();
     const search = params.searchKey?.trim().toLowerCase();
-    if (!search) return proxyStore;
-    return proxyStore.filter((proxy) =>
-      [proxy.name, proxy.slug, proxy.upstreamMasked].some((value) =>
-        value.toLowerCase().includes(search),
-      ),
-    );
+    const matches = search
+      ? proxyStore.filter((proxy) =>
+          [proxy.name, proxy.slug, proxy.upstreamMasked].some((value) =>
+            value.toLowerCase().includes(search),
+          ),
+        )
+      : proxyStore;
+    const pageSize = params.pageSize ?? 200;
+    const pageNumber = params.pageNumber ?? 0;
+    return {
+      items: matches.slice(pageNumber * pageSize, pageNumber * pageSize + pageSize),
+      totalCount: matches.length,
+    };
   },
 
   get: async (id: string): Promise<Proxy | null> => {

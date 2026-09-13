@@ -2,8 +2,9 @@ import { Badge } from "@/components/ui-kits/badge/badge";
 import { useGetProxies } from "../hooks";
 
 export const ProxyCountBadge = () => {
-  const { data } = useGetProxies();
-  const count = data?.length ?? 0;
+  // Only the total is needed here, so ask the server for the smallest possible page.
+  const { data } = useGetProxies({ pageSize: 1 });
+  const count = data?.totalCount ?? 0;
 
   return (
     <Badge

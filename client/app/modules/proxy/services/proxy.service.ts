@@ -28,6 +28,7 @@ import {
   ProxyExecutionPage,
   ProxyFormValues,
   ProxyListItemDto,
+  ProxyListPage,
   ProxyListParams,
   ProxyLogFilter,
   ProxyMutationResponse,
@@ -90,7 +91,7 @@ export class ProxyService {
 
   endpoints = PROXY_ENDPOINTS;
 
-  getAll = async (params: ProxyListParams = {}): Promise<Proxy[]> => {
+  getAll = async (params: ProxyListParams = {}): Promise<ProxyListPage> => {
     const response = await this.logicHttpClient.post<BaseQueryListResponse<ProxyListItemDto[]>>(
       PROXY_ENDPOINTS.GET_ALL,
       {
@@ -100,7 +101,8 @@ export class ProxyService {
         pageNumber: params.pageNumber ?? 0,
       },
     );
-    return (response.data ?? []).map(mapProxyListItemDtoToProxy);
+    const items = (response.data ?? []).map(mapProxyListItemDtoToProxy);
+    return { items, totalCount: response.totalCount ?? items.length };
   };
 
   get = async (id: string): Promise<Proxy | null> => {

@@ -31,6 +31,7 @@ import { containsVarRef, pathsToTree } from "../../utils";
 import { ProxyMethodChips } from "../../components/proxy-method-chips";
 import { ProxyStatusBadge } from "../../components/proxy-status-badge";
 import { ProxyLogsTab } from "../../components/proxy-logs-tab";
+import { ProxyTestTab } from "../../components/proxy-test-tab";
 import { ProxyHistoryTab } from "../../components/proxy-history-tab";
 import { DeleteProxyDialog } from "../../components/delete-proxy-dialog";
 
@@ -226,6 +227,7 @@ const tabClass =
 
 const proxyDetailTabs = [
   { value: "overview", label: "Overview" },
+  { value: "test", label: "Test" },
   { value: "logs", label: "Request logs" },
   { value: "history", label: "Change history" },
 ];
@@ -280,6 +282,7 @@ const ProxyDetailsSkeleton = () => (
       <div className="space-y-4">
         <div className="flex gap-8 border-b border-border">
           <Skeleton className="h-8 w-20 rounded-none" />
+          <Skeleton className="h-8 w-12 rounded-none" />
           <Skeleton className="h-8 w-28 rounded-none" />
           <Skeleton className="h-8 w-32 rounded-none" />
         </div>
@@ -577,6 +580,9 @@ export const ProxyDetails = () => {
                 </Card>
               </>
             )}
+          </TabsContent>
+          <TabsContent value="test">
+            <ProxyTestTab proxy={proxy} />
           </TabsContent>
           <TabsContent value="logs">
             <ProxyLogsTab proxy={proxy} active={activeTab === "logs"} />

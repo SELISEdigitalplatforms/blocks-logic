@@ -123,6 +123,12 @@ export type ProxyFieldChange = {
   after?: string | null;
 };
 
+/** One page of the proxy list plus the server-side total, for the list screen's pagination. */
+export type ProxyListPage = {
+  items: Proxy[];
+  totalCount: number;
+};
+
 export type ProxyListParams = {
   searchKey?: string;
   enabled?: boolean;

@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { useNavigate } from "react-router";
 import { useScopedPath } from "@seliseblocks/genesis-os";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui-kits/button/button";
+import { Pagination } from "@/components/ui-kits/pagination/pagination";
+import { PROXY_PAGE_SIZE, PROXY_PAGE_SIZE_OPTIONS } from "../../constants";
 import { useGetProxies } from "../../hooks";
 import { ProxyList } from "../../components/proxy-list";
 import { VariablesButton } from "../../components/variables-button";
@@ -9,10 +12,24 @@ import { VariablesButton } from "../../components/variables-button";
 export const Proxies = () => {
   const navigate = useNavigate();
   const scoped = useScopedPath();
-  const { data, isLoading, isFetching } = useGetProxies();
-  const proxies = data ?? [];
-  const isListLoading = isLoading || isFetching;
-  const shouldShowAddProxyButton = !isListLoading && proxies.length > 0;
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState<number>(PROXY_PAGE_SIZE);
+  const { data, isLoading, isFetching } = useGetProxies({ pageNumber: page, pageSize });
+  const proxies = data?.items ?? [];
+  const totalCount = data?.totalCount ?? 0;
+  const shouldShowAddProxyButton = !isLoading && totalCount > 0;
+  // A single page of results needs no pager.
+  const showPagination = !isLoading && totalCount > pageSize;
+
+  // Deleting the last row of a page would otherwise strand the user on an empty page.
+  const handleProxyDeleted = () => {
+    if (page > 0 && proxies.length === 1) setPage(page - 1);
+  };
+
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
+    setPage(0);
+  };
 
   return (
     <section className="flex flex-col gap-6 p-4">
@@ -34,8 +51,23 @@ export const Proxies = () => {
           </div>
         )}
       </div>
-      <div>
-        <ProxyList proxies={proxies} isLoading={isListLoading} />
+      <div className="space-y-4">
+        {/* Paging keeps the previous page mounted (keepPreviousData); dim it while the next loads. */}
+        <div className={isFetching && !isLoading ? "opacity-60 transition-opacity" : undefined}>
+          <ProxyList proxies={proxies} isLoading={isLoading} onProxyDeleted={handleProxyDeleted} />
+        </div>
+        {showPagination ? (
+          <div className="flex justify-end">
+            <Pagination
+              totalCount={totalCount}
+              page={page}
+              pageSize={pageSize}
+              pageSizeOptions={[...PROXY_PAGE_SIZE_OPTIONS]}
+              onChange={setPage}
+              onPageSizeChange={handlePageSizeChange}
+            />
+          </div>
+        ) : null}
       </div>
     </section>
   );
