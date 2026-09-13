@@ -502,7 +502,7 @@
         <member name="T:Utilities.Api.Controllers.WorkflowController">
             <summary>
             Management API for workflows, their versions and their executions, routed as
-            <c>/api/Workflow/{action}</c>. Every action except the two webhook entry points requires a bearer
+            <c>/api/Workflow/{action}</c>. Every action except the webhook entry points requires a bearer
             token; the tenant always comes from <see cref="T:Blocks.Genesis.BlocksContext"/> and is never taken from the payload.
             </summary>
         </member>
@@ -563,6 +563,20 @@
             <summary>
             The <c>webhook-test</c> twin of <see cref="M:Utilities.Api.Controllers.WorkflowController.Webhook(System.String,System.String,System.String,System.Text.Json.JsonElement)"/>: runs the DRAFT graph rather than the
             published version, for the console's test panel. Same route shape, same 401 behaviour.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.WebhookByHeader(System.String,System.String,System.Text.Json.JsonElement)">
+            <summary>
+            Header-based twin of <see cref="M:Utilities.Api.Controllers.WorkflowController.Webhook(System.String,System.String,System.String,System.Text.Json.JsonElement)"/>: tenant comes from <c>x-blocks-key</c> rather than the
+            path. <c>POST /api/Workflow/Webhook/{workflowId}/{webhookId}</c>. Anonymous at the framework
+            level — missing or blank header is 400; trigger <c>authType</c> failures still surface as 401.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.TestWebhookByHeader(System.String,System.String,System.Text.Json.JsonElement)">
+            <summary>
+            Header-based twin of <see cref="M:Utilities.Api.Controllers.WorkflowController.TestWebhook(System.String,System.String,System.String,System.Text.Json.JsonElement)"/>: tenant comes from <c>x-blocks-key</c> rather than
+            the path. <c>POST /api/Workflow/webhook-test/{workflowId}/{webhookId}</c>. Same 400/401 behaviour
+            as <see cref="M:Utilities.Api.Controllers.WorkflowController.WebhookByHeader(System.String,System.String,System.Text.Json.JsonElement)"/>.
             </summary>
         </member>
         <member name="M:Utilities.Api.Controllers.WorkflowController.StepExecute(Workflow.DomainService.Dtos.StepExecuteRequestDto)">
