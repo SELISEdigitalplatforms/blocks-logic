@@ -62,6 +62,7 @@ namespace Workflow.DomainService.Services
             Func<List<AddExcuationNodeEvent>, Task> dispatchNextNodes,
             Func<NodeExecutionContext, NodeEntity, NodeExecutionResult, NodeExecutionResult>? postProcessResult = null)
         {
+            EnsureTenantId(dto);
 
             var prepared = await PrepareNodeForExecutionAsync(dto);
             if (prepared == null) return;
@@ -98,6 +99,27 @@ namespace Workflow.DomainService.Services
             catch (Exception ex)
             {
                 await FailNodeExecutionAsync(execution, nodeExecution, ex);
+            }
+        }
+
+        /// <summary>
+        /// Payload TenantId is preferred. Messages published before that field existed only have it
+        /// on the Genesis envelope (BlocksContext from SecurityContext / ApplicationProperties).
+        /// </summary>
+        private void EnsureTenantId(AddExcuationNodeEvent dto)
+        {
+            if (!string.IsNullOrWhiteSpace(dto.TenantId))
+            {
+                return;
+            }
+
+            dto.TenantId = BlocksContext.GetContext()?.TenantId ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(dto.TenantId))
+            {
+                _logger.LogError(
+                    "AddExcuationNodeEvent is missing TenantId and BlocksContext has none. WorkflowExecutionId={WorkflowExecutionId} NodeId={NodeId}",
+                    dto.WorkflowExecutionId, dto.NodeId);
+                throw new InvalidOperationException("TenantId is required to execute a workflow node.");
             }
         }
 
