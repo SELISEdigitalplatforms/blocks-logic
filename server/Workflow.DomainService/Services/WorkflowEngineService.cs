@@ -63,10 +63,10 @@ namespace Workflow.DomainService.Services
             Func<NodeExecutionContext, NodeEntity, NodeExecutionResult, NodeExecutionResult>? postProcessResult = null)
         {
 
-            var prepared = await PrepareNodeForExecutionAsync(dto);
+            var prepared = await PrepareNodeRowAsync(dto);
             if (prepared == null) return;
 
-            var (execution, node, nodeExecution, nodeExecutionContext, executor) = prepared.Value;
+            var (execution, node, nodeExecution) = prepared.Value;
             var completionNodeId = execution.ExecutionMode == WorkflowExecutionMode.Test ? execution.WorkflowSnapshot.TestMeta.CompletionNodeId : null;
 
             await _workflowNotificationService.NotifyExecutionEventAsync(
@@ -77,8 +77,18 @@ namespace Workflow.DomainService.Services
                 status: nameof(NodeExecutionStatus.Running),
                 data: nodeExecution.Id,
                 message: $"Node '{nodeExecution.NodeName}' started executing.");
+
+            // Everything from here on runs against an already-persisted "Running" node execution row, so
+            // ANY failure — building the execution context (input/ancestor resolution, executor lookup) as
+            // much as the executor itself throwing — must go through FailNodeExecutionAsync. Otherwise the
+            // row is left "Running" forever with nothing to ever mark it Failed (this used to be the case
+            // for everything built in the old PrepareNodeForExecutionAsync, which ran outside this try).
             try
             {
+                var nodeExecutionContext = await BuildNodeExecutionContextAsync(dto, execution, node);
+                var executor = _nodeExecutors.First(ne => ne.NodeType == node.Type);
+                _logger.LogInformation("Node {NodeId} Using executor {ExecutorName}.", node.Id, executor.GetType().Name);
+
                 var result = await executor.RunAsync(nodeExecutionContext);
                 if (postProcessResult != null)
                 {
@@ -102,11 +112,14 @@ namespace Workflow.DomainService.Services
         }
 
         /// <summary>
-        /// Fetches execution, validates status, checks readiness, creates node metadata,
-        /// resolves inputs/ancestors, selects executor, and builds execution context.
-        /// Returns null if the node should be skipped.
+        /// Fetches execution, validates status, checks readiness, and creates + persists the node's
+        /// "Running" execution row. Returns null if the node should be skipped. Deliberately does nothing
+        /// past the point a node execution row could plausibly exist in the DB: anything riskier (input /
+        /// ancestor resolution, executor lookup) lives in <see cref="BuildNodeExecutionContextAsync"/>, which
+        /// runs inside <see cref="ExecuteNodeAsync"/>'s try/catch so a failure there still marks the node
+        /// Failed instead of leaving it orphaned at Running.
         /// </summary>
-        private async Task<(WorkflowExecutionEntity execution, NodeEntity node, NodeExecutionEntity nodeExecution, NodeExecutionContext context, INodeExecutor executor)?> PrepareNodeForExecutionAsync(AddExcuationNodeEvent dto)
+        private async Task<(WorkflowExecutionEntity execution, NodeEntity node, NodeExecutionEntity nodeExecution)?> PrepareNodeRowAsync(AddExcuationNodeEvent dto)
         {
             var execution = await _workflowExecutionRepository.GetByIdAsync(dto.WorkflowExecutionId, dto.TenantId)
                 ?? throw new InvalidOperationException("Workflow execution not found");
@@ -145,10 +158,22 @@ namespace Workflow.DomainService.Services
             // Atomically push NodeExecution to DB (avoids ReplaceOneAsync race)
             await _workflowExecutionRepository.AtomicAddNodeExecutionAsync(execution.Id, execution.TenantId, nodeExecution);
             _logger.LogInformation("Node {NodeId} Updated to Running status.", node.Id);
+
+            return (execution, node, nodeExecution);
+        }
+
+        /// <summary>
+        /// Resolves input items/ancestor outputs and builds the executor's <see cref="NodeExecutionContext"/>.
+        /// Called inside <see cref="ExecuteNodeAsync"/>'s try/catch (unlike the old combined
+        /// PrepareNodeForExecutionAsync) so a failure here fails the node instead of orphaning it at Running.
+        /// </summary>
+        private async Task<NodeExecutionContext> BuildNodeExecutionContextAsync(AddExcuationNodeEvent dto, WorkflowExecutionEntity execution, NodeEntity node)
+        {
             // Resolve input items
             var inputItems = await ResolveInputItemsAsync(execution, node);
             _logger.LogInformation("Node {NodeId} Resolved {InputCount} input items.", node.Id, inputItems.Count);
 
+            var nodeExecution = execution.NodeExecutions.Last(ne => ne.NodeId == node.Id);
             // Update node execution with input count
             nodeExecution.InputItemCount = inputItems.Count;
 
@@ -156,11 +181,8 @@ namespace Workflow.DomainService.Services
             var ancestorOutputs = await ResolveAncestorNodeOutputsAsync(execution, node.Id);
             _logger.LogInformation("Node {NodeId} Resolved {AncestorCount} ancestor node outputs.", node.Id, ancestorOutputs.Count);
 
-            var executor = _nodeExecutors.First(ne => ne.NodeType == node.Type);
-            _logger.LogInformation("Node {NodeId} Using executor {ExecutorName}.", node.Id, executor.GetType().Name);
-
             // Build execution context
-            var nodeExecutionContext = new NodeExecutionContext
+            return new NodeExecutionContext
             {
                 WorkflowExecutionId = dto.WorkflowExecutionId,
                 WorkflowId = execution.WorkflowId,
@@ -173,8 +195,6 @@ namespace Workflow.DomainService.Services
                 IterationCount = inputItems.Count,
                 HasUpstream = execution.WorkflowSnapshot.Edges.Any(e => e.Target == node.Id),
             };
-
-            return (execution, node, nodeExecution, nodeExecutionContext, executor);
         }
 
         /// <summary>
@@ -307,6 +327,16 @@ namespace Workflow.DomainService.Services
             foreach (var node in execuatedItems)
             {
                 var nodeItems = execution.NodeExecutions.FirstOrDefault(ne => ne.Id == node.NodeExecutionId);
+                if (nodeItems == null)
+                {
+                    // No NodeExecution row matches this item's NodeExecutionId (e.g. a re-run ancestor whose
+                    // items now point at a stale id). Skip it rather than crash the whole node's context
+                    // build — that used to escape uncaught and orphan the current node at "Running" forever.
+                    _logger.LogWarning(
+                        "Ancestor item {ItemId} references NodeExecutionId {NodeExecutionId} which has no matching NodeExecution entry; skipping.",
+                        node.Id, node.NodeExecutionId);
+                    continue;
+                }
                 if (!result.ContainsKey(nodeItems.NodeName))
                 {
                     result[nodeItems.NodeName] = new List<WorkflowItemExecutionEntity>();
