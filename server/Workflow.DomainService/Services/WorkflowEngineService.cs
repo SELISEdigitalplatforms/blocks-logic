@@ -62,6 +62,7 @@ namespace Workflow.DomainService.Services
             Func<List<AddExcuationNodeEvent>, Task> dispatchNextNodes,
             Func<NodeExecutionContext, NodeEntity, NodeExecutionResult, NodeExecutionResult>? postProcessResult = null)
         {
+            EnsureTenantId(dto);
 
             var prepared = await PrepareNodeRowAsync(dto);
             if (prepared == null) return;
@@ -112,12 +113,30 @@ namespace Workflow.DomainService.Services
         }
 
         /// <summary>
-        /// Fetches execution, validates status, checks readiness, and creates + persists the node's
-        /// "Running" execution row. Returns null if the node should be skipped. Deliberately does nothing
-        /// past the point a node execution row could plausibly exist in the DB: anything riskier (input /
-        /// ancestor resolution, executor lookup) lives in <see cref="BuildNodeExecutionContextAsync"/>, which
-        /// runs inside <see cref="ExecuteNodeAsync"/>'s try/catch so a failure there still marks the node
-        /// Failed instead of leaving it orphaned at Running.
+        /// Payload TenantId is preferred. Messages published before that field existed only have it
+        /// on the Genesis envelope (BlocksContext from SecurityContext / ApplicationProperties).
+        /// </summary>
+        private void EnsureTenantId(AddExcuationNodeEvent dto)
+        {
+            if (!string.IsNullOrWhiteSpace(dto.TenantId))
+            {
+                return;
+            }
+
+            dto.TenantId = BlocksContext.GetContext()?.TenantId ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(dto.TenantId))
+            {
+                _logger.LogError(
+                    "AddExcuationNodeEvent is missing TenantId and BlocksContext has none. WorkflowExecutionId={WorkflowExecutionId} NodeId={NodeId}",
+                    dto.WorkflowExecutionId, dto.NodeId);
+                throw new InvalidOperationException("TenantId is required to execute a workflow node.");
+            }
+        }
+
+        /// <summary>
+        /// Fetches execution, validates status, checks readiness, creates node metadata,
+        /// resolves inputs/ancestors, selects executor, and builds execution context.
+        /// Returns null if the node should be skipped.
         /// </summary>
         private async Task<(WorkflowExecutionEntity execution, NodeEntity node, NodeExecutionEntity nodeExecution)?> PrepareNodeRowAsync(AddExcuationNodeEvent dto)
         {

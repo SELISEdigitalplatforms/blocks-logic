@@ -1,6 +1,7 @@
 using Blocks.Secrets;
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -20,12 +21,16 @@ namespace XUnitTest.Proxy
 
         private readonly FakeSecretService _secrets = new();
         private readonly MemoryCache _cache = new(new MemoryCacheOptions());
+        private readonly ServiceProvider _services;
         private readonly ProxyVariableResolver _resolver;
 
         public ProxyVariableResolverTests()
         {
+            _services = new ServiceCollection()
+                .AddSingleton<ISecretService>(_secrets)
+                .BuildServiceProvider();
             _resolver = new ProxyVariableResolver(
-                _secrets,
+                _services.GetRequiredService<IServiceScopeFactory>(),
                 _cache,
                 Options.Create(new ProxyVariableResolverOptions()),
                 Mock.Of<ILogger<ProxyVariableResolver>>());

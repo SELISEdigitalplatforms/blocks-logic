@@ -1,6 +1,7 @@
 using Blocks.Genesis;
 using Blocks.Secrets;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -56,23 +57,25 @@ namespace Proxy.DomainService.Services
     /// <see cref="IProxyVariableResolver"/> over the in-process <see cref="ISecretService"/>. Name &rarr; id and
     /// id &rarr; value are both done at forward time behind a per-tenant <see cref="IMemoryCache"/>; the stored
     /// config row only ever holds the verbatim token. See <c>PROXY-PLAN-config-variables.md</c> &sect;3.2.
+    /// <see cref="ISecretService"/> is resolved from a new DI scope per <see cref="ResolveAsync"/> because
+    /// <c>AddBlocksSecrets()</c> registers it (and <c>SecretStoreContext</c>) as scoped.
     /// </summary>
     public sealed class ProxyVariableResolver : IProxyVariableResolver
     {
         private const int FindPageSize = 50;
 
-        private readonly ISecretService _secrets;
+        private readonly IServiceScopeFactory _scopeFactory;
         private readonly IMemoryCache _cache;
         private readonly ProxyVariableResolverOptions _options;
         private readonly ILogger<ProxyVariableResolver> _logger;
 
         public ProxyVariableResolver(
-            ISecretService secrets,
+            IServiceScopeFactory scopeFactory,
             IMemoryCache cache,
             IOptions<ProxyVariableResolverOptions> options,
             ILogger<ProxyVariableResolver> logger)
         {
-            _secrets = secrets;
+            _scopeFactory = scopeFactory;
             _cache = cache;
             _options = options.Value;
             _logger = logger;
@@ -108,13 +111,19 @@ namespace Proxy.DomainService.Services
 
             try
             {
+                // ISecretService (and SecretStoreContext) are scoped. Open a request-sized scope for this
+                // resolve so the singleton resolver does not capture them — Development ValidateScopes
+                // rejects that graph at host build; Production would silently keep one context forever.
+                using var scope = _scopeFactory.CreateScope();
+                var secrets = scope.ServiceProvider.GetRequiredService<ISecretService>();
+
                 var missing = new List<string>();
 
                 // --- name -> id (cached; ids are stable) ---
                 var nameToId = new Dictionary<string, string>(StringComparer.Ordinal);
                 foreach (var name in distinct)
                 {
-                    var id = await ResolveIdAsync(name, tenantId, ct);
+                    var id = await ResolveIdAsync(secrets, name, tenantId, ct);
                     if (id is null)
                     {
                         missing.Add(name);
@@ -144,7 +153,7 @@ namespace Proxy.DomainService.Services
                 {
                     try
                     {
-                        var fetched = await _secrets.GetValuesAsync(uncachedIds, ct);
+                        var fetched = await secrets.GetValuesAsync(uncachedIds, ct);
 
                         foreach (var id in uncachedIds)
                         {
@@ -209,7 +218,8 @@ namespace Proxy.DomainService.Services
             }
         }
 
-        private async Task<string?> ResolveIdAsync(string name, string tenantId, CancellationToken ct)
+        private async Task<string?> ResolveIdAsync(
+            ISecretService secrets, string name, string tenantId, CancellationToken ct)
         {
             var cacheKey = IdCacheKey(tenantId, name);
             if (_cache.TryGetValue(cacheKey, out string? cachedId) && cachedId is not null)
@@ -219,7 +229,7 @@ namespace Proxy.DomainService.Services
 
             try
             {
-                var found = await _secrets.FindAsync(new SecretFilter { Search = name, PageSize = FindPageSize }, ct);
+                var found = await secrets.FindAsync(new SecretFilter { Search = name, PageSize = FindPageSize }, ct);
 
                 var match = found.Data?.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.Ordinal));
                 if (match is null || string.IsNullOrEmpty(match.SecretId))
