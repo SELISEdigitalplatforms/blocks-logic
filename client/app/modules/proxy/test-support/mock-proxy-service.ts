@@ -185,13 +185,16 @@ export const mockProxyService = {
   getAll: async (params: ProxyListParams = {}): Promise<ProxyListPage> => {
     await waitForMock();
     const search = params.searchKey?.trim().toLowerCase();
-    const matches = search
+    let matches = search
       ? proxyStore.filter((proxy) =>
           [proxy.name, proxy.slug, proxy.upstreamMasked].some((value) =>
             value.toLowerCase().includes(search),
           ),
         )
       : proxyStore;
+    if (params.isActive !== undefined) {
+      matches = matches.filter((proxy) => proxy.enabled === params.isActive);
+    }
     const pageSize = params.pageSize ?? 200;
     const pageNumber = params.pageNumber ?? 0;
     return {

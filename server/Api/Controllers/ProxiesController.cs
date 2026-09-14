@@ -75,7 +75,7 @@ namespace Utilities.Api.Controllers
 
         /// <summary>
         /// <c>GET /api/Proxies</c> — the console list page: the tenant's proxies newest-created first,
-        /// optionally narrowed by a name / slug search term and by enabled state. A list projection: full
+        /// optionally narrowed by a name / slug search term and by isActive state. A list projection: full
         /// upstream and header rows are not included.
         /// </summary>
         [Authorize]

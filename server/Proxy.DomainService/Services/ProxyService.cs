@@ -41,11 +41,11 @@ namespace Proxy.DomainService.Services
             var pageNumber = Math.Max(0, request.PageNumber);
 
             _logger.LogInformation(
-                "Listing proxies for tenant {TenantId}. Search: {Search}, Enabled: {Enabled}, Page: {Page}, PageSize: {PageSize}",
-                tenantId, request.Search, request.Enabled, pageNumber, pageSize);
+                "Listing proxies for tenant {TenantId}. Search: {Search}, IsActive: {IsActive}, Page: {Page}, PageSize: {PageSize}",
+                tenantId, request.Search, request.IsActive, pageNumber, pageSize);
 
-            var proxies = await _proxyRepository.GetAllAsync(tenantId, request.Search, request.Enabled, pageSize, pageNumber);
-            var totalCount = await _proxyRepository.CountAsync(tenantId, request.Search, request.Enabled);
+            var proxies = await _proxyRepository.GetAllAsync(tenantId, request.Search, request.IsActive, pageSize, pageNumber);
+            var totalCount = await _proxyRepository.CountAsync(tenantId, request.Search, request.IsActive);
 
             // Read from each proxy document's own counters instead of aggregating ProxyExecutions for the
             // whole page: the documents are already loaded, so the card count now costs no query at all.

@@ -173,7 +173,7 @@ export type ProxyListPage = {
 
 export type ProxyListParams = {
   searchKey?: string;
-  enabled?: boolean;
+  isActive?: boolean;
   pageNumber?: number;
   pageSize?: number;
 };

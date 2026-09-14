@@ -9,9 +9,9 @@ namespace Proxy.DomainService.Repositories
 
         Task<ProxyDetailEntity?> GetBySlugAsync(string tenantId, string slug);
 
-        Task<List<ProxyDetailEntity>> GetAllAsync(string tenantId, string? search, bool? enabled, int pageSize, int pageNumber);
+        Task<List<ProxyDetailEntity>> GetAllAsync(string tenantId, string? search, bool? isActive, int pageSize, int pageNumber);
 
-        Task<long> CountAsync(string tenantId, string? search, bool? enabled);
+        Task<long> CountAsync(string tenantId, string? search, bool? isActive);
 
         Task InsertAsync(ProxyDetailEntity proxy);
 

@@ -67,7 +67,7 @@ namespace Proxy.DomainService.Repositories
             }
         }
 
-        private static FilterDefinition<ProxyDetailEntity> BuildListFilter(string tenantId, string? search, bool? enabled)
+        private static FilterDefinition<ProxyDetailEntity> BuildListFilter(string tenantId, string? search, bool? isActive)
         {
             var builder = Builders<ProxyDetailEntity>.Filter;
             var filter = builder.Eq(p => p.TenantId, tenantId);
@@ -78,9 +78,9 @@ namespace Proxy.DomainService.Repositories
                 filter &= builder.Or(builder.Regex(p => p.Name, pattern), builder.Regex(p => p.Slug, pattern));
             }
 
-            if (enabled.HasValue)
+            if (isActive.HasValue)
             {
-                filter &= builder.Eq(p => p.Enabled, enabled.Value);
+                filter &= builder.Eq(p => p.Enabled, isActive.Value);
             }
 
             return filter;
@@ -104,21 +104,21 @@ namespace Proxy.DomainService.Repositories
         }
 
         public async Task<List<ProxyDetailEntity>> GetAllAsync(
-            string tenantId, string? search, bool? enabled, int pageSize, int pageNumber)
+            string tenantId, string? search, bool? isActive, int pageSize, int pageNumber)
         {
             var collection = GetCollection(tenantId);
             return await collection
-                .Find(BuildListFilter(tenantId, search, enabled))
+                .Find(BuildListFilter(tenantId, search, isActive))
                 .SortByDescending(p => p.CreatedDate)
                 .Skip(pageNumber * pageSize)
                 .Limit(pageSize)
                 .ToListAsync();
         }
 
-        public async Task<long> CountAsync(string tenantId, string? search, bool? enabled)
+        public async Task<long> CountAsync(string tenantId, string? search, bool? isActive)
         {
             var collection = GetCollection(tenantId);
-            return await collection.CountDocumentsAsync(BuildListFilter(tenantId, search, enabled));
+            return await collection.CountDocumentsAsync(BuildListFilter(tenantId, search, isActive));
         }
 
         public async Task InsertAsync(ProxyDetailEntity proxy)
