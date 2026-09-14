@@ -443,7 +443,7 @@
         <member name="M:Utilities.Api.Controllers.ProxiesController.ListExecutions(System.String,Proxy.DomainService.Dtos.ProxyGetExecutionsRequestDto)">
             <summary>
             <c>GET /api/Proxies/{proxyId}/executions</c> — SPEC3 §3.1, the <em>Request logs</em> list for one
-            proxy: last 24h, filtered by <c>statusClass</c>, newest-first, paged, or a Live tail when
+            proxy: all-time, filtered by <c>statusClass</c>, newest-first, paged, or a Live tail when
             <c>afterId</c> is supplied. Returns 400 <c>PROXY_VALIDATION</c> on a bad field and 404
             <c>PROXY_NOT_FOUND</c> for a genuinely unknown proxy id (a deleted proxy whose rows remain still
             works).
