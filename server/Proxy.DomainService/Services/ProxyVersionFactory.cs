@@ -52,6 +52,7 @@ namespace Proxy.DomainService.Services
             Routes = proxy.Routes.Select(CloneRoute).ToList(),
             ResponseMode = proxy.ResponseMode,
             ResponseInclude = new List<string>(proxy.ResponseInclude),
+            Access = proxy.Access.Clone(),
         };
 
         public static ProxyVersionEntity Build(

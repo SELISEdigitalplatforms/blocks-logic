@@ -1,4 +1,5 @@
 using System.Net.Http;
+using Common.InternalService.Access;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Proxy.DomainService.Repositories;
@@ -22,6 +23,10 @@ namespace Proxy.DomainService
         {
             // A pinnable clock for the rolling 24h windows in Phase 3 reads (kept injectable for tests).
             services.TryAddSingleton(TimeProvider.System);
+
+            // Inbound auth for the gateway: the per-proxy "Who can call it" policy is enforced at request
+            // time by the shared authorizer, since the route is anonymous at the framework level.
+            services.AddEndpointAccess();
 
             // business services
             services.AddSingleton<IProxyService, ProxyService>();

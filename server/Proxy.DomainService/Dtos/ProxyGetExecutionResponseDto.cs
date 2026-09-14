@@ -56,6 +56,12 @@ namespace Proxy.DomainService.Dtos
 
         public string? CallerUserName { get; set; }
 
+        /// <summary><c>true</c> when the call was made under an IAM impersonation token.</summary>
+        public bool CallerImpersonated { get; set; }
+
+        /// <summary>The IAM impersonation session id when <see cref="CallerImpersonated"/>; otherwise <c>null</c>.</summary>
+        public string? CallerImpersonationSessionId { get; set; }
+
         /// <summary>Remote IP of the caller; <c>null</c> for an in-process workflow forward.</summary>
         public string? CallerIp { get; set; }
 

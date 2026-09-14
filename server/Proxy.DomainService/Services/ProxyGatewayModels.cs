@@ -1,3 +1,4 @@
+using Common.InternalService.Access;
 using Proxy.DomainService.Entities;
 
 namespace Proxy.DomainService.Services
@@ -19,6 +20,9 @@ namespace Proxy.DomainService.Services
         public IReadOnlyList<HttpMethodType> Methods { get; init; } = Array.Empty<HttpMethodType>();
 
         public bool Enabled { get; init; } = true;
+
+        /// <summary>Who can call the gateway route. Enforced by the controller before <c>ForwardAsync</c> runs.</summary>
+        public EndpointAccessPolicy Access { get; init; } = EndpointAccessPolicy.RequireToken();
 
         public IReadOnlyList<ProxyKeyValue> Headers { get; init; } = Array.Empty<ProxyKeyValue>();
 
@@ -59,6 +63,7 @@ namespace Proxy.DomainService.Services
             Upstream = proxy.Upstream,
             Methods = proxy.Methods,
             Enabled = proxy.Enabled,
+            Access = proxy.Access,
             Headers = proxy.Headers,
             Query = proxy.Query,
             BodyMerge = proxy.BodyMerge,
@@ -85,6 +90,16 @@ namespace Proxy.DomainService.Services
 
         /// <summary>Calling user's display name at call time, or <c>null</c>.</summary>
         public string? UserName { get; init; }
+
+        /// <summary>
+        /// <c>true</c> when the caller's token is an impersonation token (a root-tenant user acting inside this
+        /// tenant). The access policy is evaluated on the token's claims exactly as for any caller; the flag is
+        /// recorded on the execution row so the logs can tell an impersonated call from a native one.
+        /// </summary>
+        public bool CallerImpersonated { get; init; }
+
+        /// <summary>The IAM impersonation session id when <see cref="CallerImpersonated"/>; correlates with the IAM audit trail.</summary>
+        public string? CallerImpersonationSessionId { get; init; }
 
         /// <summary>Remote IP of the calling client; <c>null</c> for an in-process workflow forward.</summary>
         public string? CallerIp { get; init; }
@@ -138,6 +153,14 @@ namespace Proxy.DomainService.Services
         /// <c>true</c> for <c>POST /api/Proxies/test</c>: run the identical pipeline but write NO execution row.
         /// </summary>
         public bool IsTest { get; init; }
+
+        /// <summary>
+        /// Set by the gateway controller when the caller authenticated but fails the proxy's access policy
+        /// (roles / permissions). The forwarder then records a <see cref="ProxyExecutionOutcome.Forbidden"/>
+        /// row and answers 403 without an upstream call, so refused callers are visible in the logs the same
+        /// way a caller probing undeclared routes is. <c>null</c> ⇒ the caller passed the policy.
+        /// </summary>
+        public string? ForbiddenReason { get; init; }
     }
 
     /// <summary>

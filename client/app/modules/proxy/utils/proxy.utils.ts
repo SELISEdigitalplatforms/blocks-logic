@@ -1,5 +1,7 @@
 import { z } from "zod";
 import {
+  ProxyAccess,
+  ProxyAccessRule,
   ProxyCredentialRow,
   ProxyExecutionLog,
   ProxyFormValues,
@@ -7,6 +9,77 @@ import {
   ProxyMethod,
   ResponseFieldNode,
 } from "../types";
+
+// ---------------------------------------------------------------------------
+// "Who can call it"
+// ---------------------------------------------------------------------------
+
+/** Server caps (ProxyConfigValidator.MaxAccessValues / MaxAccessValueLength). */
+export const MAX_ACCESS_VALUES = 50;
+export const MAX_ACCESS_VALUE_LENGTH = 200;
+
+export const emptyAccessRule = (): ProxyAccessRule => ({ mode: "any", values: [] });
+
+/** The safe default, and what an older proxy with no stored block means: token required, anyone signed in. */
+export const defaultProxyAccess = (): ProxyAccess => ({
+  kind: "blocksToken",
+  combine: "or",
+  roles: emptyAccessRule(),
+  permissions: emptyAccessRule(),
+  organizationId: "",
+});
+
+const listClause = (noun: string, rule: ProxyAccessRule) => {
+  if (rule.values.length === 1) return `the ${noun} ${rule.values[0]}`;
+  const quantifier = rule.mode === "all" ? "all of the" : "any of the";
+  return `${quantifier} ${noun}s ${rule.values.join(", ")}`;
+};
+
+/**
+ * The footer sentence under "Restrict further" — one place so the form, the detail page and the tests
+ * agree on what a policy means.
+ */
+export const describeProxyAccess = (access: ProxyAccess): string => {
+  if (access.kind === "public") {
+    return "Anyone with the URL can call it. No identity, no token-scoped work.";
+  }
+
+  const hasRoles = access.roles.values.length > 0;
+  const hasPermissions = access.permissions.values.length > 0;
+  if (!hasRoles && !hasPermissions) {
+    return "No extra restriction — any signed-in caller with a valid Blocks token can invoke it.";
+  }
+
+  const roles = hasRoles ? listClause("role", access.roles) : null;
+  const permissions = hasPermissions ? listClause("permission", access.permissions) : null;
+  if (roles && permissions) {
+    return `Callers must hold ${roles} ${access.combine === "and" ? "AND" : "OR"} ${permissions}.`;
+  }
+  return `Callers must hold ${roles ?? permissions}.`;
+};
+
+/** Problems the form must block on before the server does. `null` when the policy is saveable. */
+export const validateProxyAccess = (access: ProxyAccess): string | null => {
+  if (access.kind === "public") {
+    return access.roles.values.length || access.permissions.values.length
+      ? "A public endpoint cannot be restricted by roles or permissions."
+      : null;
+  }
+  const rules: Array<[string, ProxyAccessRule]> = [
+    ["role", access.roles],
+    ["permission", access.permissions],
+  ];
+  for (const [label, rule] of rules) {
+    if (rule.values.length > MAX_ACCESS_VALUES) return `At most ${MAX_ACCESS_VALUES} ${label}s.`;
+    if (rule.values.some((value) => value.length > MAX_ACCESS_VALUE_LENGTH)) {
+      return `A ${label} entry is over ${MAX_ACCESS_VALUE_LENGTH} characters.`;
+    }
+    if (rule.values.some((value) => value.includes(","))) {
+      return `A ${label} entry may not contain a comma.`;
+    }
+  }
+  return null;
+};
 
 export const slugifyProxyName = (name: string) =>
   name
@@ -474,6 +547,19 @@ const routeSchema = z.object({
   responseInclude: z.array(z.string()).nullable().default(null),
 });
 
+const accessRuleSchema = z.object({
+  mode: z.enum(["any", "all"]),
+  values: z.array(z.string()),
+});
+
+const accessSchema = z.object({
+  kind: z.enum(["blocksToken", "public"]),
+  combine: z.enum(["or", "and"]),
+  roles: accessRuleSchema,
+  permissions: accessRuleSchema,
+  organizationId: z.string().optional(),
+});
+
 export const proxyFormSchema = z
   .object({
     name: z.string().trim().min(1, "Give the proxy a name - it becomes the path."),
@@ -494,8 +580,14 @@ export const proxyFormSchema = z
     credentials: z.array(credentialSchema).optional(),
     responseMode: z.enum(["all", "select"]).default("all"),
     responseInclude: z.array(z.string()).default([]),
+    access: accessSchema.default(defaultProxyAccess),
   })
   .superRefine((values, ctx) => {
+    const accessProblem = validateProxyAccess(values.access ?? defaultProxyAccess());
+    if (accessProblem) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["access"], message: accessProblem });
+    }
+
     const seenRoutes = new Set<string>();
     values.routes?.forEach((route, index) => {
       const parsed = parseRouteTemplate(route.path);
@@ -636,6 +728,7 @@ export const proxyFormDefaultValues: ProxyFormValues = {
   ],
   responseMode: "all",
   responseInclude: [],
+  access: defaultProxyAccess(),
   credentials: [],
 };
 
