@@ -59,6 +59,14 @@ namespace Proxy.DomainService.Entities
         public const string RouteNotAllowed = "RouteNotAllowed";
         public const string ProxyNotFound = "ProxyNotFound";
         public const string Unauthorized = "Unauthorized";
+
+        /// <summary>
+        /// The caller presented a valid Blocks token but does not satisfy the proxy's "Who can call it"
+        /// role / permission rules. Returned as <c>403</c> with no upstream call; an execution row is still
+        /// written so refused callers show up in the logs. (A missing / invalid token is
+        /// <see cref="Unauthorized"/> and writes no row.)
+        /// </summary>
+        public const string Forbidden = "Forbidden";
         public const string InternalError = "InternalError";
     }
 }

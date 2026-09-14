@@ -84,7 +84,7 @@ namespace Proxy.DomainService.Services
                 var draft = request.Draft!;
                 var validation = ProxyConfigValidator.Validate(
                     "draft", draft.Upstream, draft.Methods, draft.Headers, draft.Query, draft.MethodConfigs,
-                    draft.BodyMerge, draft.ResponseMode, draft.ResponseInclude, draft.Routes);
+                    draft.BodyMerge, draft.ResponseMode, draft.ResponseInclude, draft.Routes, draft.Access);
 
                 foreach (var pair in validation.Errors)
                 {
@@ -120,6 +120,7 @@ namespace Proxy.DomainService.Services
                     Routes = validation.Routes,
                     ResponseMode = validation.ResponseMode,
                     ResponseInclude = validation.ResponseInclude,
+                    Access = validation.Access,
                 };
             }
 

@@ -1,5 +1,14 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+    <!--
+      Access/ validates inbound Blocks bearer tokens for endpoints whose access policy is stored per row,
+      which needs HttpRequest and the token helpers, so the project takes a FrameworkReference on the
+      shared framework exactly as the Proxy domain does.
+    -->
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+
     <ItemGroup>
         <PackageReference Include="FluentValidation" />
         <PackageReference Include="Newtonsoft.Json" />

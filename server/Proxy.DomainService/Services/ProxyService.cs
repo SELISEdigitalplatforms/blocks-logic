@@ -1,3 +1,4 @@
+using Common.InternalService.Access;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using Proxy.DomainService.Dtos;
@@ -103,6 +104,7 @@ namespace Proxy.DomainService.Services
                 Routes = proxy.Routes.Select(ToRouteDto).ToList(),
                 ResponseMode = proxy.ResponseMode.ToString(),
                 ResponseInclude = proxy.ResponseInclude.ToList(),
+                Access = ToAccessDto(proxy.Access),
                 CurrentVersion = proxy.CurrentVersion,
                 CreatedDate = proxy.CreatedDate,
                 CreatedBy = proxy.CreatedBy,
@@ -120,7 +122,7 @@ namespace Proxy.DomainService.Services
 
             var validation = ProxyConfigValidator.Validate(
                 request.Name, request.Upstream, request.Methods, request.Headers, request.Query, request.MethodConfigs,
-                request.BodyMerge, request.ResponseMode, request.ResponseInclude, request.Routes);
+                request.BodyMerge, request.ResponseMode, request.ResponseInclude, request.Routes, request.Access);
             if (!validation.IsValid)
             {
                 _logger.LogWarning(
@@ -159,6 +161,7 @@ namespace Proxy.DomainService.Services
                 Routes = validation.Routes,
                 ResponseMode = validation.ResponseMode,
                 ResponseInclude = validation.ResponseInclude,
+                Access = validation.Access,
                 CurrentVersion = 1,
                 CreatedDate = now,
                 LastUpdatedDate = now,
@@ -198,7 +201,7 @@ namespace Proxy.DomainService.Services
 
             var validation = ProxyConfigValidator.Validate(
                 request.Name, request.Upstream, request.Methods, request.Headers, request.Query, request.MethodConfigs,
-                request.BodyMerge, request.ResponseMode, request.ResponseInclude, request.Routes);
+                request.BodyMerge, request.ResponseMode, request.ResponseInclude, request.Routes, request.Access);
             if (!validation.IsValid)
             {
                 _logger.LogWarning(
@@ -252,6 +255,7 @@ namespace Proxy.DomainService.Services
                 Routes = validation.Routes.Select(ProxyVersionFactory.CloneRoute).ToList(),
                 ResponseMode = validation.ResponseMode,
                 ResponseInclude = new List<string>(validation.ResponseInclude),
+                Access = validation.Access.Clone(),
             };
             var changes = ProxyChangeSet.Diff(beforeSnapshot, candidate);
 
@@ -272,6 +276,7 @@ namespace Proxy.DomainService.Services
             proxy.Routes = validation.Routes;
             proxy.ResponseMode = validation.ResponseMode;
             proxy.ResponseInclude = validation.ResponseInclude;
+            proxy.Access = validation.Access;
             proxy.LastUpdatedDate = DateTime.UtcNow;
             proxy.LastUpdatedBy = ProxyVersionFactory.CurrentUserId();
             proxy.CurrentVersion += 1;
@@ -389,6 +394,21 @@ namespace Proxy.DomainService.Services
             BodyMerge = source.BodyMerge?.Select(ToKeyValueDto).ToList(),
             ResponseMode = source.ResponseMode?.ToString(),
             ResponseInclude = source.ResponseInclude is null ? null : new List<string>(source.ResponseInclude),
+        };
+
+        private static ProxyAccessDto ToAccessDto(EndpointAccessPolicy source) => new()
+        {
+            Kind = source.Kind.ToString(),
+            OrganizationId = source.OrganizationId,
+            Roles = ToAccessRuleDto(source.Roles),
+            Permissions = ToAccessRuleDto(source.Permissions),
+            Combine = source.Combine.ToString(),
+        };
+
+        private static ProxyAccessRuleDto ToAccessRuleDto(EndpointAccessRule source) => new()
+        {
+            Mode = source.RequiresAll ? EndpointAccessRule.ModeAll : EndpointAccessRule.ModeAny,
+            Values = new List<string>(source.Values),
         };
 
         private static ProxyMethodConfigDto ToMethodConfigDto(ProxyMethodConfig source) => new()

@@ -146,7 +146,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         id: "authorizationMode",
         type: "select",
         label: "Authorization Mode",
-        info: "Choose which rule(s) the caller must satisfy. RolesOnly: only the Roles list applies. PermissionsOnly: only the Permissions list applies. RolesAndPermissions: caller must satisfy both.",
+        info: "Choose which rule(s) the caller must satisfy. RolesOnly: only the Roles list applies. PermissionsOnly: only the Permissions list applies. RolesAndPermissions: caller must satisfy both. RolesOrPermissions: caller must satisfy either.",
         key: "authorizationMode",
         defaultValue: "",
         dependsOn: AUTHORIZATION_DEPENDENCY,
@@ -154,6 +154,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
           { label: "Roles only", value: "RolesOnly" },
           { label: "Permissions only", value: "PermissionsOnly" },
           { label: "Roles and Permissions", value: "RolesAndPermissions" },
+          { label: "Roles or Permissions", value: "RolesOrPermissions" },
         ],
       },
       {
@@ -165,7 +166,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         placeholder: "Search roles...",
         dependsOn: {
           key: "authorizationMode",
-          value: ["RolesOnly", "RolesAndPermissions"],
+          value: ["RolesOnly", "RolesAndPermissions", "RolesOrPermissions"],
           operator: "in",
         },
         defaultValue: (data: Record<string, unknown>) => rolesAsFieldValue(data),
@@ -184,7 +185,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         placeholder: "Search permissions...",
         dependsOn: {
           key: "authorizationMode",
-          value: ["PermissionsOnly", "RolesAndPermissions"],
+          value: ["PermissionsOnly", "RolesAndPermissions", "RolesOrPermissions"],
           operator: "in",
         },
         defaultValue: (data: Record<string, unknown>) => permissionsAsFieldValue(data),

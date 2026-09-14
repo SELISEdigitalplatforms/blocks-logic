@@ -1,7 +1,11 @@
-import { compactKeyValues, isResponsePath, maskUpstreamUrl } from "../utils";
+import { compactKeyValues, defaultProxyAccess, isResponsePath, maskUpstreamUrl } from "../utils";
 import {
   BaseMutationResponseDto,
   Proxy,
+  ProxyAccess,
+  ProxyAccessDto,
+  ProxyAccessRule,
+  ProxyAccessRuleDto,
   ProxyDetailDto,
   ProxyExecutionDetailDto,
   ProxyExecutionListItemDto,
@@ -142,6 +146,50 @@ const toResponseFilter = (values: ProxyFormValues) =>
       }
     : { responseMode: "All", responseInclude: [] };
 
+// ---------------------------------------------------------------------------
+// "Who can call it" — the server's wire vocabulary lives here and nowhere else.
+// ---------------------------------------------------------------------------
+
+const toAccessRulePayload = (rule: ProxyAccessRule): ProxyAccessRuleDto => ({
+  mode: rule.mode === "all" ? "all" : "any",
+  values: [...new Set(rule.values.map((value) => value.trim()).filter(Boolean))],
+});
+
+/**
+ * A public save never carries role / permission values (the server rejects that combination), so
+ * chips a user picked before switching to Public are dropped here rather than failing the save.
+ */
+export const toAccessPayload = (access: ProxyAccess | undefined): ProxyAccessDto => {
+  const value = access ?? defaultProxyAccess();
+  const isPublic = value.kind === "public";
+  return {
+    kind: isPublic ? "Public" : "BlocksToken",
+    combine: value.combine === "and" ? "And" : "Or",
+    roles: isPublic ? { mode: "any", values: [] } : toAccessRulePayload(value.roles),
+    permissions: isPublic ? { mode: "any", values: [] } : toAccessRulePayload(value.permissions),
+    organizationId: value.organizationId?.trim() ?? "",
+  };
+};
+
+const toAccessRule = (dto: ProxyAccessRuleDto | null | undefined): ProxyAccessRule => ({
+  mode: dto?.mode?.toLowerCase() === "all" ? "all" : "any",
+  values: Array.isArray(dto?.values)
+    ? dto.values.filter((value): value is string => typeof value === "string")
+    : [],
+});
+
+/** A missing block (older proxy) is the token-only default — exactly what the server enforces for it. */
+export const toAccess = (dto: ProxyAccessDto | null | undefined): ProxyAccess =>
+  dto
+    ? {
+        kind: dto.kind?.toLowerCase() === "public" ? "public" : "blocksToken",
+        combine: dto.combine?.toLowerCase() === "and" ? "and" : "or",
+        roles: toAccessRule(dto.roles),
+        permissions: toAccessRule(dto.permissions),
+        organizationId: dto.organizationId ?? "",
+      }
+    : defaultProxyAccess();
+
 export const mapProxyToCreatePayload = (values: ProxyFormValues) => ({
   name: values.name.trim(),
   upstream: values.upstreamUrl.trim(),
@@ -152,6 +200,7 @@ export const mapProxyToCreatePayload = (values: ProxyFormValues) => ({
   methodConfigs: toMethodConfigInputs(values.methodConfigs, values.methods),
   routes: toRouteInputs(values.routes),
   ...toResponseFilter(values),
+  access: toAccessPayload(values.access),
   enabled: true,
 });
 
@@ -166,6 +215,7 @@ export const mapProxyToUpdatePayload = (id: string, values: ProxyFormValues) => 
   methodConfigs: toMethodConfigInputs(values.methodConfigs, values.methods),
   routes: toRouteInputs(values.routes),
   ...toResponseFilter(values),
+  access: toAccessPayload(values.access),
 });
 
 export const mapProxyTestRequestToPayload = (request: ProxyTestRequest) => ({
@@ -182,6 +232,7 @@ export const mapProxyTestRequestToPayload = (request: ProxyTestRequest) => ({
         // endpoint is refused as unlisted before it ever reaches the vendor.
         routes: toRouteInputs(request.draft.routes),
         ...toResponseFilter(request.draft),
+        access: toAccessPayload(request.draft.access),
       }
     : undefined,
   method: request.method,
@@ -279,6 +330,7 @@ export const mapProxyListItemDtoToProxy = (dto: ProxyListItemDto): Proxy => ({
   routes: [],
   responseMode: "all",
   responseInclude: [],
+  access: defaultProxyAccess(),
   calls24h: Number(dto.calls24h ?? 0),
   createdAt: dto.createdDate,
   updatedAt: dto.lastUpdatedDate,
@@ -300,6 +352,7 @@ export const mapProxyDetailDtoToProxy = (dto: ProxyDetailDto): Proxy => ({
   routes: toRoutes(dto.routes),
   responseMode: dto.responseMode?.toLowerCase() === "select" ? "select" : "all",
   responseInclude: Array.isArray(dto.responseInclude) ? dto.responseInclude : [],
+  access: toAccess(dto.access),
   calls24h: 0,
   createdAt: dto.createdDate,
   updatedAt: dto.lastUpdatedDate,

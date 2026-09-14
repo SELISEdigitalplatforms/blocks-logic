@@ -1,4 +1,14 @@
-import { Proxy, ProxyExecutionLog, ProxyVersionHistory } from "../types";
+import { Proxy, ProxyAccess, ProxyExecutionLog, ProxyVersionHistory } from "../types";
+
+// Spelled out rather than imported from ../utils: the utils barrel is imported by everything that
+// imports this module's barrel, and a constants -> utils edge would close an import cycle.
+const tokenOnlyAccess = (): ProxyAccess => ({
+  kind: "blocksToken",
+  combine: "or",
+  roles: { mode: "any", values: [] },
+  permissions: { mode: "any", values: [] },
+  organizationId: "",
+});
 
 export const PROXY_MOCK_DATA: Proxy[] = [
   {
@@ -30,6 +40,7 @@ export const PROXY_MOCK_DATA: Proxy[] = [
     ],
     responseMode: "all",
     responseInclude: [],
+    access: tokenOnlyAccess(),
     calls24h: 1248,
     createdAt: "2026-04-12T09:15:00.000Z",
     updatedAt: "2026-09-01T11:30:00.000Z",
@@ -49,6 +60,7 @@ export const PROXY_MOCK_DATA: Proxy[] = [
     routes: [{ method: "POST", path: "", upstreamPath: null, headers: null, query: null, bodyMerge: null, responseMode: null, responseInclude: null }],
     responseMode: "all",
     responseInclude: [],
+    access: tokenOnlyAccess(),
     calls24h: 382,
     createdAt: "2026-05-02T14:00:00.000Z",
     updatedAt: "2026-08-27T08:45:00.000Z",
@@ -79,6 +91,7 @@ export const PROXY_MOCK_DATA: Proxy[] = [
     ],
     responseMode: "select",
     responseInclude: ["location.name", "current.temp_c", "current.condition.text"],
+    access: tokenOnlyAccess(),
     calls24h: 74,
     createdAt: "2026-06-18T10:20:00.000Z",
     updatedAt: "2026-08-30T16:10:00.000Z",

@@ -193,6 +193,8 @@ namespace Proxy.DomainService.Services
                     CallerKind = string.IsNullOrEmpty(row.CallerKind) ? ProxyCallerKind.Client : row.CallerKind,
                     CallerUserId = row.CreatedBy,
                     CallerUserName = row.CallerUserName,
+                    CallerImpersonated = row.CallerImpersonated,
+                    CallerImpersonationSessionId = row.CallerImpersonated ? row.CallerImpersonationSessionId : null,
                     CallerIp = row.CallerIp,
                     CallerUserAgent = row.CallerUserAgent,
                     CallerOrigin = row.CallerOrigin,
@@ -386,6 +388,7 @@ namespace Proxy.DomainService.Services
             // calls, so report them as such rather than leaving the column blank in the logs table.
             CallerKind = string.IsNullOrEmpty(row.CallerKind) ? ProxyCallerKind.Client : row.CallerKind,
             CallerUserName = row.CallerUserName,
+            CallerImpersonated = row.CallerImpersonated,
             RoutePath = row.RoutePath,
             RequestMethod = row.RequestMethod,
             RequestPath = row.RequestPath,

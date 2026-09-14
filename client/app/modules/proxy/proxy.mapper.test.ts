@@ -97,6 +97,13 @@ describe("proxy mapper", () => {
       routes: [],
       responseMode: "All",
       responseInclude: [],
+      access: {
+        kind: "BlocksToken",
+        combine: "Or",
+        roles: { mode: "any", values: [] },
+        permissions: { mode: "any", values: [] },
+        organizationId: "",
+      },
       enabled: true,
     });
     expect(mapProxyToUpdatePayload("p1", values)).toMatchObject({ itemId: "p1" });

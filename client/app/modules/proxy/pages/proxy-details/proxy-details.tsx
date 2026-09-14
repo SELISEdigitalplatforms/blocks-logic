@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
 import { getProxyClientUrl } from "../../constants";
 import { useGetProxyById, useGetProxyOverview, useToggleProxy } from "../../hooks";
 import { Proxy, ProxyKeyValue, ProxyRoute, ResponseFieldNode } from "../../types";
-import { containsVarRef, pathsToTree } from "../../utils";
+import { containsVarRef, describeProxyAccess, pathsToTree } from "../../utils";
 import { ProxyMethodBadge } from "../../components/proxy-method-badge";
 import { ProxyMethodChips } from "../../components/proxy-method-chips";
 import { ProxyStatusBadge } from "../../components/proxy-status-badge";
@@ -581,6 +581,15 @@ export const ProxyDetails = () => {
                       rows={proxy.query}
                       empty="No query parameters added."
                     />
+                    <div data-testid="proxy-access-summary">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Who can call it
+                      </p>
+                      <p className="mt-1 text-sm font-medium">
+                        {proxy.access.kind === "public" ? "Public" : "Blocks token"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{describeProxyAccess(proxy.access)}</p>
+                    </div>
                     <EndpointsSection proxy={proxy} clientUrlFor={clientUrlFor} />
                   </CardContent>
                 </Card>

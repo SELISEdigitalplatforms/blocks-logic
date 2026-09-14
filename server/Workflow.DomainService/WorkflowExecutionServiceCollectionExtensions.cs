@@ -8,6 +8,7 @@ using Workflow.DomainService.Nodes.ActionDataV1;
 using Workflow.DomainService.Nodes.ActionProxy;
 using Microsoft.Extensions.DependencyInjection;
 using Blocks.Extension.DependencyInjection;
+using Common.InternalService.Access;
 using Workflow.DomainService.Nodes.TriggerEmailV1;
 using Workflow.DomainService.Nodes.TriggerDataV1;
 using Workflow.DomainService.Nodes.TriggerScheduleV1;
@@ -34,6 +35,8 @@ namespace Workflow.DomainService
             services.AddSingleton<IWorkflowEngineService, WorkflowEngineService>();
             services.AddSingleton<IWorkflowNotificationService, WorkflowNotificationService>();
             services.AddSingleton<IWorkflowVersionService, WorkflowVersionService>();
+            // Shared inbound-auth for tenant-published endpoints (webhooks here, the proxy gateway there).
+            services.AddEndpointAccess();
             services.AddSingleton<IWorkflowAuthService, WorkflowAuthService>();
 
             // register repositories

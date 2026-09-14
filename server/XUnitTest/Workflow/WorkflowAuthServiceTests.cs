@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Blocks.Genesis;
+using Common.InternalService.Access;
 using Workflow.DomainService.Services;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
@@ -35,8 +36,10 @@ namespace XUnitTest.Workflow
 
             _cacheClient.Setup(c => c.CacheDatabase()).Returns(_cacheDatabase.Object);
             _service = new WorkflowAuthService(
-                _tenants.Object,
-                _cacheClient.Object,
+                new EndpointAccessAuthorizer(
+                    _tenants.Object,
+                    _cacheClient.Object,
+                    Mock.Of<ILogger<EndpointAccessAuthorizer>>()),
                 Mock.Of<ILogger<WorkflowAuthService>>(),
                 _delegatedTokenProvider.Object);
         }
@@ -136,6 +139,47 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
+        public void EvaluateAuthorization_RolesOrPermissions_RequiresEither()
+        {
+            var principal = PrincipalWith(orgId: "org-a", roles: ["editor"], permissions: ["workflow:read"]);
+
+            var rolePasses = new AuthorizationConfig(
+                "org-a",
+                new Rule { Mode = "or", Values = ["editor"] },
+                new Rule { Mode = "or", Values = ["workflow:write"] },
+                AuthorizationMode.RolesOrPermissions);
+            EvaluateAuthorization(principal, rolePasses).Should().BeTrue();
+
+            var permissionPasses = new AuthorizationConfig(
+                "org-a",
+                new Rule { Mode = "or", Values = ["admin"] },
+                new Rule { Mode = "or", Values = ["workflow:read"] },
+                AuthorizationMode.RolesOrPermissions);
+            EvaluateAuthorization(principal, permissionPasses).Should().BeTrue();
+
+            var neitherPasses = new AuthorizationConfig(
+                "org-a",
+                new Rule { Mode = "or", Values = ["admin"] },
+                new Rule { Mode = "or", Values = ["workflow:write"] },
+                AuthorizationMode.RolesOrPermissions);
+            EvaluateAuthorization(principal, neitherPasses).Should().BeFalse();
+        }
+
+        [Fact]
+        public void EvaluateAuthorization_RolesOnly_IgnoresConfiguredPermissions()
+        {
+            // Legacy semantics: under RolesOnly a stored permissions list never applies.
+            var principal = PrincipalWith(orgId: "org-a", roles: ["editor"], permissions: []);
+            var config = new AuthorizationConfig(
+                "org-a",
+                new Rule { Mode = "or", Values = ["editor"] },
+                new Rule { Mode = "or", Values = ["workflow:write"] },
+                AuthorizationMode.RolesOnly);
+
+            EvaluateAuthorization(principal, config).Should().BeTrue();
+        }
+
+        [Fact]
         public void EvaluateAuthorization_EmptyRule_IsTreatedAsPass()
         {
             var principal = PrincipalWith(orgId: "org-a");
@@ -178,6 +222,7 @@ namespace XUnitTest.Workflow
         [InlineData("RolesOnly", AuthorizationMode.RolesOnly)]
         [InlineData("PermissionsOnly", AuthorizationMode.PermissionsOnly)]
         [InlineData("RolesAndPermissions", AuthorizationMode.RolesAndPermissions)]
+        [InlineData("RolesOrPermissions", AuthorizationMode.RolesOrPermissions)]
         public void TryParseAuthorizationMode_ParsesKnownValues(string wireValue, AuthorizationMode expected)
         {
             AuthorizationConfig.TryParseAuthorizationMode(wireValue).Should().Be(expected);

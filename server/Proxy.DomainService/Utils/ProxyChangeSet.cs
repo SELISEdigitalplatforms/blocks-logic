@@ -1,3 +1,4 @@
+using Common.InternalService.Access;
 using Proxy.DomainService.Entities;
 
 namespace Proxy.DomainService.Utils
@@ -20,6 +21,17 @@ namespace Proxy.DomainService.Utils
         private const string ResponseModeField = "responseMode";
         private const string ResponseModeAll = "All";
         private const string ResponseModeSelect = "Select";
+
+        // "Who can call it". The kind and combinator are stored as the enum names; a rule is stored as
+        // "<any|all> of <v1>, <v2>" (null when it carries no values), which the history can show verbatim and
+        // ApplyField can parse back. The validator forbids commas inside a value so the encoding is unambiguous.
+        private const string AccessField = "access";
+        private const string AccessCombineField = "access:combine";
+        private const string AccessRolesField = "access:roles";
+        private const string AccessPermissionsField = "access:permissions";
+        private const string AccessOrganizationField = "access:organization";
+        private const string RuleAnyPrefix = "any of ";
+        private const string RuleAllPrefix = "all of ";
 
         private static readonly IReadOnlyList<ProxyKeyValue> NoPairs = Array.Empty<ProxyKeyValue>();
 
@@ -74,6 +86,7 @@ namespace Proxy.DomainService.Utils
                 });
             }
 
+            DiffAccess(before.Access, after.Access, changes);
             DiffPairs(before.Headers, after.Headers, HeaderPrefix, "header", changes);
             DiffPairs(before.Query, after.Query, QueryPrefix, "query", changes);
             DiffPairs(before.BodyMerge, after.BodyMerge, BodyPrefix, "body field", changes);
@@ -224,6 +237,42 @@ namespace Proxy.DomainService.Utils
                         : $"response field {responsePath} added";
                 }
 
+                // Who may call the endpoint is as security-relevant as which endpoints it reaches, so the
+                // history names the change outright.
+                if (change.Field == AccessField)
+                {
+                    return string.Equals(change.After, nameof(EndpointAccessKind.Public), StringComparison.Ordinal)
+                        ? "Endpoint made public"
+                        : "Endpoint now requires a Blocks token";
+                }
+
+                if (change.Field == AccessRolesField || change.Field == AccessPermissionsField)
+                {
+                    var word = change.Field == AccessRolesField ? "Role" : "Permission";
+                    if (change.Before is null)
+                    {
+                        return $"{word} restriction added";
+                    }
+
+                    return change.After is null
+                        ? $"{word} restriction removed"
+                        : $"{word} restriction changed";
+                }
+
+                if (change.Field == AccessCombineField)
+                {
+                    return string.Equals(change.After, nameof(EndpointAccessCombine.And), StringComparison.Ordinal)
+                        ? "Roles and permissions now both required"
+                        : "Roles or permissions now sufficient";
+                }
+
+                if (change.Field == AccessOrganizationField)
+                {
+                    return change.After is null
+                        ? "Organization restriction removed"
+                        : "Organization restriction changed";
+                }
+
                 // Which endpoints a proxy can reach is the most security-relevant thing about it, so the
                 // history says so outright rather than falling through to "Configuration updated".
                 if (TrySplitRouteField(change.Field, out var routeAddress))
@@ -301,6 +350,12 @@ namespace Proxy.DomainService.Utils
                 case "enabled": return proxy.Enabled ? EnabledWord : DisabledWord;
                 case "methods": return MethodsValue(proxy.Methods);
                 case ResponseModeField: return proxy.ResponseMode.ToString();
+                case AccessField: return proxy.Access.Kind.ToString();
+                case AccessCombineField: return proxy.Access.Combine.ToString();
+                case AccessRolesField: return RuleValue(proxy.Access.Roles);
+                case AccessPermissionsField: return RuleValue(proxy.Access.Permissions);
+                case AccessOrganizationField:
+                    return string.IsNullOrEmpty(proxy.Access.OrganizationId) ? null : proxy.Access.OrganizationId;
             }
 
             if (TrySplitResponseField(field, out var responsePath))
@@ -377,6 +432,25 @@ namespace Proxy.DomainService.Utils
                     proxy.ResponseMode = Enum.TryParse<ProxyResponseMode>(rawValue, ignoreCase: true, out var mode)
                         ? mode
                         : ProxyResponseMode.All;
+                    return;
+                case AccessField:
+                    proxy.Access.Kind = Enum.TryParse<EndpointAccessKind>(rawValue, ignoreCase: true, out var kind)
+                        ? kind
+                        : EndpointAccessKind.BlocksToken;
+                    return;
+                case AccessCombineField:
+                    proxy.Access.Combine = Enum.TryParse<EndpointAccessCombine>(rawValue, ignoreCase: true, out var combine)
+                        ? combine
+                        : EndpointAccessCombine.Or;
+                    return;
+                case AccessRolesField:
+                    proxy.Access.Roles = ParseRule(rawValue);
+                    return;
+                case AccessPermissionsField:
+                    proxy.Access.Permissions = ParseRule(rawValue);
+                    return;
+                case AccessOrganizationField:
+                    proxy.Access.OrganizationId = rawValue ?? string.Empty;
                     return;
             }
 
@@ -469,6 +543,112 @@ namespace Proxy.DomainService.Utils
             {
                 list.Add(updated);
             }
+        }
+
+        /// <summary>
+        /// "Who can call it" diff. Five independent addresses so a Revert of one (say, the role list) does not
+        /// drag the others along; the kind change is listed first because it is the headline.
+        /// </summary>
+        private static void DiffAccess(EndpointAccessPolicy before, EndpointAccessPolicy after, List<ProxyFieldChange> changes)
+        {
+            if (before.Kind != after.Kind)
+            {
+                changes.Add(new ProxyFieldChange
+                {
+                    Field = AccessField,
+                    Label = "who can call it",
+                    Before = before.Kind.ToString(),
+                    After = after.Kind.ToString(),
+                });
+            }
+
+            var beforeOrg = string.IsNullOrEmpty(before.OrganizationId) ? null : before.OrganizationId;
+            var afterOrg = string.IsNullOrEmpty(after.OrganizationId) ? null : after.OrganizationId;
+            if (!string.Equals(beforeOrg, afterOrg, StringComparison.Ordinal))
+            {
+                changes.Add(new ProxyFieldChange
+                {
+                    Field = AccessOrganizationField, Label = "organization", Before = beforeOrg, After = afterOrg,
+                });
+            }
+
+            var beforeRoles = RuleValue(before.Roles);
+            var afterRoles = RuleValue(after.Roles);
+            if (!string.Equals(beforeRoles, afterRoles, StringComparison.Ordinal))
+            {
+                changes.Add(new ProxyFieldChange
+                {
+                    Field = AccessRolesField, Label = "roles", Before = beforeRoles, After = afterRoles,
+                });
+            }
+
+            var beforePermissions = RuleValue(before.Permissions);
+            var afterPermissions = RuleValue(after.Permissions);
+            if (!string.Equals(beforePermissions, afterPermissions, StringComparison.Ordinal))
+            {
+                changes.Add(new ProxyFieldChange
+                {
+                    Field = AccessPermissionsField, Label = "permissions", Before = beforePermissions, After = afterPermissions,
+                });
+            }
+
+            if (before.Combine != after.Combine)
+            {
+                changes.Add(new ProxyFieldChange
+                {
+                    Field = AccessCombineField,
+                    Label = "roles / permissions combination",
+                    Before = before.Combine.ToString(),
+                    After = after.Combine.ToString(),
+                });
+            }
+        }
+
+        /// <summary>
+        /// A rule as one history value: <c>"any of admin, editor"</c> / <c>"all of ..."</c>; <c>null</c> when it
+        /// carries no values. Values are sorted so reordering chips is not a change.
+        /// </summary>
+        public static string? RuleValue(EndpointAccessRule rule)
+        {
+            if (rule is null || !rule.IsConfigured)
+            {
+                return null;
+            }
+
+            var ordered = rule.Values.OrderBy(v => v, StringComparer.Ordinal);
+            return (rule.RequiresAll ? RuleAllPrefix : RuleAnyPrefix) + string.Join(", ", ordered);
+        }
+
+        /// <summary>Inverse of <see cref="RuleValue"/>. <c>null</c> / unparseable ⇒ an unconfigured rule.</summary>
+        public static EndpointAccessRule ParseRule(string? rawValue)
+        {
+            var rule = new EndpointAccessRule();
+            if (string.IsNullOrWhiteSpace(rawValue))
+            {
+                return rule;
+            }
+
+            string rest;
+            if (rawValue.StartsWith(RuleAllPrefix, StringComparison.Ordinal))
+            {
+                rule.Mode = EndpointAccessRule.ModeAll;
+                rest = rawValue[RuleAllPrefix.Length..];
+            }
+            else if (rawValue.StartsWith(RuleAnyPrefix, StringComparison.Ordinal))
+            {
+                rule.Mode = EndpointAccessRule.ModeAny;
+                rest = rawValue[RuleAnyPrefix.Length..];
+            }
+            else
+            {
+                return rule;
+            }
+
+            rule.Values = rest
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            return rule;
         }
 
         /// <summary>First-occurrence-ordered wire names joined with <c>", "</c> (e.g. <c>"GET, POST"</c>).</summary>

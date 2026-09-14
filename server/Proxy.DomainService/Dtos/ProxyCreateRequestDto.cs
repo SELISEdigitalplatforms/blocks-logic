@@ -37,6 +37,9 @@ namespace Proxy.DomainService.Dtos
         /// <summary>Response field paths kept when <see cref="ResponseMode"/> is <c>"Select"</c>.</summary>
         public List<string>? ResponseInclude { get; set; }
 
+        /// <summary>Who can call the gateway route. Omitted ⇒ a Blocks token is required, any signed-in caller.</summary>
+        public ProxyAccessInputDto? Access { get; set; }
+
         /// <summary>Defaults to <c>true</c> when omitted.</summary>
         public bool Enabled { get; set; } = true;
     }

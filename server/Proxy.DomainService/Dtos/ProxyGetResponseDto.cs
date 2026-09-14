@@ -53,6 +53,9 @@ namespace Proxy.DomainService.Dtos
         /// <summary>Response field paths kept when <see cref="ResponseMode"/> is <c>"Select"</c>.</summary>
         public List<string> ResponseInclude { get; set; } = new();
 
+        /// <summary>Who can call the gateway route. Shared by every declared route.</summary>
+        public ProxyAccessDto Access { get; set; } = new();
+
         public int CurrentVersion { get; set; }
 
         public DateTime CreatedDate { get; set; }

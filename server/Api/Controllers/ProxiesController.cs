@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Blocks.Genesis;
+using Common.InternalService.Access;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Proxy.DomainService.Dtos;
@@ -23,9 +24,12 @@ namespace Utilities.Api.Controllers
     /// <item><b>Data plane</b> (Phase 2) — <see cref="Gateway"/> at
     /// <c>{METHOD} /api/proxy/gateway/{slug}/{**path}</c>, the path a tenant's client calls instead of the
     /// vendor. That route is pinned absolutely rather than derived from the convention, because it is a
-    /// published contract (see the remarks on <see cref="Gateway"/>). Like every other action it is
-    /// <see cref="AuthorizeAttribute"/>: the framework's bearer handler already resolves the tenant from the
-    /// <c>x-blocks-key</c> header and validates the token against that tenant's certificate.</item>
+    /// published contract (see the remarks on <see cref="Gateway"/>). Unlike every other action it is
+    /// <see cref="AllowAnonymousAttribute"/>: who may call a proxy ("Who can call it" — public, or a Blocks
+    /// token optionally narrowed by roles / permissions) is stored per proxy, so the action resolves the
+    /// tenant from <c>x-blocks-key</c> itself and hands the request to the shared
+    /// <see cref="IEndpointAccessAuthorizer"/>, which validates the token against that tenant's certificate
+    /// and evaluates the stored policy.</item>
     /// </list>
     /// <para>
     /// A route id always wins over the same id supplied in the body or query string: the URL identifies the
@@ -54,15 +58,20 @@ namespace Utilities.Api.Controllers
         private readonly IProxyTestService _proxyTestService;
         private readonly IProxyExecutionService _proxyExecutionService;
         private readonly IProxyGatewayService _gatewayService;
+        private readonly IEndpointAccessAuthorizer _accessAuthorizer;
         private readonly ILogger<ProxiesController> _logger;
 
-        /// <summary>Takes the four control-plane services plus the data-plane gateway service.</summary>
+        /// <summary>
+        /// Takes the four control-plane services, the data-plane gateway service, and the shared access
+        /// authorizer that enforces each proxy's "Who can call it" policy on the gateway route.
+        /// </summary>
         public ProxiesController(
             IProxyService proxyService,
             IProxyVersionService proxyVersionService,
             IProxyTestService proxyTestService,
             IProxyExecutionService proxyExecutionService,
             IProxyGatewayService gatewayService,
+            IEndpointAccessAuthorizer accessAuthorizer,
             ILogger<ProxiesController> logger)
         {
             _proxyService = proxyService;
@@ -70,6 +79,7 @@ namespace Utilities.Api.Controllers
             _proxyTestService = proxyTestService;
             _proxyExecutionService = proxyExecutionService;
             _gatewayService = gatewayService;
+            _accessAuthorizer = accessAuthorizer;
             _logger = logger;
         }
 
@@ -247,9 +257,12 @@ namespace Utilities.Api.Controllers
 
         /// <summary>
         /// Data plane (Phase 2). A tenant's client calls <c>{METHOD} /api/proxy/gateway/{slug}/{**path}</c>
-        /// instead of the vendor; the framework's bearer handler authenticates the caller (tenant from the
-        /// <c>x-blocks-key</c> header, token validated against that tenant's certificate) before this action
-        /// runs, so an unauthenticated call is answered 401 and writes NO execution row (C1). Blocks then
+        /// instead of the vendor. The tenant comes from the <c>x-blocks-key</c> header (or the tenant claim of a
+        /// presented token); the proxy's stored <see cref="ProxyResolvedConfig.Access"/> policy then decides
+        /// whether a Blocks token is required and which roles / permissions the caller must hold. A missing
+        /// tenant or a missing / invalid token when one is required is answered 401 and writes NO execution
+        /// row (C1); a valid token that fails the rules is answered 403 and DOES write a row
+        /// (<see cref="ProxyExecutionOutcome.Forbidden"/>), like a probe of an undeclared route. Blocks then
         /// rebuilds the request against the stored upstream, attaches ONLY the configured headers / query
         /// params, calls the third party server-side, relays the response, and records one
         /// <see cref="ProxyExecutionEntity"/> per attempt.
@@ -263,32 +276,56 @@ namespace Utilities.Api.Controllers
         /// here once and never doubled.
         /// </para>
         /// </summary>
-        [Authorize]
+        [AllowAnonymous]
         [RequestSizeLimit(GatewayHardBodyLimitBytes)]
         [AcceptVerbs("GET", "POST", "PUT", "PATCH", "DELETE", Route = "~/api/proxy/gateway/{slug}/{**path}")]
         public async Task<IActionResult> Gateway(string slug, string? path)
         {
             var method = Request.Method.ToUpperInvariant();
             var requestPath = Request.Path.Value ?? $"/api/proxy/gateway/{slug}/{path}";
+            var aborted = HttpContext.RequestAborted;
 
-            // Step 1 — identify the caller. [Authorize] has already rejected anyone without a valid bearer
-            // for the tenant, so the context is populated here; the guard only covers a misconfigured
-            // pipeline and still writes NO execution row (C1).
-            var context = BlocksContext.GetContext();
-            if (context is null || !context.IsAuthenticated || string.IsNullOrEmpty(context.TenantId))
+            // Step 1 — identify the tenant. The route is anonymous at the framework level because "Who can
+            // call it" is stored per proxy and the Genesis bearer handler skips [AllowAnonymous] actions, so
+            // the tenant has to be resolved here: x-blocks-key, or the tenant claim of a presented token.
+            // Without either nothing can be looked up and the call is refused with NO execution row (C1).
+            var tenantId = await _accessAuthorizer.ResolveTenantIdAsync(Request);
+            if (string.IsNullOrEmpty(tenantId))
             {
-                _logger.LogWarning("Proxy gateway: rejected unauthenticated {Method} {Path}.", method, requestPath);
+                _logger.LogWarning("Proxy gateway: rejected {Method} {Path} — no tenant (x-blocks-key or token).", method, requestPath);
                 return GatewayError(ProxyExecutionOutcome.Unauthorized, 401, requestPath);
             }
 
-            // Step 2 — buffer the body under the 10 MB cap before any upstream connection (C4 / C10).
-            var (body, tooLarge) = await ReadBodyAsync(HttpContext.RequestAborted);
+            // Step 2 — enforce the proxy's access policy. An unknown slug is checked against the default
+            // (token required) policy so an anonymous caller cannot probe which slugs exist: 401 before 404.
+            var config = await _gatewayService.ResolveAsync(tenantId, slug, aborted);
+            var policy = config?.Access ?? EndpointAccessPolicy.RequireToken();
+            var decision = await _accessAuthorizer.AuthorizeAsync(Request, tenantId, policy, aborted);
+            if (decision.Status == EndpointAccessStatus.Unauthenticated)
+            {
+                _logger.LogWarning("Proxy gateway: rejected unauthenticated {Method} {Path} (tenant {TenantId}).", method, requestPath, tenantId);
+                return GatewayError(ProxyExecutionOutcome.Unauthorized, 401, requestPath);
+            }
+
+            // Null for a public policy: no identity, no token-scoped work.
+            var context = decision.Context;
+
+            // Step 3 — buffer the body under the 10 MB cap before any upstream connection (C4 / C10).
+            var (body, tooLarge) = await ReadBodyAsync(aborted);
 
             var result = await _gatewayService.ForwardAsync(new ProxyForwardRequest
             {
-                TenantId = context.TenantId,
-                UserId = string.IsNullOrEmpty(context.UserId) ? null : context.UserId,
-                UserName = context.UserName,
+                TenantId = tenantId,
+                UserId = string.IsNullOrEmpty(context?.UserId) ? null : context.UserId,
+                UserName = context?.UserName,
+                // Impersonation is evaluated like any other token (the claims are the impersonated identity's);
+                // it is only recorded, so the logs can tell a root-tenant user acting here from a native caller.
+                CallerImpersonated = context?.Impersonated ?? false,
+                CallerImpersonationSessionId = context?.ImpersonationSessionId is { Length: > 0 } session ? session : null,
+                ResolvedConfig = config,
+                // An authenticated caller who fails the role / permission rules is recorded as a 403 row (like
+                // RouteNotAllowed) so refused callers are visible in the logs; the forwarder never calls upstream.
+                ForbiddenReason = decision.Status == EndpointAccessStatus.Forbidden ? decision.Reason : null,
                 // Provenance for the execution row: who called, from where, and under which trace. Read from
                 // the connection and headers here rather than in the forwarder, which also serves in-process
                 // workflow calls that have no HttpContext.
@@ -310,7 +347,7 @@ namespace Utilities.Api.Controllers
                 BodyTooLarge = tooLarge,
                 ContentType = string.IsNullOrWhiteSpace(Request.ContentType) ? null : Request.ContentType,
                 IsTest = false,
-            }, HttpContext.RequestAborted);
+            }, aborted);
 
             if (result.Ok)
             {

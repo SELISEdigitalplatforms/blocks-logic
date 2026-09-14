@@ -11,6 +11,14 @@ vi.mock("@/services/secret.service", async () => ({
   secretService: (await import("../test-support/mock-secret-service")).mockSecretService,
 }));
 
+// The "Who can call it" card lists the tenant's roles / permissions; the form tests are not about that.
+vi.mock("@/modules/workflow/services/iam.service", () => ({
+  iamService: {
+    getRoles: vi.fn(async () => ({ data: [], totalCount: 0, errors: null })),
+    getPermissions: vi.fn(async () => ({ data: [], totalCount: 0, errors: null })),
+  },
+}));
+
 import { proxyService } from "../services";
 import { ProxyForm } from "./proxy-form";
 

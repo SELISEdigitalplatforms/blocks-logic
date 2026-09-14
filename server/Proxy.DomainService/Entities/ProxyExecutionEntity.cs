@@ -41,6 +41,15 @@ namespace Proxy.DomainService.Entities
         /// <summary>Display name of the calling user at call time, or <c>null</c>. <c>CreatedBy</c> holds the id.</summary>
         public string? CallerUserName { get; set; }
 
+        /// <summary>
+        /// <c>true</c> when the call was made under an IAM impersonation token (a root-tenant user acting inside
+        /// this tenant). Absent on rows written before the field existed, which reads as <c>false</c>.
+        /// </summary>
+        public bool CallerImpersonated { get; set; }
+
+        /// <summary>The IAM impersonation session id when <see cref="CallerImpersonated"/>, for cross-referencing the IAM audit log.</summary>
+        public string? CallerImpersonationSessionId { get; set; }
+
         /// <summary>Remote IP of the calling client, or <c>null</c> for an in-process workflow forward.</summary>
         public string? CallerIp { get; set; }
 
