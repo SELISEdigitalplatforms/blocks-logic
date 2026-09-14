@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatDuration,
   formatMemoryAgainstLimit,
+  formatMillicoresAgainstLimit,
   formatRelativeTime,
   formatRunCount,
   formatTimeOfDay,
@@ -71,6 +72,32 @@ describe("formatMemoryAgainstLimit", () => {
   it("drops the limit when it is unknown, and the whole thing when nothing was measured", () => {
     expect(formatMemoryAgainstLimit(86_000_000, null)).toBe("82 MB");
     expect(formatMemoryAgainstLimit(null, 192)).toBe("—");
+  });
+});
+
+describe("formatMillicoresAgainstLimit", () => {
+  it("averages consumed CPU over the run's wall time, in the unit the limit is set in", () => {
+    // 1.4 s of CPU across a 6.98 s run is a fifth of a core held busy throughout.
+    expect(formatMillicoresAgainstLimit(1400, 6980, 200)).toBe("201 / 200 m");
+    // An I/O-bound run: the same wall time, almost none of it spent on CPU.
+    expect(formatMillicoresAgainstLimit(120, 6980, 200)).toBe("17 / 200 m");
+    // One core, flat out.
+    expect(formatMillicoresAgainstLimit(5000, 5000, 1000)).toBe("1000 / 1000 m");
+  });
+
+  it("drops the limit when it is unknown", () => {
+    expect(formatMillicoresAgainstLimit(1400, 6980, null)).toBe("201 m");
+  });
+
+  it("says nothing rather than zero when the CPU was never measured", () => {
+    expect(formatMillicoresAgainstLimit(null, 6980, 200)).toBe("—");
+    // The stale-runner reading: a final sample taken after the cgroup was gone.
+    expect(formatMillicoresAgainstLimit(0, 6980, 200)).toBe("—");
+  });
+
+  it("does not divide by a duration it does not have", () => {
+    expect(formatMillicoresAgainstLimit(1400, null, 200)).toBe("—");
+    expect(formatMillicoresAgainstLimit(1400, 0, 200)).toBe("—");
   });
 });
 

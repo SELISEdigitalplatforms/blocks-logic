@@ -13,6 +13,7 @@ import {
   formatAbsoluteTime,
   formatDuration,
   formatMemoryAgainstLimit,
+  formatMillicoresAgainstLimit,
   formatRelativeTime,
   formatTimeOfDay,
   runnerSpanMs,
@@ -139,13 +140,21 @@ type RunDetailProps = {
   runId: string;
   /** The limit the run was given, so peak memory reads against it. */
   memoryLimitMb?: number | null;
+  /** Same, for CPU: the millicore limit the run's average CPU usage reads against. */
+  cpuLimitMillicores?: number | null;
   /** Loads a run's input into the Code tab's test panel. */
   onUseAsTestInput?: (input: string) => void;
   /** Renders the "‹ All runs" back-link in the same row as Replay/Cancel. */
   onBack?: () => void;
 };
 
-export const RunDetail = ({ runId, memoryLimitMb, onUseAsTestInput, onBack }: RunDetailProps) => {
+export const RunDetail = ({
+  runId,
+  memoryLimitMb,
+  cpuLimitMillicores,
+  onUseAsTestInput,
+  onBack,
+}: RunDetailProps) => {
   const { data: run, isLoading } = useGetRun({ runId });
   const { data: logsData, isLoading: isLogsLoading } = useGetRunLogs(runId, 0, 500);
   const { mutateAsync: replayAsync, isPending: isReplaying } = useReplayRun();
@@ -196,7 +205,14 @@ export const RunDetail = ({ runId, memoryLimitMb, onUseAsTestInput, onBack }: Ru
       label: "Peak memory",
       value: formatMemoryAgainstLimit(run.peakMemoryBytes, memoryLimitMb),
     },
-    { label: "CPU time", value: formatDuration(run.cpuUsageMs) },
+    {
+      // Millicores, not raw CPU time: the limit is set in millicores, so this is the figure that
+      // says whether the sandbox was throttled — the consumed time it is derived from stays in
+      // the hint, since that is the one that says how much work was actually done.
+      label: "CPU",
+      value: formatMillicoresAgainstLimit(run.cpuUsageMs, run.durationMs, cpuLimitMillicores),
+      hint: run.cpuUsageMs ? `${formatDuration(run.cpuUsageMs)} CPU time` : undefined,
+    },
     {
       label: "Attempts",
       value: `${run.attempt} / ${run.maxAttempts}`,

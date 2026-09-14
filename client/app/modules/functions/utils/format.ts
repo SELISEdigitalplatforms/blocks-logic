@@ -81,5 +81,30 @@ export const formatMemoryAgainstLimit = (
   return limitMb == null ? `${used} MB` : `${used} / ${limitMb} MB`;
 };
 
+/**
+ * "138 / 100 m" — the CPU a run actually used, averaged over its wall time, against the millicore
+ * limit it ran under.
+ *
+ * The runner records CPU as *consumed time*, a cumulative cgroup counter. That answers "how much
+ * work did it do" but not "was it starved", which is the question a limit expressed in millicores
+ * raises. Dividing by the sandbox's own stopwatch converts it into the unit the limit is set in:
+ * 1000 m is one core held busy for the whole run, so a figure pinned at the limit means the wall
+ * time went on waiting for CPU quota, and one far below it means the wall time went on I/O.
+ *
+ * Zero is treated as "not measured", not as "used no CPU": the runner reports null when no stats
+ * sample arrived and rounds anything it did measure up to at least 1 ms, so a literal 0 only ever
+ * comes from a runner build that read the container's final, already-torn-down sample.
+ */
+export const formatMillicoresAgainstLimit = (
+  cpuUsageMs?: number | null,
+  durationMs?: number | null,
+  limitMillicores?: number | null,
+): string => {
+  if (cpuUsageMs == null || cpuUsageMs <= 0) return "—";
+  if (durationMs == null || durationMs <= 0) return "—";
+  const used = Math.round((cpuUsageMs / durationMs) * 1000);
+  return limitMillicores == null ? `${used} m` : `${used} / ${limitMillicores} m`;
+};
+
 export const formatRunCount = (count?: number | null): string =>
   count == null ? "—" : count.toLocaleString();

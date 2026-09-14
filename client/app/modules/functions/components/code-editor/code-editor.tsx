@@ -18,6 +18,11 @@ type CodeEditorProps = {
   value: string;
   onChange?: (value: string) => void;
   readOnly?: boolean;
+  /**
+   * Any CSS length. `"100%"` makes the editor fill its container, which then has to carry a
+   * definite height of its own — Monaco reads the container's box, so a percentage against an
+   * auto-height parent collapses to nothing.
+   */
   height?: string | number;
   className?: string;
   /**

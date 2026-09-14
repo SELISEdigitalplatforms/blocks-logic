@@ -56,6 +56,19 @@ const rangeStart = (range: string, now: number): string => {
   return new Date(Math.floor(start / 60_000) * 60_000).toISOString();
 };
 
+/**
+ * The code card is sized to reach the bottom of the window instead of stopping at a fixed 520px,
+ * so a tall monitor shows more of the file. Everything above it is fixed chrome — the 60px app
+ * header, the breadcrumb, the title block and the tab strip — plus the page's own bottom padding,
+ * which is what this reserve adds up to. `max()` is the floor: on a short window, or a phone where
+ * the header block wraps onto extra rows, the card keeps a usable editor and scrolls with the page
+ * rather than collapsing. 400px is that floor less the card's own ~106px of padding, file tabs and
+ * footnote — it leaves the 280px of editor this tab has always guaranteed. The card is a flex
+ * column, so those two take their natural height and the editor takes whatever is left, which is
+ * why the reserve only has to account for what sits above the card and never for its insides.
+ */
+const CODE_CARD_HEIGHT = "max(400px, calc(100dvh - 264px))";
+
 const TAB_ORDER = ["code", "trigger", "output", "configuration", "runs", "versions"] as const;
 const TAB_LABELS: Record<(typeof TAB_ORDER)[number], string> = {
   code: "Code",
@@ -393,8 +406,11 @@ export const FunctionDetailPage = () => {
             value="code"
             className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]"
           >
-            <Card className="min-w-0 overflow-hidden">
-              <div className="flex items-center justify-between gap-3 border-b bg-surface-app pr-4">
+            <Card
+              className="flex min-w-0 flex-col overflow-hidden"
+              style={{ height: CODE_CARD_HEIGHT }}
+            >
+              <div className="flex shrink-0 items-center justify-between gap-3 border-b bg-surface-app pr-4">
                 <div className="flex">
                   {(["index.js", "package.json"] as const).map((file) => (
                     <button
@@ -417,26 +433,31 @@ export const FunctionDetailPage = () => {
                     : "pinned versions only · installed at deploy"}
                 </span>
               </div>
-              {activeFile === "index.js" ? (
-                <CodeEditor
-                  language="javascript"
-                  value={indexJs}
-                  onChange={setIndexJs}
-                  height="clamp(280px, 46vh, 520px)"
-                  className="overflow-hidden"
-                  // The tenant's own keys, so `ctx.env.` completes with what is actually bound.
-                  envKeys={variables.map((variable) => variable.key)}
-                />
-              ) : (
-                <CodeEditor
-                  language="json"
-                  value={packageJson}
-                  onChange={setPackageJson}
-                  height="clamp(280px, 46vh, 520px)"
-                  className="overflow-hidden"
-                />
-              )}
-              <p className="border-t bg-surface-app px-4 py-2.5 text-xs text-medium-emphasis">
+              {/* `min-h-0` so this row can shrink below the editor's content height: without it a
+                  flex item refuses to go under its min-content size and the card grows past the
+                  window instead of the editor scrolling inside it. */}
+              <div className="min-h-0 flex-1">
+                {activeFile === "index.js" ? (
+                  <CodeEditor
+                    language="javascript"
+                    value={indexJs}
+                    onChange={setIndexJs}
+                    height="100%"
+                    className="overflow-hidden"
+                    // The tenant's own keys, so `ctx.env.` completes with what is actually bound.
+                    envKeys={variables.map((variable) => variable.key)}
+                  />
+                ) : (
+                  <CodeEditor
+                    language="json"
+                    value={packageJson}
+                    onChange={setPackageJson}
+                    height="100%"
+                    className="overflow-hidden"
+                  />
+                )}
+              </div>
+              <p className="shrink-0 border-t bg-surface-app px-4 py-2.5 text-xs text-medium-emphasis">
                 Native <code className="font-mono">fetch()</code>, async/await and pinned npm
                 packages. Variables arrive as <code className="font-mono">ctx.env.NAME</code>.
               </p>
@@ -513,6 +534,7 @@ export const FunctionDetailPage = () => {
               <RunDetail
                 runId={queryParams.runId}
                 memoryLimitMb={limits.memoryMb}
+                cpuLimitMillicores={limits.cpuMillicores}
                 onBack={() => setQueryParams({ runId: "" })}
                 onUseAsTestInput={(input) => {
                   setTestInput(input);
