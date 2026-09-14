@@ -128,9 +128,24 @@ namespace Common.InternalService.Access
             try
             {
                 var tokenHandler = new JwtSecurityTokenHandler { MapInboundClaims = false };
-                var cacheKey = $"{PublicCertCachePrefix}{tenant.TenantId}";
+                if (!tokenHandler.CanReadToken(token))
+                {
+                    return (null, null);
+                }
+
+                // Impersonated tokens are signed by the ORIGINAL (root) tenant, not the tenant being acted in,
+                // so the certificate is picked from the token's own (still unverified) claims and the binding
+                // to the requested tenant is checked after the signature holds.
+                var jwt = tokenHandler.ReadJwtToken(token);
+                var signingTenant = ResolveSigningTenant(jwt, tenant);
+                if (signingTenant is null)
+                {
+                    return (null, null);
+                }
+
+                var cacheKey = $"{PublicCertCachePrefix}{signingTenant.TenantId}";
                 var certificateData = await _cacheClient.CacheDatabase().StringGetAsync(cacheKey).ConfigureAwait(false);
-                var validationParams = tenant.JwtTokenParameters;
+                var validationParams = signingTenant.JwtTokenParameters;
                 var publicCert = X509CertificateLoader.LoadPkcs12(certificateData, validationParams.PublicCertificatePassword);
                 var tokenValidationParameters = new TokenValidationParameters
                 {
@@ -143,6 +158,14 @@ namespace Common.InternalService.Access
                     SaveSigninToken = true,
                 };
                 var principal = tokenHandler.ValidateToken(token, tokenValidationParameters, out _);
+                if (!ImpersonatedTokenMatchesTenant(principal, tenantId, signingTenant.TenantId))
+                {
+                    _logger.LogWarning(
+                        "Endpoint access: impersonated token is not bound to tenant {TenantId} / signing tenant {SigningTenantId}.",
+                        tenantId, signingTenant.TenantId);
+                    return (null, null);
+                }
+
                 return (principal, token);
             }
             catch (Exception ex)
@@ -150,6 +173,40 @@ namespace Common.InternalService.Access
                 _logger.LogWarning(ex, "Endpoint access: bearer token validation failed. TenantId={TenantId}", tenantId);
                 return (null, null);
             }
+        }
+
+        /// <summary>
+        /// Picks the tenant whose public certificate must verify <paramref name="jwt"/>. The unverified claims
+        /// are a key-selection hint only; the signature is checked afterwards. An impersonated token with a
+        /// missing or unknown <c>original_tenant_id</c> fails closed.
+        /// </summary>
+        private Tenant? ResolveSigningTenant(JwtSecurityToken jwt, Tenant requestedTenant)
+        {
+            var impersonated = jwt.Claims.FirstOrDefault(c => c.Type == BlocksContext.IMPERSONATED_CLAIM)?.Value == "true";
+            if (!impersonated)
+            {
+                return requestedTenant;
+            }
+
+            var originalTenantId = jwt.Claims.FirstOrDefault(c => c.Type == BlocksContext.ORIGINAL_TENANT_ID_CLAIM)?.Value;
+            return string.IsNullOrWhiteSpace(originalTenantId) ? null : _tenants.GetTenantByID(originalTenantId);
+        }
+
+        /// <summary>
+        /// After signature validation an impersonated token must still target the requested tenant and name
+        /// the signing tenant as <c>original_tenant_id</c>; otherwise a root-tenant token minted for tenant A
+        /// could be replayed against tenant B. Non-impersonated tokens skip this: their certificate already
+        /// ties them to the requested tenant.
+        /// </summary>
+        private static bool ImpersonatedTokenMatchesTenant(ClaimsPrincipal principal, string requestedTenantId, string signingTenantId)
+        {
+            if (!EndpointAccessEvaluator.GetImpersonated(principal))
+            {
+                return true;
+            }
+
+            return string.Equals(EndpointAccessEvaluator.GetClaimValue(principal, BlocksContext.TENANT_ID_CLAIM), requestedTenantId, StringComparison.Ordinal)
+                && string.Equals(EndpointAccessEvaluator.GetClaimValue(principal, BlocksContext.ORIGINAL_TENANT_ID_CLAIM), signingTenantId, StringComparison.Ordinal);
         }
 
         public BlocksContext? BuildContext(HttpRequest request, string tenantId, ClaimsPrincipal principal, string? rawToken)

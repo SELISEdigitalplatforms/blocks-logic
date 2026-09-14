@@ -33,7 +33,7 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
         required: true,
         searchable: true,
         options: () =>
-          proxyService.getAll({ enabled: true }).then(({ items }) =>
+          proxyService.getAll({ isActive: true }).then(({ items }) =>
             items.map((proxy) => ({
               value: [proxy.id, proxy.slug].join(SEP),
               label: proxy.name,
