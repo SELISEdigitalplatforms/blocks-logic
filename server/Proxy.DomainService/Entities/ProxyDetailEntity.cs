@@ -1,4 +1,5 @@
 using Blocks.Genesis;
+using Common.InternalService.Access;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 
@@ -34,6 +35,15 @@ namespace Proxy.DomainService.Entities
 
         /// <summary>Whether the proxy currently accepts traffic. Toggled via the Toggle action only.</summary>
         public bool Enabled { get; set; } = true;
+
+        /// <summary>
+        /// Who can call the gateway route ("Who can call it" in the console). One policy per proxy: every
+        /// declared route shares it, because the gateway is a single catch-all action and the routes are
+        /// data, not endpoints of their own. Missing on rows written before the field existed, which the
+        /// default resolves to "Blocks token required, any signed-in caller" — exactly what those rows
+        /// enforced through the framework's <c>[Authorize]</c> before. Never public by omission.
+        /// </summary>
+        public EndpointAccessPolicy Access { get; set; } = EndpointAccessPolicy.RequireToken();
 
         /// <summary>Headers Blocks attaches when forwarding a call.</summary>
         public List<ProxyKeyValue> Headers { get; set; } = new();

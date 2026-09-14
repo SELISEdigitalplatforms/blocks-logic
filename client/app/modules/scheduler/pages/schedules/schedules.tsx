@@ -19,7 +19,8 @@ export const Schedules = () => {
   });
   const schedules = data?.data || [];
   const isListLoading = isLoading || isFetching;
-  const isEmpty = !isListLoading && schedules.length === 0;
+  const isFiltered = !!queryParams.search;
+  const isEmpty = !isListLoading && schedules.length === 0 && !isFiltered;
 
   const handleCreateSchedule = () => {
     navigate(scoped("schedule/new"));
@@ -53,6 +54,7 @@ export const Schedules = () => {
             schedules={schedules}
             isLoading={isListLoading}
             onCreateSchedule={handleCreateSchedule}
+            isFiltered={isFiltered}
           />
 
           {!!data?.totalCount && (

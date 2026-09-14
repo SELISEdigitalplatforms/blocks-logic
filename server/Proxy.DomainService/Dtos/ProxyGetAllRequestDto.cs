@@ -6,8 +6,8 @@ namespace Proxy.DomainService.Dtos
         /// <summary>Case-insensitive substring match on name and slug.</summary>
         public string? Search { get; set; }
 
-        /// <summary>When set, restricts to enabled (<c>true</c>) or disabled (<c>false</c>) proxies.</summary>
-        public bool? Enabled { get; set; }
+        /// <summary>When set, restricts to active (<c>true</c>) or inactive (<c>false</c>) proxies.</summary>
+        public bool? IsActive { get; set; }
 
         /// <summary>1..200, default 20.</summary>
         public int PageSize { get; set; } = 20;

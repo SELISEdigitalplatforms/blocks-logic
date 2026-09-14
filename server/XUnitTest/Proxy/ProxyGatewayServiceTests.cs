@@ -1,5 +1,6 @@
-using System.Net;
+﻿using System.Net;
 using System.Text;
+using Common.InternalService.Access;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -625,6 +626,68 @@ namespace XUnitTest.Proxy
             result.AllowedMethods.Should().Equal("GET", "POST");
             _handler.CallCount.Should().Be(0);
             row!.Outcome.Should().Be(ProxyExecutionOutcome.MethodNotAllowed);
+        }
+
+        // ---------- access policy ----------
+
+        [Fact]
+        public async Task Forward_ForbiddenByAccessPolicy_Returns403_WritesRow_NoUpstreamCall()
+        {
+            var proxy = Proxy();
+            GivenProxy(proxy);
+
+            ProxyExecutionEntity? row = null;
+            _executionRepo.Setup(r => r.InsertAsync(It.IsAny<ProxyExecutionEntity>()))
+                .Callback<ProxyExecutionEntity>(e => row = e).Returns(Task.CompletedTask);
+
+            var result = await _service.ForwardAsync(Request("GET", b =>
+            {
+                b.Slug = proxy.Slug;
+                b.ForbiddenReason = "The caller does not hold the required roles or permissions.";
+            }));
+
+            result.StatusCode.Should().Be(403);
+            result.Outcome.Should().Be(ProxyExecutionOutcome.Forbidden);
+            result.ErrorMessage.Should().Contain("roles or permissions");
+            _handler.CallCount.Should().Be(0);
+            row!.Outcome.Should().Be(ProxyExecutionOutcome.Forbidden);
+            row.StatusCode.Should().Be(403);
+            row.ProxyId.Should().Be(proxy.ItemId);
+        }
+
+        [Fact]
+        public async Task Forward_ForbiddenOnDisabledProxy_StillAnswers404()
+        {
+            // The policy refusal only applies once the proxy is known to be live; a paused proxy keeps
+            // hiding behind 404 regardless of who asked.
+            var proxy = Proxy(p => p.Enabled = false);
+            GivenProxy(proxy);
+            _executionRepo.Setup(r => r.InsertAsync(It.IsAny<ProxyExecutionEntity>())).Returns(Task.CompletedTask);
+
+            var result = await _service.ForwardAsync(Request("GET", b =>
+            {
+                b.Slug = proxy.Slug;
+                b.ForbiddenReason = "refused";
+            }));
+
+            result.StatusCode.Should().Be(404);
+            result.Outcome.Should().Be(ProxyExecutionOutcome.ProxyNotFound);
+        }
+
+        [Fact]
+        public async Task Resolve_ReturnsTheStoredAccessPolicy_OrNullForUnknownSlug()
+        {
+            var proxy = Proxy(p =>
+            {
+                p.Access.Kind = EndpointAccessKind.Public;
+            });
+            GivenProxy(proxy);
+
+            var resolved = await _service.ResolveAsync(Tenant, proxy.Slug);
+            resolved!.Access.IsPublic.Should().BeTrue();
+            resolved.ProxyId.Should().Be(proxy.ItemId);
+
+            (await _service.ResolveAsync(Tenant, "nope")).Should().BeNull();
         }
 
         // ---------- C4 ----------
@@ -1396,6 +1459,7 @@ namespace XUnitTest.Proxy
             public string? ContentType { get; set; }
             public bool IsTest { get; set; }
             public ProxyResolvedConfig? ResolvedConfig { get; set; }
+            public string? ForbiddenReason { get; set; }
 
             public ProxyForwardRequest Build() => new()
             {
@@ -1403,6 +1467,7 @@ namespace XUnitTest.Proxy
                 UserId = "user-1",
                 Slug = Slug,
                 ResolvedConfig = ResolvedConfig,
+                ForbiddenReason = ForbiddenReason,
                 Method = Method,
                 PathSuffix = PathSuffix,
                 IncomingQuery = IncomingQuery,

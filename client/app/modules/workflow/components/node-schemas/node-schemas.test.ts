@@ -14,6 +14,8 @@ const {
   getOrganizations,
   getRoles,
   getPermissions,
+  getProxies,
+  getProxy,
 } = vi.hoisted(() => ({
   getAgents: vi.fn(),
   fetchEmailConfigs: vi.fn(),
@@ -25,6 +27,8 @@ const {
   getOrganizations: vi.fn(),
   getRoles: vi.fn(),
   getPermissions: vi.fn(),
+  getProxies: vi.fn(),
+  getProxy: vi.fn(),
 }));
 
 vi.mock("@/modules/workflow/services/agent.service", () => ({
@@ -43,6 +47,9 @@ vi.mock("@blocks-workflow/services/iam.service", () => ({
   authClientService: { clients: { getClientCredentials } },
   iamService: { getOrganizations, getRoles, getPermissions },
 }));
+vi.mock("@/modules/proxy/services/proxy.service", () => ({
+  proxyService: { getAll: getProxies, get: getProxy },
+}));
 
 import { useProjectStore } from "@seliseblocks/genesis-os";
 import { NodeSchemasDefinition } from "./node-schemas";
@@ -54,6 +61,7 @@ import { NodeSchemaActionAiAgentV1 } from "./node-schema-action-aiAgent-v1";
 import { NodeSchemaActionSendMailV1 } from "./node-schema-action-sendMail-v1";
 import { NodeSchemaActionHttpRequestV1 } from "./node-schema-action-httpRequest-v1";
 import { NodeSchemaActionDataActionV1 } from "./node-schema-action-dataAction-v1";
+import { NodeSchemaActionProxy } from "./node-schema-action-proxy";
 import { NodeSchemaTransformSetFieldV1 } from "./node-schema-transform-setfield-v1";
 import { NodeSchemaTransformCodeV1 } from "./node-schema-transform-code-v1";
 import { NodeSchemaLogicIfV1 } from "./node-schema-logic-if-v1";
@@ -91,6 +99,7 @@ describe("NodeSchemasDefinition registry", () => {
         "actionsendMailv1",
         "actionhttpRequestv1",
         "actiondataActionv1",
+        "actionproxyv1",
         "logicifv1",
       ]),
     );
@@ -745,6 +754,42 @@ describe("data action v1", () => {
     const params = out.parameters as AnyRec;
     expect(params.projectShortKey).toBe("slug-1");
     expect("apiBaseUrl" in params).toBe(true);
+  });
+});
+
+describe("action proxy v1", () => {
+  it("loads only active proxies through the current list filter", async () => {
+    getProxies.mockResolvedValue({
+      items: [
+        {
+          id: "p1",
+          slug: "stripe",
+          name: "Stripe",
+        },
+      ],
+      totalCount: 1,
+    });
+
+    const opts = field(NodeSchemaActionProxy, "proxy_composite").options;
+    expect(await opts({}, {})).toEqual([{ value: "p1:::stripe", label: "Stripe" }]);
+    expect(getProxies).toHaveBeenCalledWith({ isActive: true });
+  });
+
+  it("route options fall back to the base path when a proxy has no route allowlist", async () => {
+    getProxy.mockResolvedValue({
+      id: "p1",
+      slug: "stripe",
+      name: "Stripe",
+      methods: ["GET", "POST"],
+      routes: [],
+    });
+
+    const opts = field(NodeSchemaActionProxy, "route_composite").options;
+    expect(await opts({ proxyId: "p1" }, {})).toEqual([
+      { value: "GET:::", label: "GET /" },
+      { value: "POST:::", label: "POST /" },
+    ]);
+    expect(getProxy).toHaveBeenCalledWith("p1");
   });
 });
 

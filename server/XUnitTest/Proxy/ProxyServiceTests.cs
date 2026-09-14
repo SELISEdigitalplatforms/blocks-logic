@@ -285,6 +285,91 @@ namespace XUnitTest.Proxy
             result.TotalCount.Should().Be(0);
         }
 
+        // ---------- GetAll : Search passthrough ----------
+        [Fact]
+        public async Task GetAll_PassesSearchThroughToRepository()
+        {
+            _proxyRepo.Setup(r => r.GetAllAsync(Tenant, "a.b+c", null, 20, 0))
+                .ReturnsAsync(new List<ProxyDetailEntity>());
+            _proxyRepo.Setup(r => r.CountAsync(Tenant, "a.b+c", null)).ReturnsAsync(0);
+
+            var result = await _service.GetAllAsync(Tenant, new ProxyGetAllRequestDto { Search = "a.b+c" });
+
+            result.TotalCount.Should().Be(0);
+            _proxyRepo.Verify(r => r.GetAllAsync(Tenant, "a.b+c", null, 20, 0), Times.Once);
+        }
+
+        // ---------- GetAll : IsActive passthrough ----------
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task GetAll_PassesIsActiveThroughToRepository(bool isActive)
+        {
+            _proxyRepo.Setup(r => r.GetAllAsync(Tenant, null, isActive, 20, 0))
+                .ReturnsAsync(new List<ProxyDetailEntity>());
+            _proxyRepo.Setup(r => r.CountAsync(Tenant, null, isActive)).ReturnsAsync(0);
+
+            await _service.GetAllAsync(Tenant, new ProxyGetAllRequestDto { IsActive = isActive });
+
+            _proxyRepo.Verify(r => r.GetAllAsync(Tenant, null, isActive, 20, 0), Times.Once);
+            _proxyRepo.Verify(r => r.CountAsync(Tenant, null, isActive), Times.Once);
+        }
+
+        [Fact]
+        public async Task GetAll_IsActiveOmitted_PassesNullThroughToRepository()
+        {
+            _proxyRepo.Setup(r => r.GetAllAsync(Tenant, null, null, 20, 0))
+                .ReturnsAsync(new List<ProxyDetailEntity>());
+            _proxyRepo.Setup(r => r.CountAsync(Tenant, null, null)).ReturnsAsync(0);
+
+            await _service.GetAllAsync(Tenant, new ProxyGetAllRequestDto());
+
+            _proxyRepo.Verify(r => r.GetAllAsync(Tenant, null, null, 20, 0), Times.Once);
+        }
+
+        // ---------- GetAll : Search + IsActive combined ----------
+        [Fact]
+        public async Task GetAll_CombinesSearchAndIsActive()
+        {
+            _proxyRepo.Setup(r => r.GetAllAsync(Tenant, "stripe", true, 20, 0))
+                .ReturnsAsync(new List<ProxyDetailEntity> { Existing() });
+            _proxyRepo.Setup(r => r.CountAsync(Tenant, "stripe", true)).ReturnsAsync(1);
+
+            var result = await _service.GetAllAsync(
+                Tenant, new ProxyGetAllRequestDto { Search = "stripe", IsActive = true });
+
+            result.TotalCount.Should().Be(1);
+            _proxyRepo.Verify(r => r.GetAllAsync(Tenant, "stripe", true, 20, 0), Times.Once);
+        }
+
+        // ---------- GetAll : paging clamp bounds ----------
+        [Theory]
+        [InlineData(0, 20)]
+        [InlineData(-5, 20)]
+        [InlineData(500, 200)]
+        public async Task GetAll_ClampsPageSize(int requestedPageSize, int expectedPageSize)
+        {
+            _proxyRepo.Setup(r => r.GetAllAsync(Tenant, null, null, expectedPageSize, 0))
+                .ReturnsAsync(new List<ProxyDetailEntity>());
+            _proxyRepo.Setup(r => r.CountAsync(Tenant, null, null)).ReturnsAsync(0);
+
+            await _service.GetAllAsync(Tenant, new ProxyGetAllRequestDto { PageSize = requestedPageSize });
+
+            _proxyRepo.Verify(r => r.GetAllAsync(Tenant, null, null, expectedPageSize, 0), Times.Once);
+        }
+
+        [Fact]
+        public async Task GetAll_ClampsNegativePageNumberToZero()
+        {
+            _proxyRepo.Setup(r => r.GetAllAsync(Tenant, null, null, 20, 0))
+                .ReturnsAsync(new List<ProxyDetailEntity>());
+            _proxyRepo.Setup(r => r.CountAsync(Tenant, null, null)).ReturnsAsync(0);
+
+            await _service.GetAllAsync(Tenant, new ProxyGetAllRequestDto { PageNumber = -3 });
+
+            _proxyRepo.Verify(r => r.GetAllAsync(Tenant, null, null, 20, 0), Times.Once);
+        }
+
         // ---------- Get : H9 ----------
         [Fact]
         public async Task Get_Known_ReturnsDetailWithPathAndUnmaskedUpstream()

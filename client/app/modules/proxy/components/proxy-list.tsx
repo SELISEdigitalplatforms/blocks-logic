@@ -1,7 +1,16 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { useProjectStore, useScopedPath } from "@seliseblocks/genesis-os";
-import { ArrowRightFromLine, EllipsisVertical, Pause, Pen, Play, Plus, Trash } from "lucide-react";
+import {
+  ArrowRightFromLine,
+  EllipsisVertical,
+  Pause,
+  Pen,
+  Play,
+  Plus,
+  Search,
+  Trash,
+} from "lucide-react";
 import { ProxyIcon } from "@/constants/navigation-menus";
 import { Button } from "@/components/ui-kits/button/button";
 import {
@@ -33,6 +42,9 @@ type Props = {
   isLoading: boolean;
   /** Lets the list screen step back a page when the deleted row was the page's last one. */
   onProxyDeleted?: () => void;
+  /** True when a search term or status filter is narrowing the list, so a zero-row result is
+   * "no matches" rather than "nothing has ever been created" — the two need different copy. */
+  isFiltered?: boolean;
 };
 
 const VISIBLE_METHOD_COUNT = 2;
@@ -49,7 +61,7 @@ const ProxyListSkeleton = () => (
   </>
 );
 
-export const ProxyList = ({ proxies, isLoading, onProxyDeleted }: Props) => {
+export const ProxyList = ({ proxies, isLoading, onProxyDeleted, isFiltered }: Props) => {
   const navigate = useNavigate();
   const selectedProject = useProjectStore().selectedProject;
   const scoped = useScopedPath();
@@ -73,6 +85,19 @@ export const ProxyList = ({ proxies, isLoading, onProxyDeleted }: Props) => {
   }
 
   if (!proxies.length) {
+    if (isFiltered) {
+      return (
+        <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-12 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <Search className="h-7 w-7" />
+          </div>
+          <h3 className="mt-5 text-lg font-semibold text-high-emphasis">No proxies found</h3>
+          <p className="mt-2 max-w-md text-sm text-muted-foreground">
+            No proxies match your search or filter. Try adjusting them.
+          </p>
+        </div>
+      );
+    }
     return (
       <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-12 text-center">
         <div className="flex h-14 w-14 items-center justify-center rounded-md bg-primary/10 text-primary">

@@ -431,9 +431,12 @@
             <item><b>Data plane</b> (Phase 2) — <see cref="M:Utilities.Api.Controllers.ProxiesController.Gateway(System.String,System.String)"/> at
             <c>{METHOD} /api/proxy/gateway/{slug}/{**path}</c>, the path a tenant's client calls instead of the
             vendor. That route is pinned absolutely rather than derived from the convention, because it is a
-            published contract (see the remarks on <see cref="M:Utilities.Api.Controllers.ProxiesController.Gateway(System.String,System.String)"/>). Like every other action it is
-            <see cref="T:Microsoft.AspNetCore.Authorization.AuthorizeAttribute"/>: the framework's bearer handler already resolves the tenant from the
-            <c>x-blocks-key</c> header and validates the token against that tenant's certificate.</item>
+            published contract (see the remarks on <see cref="M:Utilities.Api.Controllers.ProxiesController.Gateway(System.String,System.String)"/>). Unlike every other action it is
+            <see cref="T:Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute"/>: who may call a proxy ("Who can call it" — public, or a Blocks
+            token optionally narrowed by roles / permissions) is stored per proxy, so the action resolves the
+            tenant from <c>x-blocks-key</c> itself and hands the request to the shared
+            <see cref="T:Common.InternalService.Access.IEndpointAccessAuthorizer"/>, which validates the token against that tenant's certificate
+            and evaluates the stored policy.</item>
             </list>
             <para>
             A route id always wins over the same id supplied in the body or query string: the URL identifies the
@@ -454,13 +457,16 @@
             </para>
             </summary>
         </member>
-        <member name="M:Utilities.Api.Controllers.ProxiesController.#ctor(Proxy.DomainService.Services.IProxyService,Proxy.DomainService.Services.IProxyVersionService,Proxy.DomainService.Services.IProxyTestService,Proxy.DomainService.Services.IProxyExecutionService,Proxy.DomainService.Services.IProxyGatewayService,Microsoft.Extensions.Logging.ILogger{Utilities.Api.Controllers.ProxiesController})">
-            <summary>Takes the four control-plane services plus the data-plane gateway service.</summary>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.#ctor(Proxy.DomainService.Services.IProxyService,Proxy.DomainService.Services.IProxyVersionService,Proxy.DomainService.Services.IProxyTestService,Proxy.DomainService.Services.IProxyExecutionService,Proxy.DomainService.Services.IProxyGatewayService,Common.InternalService.Access.IEndpointAccessAuthorizer,Microsoft.Extensions.Logging.ILogger{Utilities.Api.Controllers.ProxiesController})">
+            <summary>
+            Takes the four control-plane services, the data-plane gateway service, and the shared access
+            authorizer that enforces each proxy's "Who can call it" policy on the gateway route.
+            </summary>
         </member>
         <member name="M:Utilities.Api.Controllers.ProxiesController.List(Proxy.DomainService.Dtos.ProxyGetAllRequestDto)">
             <summary>
             <c>GET /api/Proxies</c> — the console list page: the tenant's proxies newest-created first,
-            optionally narrowed by a name / slug search term and by enabled state. A list projection: full
+            optionally narrowed by a name / slug search term and by isActive state. A list projection: full
             upstream and header rows are not included.
             </summary>
         </member>
@@ -523,7 +529,7 @@
         <member name="M:Utilities.Api.Controllers.ProxiesController.ListExecutions(System.String,Proxy.DomainService.Dtos.ProxyGetExecutionsRequestDto)">
             <summary>
             <c>GET /api/Proxies/{proxyId}/executions</c> — SPEC3 §3.1, the <em>Request logs</em> list for one
-            proxy: last 24h, filtered by <c>statusClass</c>, newest-first, paged, or a Live tail when
+            proxy: all-time, filtered by <c>statusClass</c>, newest-first, paged, or a Live tail when
             <c>afterId</c> is supplied. Returns 400 <c>PROXY_VALIDATION</c> on a bad field and 404
             <c>PROXY_NOT_FOUND</c> for a genuinely unknown proxy id (a deleted proxy whose rows remain still
             works).
@@ -548,9 +554,12 @@
         <member name="M:Utilities.Api.Controllers.ProxiesController.Gateway(System.String,System.String)">
             <summary>
             Data plane (Phase 2). A tenant's client calls <c>{METHOD} /api/proxy/gateway/{slug}/{**path}</c>
-            instead of the vendor; the framework's bearer handler authenticates the caller (tenant from the
-            <c>x-blocks-key</c> header, token validated against that tenant's certificate) before this action
-            runs, so an unauthenticated call is answered 401 and writes NO execution row (C1). Blocks then
+            instead of the vendor. The tenant comes from the <c>x-blocks-key</c> header (or the tenant claim of a
+            presented token); the proxy's stored <see cref="P:Proxy.DomainService.Services.ProxyResolvedConfig.Access"/> policy then decides
+            whether a Blocks token is required and which roles / permissions the caller must hold. A missing
+            tenant or a missing / invalid token when one is required is answered 401 and writes NO execution
+            row (C1); a valid token that fails the rules is answered 403 and DOES write a row
+            (<see cref="F:Proxy.DomainService.Entities.ProxyExecutionOutcome.Forbidden"/>), like a probe of an undeclared route. Blocks then
             rebuilds the request against the stored upstream, attaches ONLY the configured headers / query
             params, calls the third party server-side, relays the response, and records one
             <see cref="T:Proxy.DomainService.Entities.ProxyExecutionEntity"/> per attempt.

@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <InternalsVisibleTo Include="XUnitTest" />
@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <PackageReference Include="MongoDB.Driver" />
+    <ProjectReference Include="..\Common.InternalService\Common.InternalService.csproj" />
     <PackageReference Include="SeliseBlocks.Genesis.OS" />
     <!-- On-the-fly {{$VAR.name}} resolution reads the tenant's Blocks Secrets via the in-process ISecretService. -->
     <PackageReference Include="SeliseBlocks.Secrets.OS" />

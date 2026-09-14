@@ -38,6 +38,7 @@ import {
   Copy,
   Download,
   EllipsisVertical,
+  Search,
   Trash,
   Workflow,
 } from "lucide-react";
@@ -101,12 +102,27 @@ const WorkflowEmptyState = () => (
   </div>
 );
 
+const WorkflowNoResultsState = () => (
+  <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-12 text-center">
+    <div className="flex h-14 w-14 items-center justify-center rounded-md bg-primary/10 text-primary">
+      <Search className="h-7 w-7" />
+    </div>
+    <h4 className="mt-5 text-lg font-semibold text-high-emphasis">No workflows found</h4>
+    <p className="mt-2 max-w-md text-sm text-muted-foreground">
+      No workflows match your search or filter. Try adjusting them.
+    </p>
+  </div>
+);
+
 type WorkflowListProps = {
   workflow: WorkflowSummary[];
   isLoading: boolean;
+  /** True when a search term or status filter is narrowing the list, so a zero-row result is
+   * "no matches" rather than "nothing has ever been created" — the two need different copy. */
+  isFiltered?: boolean;
 };
 
-export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
+export const WorkflowList = ({ workflow, isLoading, isFiltered }: WorkflowListProps) => {
   const navigate = useNavigate();
   const [modal, setModal] = useState<{
     type: "delete" | "publish" | "publish_new" | "unpublish" | "duplicate" | "rename" | null;
@@ -396,7 +412,11 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
   return (
     <>
       {!isLoading && !workflow.length ? (
-        <WorkflowEmptyState />
+        isFiltered ? (
+          <WorkflowNoResultsState />
+        ) : (
+          <WorkflowEmptyState />
+        )
       ) : (
         <Table className="border-separate border-spacing-y-4">
           <TableHeader className="[&_tr]:border-0">

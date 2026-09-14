@@ -23,7 +23,8 @@ export const Workflows = () => {
   });
   const workflows = data?.data || [];
   const isListLoading = isLoading || isFetching;
-  const isEmpty = !isListLoading && workflows.length === 0;
+  const isFiltered = !!queryParams.search || queryParams.isPublished !== "all";
+  const isEmpty = !isListLoading && workflows.length === 0 && !isFiltered;
 
   return (
     <>
@@ -44,7 +45,7 @@ export const Workflows = () => {
             </CardHeader>
           )}
           <CardContent>
-            <WorkflowList workflow={workflows} isLoading={isListLoading} />
+            <WorkflowList workflow={workflows} isLoading={isListLoading} isFiltered={isFiltered} />
 
             {!!data?.totalCount && (
               <div className="mt-5 flex justify-end">

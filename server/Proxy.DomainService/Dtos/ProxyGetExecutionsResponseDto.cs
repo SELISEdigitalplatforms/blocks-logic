@@ -55,6 +55,9 @@ namespace Proxy.DomainService.Dtos
         /// <summary>Display name of the calling user at call time, or <c>null</c>.</summary>
         public string? CallerUserName { get; set; }
 
+        /// <summary><c>true</c> when the call was made under an IAM impersonation token.</summary>
+        public bool CallerImpersonated { get; set; }
+
         /// <summary>The route template that matched, or <c>null</c> when the call was rejected before matching.</summary>
         public string? RoutePath { get; set; }
     }

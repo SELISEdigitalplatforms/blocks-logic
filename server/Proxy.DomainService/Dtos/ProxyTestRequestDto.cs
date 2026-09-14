@@ -60,5 +60,11 @@ namespace Proxy.DomainService.Dtos
 
         /// <summary>Response field paths kept when <see cref="ResponseMode"/> is <c>"Select"</c>.</summary>
         public List<string>? ResponseInclude { get; set; }
+
+        /// <summary>
+        /// The draft's "Who can call it" setting. Validated like Create / Update so a bad draft fails Test the
+        /// same way it would fail Save; it is not enforced on the Test call itself (the console user is the caller).
+        /// </summary>
+        public ProxyAccessInputDto? Access { get; set; }
     }
 }

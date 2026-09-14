@@ -17,6 +17,7 @@ import { getProxyClientUrl } from "../constants";
 import { useCreateProxy, useSecrets, useSendProxyTestRequest, useUpdateProxy } from "../hooks";
 import { Proxy, ProxyFormValues, ProxyRoute, ProxyTestResponse } from "../types";
 import {
+  defaultProxyAccess,
   deriveProxyMethods,
   proxyFormDefaultValues,
   proxyFormSchema,
@@ -25,6 +26,7 @@ import {
   toCredentialRows,
 } from "../utils";
 import { KeyValueFieldArray } from "./key-value-field-array";
+import { ProxyAccessCard } from "./proxy-access-card";
 import { ProxyFormHeader } from "./proxy-form-header";
 import { ProxyRoutesCard, blankRoute } from "./proxy-routes-card";
 import { useProjectStore } from "@seliseblocks/genesis-os";
@@ -103,6 +105,8 @@ export const ProxyForm = ({
       query,
       methods: deriveProxyMethods(values.routes ?? []),
       routes: values.routes ?? [],
+      // One policy for every endpoint of the proxy.
+      access: values.access ?? defaultProxyAccess(),
       // Per-endpoint only; nothing at proxy level.
       bodyMerge: [],
       bodyMode: "passthrough",
@@ -141,6 +145,7 @@ export const ProxyForm = ({
         query: proxy.query,
         credentials: toCredentialRows(proxy.headers, proxy.query),
         routes,
+        access: proxy.access ?? defaultProxyAccess(),
       });
     } else if (!isEdit && seededForId.current !== "new") {
       seededForId.current = "new";
@@ -242,6 +247,9 @@ export const ProxyForm = ({
             />
           </CardContent>
         </Card>
+
+        {/* Who can call it: one policy shared by every endpoint below. */}
+        <ProxyAccessCard control={form.control} />
 
         {/* Endpoints: every per-call setting, on the call it belongs to. */}
         <Card className="rounded-xl">

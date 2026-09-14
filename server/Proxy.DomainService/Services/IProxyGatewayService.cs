@@ -10,6 +10,14 @@ namespace Proxy.DomainService.Services
     /// </summary>
     public interface IProxyGatewayService
     {
+        /// <summary>
+        /// Loads the proxy behind <paramref name="slug"/> for <paramref name="tenantId"/> as the forwarder's
+        /// resolved view, or <c>null</c> when no such proxy exists. The controller calls this first so it can
+        /// enforce the proxy's <see cref="ProxyResolvedConfig.Access"/> policy, then hands the same config to
+        /// <see cref="ForwardAsync"/> via <see cref="ProxyForwardRequest.ResolvedConfig"/> so the row is read once.
+        /// </summary>
+        Task<ProxyResolvedConfig?> ResolveAsync(string tenantId, string slug, CancellationToken cancellationToken = default);
+
         Task<ProxyForwardResult> ForwardAsync(ProxyForwardRequest request, CancellationToken cancellationToken = default);
     }
 }

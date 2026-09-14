@@ -23,7 +23,6 @@ namespace XUnitTest.Proxy
 
         private static readonly DateTime Now = new(2026, 9, 7, 10, 15, 0, DateTimeKind.Utc);
         private static readonly DateTime InWindow = Now.AddHours(-1);
-        private static readonly DateTime OutOfWindow = Now.AddHours(-25);
 
         private readonly Mock<IProxyExecutionRepository> _executions = new();
         private readonly Mock<IProxyRepository> _proxies = new();
@@ -202,10 +201,8 @@ namespace XUnitTest.Proxy
             result.AsOfUtc.Should().Be(pinned);
         }
 
-        [Theory] // A future pin would let new rows leak in; one older than the window would return nothing.
-        [InlineData(60)]      // minutes into the future
-        [InlineData(-60 * 48)] // two days ago, well outside the 24h window
-        public async Task GetExecutions_WithAsOfOutOfRange_ClampsToNowInsteadOfFailing(int offsetMinutes)
+        [Fact] // A future pin would let new rows leak in, so it clamps to now.
+        public async Task GetExecutions_WithAsOfInTheFuture_ClampsToNowInsteadOfFailing()
         {
             DateTime? seenAsOf = null;
             _executions.Setup(r => r.CountAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), It.IsAny<DateTime>()))
@@ -218,20 +215,42 @@ namespace XUnitTest.Proxy
             var result = await _service.GetExecutionsAsync(Tenant, new ProxyGetExecutionsRequestDto
             {
                 ProxyId = ProxyId,
-                AsOfUtc = Now.AddMinutes(offsetMinutes),
+                AsOfUtc = Now.AddMinutes(60),
             });
 
             result.HttpStatus.Should().Be(200);
             seenAsOf.Should().Be(Now);
         }
 
+        [Fact] // The list is all-time now, so a pin from days ago is honoured verbatim, not clamped.
+        public async Task GetExecutions_WithAsOfDaysAgo_IsHonouredVerbatim()
+        {
+            var pinned = Now.AddDays(-10);
+            DateTime? seenAsOf = null;
+            _executions.Setup(r => r.CountAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), It.IsAny<DateTime>()))
+                .ReturnsAsync(0);
+            _executions.Setup(r => r.GetPageAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), It.IsAny<DateTime>(), 25, 0))
+                .Callback<string, string, ProxyStatusClass, DateTime, DateTime, int, int>(
+                    (_, _, _, _, asOf, _, _) => seenAsOf = asOf)
+                .ReturnsAsync(new List<ProxyExecutionEntity>());
+
+            var result = await _service.GetExecutionsAsync(Tenant, new ProxyGetExecutionsRequestDto
+            {
+                ProxyId = ProxyId,
+                AsOfUtc = pinned,
+            });
+
+            result.HttpStatus.Should().Be(200);
+            seenAsOf.Should().Be(pinned);
+        }
+
 
         [Fact] // H2
         public async Task GetExecutions_FiltersPagesAndReportsUnpagedTotal()
         {
-            _executions.Setup(r => r.CountAsync(Tenant, ProxyId, ProxyStatusClass.FiveXx, Now.AddHours(-24), It.IsAny<DateTime>()))
+            _executions.Setup(r => r.CountAsync(Tenant, ProxyId, ProxyStatusClass.FiveXx, It.IsAny<DateTime>(), It.IsAny<DateTime>()))
                 .ReturnsAsync(1);
-            _executions.Setup(r => r.GetPageAsync(Tenant, ProxyId, ProxyStatusClass.FiveXx, Now.AddHours(-24), It.IsAny<DateTime>(), 25, 0))
+            _executions.Setup(r => r.GetPageAsync(Tenant, ProxyId, ProxyStatusClass.FiveXx, It.IsAny<DateTime>(), It.IsAny<DateTime>(), 25, 0))
                 .ReturnsAsync(new List<ProxyExecutionEntity> { Row("e4", 500, "POST", 300) });
 
             var result = await _service.GetExecutionsAsync(Tenant, new ProxyGetExecutionsRequestDto
@@ -291,11 +310,33 @@ namespace XUnitTest.Proxy
                 It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<int>()), Times.Never);
         }
 
-        [Fact] // C8 — afterId out of window / unknown: treat as no afterId, newest page, no error
-        public async Task GetExecutions_WithOutOfWindowAfterId_FallsBackToNewestPage()
+        [Fact] // The list is all-time now, so an old-but-real afterId is still honoured as a valid tail cursor.
+        public async Task GetExecutions_WithDaysOldAfterId_StillUsesTailQuery()
         {
-            _executions.Setup(r => r.FindByItemIdAsync(Tenant, "old"))
-                .ReturnsAsync(Row("old", 200, "GET", 10, startedAt: OutOfWindow));
+            var reference = Row("old", 200, "GET", 10, startedAt: Now.AddDays(-10));
+            _executions.Setup(r => r.FindByItemIdAsync(Tenant, "old")).ReturnsAsync(reference);
+            _executions.Setup(r => r.CountAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), It.IsAny<DateTime>())).ReturnsAsync(3);
+            _executions.Setup(r => r.GetNewerThanAsync(
+                    Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), reference.StartedAtUtc, "old", 25))
+                .ReturnsAsync(new List<ProxyExecutionEntity> { Row("e3", 200, "GET", 90) });
+
+            var result = await _service.GetExecutionsAsync(Tenant, new ProxyGetExecutionsRequestDto
+            {
+                ProxyId = ProxyId,
+                AfterId = "old",
+            });
+
+            result.HttpStatus.Should().Be(200);
+            result.Data!.Single().ItemId.Should().Be("e3");
+            result.TotalCount.Should().Be(3);
+            _executions.Verify(r => r.GetPageAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<ProxyStatusClass>(),
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+        }
+
+        [Fact] // C8 — unknown afterId: treat as no afterId, newest page, no error
+        public async Task GetExecutions_WithUnknownAfterId_FallsBackToNewestPage()
+        {
+            _executions.Setup(r => r.FindByItemIdAsync(Tenant, "ghost")).ReturnsAsync((ProxyExecutionEntity?)null);
             _executions.Setup(r => r.CountAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), It.IsAny<DateTime>())).ReturnsAsync(3);
             _executions.Setup(r => r.GetPageAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), It.IsAny<DateTime>(), 25, 0))
                 .ReturnsAsync(new List<ProxyExecutionEntity> { Row("e3", 200, "GET", 90) });
@@ -303,7 +344,7 @@ namespace XUnitTest.Proxy
             var result = await _service.GetExecutionsAsync(Tenant, new ProxyGetExecutionsRequestDto
             {
                 ProxyId = ProxyId,
-                AfterId = "old",
+                AfterId = "ghost",
             });
 
             result.HttpStatus.Should().Be(200);

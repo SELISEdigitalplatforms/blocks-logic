@@ -1,3 +1,4 @@
+using Common.InternalService.Access;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 
@@ -21,6 +22,12 @@ namespace Proxy.DomainService.Entities
         public List<HttpMethodType> Methods { get; set; } = new();
 
         public bool Enabled { get; set; }
+
+        /// <summary>
+        /// Who can call the gateway route, captured per version so Revert round-trips an <c>access</c>
+        /// change and the history shows when an endpoint was made public or restricted.
+        /// </summary>
+        public EndpointAccessPolicy Access { get; set; } = EndpointAccessPolicy.RequireToken();
 
         public List<ProxyKeyValue> Headers { get; set; } = new();
 

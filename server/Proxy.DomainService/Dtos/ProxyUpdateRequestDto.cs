@@ -42,5 +42,11 @@ namespace Proxy.DomainService.Dtos
 
         /// <summary>Response field paths kept when <see cref="ResponseMode"/> is <c>"Select"</c>.</summary>
         public List<string>? ResponseInclude { get; set; }
+
+        /// <summary>
+        /// Who can call the gateway route. Omitted ⇒ reset to the default (Blocks token, any signed-in
+        /// caller), so the console must always send the current value back on Update.
+        /// </summary>
+        public ProxyAccessInputDto? Access { get; set; }
     }
 }

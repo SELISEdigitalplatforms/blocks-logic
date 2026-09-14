@@ -1,8 +1,12 @@
+﻿using Blocks.Genesis;
+using Common.InternalService.Access;
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Proxy.DomainService.Dtos;
+using Proxy.DomainService.Entities;
 using Proxy.DomainService.Services;
 using Utilities.Api.Controllers;
 using XUnitTest.TestHelpers;
@@ -16,6 +20,7 @@ namespace XUnitTest.Proxy
         private readonly Mock<IProxyTestService> _testService = new();
         private readonly Mock<IProxyExecutionService> _executionService = new();
         private readonly Mock<IProxyGatewayService> _gatewayService = new();
+        private readonly Mock<IEndpointAccessAuthorizer> _accessAuthorizer = new();
         private readonly ProxiesController _controller;
 
         public ProxiesControllerTests()
@@ -23,7 +28,7 @@ namespace XUnitTest.Proxy
             TestBlocksContext.Set("tenant-abc");
             _controller = new ProxiesController(
                 _proxyService.Object, _versionService.Object, _testService.Object, _executionService.Object,
-                _gatewayService.Object, NullLogger<ProxiesController>.Instance);
+                _gatewayService.Object, _accessAuthorizer.Object, NullLogger<ProxiesController>.Instance);
         }
 
         public void Dispose()
@@ -311,6 +316,166 @@ namespace XUnitTest.Proxy
             await _controller.ListVersions("from-route", new ProxyGetVersionsRequestDto { ProxyId = "from-query" });
 
             seen!.ProxyId.Should().Be("from-route");
+        }
+
+        // ---------- Gateway: "Who can call it" ----------
+
+        private void GivenGatewayRequest(string method = "GET", string? tenantHeader = "tenant-abc")
+        {
+            var http = new DefaultHttpContext();
+            http.Request.Method = method;
+            http.Request.Path = "/api/proxy/gateway/stripe/charges";
+            http.Request.Body = new MemoryStream();
+            if (tenantHeader is not null)
+            {
+                http.Request.Headers["x-blocks-key"] = tenantHeader;
+            }
+
+            _controller.ControllerContext = new ControllerContext { HttpContext = http };
+            _accessAuthorizer.Setup(a => a.ResolveTenantIdAsync(It.IsAny<HttpRequest>()))
+                .ReturnsAsync(tenantHeader);
+        }
+
+        private static ProxyResolvedConfig ResolvedWith(EndpointAccessPolicy access) => new()
+        {
+            ProxyId = "p1",
+            Slug = "stripe",
+            Upstream = "https://api.stripe.com",
+            Methods = [HttpMethodType.Get],
+            Access = access,
+        };
+
+        private static ProxyForwardResult Ok() => new()
+        {
+            StatusCode = 200,
+            Outcome = ProxyExecutionOutcome.Success,
+            ResponseBytes = [],
+        };
+
+        [Fact]
+        public async Task Gateway_NoTenant_Returns401_WithoutTouchingTheForwarder()
+        {
+            GivenGatewayRequest(tenantHeader: null);
+
+            var result = await _controller.Gateway("stripe", "charges");
+
+            StatusOf(result).Should().Be(401);
+            _gatewayService.Verify(g => g.ForwardAsync(It.IsAny<ProxyForwardRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task Gateway_UnknownSlug_IsCheckedAgainstTheTokenPolicy_So401ComesBefore404()
+        {
+            GivenGatewayRequest();
+            _gatewayService.Setup(g => g.ResolveAsync("tenant-abc", "stripe", It.IsAny<CancellationToken>()))
+                .ReturnsAsync((ProxyResolvedConfig?)null);
+            EndpointAccessPolicy? seenPolicy = null;
+            _accessAuthorizer.Setup(a => a.AuthorizeAsync(It.IsAny<HttpRequest>(), "tenant-abc", It.IsAny<EndpointAccessPolicy>(), It.IsAny<CancellationToken>()))
+                .Callback<HttpRequest, string, EndpointAccessPolicy, CancellationToken>((_, _, p, _) => seenPolicy = p)
+                .ReturnsAsync(EndpointAccessDecision.Unauthenticated("no token"));
+
+            var result = await _controller.Gateway("stripe", "charges");
+
+            StatusOf(result).Should().Be(401);
+            seenPolicy!.Kind.Should().Be(EndpointAccessKind.BlocksToken);
+            _gatewayService.Verify(g => g.ForwardAsync(It.IsAny<ProxyForwardRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task Gateway_PublicPolicy_ForwardsWithNoIdentity()
+        {
+            GivenGatewayRequest();
+            var config = ResolvedWith(EndpointAccessPolicy.AllowPublic());
+            _gatewayService.Setup(g => g.ResolveAsync("tenant-abc", "stripe", It.IsAny<CancellationToken>())).ReturnsAsync(config);
+            _accessAuthorizer.Setup(a => a.AuthorizeAsync(It.IsAny<HttpRequest>(), "tenant-abc", config.Access, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(EndpointAccessDecision.Public());
+            ProxyForwardRequest? seen = null;
+            _gatewayService.Setup(g => g.ForwardAsync(It.IsAny<ProxyForwardRequest>(), It.IsAny<CancellationToken>()))
+                .Callback<ProxyForwardRequest, CancellationToken>((r, _) => seen = r)
+                .ReturnsAsync(Ok());
+
+            await _controller.Gateway("stripe", "charges");
+
+            seen!.TenantId.Should().Be("tenant-abc");
+            seen.UserId.Should().BeNull();
+            seen.ResolvedConfig.Should().BeSameAs(config);
+            seen.ForbiddenReason.Should().BeNull();
+            seen.CallerKind.Should().Be(ProxyCallerKind.Client);
+        }
+
+        [Fact]
+        public async Task Gateway_ForbiddenCaller_IsHandedToTheForwarderAsA403Row()
+        {
+            GivenGatewayRequest();
+            var config = ResolvedWith(EndpointAccessPolicy.RequireToken());
+            _gatewayService.Setup(g => g.ResolveAsync("tenant-abc", "stripe", It.IsAny<CancellationToken>())).ReturnsAsync(config);
+            _accessAuthorizer.Setup(a => a.AuthorizeAsync(It.IsAny<HttpRequest>(), "tenant-abc", config.Access, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(EndpointAccessDecision.Forbidden("missing role"));
+            ProxyForwardRequest? seen = null;
+            _gatewayService.Setup(g => g.ForwardAsync(It.IsAny<ProxyForwardRequest>(), It.IsAny<CancellationToken>()))
+                .Callback<ProxyForwardRequest, CancellationToken>((r, _) => seen = r)
+                .ReturnsAsync(new ProxyForwardResult
+                {
+                    StatusCode = 403, Outcome = ProxyExecutionOutcome.Forbidden, ErrorMessage = "missing role",
+                });
+
+            var result = await _controller.Gateway("stripe", "charges");
+
+            StatusOf(result).Should().Be(403);
+            seen!.ForbiddenReason.Should().Be("missing role");
+        }
+
+        [Fact]
+        public async Task Gateway_AllowedTokenCaller_CarriesTheIdentityOntoTheForward()
+        {
+            GivenGatewayRequest();
+            var config = ResolvedWith(EndpointAccessPolicy.RequireToken());
+            _gatewayService.Setup(g => g.ResolveAsync("tenant-abc", "stripe", It.IsAny<CancellationToken>())).ReturnsAsync(config);
+            var context = BlocksContext.Create(
+                tenantId: "tenant-abc", roles: ["admin"], userId: "user-9", isAuthenticated: true, requestUri: "/",
+                organizationId: "", expireOn: DateTime.UtcNow.AddHours(1), email: "", permissions: [], userName: "jane",
+                phoneNumber: "", displayName: "Jane", oauthToken: "", originalTenantId: "tenant-abc", applicationDomain: "",
+                impersonated: false, impersonationSessionId: "");
+            _accessAuthorizer.Setup(a => a.AuthorizeAsync(It.IsAny<HttpRequest>(), "tenant-abc", config.Access, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(EndpointAccessDecision.Allowed(context, new System.Security.Claims.ClaimsPrincipal(), "tok"));
+            ProxyForwardRequest? seen = null;
+            _gatewayService.Setup(g => g.ForwardAsync(It.IsAny<ProxyForwardRequest>(), It.IsAny<CancellationToken>()))
+                .Callback<ProxyForwardRequest, CancellationToken>((r, _) => seen = r)
+                .ReturnsAsync(Ok());
+
+            await _controller.Gateway("stripe", "charges");
+
+            seen!.UserId.Should().Be("user-9");
+            seen.UserName.Should().Be("jane");
+            seen.CallerImpersonated.Should().BeFalse();
+            seen.CallerImpersonationSessionId.Should().BeNull();
+            seen.ForbiddenReason.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task Gateway_ImpersonatedCaller_IsEvaluatedLikeAnyToken_AndFlaggedOnTheForward()
+        {
+            GivenGatewayRequest();
+            var config = ResolvedWith(EndpointAccessPolicy.RequireToken());
+            _gatewayService.Setup(g => g.ResolveAsync("tenant-abc", "stripe", It.IsAny<CancellationToken>())).ReturnsAsync(config);
+            var context = BlocksContext.Create(
+                tenantId: "tenant-abc", roles: ["admin"], userId: "cloud-user", isAuthenticated: true, requestUri: "/",
+                organizationId: "", expireOn: DateTime.UtcNow.AddHours(1), email: "", permissions: [], userName: "root-admin",
+                phoneNumber: "", displayName: "Root Admin", oauthToken: "", originalTenantId: "root-tenant", applicationDomain: "",
+                impersonated: true, impersonationSessionId: "imp-42");
+            _accessAuthorizer.Setup(a => a.AuthorizeAsync(It.IsAny<HttpRequest>(), "tenant-abc", config.Access, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(EndpointAccessDecision.Allowed(context, new System.Security.Claims.ClaimsPrincipal(), "tok"));
+            ProxyForwardRequest? seen = null;
+            _gatewayService.Setup(g => g.ForwardAsync(It.IsAny<ProxyForwardRequest>(), It.IsAny<CancellationToken>()))
+                .Callback<ProxyForwardRequest, CancellationToken>((r, _) => seen = r)
+                .ReturnsAsync(Ok());
+
+            await _controller.Gateway("stripe", "charges");
+
+            seen!.TenantId.Should().Be("tenant-abc");
+            seen.UserId.Should().Be("cloud-user");
+            seen.CallerImpersonated.Should().BeTrue();
+            seen.CallerImpersonationSessionId.Should().Be("imp-42");
         }
     }
 }

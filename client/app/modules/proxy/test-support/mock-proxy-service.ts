@@ -24,7 +24,13 @@ import {
   ProxyTestResponse,
   ProxyVersionHistory,
 } from "../types";
-import { compactKeyValues, containsVarRef, maskUpstreamUrl, slugifyProxyName } from "../utils";
+import {
+  compactKeyValues,
+  containsVarRef,
+  defaultProxyAccess,
+  maskUpstreamUrl,
+  slugifyProxyName,
+} from "../utils";
 
 let proxyStore: Proxy[] = PROXY_MOCK_DATA.map((proxy) => ({ ...proxy }));
 let proxyLogs: ProxyExecutionLog[] = PROXY_MOCK_EXECUTION_LOGS.map((log) => ({ ...log }));
@@ -70,6 +76,7 @@ const buildProxy = (values: ProxyFormValues, existing?: Proxy): Proxy => {
       values.responseMode === "select"
         ? [...new Set(values.responseInclude.map((path) => path.trim()).filter(Boolean))]
         : [],
+    access: values.access ?? defaultProxyAccess(),
     calls24h: existing?.calls24h ?? 0,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
@@ -185,13 +192,16 @@ export const mockProxyService = {
   getAll: async (params: ProxyListParams = {}): Promise<ProxyListPage> => {
     await waitForMock();
     const search = params.searchKey?.trim().toLowerCase();
-    const matches = search
+    let matches = search
       ? proxyStore.filter((proxy) =>
           [proxy.name, proxy.slug, proxy.upstreamMasked].some((value) =>
             value.toLowerCase().includes(search),
           ),
         )
       : proxyStore;
+    if (params.isActive !== undefined) {
+      matches = matches.filter((proxy) => proxy.enabled === params.isActive);
+    }
     const pageSize = params.pageSize ?? 200;
     const pageNumber = params.pageNumber ?? 0;
     return {

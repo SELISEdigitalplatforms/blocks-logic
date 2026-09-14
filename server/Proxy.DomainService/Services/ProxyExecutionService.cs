@@ -9,14 +9,18 @@ namespace Proxy.DomainService.Services
 {
     /// <summary>
     /// Read-only implementation of <see cref="IProxyExecutionService"/>. Priority tradeoff (SPEC3 &sect;1):
-    /// cheap, bounded queries over real-time precision &mdash; every figure is a rolling 24 h window computed
-    /// on demand, result sizes are capped, and "Live" is a short-poll tail, not a push channel. The window
-    /// start comes from an injected <see cref="TimeProvider"/> so tests can pin the clock.
+    /// cheap, bounded queries over real-time precision. The Overview tile's <c>calls24h</c> figure is a
+    /// rolling 24 h window computed on demand; <see cref="GetExecutionsAsync"/> (the Request logs list) is
+    /// all-time, paged and capped instead, and "Live" is a short-poll tail, not a push channel. The window
+    /// start for the 24 h figures comes from an injected <see cref="TimeProvider"/> so tests can pin the clock.
     /// </summary>
     public sealed class ProxyExecutionService : IProxyExecutionService
     {
-        /// <summary>Rolling window for every "24h" figure (SPEC &sect;3).</summary>
+        /// <summary>Rolling window for the Overview tile's "24h" figures (SPEC &sect;3).</summary>
         internal static readonly TimeSpan Window = TimeSpan.FromHours(24);
+
+        /// <summary>Lower bound for <see cref="GetExecutionsAsync"/>: the list is all-time, not windowed.</summary>
+        private static readonly DateTime AllTimeStart = DateTime.SpecifyKind(DateTime.MinValue, DateTimeKind.Utc);
 
         /// <summary>Max <c>pageSize</c> accepted by <c>GetExecutions</c> (SPEC &sect;3 / C1).</summary>
         internal const int MaxPageSize = 200;
@@ -91,7 +95,7 @@ namespace Proxy.DomainService.Services
                 return NotFoundList(proxyId);
             }
 
-            var since = WindowStart();
+            var since = AllTimeStart;
             var asOf = ResolveAsOf(request.AsOfUtc, since);
             var totalCount = await _executionRepository.CountAsync(tenantId, proxyId, statusClass, since, asOf);
 
@@ -189,6 +193,8 @@ namespace Proxy.DomainService.Services
                     CallerKind = string.IsNullOrEmpty(row.CallerKind) ? ProxyCallerKind.Client : row.CallerKind,
                     CallerUserId = row.CreatedBy,
                     CallerUserName = row.CallerUserName,
+                    CallerImpersonated = row.CallerImpersonated,
+                    CallerImpersonationSessionId = row.CallerImpersonated ? row.CallerImpersonationSessionId : null,
                     CallerIp = row.CallerIp,
                     CallerUserAgent = row.CallerUserAgent,
                     CallerOrigin = row.CallerOrigin,
@@ -382,6 +388,7 @@ namespace Proxy.DomainService.Services
             // calls, so report them as such rather than leaving the column blank in the logs table.
             CallerKind = string.IsNullOrEmpty(row.CallerKind) ? ProxyCallerKind.Client : row.CallerKind,
             CallerUserName = row.CallerUserName,
+            CallerImpersonated = row.CallerImpersonated,
             RoutePath = row.RoutePath,
             RequestMethod = row.RequestMethod,
             RequestPath = row.RequestPath,

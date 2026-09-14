@@ -104,6 +104,13 @@ describe("ProxyService HTTP wiring", () => {
       routes: [],
       responseMode: "All",
       responseInclude: [],
+      access: {
+        kind: "BlocksToken",
+        combine: "Or",
+        roles: { mode: "any", values: [] },
+        permissions: { mode: "any", values: [] },
+        organizationId: "",
+      },
       enabled: true,
     });
     expect(res).toMatchObject({ isSuccess: true, itemId: "p9" });

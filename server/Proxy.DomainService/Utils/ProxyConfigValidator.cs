@@ -1,3 +1,4 @@
+using Common.InternalService.Access;
 using Proxy.DomainService.Dtos;
 using Proxy.DomainService.Entities;
 
@@ -48,6 +49,9 @@ namespace Proxy.DomainService.Utils
         /// <see cref="ResponseMode"/> so a mode round-trip does not lose the user's paths.
         /// </summary>
         public List<string> ResponseInclude { get; set; } = new();
+
+        /// <summary>Normalized "Who can call it" policy. Defaults to a Blocks token with no further restriction.</summary>
+        public EndpointAccessPolicy Access { get; set; } = EndpointAccessPolicy.RequireToken();
     }
 
     /// <summary>
@@ -75,7 +79,8 @@ namespace Proxy.DomainService.Utils
             IEnumerable<ProxyKeyValueInputDto>? bodyMerge = null,
             string? responseMode = null,
             IEnumerable<string>? responseInclude = null,
-            IEnumerable<ProxyRouteConfigInputDto>? routes = null)
+            IEnumerable<ProxyRouteConfigInputDto>? routes = null,
+            ProxyAccessInputDto? access = null)
         {
             var result = new ProxyConfigValidationResult();
 
@@ -88,8 +93,107 @@ namespace Proxy.DomainService.Utils
             result.MethodConfigs = NormalizeMethodConfigs(methodConfigs, result);
             NormalizeResponseFilter(responseMode, responseInclude, result);
             result.Routes = NormalizeRoutes(routes, result);
+            result.Access = NormalizeAccess(access, result);
 
             return result;
+        }
+
+        internal const int MaxAccessValues = 50;
+        internal const int MaxAccessValueLength = 200;
+
+        /// <summary>
+        /// Normalizes "Who can call it". <c>kind</c> parses case-insensitively to <c>BlocksToken</c> (default)
+        /// or <c>Public</c>; <c>combine</c> to <c>Or</c> (default) or <c>And</c>; a rule's <c>mode</c> to
+        /// <c>any</c> (default) or <c>all</c>. Values are trimmed, blank-dropped and ordinal-deduped, capped at
+        /// <see cref="MaxAccessValues"/> entries of at most <see cref="MaxAccessValueLength"/> characters, and may
+        /// not contain a comma (the change history encodes a rule as a comma-separated list). A public policy
+        /// with any role / permission value is rejected outright rather than having the lists dropped: the
+        /// user asked for two contradictory things and should pick one.
+        /// </summary>
+        private static EndpointAccessPolicy NormalizeAccess(ProxyAccessInputDto? access, ProxyConfigValidationResult result)
+        {
+            var policy = EndpointAccessPolicy.RequireToken();
+            if (access is null)
+            {
+                return policy;
+            }
+
+            var kind = (access.Kind ?? string.Empty).Trim();
+            if (kind.Length > 0)
+            {
+                if (Enum.TryParse<EndpointAccessKind>(kind, ignoreCase: true, out var parsedKind))
+                {
+                    policy.Kind = parsedKind;
+                }
+                else
+                {
+                    result.Errors["access"] = "access.kind must be 'BlocksToken' or 'Public'.";
+                }
+            }
+
+            var combine = (access.Combine ?? string.Empty).Trim();
+            if (combine.Length > 0)
+            {
+                if (Enum.TryParse<EndpointAccessCombine>(combine, ignoreCase: true, out var parsedCombine))
+                {
+                    policy.Combine = parsedCombine;
+                }
+                else
+                {
+                    result.Errors["access"] = "access.combine must be 'Or' or 'And'.";
+                }
+            }
+
+            policy.OrganizationId = (access.OrganizationId ?? string.Empty).Trim();
+            policy.Roles = NormalizeAccessRule(access.Roles, "roles", result);
+            policy.Permissions = NormalizeAccessRule(access.Permissions, "permissions", result);
+
+            if (policy.IsPublic && policy.HasRestrictions)
+            {
+                result.Errors["access"] = "A public endpoint cannot be restricted by roles or permissions. Choose 'Blocks token' to restrict callers.";
+            }
+
+            return policy;
+        }
+
+        private static EndpointAccessRule NormalizeAccessRule(ProxyAccessRuleDto? rule, string label, ProxyConfigValidationResult result)
+        {
+            var normalized = new EndpointAccessRule { Mode = EndpointAccessRule.NormalizeMode(rule?.Mode) };
+            if (rule?.Values is null)
+            {
+                return normalized;
+            }
+
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var raw in rule.Values)
+            {
+                var value = (raw ?? string.Empty).Trim();
+                if (value.Length == 0 || !seen.Add(value))
+                {
+                    continue;
+                }
+
+                if (value.Length > MaxAccessValueLength)
+                {
+                    result.Errors[$"access.{label}"] = $"Each {label} entry must be at most {MaxAccessValueLength} characters.";
+                    continue;
+                }
+
+                if (value.Contains(',', StringComparison.Ordinal))
+                {
+                    result.Errors[$"access.{label}"] = $"A {label} entry may not contain a comma.";
+                    continue;
+                }
+
+                normalized.Values.Add(value);
+            }
+
+            if (normalized.Values.Count > MaxAccessValues)
+            {
+                result.Errors[$"access.{label}"] = $"At most {MaxAccessValues} {label} entries.";
+            }
+
+            return normalized;
         }
 
         /// <summary>

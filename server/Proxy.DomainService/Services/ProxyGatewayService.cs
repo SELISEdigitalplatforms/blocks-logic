@@ -56,6 +56,12 @@ namespace Proxy.DomainService.Services
         /// <summary>The hard inbound-body cap; also enforced by the controller before the body is read.</summary>
         public static long MaxRequestBodyBytes => MaxBodyBytes;
 
+        public async Task<ProxyResolvedConfig?> ResolveAsync(string tenantId, string slug, CancellationToken cancellationToken = default)
+        {
+            var proxy = await _proxyRepository.GetBySlugAsync(tenantId, slug);
+            return proxy is null ? null : ProxyResolvedConfig.FromEntity(proxy);
+        }
+
         public async Task<ProxyForwardResult> ForwardAsync(ProxyForwardRequest request, CancellationToken cancellationToken = default)
         {
             var startedAt = DateTime.UtcNow;
@@ -84,6 +90,17 @@ namespace Proxy.DomainService.Services
                     request.Slug, request.TenantId);
                 return await FinalizeAsync(request, config, null, BuildPreflight(
                     ProxyExecutionOutcome.ProxyNotFound, 404, startedAt));
+            }
+
+            // Access policy refusal, decided by the controller (it holds the HttpRequest; this forwarder also
+            // serves in-process workflow calls that have none). Recorded like RouteNotAllowed: a row, no upstream.
+            if (request.ForbiddenReason is not null)
+            {
+                _logger.LogWarning(
+                    "Proxy gateway: caller {UserId} refused by the access policy of slug '{Slug}' (tenant {TenantId}); returning 403, no upstream call.",
+                    request.UserId ?? "(anonymous)", config.Slug, request.TenantId);
+                return await FinalizeAsync(request, config, null, BuildPreflight(
+                    ProxyExecutionOutcome.Forbidden, 403, startedAt, errorMessage: request.ForbiddenReason));
             }
 
             var allowedWire = config.Methods.Select(m => m.Wire()).ToList();
@@ -667,6 +684,8 @@ namespace Proxy.DomainService.Services
                 IsTest = false,
                 CallerKind = request.CallerKind,
                 CallerUserName = request.UserName,
+                CallerImpersonated = request.CallerImpersonated,
+                CallerImpersonationSessionId = request.CallerImpersonated ? request.CallerImpersonationSessionId : null,
                 CallerIp = request.CallerIp,
                 CallerUserAgent = request.CallerUserAgent,
                 CallerOrigin = request.CallerOrigin,

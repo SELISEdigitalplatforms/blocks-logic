@@ -32,6 +32,39 @@ export type ProxyStatus = "live" | "paused";
 export type ProxyResponseMode = "all" | "select";
 
 /**
+ * "Who can call it". `"blocksToken"` — the caller sends a Blocks token; identity, roles and
+ * permissions arrive on the request and {@link ProxyAccess.roles} / {@link ProxyAccess.permissions}
+ * may narrow the callers further. `"public"` — anyone with the URL; no identity. Never public by
+ * omission: a proxy saved without the block is token-only.
+ */
+export type ProxyAccessKind = "blocksToken" | "public";
+
+/** How the roles and permissions lists combine when both carry values. */
+export type ProxyAccessCombine = "or" | "and";
+
+/** Within one list: `"any"` — hold at least one entry; `"all"` — hold every entry. */
+export type ProxyAccessRuleMode = "any" | "all";
+
+export type ProxyAccessRule = {
+  mode: ProxyAccessRuleMode;
+  /** Role slugs or permission resource keys. Empty ⇒ no restriction from this list. */
+  values: string[];
+};
+
+/**
+ * One policy per proxy — every declared endpoint shares it, because the gateway is one catch-all
+ * route and the endpoints are data. Mirrors the server's `EndpointAccessPolicy`.
+ */
+export type ProxyAccess = {
+  kind: ProxyAccessKind;
+  combine: ProxyAccessCombine;
+  roles: ProxyAccessRule;
+  permissions: ProxyAccessRule;
+  /** Round-tripped only; the proxy form does not edit it. */
+  organizationId?: string;
+};
+
+/**
  * One endpoint a proxy is allowed to reach. `path` is the client-facing template appended after
  * `/api/proxy/gateway/{slug}`; `{name}` segments are parameters the caller must supply. The gateway
  * refuses any path not matching a declared route, so this list is what a consumer may call.
@@ -80,6 +113,8 @@ export type Proxy = {
   responseMode: ProxyResponseMode;
   /** Field-path expressions kept when {@link responseMode} is `"select"` (`data.user.email`, `items[].id`). */
   responseInclude: string[];
+  /** Who can call the gateway route. Populated by the detail read; the list row carries the default. */
+  access: ProxyAccess;
   calls24h: number;
   createdAt?: string;
   updatedAt?: string;
@@ -127,6 +162,7 @@ export type ProxyFormValues = Pick<
   | "routes"
   | "responseMode"
   | "responseInclude"
+  | "access"
 > & {
   bodyMode: ProxyBodyMode;
   /** Form-only. When present it is the source of truth for `headers` and `query`. */
@@ -173,7 +209,7 @@ export type ProxyListPage = {
 
 export type ProxyListParams = {
   searchKey?: string;
-  enabled?: boolean;
+  isActive?: boolean;
   pageNumber?: number;
   pageSize?: number;
 };
@@ -239,6 +275,24 @@ export type ProxyMethodConfigDto = {
   query?: ProxyKeyValueDto[] | null;
 };
 
+/** Mirrors server `ProxyAccessRuleDto`: `{ mode: "any" | "all", values }`. */
+export type ProxyAccessRuleDto = {
+  mode?: string | null;
+  values?: string[] | null;
+};
+
+/**
+ * Mirrors server `ProxyAccessDto` / `ProxyAccessInputDto`. The server's wire vocabulary is
+ * `"BlocksToken" | "Public"` and `"Or" | "And"`; the mapper is the only place that translates.
+ */
+export type ProxyAccessDto = {
+  kind?: string | null;
+  organizationId?: string | null;
+  roles?: ProxyAccessRuleDto | null;
+  permissions?: ProxyAccessRuleDto | null;
+  combine?: string | null;
+};
+
 export type ProxyListItemDto = {
   itemId: string;
   name: string;
@@ -270,6 +324,7 @@ export type ProxyDetailDto = {
   routes?: ProxyRouteDto[] | null;
   responseMode?: string | null;
   responseInclude?: string[] | null;
+  access?: ProxyAccessDto | null;
   currentVersion: number;
   createdDate: string;
   createdBy?: string | null;
