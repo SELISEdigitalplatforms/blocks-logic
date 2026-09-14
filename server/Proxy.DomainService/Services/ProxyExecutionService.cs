@@ -10,9 +10,11 @@ namespace Proxy.DomainService.Services
     /// <summary>
     /// Read-only implementation of <see cref="IProxyExecutionService"/>. Priority tradeoff (SPEC3 &sect;1):
     /// cheap, bounded queries over real-time precision. The Overview tile's <c>calls24h</c> figure is a
-    /// rolling 24 h window computed on demand; <see cref="GetExecutionsAsync"/> (the Request logs list) is
-    /// all-time, paged and capped instead, and "Live" is a short-poll tail, not a push channel. The window
-    /// start for the 24 h figures comes from an injected <see cref="TimeProvider"/> so tests can pin the clock.
+    /// rolling 24 h window computed on demand, while its <c>avgLatencyMs</c>/<c>errorRate</c> figures are
+    /// all-time, read from the never-pruned counters in <see cref="ProxyStats"/>;
+    /// <see cref="GetExecutionsAsync"/> (the Request logs list) is all-time, paged and capped instead, and
+    /// "Live" is a short-poll tail, not a push channel. The window start for the 24 h figure comes from an
+    /// injected <see cref="TimeProvider"/> so tests can pin the clock.
     /// </summary>
     public sealed class ProxyExecutionService : IProxyExecutionService
     {
@@ -250,38 +252,37 @@ namespace Proxy.DomainService.Services
             }
 
             // Read from the counters denormalized onto the proxy document: summing at most 25 hourly buckets
-            // already in hand beats an aggregation across ProxyExecutions, and costs no extra query at all
-            // since the document was loaded above. The counters lag by at most one flush interval, which is
-            // the trade this tile is happy to make; the logs tab still reads the rows themselves.
+            // (for calls24h) plus the never-pruned all-time counters (for avgLatencyMs/errorRate) already in
+            // hand beats an aggregation across ProxyExecutions, and costs no extra query at all since the
+            // document was loaded above. The counters lag by at most one flush interval, which is the trade
+            // this tile is happy to make; the logs tab still reads the rows themselves.
             // A proxy deleted but still holding rows has no document to read, so it falls back to the
             // aggregation rather than reporting zero.
             var asOf = _timeProvider.GetUtcNow().UtcDateTime;
-            ProxyStatsRollup rollup;
+            ProxyStatsRollup windowRollup;
+            ProxyStatsRollup allTimeRollup;
             if (proxy is not null)
             {
-                rollup = ProxyStatsWindow.Rollup(proxy.Stats, asOf);
+                windowRollup = ProxyStatsWindow.Rollup(proxy.Stats, asOf);
+                allTimeRollup = ProxyStatsWindow.RollupAllTime(proxy.Stats);
             }
             else
             {
-                var stats = await _executionRepository.GetStatsAsync(tenantId, proxyId, WindowStart());
-                rollup = stats.Count > 0
-                    ? new ProxyStatsRollup(
-                        stats.Count,
-                        (int)Math.Round(stats.AvgLatencyMs, MidpointRounding.AwayFromZero),
-                        Math.Round(stats.ErrorCount * 100d / stats.Count, 1, MidpointRounding.AwayFromZero),
-                        stats.LastCallAtUtc)
-                    : ProxyStatsRollup.Empty;
+                var windowStats = await _executionRepository.GetStatsAsync(tenantId, proxyId, WindowStart());
+                windowRollup = ToRollup(windowStats);
+                var allTimeStats = await _executionRepository.GetStatsAsync(tenantId, proxyId, AllTimeStart);
+                allTimeRollup = ToRollup(allTimeStats);
             }
 
             var dto = new ProxyOverviewDto
             {
-                Calls24h = rollup.Calls,
-                AvgLatencyMs = rollup.AvgLatencyMs,
-                ErrorRatePct = rollup.ErrorRatePct,
-                ErrorRateIsHigh = rollup.ErrorRatePct > ProxyStatsWindow.HighErrorRatePct,
+                Calls24h = windowRollup.Calls,
+                AvgLatencyMs = allTimeRollup.AvgLatencyMs,
+                ErrorRatePct = allTimeRollup.ErrorRatePct,
+                ErrorRateIsHigh = allTimeRollup.ErrorRatePct > ProxyStatsWindow.HighErrorRatePct,
                 CredentialRefs = CredentialRefsOf(proxy),
                 Methods = proxy is null ? new List<string>() : proxy.Methods.Select(m => m.Wire()).ToList(),
-                LastCallAtUtc = rollup.Calls > 0 ? rollup.LastCallAtUtc : null,
+                LastCallAtUtc = allTimeRollup.Calls > 0 ? allTimeRollup.LastCallAtUtc : null,
             };
 
             _logger.LogInformation(
@@ -292,6 +293,15 @@ namespace Proxy.DomainService.Services
         }
 
         private DateTime WindowStart() => _timeProvider.GetUtcNow().UtcDateTime - Window;
+
+        private static ProxyStatsRollup ToRollup(ProxyExecutionStats stats) =>
+            stats.Count > 0
+                ? new ProxyStatsRollup(
+                    stats.Count,
+                    (int)Math.Round(stats.AvgLatencyMs, MidpointRounding.AwayFromZero),
+                    Math.Round(stats.ErrorCount * 100d / stats.Count, 1, MidpointRounding.AwayFromZero),
+                    stats.LastCallAtUtc)
+                : ProxyStatsRollup.Empty;
 
         /// <summary>
         /// The upper bound for a paging session: the caller's <c>asOfUtc</c> when it is usable, otherwise now.

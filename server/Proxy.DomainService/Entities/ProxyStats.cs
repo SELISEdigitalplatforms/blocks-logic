@@ -44,5 +44,18 @@ namespace Proxy.DomainService.Entities
         /// backwards past a newer one.
         /// </summary>
         public DateTime? LastCallAtUtc { get; set; }
+
+        /// <summary>
+        /// All-time call count, never pruned (unlike <see cref="Buckets"/>). Backs the Overview tile's
+        /// all-time <c>avgLatencyMs</c> / <c>errorRate</c> figures with an O(1) read instead of an aggregation
+        /// across <c>ProxyExecutions</c>.
+        /// </summary>
+        public long TotalCalls { get; set; }
+
+        /// <summary>All-time count of calls answered to the client with <c>StatusCode &gt;= 400</c>.</summary>
+        public long TotalErrors { get; set; }
+
+        /// <summary>All-time sum of <c>LatencyMs</c> across <see cref="TotalCalls"/>.</summary>
+        public long TotalLatencyMsTotal { get; set; }
     }
 }
