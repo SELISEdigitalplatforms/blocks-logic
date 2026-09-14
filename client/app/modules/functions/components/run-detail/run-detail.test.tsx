@@ -49,7 +49,23 @@ describe("RunDetail", () => {
 
     await waitFor(() => expect(screen.getByText(RAW_MESSAGE)).toBeTruthy());
     expect(screen.getByText("UserRuntimeError")).toBeTruthy();
-    expect(screen.getByText(/The handler threw/)).toBeTruthy();
+    // The hint reads the message, not just the code: this run died while importing the module,
+    // so "the handler threw, the stack is in the logs" would point at logs that cannot exist.
+    expect(screen.getByText(/Add the package to package\.json/)).toBeTruthy();
+    expect(screen.queryByText(/The handler threw/)).toBeNull();
+  });
+
+  it("names the handler's scope when ctx was used at module level", async () => {
+    getRun.mockResolvedValue(
+      run({
+        errorCode: "UserRuntimeError",
+        errorMessage: "the function module failed to load: ctx is not defined",
+      }),
+    );
+
+    renderWithProviders(<RunDetail runId="run_1" />);
+
+    await waitFor(() => expect(screen.getByText(/parameters of your handler/)).toBeTruthy());
   });
 
   it("still explains a code that arrives with no message", async () => {

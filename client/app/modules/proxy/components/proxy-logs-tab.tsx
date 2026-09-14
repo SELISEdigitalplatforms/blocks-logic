@@ -82,15 +82,7 @@ const ProxyLogsSkeleton = () => (
  * One labelled copy action. Swaps to a tick for the duration of the hook's cooldown so a click on a
  * value that looks identical to the last one still reads as having done something.
  */
-const CopyButton = ({
-  label,
-  value,
-  title,
-}: {
-  label: string;
-  value: string;
-  title: string;
-}) => {
+const CopyButton = ({ label, value, title }: { label: string; value: string; title: string }) => {
   const { isCopying, copy } = useCopyToClipboard();
 
   return (
@@ -136,10 +128,7 @@ const LogDetails = ({ proxyId, log }: { proxyId: string; log: ProxyExecutionLog 
     );
   }
 
-  const curl = buildProxyCurl(
-    detail,
-    typeof window === "undefined" ? "" : window.location.origin,
-  );
+  const curl = buildProxyCurl(detail, typeof window === "undefined" ? "" : window.location.origin);
 
   return (
     <div className="grid gap-3 border-t bg-muted/20 px-4 py-3 text-sm lg:grid-cols-2">

@@ -101,11 +101,26 @@ namespace Functions.DomainService.Models
     public class TriggerConfig
     {
         public bool HttpEnabled { get; set; } = true;
+
+        /// <summary>
+        /// GET or POST — one per function, like a proxy route's method. The public route is
+        /// registered for both verbs and refuses the other one with 405, so a handler never has
+        /// to branch on <c>input.method</c> unless it wants to.
+        /// </summary>
+        public HttpTriggerMethod HttpMethod { get; set; } = HttpTriggerMethod.Post;
         public AuthMode AuthMode { get; set; } = AuthMode.Token;
         public List<string> Roles { get; set; } = [];
         public List<string> Permissions { get; set; } = [];
         public MatchMode RoleMatch { get; set; } = MatchMode.Any;
         public MatchMode PermissionMatch { get; set; } = MatchMode.Any;
+
+        /// <summary>
+        /// OR / AND between the two lists once both are configured — the one toggle the "Restrict
+        /// further" panel shows, exactly as the proxy's access card does. Each list's own any/all
+        /// is <see cref="RoleMatch"/> / <see cref="PermissionMatch"/>. Defaults to Or, which is
+        /// what the interface has always displayed for a function with no stored value.
+        /// </summary>
+        public AccessCombine Combine { get; set; } = AccessCombine.Or;
 
         /// <summary>Invocable from a workflow node.</summary>
         public bool WorkflowEnabled { get; set; } = true;

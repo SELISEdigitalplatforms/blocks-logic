@@ -1,5 +1,6 @@
 using Blocks.Secrets;
 using FluentValidation;
+using Common.InternalService.Access;
 using Functions.DomainService.Consumers;
 using Functions.DomainService.Dtos.Requests;
 using Functions.DomainService.Repositories;
@@ -48,6 +49,10 @@ namespace Functions.DomainService.Utils
             services.AddSingleton<IFunctionVersionRetentionService, FunctionVersionRetentionService>();
             services.AddSingleton<IFunctionDeploymentService, FunctionDeploymentService>();
             services.AddSingleton<IFunctionRunService, FunctionRunService>();
+            // The shared data-plane authorizer (Common): validates a bearer token on the anonymous
+            // /api/fn route exactly as it does on the proxy gateway. TryAdd inside, so this is
+            // harmless alongside Proxy's and Workflow's own registration.
+            services.AddEndpointAccess();
             services.AddSingleton<IFunctionInvocationService, FunctionInvocationService>();
 
             services.AddSingleton<IOutputActionProcessor, OutputActionProcessor>();

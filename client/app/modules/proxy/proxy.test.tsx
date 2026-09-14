@@ -69,7 +69,9 @@ describe("Proxy feature", () => {
     // No trailing "/*": the gateway forwards only the endpoints the proxy declares, so advertising
     // a wildcard would promise paths that are refused.
     // The base URL appears once in the summary card and once per base-path endpoint (p1 has two).
-    expect((await screen.findAllByText("/logic/v4/proxy/gateway/stripe-payments")).length).toBeGreaterThan(0);
+    expect(
+      (await screen.findAllByText("/logic/v4/proxy/gateway/stripe-payments")).length,
+    ).toBeGreaterThan(0);
     expect(screen.getByText("Authorization")).toBeTruthy();
     expect(screen.getAllByText("variable").length).toBeGreaterThan(0);
 

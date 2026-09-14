@@ -28,9 +28,7 @@ describe("ProxyLogsTab", () => {
   });
 
   it("shows visible loading skeletons while request logs load", () => {
-    vi.spyOn(proxyService, "getExecutions").mockImplementation(
-      () => new Promise(() => undefined),
-    );
+    vi.spyOn(proxyService, "getExecutions").mockImplementation(() => new Promise(() => undefined));
 
     renderWithProviders(<ProxyLogsTab proxy={PROXY_MOCK_DATA[0]} active={true} />);
 

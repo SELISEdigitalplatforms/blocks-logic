@@ -21,13 +21,25 @@ export interface IRetryPolicy {
   maxDelaySeconds: number;
 }
 
+/** OR / AND between the roles rule and the permissions rule once both are configured. */
+export type AccessCombine = "Or" | "And";
+
+/** The one method the endpoint answers — server enum names, like the other trigger enums. */
+export type HttpTriggerMethod = "Get" | "Post";
+
 export interface ITriggerConfig {
   httpEnabled: boolean;
+  /** GET or POST, one per function; the other method is refused with 405. */
+  httpMethod: HttpTriggerMethod;
   authMode: AuthMode;
   roles: string[];
   permissions: string[];
+  /** any / all within the roles list. */
   roleMatch: MatchMode;
+  /** any / all within the permissions list. */
   permissionMatch: MatchMode;
+  /** How the two lists combine — the one toggle "Restrict further" shows, as on a proxy. */
+  combine: AccessCombine;
   workflowEnabled: boolean;
 }
 

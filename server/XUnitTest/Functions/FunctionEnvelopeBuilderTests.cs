@@ -173,23 +173,143 @@ namespace XUnitTest.Functions
         }
 
         [Theory]
-        [InlineData("accessToken")]
-        [InlineData("clientSecret")]
+        [InlineData("STRIPE_API_KEY")]
         [InlineData("DB_PASSWORD")]
-        [InlineData("connectionString")]
-        [InlineData("apiKey")]
-        [InlineData("Authorization")]
-        public void A_credential_shaped_variable_is_refused(string key)
+        [InlineData("WEBHOOK_SECRET")]
+        [InlineData("AUTHORIZATION")]
+        public void A_credential_shaped_variable_name_is_allowed_because_env_is_exempt(string key)
         {
-            // A tenant could name a variable this way, or a bug could put one there. Either
-            // way the run must fail rather than deliver it.
+            // These are the honest names for a bound configuration variable. env keys are
+            // tenant-authored and BuildEnv copies nothing else in, so screening them blocked
+            // only legitimate names — never the platform credential the screen exists for.
             var function = Function();
-            function.Variables = [new VariableBinding { Key = key, Value = "leaked" }];
+            function.Variables = [new VariableBinding { Key = key, Value = "value" }];
 
-            var act = () => FunctionEnvelopeBuilder.Build(Run(), null, function, Context(), null);
+            var json = FunctionEnvelopeBuilder.Build(Run(), null, function, Context(), null);
+
+            using var doc = Parse(json);
+            doc.RootElement.GetProperty("env").GetProperty(key).GetString().Should().Be("value");
+        }
+
+        [Fact]
+        public void The_exemption_is_the_envelopes_own_env_and_nothing_else()
+        {
+            // An object called "env" that the caller sent as input is not the env the exemption
+            // is about, and must still be screened.
+            var act = () => FunctionEnvelopeBuilder.Build(
+                Run(), null, Function(), Context(), "{\"env\":{\"accessToken\":\"x\"}}");
 
             act.Should().Throw<FunctionEnvelopeBuilder.ForbiddenContentException>()
-                .WithMessage($"*{key}*");
+                .WithMessage("*input.env.accessToken*");
+        }
+
+        // ---------- {{secret.<id>}} in a variable value ----------
+
+        private static FunctionEntity WithVariables(params (string Key, string Value)[] variables)
+        {
+            var function = Function();
+            function.Variables = variables
+                .Select(v => new VariableBinding { Key = v.Key, Value = v.Value })
+                .ToList();
+            return function;
+        }
+
+        [Fact]
+        public void A_bound_variable_reaches_ctx_env_as_its_resolved_value()
+        {
+            var function = WithVariables(("STRIPE_API_KEY", "{{secret.sec_1}}"));
+            var secrets = new Dictionary<string, string> { ["sec_1"] = "sk_live_9" };
+
+            var json = FunctionEnvelopeBuilder.Build(Run(), null, function, Context(), null, secrets);
+
+            using var doc = Parse(json);
+            doc.RootElement.GetProperty("env").GetProperty("STRIPE_API_KEY").GetString()
+                .Should().Be("sk_live_9");
+        }
+
+        [Fact]
+        public void A_reference_embedded_in_a_longer_value_is_substituted_in_place()
+        {
+            var function = WithVariables(("AUTH", "Bearer {{secret.sec_1}} v2"));
+            var secrets = new Dictionary<string, string> { ["sec_1"] = "tok" };
+
+            var json = FunctionEnvelopeBuilder.Build(Run(), null, function, Context(), null, secrets);
+
+            using var doc = Parse(json);
+            doc.RootElement.GetProperty("env").GetProperty("AUTH").GetString()
+                .Should().Be("Bearer tok v2");
+        }
+
+        [Fact]
+        public void An_unresolved_reference_fails_the_run_rather_than_shipping_the_placeholder()
+        {
+            // Delivering "{{secret.sec_gone}}" would have the function present that text to a
+            // provider as if it were a key — a 401 far away from the real cause.
+            var function = WithVariables(("STRIPE_API_KEY", "{{secret.sec_gone}}"));
+
+            var act = () => FunctionEnvelopeBuilder.Build(
+                Run(), null, function, Context(), null, new Dictionary<string, string>());
+
+            act.Should().Throw<FunctionEnvelopeBuilder.UnresolvedSecretException>()
+                .WithMessage("*sec_gone*");
+        }
+
+        [Fact]
+        public void An_unresolved_reference_names_the_id_and_never_a_value()
+        {
+            var function = WithVariables(("A", "{{secret.sec_1}}"), ("B", "{{secret.sec_2}}"));
+            var secrets = new Dictionary<string, string> { ["sec_1"] = "sk_live_9" };
+
+            var act = () => FunctionEnvelopeBuilder.Build(Run(), null, function, Context(), null, secrets);
+
+            act.Should().Throw<FunctionEnvelopeBuilder.UnresolvedSecretException>()
+                .Which.Message.Should().Contain("sec_2").And.NotContain("sk_live_9");
+        }
+
+        [Fact]
+        public void A_plain_value_that_merely_mentions_secret_is_left_alone()
+        {
+            var function = WithVariables(("NOTE", "the secret.sauce is {{not a ref}}"));
+
+            var json = FunctionEnvelopeBuilder.Build(Run(), null, function, Context(), null);
+
+            using var doc = Parse(json);
+            doc.RootElement.GetProperty("env").GetProperty("NOTE").GetString()
+                .Should().Be("the secret.sauce is {{not a ref}}");
+        }
+
+        [Fact]
+        public void Collected_ids_are_deduplicated_across_variables()
+        {
+            var function = WithVariables(
+                ("A", "{{secret.sec_1}}"),
+                ("B", "x {{secret.sec_1}} y {{secret.sec_2}}"),
+                ("C", "plain"));
+
+            FunctionEnvelopeBuilder.CollectSecretIds(null, function)
+                .Should().BeEquivalentTo(["sec_1", "sec_2"]);
+        }
+
+        [Fact]
+        public void Collected_ids_come_from_the_deployed_version_when_there_is_one()
+        {
+            // The version snapshot is what the run executes, so its references are the ones to
+            // resolve — the editor's unsaved configuration must not decide what gets read.
+            var version = new FunctionVersionEntity
+            {
+                Variables = [new VariableBinding { Key = "A", Value = "{{secret.from_version}}" }],
+                Limits = new FunctionLimits { TimeoutSeconds = 10 },
+                Trigger = new TriggerConfig { AuthMode = AuthMode.Token },
+            };
+
+            FunctionEnvelopeBuilder.CollectSecretIds(version, WithVariables(("A", "{{secret.from_draft}}")))
+                .Should().BeEquivalentTo(["from_version"]);
+        }
+
+        [Fact]
+        public void A_function_with_no_references_asks_for_no_secrets()
+        {
+            FunctionEnvelopeBuilder.CollectSecretIds(null, Function()).Should().BeEmpty();
         }
 
         [Fact]

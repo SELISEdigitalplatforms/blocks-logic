@@ -101,7 +101,7 @@ namespace XUnitTest.Functions
         }
 
         [Theory]
-        [InlineData(FunctionStarterTemplates.Minimal, "return { received: input }")]
+        [InlineData(FunctionStarterTemplates.Minimal, "return { received: input.body }")]
         [InlineData(FunctionStarterTemplates.HttpEcho, "isAuthenticated")]
         [InlineData(FunctionStarterTemplates.FetchTransform, "await fetch(")]
         public void Each_starter_template_seeds_its_own_handler(string template, string marker)

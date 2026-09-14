@@ -34,6 +34,11 @@ export const HARD_CAPS = [
 /** The "What the sandbox gives you" reference in the Code tab's right rail. */
 export const SANDBOX_CTX_DOCS = [
   {
+    name: "input",
+    description:
+      "The request: { method, path, query, headers, body }. path is whatever followed /fn/{id}; body is the parsed JSON (or text) of a POST, null on a GET. From a workflow node it is the previous node's output instead.",
+  },
+  {
     name: "fetch(url)",
     description:
       "Standard fetch. Public internet is reachable; Blocks internals and private networks are not routed.",
@@ -65,24 +70,6 @@ export const BACKOFF_DELAYS = {
   Fixed: { initialDelaySeconds: 5, maxDelaySeconds: 5 },
   Exponential: { initialDelaySeconds: 1, maxDelaySeconds: 20 },
 } as const;
-
-export const AUTH_MODE_OPTIONS = [
-  {
-    value: "Token",
-    label: "Blocks token",
-    hint: "The caller sends a Blocks token. Identity, roles and permissions arrive on ctx.context.",
-  },
-  {
-    value: "Public",
-    label: "Public",
-    hint: "Anyone with the URL can call it. No identity, no token-scoped work.",
-  },
-] as const;
-
-export const MATCH_MODE_OPTIONS = [
-  { value: "Any", label: "OR" },
-  { value: "All", label: "AND" },
-] as const;
 
 export const HTTP_METHOD_OPTIONS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
 

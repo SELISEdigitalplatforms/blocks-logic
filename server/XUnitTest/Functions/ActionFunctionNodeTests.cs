@@ -21,7 +21,7 @@ namespace XUnitTest.Functions
     {
         private sealed class FakeInvocationService : IFunctionInvocationService
         {
-            public List<(string TenantId, string FunctionId, string? Input)> Calls { get; } = [];
+            public List<(string TenantId, string FunctionId, string? Input, int? WaitTimeoutSeconds, string? WorkflowExecutionId)> Calls { get; } = [];
             public Func<string?, InvokeResultDto> Respond { get; set; } = _ => new InvokeResultDto
             {
                 RunId = "run_1", Status = "SUCCEEDED", Result = "{\"ok\":true}",
@@ -30,10 +30,10 @@ namespace XUnitTest.Functions
 
             public Task<InvokeResultDto> InvokeFromWorkflowAsync(
                 string tenantId, string functionId, string? inputJson, BlocksContext? callerContext,
-                int? waitTimeoutSeconds, CancellationToken cancellationToken = default)
+                int? waitTimeoutSeconds, string? workflowExecutionId, CancellationToken cancellationToken = default)
             {
                 if (ThrowOnInvoke is not null) throw ThrowOnInvoke;
-                Calls.Add((tenantId, functionId, inputJson));
+                Calls.Add((tenantId, functionId, inputJson, waitTimeoutSeconds, workflowExecutionId));
                 return Task.FromResult(Respond(inputJson));
             }
 
@@ -64,7 +64,8 @@ namespace XUnitTest.Functions
 
         private static NodeExecutionContext Context(
             List<WorkflowItemExecutionEntity> items, string functionId = "fn_1",
-            string inputMode = "item", string? inputExpression = null, int? waitTimeoutSec = null)
+            string inputMode = "item", string? inputExpression = null, int? waitTimeoutSec = null,
+            bool hasUpstream = true, CancellationToken cancellationToken = default)
         {
             var parameters = new BsonDocument
             {
@@ -80,8 +81,10 @@ namespace XUnitTest.Functions
                 Parameters = parameters,
                 InputItems = items,
                 IterationCount = items.Count,
+                HasUpstream = hasUpstream,
                 WorkflowContext = new BsonDocument(),
                 AncestorNodeOutputs = new Dictionary<string, List<WorkflowItemExecutionEntity>>(),
+                CancellationToken = cancellationToken,
             };
         }
 
@@ -215,15 +218,102 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
-        public async Task Zero_items_invokes_nothing_and_succeeds_with_an_empty_result()
+        public async Task Zero_items_from_an_upstream_invokes_nothing_and_succeeds_with_an_empty_result()
         {
+            // An untaken branch: the engine dispatches down every outgoing edge and relies on the
+            // zero-item node to prune. Firing here would run the function on a path the workflow
+            // deliberately did not choose.
             var service = new FakeInvocationService();
 
-            var result = await Node(service).RunAsync(Context([]));
+            var result = await Node(service).RunAsync(Context([], hasUpstream: true));
 
             result.IsSuccess.Should().BeTrue();
             result.OutputItems.Should().BeEmpty();
             service.Calls.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task A_node_with_nothing_wired_to_it_still_invokes_once()
+        {
+            // Testing a lone function step is the first thing anyone does after dropping one on the
+            // canvas. Zero iterations would make it succeed without ever calling the function.
+            var service = new FakeInvocationService();
+
+            var result = await Node(service).RunAsync(Context([], hasUpstream: false));
+
+            result.IsSuccess.Should().BeTrue();
+            service.Calls.Should().ContainSingle();
+            result.OutputItems.Should().ContainSingle();
+            result.OutputItems[0].ParentItemIds.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task A_standalone_run_sends_no_input_rather_than_failing_on_the_missing_item()
+        {
+            var service = new FakeInvocationService();
+
+            await Node(service).RunAsync(Context([], hasUpstream: false));
+
+            service.Calls[0].Input.Should().Be("{ }");
+        }
+
+        [Fact]
+        public async Task The_workflow_execution_id_is_passed_through_as_the_runs_invoker()
+        {
+            // Spec §41: ctx.run.invokedBy must identify the workflow execution. Without it a run
+            // shows "Triggered by workflow" and names no workflow at all.
+            var service = new FakeInvocationService();
+            var items = new List<WorkflowItemExecutionEntity> { Item("i1", new BsonDocument()) };
+
+            await Node(service).RunAsync(Context(items));
+
+            service.Calls[0].WorkflowExecutionId.Should().Be("exec-1");
+        }
+
+        [Fact]
+        public async Task The_configured_wait_timeout_is_passed_through()
+        {
+            var service = new FakeInvocationService();
+            var items = new List<WorkflowItemExecutionEntity> { Item("i1", new BsonDocument()) };
+
+            await Node(service).RunAsync(Context(items, waitTimeoutSec: 12));
+
+            service.Calls[0].WaitTimeoutSeconds.Should().Be(12);
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(-30)]
+        public async Task A_non_positive_wait_timeout_fails_before_queueing_a_run(int waitTimeoutSec)
+        {
+            // The run would really execute; only the waiting would be skipped. Failing the step
+            // after causing that side effect is the worst of both outcomes.
+            var service = new FakeInvocationService();
+            var items = new List<WorkflowItemExecutionEntity> { Item("i1", new BsonDocument()) };
+
+            var result = await Node(service).RunAsync(Context(items, waitTimeoutSec: waitTimeoutSec));
+
+            result.IsSuccess.Should().BeFalse();
+            result.ErrorMessage.Should().Contain("at least 1 second");
+            service.Calls.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task Cancellation_propagates_instead_of_becoming_a_failed_step()
+        {
+            // The engine stopping this execution is not the function failing, and recording it as a
+            // step error would blame the tenant's code for something the workflow asked for.
+            using var cts = new CancellationTokenSource();
+            await cts.CancelAsync();
+            var service = new FakeInvocationService
+            {
+                ThrowOnInvoke = new OperationCanceledException(cts.Token),
+            };
+            var items = new List<WorkflowItemExecutionEntity> { Item("i1", new BsonDocument()) };
+
+            var act = async () => await Node(service).RunAsync(Context(items, cancellationToken: cts.Token));
+
+            await act.Should().ThrowAsync<OperationCanceledException>();
         }
     }
 }

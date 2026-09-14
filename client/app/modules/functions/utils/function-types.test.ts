@@ -11,6 +11,12 @@ describe("buildFunctionTypeDefs", () => {
     expect(dts).toContain("readonly log: FunctionLogger");
     expect(dts).toContain("readonly isAuthenticated: boolean");
     expect(dts).toContain("info(message: string, data?: unknown): void");
+    // The HTTP route is a catch-all on every method, so the handler is told which was called.
+    expect(dts).toContain("declare interface FunctionInput");
+    expect(dts).toContain('readonly method: "GET" | "POST"');
+    expect(dts).toContain("(input: FunctionInput, ctx: FunctionContext)");
+    // The scope rule travels with the type, so hovering the handler explains it.
+    expect(dts).toContain("they exist only inside the handler");
   });
 
   it("types each bound variable as a known key", () => {

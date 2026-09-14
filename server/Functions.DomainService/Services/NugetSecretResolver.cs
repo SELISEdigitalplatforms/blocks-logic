@@ -78,13 +78,34 @@ namespace Functions.DomainService.Services
                 using var scope = _scopeFactory.CreateScope();
                 var secretService = scope.ServiceProvider.GetRequiredService<ISecretService>();
 
-                return await secretService.GetValuesAsync(secretIds, cancellationToken);
+                var resolved = await secretService.GetValuesAsync(secretIds, cancellationToken);
+
+                // "Absent, not thrown" is the contract, which means a caller sees the same empty
+                // slot whether the secret does not exist, is not readable, or the value store is
+                // misconfigured. Say which here — this log is the only place the difference is
+                // visible, and without it a run refused for an unresolved reference gives the
+                // author nothing to act on.
+                var missing = secretIds.Where(id => !resolved.ContainsKey(id)).ToList();
+                if (missing.Count > 0)
+                {
+                    _logger.LogWarning(
+                        "Resolved {Resolved}/{Requested} secret(s) for tenant {TenantId}; no value came back for: {MissingIds}. " +
+                        "The id is looked up through ISecretService, which derives its own key-vault name — " +
+                        "check the secret exists for this tenant and that its value was ever set.",
+                        resolved.Count, secretIds.Count, tenantId, string.Join(", ", missing));
+                }
+
+                return resolved;
             }
             catch (Exception ex)
             {
                 // A stale or inaccessible reference must fail one output action, not the whole
                 // run's result processing — the interface contract is "absent, not thrown".
-                _logger.LogWarning(ex, "Could not resolve {Count} secret(s) for tenant {TenantId}", secretIds.Count, tenantId);
+                // The exception type is the useful half: a KeyVault 403 and a missing
+                // KeyVault__* configuration are the same empty dictionary to the caller.
+                _logger.LogWarning(ex,
+                    "Could not resolve {Count} secret(s) for tenant {TenantId} ({ExceptionType}). Ids: {SecretIds}",
+                    secretIds.Count, tenantId, ex.GetType().Name, string.Join(", ", secretIds));
                 return new Dictionary<string, string>();
             }
         }

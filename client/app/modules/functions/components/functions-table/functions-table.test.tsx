@@ -62,7 +62,7 @@ describe("FunctionsTable", () => {
 
     expect(screen.getByText("Send confirmation")).toBeTruthy();
     // The endpoint, not the bare id — it is what a caller needs.
-    expect(screen.getByText("/api/fn/fn_1")).toBeTruthy();
+    expect(screen.getByText("/logic/v4/fn/fn_1")).toBeTruthy();
     expect(screen.getByText("Live")).toBeTruthy();
     expect(screen.getByText("v3")).toBeTruthy();
     expect(screen.getByText("1,204")).toBeTruthy();

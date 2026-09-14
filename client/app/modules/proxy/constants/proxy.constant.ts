@@ -58,7 +58,7 @@ export const PROXY_LOG_PAGE_SIZE = PROXY_LOG_PAGE_SIZE_OPTIONS[0];
  * `~/api/proxy/gateway/{slug}/{**path}`; the public gateway addresses it under this prefix instead,
  * so the `/api` segment never appears in a URL we hand to a tenant.
  */
-const PUBLIC_GATEWAY_PREFIX = "/logic/v4";
+export const PUBLIC_GATEWAY_PREFIX = "/logic/v4";
 
 /**
  * The data-plane path a tenant's client actually calls (see `ProxiesController.Gateway`). Pinned

@@ -1,6 +1,7 @@
 import { Plus, Trash2, TriangleAlert } from "lucide-react";
 import { Input } from "@/components/ui-kits/input/input";
 import { Button } from "@/components/ui-kits/button/button";
+import { VariableRefField, secretIdRef, soleRefKey } from "@/components/variable-picker";
 import { IVariableBinding } from "../../types/function.types";
 
 type VariablesEditorProps = {
@@ -10,7 +11,7 @@ type VariablesEditorProps = {
 
 const KEY_PATTERN = /^[A-Z][A-Z0-9_]*$/;
 const MAX_VALUE_LENGTH = 4096;
-/** Names that usually mean a credential — a variable is plain text on `ctx.env`, so warn, don't block. */
+/** Names that usually mean a credential — a plain-text variable is readable in the sandbox, so warn. */
 const SECRET_LOOKING_KEY = /(SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|PRIVATE|_KEY|^KEY$|APIKEY)/;
 const SECRET_LOOKING_VALUE = /^[A-Za-z0-9_\-.]{32,}$/;
 
@@ -27,7 +28,12 @@ const valueError = (value: string) =>
 const looksLikeSecret = ({ key, value }: IVariableBinding) =>
   SECRET_LOOKING_KEY.test(key.toUpperCase()) || SECRET_LOOKING_VALUE.test(value);
 
-/** Non-secret `ctx.env.KEY` bindings. Secrets never go here — see the output actions editor. */
+/**
+ * `ctx.env.KEY` bindings. A value is either typed in plain — readable by anyone who can see the
+ * function's configuration — or bound to one of the tenant's platform configuration variables,
+ * in which case only a `{{secret.<id>}}` reference is stored and the value is resolved on the
+ * host as the run starts.
+ */
 export const VariablesEditor = ({ value, onChange }: VariablesEditorProps) => {
   const update = (index: number, partial: Partial<IVariableBinding>) => {
     onChange(value.map((v, i) => (i === index ? { ...v, ...partial } : v)));
@@ -46,7 +52,8 @@ export const VariablesEditor = ({ value, onChange }: VariablesEditorProps) => {
             </span>
           </span>
           <span className="text-xs text-medium-emphasis">
-            Plain strings on <code className="font-mono">ctx.env</code>, snapshotted at deploy.
+            Strings on <code className="font-mono">ctx.env</code>. Bind one to a configuration
+            variable to keep the value out of the editor.
           </span>
         </div>
         <Button type="button" size="sm" className="gap-1.5" onClick={add}>
@@ -65,7 +72,7 @@ export const VariablesEditor = ({ value, onChange }: VariablesEditorProps) => {
           {/* Header and rows are separate grids: the last track is a fixed 32 px (the Remove
               button) rather than `auto`, which measured 0 in the header and 32 in each row and
               pushed every label out of line with its input. */}
-          <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.2fr)_minmax(0,1fr)_32px] gap-3 border-b px-4 py-2 text-xs font-semibold uppercase tracking-wide text-low-emphasis">
+          <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_minmax(0,0.9fr)_32px] gap-3 border-b px-4 py-2 text-xs font-semibold uppercase tracking-wide text-low-emphasis">
             <span>Key</span>
             <span>Value</span>
             <span>Read in code as</span>
@@ -74,10 +81,12 @@ export const VariablesEditor = ({ value, onChange }: VariablesEditorProps) => {
           {value.map((variable, index) => {
             const keyMessage = keyError(variable.key, index, value);
             const valueMessage = valueError(variable.value);
-            const secretWarning = looksLikeSecret(variable);
+            const bound = soleRefKey(variable.value, secretIdRef);
+            const secretWarning = !bound && looksLikeSecret(variable);
+
             return (
               <div key={index} className="border-b px-4 py-2.5 last:border-b-0">
-                <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.2fr)_minmax(0,1fr)_32px] items-center gap-3">
+                <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_minmax(0,0.9fr)_32px] items-center gap-3">
                   <Input
                     aria-label={`Variable ${index + 1} key`}
                     placeholder="STRIPE_ACCOUNT"
@@ -85,13 +94,16 @@ export const VariablesEditor = ({ value, onChange }: VariablesEditorProps) => {
                     value={variable.key}
                     onChange={(e) => update(index, { key: e.target.value.toUpperCase() })}
                   />
-                  <Input
-                    aria-label={`Variable ${index + 1} value`}
-                    placeholder="acct_1P9…"
-                    className="h-9 font-mono text-xs"
+
+                  <VariableRefField
                     value={variable.value}
-                    onChange={(e) => update(index, { value: e.target.value })}
+                    onChange={(next) => update(index, { value: next })}
+                    codec={secretIdRef}
+                    ariaLabel={`Variable ${index + 1} value`}
+                    placeholder="acct_1P9…"
+                    hint="Stored as a reference and resolved when the run starts, so the value is never saved here."
                   />
+
                   <code className="min-w-0 truncate font-mono text-xs text-medium-emphasis">
                     ctx.env.{variable.key || "NAME"}
                   </code>
@@ -106,14 +118,16 @@ export const VariablesEditor = ({ value, onChange }: VariablesEditorProps) => {
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
+
                 {(keyMessage || valueMessage) && (
                   <p className="mt-1.5 text-xs text-error">{keyMessage ?? valueMessage}</p>
                 )}
                 {!keyMessage && secretWarning && (
                   <p className="mt-1.5 flex items-start gap-1.5 text-xs text-warning-800">
                     <TriangleAlert className="mt-px h-3.5 w-3.5 shrink-0" />
-                    This looks like a secret. Store it in Blocks OS Secrets and use it in an output
-                    action instead — variables are readable in the sandbox.
+                    This looks like a credential. Bind it to a configuration variable instead — a
+                    typed value is stored in plain text and visible to anyone who can open this
+                    function.
                   </p>
                 )}
               </div>
@@ -124,7 +138,8 @@ export const VariablesEditor = ({ value, onChange }: VariablesEditorProps) => {
 
       <p className="border-t px-4 py-3 text-xs text-medium-emphasis">
         Changes apply on the next deploy, so a version always runs with the variables it was built
-        with.
+        with. A bound configuration variable is the exception: the reference is deployed and its
+        value is read at run time, so rotating one takes effect without a redeploy.
       </p>
     </div>
   );

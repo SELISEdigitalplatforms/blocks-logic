@@ -50,10 +50,37 @@ const LOG_LEVEL_CLASS: Record<string, string> = {
   debug: "text-low-emphasis",
 };
 
+/**
+ * A stored run's input is the whole request — `{ method, path, query, headers, body }` — because
+ * that is what the handler received. The test box holds only the payload (Test wraps it the same
+ * way server-side: the body of a POST, the query of a GET), so reusing a run's input means lifting
+ * that part back out. Anything not in that shape (an older run, a workflow input) is reused as is.
+ */
+const payloadOf = (storedInput: string): string => {
+  try {
+    const parsed: unknown = JSON.parse(storedInput);
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed) &&
+      typeof (parsed as { method?: unknown }).method === "string" &&
+      "body" in parsed
+    ) {
+      const request = parsed as { method: string; body: unknown; query?: unknown };
+      const payload = request.method === "GET" ? request.query : request.body;
+      return payload == null ? "{}" : JSON.stringify(payload, null, 2);
+    }
+  } catch {
+    // Not JSON: hand it back untouched.
+  }
+  return storedInput;
+};
+
 /** Test input + the result of the last test, in the Code tab's right rail. Ctrl+Enter runs it. */
 export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: TestPanelProps) => {
   const testInput = useFunctionEditorStore((s) => s.testInput);
   const setTestInput = useFunctionEditorStore((s) => s.setTestInput);
+  const httpMethod = useFunctionEditorStore((s) => s.trigger.httpMethod);
   const [runId, setRunId] = useState<string | null>(null);
   // Set when Test came back with a build rather than a run: the image was not ready yet.
   const [buildId, setBuildId] = useState<string | null>(null);
@@ -81,35 +108,38 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
    * dependency's newer patch is only picked up by a build, and a cached image that is broken
    * rather than missing has no other way out than editing the source until its hash changes.
    */
-  const handleRun = useCallback(async ({ rebuild = false }: { rebuild?: boolean } = {}) => {
-    try {
-      JSON.parse(testInput || "{}");
-    } catch {
-      return setInputError("That is not valid JSON.");
-    }
-    setInputError(null);
-    try {
-      if (onBeforeRun) {
-        setIsSaving(true);
-        const saved = await onBeforeRun();
-        if (!saved) return;
+  const handleRun = useCallback(
+    async ({ rebuild = false }: { rebuild?: boolean } = {}) => {
+      try {
+        JSON.parse(testInput || "{}");
+      } catch {
+        return setInputError("That is not valid JSON.");
       }
-      const response = await mutateAsync({ functionId, inputJson: testInput, rebuild });
-      if (response.runId) {
-        setBuildId(null);
-        setRunId(response.runId);
-      } else if (response.buildId) {
-        // No run yet — the image is still building. Follow the build and start the run when it lands.
-        setRunId(null);
-        setBuildId(response.buildId);
+      setInputError(null);
+      try {
+        if (onBeforeRun) {
+          setIsSaving(true);
+          const saved = await onBeforeRun();
+          if (!saved) return;
+        }
+        const response = await mutateAsync({ functionId, inputJson: testInput, rebuild });
+        if (response.runId) {
+          setBuildId(null);
+          setRunId(response.runId);
+        } else if (response.buildId) {
+          // No run yet — the image is still building. Follow the build and start the run when it lands.
+          setRunId(null);
+          setBuildId(response.buildId);
+        }
+      } catch (error) {
+        if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
+        return showErrorToast({ errors: "Failed to run test" });
+      } finally {
+        setIsSaving(false);
       }
-    } catch (error) {
-      if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
-      return showErrorToast({ errors: "Failed to run test" });
-    } finally {
-      setIsSaving(false);
-    }
-  }, [functionId, mutateAsync, onBeforeRun, testInput]);
+    },
+    [functionId, mutateAsync, onBeforeRun, testInput],
+  );
 
   useEffect(() => {
     if (!buildId || build?.status !== "Succeeded") return;
@@ -155,14 +185,18 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
   ]
     .filter(Boolean)
     .join(" · ");
-  const explanation = explainRunError(run?.errorCode);
+  const explanation = explainRunError(run?.errorCode, run?.errorMessage);
 
   return (
     <div className="flex flex-col gap-3">
       <Card className="overflow-hidden">
         <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
           <span className="text-sm font-semibold">Test input</span>
-          <span className="text-xs text-low-emphasis">same sandbox as production</span>
+          <span className="text-xs text-low-emphasis">
+            sent as{" "}
+            <code className="font-mono">{httpMethod === "Get" ? "input.query" : "input.body"}</code>{" "}
+            · same sandbox as production
+          </span>
         </div>
         <Textarea
           aria-label="Test input JSON"
@@ -182,7 +216,7 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
               size="xs"
               className="px-2 text-xs"
               disabled={!lastRun?.input}
-              onClick={() => lastRun?.input && setTestInput(lastRun.input)}
+              onClick={() => lastRun?.input && setTestInput(payloadOf(lastRun.input))}
             >
               Use last run input
             </Button>

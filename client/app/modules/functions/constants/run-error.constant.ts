@@ -23,14 +23,58 @@ export const RUN_ERROR_EXPLANATIONS: Record<RunErrorCode, string> = {
 };
 
 /**
- * The hint for a code, or null when there is no hint to add.
+ * The bootstrap's prefix for a run that died while *importing* index.js, before the handler was
+ * ever called (`runtime/bootstrap.mjs`). It is worth telling apart from any other
+ * `UserRuntimeError`: the generic sentence for that code sends the reader to a stack in the logs,
+ * and a module that never loaded has written no logs at all.
+ */
+const MODULE_LOAD_PREFIX = "the function module failed to load";
+
+/** `ctx is not defined` / `input is not defined` — the handler's parameters used at module scope. */
+const HANDLER_SCOPE = /\b(ctx|input)\b is not defined/i;
+
+/** Node's shape for an import of something that is not installed. */
+const MISSING_PACKAGE = /cannot find (package|module)|ERR_MODULE_NOT_FOUND/i;
+
+/**
+ * The hint for a failure, or null when there is no hint to add.
  *
- * It deliberately no longer falls back to the raw message: callers render that themselves, and
+ * It deliberately does not fall back to the raw message: callers render that themselves, and
  * returning it here made the two indistinguishable — a known code showed the friendly sentence
  * *instead of* what actually happened, so "Cannot find package 'ky' imported from /function/index.js"
  * could only be read in the network tab.
+ *
+ * `errorMessage` refines the code rather than replacing it: one code covers everything a tenant's
+ * module can do, and the most common first failure — reaching for `ctx` outside the handler — is
+ * indistinguishable from a thrown handler unless the message is read.
  */
-export const explainRunError = (errorCode?: RunErrorCode | string | null) => {
+export const explainRunError = (
+  errorCode?: RunErrorCode | string | null,
+  errorMessage?: string | null,
+) => {
+  const message = errorMessage ?? "";
+
+  if (message.toLowerCase().startsWith(MODULE_LOAD_PREFIX)) {
+    if (HANDLER_SCOPE.test(message)) {
+      return (
+        "input and ctx are parameters of your handler — they exist only inside " +
+        "export default async function handler(input, ctx) { … }, not at the top level of the file. " +
+        "Code outside the handler runs once when the sandbox starts, which is where clients, caches " +
+        "and constants belong; anything that needs the request or the context has to be inside."
+      );
+    }
+    if (MISSING_PACKAGE.test(message)) {
+      return (
+        "The import could not be resolved. Add the package to package.json — pinned to an exact " +
+        "version — then run the test again, which builds a new image."
+      );
+    }
+    return (
+      "The file threw while it was being imported, so the handler never ran and nothing was logged. " +
+      "The cause is in top-level code, not inside your handler."
+    );
+  }
+
   if (!errorCode) return null;
   return RUN_ERROR_EXPLANATIONS[errorCode as RunErrorCode] ?? null;
 };

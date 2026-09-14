@@ -64,7 +64,7 @@ namespace XUnitTest.Functions
             member.GetCustomAttributes().Any(a => a.GetType().Name == "ProtectedEndPointAttribute");
 
         [Theory]
-        [InlineData(nameof(FunctionsController.Invoke), "api/fn/{functionId}")]
+        [InlineData(nameof(FunctionsController.Invoke), "api/fn/{functionId}/{**path}")]
         [InlineData(nameof(FunctionsController.PollRun), "api/fn/runs/{runId}")]
         public void PublicEndpointsKeepTheirOwnPathWhateverTheControllerTemplateIs(string actionName, string expected)
         {
@@ -75,6 +75,30 @@ namespace XUnitTest.Functions
             // /api/functions/invoke/... and every tenant's published URL 404s.
             RouteOf(action, ControllerTemplate).Should().Be(expected);
             RouteOf(action, PrefixedControllerTemplate).Should().Be(expected);
+        }
+
+        [Fact]
+        public void InvokeIsAGatewayStyleCatchAllOnEveryMethod()
+        {
+            // The proxy gateway's shape, deliberately: the two methods a trigger can pick from,
+            // anything after the id is the handler's input.path, and a body cap enforced before
+            // Kestrel's generic 413. The trigger's own method is enforced inside the service.
+            var verbs = Action(nameof(FunctionsController.Invoke)).GetCustomAttribute<AcceptVerbsAttribute>();
+            verbs.Should().NotBeNull();
+            verbs!.HttpMethods.Should().BeEquivalentTo(["GET", "POST"]);
+            verbs.Route.Should().Be("~/api/fn/{functionId}/{**path}");
+
+            Action(nameof(FunctionsController.Invoke)).GetCustomAttribute<RequestSizeLimitAttribute>().Should().NotBeNull();
+        }
+
+        [Fact]
+        public void PollRunDoesNotSitUnderTheCatchAll()
+        {
+            // `runs/{runId}` would otherwise match `{functionId}/{**path}` with functionId = "runs".
+            // ASP.NET Core prefers the literal segment, but that is a routing subtlety worth pinning
+            // rather than trusting: the two templates must stay distinguishable by more than luck.
+            var poll = Action(nameof(FunctionsController.PollRun)).GetCustomAttribute<HttpGetAttribute>();
+            poll!.Template.Should().StartWith("~/api/fn/runs/");
         }
 
         [Theory]

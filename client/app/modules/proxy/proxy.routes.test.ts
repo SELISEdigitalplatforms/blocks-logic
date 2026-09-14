@@ -157,7 +157,8 @@ describe("proxy routes", () => {
   });
 
   describe("form validation", () => {
-    const parse = (routes: ProxyFormValues["routes"]) => proxyFormSchema.safeParse(formValues(routes));
+    const parse = (routes: ProxyFormValues["routes"]) =>
+      proxyFormSchema.safeParse(formValues(routes));
 
     const route = (over: Partial<ProxyFormValues["routes"][number]>) => ({
       method: "GET" as const,

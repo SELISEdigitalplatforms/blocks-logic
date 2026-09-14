@@ -44,12 +44,34 @@ namespace Functions.DomainService.Nodes
                 return NodeExecutionResult.Failed("the function action step has no function selected");
             }
 
+            // Checked here rather than left to the invocation service: a non-positive wait window
+            // makes WaitForResultAsync's deadline expire before its first poll, so the step would
+            // queue a run that really does execute and then fail as "still running" — a side effect
+            // with no result, from a value the editor should not have accepted in the first place.
+            if (parameters.WaitTimeoutSec is <= 0)
+            {
+                return NodeExecutionResult.Failed(
+                    $"wait timeout must be at least 1 second, but is {parameters.WaitTimeoutSec}");
+            }
+
             var callerContext = BlocksContext.GetContext();
             var outputItems = new List<NodeOutputItem>();
 
-            for (var i = 0; i < context.IterationCount; i++)
+            // In "expression" input mode the step is self-contained, and even in "item" mode the
+            // function may take no input at all, so a lone function node has something to run. With
+            // nothing wired to it there is no producer to take items from, and iterating zero times
+            // would make a single-node test of it silently succeed without ever calling the function.
+            //
+            // A node that DOES have an upstream keeps the zero-iteration behaviour exactly. An empty
+            // input there means an upstream branch that was not taken (the engine dispatches down every
+            // outgoing edge and relies on the zero-item node to prune), and firing anyway would run the
+            // tenant's function — and its output actions — on a path the workflow deliberately skipped.
+            var standalone = context.IterationCount == 0 && !context.HasUpstream;
+            var iterations = standalone ? 1 : context.IterationCount;
+
+            for (var i = 0; i < iterations; i++)
             {
-                var inputItem = context.InputItems[i];
+                var inputItem = standalone ? StandaloneInputItem(context) : context.InputItems[i];
                 var inputJson = BuildInputJson(parameters, inputItem, context);
 
                 InvokeResultDto result;
@@ -57,7 +79,15 @@ namespace Functions.DomainService.Nodes
                 {
                     result = await _invocationService.InvokeFromWorkflowAsync(
                         context.TenantId, parameters.FunctionId, inputJson, callerContext,
-                        parameters.WaitTimeoutSec, context.CancellationToken);
+                        parameters.WaitTimeoutSec, context.WorkflowExecutionId, context.CancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Cancellation is the engine stopping this execution, not the function failing,
+                    // so it is left to the engine rather than reported as the function's own error
+                    // — the same split ActionProxyNode makes. The step still ends up failed either
+                    // way; what differs is only that the recorded reason is the cancellation.
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -80,12 +110,31 @@ namespace Functions.DomainService.Nodes
                         Parameters = parameters.ToBsonDocument(),
                     },
                     Branch = "source",
-                    ParentItemIds = [inputItem.Id],
+                    // A standalone run has no parent item, so it claims none: the engine reads these
+                    // ids back out of InputItems to build the ancestor map.
+                    ParentItemIds = standalone ? [] : [inputItem.Id],
                 });
             }
 
             return NodeExecutionResult.Successful(outputItems);
         }
+
+        /// <summary>
+        /// The stand-in input item for a function node with nothing wired to it. Carries an empty
+        /// payload, so "item" mode sends no input and an expression resolving against
+        /// <c>$json</c> resolves to nothing rather than throwing.
+        /// </summary>
+        private static WorkflowItemExecutionEntity StandaloneInputItem(NodeExecutionContext context) => new()
+        {
+            Id = string.Empty,
+            WorkflowExecutionId = context.WorkflowExecutionId,
+            TenantId = context.TenantId,
+            NodeId = context.NodeId,
+            NodeExecutionId = string.Empty,
+            NodeName = string.Empty,
+            Branch = "source",
+            Data = new NodeOutputItemData(),
+        };
 
         /// <summary>
         /// "item" passes the current input item's own output through as the function's input,

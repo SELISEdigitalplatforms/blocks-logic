@@ -96,6 +96,31 @@ namespace Functions.DomainService.Enums
         All = 1,
     }
 
+    /// <summary>
+    /// The one HTTP method a function's endpoint answers. Post is 0 so a stored trigger from before
+    /// the field existed keeps behaving as it did — every function was POST-only then.
+    /// </summary>
+    public enum HttpTriggerMethod
+    {
+        Post = 0,
+        Get = 1,
+    }
+
+    /// <summary>
+    /// How the roles rule and the permissions rule combine when <i>both</i> are configured on a
+    /// token trigger. Mirrors <c>EndpointAccessCombine</c> in Common, which is what the shared
+    /// authorizer evaluates on the public route; a rule with no values is not configured and
+    /// never takes part, so this only matters once both lists carry an entry.
+    /// </summary>
+    public enum AccessCombine
+    {
+        /// <summary>The caller passes if either configured rule passes.</summary>
+        Or = 0,
+
+        /// <summary>The caller must pass every configured rule.</summary>
+        And = 1,
+    }
+
     /// <summary>Shape of the delay between run attempts.</summary>
     /// <summary>
     /// Serialised by name. These four reach the wire inside <c>SaveFunctionRequestDto</c>, which

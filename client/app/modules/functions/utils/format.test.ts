@@ -38,6 +38,26 @@ describe("formatDuration", () => {
     expect(formatDuration(75_000)).toBe("1 min 15 s");
     expect(formatDuration(null)).toBe("—");
   });
+
+  it("reads the two decimals as hundredths of a second", () => {
+    // 7.99 s is 7990 ms, not 7 s 99 ms — the question the runs page invites.
+    expect(formatDuration(7_990)).toBe("7.99 s");
+    expect(formatDuration(7_930)).toBe("7.93 s");
+    expect(formatDuration(1_000)).toBe("1.00 s");
+  });
+
+  it("carries a rounded-up remainder instead of printing an impossible time", () => {
+    // Rounding each half on its own gave "60.00 s" and "1 min 60 s".
+    expect(formatDuration(59_999)).toBe("1 min 0 s");
+    expect(formatDuration(119_600)).toBe("2 min 0 s");
+    expect(formatDuration(60_000)).toBe("1 min 0 s");
+    expect(formatDuration(123_000)).toBe("2 min 3 s");
+  });
+
+  it("holds the boundary either side of a minute", () => {
+    expect(formatDuration(59_000)).toBe("59.00 s");
+    expect(formatDuration(59_994)).toBe("59.99 s");
+  });
 });
 
 describe("runnerSpanMs", () => {

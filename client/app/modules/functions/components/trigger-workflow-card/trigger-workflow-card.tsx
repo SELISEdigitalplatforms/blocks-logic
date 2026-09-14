@@ -20,8 +20,11 @@ const NODES = [
 export const TriggerWorkflowCard = ({ value, onChange }: TriggerWorkflowCardProps) => (
   <Card>
     <CardContent className="flex flex-col gap-3 p-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex min-w-0 flex-col gap-1">
+      {/* The card sits in a half-width column, so the heading block has to be allowed to shrink:
+          left to its max-content width it never fits beside the switch and wraps it onto a line
+          of its own. Same row idiom as the HTTP card above it. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="text-base font-semibold">Use in workflows</span>
           <span className="text-xs leading-relaxed text-medium-emphasis">
             A workflow node can trigger this function, and what it returns is passed to the next
@@ -32,6 +35,7 @@ export const TriggerWorkflowCard = ({ value, onChange }: TriggerWorkflowCardProp
           aria-label="Use in workflows"
           checked={value.workflowEnabled}
           onCheckedChange={(checked) => onChange({ ...value, workflowEnabled: checked })}
+          className="flex-shrink-0"
         />
       </div>
 

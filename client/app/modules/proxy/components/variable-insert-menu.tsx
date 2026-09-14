@@ -1,18 +1,9 @@
+import { useState } from "react";
 import { ChevronDown, Key } from "lucide-react";
 import { Button } from "@/components/ui-kits/button/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui-kits/dropdown-menu/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui-kits/tooltip/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui-kits/popover/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
+import { VariablePicker } from "@/components/variable-picker";
 import { SecretListItem } from "../types";
 
 type Props = {
@@ -25,10 +16,14 @@ type Props = {
 };
 
 /**
- * A compact icon-button dropdown that lists the tenant's secret keys. Selecting one calls
- * `onPick(name)`; the caller turns that into a `{{$VAR.name}}` token and inserts it at the value
- * field's caret. While loading, on error, or when the tenant has no usable key the trigger is a
- * plain disabled button with an explanatory tooltip — the menu is not rendered at all.
+ * A compact icon-button dropdown that lists the tenant's configuration variables, searchable by
+ * name and filterable by tag. Selecting one calls `onPick(name)`; the caller turns that into a
+ * `{{$VAR.name}}` token and inserts it at the value field's caret. While loading, on error, or
+ * when the tenant has no usable key the trigger is a plain disabled button with an explanatory
+ * tooltip — the panel is not rendered at all.
+ *
+ * A Popover rather than a DropdownMenu because the panel owns a text input: a menu steals
+ * keystrokes for its own typeahead, so search cannot live inside one.
  */
 export const VariableInsertMenu = ({
   variables,
@@ -37,6 +32,7 @@ export const VariableInsertMenu = ({
   onPick,
   ariaLabel,
 }: Props) => {
+  const [open, setOpen] = useState(false);
   const usable = variables ?? [];
   const disabled = Boolean(variablesLoading) || Boolean(variablesError) || usable.length === 0;
 
@@ -78,10 +74,10 @@ export const VariableInsertMenu = ({
   }
 
   return (
-    <DropdownMenu>
+    <Popover open={open} onOpenChange={setOpen}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <DropdownMenuTrigger asChild>
+          <PopoverTrigger asChild>
             <Button
               type="button"
               variant="ghost"
@@ -91,23 +87,19 @@ export const VariableInsertMenu = ({
             >
               {triggerIcon}
             </Button>
-          </DropdownMenuTrigger>
+          </PopoverTrigger>
         </TooltipTrigger>
         <TooltipContent>{hint}</TooltipContent>
       </Tooltip>
-      <DropdownMenuContent align="end" className="max-h-64 w-56 overflow-y-auto">
-        <DropdownMenuLabel>Configuration variables</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        {usable.map((variable) => (
-          <DropdownMenuItem
-            key={variable.id}
-            onSelect={() => onPick(variable.name)}
-            className="font-mono text-xs"
-          >
-            {variable.name}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      <PopoverContent align="end" className="w-64 p-0">
+        <VariablePicker
+          variables={usable}
+          onPick={(variable) => {
+            onPick(variable.name);
+            setOpen(false);
+          }}
+        />
+      </PopoverContent>
+    </Popover>
   );
 };

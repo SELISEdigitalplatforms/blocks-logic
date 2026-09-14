@@ -1,6 +1,8 @@
 using Blocks.Genesis;
+using Common.InternalService.Access;
 using Functions.DomainService.Dtos.Requests;
 using Functions.DomainService.Dtos.Responses;
+using Functions.DomainService.Models;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Services;
 using Functions.DomainService.Utils;
@@ -20,9 +22,11 @@ namespace BlocksTemplate.Api.Controllers
     /// </item>
     /// <item>
     /// The <b>public invocation surface</b> at the bottom of this file — <c>/api/fn/…</c>,
-    /// reached by callers who are not necessarily Blocks users at all. Its routes are absolute
-    /// (<c>~/api/…</c>) because they do not follow the controller's template, and its entry
-    /// action is deliberately anonymous.
+    /// reached by callers who are not necessarily Blocks users at all. It is built the way the
+    /// proxy gateway is: a catch-all route on every method, anonymous at the framework level, the
+    /// tenant resolved from <c>x-blocks-key</c> by the shared access authorizer, and the stored
+    /// "Who can call it" enforced per call. Its routes are absolute (<c>~/api/…</c>) because they
+    /// do not follow the controller's template.
     /// </item>
     /// </list>
     /// <para>
@@ -43,14 +47,20 @@ namespace BlocksTemplate.Api.Controllers
         private readonly IFunctionRunService _runService;
         private readonly IFunctionBuildService _buildService;
         private readonly IFunctionAuditService _auditService;
+        private readonly IEndpointAccessAuthorizer _accessAuthorizer;
 
+        /// <summary>
+        /// The management services, plus the shared access authorizer that resolves the tenant on
+        /// the anonymous <see cref="Invoke"/> route — the same one the proxy gateway uses.
+        /// </summary>
         public FunctionsController(
             IFunctionService functionService,
             IFunctionDeploymentService deploymentService,
             IFunctionInvocationService invocationService,
             IFunctionRunService runService,
             IFunctionBuildService buildService,
-            IFunctionAuditService auditService)
+            IFunctionAuditService auditService,
+            IEndpointAccessAuthorizer accessAuthorizer)
         {
             _functionService = functionService;
             _deploymentService = deploymentService;
@@ -58,6 +68,7 @@ namespace BlocksTemplate.Api.Controllers
             _runService = runService;
             _buildService = buildService;
             _auditService = auditService;
+            _accessAuthorizer = accessAuthorizer;
         }
 
         // --------------------------------------------------------------- functions ----
@@ -204,61 +215,91 @@ namespace BlocksTemplate.Api.Controllers
         // per-action attributes, so read the class summary before adding anything here.
 
         /// <summary>
-        /// The public function endpoint (DECISIONS D5): <c>POST /api/fn/{functionId}</c>.
+        /// Same shape as the proxy gateway's own cap: a little above the service's ceiling, so the
+        /// service — not Kestrel's generic 413 — is what answers an oversized body, with the
+        /// documented error shape. Kestrel still stops a runaway upload here.
+        /// </summary>
+        private const long InvokeHardBodyLimitBytes = FunctionLimits.Ceiling.InputBytes + 64 * 1024;
+
+        /// <summary>
+        /// The public function endpoint (DECISIONS D5): <c>{METHOD} /api/fn/{functionId}/{**path}</c>.
+        /// A tenant's client calls this instead of hosting the code. The route is registered for
+        /// GET and POST; the trigger picks one of them, and the other is refused with 405 once the
+        /// caller is authorized. Anything after the id is passed to the handler as
+        /// <c>input.path</c>, with the method, query, allow-listed headers and body alongside it
+        /// (see <c>FunctionHttpInputBuilder</c>).
         /// <para>
-        /// The tenant comes from <see cref="BlocksContext"/>, never from the route. Genesis'
-        /// <c>TenantValidationMiddleware</c> guards every path under <c>api</c> — that prefix is
-        /// in its default set, so this route is covered — resolving the tenant from the
-        /// <c>x-blocks-key</c> header (or the query/form fallbacks in
-        /// <c>TenantContextHelper.ResolveTenantIdFromHeaders</c>), validating it against the real
-        /// tenant record, and calling <c>EnsureTenantContext</c> before any controller runs. So a
-        /// caller must present a tenant key to reach this action at all, and that key is the only
-        /// tenant identity the platform has actually verified.
+        /// The tenant comes from <c>x-blocks-key</c> (or the tenant claim of a presented token),
+        /// resolved by the shared <see cref="IEndpointAccessAuthorizer"/>, never from the route, the
+        /// query or the body. There is exactly one tenant in this request and it is the one whose
+        /// certificate then has to validate any token presented — a second, unvalidated tenant id
+        /// in the path would let any valid key reach a <c>Public</c> function in whatever other
+        /// tenant the caller could name.
         /// </para>
         /// <para>
-        /// <b>Never take a tenant from the route, the query or the body.</b> The middleware has
-        /// already authenticated one tenant — the header's — so a second, unvalidated tenant id
-        /// in the path would let any valid <c>x-blocks-key</c> reach a <c>Public</c> function in
-        /// whatever other tenant the caller could name, while every gate here was evaluated
-        /// against that named tenant rather than the authenticated one. There is exactly one
-        /// tenant in this request and it comes from <see cref="BlocksContext"/>.
+        /// <see cref="AllowAnonymousAttribute"/> at the framework level, like the proxy gateway: a
+        /// tenant key identifies a tenant but authenticates no user, and whether a caller may
+        /// proceed is the deployed version's own "Who can call it" (public, or a Blocks token
+        /// optionally narrowed by roles / permissions), decided per stored policy inside
+        /// <c>FunctionInvocationService.InvokeHttpAsync</c>. The Genesis bearer handler skips
+        /// anonymous actions entirely, so that service is where the token is validated. Saying
+        /// anonymous explicitly also keeps the endpoint public if this class ever acquires a
+        /// type-level authorization attribute.
         /// </para>
         /// <para>
-        /// The route is absolute so that it stays <c>/api/fn/{functionId}</c> rather than
-        /// following this controller's <c>[controller]/[action]</c> template. That also puts it
+        /// The route is absolute (<c>~/</c>) so it stays <c>/api/fn/…</c> whatever this controller
+        /// or method is called: it is a published contract clients hard-code. That also puts it
         /// outside <c>GlobalApiRoutePrefixConvention</c>, which only prefixes controller-level
-        /// templates — hence the <c>api</c> segment written out here.
+        /// templates — hence the <c>api</c> segment written out here, once.
         /// </para>
         /// <para>
-        /// <see cref="AllowAnonymousAttribute"/> rather than merely omitting <c>[Authorize]</c>:
-        /// a tenant key identifies a tenant but authenticates no user, and whether a caller may
-        /// proceed is the function's own trigger configuration (public vs. token-protected),
-        /// decided inside <c>FunctionInvocationService.InvokeHttpAsync</c> — this mirrors how the
-        /// workflow webhook action is anonymous at the controller and authorizes itself
-        /// internally per-trigger. Saying it explicitly also keeps the endpoint public if this
-        /// class ever does acquire a type-level authorization attribute.
+        /// Errors use the gateway's body shape, <c>{ code, message, instance }</c>, with
+        /// <c>FUNCTION_INVOKE_*</c> codes: 401 for no tenant or no usable token, 403 when the token
+        /// validates but the rules refuse it (or HTTP is switched off), 404 for an unknown or
+        /// undeployed function — but only to a caller who could have reached it, so 401 comes
+        /// first — 405 with an <c>Allow</c> header for the method the trigger does not take, 413
+        /// over the body ceiling, 400 for input the sandbox cannot be given. 202 with a
+        /// run id is the fire-and-forget shape; 200 carries the result once <c>?wait=true</c> saw a
+        /// terminal outcome.
         /// </para>
         /// </summary>
         [AllowAnonymous]
-        [HttpPost("~/api/fn/{functionId}")]
-        public async Task<IActionResult> Invoke(
-            string functionId, [FromQuery] bool wait, [FromBody] object? body)
+        [RequestSizeLimit(InvokeHardBodyLimitBytes)]
+        [AcceptVerbs("GET", "POST", Route = "~/api/fn/{functionId}/{**path}")]
+        public async Task<IActionResult> Invoke(string functionId, string? path, [FromQuery] bool wait)
         {
-            // Set by TenantValidationMiddleware from the caller's tenant key. Empty means the
-            // middleware did not run, which should be impossible for a path under api — so fail
-            // closed rather than guessing a tenant.
-            var tenantId = BlocksContext.GetContext()?.TenantId;
+            var instance = Request.Path.Value ?? $"/api/fn/{functionId}/{path}";
+            var aborted = HttpContext.RequestAborted;
+
+            var tenantId = await _accessAuthorizer.ResolveTenantIdAsync(Request);
             if (string.IsNullOrEmpty(tenantId))
             {
-                return BadRequest(new { message = "no tenant in context; send a valid tenant key" });
+                return InvokeError(401, "UNAUTHORIZED", "Missing or invalid credentials for this tenant.", instance);
             }
 
-            var inputJson = body is null ? null : System.Text.Json.JsonSerializer.Serialize(body);
-            var request = new InvokeFunctionRequestDto { InputJson = inputJson, Wait = ShouldWait(wait) };
+            // Buffered under the ceiling before anything is queued: the runtime refuses an envelope
+            // over 1 MB outright, so accepting more would only create a run that can fail.
+            var (body, tooLarge) = await ReadBodyAsync(aborted);
+
+            var request = new InvokeFunctionRequestDto
+            {
+                Method = Request.Method,
+                Path = path,
+                // `wait` is the platform's, not the caller's payload to the function, so the
+                // handler does not see it; everything else in the query is theirs and passes through.
+                Query = Request.Query
+                    .Where(q => !string.Equals(q.Key, "wait", StringComparison.OrdinalIgnoreCase))
+                    .ToDictionary(q => q.Key, q => q.Value.Where(v => v is not null).Select(v => v!).ToArray(), StringComparer.Ordinal),
+                Headers = Request.Headers.ToDictionary(h => h.Key, h => h.Value.ToString(), StringComparer.OrdinalIgnoreCase),
+                ContentType = string.IsNullOrWhiteSpace(Request.ContentType) ? null : Request.ContentType,
+                Body = tooLarge ? null : body,
+                BodyTooLarge = tooLarge,
+                Wait = ShouldWait(wait),
+            };
 
             try
             {
-                var result = await _invocationService.InvokeHttpAsync(tenantId, functionId, request);
+                var result = await _invocationService.InvokeHttpAsync(tenantId, functionId, request, aborted);
 
                 // 202 for the fire-and-forget shape (queued, or still running after Wait's
                 // window lapsed); 200 once a terminal outcome is known.
@@ -266,17 +307,36 @@ namespace BlocksTemplate.Api.Controllers
                     ? Accepted(result)
                     : Ok(result);
             }
-            catch (FunctionNotFoundException ex)
-            {
-                return NotFound(new { message = ex.Message });
-            }
             catch (FunctionAuthorizationException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return InvokeError(401, "UNAUTHORIZED", ex.Message, instance);
+            }
+            catch (FunctionForbiddenException ex)
+            {
+                return InvokeError(403, "FORBIDDEN", ex.Message, instance);
+            }
+            catch (FunctionNotFoundException ex)
+            {
+                return InvokeError(404, "NOT_FOUND", ex.Message, instance);
+            }
+            catch (FunctionMethodNotAllowedException ex)
+            {
+                Response.Headers.Allow = ex.Allowed;
+                return InvokeError(405, "METHOD_NOT_ALLOWED", ex.Message, instance);
+            }
+            catch (FunctionRequestTooLargeException ex)
+            {
+                return InvokeError(413, "REQUEST_TOO_LARGE", ex.Message, instance);
             }
             catch (FunctionValidationException ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return InvokeError(400, "INVALID_REQUEST", ex.Message, instance);
+            }
+            catch (FunctionEnvelopeBuilder.ForbiddenContentException ex)
+            {
+                // A credential-shaped key in the query or body. The sandbox never receives it;
+                // the caller is told why rather than getting a 500.
+                return InvokeError(400, "FORBIDDEN_CONTENT", ex.Message, instance);
             }
         }
 
@@ -292,6 +352,47 @@ namespace BlocksTemplate.Api.Controllers
             var prefer = Request.Headers.TryGetValue("Prefer", out var value) ? value.ToString() : null;
             return prefer is not null && prefer.Contains("wait=", StringComparison.OrdinalIgnoreCase);
         }
+
+        /// <summary>
+        /// Reads the body up to <see cref="FunctionHttpInputBuilder.MaxBodyBytes"/>, the same way the
+        /// proxy gateway buffers its own. Returns <c>(null, true)</c> the moment the cap is passed —
+        /// by the declared length, or by the bytes actually read — so nothing over it is held.
+        /// </summary>
+        private async Task<(byte[]? Body, bool TooLarge)> ReadBodyAsync(CancellationToken cancellationToken)
+        {
+            var cap = FunctionHttpInputBuilder.MaxBodyBytes;
+
+            if (Request.ContentLength is { } declared && declared > cap)
+            {
+                return (null, true);
+            }
+
+            if (!Request.Body.CanRead)
+            {
+                return (null, false);
+            }
+
+            using var buffer = new MemoryStream();
+            var chunk = new byte[81920];
+            long total = 0;
+            int read;
+            while ((read = await Request.Body.ReadAsync(chunk, cancellationToken)) > 0)
+            {
+                total += read;
+                if (total > cap)
+                {
+                    return (null, true);
+                }
+
+                buffer.Write(chunk, 0, read);
+            }
+
+            return (buffer.Length == 0 ? null : buffer.ToArray(), false);
+        }
+
+        /// <summary>Blocks-generated error body, the gateway's shape: <c>{ code: "FUNCTION_INVOKE_&lt;OUTCOME&gt;", message, instance }</c>.</summary>
+        private IActionResult InvokeError(int statusCode, string outcome, string message, string instance) =>
+            StatusCode(statusCode, new { code = "FUNCTION_INVOKE_" + outcome, message, instance });
 
         /// <summary>
         /// The poll half of Fire/Poll: <c>GET /api/fn/runs/{runId}</c>, for a caller that took a

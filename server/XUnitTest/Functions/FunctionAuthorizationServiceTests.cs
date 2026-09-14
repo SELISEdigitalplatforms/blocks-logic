@@ -176,14 +176,17 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
-        public void Roles_and_permissions_must_both_be_satisfied()
+        public void Roles_and_permissions_must_both_be_satisfied_under_AND()
         {
-            // They are separate gates, not alternatives.
+            // With Combine = And the two lists are separate gates, not alternatives. The default
+            // is Or (what the interface has always shown for the toggle); that half of the matrix,
+            // and the parity with the HTTP route's evaluator, lives in FunctionAccessCombineTests.
             var function = Function(new TriggerConfig
             {
                 AuthMode = AuthMode.Token,
                 Roles = ["Admin"],
                 Permissions = ["orders.write"],
+                Combine = AccessCombine.And,
             });
 
             _service.Authorize(function, null, Context(roles: ["Admin"], permissions: ["orders.write"]))

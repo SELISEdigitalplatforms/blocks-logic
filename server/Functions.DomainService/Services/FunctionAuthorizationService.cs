@@ -51,6 +51,12 @@ namespace Functions.DomainService.Services
     /// editable configuration: editing the trigger must not change how the running version
     /// authorizes until it is deployed.
     /// </para>
+    /// <para>
+    /// This is the <b>workflow</b> path's evaluator. The public HTTP route hands the same trigger,
+    /// mapped by <see cref="TriggerAccessPolicy"/>, to the shared <c>IEndpointAccessAuthorizer</c>
+    /// — the one place that validates a bearer token for every module's data plane. The rule
+    /// semantics here are kept identical to that evaluator's, and a test holds them together.
+    /// </para>
     /// </summary>
     public class FunctionAuthorizationService : IFunctionAuthorizationService
     {
@@ -99,9 +105,23 @@ namespace Functions.DomainService.Services
             }
 
             var roleCheck = Satisfies(trigger.Roles, context.Roles, trigger.RoleMatch, "role");
-            if (!roleCheck.Allowed) return roleCheck;
+            var permissionCheck = Satisfies(trigger.Permissions, context.Permissions, trigger.PermissionMatch, "permission");
 
-            return Satisfies(trigger.Permissions, context.Permissions, trigger.PermissionMatch, "permission");
+            // The two lists combine per Trigger.Combine only when both are configured: a list with
+            // no values imposes nothing and must not be the half of an OR that "passes". With one
+            // list, or with AND, both checks simply have to hold. This is the same rule the shared
+            // EndpointAccessEvaluator applies on the public route, kept in step by
+            // FunctionAccessParityTests so the workflow and HTTP paths cannot disagree.
+            var bothConfigured = trigger.Roles is { Count: > 0 } && trigger.Permissions is { Count: > 0 };
+            if (bothConfigured && trigger.Combine == AccessCombine.Or)
+            {
+                return roleCheck.Allowed || permissionCheck.Allowed
+                    ? AuthorizationResult.Allow()
+                    : AuthorizationResult.Deny($"{roleCheck.Reason}; or {permissionCheck.Reason}");
+            }
+
+            if (!roleCheck.Allowed) return roleCheck;
+            return permissionCheck;
         }
 
         /// <summary>

@@ -56,11 +56,13 @@ const emptySnapshot: FunctionEditorSnapshot = {
   retry: { attempts: 1, backoff: "None", initialDelaySeconds: 5, maxDelaySeconds: 300 },
   trigger: {
     httpEnabled: true,
+    httpMethod: "Post",
     authMode: "Token",
     roles: [],
     permissions: [],
     roleMatch: "Any",
     permissionMatch: "Any",
+    combine: "Or",
     workflowEnabled: true,
   },
   outputActions: [],

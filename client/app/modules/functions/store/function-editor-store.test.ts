@@ -15,11 +15,13 @@ const snapshot = {
   retry: { attempts: 1, backoff: "None" as const, initialDelaySeconds: 5, maxDelaySeconds: 300 },
   trigger: {
     httpEnabled: true,
+    httpMethod: "Post" as const,
     authMode: "Token" as const,
     roles: [],
     permissions: [],
     roleMatch: "Any" as const,
     permissionMatch: "Any" as const,
+    combine: "Or" as const,
     workflowEnabled: true,
   },
   outputActions: [],

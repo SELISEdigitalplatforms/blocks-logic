@@ -69,8 +69,31 @@ declare interface FunctionLogger {
   error(message: string, data?: unknown): void;
 }
 
-/** The shape the runner expects as the module's default export. */
-declare type FunctionHandler = (input: unknown, ctx: FunctionContext) => unknown | Promise<unknown>;
+/**
+ * What an HTTP or Test invocation hands the handler. Anything after \`/fn/{id}\` is \`path\`; the
+ * body arrives parsed when it is JSON. A workflow node passes the previous node's output instead.
+ */
+declare interface FunctionInput {
+  /** The trigger's method — the other one never reaches the handler (405). */
+  readonly method: "GET" | "POST";
+  /** \`orders/42\` for a call to \`…/fn/{id}/orders/42\`; \`\` for the root. */
+  readonly path: string;
+  /** A repeated key is an array. */
+  readonly query: Record<string, string | string[]>;
+  /** Lower-cased. Content negotiation and provenance only — never a credential. */
+  readonly headers: Record<string, string>;
+  /** Parsed JSON, the raw text for other content types, null for no body (always null on GET). */
+  readonly body: unknown;
+}
+
+/**
+ * The shape the runner expects as the module's default export.
+ *
+ * \`input\` and \`ctx\` are **parameters**: they exist only inside the handler. Top-level code runs
+ * once when the sandbox starts — the place for clients, caches and constants — and referencing
+ * \`ctx\` there fails the run while the module is still loading, before the handler is called.
+ */
+declare type FunctionHandler = (input: FunctionInput, ctx: FunctionContext) => unknown | Promise<unknown>;
 
 // Node globals the sandbox provides that the browser libs do not describe.
 declare const process: {

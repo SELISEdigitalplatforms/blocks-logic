@@ -12,4 +12,3 @@ describe("ProxyMethodChips", () => {
     expect(screen.getByText("DELETE")).toBeTruthy();
   });
 });
-

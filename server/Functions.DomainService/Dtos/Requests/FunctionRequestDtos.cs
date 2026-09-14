@@ -88,11 +88,33 @@ namespace Functions.DomainService.Dtos.Requests
         public int PageSize { get; set; } = 20;
     }
 
+    /// <summary>
+    /// One call to the public route, <c>{METHOD} /api/fn/{functionId}/{**path}</c>, as the
+    /// controller read it off the wire. The service turns this into the handler's <c>input</c>
+    /// through <c>FunctionHttpInputBuilder</c>; nothing here is the body alone any more, because
+    /// the route accepts every method and any sub-path and the handler has to be told which.
+    /// </summary>
     public sealed class InvokeFunctionRequestDto
     {
-        public string? InputJson { get; set; }
+        public string Method { get; set; } = "POST";
 
-        /// <summary>Sync up to min(timeout+5s, 60s); otherwise 202 immediately (DECISIONS D5).</summary>
+        /// <summary>What followed <c>/api/fn/{functionId}/</c>, or empty.</summary>
+        public string? Path { get; set; }
+
+        public IReadOnlyDictionary<string, string[]>? Query { get; set; }
+
+        /// <summary>Every request header; the builder keeps only its allow-list.</summary>
+        public IReadOnlyDictionary<string, string>? Headers { get; set; }
+
+        public string? ContentType { get; set; }
+
+        /// <summary>The buffered body, or null for none. Never set when <see cref="BodyTooLarge"/>.</summary>
+        public byte[]? Body { get; set; }
+
+        /// <summary>The controller hit its cap while reading; the service refuses with 413.</summary>
+        public bool BodyTooLarge { get; set; }
+
+        /// <summary>Sync up to min(timeout+5s, Functions:SyncWaitMaxSeconds — 180s by default); otherwise 202 immediately (DECISIONS D5).</summary>
         public bool Wait { get; set; }
     }
 }

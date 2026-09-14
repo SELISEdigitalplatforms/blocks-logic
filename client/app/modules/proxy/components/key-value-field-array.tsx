@@ -1,4 +1,4 @@
-import { ReactNode, useRef } from "react";
+import { ReactNode } from "react";
 import { Control, useFieldArray } from "react-hook-form";
 import { Plus, Trash2, Variable } from "lucide-react";
 import { Badge } from "@/components/ui-kits/badge/badge";
@@ -13,8 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui-kits/select/select";
 import { ProxyCredentialRow, ProxyFormValues, SecretListItem } from "../types";
-import { buildVarToken, containsVarRef, insertToken } from "../utils";
-import { VariableInsertMenu } from "./variable-insert-menu";
+import { VariableTokenField, varNameRef } from "@/components/variable-picker";
 import { VariablesButton } from "./variables-button";
 
 type VariablePickerProps = {
@@ -41,9 +40,9 @@ type Props = VariablePickerProps & {
 };
 
 /**
- * The value cell for one key/value row: a free-text input plus a compact `{{$VAR.name}}` picker.
- * Selecting a variable inserts its token at the caret (falling back to the end of the value);
- * the user can also type the token by hand.
+ * The value cell for one key/value row: free text plus a `{{$VAR.name}}` picker, both from the
+ * shared variable field so Proxy, Functions and Workflow behave identically. The rows are threaded
+ * down from the form rather than fetched here, so one page load means one catalog request.
  */
 const ValueCell = ({
   control,
@@ -53,63 +52,29 @@ const ValueCell = ({
   variables,
   variablesLoading,
   variablesError,
-}: Pick<Props, "control" | "name" | "label"> &
-  VariablePickerProps & { index: number }) => {
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const caretRef = useRef<number | null>(null);
-
-  const rememberCaret = () => {
-    caretRef.current = inputRef.current?.selectionStart ?? null;
-  };
-
-  return (
-    <FormField
-      control={control}
-      name={`${name}.${index}.value`}
-      render={({ field: valueField }) => {
-        const insert = (variableName: string) => {
-          const current: string = valueField.value ?? "";
-          const caret = caretRef.current ?? current.length;
-          valueField.onChange(insertToken(current, caret, buildVarToken(variableName)));
-        };
-
-        return (
-        <FormItem>
-          <div className="flex items-center gap-1.5">
-            <FormControl>
-              <Input
-                placeholder="Enter value"
-                className="font-mono text-xs"
-                {...valueField}
-                ref={(el) => {
-                  inputRef.current = el;
-                  valueField.ref(el);
-                }}
-                onSelect={rememberCaret}
-                onKeyUp={rememberCaret}
-                onClick={rememberCaret}
-              />
-            </FormControl>
-            <VariableInsertMenu
-              variables={variables}
-              variablesLoading={variablesLoading}
-              variablesError={variablesError}
-              onPick={insert}
-              ariaLabel={`Insert a configuration variable into ${label.toLowerCase()} value`}
-            />
-          </div>
-          {containsVarRef(valueField.value ?? "") ? (
-            <Badge variant="secondary" className="mt-1 w-fit rounded px-1.5 py-0 text-[10px]">
-              variable
-            </Badge>
-          ) : null}
-          <FormMessage />
-        </FormItem>
-        );
-      }}
-    />
-  );
-};
+}: Pick<Props, "control" | "name" | "label"> & VariablePickerProps & { index: number }) => (
+  <FormField
+    control={control}
+    name={`${name}.${index}.value`}
+    render={({ field: valueField }) => (
+      <FormItem>
+        <FormControl>
+          <VariableTokenField
+            value={valueField.value ?? ""}
+            onChange={valueField.onChange}
+            codec={varNameRef}
+            ariaLabel={`${label} value`}
+            placeholder="Enter value"
+            variables={variables}
+            isLoading={variablesLoading}
+            isError={variablesError}
+          />
+        </FormControl>
+        <FormMessage />
+      </FormItem>
+    )}
+  />
+);
 
 export const KeyValueFieldArray = ({
   control,
@@ -262,9 +227,7 @@ export const KeyValueFieldArray = ({
           {variablesError ||
           (!variablesLoading && Array.isArray(variables) && variables.length === 0) ? (
             <p className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-              {variablesError
-                ? "Unable to load secret keys."
-                : "No configuration variables yet."}
+              {variablesError ? "Unable to load secret keys." : "No configuration variables yet."}
               <VariablesButton className="h-7 px-2 text-xs" />
             </p>
           ) : null}

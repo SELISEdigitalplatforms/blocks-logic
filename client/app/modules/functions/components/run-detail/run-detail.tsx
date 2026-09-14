@@ -181,7 +181,7 @@ export const RunDetail = ({
   }
 
   const isActive = !TERMINAL_RUN_STATUSES.includes(run.status);
-  const explanation = explainRunError(run.errorCode);
+  const explanation = explainRunError(run.errorCode, run.errorMessage);
   const stages = buildStages(run);
 
   // The sandbox stopwatch and the runner's own span are different measurements, and the page
@@ -219,7 +219,14 @@ export const RunDetail = ({
       isWarning: run.attempt > 1,
     },
     { label: "Version", value: `v${run.versionNumber}`, isPrimary: true },
-    { label: "Triggered by", value: TRIGGER_LABELS[run.invokedBy] ?? run.invokedBy },
+    {
+      label: "Triggered by",
+      value: TRIGGER_LABELS[run.invokedBy] ?? run.invokedBy,
+      // The workflow execution (or, for a replay, the original run) that caused this one. Without
+      // it "Workflow" says a workflow ran the function but not which one, which is the whole
+      // question once a function is wired into more than one.
+      hint: run.invokedById ?? undefined,
+    },
   ];
 
   const handleReplay = async () => {

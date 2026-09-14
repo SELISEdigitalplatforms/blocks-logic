@@ -1,87 +1,53 @@
-import { useState } from "react";
-import { TriangleAlert, X } from "lucide-react";
+import { Globe, KeyRound } from "lucide-react";
 import { Card, CardContent } from "@/components/ui-kits/card/card";
-import { Input } from "@/components/ui-kits/input/input";
+import { RadioGroup, RadioGroupItem } from "@/components/ui-kits/radio-group/radio-group";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui-kits/tabs/tabs";
 import { cn } from "@/lib/utils";
-import { AUTH_MODE_OPTIONS, MATCH_MODE_OPTIONS } from "../../constants/limits.constant";
-import { AuthMode, ITriggerConfig, MatchMode } from "../../types/function.types";
+import { AccessRulePicker } from "@/modules/proxy/components/proxy-access-card";
+import { useIamPermissions, useIamRoles } from "@/modules/proxy/hooks";
+import type { ProxyAccessRule } from "@/modules/proxy/types";
+import { FUNCTION_HTTP_METHODS, toHttpVerb } from "../../constants/endpoint.constant";
+import {
+  AccessCombine,
+  AuthMode,
+  HttpTriggerMethod,
+  ITriggerConfig,
+  MatchMode,
+} from "../../types/function.types";
+import { describeTriggerAccess } from "../../utils/access";
 import { EndpointBadge } from "../endpoint-badge";
 
-type ChipListProps = {
-  label: string;
-  values: string[];
-  onChange: (values: string[]) => void;
-  placeholder: string;
-  mono?: boolean;
-};
+const KIND_OPTIONS: Array<{
+  value: AuthMode;
+  title: string;
+  description: string;
+  icon: typeof KeyRound;
+}> = [
+  {
+    value: "Token",
+    title: "Blocks token",
+    description:
+      "The caller sends a Blocks token. Identity, roles and permissions arrive on ctx.context.",
+    icon: KeyRound,
+  },
+  {
+    value: "Public",
+    title: "Public",
+    description:
+      "Anyone with the URL and your project key can call it. No identity, no token-scoped work.",
+    icon: Globe,
+  },
+];
 
-const ChipList = ({ label, values, onChange, placeholder, mono }: ChipListProps) => {
-  const [draft, setDraft] = useState("");
-
-  const commit = () => {
-    const trimmed = draft.trim();
-    if (trimmed && !values.includes(trimmed)) onChange([...values, trimmed]);
-    setDraft("");
-  };
-
-  return (
-    <div className="flex flex-col gap-2">
-      <span className="text-xs font-medium uppercase tracking-wide text-medium-emphasis">
-        {label}
-      </span>
-      <div className="flex flex-wrap items-center gap-2">
-        {values.map((value) => (
-          <span
-            key={value}
-            className={cn(
-              "flex items-center gap-1.5 rounded-full bg-blocks-primary-50 px-2.5 py-1 text-xs font-semibold text-primary",
-              mono && "font-mono",
-            )}
-          >
-            {value}
-            <button
-              type="button"
-              aria-label={`Remove ${value}`}
-              className="text-medium-emphasis hover:text-error"
-              onClick={() => onChange(values.filter((v) => v !== value))}
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </span>
-        ))}
-        <Input
-          aria-label={`Add ${label.toLowerCase()}`}
-          placeholder={placeholder}
-          className="h-8 w-44 rounded-full border-dashed text-xs"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === ",") {
-              e.preventDefault();
-              commit();
-            }
-            // Committing on blur means abandoned text still becomes a chip, so there has to be a
-            // way to abandon it deliberately: Esc drops the draft, and the blur that follows sees
-            // nothing to commit.
-            if (e.key === "Escape") {
-              e.preventDefault();
-              setDraft("");
-            }
-          }}
-          onBlur={commit}
-        />
-      </div>
-    </div>
-  );
-};
-
-const summarise = ({ roles, permissions, roleMatch }: ITriggerConfig) => {
-  if (roles.length + permissions.length === 0)
-    return "No extra restriction — any signed-in caller with a valid Blocks token can invoke it.";
-  return roleMatch === "All"
-    ? "AND — the caller must hold every listed role and permission."
-    : "OR — the caller needs at least one of the listed roles or permissions.";
-};
+/** The trigger's list + its any/all as the shared picker's rule shape, and back. */
+const toRule = (values: string[], match: MatchMode): ProxyAccessRule => ({
+  mode: match === "All" ? "all" : "any",
+  values,
+});
+const fromRule = (rule: ProxyAccessRule): { values: string[]; match: MatchMode } => ({
+  values: rule.values,
+  match: rule.mode === "all" ? "All" : "Any",
+});
 
 type TriggerHttpCardProps = {
   value: ITriggerConfig;
@@ -90,138 +56,171 @@ type TriggerHttpCardProps = {
 };
 
 /**
- * HTTP is always on — there is no switch, because a function with no endpoint has no way in. The
- * only decision here is who may call it, and the two match modes are one control: the design has a
- * single OR/AND choice covering roles and permissions together.
+ * The HTTP endpoint and its "Who can call it", laid out exactly like a proxy's access card so the
+ * two products read as one: the same two kinds with the same icons, the same "Restrict further"
+ * panel with one OR/AND between the lists and an any/all inside each, the same IAM pickers, the
+ * same footer sentence. HTTP itself is always on — a function with no endpoint has no way in.
+ *
+ * The shape underneath differs from a proxy's (`roles` + `roleMatch` rather than a rule object),
+ * so this card translates at its edges and nothing else has to know.
  */
 export const TriggerHttpCard = ({ value, onChange, functionId }: TriggerHttpCardProps) => {
   const patch = (partial: Partial<ITriggerConfig>) => onChange({ ...value, ...partial });
-  const setMatch = (match: MatchMode) => patch({ roleMatch: match, permissionMatch: match });
+  const rolesQuery = useIamRoles();
+  const permissionsQuery = useIamPermissions();
+  const isToken = value.authMode === "Token";
+
+  const onKindChange = (kind: string) => {
+    if (kind === "Public") {
+      // Public ignores rules, and the server drops them anyway; clearing here means the card
+      // shows what will be enforced rather than chips that no longer do anything.
+      patch({ authMode: "Public", roles: [], permissions: [] });
+    } else {
+      patch({ authMode: "Token" });
+    }
+  };
 
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-4 p-5">
-        <div className="flex flex-col gap-1">
-          <span className="text-base font-semibold">HTTP endpoint</span>
-          <span className="text-xs leading-relaxed text-medium-emphasis">
-            Always on. The call returns <code className="font-mono">202 Accepted</code> with a run
-            id — the code runs on the sandbox host, so nothing is held open waiting.
-          </span>
+    <Card className="rounded-xl">
+      <CardContent className="space-y-5 p-5">
+        <div className="space-y-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold">HTTP endpoint</p>
+              <p className="text-xs text-muted-foreground">
+                Always on. The call returns <code className="font-mono">202 Accepted</code> with a
+                run id, or the result itself with <code className="font-mono">?wait=true</code>.
+              </p>
+            </div>
+            {/* One method per function, like a proxy route: the other one is refused with 405. */}
+            <Tabs
+              value={value.httpMethod}
+              onValueChange={(method) => patch({ httpMethod: method as HttpTriggerMethod })}
+              className="w-auto flex-shrink-0"
+            >
+              <TabsList
+                className="grid h-8 grid-cols-2 rounded-md bg-muted p-0.5"
+                aria-label="HTTP method"
+              >
+                {FUNCTION_HTTP_METHODS.map((method) => (
+                  <TabsTrigger
+                    key={method}
+                    value={method}
+                    className="rounded px-3 font-mono text-xs"
+                  >
+                    {toHttpVerb(method)}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          </div>
+          <EndpointBadge functionId={functionId} method={value.httpMethod} />
         </div>
 
-        <EndpointBadge functionId={functionId} />
+        <div className="space-y-4">
+          <div>
+            <p className="text-sm font-semibold">Who can call it</p>
+            <p className="text-xs text-muted-foreground">
+              One setting for every path of this function. Nothing is ever public by omission.
+            </p>
+          </div>
 
-        <div className="flex flex-col gap-2">
-          <span className="text-xs font-semibold" id="fn-auth-mode-label">
-            Who can call it
-          </span>
-          {/*
-            An exclusive choice, so radio semantics rather than aria-pressed: a toggle button
-            announces "pressed/not pressed" per option and never says one of two.
-          */}
-          <div
-            className="flex flex-col gap-2"
-            role="radiogroup"
-            aria-labelledby="fn-auth-mode-label"
-          >
-            {AUTH_MODE_OPTIONS.map((option) => {
-              const isSelected = value.authMode === option.value;
+          <RadioGroup value={value.authMode} onValueChange={onKindChange} className="gap-2">
+            {KIND_OPTIONS.map((option) => {
+              const Icon = option.icon;
+              const checked = value.authMode === option.value;
               return (
-                <button
+                <label
                   key={option.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={isSelected}
                   className={cn(
-                    "flex items-start gap-2.5 rounded-lg border p-3 text-left transition-colors",
-                    isSelected
-                      ? "border-primary bg-blocks-primary-25"
-                      : "border-border hover:bg-surface-app",
+                    "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors",
+                    checked ? "border-primary bg-primary/5" : "hover:bg-muted/40",
                   )}
-                  onClick={() => patch({ authMode: option.value as AuthMode })}
                 >
-                  <span
-                    className={cn(
-                      "mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border bg-background",
-                      isSelected ? "border-[4px] border-primary" : "border-border-medium-emphasis",
-                    )}
+                  <RadioGroupItem
+                    value={option.value}
+                    aria-label={option.title}
+                    className="mt-0.5"
                   />
-                  <span className="flex min-w-0 flex-col gap-0.5">
-                    <span className="text-xs font-semibold">{option.label}</span>
-                    <span className="text-xs leading-relaxed text-medium-emphasis">
-                      {option.hint}
-                    </span>
-                  </span>
-                </button>
+                  <div className="min-w-0">
+                    <p className="flex items-center gap-1.5 text-sm font-medium">
+                      <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                      {option.title}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{option.description}</p>
+                  </div>
+                </label>
               );
             })}
-          </div>
-        </div>
+          </RadioGroup>
 
-        {value.authMode === "Token" && (
-          <div className="flex flex-col gap-3 rounded-lg border bg-surface-app p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <span className="text-xs font-semibold">
-                Restrict further{" "}
-                <span className="font-normal text-medium-emphasis">
-                  — optional, both work together
-                </span>
-              </span>
-              <div
-                className="flex overflow-hidden rounded-md border"
-                role="radiogroup"
-                aria-label="How roles and permissions combine"
-              >
-                {MATCH_MODE_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    role="radio"
-                    aria-checked={value.roleMatch === option.value}
-                    className={cn(
-                      "px-3 py-1.5 text-xs font-semibold transition-colors",
-                      value.roleMatch === option.value
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-background text-medium-emphasis hover:bg-surface-app",
-                    )}
-                    onClick={() => setMatch(option.value as MatchMode)}
+          {isToken ? (
+            <div
+              className="space-y-4 rounded-lg border bg-muted/20 p-4"
+              data-testid="access-restrictions"
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm">
+                  <span className="font-semibold">Restrict further</span>
+                  <span className="text-muted-foreground"> — optional, both work together</span>
+                </p>
+                <Tabs
+                  value={value.combine}
+                  onValueChange={(combine) => patch({ combine: combine as AccessCombine })}
+                  className="w-auto flex-shrink-0"
+                >
+                  <TabsList
+                    className="grid h-8 grid-cols-2 rounded-md bg-muted p-0.5"
+                    aria-label="How roles and permissions combine"
                   >
-                    {option.label}
-                  </button>
-                ))}
+                    <TabsTrigger value="Or" className="rounded px-3 text-xs">
+                      OR
+                    </TabsTrigger>
+                    <TabsTrigger value="And" className="rounded px-3 text-xs">
+                      AND
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
               </div>
+
+              <AccessRulePicker
+                label="Roles"
+                noun="role"
+                addLabel="Add role"
+                rule={toRule(value.roles, value.roleMatch)}
+                options={rolesQuery.data ?? []}
+                loading={rolesQuery.isLoading}
+                onChange={(rule) => {
+                  const { values, match } = fromRule(rule);
+                  patch({ roles: values, roleMatch: match });
+                }}
+              />
+              <AccessRulePicker
+                label="Permissions"
+                noun="permission"
+                addLabel="Add permission"
+                rule={toRule(value.permissions, value.permissionMatch)}
+                options={permissionsQuery.data ?? []}
+                loading={permissionsQuery.isLoading}
+                onChange={(rule) => {
+                  const { values, match } = fromRule(rule);
+                  patch({ permissions: values, permissionMatch: match });
+                }}
+              />
+
+              <p className="text-xs text-muted-foreground" data-testid="access-summary">
+                {describeTriggerAccess(value)}
+              </p>
             </div>
-
-            <ChipList
-              label="Roles"
-              values={value.roles}
-              onChange={(roles) => patch({ roles })}
-              placeholder="＋ Add role"
-            />
-            <ChipList
-              label="Permissions"
-              mono
-              values={value.permissions}
-              onChange={(permissions) => patch({ permissions })}
-              placeholder="＋ Add permission"
-            />
-
-            <p className="text-xs leading-relaxed text-medium-emphasis">{summarise(value)}</p>
-          </div>
-        )}
-
-        {value.authMode === "Public" && (
-          <div className="flex items-start gap-2.5 rounded-lg border border-error/30 bg-error/5 p-3">
-            <TriangleAlert className="mt-px h-4 w-4 shrink-0 text-error" />
-            <span className="text-xs leading-relaxed text-error">
-              Anonymous callers get no identity:{" "}
-              <code className="font-mono">ctx.context.isAuthenticated</code> is{" "}
-              <code className="font-mono">false</code> and <code className="font-mono">userId</code>{" "}
-              is <code className="font-mono">null</code>. Roles and permissions don&apos;t apply,
-              and nothing token-scoped will work.
-            </span>
-          </div>
-        )}
+          ) : (
+            <p className="text-xs text-muted-foreground" data-testid="access-summary">
+              {describeTriggerAccess(value)} <code className="font-mono">ctx.context.userId</code>{" "}
+              is <code className="font-mono">null</code> and{" "}
+              <code className="font-mono">isAuthenticated</code> is{" "}
+              <code className="font-mono">false</code>.
+            </p>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

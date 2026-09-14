@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, type MutableRefObject } from "react";
 import Editor, { useMonaco, type Monaco, type OnMount } from "@monaco-editor/react";
 import { useTheme } from "@seliseblocks/genesis-os/hooks";
 import {
@@ -13,11 +13,35 @@ import {
 
 export type CodeEditorLanguage = "javascript" | "json";
 
+/**
+ * What a toolbar rendered outside this component can trigger. Imperative on purpose: running the
+ * formatter or opening Find is an action, not a piece of state, and Monaco already owns both.
+ * Word wrap is the opposite — it is state a button has to render the current value of — so it is a
+ * prop rather than an action here.
+ */
+export type CodeEditorActions = {
+  /** VS Code's Format Document. Same thing Shift+Alt+F runs. */
+  format: () => void;
+  /** Opens Monaco's find widget, seeded with the selection. Same thing Ctrl+F runs. */
+  find: () => void;
+};
+
 type CodeEditorProps = {
   language: CodeEditorLanguage;
   value: string;
   onChange?: (value: string) => void;
   readOnly?: boolean;
+  /**
+   * Soft-wrap long lines. Declarative so a toolbar's toggle is the single source of truth for
+   * the pressed state; Monaco is told through `updateOptions`, which does not remount the model
+   * and so keeps the cursor, selection and undo history.
+   */
+  wordWrap?: boolean;
+  /**
+   * Filled on mount so a toolbar outside this component can run the editor's own actions, and
+   * cleared when the editor goes away so a stale handle cannot be called against a disposed one.
+   */
+  actionsRef?: MutableRefObject<CodeEditorActions | null>;
   /**
    * Any CSS length. `"100%"` makes the editor fill its container, which then has to carry a
    * definite height of its own — Monaco reads the container's box, so a percentage against an
@@ -140,6 +164,8 @@ export const CodeEditor = ({
   value,
   onChange,
   readOnly = false,
+  wordWrap = false,
+  actionsRef,
   height = "clamp(240px, 40vh, 460px)",
   className,
   envKeys,
@@ -152,6 +178,7 @@ export const CodeEditor = ({
   // A stable key for the bound variables, so re-renders do not rebuild the type definitions.
   const envKey = useMemo(() => (envKeys ?? []).join(","), [envKeys]);
 
+  const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const libRef = useRef<{ dispose: () => void } | null>(null);
   const completionRef = useRef<{ dispose: () => void } | null>(null);
 
@@ -217,7 +244,26 @@ export const CodeEditor = ({
     };
   }, [monaco, isJavaScript, envKey]);
 
+  // `updateOptions` rather than a remount: the editor keeps the cursor, the selection and the
+  // undo stack, which a changed `options` object on the React component would not.
+  useEffect(() => {
+    editorRef.current?.updateOptions({ wordWrap: wordWrap ? "on" : "off" });
+  }, [wordWrap]);
+
   const handleMount: OnMount = (editor, monacoInstance) => {
+    editorRef.current = editor;
+    if (actionsRef) {
+      actionsRef.current = {
+        format: () => void editor.getAction("editor.action.formatDocument")?.run(),
+        find: () => {
+          // Focus first: the find widget seeds itself from the selection, and opening it on an
+          // editor that never had focus gives an empty box and no cursor to type into.
+          editor.focus();
+          void editor.getAction("actions.find")?.run();
+        },
+      };
+    }
+
     // Ctrl+S belongs to the page (it saves the function), so let that one through and keep every
     // other key inside the editor rather than the page shell's shortcuts.
     const container = editor.getContainerDomNode();
@@ -240,6 +286,8 @@ export const CodeEditor = ({
       container.removeEventListener("keydown", stopKeyPropagation);
       container.removeEventListener("keyup", stopKeyPropagation);
       container.removeEventListener("keypress", stopKeyPropagation);
+      editorRef.current = null;
+      if (actionsRef) actionsRef.current = null;
     });
   };
 
@@ -257,6 +305,9 @@ export const CodeEditor = ({
       onMount={handleMount}
       options={{
         readOnly,
+        // Applied again by the effect above on every change; here so the first paint already
+        // has it rather than wrapping a frame later.
+        wordWrap: wordWrap ? "on" : "off",
         // ── VS Code defaults ────────────────────────────────────────────────
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace',
         fontSize: 13,
@@ -265,6 +316,9 @@ export const CodeEditor = ({
         // No minimap and no ruler: in a two-column editor panel they are the two things that
         // read as noise — a map of a 4-line file, and a vertical line down otherwise empty space.
         minimap: { enabled: false },
+        // The find widget is the toolbar's Search button and Ctrl+F. Seeding it from the
+        // selection is what VS Code does; the whole-word/regex toggles come with it.
+        find: { seedSearchStringFromSelection: "always", autoFindInSelection: "multiline" },
         stickyScroll: { enabled: false },
         bracketPairColorization: { enabled: true },
         guides: { bracketPairs: true, indentation: true, highlightActiveIndentation: true },

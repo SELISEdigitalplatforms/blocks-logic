@@ -24,7 +24,12 @@ import {
   ProxyAccessRule,
   ProxyFormValues,
 } from "../types";
-import { defaultProxyAccess, describeProxyAccess, emptyAccessRule, validateProxyAccess } from "../utils";
+import {
+  defaultProxyAccess,
+  describeProxyAccess,
+  emptyAccessRule,
+  validateProxyAccess,
+} from "../utils";
 
 type Props = {
   control: Control<ProxyFormValues>;
@@ -56,7 +61,7 @@ const KIND_OPTIONS: Array<{
  * tenant's options (typed text that matches nothing can still be added verbatim, so a key the IAM list
  * does not know yet is not a dead end), and an any/all toggle once the list has more than one entry.
  */
-const AccessRulePicker = ({
+export const AccessRulePicker = ({
   label,
   noun,
   addLabel,
@@ -100,7 +105,9 @@ const AccessRulePicker = ({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {label}
+        </p>
         {rule.values.length > 1 ? (
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <span>Caller needs</span>
@@ -118,7 +125,11 @@ const AccessRulePicker = ({
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {rule.values.map((value) => (
-          <Badge key={value} variant="secondary" className="gap-1 rounded-full px-2.5 py-1 font-normal">
+          <Badge
+            key={value}
+            variant="secondary"
+            className="gap-1 rounded-full px-2.5 py-1 font-normal"
+          >
             <span title={value}>{labelFor(value)}</span>
             <button
               type="button"
@@ -162,7 +173,10 @@ const AccessRulePicker = ({
                 )}
                 {queryIsNew ? (
                   <CommandGroup forceMount>
-                    <CommandItem value={`__new__${trimmedQuery}`} onSelect={() => add(trimmedQuery)}>
+                    <CommandItem
+                      value={`__new__${trimmedQuery}`}
+                      onSelect={() => add(trimmedQuery)}
+                    >
                       <Plus className="mr-2 h-3.5 w-3.5" />
                       Use “{trimmedQuery}”
                     </CommandItem>
@@ -178,7 +192,12 @@ const AccessRulePicker = ({
                           value={`${option.label} ${option.value}`}
                           onSelect={() => (selected ? remove(option.value) : add(option.value))}
                         >
-                          <Check className={cn("mr-2 h-3.5 w-3.5", selected ? "opacity-100" : "opacity-0")} />
+                          <Check
+                            className={cn(
+                              "mr-2 h-3.5 w-3.5",
+                              selected ? "opacity-100" : "opacity-0",
+                            )}
+                          />
                           <span className="flex-1 truncate">{option.label}</span>
                           {option.label !== option.value ? (
                             <span className="ml-2 truncate font-mono text-[10px] text-muted-foreground">
@@ -246,11 +265,7 @@ export const ProxyAccessCard = ({ control }: Props) => {
                   checked ? "border-primary bg-primary/5" : "hover:bg-muted/40",
                 )}
               >
-                <RadioGroupItem
-                  value={option.value}
-                  aria-label={option.title}
-                  className="mt-0.5"
-                />
+                <RadioGroupItem value={option.value} aria-label={option.title} className="mt-0.5" />
                 <div className="min-w-0">
                   <p className="flex items-center gap-1.5 text-sm font-medium">
                     <Icon className="h-3.5 w-3.5 text-muted-foreground" />
@@ -264,7 +279,10 @@ export const ProxyAccessCard = ({ control }: Props) => {
         </RadioGroup>
 
         {isToken ? (
-          <div className="space-y-4 rounded-lg border bg-muted/20 p-4" data-testid="access-restrictions">
+          <div
+            className="space-y-4 rounded-lg border bg-muted/20 p-4"
+            data-testid="access-restrictions"
+          >
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm">
                 <span className="font-semibold">Restrict further</span>

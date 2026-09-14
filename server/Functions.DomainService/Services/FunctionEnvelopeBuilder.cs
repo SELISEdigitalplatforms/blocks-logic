@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Blocks.Genesis;
 using Functions.DomainService.Entities;
 using Functions.DomainService.Enums;
@@ -24,12 +25,20 @@ namespace Functions.DomainService.Services
     /// instead of leaking. The runner screens it again on arrival; this is the first of two
     /// independent checks, not the only one.
     /// </para>
+    /// <para>
+    /// <b>One deliberate exception</b>: a variable's value may be a <c>{{secret.&lt;id&gt;}}</c>
+    /// reference, resolved here so the function reads the real value as <c>ctx.env.NAME</c>.
+    /// Those are the tenant's <i>own</i> secrets, chosen explicitly in the editor — spec §17 is
+    /// about the platform's credentials, which still never appear. Because the value genuinely
+    /// is a credential, it is resolved as late as possible (at invoke, not at deploy) and is
+    /// never written to the version snapshot: the snapshot keeps the reference.
+    /// </para>
     /// </summary>
     public static class FunctionEnvelopeBuilder
     {
         /// <summary>
-        /// Property-name fragments that must never appear anywhere in an envelope, at any
-        /// depth. Matched case-insensitively. Mirrors the runner's own screen.
+        /// Property-name fragments that must never appear in an envelope outside <c>env</c>, at
+        /// any depth. Matched case-insensitively. Mirrors the runner's own screen.
         /// </summary>
         private static readonly string[] ForbiddenKeyFragments =
         [
@@ -42,8 +51,23 @@ namespace Functions.DomainService.Services
 
         private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 
+        /// <summary>
+        /// <c>{{secret.&lt;id&gt;}}</c> in a variable value. Ids, never names — the same shape
+        /// and the same reasoning as <see cref="OutputActionProcessor"/>'s: renaming a secret in
+        /// the catalog must not break a function that already references it.
+        /// </summary>
+        private static readonly Regex SecretPlaceholder = new(@"\{\{secret\.([\w-]+)\}\}", RegexOptions.Compiled);
+
         /// <summary>Thrown when an envelope fails screening. The run must not be enqueued.</summary>
         public sealed class ForbiddenContentException(string message) : Exception(message);
+
+        /// <summary>
+        /// Thrown when a variable references a secret this tenant cannot resolve — deleted,
+        /// renamed away, or never readable. The run fails instead of starting, because the
+        /// alternative is handing the sandbox the literal <c>{{secret.id}}</c> text and letting
+        /// the function present it to a payment provider as if it were a key.
+        /// </summary>
+        public sealed class UnresolvedSecretException(string message) : Exception(message);
 
         /// <summary>
         /// Builds the envelope for one run.
@@ -59,12 +83,18 @@ namespace Functions.DomainService.Services
         /// notably <c>OAuthToken</c> is not, and must never be.
         /// </param>
         /// <param name="inputJson">The caller's input as raw JSON, or null.</param>
+        /// <param name="secrets">
+        /// Secret id &rarr; plaintext, for the ids <see cref="CollectSecretIds"/> reported. Every
+        /// referenced id must be present: a missing one fails the run rather than reaching the
+        /// sandbox as literal placeholder text.
+        /// </param>
         public static string Build(
             FunctionRunEntity run,
             FunctionVersionEntity? version,
             FunctionEntity function,
             BlocksContext? context,
-            string? inputJson)
+            string? inputJson,
+            IReadOnlyDictionary<string, string>? secrets = null)
         {
             ArgumentNullException.ThrowIfNull(run);
             ArgumentNullException.ThrowIfNull(function);
@@ -88,7 +118,7 @@ namespace Functions.DomainService.Services
                     },
                 },
                 ["context"] = BuildIdentity(context, authMode),
-                ["env"] = BuildEnv(variables),
+                ["env"] = BuildEnv(variables, secrets),
                 ["input"] = ParseInput(inputJson),
                 ["limits"] = new JsonObject
                 {
@@ -108,6 +138,29 @@ namespace Functions.DomainService.Services
 
             Screen(json);
             return json;
+        }
+
+        /// <summary>
+        /// The secret ids referenced by the variables this run will use, deduplicated. The
+        /// caller resolves them and hands the values back to <see cref="Build"/> — the lookup
+        /// is I/O and this type stays synchronous and pure, which is what makes the screening
+        /// guarantees here testable without a secret store.
+        /// </summary>
+        public static IReadOnlyCollection<string> CollectSecretIds(
+            FunctionVersionEntity? version, FunctionEntity function)
+        {
+            ArgumentNullException.ThrowIfNull(function);
+
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var variable in version?.Variables ?? function.Variables)
+            {
+                if (string.IsNullOrEmpty(variable.Value)) continue;
+                foreach (Match match in SecretPlaceholder.Matches(variable.Value))
+                {
+                    ids.Add(match.Groups[1].Value);
+                }
+            }
+            return ids;
         }
 
         /// <summary>
@@ -150,10 +203,18 @@ namespace Functions.DomainService.Services
         }
 
         /// <summary>
-        /// <c>ctx.env</c> from the version's variable snapshot. Non-secret configuration only —
-        /// secret values are resolved in the Worker's output processor and never come near here.
+        /// <c>ctx.env</c> from the version's variable snapshot, with every
+        /// <c>{{secret.&lt;id&gt;}}</c> reference replaced by its value.
+        /// <para>
+        /// A reference can be embedded rather than whole (<c>Bearer {{secret.abc}}</c>), so this
+        /// substitutes in place rather than swapping the value wholesale. An id with no resolved
+        /// value throws: the function would otherwise receive the placeholder text and send it
+        /// upstream as though it were a key, which fails far away from the cause and can look
+        /// like a provider outage rather than a deleted secret.
+        /// </para>
         /// </summary>
-        private static JsonObject BuildEnv(IEnumerable<VariableBinding>? variables)
+        private static JsonObject BuildEnv(
+            IEnumerable<VariableBinding>? variables, IReadOnlyDictionary<string, string>? secrets)
         {
             var env = new JsonObject();
             if (variables is null) return env;
@@ -161,9 +222,34 @@ namespace Functions.DomainService.Services
             foreach (var variable in variables)
             {
                 if (string.IsNullOrWhiteSpace(variable.Key)) continue;
-                env[variable.Key] = variable.Value;
+                env[variable.Key] = Substitute(variable.Key, variable.Value, secrets);
             }
             return env;
+        }
+
+        private static string? Substitute(
+            string key, string? value, IReadOnlyDictionary<string, string>? secrets)
+        {
+            if (string.IsNullOrEmpty(value)) return value;
+
+            var unresolved = new List<string>();
+            var substituted = SecretPlaceholder.Replace(value, match =>
+            {
+                var id = match.Groups[1].Value;
+                if (secrets is not null && secrets.TryGetValue(id, out var secret)) return secret;
+                unresolved.Add(id);
+                return match.Value;
+            });
+
+            if (unresolved.Count > 0)
+            {
+                // Ids only. The whole point of the failure is that there was no value to leak.
+                throw new UnresolvedSecretException(
+                    $"variable '{key}' references {(unresolved.Count == 1 ? "a secret" : "secrets")} " +
+                    $"that could not be resolved: {string.Join(", ", unresolved)}");
+            }
+
+            return substituted;
         }
 
         private static JsonNode? ParseInput(string? inputJson)
@@ -203,6 +289,15 @@ namespace Functions.DomainService.Services
         /// <summary>
         /// Rejects an envelope carrying anything credential-shaped. Keys only: screening values
         /// would reject legitimate input such as a note that happens to mention a password.
+        /// <para>
+        /// <c>env</c> is exempt, and only <c>env</c>. Its keys are variable names the tenant
+        /// authored, already constrained to an identifier by <c>VariableBindingValidator</c>,
+        /// and <see cref="BuildEnv"/> copies nothing else into it — so no platform credential
+        /// can ever surface as an <c>env</c> key, and screening there blocked only the honest
+        /// names (<c>STRIPE_API_KEY</c>, <c>DB_PASSWORD</c>) that a bound secret is for. The
+        /// screen still covers <c>run</c>, <c>context</c>, <c>input</c> and <c>limits</c>,
+        /// which is where a control-plane mistake would actually put a token.
+        /// </para>
         /// </summary>
         public static void Screen(string envelopeJson)
         {
@@ -218,27 +313,35 @@ namespace Functions.DomainService.Services
 
             using (document)
             {
-                Walk(document.RootElement, string.Empty);
+                Walk(document.RootElement, string.Empty, screenKeys: true);
             }
         }
 
-        private static void Walk(JsonElement element, string path)
+        private static void Walk(JsonElement element, string path, bool screenKeys)
         {
             switch (element.ValueKind)
             {
                 case JsonValueKind.Object:
                     foreach (var property in element.EnumerateObject())
                     {
-                        foreach (var fragment in ForbiddenKeyFragments)
+                        // Only the envelope's own top-level `env` — a nested object that merely
+                        // happens to be called "env" inside `input` is still screened.
+                        var childScreens = screenKeys
+                            && !(path.Length == 0 && property.Name == "env");
+
+                        if (screenKeys)
                         {
-                            if (property.Name.Contains(fragment, StringComparison.OrdinalIgnoreCase))
+                            foreach (var fragment in ForbiddenKeyFragments)
                             {
-                                throw new ForbiddenContentException(
-                                    $"the execution envelope contains a forbidden key at " +
-                                    $"'{path}{property.Name}'; credentials must never reach a sandbox");
+                                if (property.Name.Contains(fragment, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    throw new ForbiddenContentException(
+                                        $"the execution envelope contains a forbidden key at " +
+                                        $"'{path}{property.Name}'; credentials must never reach a sandbox");
+                                }
                             }
                         }
-                        Walk(property.Value, $"{path}{property.Name}.");
+                        Walk(property.Value, $"{path}{property.Name}.", childScreens);
                     }
                     break;
 
@@ -246,7 +349,7 @@ namespace Functions.DomainService.Services
                     var index = 0;
                     foreach (var item in element.EnumerateArray())
                     {
-                        Walk(item, $"{path}[{index++}].");
+                        Walk(item, $"{path}[{index++}].", screenKeys);
                     }
                     break;
 

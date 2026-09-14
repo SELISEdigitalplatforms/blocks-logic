@@ -81,7 +81,8 @@ export const ProxyForm = ({
 
   const name = useWatch({ control: form.control, name: "name" });
   const upstreamUrl = useWatch({ control: form.control, name: "upstreamUrl" }) ?? "";
-  const watchedRoutes = useWatch({ control: form.control, name: "routes" }) as ProxyRoute[] | undefined;
+  const watchedRoutes = useWatch({ control: form.control, name: "routes" }) as
+    ProxyRoute[] | undefined;
   const selectedProject = useProjectStore().selectedProject;
   const slug = slugifyProxyName(name);
   const clientUrlFor = (routePath: string) => getProxyClientUrl(selectedProject, slug, routePath);
@@ -117,7 +118,11 @@ export const ProxyForm = ({
   };
 
   const sendTest = useSendProxyTestRequest();
-  const runTest = (route: ProxyRoute, pathSuffix: string, body: string): Promise<ProxyTestResponse> =>
+  const runTest = (
+    route: ProxyRoute,
+    pathSuffix: string,
+    body: string,
+  ): Promise<ProxyTestResponse> =>
     // Always the draft, never the saved proxy: the point of Test is to check what you are about
     // to save.
     sendTest.mutateAsync({

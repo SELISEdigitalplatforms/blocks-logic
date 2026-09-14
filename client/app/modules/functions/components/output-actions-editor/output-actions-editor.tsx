@@ -1,6 +1,5 @@
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui-kits/input/input";
-import { Textarea } from "@/components/ui-kits/textarea/textarea";
 import { Button } from "@/components/ui-kits/button/button";
 import { Label } from "@/components/ui-kits/label/label";
 import {
@@ -14,7 +13,7 @@ import { Card } from "@/components/ui-kits/card/card";
 import { cn } from "@/lib/utils";
 import { HTTP_METHOD_OPTIONS } from "../../constants/limits.constant";
 import { IOutputAction } from "../../types/function.types";
-import { SecretPickerPopover } from "../secret-picker-popover";
+import { VariableTokenField, secretIdRef } from "@/components/variable-picker";
 
 type OutputActionsEditorProps = {
   value: IOutputAction[];
@@ -216,18 +215,15 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
                     value={key}
                     onChange={(e) => renameHeader(index, key, e.target.value)}
                   />
-                  <Input
-                    aria-label="Header value"
-                    placeholder="Value"
-                    className="h-9 min-w-[180px] flex-1 font-mono text-xs"
-                    value={headerValue}
-                    onChange={(e) => updateHeader(index, key, e.target.value)}
-                  />
-                  <SecretPickerPopover
-                    onInsert={(placeholder) =>
-                      updateHeader(index, key, `${headerValue}${placeholder}`)
-                    }
-                  />
+                  <div className="min-w-[180px] flex-1">
+                    <VariableTokenField
+                      value={headerValue}
+                      onChange={(next) => updateHeader(index, key, next)}
+                      codec={secretIdRef}
+                      ariaLabel="Header value"
+                      placeholder="Value"
+                    />
+                  </div>
                   <Button
                     type="button"
                     variant="ghost"
@@ -283,27 +279,20 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
                 </p>
               ) : (
                 <>
-                  <Textarea
-                    aria-label="Body template"
-                    className="min-h-[90px] resize-y font-mono text-xs"
-                    placeholder={'{ "payload": {{result}}, "runId": "{{run.id}}" }'}
+                  <VariableTokenField
+                    multiline
                     value={action.bodyTemplate}
-                    onChange={(e) => update(index, { bodyTemplate: e.target.value })}
+                    onChange={(next) => update(index, { bodyTemplate: next })}
+                    codec={secretIdRef}
+                    ariaLabel="Body template"
+                    placeholder={'{ "payload": {{result}}, "runId": "{{run.id}}" }'}
+                    className="min-h-[90px] resize-y font-mono text-xs"
                   />
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs text-medium-emphasis">
-                      <code className="font-mono">{"{{result}}"}</code> and{" "}
-                      <code className="font-mono">{"{{run.id}}"}</code> are substituted before the
-                      call.
-                    </p>
-                    <SecretPickerPopover
-                      onInsert={(placeholder) =>
-                        update(index, {
-                          bodyTemplate: `${action.bodyTemplate ?? ""}${placeholder}`,
-                        })
-                      }
-                    />
-                  </div>
+                  <p className="text-xs text-medium-emphasis">
+                    <code className="font-mono">{"{{result}}"}</code> and{" "}
+                    <code className="font-mono">{"{{run.id}}"}</code> are substituted before the
+                    call.
+                  </p>
                 </>
               )}
             </div>
@@ -313,9 +302,8 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
 
       {value.length > 0 && (
         <p className="text-xs text-medium-emphasis">
-          Secrets are resolved here, never inside the function — a header or body carries{" "}
-          <code className="font-mono">{"{{secret.NAME}}"}</code> and the value is substituted on the
-          host.
+          Configuration variables are resolved here, never inside the function — a header or body
+          carries a reference and the value is substituted on the host.
         </p>
       )}
     </div>

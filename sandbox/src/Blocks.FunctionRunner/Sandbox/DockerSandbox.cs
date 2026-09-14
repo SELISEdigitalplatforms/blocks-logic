@@ -290,7 +290,24 @@ namespace Blocks.FunctionRunner.Sandbox
                 _logger.LogWarning(ex, "Could not collect resource stats for sandbox {ContainerId}", containerId);
             }
 
-            return (stats.PeakMemoryBytes, stats.CpuUsageMs);
+            var peakMemoryBytes = stats.PeakMemoryBytes;
+            var cpuUsageMs = stats.CpuUsageMs;
+
+            // Memory without CPU is the one combination that says the stream attached and
+            // delivered real samples, yet every one of them carried no `cpu_usage`. That is a
+            // host-side gap — typically a cgroup v2 hierarchy with the cpu controller not
+            // delegated to Docker — not a run that used no CPU, and it reaches the console as a
+            // bare "—" with nothing anywhere saying why. Say why here.
+            if (peakMemoryBytes is not null && cpuUsageMs is null)
+            {
+                _logger.LogWarning(
+                    "Sandbox {ContainerId} reported memory but no CPU time; the stats stream " +
+                    "carried no cpu_usage. Check that the cpu controller is delegated to Docker " +
+                    "on this host (cat /sys/fs/cgroup/cgroup.subtree_control).",
+                    containerId);
+            }
+
+            return (peakMemoryBytes, cpuUsageMs);
         }
 
         /// <summary>Removes a container by name, if one exists. Quiet when there is nothing there.</summary>

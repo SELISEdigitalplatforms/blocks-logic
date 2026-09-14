@@ -41,11 +41,28 @@ export const formatTimeOfDay = (value?: string | null): string => {
   return `${time}.${String(date.getMilliseconds()).padStart(3, "0")}`;
 };
 
+/**
+ * "684 ms", "7.99 s", "2 min 3 s". The two decimals are hundredths of a second, not milliseconds:
+ * 7.99 s is 7990 ms.
+ *
+ * Both handovers carry rather than round in place. Rounding each part on its own printed "60.00 s"
+ * at 59_999 ms and "1 min 60 s" at 119_600 ms — the seconds are rounded up to a full minute that
+ * the minutes half, floored independently, never hears about.
+ *
+ * A sandbox run cannot reach the minutes branch at all: `FunctionLimits.Ceiling.TimeoutSeconds` is
+ * 60, so its own stopwatch is capped below it. The branch is for the spans that are not one run's
+ * execution — the runner's wider pickup-to-completion window, which includes image pull and
+ * container create, and the CPU-time hints that read against it.
+ */
 export const formatDuration = (durationMs?: number | null): string => {
   if (durationMs == null) return "—";
   if (durationMs < 1000) return `${durationMs} ms`;
-  if (durationMs < 60_000) return `${(durationMs / 1000).toFixed(2)} s`;
-  return `${Math.floor(durationMs / 60_000)} min ${Math.round((durationMs % 60_000) / 1000)} s`;
+
+  const seconds = (durationMs / 1000).toFixed(2);
+  if (Number(seconds) < 60) return `${seconds} s`;
+
+  const totalSeconds = Math.round(durationMs / 1000);
+  return `${Math.floor(totalSeconds / 60)} min ${totalSeconds % 60} s`;
 };
 
 /**

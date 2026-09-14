@@ -1,5 +1,5 @@
 using Blocks.Genesis;
-using Workflow.DomainService.Services;
+using Common.InternalService.Access;
 using Functions.DomainService.Dtos.Requests;
 using Functions.DomainService.Dtos.Responses;
 using Functions.DomainService.Entities;
@@ -18,11 +18,21 @@ namespace Functions.DomainService.Services
     public interface IFunctionInvocationService
     {
         /// <summary>
-        /// The public entry point behind <c>POST /api/fn/{functionId}</c>. Resolves the
-        /// function's <b>active, deployed</b> version, authenticates the caller against that
-        /// version's own trigger configuration (never the editable draft — see
-        /// <c>FunctionAuthorizationServiceTests</c> in spirit: the deployed version's rules are
-        /// authoritative), and queues a run.
+        /// The public entry point behind <c>{METHOD} /api/fn/{functionId}/{**path}</c>. Resolves
+        /// the function's <b>active, deployed</b> version, enforces that version's own "Who can
+        /// call it" (never the editable draft's — the deployed rules are authoritative) through the
+        /// shared <see cref="IEndpointAccessAuthorizer"/>, shapes the call into the handler's
+        /// <c>input</c> with <see cref="FunctionHttpInputBuilder"/>, and queues a run.
+        /// <para>
+        /// Refusals are typed so the controller can answer like the proxy gateway does: no usable
+        /// credentials → <see cref="FunctionAuthorizationException"/> (401); authenticated but
+        /// failing the rules, or HTTP switched off → <see cref="FunctionForbiddenException"/> (403);
+        /// unknown or undeployed function → <see cref="FunctionNotFoundException"/> (404), but
+        /// only to a caller who could have reached it — an anonymous caller gets 401 first, so the
+        /// route cannot be used to discover which ids exist; the other method →
+        /// <see cref="FunctionMethodNotAllowedException"/> (405); body over the ceiling →
+        /// <see cref="FunctionRequestTooLargeException"/> (413).
+        /// </para>
         /// </summary>
         Task<InvokeResultDto> InvokeHttpAsync(
             string tenantId, string functionId, InvokeFunctionRequestDto request, CancellationToken cancellationToken = default);
@@ -60,10 +70,16 @@ namespace Functions.DomainService.Services
         /// check against whatever identity the workflow execution is already running as, via
         /// <see cref="IFunctionAuthorizationService.AuthorizeForWorkflow"/> rather than
         /// <see cref="IWorkflowAuthService"/>'s JWT path.
+        /// <para>
+        /// <paramref name="workflowExecutionId"/> is recorded as the run's <c>InvokedById</c> and
+        /// reaches the sandbox as <c>ctx.run.invokedBy.id</c> (spec §41), so a function run can be
+        /// traced back to the workflow execution that caused it — without it, "Triggered by
+        /// workflow" names no workflow at all.
+        /// </para>
         /// </summary>
         Task<InvokeResultDto> InvokeFromWorkflowAsync(
             string tenantId, string functionId, string? inputJson, BlocksContext? callerContext,
-            int? waitTimeoutSeconds, CancellationToken cancellationToken = default);
+            int? waitTimeoutSeconds, string? workflowExecutionId, CancellationToken cancellationToken = default);
     }
 
     /// <summary>
@@ -72,7 +88,7 @@ namespace Functions.DomainService.Services
     /// (DECISIONS D5) polls the run record this same service just created rather than using
     /// Redis pub/sub: <c>function:sync:{runId}</c> is a fire-and-forget notification with no
     /// delivery guarantee, and subscribing to it race-free from inside a single request would
-    /// add real complexity for a feature whose own contract is "best-effort, up to 60 s, 202
+    /// add real complexity for a feature whose own contract is "best-effort, up to the configured ceiling — 180 s by default — 202
     /// otherwise". A short poll of the record <c>FunctionResultConsumer</c> is about to write
     /// is simpler, cannot miss the update, and costs at most the poll interval in latency.
     /// </summary>
@@ -81,6 +97,15 @@ namespace Functions.DomainService.Services
         private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(200);
         private const int SyncGraceSeconds = 5;
 
+        /// <summary>
+        /// Ceiling on a synchronous wait when <c>Functions:SyncWaitMaxSeconds</c> is not configured.
+        /// Sized above the largest function timeout (<see cref="FunctionLimits.Ceiling.TimeoutSeconds"/>
+        /// + <see cref="SyncGraceSeconds"/>) so a function allowed to run for its full limit can still
+        /// be awaited to completion rather than reported as "still running". Mirrored by the workflow
+        /// Function step's editor maximum (client: FUNCTION_STEP_MAX_WAIT_SECONDS).
+        /// </summary>
+        private const int DefaultSyncWaitMaxSeconds = 180;
+
         private readonly IFunctionRepository _functionRepository;
         private readonly IFunctionVersionRepository _versionRepository;
         private readonly IFunctionRunRepository _runRepository;
@@ -88,7 +113,8 @@ namespace Functions.DomainService.Services
         private readonly IFunctionAdmissionService _admissionService;
         private readonly IFunctionAuthorizationService _authorizationService;
         private readonly IFunctionBuildService _buildService;
-        private readonly IWorkflowAuthService _workflowAuthService;
+        private readonly ISecretResolver _secretResolver;
+        private readonly IEndpointAccessAuthorizer _accessAuthorizer;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly ICacheClient _cache;
         private readonly IConfiguration _configuration;
@@ -102,7 +128,8 @@ namespace Functions.DomainService.Services
             IFunctionAdmissionService admissionService,
             IFunctionAuthorizationService authorizationService,
             IFunctionBuildService buildService,
-            IWorkflowAuthService workflowAuthService,
+            ISecretResolver secretResolver,
+            IEndpointAccessAuthorizer accessAuthorizer,
             IHttpContextAccessor httpContextAccessor,
             ICacheClient cache,
             IConfiguration configuration,
@@ -115,7 +142,8 @@ namespace Functions.DomainService.Services
             _admissionService = admissionService;
             _authorizationService = authorizationService;
             _buildService = buildService;
-            _workflowAuthService = workflowAuthService;
+            _secretResolver = secretResolver;
+            _accessAuthorizer = accessAuthorizer;
             _httpContextAccessor = httpContextAccessor;
             _cache = cache;
             _configuration = configuration;
@@ -125,63 +153,93 @@ namespace Functions.DomainService.Services
         public async Task<InvokeResultDto> InvokeHttpAsync(
             string tenantId, string functionId, InvokeFunctionRequestDto request, CancellationToken cancellationToken = default)
         {
-            var function = await _functionRepository.GetByIdAsync(tenantId, functionId, cancellationToken)
-                ?? throw new FunctionNotFoundException($"function '{functionId}' was not found");
+            ArgumentNullException.ThrowIfNull(request);
 
-            if (function.Status != FunctionStatus.Live || string.IsNullOrEmpty(function.ActiveVersionId))
+            var httpRequest = _httpContextAccessor.HttpContext?.Request
+                ?? throw new InvalidOperationException("InvokeHttpAsync requires an active HTTP request");
+
+            var function = await _functionRepository.GetByIdAsync(tenantId, functionId, cancellationToken);
+            FunctionVersionEntity? version = null;
+            if (function is { Status: FunctionStatus.Live } && !string.IsNullOrEmpty(function.ActiveVersionId))
             {
-                throw new FunctionNotFoundException($"function '{functionId}' is not deployed");
+                version = await _versionRepository.GetByIdAsync(tenantId, function.ActiveVersionId, cancellationToken);
             }
 
-            var version = await _versionRepository.GetByIdAsync(tenantId, function.ActiveVersionId, cancellationToken)
-                ?? throw new FunctionNotFoundException($"function '{functionId}' has no active version");
+            if (function is null || version is null)
+            {
+                // 401 before 404, as the proxy gateway does for an unknown slug: an anonymous
+                // caller is checked against the default (token required) policy and refused
+                // there, so the route cannot be walked to learn which ids exist or are deployed.
+                await RequireAuthenticatedCallerAsync(httpRequest, tenantId, cancellationToken);
+                throw new FunctionNotFoundException(function is null
+                    ? $"function '{functionId}' was not found"
+                    : $"function '{functionId}' is not deployed");
+            }
 
             if (!version.Trigger.HttpEnabled)
             {
-                throw new FunctionAuthorizationException("this function does not accept HTTP invocations");
+                // Same reasoning: only a caller who could have invoked it learns that HTTP is off.
+                await RequireAuthenticatedCallerAsync(httpRequest, tenantId, cancellationToken);
+                throw new FunctionForbiddenException("this function does not accept HTTP invocations");
             }
 
-            BlocksContext? context = null;
-            if (version.Trigger.AuthMode == AuthMode.Token)
+            // The deployed version's own policy, enforced by the same authorizer that guards every
+            // proxy gateway route: public passes without looking at credentials; otherwise the
+            // bearer token is validated against the tenant's certificate and the rules evaluated.
+            // The Genesis bearer handler never ran on this [AllowAnonymous] action, so this is the
+            // one place the token is checked, and the resulting BlocksContext is the identity the
+            // sandbox sees (null for public — the envelope builder strips it regardless).
+            var policy = TriggerAccessPolicy.From(version.Trigger);
+            var decision = await _accessAuthorizer.AuthorizeAsync(httpRequest, tenantId, policy, cancellationToken);
+            switch (decision.Status)
             {
-                var httpRequest = _httpContextAccessor.HttpContext?.Request
-                    ?? throw new InvalidOperationException("InvokeHttpAsync requires an active HTTP request");
-
-                // Authentication only. The config carries no rules, and WorkflowAuthService's
-                // own Satisfies() treats a null rule as "no requirement", so this call reduces
-                // to: validate the bearer token against the tenant's certificate and build the
-                // caller's BlocksContext. Reusing it for that half is the point — it is the
-                // audited JWT path and re-implementing it here would be a second one.
-                var authenticationOnly = new WorkflowAuthService.AuthorizationConfig(
-                    OrganizationId: string.Empty,
-                    Roles: null,
-                    Permissions: null,
-                    Mode: WorkflowAuthService.AuthorizationMode.RolesAndPermissions);
-
-                var (isAuthenticated, resolvedContext) =
-                    await _workflowAuthService.IsAuthorized(httpRequest, tenantId, authenticationOnly);
-                if (!isAuthenticated)
-                {
-                    throw new FunctionAuthorizationException("authentication failed");
-                }
-                context = resolvedContext;
+                case EndpointAccessStatus.Unauthenticated:
+                    throw new FunctionAuthorizationException(decision.Reason ?? "a valid Blocks token is required");
+                case EndpointAccessStatus.Forbidden:
+                    throw new FunctionForbiddenException(
+                        decision.Reason ?? "the caller does not hold the required roles or permissions");
+                default:
+                    break;
             }
 
-            // The roles/permissions decision itself belongs to FunctionAuthorizationService, the
-            // one implementation of that rule — the workflow path (AuthorizeForWorkflow) uses the
-            // same core, so the two entry points cannot drift. It re-checks HttpEnabled, which
-            // the guard above has already rejected; that guard stays because it must run before
-            // any token work, so a disabled endpoint never triggers JWT validation.
-            var authResult = _authorizationService.Authorize(function, version, context);
-            if (!authResult.Allowed)
+            // The trigger answers one method. Checked after authorization, as the gateway checks
+            // a route's methods, so which verb a function takes is not learnable anonymously.
+            var verb = FunctionHttpInputBuilder.Verb(version.Trigger.HttpMethod);
+            if (!string.Equals(request.Method, verb, StringComparison.OrdinalIgnoreCase))
             {
-                throw new FunctionAuthorizationException(authResult.Reason ?? "authorization failed");
+                throw new FunctionMethodNotAllowedException(verb);
             }
+
+            // After authorization, like the gateway's own body cap, so the ceiling is not a probe
+            // an unauthorized caller can use. The controller has already stopped reading.
+            if (request.BodyTooLarge)
+            {
+                throw new FunctionRequestTooLargeException(
+                    $"the request body exceeds the {FunctionHttpInputBuilder.MaxBodyBytes} byte limit");
+            }
+
+            var inputJson = FunctionHttpInputBuilder.Build(request);
 
             return await InvokeCoreAsync(
-                tenantId, function, version, version.ImageDigest, context,
-                InvokedByType.Http, invokedById: null, request.InputJson, request.Wait, waitTimeoutSeconds: null,
+                tenantId, function, version, version.ImageDigest, decision.Context,
+                InvokedByType.Http, invokedById: null, inputJson, request.Wait, waitTimeoutSeconds: null,
                 cancellationToken);
+        }
+
+        /// <summary>
+        /// Refuses with 401 unless the request carries a token that validates for
+        /// <paramref name="tenantId"/>. Used on the paths that would otherwise leak whether a
+        /// function exists, is deployed or accepts HTTP.
+        /// </summary>
+        private async Task RequireAuthenticatedCallerAsync(
+            HttpRequest httpRequest, string tenantId, CancellationToken cancellationToken)
+        {
+            var decision = await _accessAuthorizer.AuthorizeAsync(
+                httpRequest, tenantId, EndpointAccessPolicy.RequireToken(), cancellationToken);
+            if (decision.Status == EndpointAccessStatus.Unauthenticated)
+            {
+                throw new FunctionAuthorizationException(decision.Reason ?? "a valid Blocks token is required");
+            }
         }
 
         public async Task<InvokeResultDto> TestAsync(
@@ -219,9 +277,14 @@ namespace Functions.DomainService.Services
 
             var context = BlocksContext.GetContext();
 
+            // The editor's payload becomes input.body of a POST to the root, so the handler code a
+            // tenant tests is the code that runs behind the public route — no "works in Test,
+            // input is undefined in production" surprise.
+            var inputJson = FunctionHttpInputBuilder.ForTest(request.InputJson, function.Trigger.HttpMethod);
+
             return await InvokeCoreAsync(
                 tenantId, function, version: null, build.ImageDigest, context,
-                InvokedByType.Test, invokedById: null, request.InputJson, wait: true, request.WaitTimeoutSeconds,
+                InvokedByType.Test, invokedById: null, inputJson, wait: true, request.WaitTimeoutSeconds,
                 cancellationToken);
         }
 
@@ -269,7 +332,7 @@ namespace Functions.DomainService.Services
 
         public async Task<InvokeResultDto> InvokeFromWorkflowAsync(
             string tenantId, string functionId, string? inputJson, BlocksContext? callerContext,
-            int? waitTimeoutSeconds, CancellationToken cancellationToken = default)
+            int? waitTimeoutSeconds, string? workflowExecutionId, CancellationToken cancellationToken = default)
         {
             var function = await _functionRepository.GetByIdAsync(tenantId, functionId, cancellationToken)
                 ?? throw new FunctionNotFoundException($"function '{functionId}' was not found");
@@ -290,8 +353,8 @@ namespace Functions.DomainService.Services
 
             return await InvokeCoreAsync(
                 tenantId, function, version, version.ImageDigest, callerContext,
-                InvokedByType.Workflow, invokedById: null, inputJson, wait: true, waitTimeoutSeconds,
-                cancellationToken);
+                InvokedByType.Workflow, invokedById: workflowExecutionId, inputJson, wait: true,
+                waitTimeoutSeconds, cancellationToken);
         }
 
         private async Task<InvokeResultDto> InvokeCoreAsync(
@@ -333,7 +396,37 @@ namespace Functions.DomainService.Services
             };
             run.IdempotencyKey = $"{run.ItemId}-{run.Attempt}";
 
-            var envelopeJson = FunctionEnvelopeBuilder.Build(run, version, function, context, inputJson);
+            // Secrets bound to variables are resolved here, at invoke, and never at deploy: a
+            // version snapshot keeps the `{{secret.<id>}}` reference, so rotating a secret takes
+            // effect on the next run rather than needing a redeploy, and a stored snapshot never
+            // holds plaintext. This runs on the request thread, where IDelegatedTokenProvider has
+            // a grant to redeem — the Worker's result consumer does not, which is exactly the
+            // limitation documented on BlocksOsHttpSecretResolver.
+            var secretIds = FunctionEnvelopeBuilder.CollectSecretIds(version, function);
+            IReadOnlyDictionary<string, string>? secrets = null;
+            if (secretIds.Count > 0)
+            {
+                secrets = await _secretResolver.ResolveAsync(secretIds, tenantId, cancellationToken);
+            }
+
+            string envelopeJson;
+            try
+            {
+                envelopeJson = FunctionEnvelopeBuilder.Build(run, version, function, context, inputJson, secrets);
+            }
+            catch (FunctionEnvelopeBuilder.UnresolvedSecretException ex)
+            {
+                // The run is never created: there is nothing the sandbox could usefully do with a
+                // half-built environment, and the author needs to hear about the broken reference
+                // rather than debug a 401 from whatever the function was calling.
+                // The resolver reports "absent", never why, so the run is refused with the ids and
+                // the resolver that was asked — the pair needed to tell "no such secret" from
+                // "this environment has no working secret store" without reading two log files.
+                _logger.LogWarning(
+                    "Refusing to invoke {FunctionId} via resolver {Resolver}: {Message}",
+                    function.ItemId, _secretResolver.GetType().Name, ex.Message);
+                throw new FunctionValidationException(ex.Message);
+            }
 
             await _runRepository.CreateAsync(tenantId, run, cancellationToken);
             await _runStatsRepository.RecordRunStartedAsync(tenantId, function.ItemId, run.CreatedDate, cancellationToken);
@@ -345,7 +438,7 @@ namespace Functions.DomainService.Services
                 return new InvokeResultDto { RunId = run.ItemId, Status = FunctionQueueKeys.Wire.Queued };
             }
 
-            var maxSyncWaitSeconds = _configuration.GetValue("Functions:SyncWaitMaxSeconds", 60);
+            var maxSyncWaitSeconds = _configuration.GetValue("Functions:SyncWaitMaxSeconds", DefaultSyncWaitMaxSeconds);
             var effectiveWaitSeconds = Math.Min(
                 maxSyncWaitSeconds, (waitTimeoutSeconds ?? limits.TimeoutSeconds) + SyncGraceSeconds);
             return await WaitForResultAsync(tenantId, run.ItemId, effectiveWaitSeconds, cancellationToken);
@@ -411,11 +504,5 @@ namespace Functions.DomainService.Services
             return new InvokeResultDto { RunId = runId, Status = FunctionQueueKeys.Wire.Running };
         }
 
-        /// <summary>
-        /// Maps the Functions module's independent role/permission match modes onto
-        /// <see cref="WorkflowAuthService"/>'s single combined <c>AuthorizationMode</c>: both
-        /// lists configured means both must pass (AND across lists; each list's own AND/OR is
-        /// still governed by its own <see cref="MatchMode"/>).
-        /// </summary>
     }
 }

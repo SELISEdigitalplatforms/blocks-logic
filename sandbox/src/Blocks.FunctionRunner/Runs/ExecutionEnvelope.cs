@@ -16,7 +16,7 @@ namespace Blocks.FunctionRunner.Runs
     public static class ExecutionEnvelope
     {
         /// <summary>
-        /// Substrings that must never appear as a key anywhere in an envelope. Matched
+        /// Substrings that must never appear as a key in an envelope outside <c>env</c>. Matched
         /// case-insensitively against every property name at every depth.
         /// </summary>
         private static readonly string[] ForbiddenKeyFragments =
@@ -71,6 +71,13 @@ namespace Blocks.FunctionRunner.Runs
         /// <summary>
         /// Rejects an envelope carrying anything that looks like a credential, and rejects
         /// malformed JSON outright.
+        /// <para>
+        /// <c>env</c> is exempt, and only <c>env</c>: its keys are tenant-authored variable
+        /// names, and a variable may deliberately carry a secret the tenant bound to it, so the
+        /// honest name for one (<c>STRIPE_API_KEY</c>) must not fail the run. Mirrors the
+        /// control plane's <c>FunctionEnvelopeBuilder.Screen</c> — the two screens are meant to
+        /// agree, so a change to one belongs in the other.
+        /// </para>
         /// </summary>
         public static void Screen(string envelopeJson)
         {
@@ -86,11 +93,11 @@ namespace Blocks.FunctionRunner.Runs
 
             using (doc)
             {
-                Walk(doc.RootElement, string.Empty);
+                Walk(doc.RootElement, string.Empty, screenKeys: true);
             }
         }
 
-        private static void Walk(JsonElement element, string path)
+        private static void Walk(JsonElement element, string path, bool screenKeys)
         {
             switch (element.ValueKind)
             {
@@ -98,16 +105,24 @@ namespace Blocks.FunctionRunner.Runs
                     foreach (var property in element.EnumerateObject())
                     {
                         var name = property.Name;
-                        foreach (var fragment in ForbiddenKeyFragments)
+
+                        // Only the envelope's own top-level `env` — a nested "env" inside
+                        // `input` is caller data and is still screened.
+                        var childScreens = screenKeys && !(path.Length == 0 && name == "env");
+
+                        if (screenKeys)
                         {
-                            if (name.Contains(fragment, StringComparison.OrdinalIgnoreCase))
+                            foreach (var fragment in ForbiddenKeyFragments)
                             {
-                                throw new ForbiddenContentException(
-                                    $"the execution envelope contains a forbidden key at '{path}{name}'; " +
-                                    "credentials must never reach a sandbox");
+                                if (name.Contains(fragment, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    throw new ForbiddenContentException(
+                                        $"the execution envelope contains a forbidden key at '{path}{name}'; " +
+                                        "credentials must never reach a sandbox");
+                                }
                             }
                         }
-                        Walk(property.Value, $"{path}{name}.");
+                        Walk(property.Value, $"{path}{name}.", childScreens);
                     }
                     break;
 
@@ -115,7 +130,7 @@ namespace Blocks.FunctionRunner.Runs
                     var index = 0;
                     foreach (var item in element.EnumerateArray())
                     {
-                        Walk(item, $"{path}[{index++}].");
+                        Walk(item, $"{path}[{index++}].", screenKeys);
                     }
                     break;
 

@@ -223,7 +223,10 @@ describe("response field filtering helpers", () => {
   it("mergeSchemaIntoTree keeps manual nodes and checks, adds discovered nodes as checked", () => {
     const { tree, checked } = pathsToTree(["data.id"]);
     const beforeCount = checked.size;
-    const { tree: schema } = deriveResponseSchema({ data: { id: 1, name: "x" }, meta: { page: 1 } });
+    const { tree: schema } = deriveResponseSchema({
+      data: { id: 1, name: "x" },
+      meta: { page: 1 },
+    });
 
     const merged = mergeSchemaIntoTree(tree, checked, schema);
     const paths = treeToPaths(merged.tree, merged.checked).sort();

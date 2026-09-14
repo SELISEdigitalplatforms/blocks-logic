@@ -66,7 +66,7 @@ namespace Functions.DomainService.Queue
         // Redis holds the payload; Mongo holds the record. If the payload expires before a
         // consumer reaches it, the stream entry survives but there is nothing left to apply, so
         // the run is lost. Everything the payload is actually needed for finishes in minutes —
-        // the sync wait caps at 60 s, a retry's backoff at MaxDelaySeconds (300 s by default),
+        // the sync wait caps at 180 s (Functions:SyncWaitMaxSeconds), a retry's backoff at MaxDelaySeconds (300 s by default),
         // reclaim triggers at 90 s idle — so the remainder is purely outage headroom.
         // Mirrored in the runner's RedisKeys and in plan/PROTOCOL.md; change all three together.
         public static readonly TimeSpan RunTtl = TimeSpan.FromHours(6);

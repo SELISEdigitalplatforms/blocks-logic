@@ -77,9 +77,11 @@
             </item>
             <item>
             The <b>public invocation surface</b> at the bottom of this file — <c>/api/fn/…</c>,
-            reached by callers who are not necessarily Blocks users at all. Its routes are absolute
-            (<c>~/api/…</c>) because they do not follow the controller's template, and its entry
-            action is deliberately anonymous.
+            reached by callers who are not necessarily Blocks users at all. It is built the way the
+            proxy gateway is: a catch-all route on every method, anonymous at the framework level, the
+            tenant resolved from <c>x-blocks-key</c> by the shared access authorizer, and the stored
+            "Who can call it" enforced per call. Its routes are absolute (<c>~/api/…</c>) because they
+            do not follow the controller's template.
             </item>
             </list>
             <para>
@@ -91,41 +93,60 @@
             </para>
             </summary>
         </member>
-        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.Invoke(System.String,System.Boolean,System.Object)">
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.#ctor(Functions.DomainService.Services.IFunctionService,Functions.DomainService.Services.IFunctionDeploymentService,Functions.DomainService.Services.IFunctionInvocationService,Functions.DomainService.Services.IFunctionRunService,Functions.DomainService.Services.IFunctionBuildService,Functions.DomainService.Services.IFunctionAuditService,Common.InternalService.Access.IEndpointAccessAuthorizer)">
             <summary>
-            The public function endpoint (DECISIONS D5): <c>POST /api/fn/{functionId}</c>.
+            The management services, plus the shared access authorizer that resolves the tenant on
+            the anonymous <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.Invoke(System.String,System.String,System.Boolean)"/> route — the same one the proxy gateway uses.
+            </summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Controllers.FunctionsController.InvokeHardBodyLimitBytes">
+            <summary>
+            Same shape as the proxy gateway's own cap: a little above the service's ceiling, so the
+            service — not Kestrel's generic 413 — is what answers an oversized body, with the
+            documented error shape. Kestrel still stops a runaway upload here.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.Invoke(System.String,System.String,System.Boolean)">
+            <summary>
+            The public function endpoint (DECISIONS D5): <c>{METHOD} /api/fn/{functionId}/{**path}</c>.
+            A tenant's client calls this instead of hosting the code. The route is registered for
+            GET and POST; the trigger picks one of them, and the other is refused with 405 once the
+            caller is authorized. Anything after the id is passed to the handler as
+            <c>input.path</c>, with the method, query, allow-listed headers and body alongside it
+            (see <c>FunctionHttpInputBuilder</c>).
             <para>
-            The tenant comes from <see cref="T:Blocks.Genesis.BlocksContext"/>, never from the route. Genesis'
-            <c>TenantValidationMiddleware</c> guards every path under <c>api</c> — that prefix is
-            in its default set, so this route is covered — resolving the tenant from the
-            <c>x-blocks-key</c> header (or the query/form fallbacks in
-            <c>TenantContextHelper.ResolveTenantIdFromHeaders</c>), validating it against the real
-            tenant record, and calling <c>EnsureTenantContext</c> before any controller runs. So a
-            caller must present a tenant key to reach this action at all, and that key is the only
-            tenant identity the platform has actually verified.
+            The tenant comes from <c>x-blocks-key</c> (or the tenant claim of a presented token),
+            resolved by the shared <see cref="T:Common.InternalService.Access.IEndpointAccessAuthorizer"/>, never from the route, the
+            query or the body. There is exactly one tenant in this request and it is the one whose
+            certificate then has to validate any token presented — a second, unvalidated tenant id
+            in the path would let any valid key reach a <c>Public</c> function in whatever other
+            tenant the caller could name.
             </para>
             <para>
-            <b>Never take a tenant from the route, the query or the body.</b> The middleware has
-            already authenticated one tenant — the header's — so a second, unvalidated tenant id
-            in the path would let any valid <c>x-blocks-key</c> reach a <c>Public</c> function in
-            whatever other tenant the caller could name, while every gate here was evaluated
-            against that named tenant rather than the authenticated one. There is exactly one
-            tenant in this request and it comes from <see cref="T:Blocks.Genesis.BlocksContext"/>.
+            <see cref="T:Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute"/> at the framework level, like the proxy gateway: a
+            tenant key identifies a tenant but authenticates no user, and whether a caller may
+            proceed is the deployed version's own "Who can call it" (public, or a Blocks token
+            optionally narrowed by roles / permissions), decided per stored policy inside
+            <c>FunctionInvocationService.InvokeHttpAsync</c>. The Genesis bearer handler skips
+            anonymous actions entirely, so that service is where the token is validated. Saying
+            anonymous explicitly also keeps the endpoint public if this class ever acquires a
+            type-level authorization attribute.
             </para>
             <para>
-            The route is absolute so that it stays <c>/api/fn/{functionId}</c> rather than
-            following this controller's <c>[controller]/[action]</c> template. That also puts it
+            The route is absolute (<c>~/</c>) so it stays <c>/api/fn/…</c> whatever this controller
+            or method is called: it is a published contract clients hard-code. That also puts it
             outside <c>GlobalApiRoutePrefixConvention</c>, which only prefixes controller-level
-            templates — hence the <c>api</c> segment written out here.
+            templates — hence the <c>api</c> segment written out here, once.
             </para>
             <para>
-            <see cref="T:Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute"/> rather than merely omitting <c>[Authorize]</c>:
-            a tenant key identifies a tenant but authenticates no user, and whether a caller may
-            proceed is the function's own trigger configuration (public vs. token-protected),
-            decided inside <c>FunctionInvocationService.InvokeHttpAsync</c> — this mirrors how the
-            workflow webhook action is anonymous at the controller and authorizes itself
-            internally per-trigger. Saying it explicitly also keeps the endpoint public if this
-            class ever does acquire a type-level authorization attribute.
+            Errors use the gateway's body shape, <c>{ code, message, instance }</c>, with
+            <c>FUNCTION_INVOKE_*</c> codes: 401 for no tenant or no usable token, 403 when the token
+            validates but the rules refuse it (or HTTP is switched off), 404 for an unknown or
+            undeployed function — but only to a caller who could have reached it, so 401 comes
+            first — 405 with an <c>Allow</c> header for the method the trigger does not take, 413
+            over the body ceiling, 400 for input the sandbox cannot be given. 202 with a
+            run id is the fire-and-forget shape; 200 carries the result once <c>?wait=true</c> saw a
+            terminal outcome.
             </para>
             </summary>
         </member>
@@ -137,10 +158,20 @@
             plus a fixed grace, not whatever value the header names.
             </summary>
         </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.ReadBodyAsync(System.Threading.CancellationToken)">
+            <summary>
+            Reads the body up to <see cref="F:Functions.DomainService.Services.FunctionHttpInputBuilder.MaxBodyBytes"/>, the same way the
+            proxy gateway buffers its own. Returns <c>(null, true)</c> the moment the cap is passed —
+            by the declared length, or by the bytes actually read — so nothing over it is held.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.InvokeError(System.Int32,System.String,System.String,System.String)">
+            <summary>Blocks-generated error body, the gateway's shape: <c>{ code: "FUNCTION_INVOKE_&lt;OUTCOME&gt;", message, instance }</c>.</summary>
+        </member>
         <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.PollRun(System.String)">
             <summary>
             The poll half of Fire/Poll: <c>GET /api/fn/runs/{runId}</c>, for a caller that took a
-            202 from <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.Invoke(System.String,System.Boolean,System.Object)"/>. Distinct from <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.GetRun(System.String)"/> — same service call,
+            202 from <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.Invoke(System.String,System.String,System.Boolean)"/>. Distinct from <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.GetRun(System.String)"/> — same service call,
             but a path parameter on the public route and a signed-in Blocks user rather than a
             permission-gated Studio request.
             </summary>

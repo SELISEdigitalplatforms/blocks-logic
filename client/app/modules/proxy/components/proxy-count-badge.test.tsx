@@ -22,4 +22,3 @@ describe("ProxyCountBadge", () => {
     await waitFor(() => expect(screen.getByText("3")).toBeTruthy());
   });
 });
-

@@ -23,27 +23,34 @@ namespace Functions.DomainService.Utils
             PackageJson = PackageJson,
         };
 
+        // `input` is the request for an HTTP or Test run — { method, path, query, headers, body } —
+        // and the previous node's output for a workflow run. The starters read input.body so they
+        // behave the same from the editor's Run test and from the public URL.
         private const string MinimalIndexJs = """
             /**
-             * @param {unknown} input - the JSON body this function was invoked with
+             * @param {FunctionInput} input - the request: method, path, query, headers and body
              * @param {FunctionContext} ctx - env, run, caller context and the logger
              */
             export default async function handler(input, ctx) {
-              ctx.log.info("Function invoked", { input });
-              return { received: input };
+              ctx.log.info("Function invoked", { method: input.method, path: input.path });
+              return { received: input.body };
             }
             """;
 
         private const string HttpEchoIndexJs = """
             /**
-             * @param {unknown} input - the JSON body this function was invoked with
+             * @param {FunctionInput} input - the request: method, path, query, headers and body
              * @param {FunctionContext} ctx - env, run, caller context and the logger
              */
             export default async function handler(input, ctx) {
-              ctx.log.info("Invoked", { invokedBy: ctx.run.invokedBy });
+              ctx.log.info("Invoked", { invokedBy: ctx.run.invokedBy, method: input.method });
 
+              // Anything after /fn/{id} is yours to route on: GET .../orders/42 → "orders/42".
               return {
-                received: input,
+                method: input.method,
+                path: input.path,
+                query: input.query,
+                body: input.body,
                 caller: {
                   userId: ctx.context.userId,
                   isAuthenticated: ctx.context.isAuthenticated,
@@ -54,7 +61,7 @@ namespace Functions.DomainService.Utils
 
         private const string FetchTransformIndexJs = """
             /**
-             * @param {unknown} input - the JSON body this function was invoked with
+             * @param {FunctionInput} input - the request: method, path, query, headers and body
              * @param {FunctionContext} ctx - env, run, caller context and the logger
              */
             export default async function handler(input, ctx) {
@@ -69,7 +76,7 @@ namespace Functions.DomainService.Utils
               const payload = await response.json();
               ctx.log.info("fetched rates", { count: Object.keys(payload.rates ?? {}).length });
 
-              return { base: payload.base, eur: payload.rates?.EUR ?? null, input };
+              return { base: payload.base, eur: payload.rates?.EUR ?? null, requested: input.body };
             }
             """;
 

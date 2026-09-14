@@ -1,28 +1,44 @@
 import { useState } from "react";
 import { Copy, Check } from "lucide-react";
-import { getRuntimeEnv } from "@seliseblocks/genesis-os";
-import { Badge } from "@/components/ui-kits/badge/badge";
+import { useProjectStore, type IProject } from "@seliseblocks/genesis-os";
 import { Button } from "@/components/ui-kits/button/button";
-import { FUNCTION_INVOKE_ENDPOINT_BASE } from "../../constants/endpoint.constant";
+import { ProxyMethodBadge } from "@/modules/proxy/components/proxy-method-badge";
+import {
+  getFunctionClientPath,
+  getFunctionClientUrl,
+  toHttpVerb,
+} from "../../constants/endpoint.constant";
+import { HttpTriggerMethod } from "../../types/function.types";
 
 /**
- * The function's public URL. A function is addressed by its id, and the tenant is not in the path
- * at all: Genesis' TenantValidationMiddleware resolves it from the caller's `x-blocks-key` header
- * for every path under `api`.
+ * The function's public URL, published the way a proxy's is: the project's own API host when it
+ * has one, on the public gateway path. A function is addressed by its id; the tenant is not in the
+ * path — the caller's `x-blocks-key` names it, and the shared access authorizer resolves it.
  */
-export const buildInvokeUrl = (functionId: string) =>
-  `${getRuntimeEnv("BLOCKS_LOGIC_BASE_URL") || ""}${buildInvokePath(functionId)}`;
+export const buildInvokeUrl = (functionId: string, project?: IProject | null) =>
+  getFunctionClientUrl(project, functionId);
 
 /**
  * The path half of {@link buildInvokeUrl}, for the places the design shows a path rather than a
  * full URL (the list's mono sub-line). Sharing the tail keeps the two from drifting apart.
  */
-export const buildInvokePath = (functionId: string) =>
-  `${FUNCTION_INVOKE_ENDPOINT_BASE}/${functionId}`;
+export const buildInvokePath = (functionId: string) => getFunctionClientPath(functionId);
 
-export const EndpointBadge = ({ functionId }: { functionId: string }) => {
+/**
+ * "Your client calls" for one function: the method the trigger answers, the URL, and a copy
+ * button — the same block the proxy details page leads its Configuration card with. Anything the
+ * caller appends after the id reaches the handler as `input.path`, which the trailing hint says.
+ */
+export const EndpointBadge = ({
+  functionId,
+  method,
+}: {
+  functionId: string;
+  method: HttpTriggerMethod;
+}) => {
   const [copied, setCopied] = useState(false);
-  const url = buildInvokeUrl(functionId);
+  const project = useProjectStore().selectedProject;
+  const url = buildInvokeUrl(functionId, project);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(url);
@@ -31,24 +47,32 @@ export const EndpointBadge = ({ functionId }: { functionId: string }) => {
   };
 
   return (
-    <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-2">
-      <Badge variant="outline" className="font-mono text-xs uppercase">
-        POST
-      </Badge>
-      <span className="min-w-0 flex-1 truncate font-mono text-xs">{url}</span>
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-label={copied ? "Endpoint copied" : "Copy endpoint"}
-        className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
-        onClick={handleCopy}
-      >
-        {copied ? (
-          <Check className="h-3.5 w-3.5 text-green-500" />
-        ) : (
-          <Copy className="h-3.5 w-3.5" />
-        )}
-      </Button>
+    <div className="flex flex-col gap-2 rounded-lg border bg-muted/20 px-3 py-2.5">
+      <div className="flex items-center gap-2">
+        <ProxyMethodBadge method={toHttpVerb(method)} />
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={copied ? "Endpoint copied" : "Copy endpoint"}
+          className="ml-auto h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+          onClick={handleCopy}
+        >
+          {copied ? (
+            <Check className="h-3.5 w-3.5 text-green-500" />
+          ) : (
+            <Copy className="h-3.5 w-3.5" />
+          )}
+        </Button>
+      </div>
+      <p className="break-all font-mono text-sm text-foreground">
+        {url}
+        <span className="text-muted-foreground">/{"{path}"}</span>
+      </p>
+      <p className="text-xs text-muted-foreground">
+        Whatever follows the id is yours to route on — it arrives as{" "}
+        <code className="font-mono">input.path</code>, with the query, headers and body beside it.
+        The other method is refused with <code className="font-mono">405</code>.
+      </p>
     </div>
   );
 };

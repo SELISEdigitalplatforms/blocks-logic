@@ -220,7 +220,12 @@ describe("proxy mapper", () => {
       headers: [],
       query: [],
       methodConfigs: [
-        { method: "POST", upstream: "https://api.x.com/v2", headers: [{ key: "X-Trace", value: "on" }], query: null },
+        {
+          method: "POST",
+          upstream: "https://api.x.com/v2",
+          headers: [{ key: "X-Trace", value: "on" }],
+          query: null,
+        },
       ],
       currentVersion: 3,
       createdDate: "2026-09-01T00:00:00.000Z",
@@ -324,9 +329,10 @@ describe("proxy mapper", () => {
   });
 
   it("normalises a mutation envelope, falling back to message when errors is null", () => {
-    expect(
-      mapMutationResponse({ isSuccess: true, itemId: "p1", errors: null }),
-    ).toMatchObject({ isSuccess: true, itemId: "p1" });
+    expect(mapMutationResponse({ isSuccess: true, itemId: "p1", errors: null })).toMatchObject({
+      isSuccess: true,
+      itemId: "p1",
+    });
 
     expect(
       mapMutationResponse({

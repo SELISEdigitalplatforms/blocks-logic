@@ -41,13 +41,46 @@ namespace Blocks.FunctionRunner.Tests
             var json = JsonSerializer.Serialize(new Dictionary<string, object>
             {
                 ["run"] = new Dictionary<string, string> { ["id"] = "run_1" },
-                ["env"] = new Dictionary<string, string> { [key] = "value" },
+                ["context"] = new Dictionary<string, string> { [key] = "value" },
             });
 
             var act = () => ExecutionEnvelope.Screen(json);
 
             act.Should().Throw<ExecutionEnvelope.ForbiddenContentException>()
                 .WithMessage($"*{key}*");
+        }
+
+        [Theory]
+        [InlineData("STRIPE_API_KEY")]
+        [InlineData("MONGO_PASSWORD")]
+        [InlineData("WEBHOOK_SECRET")]
+        public void A_credential_shaped_key_under_env_is_allowed(string key)
+        {
+            // env keys are variable names the tenant wrote, and a variable may deliberately
+            // carry a secret they bound to it — the honest name must not fail the run. Mirrors
+            // FunctionEnvelopeBuilder.Screen; the two screens are meant to agree.
+            var json = JsonSerializer.Serialize(new Dictionary<string, object>
+            {
+                ["run"] = new Dictionary<string, string> { ["id"] = "run_1" },
+                ["env"] = new Dictionary<string, string> { [key] = "value" },
+            });
+
+            var act = () => ExecutionEnvelope.Screen(json);
+
+            act.Should().NotThrow();
+        }
+
+        [Fact]
+        public void An_env_object_nested_in_the_input_is_still_screened()
+        {
+            // Only the envelope's own top-level env is exempt. Caller input that happens to
+            // contain an "env" object is not the same thing.
+            const string json = """{"run":{"id":"r"},"input":{"env":{"accessToken":"x"}}}""";
+
+            var act = () => ExecutionEnvelope.Screen(json);
+
+            act.Should().Throw<ExecutionEnvelope.ForbiddenContentException>()
+                .WithMessage("*input.env.accessToken*");
         }
 
         [Fact]
@@ -65,7 +98,7 @@ namespace Blocks.FunctionRunner.Tests
         [Fact]
         public void Case_does_not_help_an_attacker()
         {
-            const string json = """{"run":{"id":"r"},"env":{"AcCeSsToKeN":"x"}}""";
+            const string json = """{"run":{"id":"r"},"context":{"AcCeSsToKeN":"x"}}""";
 
             var act = () => ExecutionEnvelope.Screen(json);
 

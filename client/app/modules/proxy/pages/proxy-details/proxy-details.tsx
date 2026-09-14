@@ -589,7 +589,9 @@ export const ProxyDetails = () => {
                       <p className="mt-1 text-sm font-medium">
                         {proxy.access.kind === "public" ? "Public" : "Blocks token"}
                       </p>
-                      <p className="text-xs text-muted-foreground">{describeProxyAccess(proxy.access)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {describeProxyAccess(proxy.access)}
+                      </p>
                     </div>
                     <EndpointsSection proxy={proxy} clientUrlFor={clientUrlFor} />
                   </CardContent>

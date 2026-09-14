@@ -37,6 +37,16 @@ export const SandboxHelpCard = ({ limits }: SandboxHelpCardProps) => {
               <code className="font-mono">export default async function handler(input, ctx)</code>.
               Whatever it returns becomes the run&apos;s result.
             </p>
+            {/* The first thing people get wrong: `ctx` at module scope, which fails the run before
+                the handler is reached. Saying where top-level code IS useful stops the correction
+                from going too far the other way and moving warm state inside the handler. */}
+            <p className="rounded-md bg-surface-app p-2.5 text-xs leading-relaxed text-medium-emphasis">
+              <code className="font-mono">input</code> and <code className="font-mono">ctx</code>{" "}
+              are its <strong className="font-semibold">parameters</strong> — they exist only inside
+              the handler. Code at the top of the file runs once when the sandbox starts, so put
+              clients, caches and constants there; anything that reads the request or the context
+              goes inside.
+            </p>
             {SANDBOX_CTX_DOCS.map((doc) => (
               <div key={doc.name} className="flex flex-col gap-0.5">
                 <code className="font-mono text-xs font-semibold text-primary">{doc.name}</code>

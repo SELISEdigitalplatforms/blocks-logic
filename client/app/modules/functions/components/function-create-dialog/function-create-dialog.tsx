@@ -87,8 +87,8 @@ export const FunctionCreateDialog = ({ open, onOpenChange }: FunctionCreateDialo
             <DialogTitle className="tracking-tight">Create function</DialogTitle>
             <DialogDescription>
               Pick a starter and name it. Its endpoint is{" "}
-              <code className="font-mono text-xs">POST /api/fn/{"{id}"}</code>, so there is no slug
-              to choose and nothing here has to be unique.
+              <code className="font-mono text-xs">/logic/v4/fn/{"{id}"}</code> on GET or POST, so
+              there is no slug to choose and nothing here has to be unique.
             </DialogDescription>
           </div>
         </DialogHeader>

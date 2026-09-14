@@ -1,9 +1,19 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
-import { useScopedPath } from "@seliseblocks/genesis-os";
+import { useProjectStore, useScopedPath } from "@seliseblocks/genesis-os";
 import { parseAsInteger, parseAsString, useQueryStates } from "nuqs";
-import { Check, Copy, Loader2, Pencil, Rocket, Save } from "lucide-react";
+import {
+  Check,
+  Copy,
+  Loader2,
+  Pencil,
+  Rocket,
+  Save,
+  Search,
+  Sparkles,
+  WrapText,
+} from "lucide-react";
 import PageBreadcrumb from "@/components/breadcrumb/breadcrumb";
 import { Button } from "@/components/ui-kits/button/button";
 import { Card, CardContent, CardHeader } from "@/components/ui-kits/card/card";
@@ -21,7 +31,8 @@ import { useGetVersions } from "../../hooks/use-versions";
 import { useFunctionEditorStore } from "../../store/function-editor-store";
 import { TERMINAL_RUN_STATUSES } from "../../types/run.types";
 import { FunctionStatusChip } from "../../components/function-status-chip";
-import { CodeEditor } from "../../components/code-editor";
+import { CodeEditor, type CodeEditorActions } from "../../components/code-editor";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
 import { SandboxHelpCard } from "../../components/sandbox-help-card";
 import { EnvironmentCard } from "../../components/environment-card";
 import { TestPanel } from "../../components/test-panel";
@@ -39,6 +50,8 @@ import { RunDetail } from "../../components/run-detail";
 import { VersionsTable } from "../../components/versions-table";
 import { DeleteFunctionDialog } from "../../components/delete-function-dialog";
 import { buildInvokeUrl } from "../../components/endpoint-badge";
+import { ProxyMethodBadge } from "@/modules/proxy/components/proxy-method-badge";
+import { toHttpVerb } from "../../constants/endpoint.constant";
 
 const RUNS_PAGE_SIZE = 20;
 
@@ -68,6 +81,49 @@ const rangeStart = (range: string, now: number): string => {
  * why the reserve only has to account for what sits above the card and never for its insides.
  */
 const CODE_CARD_HEIGHT = "max(400px, calc(100dvh - 264px))";
+
+/**
+ * One editor tool. Icon-only to fit the file-tab row, so the accessible name and the tooltip
+ * carry the label and the shortcut — an icon nobody can name is not a control.
+ */
+const EditorToolButton = ({
+  label,
+  hint,
+  shortcut,
+  icon: Icon,
+  isActive,
+  onClick,
+}: {
+  label: string;
+  hint: string;
+  shortcut?: string;
+  icon: typeof Search;
+  isActive?: boolean;
+  onClick: () => void;
+}) => (
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        aria-label={label}
+        aria-pressed={isActive}
+        className={cn(
+          "h-7 w-7 text-medium-emphasis hover:text-foreground",
+          isActive && "bg-primary/10 text-primary hover:text-primary",
+        )}
+        onClick={onClick}
+      >
+        <Icon className="h-3.5 w-3.5" />
+      </Button>
+    </TooltipTrigger>
+    <TooltipContent side="bottom" className="text-xs">
+      {hint}
+      {shortcut ? <span className="ml-1.5 font-mono text-low-emphasis">{shortcut}</span> : null}
+    </TooltipContent>
+  </Tooltip>
+);
 
 const TAB_ORDER = ["code", "trigger", "output", "configuration", "runs", "versions"] as const;
 const TAB_LABELS: Record<(typeof TAB_ORDER)[number], string> = {
@@ -114,6 +170,11 @@ export const FunctionDetailPage = () => {
   const activeFile = useFunctionEditorStore((s) => s.activeFile);
   const setActiveFile = useFunctionEditorStore((s) => s.setActiveFile);
   const limits = useFunctionEditorStore((s) => s.limits);
+  const selectedProject = useProjectStore().selectedProject;
+  // The editor's own view settings. They belong to the person reading the file, not to the
+  // function, so they are page state and are never part of the saved source.
+  const [isWrapped, setIsWrapped] = useState(false);
+  const editorActions = useRef<CodeEditorActions | null>(null);
   const setLimits = useFunctionEditorStore((s) => s.setLimits);
   const retry = useFunctionEditorStore((s) => s.retry);
   const setRetry = useFunctionEditorStore((s) => s.setRetry);
@@ -205,7 +266,7 @@ export const FunctionDetailPage = () => {
   };
 
   const copyEndpoint = () => {
-    navigator.clipboard.writeText(buildInvokeUrl(functionId));
+    navigator.clipboard.writeText(buildInvokeUrl(functionId, selectedProject));
     setIsEndpointCopied(true);
     setTimeout(() => setIsEndpointCopied(false), 1400);
   };
@@ -290,7 +351,10 @@ export const FunctionDetailPage = () => {
 
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-medium-emphasis">
               <span className="flex min-w-0 items-center gap-1.5">
-                <code className="truncate font-mono">POST {buildInvokeUrl(functionId)}</code>
+                <ProxyMethodBadge method={toHttpVerb(trigger.httpMethod)} />
+                <code className="truncate font-mono">
+                  {buildInvokeUrl(functionId, selectedProject)}
+                </code>
                 <button
                   type="button"
                   aria-label="Copy endpoint"
@@ -427,11 +491,39 @@ export const FunctionDetailPage = () => {
                     </button>
                   ))}
                 </div>
-                <span className="text-xs text-low-emphasis">
-                  {activeFile === "index.js"
-                    ? `ES modules · ${indexJs.split("\n").length} lines`
-                    : "pinned versions only · installed at deploy"}
-                </span>
+                <div className="flex shrink-0 items-center gap-1">
+                  <span className="hidden text-xs text-low-emphasis sm:inline">
+                    {activeFile === "index.js"
+                      ? `ES modules · ${indexJs.split("\n").length} lines`
+                      : "pinned versions only · installed at deploy"}
+                  </span>
+                  {/* Monaco owns all three; these only make them visible. Every one keeps its
+                      keyboard shortcut, so the buttons are a discovery aid rather than the
+                      only way in. */}
+                  <div className="ml-2 flex items-center gap-0.5 border-l pl-2">
+                    <EditorToolButton
+                      label="Search"
+                      hint="Find and replace"
+                      shortcut="Ctrl+F"
+                      icon={Search}
+                      onClick={() => editorActions.current?.find()}
+                    />
+                    <EditorToolButton
+                      label="Format"
+                      hint="Format document"
+                      shortcut="Shift+Alt+F"
+                      icon={Sparkles}
+                      onClick={() => editorActions.current?.format()}
+                    />
+                    <EditorToolButton
+                      label="Wrap lines"
+                      hint={isWrapped ? "Stop wrapping long lines" : "Wrap long lines"}
+                      icon={WrapText}
+                      isActive={isWrapped}
+                      onClick={() => setIsWrapped((wrapped) => !wrapped)}
+                    />
+                  </div>
+                </div>
               </div>
               {/* `min-h-0` so this row can shrink below the editor's content height: without it a
                   flex item refuses to go under its min-content size and the card grows past the
@@ -444,6 +536,8 @@ export const FunctionDetailPage = () => {
                     onChange={setIndexJs}
                     height="100%"
                     className="overflow-hidden"
+                    wordWrap={isWrapped}
+                    actionsRef={editorActions}
                     // The tenant's own keys, so `ctx.env.` completes with what is actually bound.
                     envKeys={variables.map((variable) => variable.key)}
                   />
@@ -454,12 +548,15 @@ export const FunctionDetailPage = () => {
                     onChange={setPackageJson}
                     height="100%"
                     className="overflow-hidden"
+                    wordWrap={isWrapped}
+                    actionsRef={editorActions}
                   />
                 )}
               </div>
               <p className="shrink-0 border-t bg-surface-app px-4 py-2.5 text-xs text-medium-emphasis">
                 Native <code className="font-mono">fetch()</code>, async/await and pinned npm
-                packages. Variables arrive as <code className="font-mono">ctx.env.NAME</code>.
+                packages. Variables arrive as <code className="font-mono">ctx.env.NAME</code> —
+                inside the handler, where <code className="font-mono">ctx</code> exists.
               </p>
             </Card>
 
