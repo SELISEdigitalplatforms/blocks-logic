@@ -25,5 +25,5 @@ export const FUNCTIONS_ENDPOINTS = {
   GET_AUDIT_LOG: `${API_BASES.WORKFLOW}${FUNCTIONS_SUBPATH}/GetAuditLog`,
 } as const;
 
-/** Public invocation endpoint (`FunctionInvokeController`) — shown to the tenant as their function's URL, never called by this client itself. */
+/** Public invocation endpoint (`FunctionsController.Invoke`) — shown to the tenant as their function's URL, never called by this client itself. */
 export const FUNCTION_INVOKE_ENDPOINT_BASE = `${API_BASES.WORKFLOW}${FUNCTION_INVOKE_SUBPATH}`;

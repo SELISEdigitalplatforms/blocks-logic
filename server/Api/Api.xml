@@ -65,13 +65,39 @@
         <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.UpdateRepoDomain(Devops.DomainService.Deployment.Models.Request.RepoDomainUpdateRequest)">
             <summary><c>POST</c> — points a repository at a different deployment domain.</summary>
         </member>
-        <member name="T:BlocksTemplate.Api.Controllers.FunctionInvokeController">
+        <member name="T:BlocksTemplate.Api.Controllers.FunctionsController">
+            <summary>
+            Every HTTP entry point for functions, in two parts that do not share a security model.
+            <list type="bullet">
+            <item>
+            The <b>management surface</b> — everything a tenant does to their own functions in the
+            Blocks Studio. Routed by convention to <c>/api/functions/{action}</c>, and every action
+            carries its own <c>[ProtectedEndPoint]</c>: an authenticated, already-authorized caller
+            is assumed throughout.
+            </item>
+            <item>
+            The <b>public invocation surface</b> at the bottom of this file — <c>/api/fn/…</c>,
+            reached by callers who are not necessarily Blocks users at all. Its routes are absolute
+            (<c>~/api/…</c>) because they do not follow the controller's template, and its entry
+            action is deliberately anonymous.
+            </item>
+            </list>
+            <para>
+            <b>Do not put a class-level <c>[Authorize]</c> or <c>[ProtectedEndPoint]</c> on this
+            type.</b> It would shut off public invocation for every tenant, and the failure would
+            show up as callers' 401s rather than as anything failing here. Authorization on this
+            controller is per-action, on purpose — a new action gets nothing by default, so give it
+            the attribute it needs.
+            </para>
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.Invoke(System.String,System.Boolean,System.Object)">
             <summary>
             The public function endpoint (DECISIONS D5): <c>POST /api/fn/{functionId}</c>.
             <para>
             The tenant comes from <see cref="T:Blocks.Genesis.BlocksContext"/>, never from the route. Genesis'
-            <c>TenantValidationMiddleware</c> guards every path under <c>api</c> — that prefix is in
-            its default set, so this route is covered — resolving the tenant from the
+            <c>TenantValidationMiddleware</c> guards every path under <c>api</c> — that prefix is
+            in its default set, so this route is covered — resolving the tenant from the
             <c>x-blocks-key</c> header (or the query/form fallbacks in
             <c>TenantContextHelper.ResolveTenantIdFromHeaders</c>), validating it against the real
             tenant record, and calling <c>EnsureTenantContext</c> before any controller runs. So a
@@ -80,22 +106,30 @@
             </para>
             <para>
             <b>Never take a tenant from the route, the query or the body.</b> The middleware has
-            already authenticated one tenant — the header's — so a second, unvalidated tenant id in
-            the path would let any valid <c>x-blocks-key</c> reach a <c>Public</c> function in
-            whatever other tenant the caller could name, while every gate here was evaluated against
-            that named tenant rather than the authenticated one. There is exactly one tenant in this
-            request and it comes from <see cref="T:Blocks.Genesis.BlocksContext"/>.
+            already authenticated one tenant — the header's — so a second, unvalidated tenant id
+            in the path would let any valid <c>x-blocks-key</c> reach a <c>Public</c> function in
+            whatever other tenant the caller could name, while every gate here was evaluated
+            against that named tenant rather than the authenticated one. There is exactly one
+            tenant in this request and it comes from <see cref="T:Blocks.Genesis.BlocksContext"/>.
             </para>
             <para>
-            The invoke action itself carries no <c>[Authorize]</c>: a tenant key identifies a tenant
-            but authenticates no user, and whether a caller may proceed is the function's own trigger
-            configuration (public vs. token-protected), decided inside
-            <c>FunctionInvocationService.InvokeHttpAsync</c> — this mirrors how the workflow webhook
-            action is anonymous at the controller and authorizes itself internally per-trigger.
+            The route is absolute so that it stays <c>/api/fn/{functionId}</c> rather than
+            following this controller's <c>[controller]/[action]</c> template. That also puts it
+            outside <c>GlobalApiRoutePrefixConvention</c>, which only prefixes controller-level
+            templates — hence the <c>api</c> segment written out here.
+            </para>
+            <para>
+            <see cref="T:Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute"/> rather than merely omitting <c>[Authorize]</c>:
+            a tenant key identifies a tenant but authenticates no user, and whether a caller may
+            proceed is the function's own trigger configuration (public vs. token-protected),
+            decided inside <c>FunctionInvocationService.InvokeHttpAsync</c> — this mirrors how the
+            workflow webhook action is anonymous at the controller and authorizes itself
+            internally per-trigger. Saying it explicitly also keeps the endpoint public if this
+            class ever does acquire a type-level authorization attribute.
             </para>
             </summary>
         </member>
-        <member name="M:BlocksTemplate.Api.Controllers.FunctionInvokeController.ShouldWait(System.Boolean)">
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.ShouldWait(System.Boolean)">
             <summary>
             <c>?wait=true</c>, matching DECISIONS D5. A <c>Prefer: wait=&lt;sec&gt;</c> header is
             also accepted for parity with the spec's Sync/Fire/Poll language, treated the same
@@ -103,13 +137,12 @@
             plus a fixed grace, not whatever value the header names.
             </summary>
         </member>
-        <member name="T:BlocksTemplate.Api.Controllers.FunctionsController">
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.PollRun(System.String)">
             <summary>
-            The authenticated management surface: everything a tenant does to their own functions
-            in the Blocks Studio. The public invocation endpoint lives separately in
-            <see cref="T:BlocksTemplate.Api.Controllers.FunctionInvokeController"/> — it is reached by callers who are not
-            necessarily Blocks users at all, and carries none of the assumptions this controller
-            makes about an authenticated, already-authorized caller.
+            The poll half of Fire/Poll: <c>GET /api/fn/runs/{runId}</c>, for a caller that took a
+            202 from <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.Invoke(System.String,System.Boolean,System.Object)"/>. Distinct from <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.GetRun(System.String)"/> — same service call,
+            but a path parameter on the public route and a signed-in Blocks user rather than a
+            permission-gated Studio request.
             </summary>
         </member>
         <member name="T:BlocksTemplate.Api.Controllers.HealthController">
