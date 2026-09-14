@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <UserSecretsId>blocks-function-runner</UserSecretsId>
+    <RootNamespace>Blocks.FunctionRunner</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="SeliseBlocks.Genesis.OS" />
+    <PackageReference Include="Docker.DotNet" />
+    <PackageReference Include="SharpZipLib" />
+    <PackageReference Include="StackExchange.Redis" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Blocks.FunctionRunner.Contracts/Blocks.FunctionRunner.Contracts.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The tenant image template is deployed beside the binaries, so changing it is a
+         deployment rather than a rebuild of the runner. -->
+    <None Include="../../runtime-image/function.Dockerfile.tmpl"
+          CopyToOutputDirectory="PreserveNewest" Link="function.Dockerfile.tmpl" />
+  </ItemGroup>
+</Project>

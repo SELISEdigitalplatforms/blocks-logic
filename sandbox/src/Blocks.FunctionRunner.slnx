@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="Blocks.FunctionRunner.Cli/Blocks.FunctionRunner.Cli.csproj" />
+  <Project Path="Blocks.FunctionRunner.Contracts/Blocks.FunctionRunner.Contracts.csproj" />
+  <Project Path="Blocks.FunctionRunner.Tests/Blocks.FunctionRunner.Tests.csproj" />
+  <Project Path="Blocks.FunctionRunner/Blocks.FunctionRunner.csproj" />
+</Solution>

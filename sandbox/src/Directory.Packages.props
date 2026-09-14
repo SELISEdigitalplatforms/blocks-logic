@@ -1,0 +1,45 @@
+<Project>
+  <!-- Central package versions for the runner. Every package shared with server/ is pinned to
+       the same version server/Directory.Packages.props pins (Genesis 4.1.5, xunit 2.9.3,
+       FluentAssertions 8.8.0, Microsoft.NET.Test.Sdk 18.0.1, xunit.runner.visualstudio 3.1.4), so
+       the two files agree wherever they overlap and a shared package can be bumped in both
+       without thought. Keep it that way: a shared version changed here is changed there too.
+
+       Two deliberate deltas, each documented where it is declared: Microsoft.Extensions.Hosting
+       is 10.0.0 here against server's 9.0.2 (below), and CentralPackageTransitivePinningEnabled
+       is on here and off there (above). Those two are why the runner keeps its own file rather
+       than inheriting server's. -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- server/Directory.Packages.props does not set this; it is on here because it is what
+         surfaced Genesis 4.1.5 silently resolving StackExchange.Redis down to 2.8.58. Turning it
+         off to match would re-open a trap that only fails at runtime, and it cannot simply be
+         turned on repository-wide instead: that would put every transitive version across the
+         twelve projects in server/ under central control in one go. -->
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="SeliseBlocks.Genesis.OS" Version="4.1.5" />
+    <PackageVersion Include="Docker.DotNet" Version="3.125.15" />
+    <!-- Tar packing for the Engine's build API, which takes the context as a tar stream. -->
+    <PackageVersion Include="SharpZipLib" Version="1.4.2" />
+    <!-- Must not be below what Genesis 4.1.5 was compiled against (>= 2.12.14).
+         Central transitive pinning would otherwise downgrade it silently and Genesis
+         would fail at runtime rather than at build time. -->
+    <PackageVersion Include="StackExchange.Redis" Version="2.12.14" />
+    <!-- Nothing references this directly; it is here because transitive pinning puts transitive
+         versions under this file's control, and Microsoft.Extensions.Hosting.Systemd 10.0.0
+         depends on Microsoft.Extensions.Hosting >= 10.0.0. server pins 9.0.2, which would be a
+         downgrade for this project. The two files disagree here on purpose, and the disagreement
+         is harmless precisely because neither tree inherits the other's. -->
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Systemd" Version="10.0.0" />
+  </ItemGroup>
+  <ItemGroup Label="Test">
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageVersion Include="FluentAssertions" Version="8.8.0" />
+    <PackageVersion Include="Xunit.SkippableFact" Version="1.5.23" />
+  </ItemGroup>
+</Project>
