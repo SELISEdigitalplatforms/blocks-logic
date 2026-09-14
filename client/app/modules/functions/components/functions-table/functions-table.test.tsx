@@ -74,6 +74,16 @@ describe("FunctionsTable", () => {
     expect(screen.getAllByText("—").length).toBeGreaterThan(0);
   });
 
+  // The row-as-button markup went away with the restyle to Proxy/Workflow's table; the name link
+  // is now the only keyboard and screen-reader path into a function, so it has to stay a link.
+  it("reaches every function by a link, not just a row click", () => {
+    render([live, draft]);
+
+    const link = screen.getByRole("link", { name: "Send confirmation" });
+    expect(link.getAttribute("href")).toContain("functions/fn_1");
+    expect(screen.getByRole("link", { name: "Sync inventory" })).toBeTruthy();
+  });
+
   it("shows how each function can be invoked", () => {
     render([live, draft]);
     expect(screen.getByText("HTTP · Workflow")).toBeTruthy();

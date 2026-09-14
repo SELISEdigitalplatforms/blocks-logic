@@ -1,8 +1,9 @@
 "use client";
-import { KeyboardEvent, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useScopedPath } from "@seliseblocks/genesis-os";
-import { Copy, EllipsisVertical, ArrowRightFromLine, Trash, Zap } from "lucide-react";
+import { ArrowRightFromLine, Copy, EllipsisVertical, Plus, Trash } from "lucide-react";
+import { FunctionIcon } from "@/constants/navigation-menus";
 import { Skeleton } from "@/components/ui-kits/skeleton/skeleton";
 import {
   DropdownMenu,
@@ -10,8 +11,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui-kits/dropdown-menu/dropdown-menu";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui-kits/table/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
 import { Button } from "@/components/ui-kits/button/button";
+import { cn } from "@/lib/utils";
 import { showSuccessToast } from "@/hooks/use-toast";
 import { IFunctionSummary } from "../../types/function.types";
 import { formatAbsoluteTime, formatRelativeTime, formatRunCount } from "../../utils/format";
@@ -20,62 +30,49 @@ import { DeleteFunctionDialog } from "../delete-function-dialog";
 import { buildInvokePath, buildInvokeUrl } from "../endpoint-badge";
 
 /**
- * Design's grid: Function · Invoked by · Active · Runs 24 h · Last run · row actions.
- *
- * Every track is `fr` or a fixed width on purpose. The header and each row are separate grid
- * containers, so an `auto` track would be measured against *that container's* content — a row
- * showing "—" and one showing "3 minutes ago" would size their columns differently, and neither
- * would line up with the header. The last track fits the kebab, which is the row's only control:
- * the chevron that used to sit beside it said nothing the whole-row click did not already say.
+ * Design's grid: Function · Invoked by · Active · Runs 24 h · Last run · row actions — rendered as
+ * the same detached-row table Proxy and Workflow use, so the three service lists read as one
+ * product rather than three. The spacing carries the separation (`border-spacing-y-4` with a
+ * rounded border per row); the shared `Table` primitives handle the overflow at narrow widths.
  */
-const GRID =
-  "grid grid-cols-[minmax(0,1.6fr)_minmax(0,0.85fr)_78px_76px_104px_28px] items-center gap-4";
+const HEAD_CLASS = "px-6 pb-0 pt-2 text-base";
 
-const HEADER_CLASS =
-  "border-b bg-surface-app px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-low-emphasis";
+const CELL_CLASS =
+  "border-y border-border bg-background px-6 py-5 text-base transition-colors group-hover:bg-muted/50";
+
+const SKELETON_ROWS = 10;
 
 const FunctionsEmptyState = ({ onCreateFunction }: { onCreateFunction: () => void }) => (
   <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-12 text-center">
     <div className="flex h-14 w-14 items-center justify-center rounded-md bg-primary/10 text-primary">
-      <Zap className="h-7 w-7" />
+      <FunctionIcon className="h-7 w-7" />
     </div>
     <h4 className="mt-5 text-lg font-semibold text-high-emphasis">No functions yet</h4>
-    <p className="mt-2 max-w-md text-sm text-medium-emphasis">
+    <p className="mt-2 max-w-md text-sm text-muted-foreground">
       A function is a small Node handler you deploy here. Every invocation runs in its own sandbox,
       with its own limits. Call it over HTTP with a Blocks token, or from a workflow&apos;s Function
       step.
     </p>
-    <Button className="mt-6" size="sm" onClick={onCreateFunction}>
+    <Button className="mt-6 gap-2" size="sm" onClick={onCreateFunction}>
+      <Plus className="h-4 w-4" />
       New function
     </Button>
   </div>
 );
 
-/** Header + rows in the real frame, so the card does not change height or shape on load. */
+/** Rows in the real frame, so the card does not change height or shape on load. */
 const FunctionsTableSkeleton = ({ rowCount }: { rowCount: number }) => (
-  <div className="overflow-hidden rounded-lg border" aria-busy="true" aria-live="polite">
-    <div className={`${GRID} ${HEADER_CLASS}`}>
-      <span>Function</span>
-      <span className="whitespace-nowrap">Invoked by</span>
-      <span>Active</span>
-      <span className="whitespace-nowrap">Runs 24 h</span>
-      <span className="whitespace-nowrap">Last run</span>
-      <span />
-    </div>
-    {Array.from({ length: rowCount }).map((_, index) => (
-      <div key={index} className={`${GRID} border-b px-4 py-3.5 last:border-b-0`}>
-        <div className="flex flex-col gap-1.5">
-          <Skeleton className="h-4 w-40" />
-          <Skeleton className="h-3 w-56" />
-        </div>
-        <Skeleton className="h-3 w-24" />
-        <Skeleton className="h-3 w-8" />
-        <Skeleton className="h-3 w-8" />
-        <Skeleton className="h-3 w-16" />
-        <span />
-      </div>
-    ))}
-  </div>
+  <Table className="border-separate border-spacing-y-4" aria-busy="true" aria-live="polite">
+    <TableBody className="[&_tr:last-child]:border-0">
+      {Array.from({ length: rowCount }).map((_, index) => (
+        <TableRow key={index} className="border-0">
+          <TableCell colSpan={6} className="rounded-lg border border-border bg-background p-4">
+            <Skeleton className="h-12 w-full" />
+          </TableCell>
+        </TableRow>
+      ))}
+    </TableBody>
+  </Table>
 );
 
 type FunctionsTableProps = {
@@ -92,7 +89,7 @@ export const FunctionsTable = ({
   functions,
   isLoading,
   hasFilters,
-  rowCount = 10,
+  rowCount = SKELETON_ROWS,
   onCreateFunction,
 }: FunctionsTableProps) => {
   const navigate = useNavigate();
@@ -105,14 +102,6 @@ export const FunctionsTable = ({
   };
 
   const openFunction = (functionId: string) => navigate(scoped(`functions/${functionId}`));
-
-  // The whole row is the target, so it has to answer the keyboard too. The container is a
-  // role="grid" rather than a static table precisely because its rows are activatable.
-  const handleRowKeyDown = (event: KeyboardEvent<HTMLDivElement>, functionId: string) => {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    event.preventDefault();
-    openFunction(functionId);
-  };
 
   if (isLoading) return <FunctionsTableSkeleton rowCount={rowCount} />;
 
@@ -128,126 +117,141 @@ export const FunctionsTable = ({
 
   return (
     <>
-      <div className="overflow-hidden rounded-lg border" role="grid" aria-label="Functions">
-        <div className={`${GRID} ${HEADER_CLASS}`} role="row">
-          <span role="columnheader">Function</span>
-          <span role="columnheader" className="whitespace-nowrap">
-            Invoked by
-          </span>
-          <span role="columnheader">Active</span>
-          <span role="columnheader" className="whitespace-nowrap">
-            Runs 24 h
-          </span>
-          <span role="columnheader" className="whitespace-nowrap">
-            Last run
-          </span>
-          <span role="columnheader" aria-label="Row actions" />
-        </div>
+      <Table className="min-w-[920px] border-separate border-spacing-y-4">
+        <TableHeader className="[&_tr]:border-0">
+          <TableRow className="border-0">
+            <TableHead className={HEAD_CLASS}>
+              <div className="font-bold text-medium-emphasis">Function</div>
+            </TableHead>
+            <TableHead className={HEAD_CLASS}>
+              <div className="font-bold text-medium-emphasis">Invoked by</div>
+            </TableHead>
+            <TableHead className={cn("w-[120px]", HEAD_CLASS)}>
+              <div className="font-bold text-medium-emphasis">Active</div>
+            </TableHead>
+            <TableHead className={cn("w-[140px]", HEAD_CLASS)}>
+              <div className="font-bold text-medium-emphasis">Runs 24 h</div>
+            </TableHead>
+            <TableHead className={cn("w-[180px]", HEAD_CLASS)}>
+              <div className="font-bold text-medium-emphasis">Last run</div>
+            </TableHead>
+            <TableHead className={cn("w-[80px]", HEAD_CLASS)}>
+              <span className="sr-only">Row actions</span>
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody className="[&_tr:last-child]:border-0">
+          {functions.map((fn) => (
+            <TableRow
+              key={fn.id}
+              className="group cursor-pointer border-0 transition-colors"
+              onClick={() => openFunction(fn.id)}
+            >
+              <TableCell className={cn("rounded-l-lg border-l", CELL_CLASS)}>
+                <div className="flex min-w-0 flex-col gap-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* The row handles the click; the link is what keyboard and screen readers
+                        reach the function by, so it keeps its own focus and activation. */}
+                    <Link
+                      to={scoped(`functions/${fn.id}`)}
+                      className="truncate font-semibold hover:text-primary hover:underline"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      {fn.name}
+                    </Link>
+                    <FunctionStatusChip status={fn.status} />
+                    {fn.isDirty && fn.status === "Live" && (
+                      <span className="whitespace-nowrap text-xs text-muted-foreground">
+                        unpublished changes
+                      </span>
+                    )}
+                  </div>
+                  <code className="w-[260px] truncate font-mono text-sm text-muted-foreground">
+                    {buildInvokePath(fn.id)}
+                  </code>
+                </div>
+              </TableCell>
 
-        {functions.map((fn) => (
-          <div
-            key={fn.id}
-            role="row"
-            tabIndex={0}
-            className={`${GRID} cursor-pointer border-b px-4 py-3.5 last:border-b-0 hover:bg-surface-app focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring`}
-            onClick={() => openFunction(fn.id)}
-            onKeyDown={(event) => handleRowKeyDown(event, fn.id)}
-          >
-            <div className="flex min-w-0 flex-col gap-1" role="gridcell">
-              <div className="flex flex-wrap items-center gap-2">
-                <Link
-                  to={scoped(`functions/${fn.id}`)}
-                  className="truncate text-sm font-semibold hover:text-primary hover:underline"
-                  // The row is already the link target; let the row handle it once.
-                  tabIndex={-1}
-                  onClick={(e) => e.stopPropagation()}
+              <TableCell className={CELL_CLASS}>
+                <span className="whitespace-nowrap text-sm text-muted-foreground">
+                  {fn.httpEnabled && fn.workflowEnabled
+                    ? "HTTP · Workflow"
+                    : fn.workflowEnabled
+                      ? "Workflow"
+                      : "HTTP"}
+                </span>
+              </TableCell>
+
+              <TableCell className={cn("w-[120px]", CELL_CLASS)}>
+                <code className="font-mono text-sm font-semibold text-primary">
+                  {fn.activeVersionNumber ? `v${fn.activeVersionNumber}` : "—"}
+                </code>
+              </TableCell>
+
+              <TableCell className={cn("w-[140px]", CELL_CLASS)}>
+                <span className="whitespace-nowrap text-sm">{formatRunCount(fn.runs24h)}</span>
+              </TableCell>
+
+              <TableCell className={cn("w-[180px]", CELL_CLASS)}>
+                <span className="whitespace-nowrap text-sm text-muted-foreground">
+                  {fn.lastRunAt ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span>{formatRelativeTime(fn.lastRunAt)}</span>
+                      </TooltipTrigger>
+                      <TooltipContent>{formatAbsoluteTime(fn.lastRunAt)}</TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    "—"
+                  )}
+                </span>
+              </TableCell>
+
+              <TableCell className={cn("w-[80px] rounded-r-lg border-r", CELL_CLASS)}>
+                <div
+                  className="flex items-center justify-end"
+                  onClick={(event) => event.stopPropagation()}
                 >
-                  {fn.name}
-                </Link>
-                <FunctionStatusChip status={fn.status} />
-                {fn.isDirty && fn.status === "Live" && (
-                  <span className="whitespace-nowrap text-xs text-medium-emphasis">
-                    unpublished changes
-                  </span>
-                )}
-              </div>
-              <code className="truncate font-mono text-xs text-medium-emphasis">
-                {buildInvokePath(fn.id)}
-              </code>
-            </div>
-
-            <span
-              className="truncate whitespace-nowrap text-xs text-medium-emphasis"
-              role="gridcell"
-            >
-              {fn.httpEnabled && fn.workflowEnabled
-                ? "HTTP · Workflow"
-                : fn.workflowEnabled
-                  ? "Workflow"
-                  : "HTTP"}
-            </span>
-
-            <code className="font-mono text-xs font-semibold text-primary" role="gridcell">
-              {fn.activeVersionNumber ? `v${fn.activeVersionNumber}` : "—"}
-            </code>
-
-            <span className="whitespace-nowrap text-xs" role="gridcell">
-              {formatRunCount(fn.runs24h)}
-            </span>
-
-            <span
-              className="min-w-0 truncate whitespace-nowrap text-xs text-medium-emphasis"
-              role="gridcell"
-            >
-              {fn.lastRunAt ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span>{formatRelativeTime(fn.lastRunAt)}</span>
-                  </TooltipTrigger>
-                  <TooltipContent>{formatAbsoluteTime(fn.lastRunAt)}</TooltipContent>
-                </Tooltip>
-              ) : (
-                "—"
-              )}
-            </span>
-
-            <div
-              className="flex items-center justify-end gap-0.5"
-              role="gridcell"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    aria-label={`Actions for ${fn.name}`}
-                    className="h-6 w-6 shrink-0 p-0"
-                  >
-                    <EllipsisVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem className="cursor-pointer" onClick={() => openFunction(fn.id)}>
-                    <ArrowRightFromLine className="mr-2 h-4 w-4" />
-                    <span>Open</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem className="cursor-pointer" onClick={() => copyEndpoint(fn.id)}>
-                    <Copy className="mr-2 h-4 w-4" />
-                    <span>Copy endpoint</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="cursor-pointer text-error"
-                    onClick={() => setPendingDelete(fn)}
-                  >
-                    <Trash className="mr-2 h-4 w-4" />
-                    <span>Delete</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-        ))}
-      </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        className="h-5 w-5 p-0"
+                        aria-label={`Actions for ${fn.name}`}
+                      >
+                        <EllipsisVertical width={20} height={20} />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        className="cursor-pointer"
+                        onClick={() => openFunction(fn.id)}
+                      >
+                        <ArrowRightFromLine className="mr-2 h-4 w-4" />
+                        <span>Open</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="cursor-pointer"
+                        onClick={() => copyEndpoint(fn.id)}
+                      >
+                        <Copy className="mr-2 h-4 w-4" />
+                        <span>Copy endpoint</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="cursor-pointer text-destructive focus:text-destructive"
+                        onClick={() => setPendingDelete(fn)}
+                      >
+                        <Trash className="mr-2 h-4 w-4" />
+                        <span>Delete</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
 
       <DeleteFunctionDialog
         open={!!pendingDelete}

@@ -24,6 +24,11 @@ export const FunctionsPage = () => {
   // Skeletons only on the first load: a background refetch (a filter change, a return to the tab)
   // keeps the rows on screen instead of flashing the whole table away.
   const hasFilters = !!queryParams.search || !!queryParams.status;
+  // Same rule Proxy uses: while the list is loading, and while the project has no functions at
+  // all, the header button stays out of the way — the empty state carries the only call to
+  // action, so the page never shows two. A filter that matches nothing is not an empty project,
+  // and its "no matches" line has no button of its own, so the header keeps one.
+  const showCreateButton = !isLoading && (!!data?.totalCount || hasFilters);
 
   return (
     <section className="flex flex-col gap-6 p-4">
@@ -34,10 +39,12 @@ export const FunctionsPage = () => {
             Deploy code and call it over HTTP or from a workflow — each run in its own sandbox.
           </p>
         </div>
-        <Button size="sm" className="shrink-0 gap-1.5" onClick={() => setIsCreateOpen(true)}>
-          <Plus className="h-4 w-4" />
-          New function
-        </Button>
+        {showCreateButton && (
+          <Button size="sm" className="shrink-0 gap-1.5" onClick={() => setIsCreateOpen(true)}>
+            <Plus className="h-4 w-4" />
+            New function
+          </Button>
+        )}
       </div>
 
       {isError ? (
