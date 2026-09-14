@@ -232,6 +232,120 @@ const MetricCard = ({
   </Card>
 );
 
+const ProxyOverviewSkeleton = () => (
+  <>
+    <div className="grid gap-4 md:grid-cols-3">
+      {Array.from({ length: 3 }).map((_, index) => (
+        <Card key={index} className="rounded-xl">
+          <CardContent className="space-y-3 p-0">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-8 w-20" />
+            <Skeleton className="h-4 w-28" />
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+
+    <Card className="rounded-xl">
+      <CardHeader>
+        <Skeleton className="h-6 w-36" />
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="grid gap-4 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className="min-h-[140px] rounded-lg border bg-card p-4">
+              <Skeleton className="h-3 w-32" />
+              <div className="mt-4 space-y-3">
+                <Skeleton className="h-6 w-28" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-2/3" />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {Array.from({ length: 2 }).map((_, sectionIndex) => (
+          <div key={sectionIndex}>
+            <Skeleton className="h-3 w-44" />
+            <div className="mt-3 overflow-hidden rounded-lg border bg-card">
+              <div className="border-b bg-muted/20 px-4 py-3">
+                <Skeleton className="h-4 w-40" />
+              </div>
+              <div className="divide-y">
+                {Array.from({ length: 2 }).map((_, rowIndex) => (
+                  <div
+                    key={rowIndex}
+                    className="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(160px,0.4fr)_minmax(0,1fr)] sm:items-center"
+                  >
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-4 w-full" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ))}
+
+        <div>
+          <Skeleton className="h-3 w-24" />
+          <Skeleton className="mt-2 h-4 w-full max-w-md" />
+          <ul className="mt-3 space-y-3">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <li key={index} className="rounded-lg border bg-card p-4">
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-6 w-14" />
+                  <Skeleton className="h-4 w-36" />
+                </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-[max-content_1fr]">
+                  {Array.from({ length: 4 }).map((__, rowIndex) => (
+                    <Skeleton
+                      key={rowIndex}
+                      className={cn("h-4", rowIndex % 2 === 0 ? "w-24" : "w-full")}
+                    />
+                  ))}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </CardContent>
+    </Card>
+  </>
+);
+
+const ProxyDetailsSkeleton = () => (
+  <div role="status" aria-label="Loading proxy details" className="flex min-h-screen flex-col">
+    <div className="px-6 pb-2 pt-4">
+      <Skeleton className="h-5 w-full max-w-xs" />
+    </div>
+    <div className="flex-1 space-y-6 px-6 pb-8 pt-4">
+      <div className="mb-3 flex items-center justify-between gap-4 sm:items-start">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <Skeleton className="h-2 w-2 shrink-0 rounded-full" />
+          <Skeleton className="h-8 w-full max-w-xs" />
+          <Skeleton className="h-6 w-20 shrink-0" />
+        </div>
+        <Skeleton className="h-10 w-10 shrink-0 sm:hidden" />
+        <div className="hidden shrink-0 gap-3 sm:flex">
+          <Skeleton className="h-10 w-24" />
+          <Skeleton className="h-10 w-20" />
+          <Skeleton className="h-10 w-24" />
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <Skeleton className="h-10 w-full sm:hidden" />
+        <div className="hidden gap-1 rounded-md bg-muted p-1 sm:inline-flex">
+          {Array.from({ length: proxyDetailTabs.length }).map((_, index) => (
+            <Skeleton key={index} className="h-8 w-20 bg-background/70" />
+          ))}
+        </div>
+        <ProxyOverviewSkeleton />
+      </div>
+    </div>
+  </div>
+);
+
 const ConfigurationStepCard = ({
   eyebrow,
   children,
@@ -260,65 +374,6 @@ const proxyDetailTabs = [
   { value: "logs", label: "Logs" },
   { value: "history", label: "History" },
 ];
-
-const ProxyOverviewSkeleton = () => (
-  <div className="space-y-6">
-    <div className="grid gap-4 md:grid-cols-3">
-      {Array.from({ length: 3 }).map((_, index) => (
-        <Card key={index} className="rounded-xl">
-          <CardContent className="space-y-3 p-0">
-            <Skeleton className="h-4 w-24" />
-            <Skeleton className="h-9 w-28" />
-            <Skeleton className="h-4 w-20" />
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-    <Card className="rounded-xl">
-      <CardHeader>
-        <Skeleton className="h-6 w-36" />
-      </CardHeader>
-      <CardContent className="space-y-5">
-        <Skeleton className="h-28 w-full" />
-        <Skeleton className="h-16 w-full" />
-        <Skeleton className="h-20 w-full" />
-      </CardContent>
-    </Card>
-  </div>
-);
-
-const ProxyDetailsSkeleton = () => (
-  <div className="flex min-h-screen flex-col" role="status" aria-label="Loading proxy details">
-    <div className="px-6 pb-2 pt-4">
-      <Skeleton className="h-5 w-64" />
-    </div>
-    <div className="flex-1 space-y-6 px-6 pb-8 pt-4">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <Skeleton className="h-3.5 w-3.5 rounded-full" />
-            <Skeleton className="h-8 w-56" />
-            <Skeleton className="h-6 w-16 rounded-full" />
-          </div>
-          <Skeleton className="h-4 w-72" />
-        </div>
-        <div className="flex gap-3">
-          <Skeleton className="h-10 w-24" />
-          <Skeleton className="h-10 w-20" />
-        </div>
-      </div>
-
-      <div className="space-y-4">
-        <div className="flex gap-8 border-b border-border">
-          <Skeleton className="h-8 w-20 rounded-none" />
-          <Skeleton className="h-8 w-28 rounded-none" />
-          <Skeleton className="h-8 w-32 rounded-none" />
-        </div>
-        <ProxyOverviewSkeleton />
-      </div>
-    </div>
-  </div>
-);
 
 export const ProxyDetails = () => {
   const navigate = useNavigate();
