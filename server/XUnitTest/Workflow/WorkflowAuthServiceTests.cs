@@ -316,6 +316,148 @@ namespace XUnitTest.Workflow
             request.HttpContext.User.FindFirst(DelegationGrantFactory.SecurityStampClaim)!.Value.Should().Be("stamp-1");
         }
 
+        [Fact]
+        public async Task IsAuthenticated_ImpersonatedToken_UsesOriginalTenantCertificate()
+        {
+            const string originalTenantId = "tenant-original";
+            var webhookTenant = TenantWithCert(out _, out var webhookCertBytes);
+            var originalTenant = TenantWithCert(out var originalCert, out var originalCertBytes, originalTenantId);
+            _tenants.Setup(t => t.GetTenantByID(TenantId)).Returns(webhookTenant);
+            _tenants.Setup(t => t.GetTenantByID(originalTenantId)).Returns(originalTenant);
+            SetupCertCache(originalTenantId, originalCertBytes);
+            SetupCertCache(TenantId, webhookCertBytes);
+
+            var request = RequestWithBearerToken(
+                originalCert,
+                orgId: "org-a",
+                userId: "user-1",
+                impersonated: true,
+                originalTenantId: originalTenantId);
+
+            var result = await _service.IsAuthenticated(request, TenantId);
+
+            result.Should().BeTrue();
+            request.HttpContext.User.FindFirst(BlocksContext.IMPERSONATED_CLAIM)!.Value.Should().Be("true");
+            VerifyCertCacheKey(originalTenantId, Times.Once());
+            VerifyCertCacheKey(TenantId, Times.Never());
+        }
+
+        [Fact]
+        public async Task IsAuthorized_ImpersonatedToken_SetsOriginalTenantOnContext()
+        {
+            const string originalTenantId = "tenant-original";
+            var webhookTenant = TenantWithCert(out _, out var webhookCertBytes);
+            var originalTenant = TenantWithCert(out var originalCert, out var originalCertBytes, originalTenantId);
+            _tenants.Setup(t => t.GetTenantByID(TenantId)).Returns(webhookTenant);
+            _tenants.Setup(t => t.GetTenantByID(originalTenantId)).Returns(originalTenant);
+            SetupCertCache(originalTenantId, originalCertBytes);
+            SetupCertCache(TenantId, webhookCertBytes);
+
+            var request = RequestWithBearerToken(
+                originalCert,
+                orgId: "org-a",
+                userId: "user-1",
+                roles: ["editor"],
+                impersonated: true,
+                originalTenantId: originalTenantId);
+            var config = new AuthorizationConfig("org-a", new Rule { Mode = "or", Values = ["editor"] }, null, AuthorizationMode.RolesOnly);
+
+            var result = await _service.IsAuthorized(request, TenantId, config);
+
+            result.isAuthorized.Should().BeTrue();
+            result.context.Should().NotBeNull();
+            result.context!.TenantId.Should().Be(TenantId);
+            result.context.OriginalTenantId.Should().Be(originalTenantId);
+            result.context.Impersonated.Should().BeTrue();
+        }
+
+        [Fact]
+        public async Task IsAuthenticated_ImpersonatedTokenSignedByWebhookTenant_ReturnsFalse()
+        {
+            const string originalTenantId = "tenant-original";
+            var webhookTenant = TenantWithCert(out var webhookCert, out var webhookCertBytes);
+            var originalTenant = TenantWithCert(out _, out var originalCertBytes, originalTenantId);
+            _tenants.Setup(t => t.GetTenantByID(TenantId)).Returns(webhookTenant);
+            _tenants.Setup(t => t.GetTenantByID(originalTenantId)).Returns(originalTenant);
+            SetupCertCache(originalTenantId, originalCertBytes);
+            SetupCertCache(TenantId, webhookCertBytes);
+
+            var request = RequestWithBearerToken(
+                webhookCert,
+                orgId: "org-a",
+                userId: "user-1",
+                impersonated: true,
+                originalTenantId: originalTenantId);
+
+            var result = await _service.IsAuthenticated(request, TenantId);
+
+            result.Should().BeFalse();
+        }
+
+        [Fact]
+        public async Task IsAuthenticated_ImpersonatedTokenMissingOriginalTenantId_ReturnsFalse()
+        {
+            var webhookTenant = TenantWithCert(out var cert, out var certBytes);
+            _tenants.Setup(t => t.GetTenantByID(TenantId)).Returns(webhookTenant);
+            SetupCertCache(TenantId, certBytes);
+
+            var request = RequestWithBearerToken(
+                cert,
+                orgId: "org-a",
+                userId: "user-1",
+                impersonated: true);
+
+            var result = await _service.IsAuthenticated(request, TenantId);
+
+            result.Should().BeFalse();
+            VerifyCertCacheKey(TenantId, Times.Never());
+        }
+
+        [Fact]
+        public async Task IsAuthenticated_ImpersonatedTokenUnknownOriginalTenant_ReturnsFalse()
+        {
+            const string originalTenantId = "tenant-missing";
+            var webhookTenant = TenantWithCert(out var cert, out var certBytes);
+            _tenants.Setup(t => t.GetTenantByID(TenantId)).Returns(webhookTenant);
+            _tenants.Setup(t => t.GetTenantByID(originalTenantId)).Returns((Tenant?)null);
+            SetupCertCache(TenantId, certBytes);
+
+            var request = RequestWithBearerToken(
+                cert,
+                orgId: "org-a",
+                userId: "user-1",
+                impersonated: true,
+                originalTenantId: originalTenantId);
+
+            var result = await _service.IsAuthenticated(request, TenantId);
+
+            result.Should().BeFalse();
+            VerifyCertCacheKey(originalTenantId, Times.Never());
+        }
+
+        [Fact]
+        public async Task IsAuthenticated_ImpersonatedTokenForDifferentWebhookTenant_ReturnsFalse()
+        {
+            const string originalTenantId = "tenant-original";
+            var webhookTenant = TenantWithCert(out _, out var webhookCertBytes);
+            var originalTenant = TenantWithCert(out var originalCert, out var originalCertBytes, originalTenantId);
+            _tenants.Setup(t => t.GetTenantByID(TenantId)).Returns(webhookTenant);
+            _tenants.Setup(t => t.GetTenantByID(originalTenantId)).Returns(originalTenant);
+            SetupCertCache(originalTenantId, originalCertBytes);
+
+            var request = RequestWithBearerToken(
+                originalCert,
+                orgId: "org-a",
+                userId: "user-1",
+                impersonated: true,
+                originalTenantId: originalTenantId,
+                tenantId: "other-tenant");
+
+            var result = await _service.IsAuthenticated(request, TenantId);
+
+            result.Should().BeFalse();
+        }
+
         // ---------- CreateBlocksAuthorizationTokenAsync ----------
 
         [Fact]
@@ -357,14 +499,15 @@ namespace XUnitTest.Workflow
             return new ClaimsPrincipal(identity);
         }
 
-        private static Tenant TenantWithCert(out X509Certificate2 cert, out byte[] certBytes)
+        private static Tenant TenantWithCert(out X509Certificate2 cert, out byte[] certBytes, string? tenantId = null)
         {
-            cert = CreateSelfSignedCertificate($"CN={TenantId}");
+            var id = tenantId ?? TenantId;
+            cert = CreateSelfSignedCertificate($"CN={id}");
             certBytes = cert.Export(X509ContentType.Pfx);
 
             return new Tenant
             {
-                TenantId = TenantId,
+                TenantId = id,
                 DbConnectionString = "mongodb://localhost:27017",
                 JwtTokenParameters = new JwtTokenParameters
                 {
@@ -375,6 +518,24 @@ namespace XUnitTest.Workflow
             };
         }
 
+        private void SetupCertCache(string tenantId, byte[] certBytes)
+        {
+            var cacheKey = $"tetocertpublic::{tenantId}";
+            _cacheDatabase.Setup(d => d.StringGetAsync(
+                    It.Is<RedisKey>(k => (string)k == cacheKey),
+                    It.IsAny<CommandFlags>()))
+                .ReturnsAsync((RedisValue)certBytes);
+        }
+
+        private void VerifyCertCacheKey(string tenantId, Times times)
+        {
+            var cacheKey = $"tetocertpublic::{tenantId}";
+            _cacheDatabase.Verify(d => d.StringGetAsync(
+                    It.Is<RedisKey>(k => (string)k == cacheKey),
+                    It.IsAny<CommandFlags>()),
+                times);
+        }
+
         private static HttpRequest RequestWithBearerToken(
             X509Certificate2 cert,
             string orgId,
@@ -382,13 +543,16 @@ namespace XUnitTest.Workflow
             IEnumerable<string>? roles = null,
             string? email = null,
             string? userName = null,
-            string? displayName = null)
+            string? displayName = null,
+            bool impersonated = false,
+            string? originalTenantId = null,
+            string? tenantId = null)
         {
             var claims = new List<Claim>
             {
                 new(BlocksContext.USER_ID_CLAIM, userId),
                 new(BlocksContext.ORGANIZATION_ID_CLAIM, orgId),
-                new(BlocksContext.TENANT_ID_CLAIM, TenantId),
+                new(BlocksContext.TENANT_ID_CLAIM, tenantId ?? TenantId),
                 new(DelegationGrantFactory.TokenVersionClaim, "1"),
                 new(DelegationGrantFactory.SecurityStampClaim, "stamp-1"),
             };
@@ -396,6 +560,8 @@ namespace XUnitTest.Workflow
             if (email is not null) claims.Add(new Claim(BlocksContext.EMAIL_CLAIM, email));
             if (userName is not null) claims.Add(new Claim(BlocksContext.USER_NAME_CLAIM, userName));
             if (displayName is not null) claims.Add(new Claim(BlocksContext.DISPLAY_NAME_CLAIM, displayName));
+            if (impersonated) claims.Add(new Claim(BlocksContext.IMPERSONATED_CLAIM, "true"));
+            if (originalTenantId is not null) claims.Add(new Claim(BlocksContext.ORIGINAL_TENANT_ID_CLAIM, originalTenantId));
 
             var signingCredentials = new X509SigningCredentials(cert, SecurityAlgorithms.RsaSha256);
             var token = new JwtSecurityTokenHandler().CreateEncodedJwt(new SecurityTokenDescriptor
