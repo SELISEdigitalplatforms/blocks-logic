@@ -90,7 +90,9 @@ namespace Workflow.DomainService.Services
                phoneNumber: GetClaimValue(principal, BlocksContext.PHONE_NUMBER_CLAIM),
                displayName: GetClaimValue(principal, BlocksContext.DISPLAY_NAME_CLAIM),
                oauthToken: rawToken ?? string.Empty,
-               originalTenantId: tenant.TenantId,
+               originalTenantId: GetClaimValue(principal, BlocksContext.ORIGINAL_TENANT_ID_CLAIM) is { Length: > 0 } original
+                   ? original
+                   : tenant.TenantId,
                applicationDomain: applicationDomain,
                impersonated: GetImpersonated(principal),
                impersonationSessionId: GetClaimValue(principal, BlocksContext.IMPERSONATION_SESSION_ID_CLAIM));
@@ -111,8 +113,10 @@ namespace Workflow.DomainService.Services
             => _delegatedTokenProvider.GetTokenAsync(ct);
 
         /// <summary>
-        /// Validates the bearer token of a webhook request against the tenant's public cert
+        /// Validates the bearer token of a webhook request against the signing tenant's public cert
         /// and returns the resulting <see cref="ClaimsPrincipal"/> plus the raw token string.
+        /// Impersonated tokens are signed by the original tenant, so the cert is loaded with
+        /// <c>original_tenant_id</c>; all other tokens use the webhook path tenant.
         /// Returns <c>(null, null)</c> on any failure (missing token, unknown tenant, invalid
         /// signature, expired, etc.). Validation runs exactly once per request; both
         /// IsAuthenticated and IsAuthorized reuse this.
@@ -128,9 +132,15 @@ namespace Workflow.DomainService.Services
             try
             {
                 var tokenHandler = new JwtSecurityTokenHandler { MapInboundClaims = false };
-                string cacheKey = $"{PublicCertCachePrefix}{tenant.TenantId}";
+                if (!tokenHandler.CanReadToken(token)) return (null, null);
+
+                var jwt = tokenHandler.ReadJwtToken(token);
+                var signingTenant = ResolveSigningTenant(jwt, tenant);
+                if (signingTenant is null) return (null, null);
+
+                string cacheKey = $"{PublicCertCachePrefix}{signingTenant.TenantId}";
                 var certificateData = await _cacheClient.CacheDatabase().StringGetAsync(cacheKey);
-                var validationParams = tenant.JwtTokenParameters;
+                var validationParams = signingTenant.JwtTokenParameters;
                 var publicCert = X509CertificateLoader.LoadPkcs12(certificateData, validationParams.PublicCertificatePassword);
                 var tokenValidationParameters = new TokenValidationParameters
                 {
@@ -143,6 +153,11 @@ namespace Workflow.DomainService.Services
                     SaveSigninToken = true
                 };
                 var principal = tokenHandler.ValidateToken(token, tokenValidationParameters, out _);
+                if (!ImpersonatedTokenMatchesWebhook(principal, tenantId, signingTenant.TenantId))
+                {
+                    return (null, null);
+                }
+
                 return (principal, token);
             }
             catch (Exception ex)
@@ -150,6 +165,47 @@ namespace Workflow.DomainService.Services
                 _logger.LogWarning(ex, "Workflow webhook token validation threw. TenantId={TenantId}", tenantId);
                 return (null, null);
             }
+        }
+
+        /// <summary>
+        /// Picks the tenant whose public cert must verify <paramref name="jwt"/>.
+        /// Unvalidated claims are a key-selection hint only; signature is checked afterwards.
+        /// Impersonated tokens with a missing/unknown <c>original_tenant_id</c> fail closed.
+        /// </summary>
+        private Tenant? ResolveSigningTenant(JwtSecurityToken jwt, Tenant webhookTenant)
+        {
+            var impersonated = jwt.Claims.FirstOrDefault(c => c.Type == BlocksContext.IMPERSONATED_CLAIM)?.Value == "true";
+            if (!impersonated)
+            {
+                return webhookTenant;
+            }
+
+            var originalTenantId = jwt.Claims.FirstOrDefault(c => c.Type == BlocksContext.ORIGINAL_TENANT_ID_CLAIM)?.Value;
+            if (string.IsNullOrWhiteSpace(originalTenantId))
+            {
+                return null;
+            }
+
+            return _tenants.GetTenantByID(originalTenantId);
+        }
+
+        /// <summary>
+        /// After signature validation, an impersonated token must still target this webhook tenant
+        /// and name the signing tenant as <c>original_tenant_id</c>. Non-impersonated tokens skip
+        /// this bind: their cert already ties them to the path tenant.
+        /// </summary>
+        private static bool ImpersonatedTokenMatchesWebhook(
+            ClaimsPrincipal principal,
+            string webhookTenantId,
+            string signingTenantId)
+        {
+            if (!GetImpersonated(principal))
+            {
+                return true;
+            }
+
+            return string.Equals(GetClaimValue(principal, BlocksContext.TENANT_ID_CLAIM), webhookTenantId, StringComparison.Ordinal)
+                && string.Equals(GetClaimValue(principal, BlocksContext.ORIGINAL_TENANT_ID_CLAIM), signingTenantId, StringComparison.Ordinal);
         }
 
         /// <summary>
