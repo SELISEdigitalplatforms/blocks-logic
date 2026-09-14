@@ -1,3 +1,4 @@
+using Blocks.FunctionRunner.Contracts;
 using Blocks.FunctionRunner.Options;
 using Docker.DotNet;
 using Microsoft.Extensions.Logging;
@@ -60,23 +61,36 @@ namespace Blocks.FunctionRunner.Health
             }
 
             // --- gVisor: mandatory, never optional ---------------------------------------
-            try
+            // Two separate questions, and the configured one comes first. Asking only whether
+            // the configured runtime is registered would pass for 'runc', which is registered on
+            // every host by definition — the check would agree with a misconfiguration instead of
+            // catching it.
+            if (!string.Equals(_options.Runtime, Ceilings.SandboxRuntime, StringComparison.Ordinal))
             {
-                var info = await _docker.System.GetSystemInfoAsync(token).ConfigureAwait(false);
-                if (info.Runtimes is not null && info.Runtimes.ContainsKey(_options.Runtime))
-                {
-                    gvisorOk = true;
-                }
-                else
-                {
-                    problems.Add(
-                        $"the '{_options.Runtime}' runtime is not registered with the Docker Engine; " +
-                        "the runner will not execute tenant code without gVisor");
-                }
+                problems.Add(
+                    $"the configured runtime is '{_options.Runtime}', not '{Ceilings.SandboxRuntime}'; " +
+                    "tenant code runs under gVisor or it does not run at all");
             }
-            catch (Exception ex)
+            else
             {
-                problems.Add($"could not read the Docker system info: {ex.Message}");
+                try
+                {
+                    var info = await _docker.System.GetSystemInfoAsync(token).ConfigureAwait(false);
+                    if (info.Runtimes is not null && info.Runtimes.ContainsKey(Ceilings.SandboxRuntime))
+                    {
+                        gvisorOk = true;
+                    }
+                    else
+                    {
+                        problems.Add(
+                            $"the '{Ceilings.SandboxRuntime}' runtime is not registered with the Docker Engine; " +
+                            "the runner will not execute tenant code without gVisor");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    problems.Add($"could not read the Docker system info: {ex.Message}");
+                }
             }
 
             // --- the confined network ----------------------------------------------------

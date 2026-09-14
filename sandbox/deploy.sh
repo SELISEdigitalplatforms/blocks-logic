@@ -75,6 +75,15 @@ esac
 require_val RUNNER__RunnerId
 ok "runner id: $(env_val RUNNER__RunnerId)"
 
+# The runtime is not a tuning knob. The runner refuses to claim work when it is set to
+# anything but runsc, so a host deployed this way would come up healthy-looking and idle;
+# failing here says why, before the unit is restarted rather than after.
+CONFIGURED_RUNTIME="$(env_val RUNNER__Runtime)"
+case "$CONFIGURED_RUNTIME" in
+  ""|runsc) ok "sandbox runtime: runsc" ;;
+  *) die "$ENV_FILE: RUNNER__Runtime is '$CONFIGURED_RUNTIME', not runsc — tenant code runs under gVisor or it does not run" ;;
+esac
+
 # Credentials must not be world-readable on a host that executes untrusted code.
 PERMS="$(stat -c '%U:%G %a' "$ENV_FILE")"
 [ "$PERMS" = "root:blocks-runner 640" ] || die "$ENV_FILE is $PERMS, expected root:blocks-runner 640"

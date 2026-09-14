@@ -46,10 +46,12 @@ install -d -m 0755 -o root -g root "$APP_DIR"
 ok "$APP_DIR (root:root 0755)"
 
 install -d -m 0750 -o "$RUNNER_USER" -g "$RUNNER_GROUP" "$STATE_DIR"
-# runs/ and builds/ are 0751 so uid 10001 inside a sandbox can traverse into its own run
-# directory to read the execution envelope, without being able to list the others.
+# runs/ and builds/ are 0751 so uid 10001 inside a sandbox can traverse into its own
+# directory — to read the execution envelope for a run, and to write the dependency tree for
+# a build — without being able to list the others. The per-build work directory inside is
+# opened to that uid by the runner; this is only the traversal that makes it reachable.
 install -d -m 0751 -o "$RUNNER_USER" -g "$RUNNER_GROUP" "$STATE_DIR/runs"
-install -d -m 0750 -o "$RUNNER_USER" -g "$RUNNER_GROUP" "$STATE_DIR/builds"
+install -d -m 0751 -o "$RUNNER_USER" -g "$RUNNER_GROUP" "$STATE_DIR/builds"
 ok "$STATE_DIR/{runs,builds}"
 
 install -d -m 0750 -o root -g "$RUNNER_GROUP" "$CONF_DIR"

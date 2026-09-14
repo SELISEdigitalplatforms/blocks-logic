@@ -16,6 +16,16 @@ const _isArray = Array.isArray;
 const _min = Math.min;
 const _byteLength = Buffer.byteLength;
 
+/**
+ * Replaces a secret's value wherever it appears in anything this process writes.
+ *
+ * A value below this length is left alone on purpose: redacting a two-character string would
+ * replace those two characters everywhere in every line and destroy the logs, and a value that
+ * short carries no secrecy to protect. Anything at or above it is masked in full.
+ */
+const MIN_REDACT_CHARS = 4;
+const REDACTED = '[redacted]';
+
 export const LIMITS = _freeze({
   LOG_BYTES: 1024 * 1024,     // 1 MB of log payload
   LOG_LINES: 10000,           // or 10 000 lines, whichever comes first
@@ -61,9 +71,49 @@ export class ProtocolWriter {
   #truncated = false;
   #resultWritten = false;
   #sink;
+  /** `[{ raw, escaped }]` for every secret-backed value, longest first. */
+  #secrets = [];
 
   constructor(sink = _stdoutWrite) {
     this.#sink = sink;
+  }
+
+  /**
+   * Masks `values` in every line written from here on. Called once by the bootstrap, after the
+   * envelope is parsed and **before** the tenant's module is imported, so there is no window in
+   * which a secret could be logged unmasked.
+   *
+   * Scrubbing happens on the serialized line rather than on the message and data separately: a
+   * secret can sit at any depth of `data`, inside an error's stack, or spliced into a string, and
+   * one pass over the finished JSON catches every one of those without walking the object. Both
+   * the raw value and its JSON-escaped form are replaced, because a value containing a quote or a
+   * backslash reaches the line escaped.
+   */
+  useRedaction(values) {
+    const seen = new Set();
+    const secrets = [];
+    for (const value of values ?? []) {
+      if (typeof value !== 'string' || value.length < MIN_REDACT_CHARS || seen.has(value)) continue;
+      seen.add(value);
+      const escaped = _stringify(value).slice(1, -1);
+      secrets.push({ raw: value, escaped: escaped === value ? null : escaped });
+    }
+    // Longest first: a secret that contains another (a token and its prefix) must be masked as
+    // a whole rather than leaving the tail of the longer one exposed.
+    secrets.sort((a, b) => b.raw.length - a.raw.length);
+    this.#secrets = secrets;
+  }
+
+  #scrub(line) {
+    if (this.#secrets.length === 0) return line;
+    let out = line;
+    for (const secret of this.#secrets) {
+      if (out.includes(secret.raw)) out = out.split(secret.raw).join(REDACTED);
+      if (secret.escaped && out.includes(secret.escaped)) {
+        out = out.split(secret.escaped).join(REDACTED);
+      }
+    }
+    return out;
   }
 
   get truncated() { return this.#truncated; }
@@ -74,7 +124,7 @@ export class ProtocolWriter {
   #emit(obj) {
     let line;
     try {
-      line = _stringify(obj) + '\n';
+      line = this.#scrub(_stringify(obj)) + '\n';
     } catch {
       return false; // never let a serialization problem in a log line kill the run
     }
@@ -98,6 +148,10 @@ export class ProtocolWriter {
       line = _stringify({ t: 'log', ts: entry.ts, level: safeLevel, msg: entry.msg,
                           data: { _unserializable: true } });
     }
+
+    // Scrub before measuring: the redacted line is the one that gets written, so it is the one
+    // the budget has to account for.
+    line = this.#scrub(line);
 
     const size = _byteLength(line, 'utf8') + 1;
     if (this.#lines + 1 > LIMITS.LOG_LINES) return this.#truncate('log_lines');
@@ -147,4 +201,4 @@ export class ProtocolWriter {
   }
 }
 
-export const _internals = _freeze({ clip, isoNow, LEVELS, _isArray, _min });
+export const _internals = _freeze({ clip, isoNow, LEVELS, _isArray, _min, MIN_REDACT_CHARS, REDACTED });

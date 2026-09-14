@@ -1,3 +1,4 @@
+using Blocks.FunctionRunner.Builds;
 using Blocks.FunctionRunner.Contracts;
 using Blocks.FunctionRunner.Options;
 using Blocks.FunctionRunner.Sandbox;
@@ -114,6 +115,61 @@ namespace Blocks.FunctionRunner.Maintenance
             }
 
             if (reaped > 0) _logger.LogInformation("Reaped {Count} orphaned sandbox(es)", reaped);
+            return reaped + await ReapBuildSandboxesAsync(token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Clears build sandboxes whose runner is gone.
+        /// <para>
+        /// These cannot use the lease test above, because a build takes no lease — there is no
+        /// per-build key to ask about. Age stands in for it: a build sandbox is killed by its
+        /// own runner at the build timeout, so one that has been alive for several times that
+        /// long has no supervisor left. The multiple is what keeps this safe against a slow but
+        /// legitimate install, which the owning runner is still holding a deadline over.
+        /// </para>
+        /// </summary>
+        private async Task<int> ReapBuildSandboxesAsync(CancellationToken token)
+        {
+            var containers = await _docker.Containers.ListContainersAsync(new ContainersListParameters
+            {
+                All = true,
+                Filters = new Dictionary<string, IDictionary<string, bool>>
+                {
+                    ["label"] = new Dictionary<string, bool> { [$"{BuildSandboxProfile.BuildSandboxLabel}=true"] = true },
+                },
+            }, token).ConfigureAwait(false);
+
+            var abandoned = TimeSpan.FromSeconds(_options.BuildTimeoutSeconds * 3);
+            var reaped = 0;
+
+            foreach (var container in containers)
+            {
+                var name = container.Names?.FirstOrDefault()?.TrimStart('/');
+                if (name is null || !name.StartsWith(BuildSandboxProfile.ContainerPrefix, StringComparison.Ordinal))
+                    continue;
+
+                var age = DateTime.UtcNow - container.Created.ToUniversalTime();
+                if (age < abandoned) continue;
+
+                _logger.LogWarning(
+                    "Reaping abandoned build sandbox {Name} ({Status}); it has outlived {Age} and no runner owns it",
+                    name, container.Status, abandoned);
+
+                try
+                {
+                    await _docker.Containers.RemoveContainerAsync(
+                        container.ID,
+                        new ContainerRemoveParameters { Force = true, RemoveVolumes = true },
+                        token).ConfigureAwait(false);
+                    reaped++;
+                }
+                catch (DockerApiException ex)
+                {
+                    _logger.LogWarning("Could not reap {Name}: {Message}", name, ex.Message);
+                }
+            }
+
+            if (reaped > 0) _logger.LogInformation("Reaped {Count} abandoned build sandbox(es)", reaped);
             return reaped;
         }
 

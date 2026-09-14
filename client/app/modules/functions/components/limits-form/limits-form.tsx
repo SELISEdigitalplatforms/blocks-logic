@@ -10,7 +10,6 @@ import { Label } from "@/components/ui-kits/label/label";
 import { cn } from "@/lib/utils";
 import { useGetLimitsOptions } from "../../hooks/use-functions";
 import {
-  CPU_MILLICORE_OPTIONS,
   DEFAULT_LIMITS_OPTIONS,
   HARD_CAPS,
   MEMORY_MB_OPTIONS,
@@ -71,18 +70,6 @@ export const LimitsForm = ({ value, onChange }: LimitsFormProps) => {
       onValueChange: (next: string) => patch({ memoryMb: Number(next) }),
     },
     {
-      key: "cpuMillicores",
-      label: "CPU",
-      value: String(value.cpuMillicores),
-      options: buildOptions(
-        CPU_MILLICORE_OPTIONS,
-        ceilings.ceilingCpuMillicores,
-        value.cpuMillicores,
-        "m",
-      ),
-      onValueChange: (next: string) => patch({ cpuMillicores: Number(next) }),
-    },
-    {
       key: "timeoutSeconds",
       label: "Timeout",
       value: String(value.timeoutSeconds),
@@ -101,7 +88,7 @@ export const LimitsForm = ({ value, onChange }: LimitsFormProps) => {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {selects.map((select) => (
           <div key={select.key} className="flex min-w-0 flex-col gap-1.5">
             <Label className="text-xs font-semibold">{select.label}</Label>
@@ -149,9 +136,13 @@ export const LimitsForm = ({ value, onChange }: LimitsFormProps) => {
         </div>
       </div>
 
+      {/* Every ceiling the dropdowns are capped at, named. The timeout was the one left unstated,
+          which made "90 s — max" in the list the only place it appeared. Both read from the
+          server's GetLimits, so raising a ceiling shows up here without a client change. CPU is
+          not among them any more — it is fixed, and says so in the hard caps below. */}
       <p className="text-xs text-medium-emphasis">
         Enforced per invocation by the sandbox. Ceiling is {ceilings.ceilingMemoryMb} MB and{" "}
-        {ceilings.ceilingCpuMillicores} millicores.
+        {ceilings.ceilingTimeoutSeconds} s.
       </p>
 
       <div className="flex flex-wrap gap-2 border-t pt-3">

@@ -127,5 +127,6 @@ Runs are queued by the control plane, not from here. To queue one by hand for a 
 
 ## Security
 
-See `SECURITY.md`. The short version: gVisor is mandatory and never falls back, the sandbox gets
-no credentials, and the design assumes this code is public.
+See `SECURITY.md`. The short version: gVisor is mandatory and never falls back — for dependency
+installs as well as runs, since `docker build` cannot be given a runtime — the sandbox gets no
+credentials, and the design assumes this code is public.

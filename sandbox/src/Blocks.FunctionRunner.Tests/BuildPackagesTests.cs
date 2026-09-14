@@ -40,13 +40,13 @@ namespace Blocks.FunctionRunner.Tests
         private static string NewWorkspace() =>
             Path.Combine(Path.GetTempPath(), "blocks-fn-tests", Guid.NewGuid().ToString("n"));
 
-        private static void InWorkspace(IReadOnlyList<SourceFile> files, Action<string> assert)
+        private static void InWorkspace(
+            IReadOnlyList<SourceFile> files, Action<BuildProcessor.BuildDirectories> assert)
         {
             var workspace = NewWorkspace();
             try
             {
-                BuildProcessor.PrepareWorkspace(workspace, files);
-                assert(workspace);
+                assert(BuildProcessor.PrepareWorkspace(workspace, files));
             }
             finally
             {
@@ -64,11 +64,19 @@ namespace Blocks.FunctionRunner.Tests
                 new("lib/helper.js", "export const a = 1;"),
             };
 
-            InWorkspace(files, workspace =>
+            InWorkspace(files, dirs =>
             {
-                File.Exists(Path.Combine(workspace, "manifest", "package.json")).Should().BeTrue();
-                File.Exists(Path.Combine(workspace, "src", "index.js")).Should().BeTrue();
-                File.Exists(Path.Combine(workspace, "src", "lib", "helper.js")).Should().BeTrue();
+                File.Exists(Path.Combine(dirs.Context, "manifest", "package.json")).Should().BeTrue();
+                File.Exists(Path.Combine(dirs.Context, "src", "index.js")).Should().BeTrue();
+                File.Exists(Path.Combine(dirs.Context, "src", "lib", "helper.js")).Should().BeTrue();
+
+                // The install sandbox resolves dependencies; it never sees the function's source.
+                File.Exists(Path.Combine(dirs.Work, "package.json")).Should().BeTrue();
+                File.Exists(Path.Combine(dirs.Work, "index.js")).Should().BeFalse();
+
+                // The writable workspace is outside what becomes the image, so nothing the
+                // sandbox produced can ride into a layer just by existing.
+                dirs.Work.Should().NotStartWith(dirs.Context);
             });
         }
 
@@ -90,9 +98,9 @@ namespace Blocks.FunctionRunner.Tests
                 new(path, """{"lockfileVersion":3}"""),
             };
 
-            InWorkspace(files, workspace =>
+            InWorkspace(files, dirs =>
             {
-                Directory.EnumerateFiles(workspace, "*", SearchOption.AllDirectories)
+                Directory.EnumerateFiles(dirs.Root, "*", SearchOption.AllDirectories)
                     .Select(Path.GetFileName)
                     .Should().NotContain(Path.GetFileName(path));
             });

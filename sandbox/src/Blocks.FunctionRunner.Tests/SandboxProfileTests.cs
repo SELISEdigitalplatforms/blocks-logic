@@ -32,13 +32,35 @@ namespace Blocks.FunctionRunner.Tests
         }
 
         [Fact]
+        public void Configuration_cannot_move_a_sandbox_off_gvisor()
+        {
+            // RunnerOptions.Runtime is bound from Genesis configuration — runner.env, or the
+            // blocks-secret-function-runner document, which lives off this VM. If it were what a
+            // sandbox was created with, that document could put every sandbox on the host kernel.
+            // It is not: the profile uses the compiled-in constant and the startup guard refuses
+            // to claim work when the configured value disagrees.
+            var weakened = new RunnerOptions
+            {
+                Runtime = "runc",
+                Network = "blocks-fn-egress",
+                ResolvConf = "/etc/blocks-runner/resolv.conf",
+            };
+
+            var host = SandboxProfile.Create(
+                "blocks-fn-run_1", "img@sha256:abc", "/var/lib/blocks-runner/runs/run_1/execution.json",
+                RunLimits.Default, weakened).HostConfig;
+
+            host.Runtime.Should().Be(Ceilings.SandboxRuntime);
+        }
+
+        [Fact]
         public void Applies_every_ceiling()
         {
             var host = Create().HostConfig;
 
-            host.NanoCPUs.Should().Be(200_000_000);
-            host.Memory.Should().Be(300L * 1024 * 1024);
-            host.MemorySwap.Should().Be(300L * 1024 * 1024);
+            host.NanoCPUs.Should().Be(100_000_000);
+            host.Memory.Should().Be(200L * 1024 * 1024);
+            host.MemorySwap.Should().Be(200L * 1024 * 1024);
             host.PidsLimit.Should().Be(64);
             host.Tmpfs["/tmp"].Should().Contain("size=67108864").And.Contain("noexec");
         }
@@ -91,7 +113,7 @@ namespace Blocks.FunctionRunner.Tests
             env.Should().HaveCount(4);
             env.Should().Contain("NODE_ENV=production");
             env.Should().Contain("BLOCKS_EXECUTION_FILE=/run/blocks/execution.json");
-            env.Should().Contain("NODE_OPTIONS=--max-old-space-size=225");
+            env.Should().Contain("NODE_OPTIONS=--max-old-space-size=150");
             env.Should().NotContain(e =>
                 e.Contains("SECRET", StringComparison.OrdinalIgnoreCase) ||
                 e.Contains("CONNECTION", StringComparison.OrdinalIgnoreCase) ||

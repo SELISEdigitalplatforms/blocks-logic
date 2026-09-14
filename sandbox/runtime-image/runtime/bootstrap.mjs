@@ -136,6 +136,12 @@ async function main() {
     });
   }
 
+  // Armed before the function is imported, and before ctx exists: from here on every line the
+  // writer emits — ctx.log, console, an uncaught error's message and stack — has each
+  // secret-backed value masked out. Top-level code in the tenant's module runs during that
+  // import, so arming any later would leave exactly one window open.
+  writer.useRedaction(envelope.maskedValues);
+
   const ctx = buildContext(envelope);
   process.title = `blocks-fn ${envelope.run.id}`;
   patchConsole();

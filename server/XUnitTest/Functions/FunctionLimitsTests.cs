@@ -1,4 +1,5 @@
 using FluentAssertions;
+using RunnerCeilings = Blocks.FunctionRunner.Contracts.Ceilings;
 using Functions.DomainService.Enums;
 using Functions.DomainService.Models;
 using Functions.DomainService.Queue;
@@ -18,8 +19,9 @@ namespace XUnitTest.Functions
         {
             var limits = new FunctionLimits();
 
-            limits.CpuMillicores.Should().Be(100).And.BeLessThan(FunctionLimits.Ceiling.CpuMillicores);
-            limits.MemoryMb.Should().Be(192).And.BeLessThan(FunctionLimits.Ceiling.MemoryMb);
+            // CPU is fixed rather than a ceiling to sit below, so the default is the value itself.
+            limits.CpuMillicores.Should().Be(FunctionLimits.Ceiling.CpuMillicores);
+            limits.MemoryMb.Should().Be(128).And.BeLessThan(FunctionLimits.Ceiling.MemoryMb);
             limits.TimeoutSeconds.Should().Be(10).And.BeLessThan(FunctionLimits.Ceiling.TimeoutSeconds);
             limits.Concurrency.Should().Be(2);
         }
@@ -57,13 +59,14 @@ namespace XUnitTest.Functions
             var clamped = new FunctionLimits
             {
                 CpuMillicores = 150,
-                MemoryMb = 256,
+                MemoryMb = 156,
                 TimeoutSeconds = 30,
                 Concurrency = 3,
             }.Clamp();
 
-            clamped.CpuMillicores.Should().Be(150);
-            clamped.MemoryMb.Should().Be(256);
+            // Not honoured: CPU is the one dimension a function does not choose.
+            clamped.CpuMillicores.Should().Be(FunctionLimits.Ceiling.CpuMillicores);
+            clamped.MemoryMb.Should().Be(156);
             clamped.TimeoutSeconds.Should().Be(30);
             clamped.Concurrency.Should().Be(3);
         }
@@ -81,7 +84,7 @@ namespace XUnitTest.Functions
                 Concurrency = value,
             }.Clamp();
 
-            clamped.CpuMillicores.Should().Be(FunctionLimits.Ceiling.DefaultCpuMillicores);
+            clamped.CpuMillicores.Should().Be(FunctionLimits.Ceiling.CpuMillicores);
             clamped.MemoryMb.Should().Be(FunctionLimits.Ceiling.DefaultMemoryMb);
             clamped.TimeoutSeconds.Should().Be(FunctionLimits.Ceiling.DefaultTimeoutSeconds);
             clamped.Concurrency.Should().Be(FunctionLimits.Ceiling.DefaultConcurrency);
@@ -106,18 +109,28 @@ namespace XUnitTest.Functions
         [Fact]
         public void The_ceilings_match_the_runners_own_constants()
         {
-            // These two halves live in different repositories and must not drift. If this
-            // fails, check plan/DECISIONS.md and the runner's Contracts.Ceilings.
-            FunctionLimits.Ceiling.CpuMillicores.Should().Be(200);
-            FunctionLimits.Ceiling.MemoryMb.Should().Be(300);
-            FunctionLimits.Ceiling.TimeoutSeconds.Should().Be(60);
-            FunctionLimits.Ceiling.PidLimit.Should().Be(64);
-            FunctionLimits.Ceiling.TmpfsMb.Should().Be(64);
-            FunctionLimits.Ceiling.InputBytes.Should().Be(1024 * 1024);
-            FunctionLimits.Ceiling.ResultBytes.Should().Be(5L * 1024 * 1024);
-            FunctionLimits.Ceiling.LogBytes.Should().Be(1024 * 1024);
-            FunctionLimits.Ceiling.LogLines.Should().Be(10_000);
+            // The runner clamps every request to its own copy of these, so a control plane that
+            // allows more than the runner does loses the difference to a killed sandbox rather
+            // than to an error anyone sees. The two used to live in separate repositories and
+            // this test compared copied literals; they are one repository now, so it compares the
+            // constants themselves and drift is no longer possible to write.
+            FunctionLimits.Ceiling.CpuMillicores.Should().Be(RunnerCeilings.CpuMillicores);
+            FunctionLimits.Ceiling.TimeoutSeconds.Should().Be(RunnerCeilings.TimeoutSeconds);
+            FunctionLimits.Ceiling.PidLimit.Should().Be(RunnerCeilings.PidLimit);
+            FunctionLimits.Ceiling.InputBytes.Should().Be(RunnerCeilings.InputBytes);
+            FunctionLimits.Ceiling.ResultBytes.Should().Be(RunnerCeilings.ResultBytes);
+            FunctionLimits.Ceiling.LogBytes.Should().Be(RunnerCeilings.LogBytes);
+            FunctionLimits.Ceiling.LogLines.Should().Be(RunnerCeilings.LogLines);
+
+            // Stated in different units on each side, so these are converted rather than compared.
+            (FunctionLimits.Ceiling.MemoryMb * 1024L * 1024L).Should().Be(RunnerCeilings.MemoryBytes);
+            (FunctionLimits.Ceiling.TmpfsMb * 1024L * 1024L).Should().Be(RunnerCeilings.TmpfsBytes);
+
+            // No counterpart on the runner: concurrency is a control-plane scheduling limit.
             FunctionLimits.Ceiling.MaxConcurrency.Should().Be(5);
+
+            // The value this change was about, pinned so a later edit to one side is deliberate.
+            FunctionLimits.Ceiling.TimeoutSeconds.Should().Be(90);
         }
 
         // ----------------------------------------------------------------- retry ----

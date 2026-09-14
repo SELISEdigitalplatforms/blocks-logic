@@ -16,8 +16,8 @@ namespace Blocks.FunctionRunner.Tests
         {
             var limits = RunLimits.Default;
 
-            limits.CpuMillicores.Should().Be(200);
-            limits.MemoryBytes.Should().Be(300L * 1024 * 1024);
+            limits.CpuMillicores.Should().Be(100);
+            limits.MemoryBytes.Should().Be(200L * 1024 * 1024);
             limits.PidLimit.Should().Be(64);
             limits.TmpfsBytes.Should().Be(64L * 1024 * 1024);
             limits.FunctionConcurrency.Should().Be(2);
@@ -50,7 +50,9 @@ namespace Blocks.FunctionRunner.Tests
         {
             var limits = RunLimits.Clamp(100, 128 * 1024 * 1024, 32, 16 * 1024 * 1024, 30, 3);
 
-            limits.CpuMillicores.Should().Be(100);
+            // CPU is not part of the request any more — the fixed allocation is what arrives
+            // however modest the ask.
+            limits.CpuMillicores.Should().Be(Ceilings.CpuMillicores);
             limits.MemoryBytes.Should().Be(128 * 1024 * 1024);
             limits.PidLimit.Should().Be(32);
             limits.TimeoutSeconds.Should().Be(30);
@@ -82,14 +84,14 @@ namespace Blocks.FunctionRunner.Tests
         [Fact]
         public void Nanocpus_convert_correctly_for_docker()
         {
-            RunLimits.Default.NanoCpus.Should().Be(200_000_000);
+            RunLimits.Default.NanoCpus.Should().Be(100_000_000);
         }
 
         [Fact]
         public void Heap_ceiling_sits_below_the_memory_ceiling()
         {
             var limits = RunLimits.Default;
-            limits.MaxOldSpaceMb.Should().Be(225);
+            limits.MaxOldSpaceMb.Should().Be(150);
             (limits.MaxOldSpaceMb * 1024L * 1024).Should().BeLessThan(limits.MemoryBytes);
         }
 

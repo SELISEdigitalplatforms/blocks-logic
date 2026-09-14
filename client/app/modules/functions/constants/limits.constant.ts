@@ -1,12 +1,12 @@
 /** Fallback shown before `GetLimits` resolves — mirrors `FunctionLimits.Ceiling` server-side. */
 export const DEFAULT_LIMITS_OPTIONS = {
-  ceilingCpuMillicores: 200,
-  ceilingMemoryMb: 300,
-  ceilingTimeoutSeconds: 60,
+  ceilingCpuMillicores: 100,
+  ceilingMemoryMb: 200,
+  ceilingTimeoutSeconds: 90,
   minConcurrency: 1,
   maxConcurrency: 5,
   defaultCpuMillicores: 100,
-  defaultMemoryMb: 192,
+  defaultMemoryMb: 128,
   defaultTimeoutSeconds: 10,
   defaultConcurrency: 2,
   showRateLimits: false,
@@ -17,13 +17,16 @@ export const DEFAULT_LIMITS_OPTIONS = {
  * of steps rather than a free number: every option is a value the sandbox actually honours, and the
  * last one in each list is the platform ceiling.
  */
-export const MEMORY_MB_OPTIONS = [128, 192, 256, 300] as const;
-export const CPU_MILLICORE_OPTIONS = [50, 100, 150, 200] as const;
-export const TIMEOUT_SECONDS_OPTIONS = [5, 10, 15, 30, 45, 60] as const;
+export const MEMORY_MB_OPTIONS = [128, 156, 200] as const;
+export const TIMEOUT_SECONDS_OPTIONS = [5, 10, 15, 30, 45, 60, 90] as const;
 export const RETRY_ATTEMPTS_OPTIONS = [1, 2, 3, 5] as const;
 
 /** Not configurable — enforced by the runner whatever the caller asks for. */
 export const HARD_CAPS = [
+  // CPU used to be a choice. It is fixed now: each call is a fresh container, so Node's boot and
+  // module import are paid every time and are pure CPU, and a smaller share would only slow that
+  // down — admission counts memory and slots, never CPU, so a lower value frees nothing.
+  { label: "CPU", value: "100m per run" },
   { label: "Input", value: "1 MB" },
   { label: "Result", value: "5 MB" },
   { label: "Logs", value: "1 MB per run" },

@@ -59,6 +59,9 @@ namespace Blocks.FunctionRunner.Utils
             services.AddSingleton<StartupGuard>();
             services.AddSingleton<IImageResolver, ImageResolver>();
             services.AddSingleton<ISandbox, DockerSandbox>();
+            // A build's dependency install is a sandbox too — the same gVisor boundary a run
+            // gets, because `docker build` cannot be given one.
+            services.AddSingleton<IDependencyInstaller, DependencyInstaller>();
             services.AddSingleton<RunProcessor>();
             services.AddSingleton<BuildProcessor>();
 

@@ -61,10 +61,19 @@ async Task<int> DoctorAsync()
         Report(true, "docker engine reachable");
 
         var info = await docker.System.GetSystemInfoAsync();
-        var hasRunsc = info.Runtimes?.ContainsKey("runsc") == true;
+        var hasRunsc = info.Runtimes?.ContainsKey(Ceilings.SandboxRuntime) == true;
         problems += Report(hasRunsc, hasRunsc
             ? "runsc runtime registered"
             : "runsc runtime MISSING — the runner will refuse all work");
+
+        // Registered is not the same question as configured. RUNNER__Runtime is bound from
+        // Genesis configuration, so a host can have gVisor installed and still be told to use
+        // something else; asking only the first question would report that host as fine.
+        var configuredRuntime = Environment.GetEnvironmentVariable("RUNNER__Runtime");
+        var runtimeOk = string.IsNullOrEmpty(configuredRuntime) || configuredRuntime == Ceilings.SandboxRuntime;
+        problems += Report(runtimeOk, runtimeOk
+            ? $"configured runtime is {configuredRuntime ?? Ceilings.SandboxRuntime}"
+            : $"RUNNER__Runtime is '{configuredRuntime}', not '{Ceilings.SandboxRuntime}' — the runner will refuse all work");
         problems += Report(info.DefaultRuntime == "runc", $"default runtime is {info.DefaultRuntime}");
         problems += Report(info.CgroupVersion == "2", $"cgroup version {info.CgroupVersion}");
 

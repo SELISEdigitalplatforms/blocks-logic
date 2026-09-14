@@ -118,7 +118,15 @@ namespace Functions.DomainService.Services
                     },
                 },
                 ["context"] = BuildIdentity(context, authMode),
-                ["env"] = BuildEnv(variables, secrets),
+                ["env"] = BuildEnv(variables, secrets, out var maskedEnvKeys),
+                // The keys whose values came from a secret, so the sandbox can mask those values
+                // out of every log line it writes. Keys only — the values are already in `env`,
+                // and naming them twice would be one more place a secret can be read from.
+                //
+                // Not "envSecrets": the envelope screen on both sides rejects any property whose
+                // name contains "secret", and it is right to, so the marker is named for what it
+                // does instead.
+                ["maskedEnv"] = new JsonArray(maskedEnvKeys.Select(k => (JsonNode?)JsonValue.Create(k)).ToArray()),
                 ["input"] = ParseInput(inputJson),
                 ["limits"] = new JsonObject
                 {
@@ -214,14 +222,26 @@ namespace Functions.DomainService.Services
         /// </para>
         /// </summary>
         private static JsonObject BuildEnv(
-            IEnumerable<VariableBinding>? variables, IReadOnlyDictionary<string, string>? secrets)
+            IEnumerable<VariableBinding>? variables,
+            IReadOnlyDictionary<string, string>? secrets,
+            out List<string> maskedEnvKeys)
         {
             var env = new JsonObject();
+            maskedEnvKeys = [];
             if (variables is null) return env;
 
             foreach (var variable in variables)
             {
                 if (string.IsNullOrWhiteSpace(variable.Key)) continue;
+
+                // A binding is secret-backed when its stored value carries a reference, whether
+                // the whole value is one or it is spliced into a larger string. Either way the
+                // resolved value is a credential and must not appear in the run's logs.
+                if (!string.IsNullOrEmpty(variable.Value) && SecretPlaceholder.IsMatch(variable.Value))
+                {
+                    maskedEnvKeys.Add(variable.Key);
+                }
+
                 env[variable.Key] = Substitute(variable.Key, variable.Value, secrets);
             }
             return env;

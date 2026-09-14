@@ -8,7 +8,7 @@ the runner, not by obscurity.
 
 | Control | How |
 |---|---|
-| Kernel isolation | **gVisor (`runsc`) is mandatory.** If it is missing the runner refuses all work and never falls back to `runc` |
+| Kernel isolation | **gVisor (`runsc`) is mandatory**, for builds as well as runs. If it is missing the runner refuses all work and never falls back to `runc`. The runtime is compiled in, not read from configuration: a sandbox is created with the constant, and a host configured for anything else claims no work at all |
 | Privileges | `--cap-drop=ALL`, `no-new-privileges`, non-root `uid 10001` |
 | Filesystem | read-only root; `/tmp` is a `noexec,nosuid,nodev` tmpfs capped at 64 MB |
 | Memory | `--memory` = `--memory-swap`, so there is no swap to escape into |
@@ -21,6 +21,32 @@ the runner, not by obscurity.
 
 Every limit a caller asks for is **re-clamped by the runner** before a sandbox is created, so a
 mistake in the control plane cannot widen a sandbox.
+
+## Builds are sandboxed too
+
+`npm install` fetches, and with `allowScripts` executes, code the tenant chose. `docker build`
+has no runtime selector — every RUN instruction lands on the Engine's default runtime, which is
+deliberately `runc` — so the install does not happen during the image build. It happens first, in
+its own gVisor sandbox (`BuildSandboxProfile`), and hands back `node_modules` as a tarball the
+image build merely copies. Nothing in `function.Dockerfile.tmpl` runs tenant-chosen code, and
+re-introducing a RUN that does would silently put it back on the host kernel.
+
+The build sandbox carries the run profile unchanged — gVisor, `--cap-drop=ALL`,
+`no-new-privileges`, uid 10001, read-only root, the confined egress network, an environment
+allowlist — and differs only where a build must: one writable bind mount (the workspace, which
+sits outside the build context), a 512 PID ceiling and a 512 MB `noexec` /tmp because npm forks
+per package and unpacks through /tmp, and the build's own CPU, memory and time budget.
+
+Two limits worth stating plainly:
+
+- **`--ignore-scripts` is still the default**, and `DenyPrivateScriptsOnBuild=true` in
+  `runner.env` refuses `allowScripts` builds outright on this host, whatever the control plane
+  sent. It is off by default because the install is now confined.
+- **Nothing here screens what a package *contains*.** Dependencies resolve fresh from
+  `package.json` with no lockfile, and `SourceValidator` screens specifier *shape* — registry
+  ranges only, no git/path/alias specifiers, a blocklist of host-reaching packages. A compromised
+  version of a legitimate package is confined by the sandbox, not detected by it, and it still
+  ships into the tenant's own function image.
 
 ## What a function never receives
 
@@ -47,15 +73,19 @@ That boundary is the reason the VM is single-purpose. Do not co-locate anything 
 
 ## Operator responsibilities
 
-1. **Keep gVisor current.** The pinned release and its checksum are in `provision/.versions`, and
+1. **Never point `RUNNER__Runtime` at anything but `runsc`.** It is bound from Genesis
+   configuration — `runner.env` *and* the `blocks-secret-function-runner` document, which lives
+   off this VM. The profile ignores it and `deploy.sh`, `fnctl doctor` and the startup guard all
+   refuse a host that sets it otherwise, but a host set that way simply stops taking work.
+2. **Keep gVisor current.** The pinned release and its checksum are in `provision/.versions`, and
    the pin is public — that is the point of a checksum, but it also means an attacker knows which
    version to look up. Update it deliberately.
-2. **Add your internal ranges** to `/etc/blocks-runner/deny-cidrs` and re-run
+3. **Add your internal ranges** to `/etc/blocks-runner/deny-cidrs` and re-run
    `provision/30-network.sh`. The mandatory ranges are compiled in; a VPN is not.
-3. **Never set `FN_ALLOW_HOST_SUBNET=1`** unless you have a specific reason — it permits sandboxes
+4. **Never set `FN_ALLOW_HOST_SUBNET=1`** unless you have a specific reason — it permits sandboxes
    to reach this VM's neighbours.
-4. **Protect `runner.env`** (0640 `root:blocks-runner`). It is the only secret on the host.
-5. Do not weaken the sandbox profile in `runtime-image/sandbox-profile.sh`. It is asserted by
+5. **Protect `runner.env`** (0640 `root:blocks-runner`). It is the only secret on the host.
+6. Do not weaken the sandbox profile in `runtime-image/sandbox-profile.sh`. It is asserted by
    `FunctionRunnerTests/verify/verify.sh`; run it after any change.
 
 ## Reporting

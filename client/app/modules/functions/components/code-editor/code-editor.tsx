@@ -256,6 +256,18 @@ export const CodeEditor = ({
       actionsRef.current = {
         format: () => void editor.getAction("editor.action.formatDocument")?.run(),
         find: () => {
+          // A toggle, not just an opener. The widget's own close button sits at the editor's top
+          // right, over the scrollbar and inside a container that clips, and has proved awkward
+          // to hit; the button that opened it always closes it, and Escape still does too.
+          // Monaco marks the open widget with `.visible`, which is the only reliable read of
+          // that state — there is no public API for it.
+          const widget = editor.getContainerDomNode().querySelector(".find-widget");
+          if (widget?.classList.contains("visible")) {
+            void editor.getAction("closeFindWidget")?.run();
+            editor.focus();
+            return;
+          }
+
           // Focus first: the find widget seeds itself from the selection, and opening it on an
           // editor that never had focus gives an empty box and no cursor to type into.
           editor.focus();

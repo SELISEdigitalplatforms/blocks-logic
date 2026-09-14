@@ -97,7 +97,11 @@ namespace Blocks.FunctionRunner.Sandbox
 
                 HostConfig = new HostConfig
                 {
-                    Runtime = options.Runtime,
+                    // The compiled-in constant, not options.Runtime. The option is bound from
+                    // Genesis configuration and exists so the startup guard can report a host
+                    // that was told to use something else; it is deliberately not what a sandbox
+                    // is created with, so no configuration path can downgrade this one.
+                    Runtime = Ceilings.SandboxRuntime,
                     NetworkMode = options.Network,
 
                     // --- ceilings -------------------------------------------------------
@@ -161,8 +165,8 @@ namespace Blocks.FunctionRunner.Sandbox
             var host = inspect.HostConfig;
             if (host is null) return "the container has no host configuration";
 
-            if (!string.Equals(host.Runtime, options.Runtime, StringComparison.Ordinal))
-                return $"runtime is '{host.Runtime}', expected '{options.Runtime}'";
+            if (!string.Equals(host.Runtime, Ceilings.SandboxRuntime, StringComparison.Ordinal))
+                return $"runtime is '{host.Runtime}', expected '{Ceilings.SandboxRuntime}'";
             if (host.NanoCPUs != limits.NanoCpus)
                 return $"NanoCPUs is {host.NanoCPUs}, expected {limits.NanoCpus}";
             if (host.Memory != limits.MemoryBytes)

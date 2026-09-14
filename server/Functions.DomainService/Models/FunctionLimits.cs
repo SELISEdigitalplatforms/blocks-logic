@@ -33,9 +33,15 @@ namespace Functions.DomainService.Models
         /// <summary>The platform ceilings, mirrored from DECISIONS.md and the runner's own constants.</summary>
         public static class Ceiling
         {
-            public const int CpuMillicores = 200;
-            public const int MemoryMb = 300;
-            public const int TimeoutSeconds = 60;
+            /// <summary>
+            /// Fixed, not a ceiling: every sandbox gets exactly this and a function cannot ask
+            /// for less or more. Mirrors <c>Ceilings.CpuMillicores</c> on the runner, which
+            /// carries the reasoning and enforces it again.
+            /// </summary>
+            public const int CpuMillicores = 100;
+
+            public const int MemoryMb = 200;
+            public const int TimeoutSeconds = 90;
             public const int PidLimit = 64;
             public const int TmpfsMb = 64;
             public const long InputBytes = 1024 * 1024;
@@ -48,7 +54,15 @@ namespace Functions.DomainService.Models
 
             /// <summary>Defaults for a newly created function — deliberately below the ceilings.</summary>
             public const int DefaultCpuMillicores = 100;
-            public const int DefaultMemoryMb = 192;
+
+            /// <summary>
+            /// The practical floor, not a comfortable default. The runner gives V8 75 % of this as
+            /// its old-space heap (96 MB here) and Node's own baseline is ~40-50 MB, so a function
+            /// with a few dependencies has little room left. It is set low so a small VM fits more
+            /// concurrent sandboxes; a function that OOMs should be given more rather than having
+            /// this raised for everyone.
+            /// </summary>
+            public const int DefaultMemoryMb = 128;
             public const int DefaultTimeoutSeconds = 10;
             public const int DefaultConcurrency = 2;
             public const int DefaultAttempts = 1;
@@ -62,8 +76,10 @@ namespace Functions.DomainService.Models
         /// </summary>
         public FunctionLimits Clamp() => new()
         {
-            CpuMillicores = Math.Clamp(
-                CpuMillicores <= 0 ? Ceiling.DefaultCpuMillicores : CpuMillicores, 1, Ceiling.CpuMillicores),
+            // Fixed rather than clamped. Whatever a caller or an older stored document says,
+            // the effective value is the platform's — the runner ignores this field too, so
+            // honouring a different number here would only mislead the editor.
+            CpuMillicores = Ceiling.CpuMillicores,
             MemoryMb = Math.Clamp(
                 MemoryMb <= 0 ? Ceiling.DefaultMemoryMb : MemoryMb, 1, Ceiling.MemoryMb),
             TimeoutSeconds = Math.Clamp(

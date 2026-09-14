@@ -17,8 +17,13 @@ namespace Blocks.FunctionRunner.Builds
     /// <para>
     /// This is the most dangerous step in the pipeline, because installing dependencies means
     /// running code the tenant chose on a host that can reach the Docker Engine. It is confined
-    /// the same way an execution is: <c>--ignore-scripts</c> unless the function explicitly opts
-    /// in, no platform credentials in the build environment, the same restricted egress network
+    /// the same way an execution is, and that phrase is now literal: the install happens in a
+    /// gVisor sandbox of its own (<see cref="DependencyInstaller"/>), because <c>docker build</c>
+    /// cannot be told which runtime to use and its RUN steps therefore land on the Engine's
+    /// default, <c>runc</c>. The image build that follows copies in what the sandbox produced and
+    /// runs nothing but commands this repository wrote. Beyond the kernel boundary:
+    /// <c>--ignore-scripts</c> unless the function explicitly opts in and the host has not vetoed
+    /// it, no platform credentials in the build environment, the same restricted egress network
     /// as a run, and hard CPU, memory and time budgets. What is built is content-addressed, so
     /// Test and Deploy share one image (DECISIONS D3).
     /// </para>
@@ -44,6 +49,7 @@ namespace Blocks.FunctionRunner.Builds
 
         private readonly IDatabase _db;
         private readonly IDockerClient _docker;
+        private readonly IDependencyInstaller _installer;
         private readonly RunnerOptions _options;
         private readonly ILogger<BuildProcessor> _logger;
         private readonly string _template;
@@ -51,11 +57,13 @@ namespace Blocks.FunctionRunner.Builds
         public BuildProcessor(
             IDatabase db,
             IDockerClient docker,
+            IDependencyInstaller installer,
             IOptions<RunnerOptions> options,
             ILogger<BuildProcessor> logger)
         {
             _db = db;
             _docker = docker;
+            _installer = installer;
             _options = options.Value;
             _logger = logger;
             _template = LoadTemplate();
@@ -102,6 +110,20 @@ namespace Blocks.FunctionRunner.Builds
                     return;
                 }
 
+                // --- the host's veto over allowScripts -----------------------------------
+                // Checked before the validator, so the message a tenant gets names the real
+                // reason rather than a lifecycle script the validator would have allowed.
+                if (job.AllowScripts && _options.DenyPrivateScriptsOnBuild)
+                {
+                    _logger.LogWarning(
+                        "Build {BuildId} asked to run npm lifecycle scripts; this host denies them",
+                        job.BuildId);
+                    await PublishAsync(job, "FAILED", null, null, log.ToString(),
+                        "this runner does not permit npm lifecycle scripts (DenyPrivateScriptsOnBuild)")
+                        .ConfigureAwait(false);
+                    return;
+                }
+
                 var validation = SourceValidator.Validate(files, job.AllowScripts);
                 if (!validation.Ok)
                 {
@@ -112,31 +134,53 @@ namespace Blocks.FunctionRunner.Builds
                 }
 
                 // --- lay out the build context -----------------------------------------
-                PrepareWorkspace(workspace, files);
+                var dirs = PrepareWorkspace(workspace, files);
 
-                var npmFlags = job.AllowScripts ? "--omit=dev" : "--omit=dev --ignore-scripts";
                 if (job.AllowScripts)
                 {
                     _logger.LogWarning(
                         "Build {BuildId} runs npm lifecycle scripts at the function's request", job.BuildId);
                 }
 
-                var dockerfile = _template
-                    .Replace("{{BASE_IMAGE}}", _options.BaseImage, StringComparison.Ordinal)
-                    .Replace("{{NPM_FLAGS}}", npmFlags, StringComparison.Ordinal)
-                    .Replace("{{MAX_OLD_SPACE_MB}}",
-                        RunLimits.Default.MaxOldSpaceMb.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)
-                    .Replace("{{PACKAGES_BEGIN}}", beginMarker, StringComparison.Ordinal)
-                    .Replace("{{PACKAGES_END}}", endMarker, StringComparison.Ordinal);
-                await File.WriteAllTextAsync(Path.Combine(workspace, "Dockerfile"), dockerfile, token)
-                    .ConfigureAwait(false);
-
-                // --- build ---------------------------------------------------------------
+                // One deadline covers the install and the image build together: they are two
+                // halves of the same job and a tenant was promised one time limit, not two.
                 using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
                 timeout.CancelAfter(TimeSpan.FromSeconds(_options.BuildTimeoutSeconds));
 
+                // --- install dependencies, under gVisor ----------------------------------
+                // The only step that runs code the tenant chose, and the reason it is not a RUN
+                // instruction: docker build has no runtime selector, so a RUN would execute on
+                // the Engine default (runc) and put tenant code on the host kernel.
+                var install = await _installer.InstallAsync(
+                    job.BuildId, dirs.Work, job.AllowScripts, beginMarker, endMarker, timeout.Token)
+                    .ConfigureAwait(false);
+
+                log.Append(install.Log);
+
+                if (!install.Ok)
+                {
+                    await PublishAsync(job, "FAILED", null, null, PublishableLog(), install.Failure)
+                        .ConfigureAwait(false);
+                    return;
+                }
+
+                // The archive moves into the context now rather than being written there, so the
+                // sandbox never held a writable path inside the directory that becomes an image.
+                File.Move(
+                    Path.Combine(dirs.Work, BuildSandboxProfile.DepsArchiveName),
+                    Path.Combine(dirs.Context, BuildSandboxProfile.DepsArchiveName));
+
+                var dockerfile = _template
+                    .Replace("{{BASE_IMAGE}}", _options.BaseImage, StringComparison.Ordinal)
+                    .Replace("{{DEPS_ARCHIVE}}", BuildSandboxProfile.DepsArchiveName, StringComparison.Ordinal)
+                    .Replace("{{MAX_OLD_SPACE_MB}}",
+                        RunLimits.Default.MaxOldSpaceMb.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal);
+                await File.WriteAllTextAsync(Path.Combine(dirs.Context, "Dockerfile"), dockerfile, token)
+                    .ConfigureAwait(false);
+
+                // --- build ---------------------------------------------------------------
                 var tag = job.ImageRef;
-                var built = await BuildImageAsync(workspace, tag, log, timeout.Token).ConfigureAwait(false);
+                var built = await BuildImageAsync(dirs.Context, tag, log, timeout.Token).ConfigureAwait(false);
                 if (!built)
                 {
                     await PublishAsync(job, "FAILED", null, null, PublishableLog(), "the image build failed")
@@ -190,33 +234,51 @@ namespace Blocks.FunctionRunner.Builds
             }
         }
 
+        /// <summary>The two directories one build works in, and the root that holds both.</summary>
+        /// <param name="Root">Deleted wholesale when the build ends.</param>
+        /// <param name="Context">What is tarred and sent to the Engine as the build context.</param>
+        /// <param name="Work">Bind-mounted read-write into the install sandbox.</param>
+        internal sealed record BuildDirectories(string Root, string Context, string Work);
+
         /// <summary>
-        /// Lays out the context the template expects: <c>manifest/</c> holds package.json so the
-        /// dependency layer caches independently, <c>src/</c> holds everything else.
+        /// Lays out the two directories a build needs.
+        /// <para>
+        /// <c>context/</c> is what becomes the image: <c>manifest/</c> holds package.json,
+        /// <c>src/</c> holds everything else, and the dependency archive is moved in later.
+        /// <c>work/</c> is separate and deliberately outside the context, because it is the one
+        /// directory a sandbox can write to — anything it produced that was not asked for must
+        /// not be able to ride into an image just by existing.
+        /// </para>
         /// <para>
         /// Lockfiles are dropped rather than copied. A build resolves dependencies fresh from
         /// package.json, and a lockfile in the context would quietly override that with pinned
         /// versions — including transitive ones the manifest screening never saw.
         /// </para>
         /// </summary>
-        internal static void PrepareWorkspace(string workspace, IReadOnlyList<SourceFile> files)
+        internal static BuildDirectories PrepareWorkspace(string workspace, IReadOnlyList<SourceFile> files)
         {
+            ArgumentNullException.ThrowIfNull(files);
+
             if (Directory.Exists(workspace)) Directory.Delete(workspace, recursive: true);
-            Directory.CreateDirectory(Path.Combine(workspace, "manifest"));
-            Directory.CreateDirectory(Path.Combine(workspace, "src"));
+
+            var context = Path.Combine(workspace, "context");
+            var work = Path.Combine(workspace, "work");
+            Directory.CreateDirectory(Path.Combine(context, "manifest"));
+            Directory.CreateDirectory(Path.Combine(context, "src"));
+            Directory.CreateDirectory(work);
 
             foreach (var file in files)
             {
                 if (IsLockfile(file.Path)) continue;
 
                 var isManifest = file.Path is "package.json";
-                var root = Path.GetFullPath(Path.Combine(workspace, isManifest ? "manifest" : "src"));
+                var root = Path.GetFullPath(Path.Combine(context, isManifest ? "manifest" : "src"));
                 var full = Path.GetFullPath(Path.Combine(root, file.Path));
 
                 // Belt and braces: the validator already refused escaping paths, but the file
                 // system is the thing that would actually be damaged, so check again here. The
                 // bound is the subdirectory, not the workspace: a single '..' stays inside the
-                // workspace and would drop a tenant file beside the generated Dockerfile.
+                // context and would drop a tenant file beside the generated Dockerfile.
                 if (!full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal))
                 {
                     throw new InvalidOperationException(
@@ -225,16 +287,43 @@ namespace Blocks.FunctionRunner.Builds
 
                 Directory.CreateDirectory(Path.GetDirectoryName(full)!);
                 File.WriteAllText(full, file.Content);
+
+                // The install needs the manifest, and only the manifest: the sandbox resolves
+                // dependencies, it does not see the function's source.
+                if (isManifest) File.WriteAllText(Path.Combine(work, "package.json"), file.Content);
             }
+
+            OpenWorkspaceToSandbox(work);
+            return new BuildDirectories(workspace, context, work);
+        }
+
+        /// <summary>
+        /// Lets uid 10001 write to the install workspace.
+        /// <para>
+        /// The sandbox runs as the same unprivileged uid a function does, which is not the uid
+        /// that owns this directory, so the directory is opened to it rather than the sandbox
+        /// being handed the runner's identity. That is safe here and nowhere else: the parent
+        /// (<c>/var/lib/blocks-runner/builds</c>) is not traversable by anyone but root and the
+        /// runner, so "other" means the sandbox and nothing else on this single-purpose VM.
+        /// </para>
+        /// </summary>
+        private static void OpenWorkspaceToSandbox(string work)
+        {
+            if (OperatingSystem.IsWindows()) return;
+
+            File.SetUnixFileMode(
+                work,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+                UnixFileMode.OtherRead | UnixFileMode.OtherWrite | UnixFileMode.OtherExecute);
         }
 
         /// <summary>A lockfile anywhere in the bundle, not only at its root.</summary>
         internal static bool IsLockfile(string path) =>
             LockfileNames.Contains(Path.GetFileName(path), StringComparer.OrdinalIgnoreCase);
 
-        private async Task<bool> BuildImageAsync(string workspace, string tag, StringBuilder log, CancellationToken token)
+        private async Task<bool> BuildImageAsync(string contextDir, string tag, StringBuilder log, CancellationToken token)
         {
-            using var context = CreateTarContext(workspace);
+            using var context = CreateTarContext(contextDir);
 
             var parameters = new ImageBuildParameters
             {
@@ -303,19 +392,34 @@ namespace Blocks.FunctionRunner.Builds
             }
         }
 
-        /// <summary>Packs the workspace into the tar stream the Engine's build API expects.</summary>
-        private static MemoryStream CreateTarContext(string workspace)
+        /// <summary>
+        /// Packs the context into the tar stream the Engine's build API expects.
+        /// <para>
+        /// Spooled to a file rather than held in memory: the context now carries the dependency
+        /// archive, which for a real manifest is tens or hundreds of megabytes, and a runner that
+        /// buffered that per concurrent build would fall over long before the Engine did. The
+        /// file deletes itself when the stream closes.
+        /// </para>
+        /// </summary>
+        private static FileStream CreateTarContext(string contextDir)
         {
-            var buffer = new MemoryStream();
+            var path = Path.Combine(
+                Path.GetDirectoryName(contextDir.TrimEnd(Path.DirectorySeparatorChar))!,
+                "context.tar");
+
+            var buffer = new FileStream(
+                path, FileMode.Create, FileAccess.ReadWrite, FileShare.None,
+                bufferSize: 64 * 1024, FileOptions.DeleteOnClose);
+
             using (var archive = TarArchive.CreateOutputTarArchive(buffer, TarBuffer.DefaultBlockFactor))
             {
                 archive.IsStreamOwner = false;
-                archive.RootPath = workspace.Replace('\\', '/').TrimEnd('/');
+                archive.RootPath = contextDir.Replace('\\', '/').TrimEnd('/');
 
-                foreach (var path in Directory.EnumerateFiles(workspace, "*", SearchOption.AllDirectories))
+                foreach (var file in Directory.EnumerateFiles(contextDir, "*", SearchOption.AllDirectories))
                 {
-                    var entry = TarEntry.CreateEntryFromFile(path);
-                    entry.Name = Path.GetRelativePath(workspace, path).Replace('\\', '/');
+                    var entry = TarEntry.CreateEntryFromFile(file);
+                    entry.Name = Path.GetRelativePath(contextDir, file).Replace('\\', '/');
                     archive.WriteEntry(entry, recurse: false);
                 }
             }
@@ -350,14 +454,15 @@ namespace Blocks.FunctionRunner.Builds
             $"---blocks-packages-{nonce}-{kind}---";
 
         /// <summary>
-        /// The versions npm actually resolved, read back from the <c>npm ls</c> block the build
-        /// fenced with this build's nonce. Returns <c>null</c> — not an empty list — when the
-        /// block is absent or unreadable, so the caller can say so rather than claim a
+        /// The versions npm actually resolved, read back from the <c>npm ls</c> block the install
+        /// sandbox fenced with this build's nonce. Returns <c>null</c> — not an empty list — when
+        /// the block is absent or unreadable, so the caller can say so rather than claim a
         /// dependency-free function.
         /// <para>
-        /// Markers are matched as whole lines: the Engine echoes the whole RUN instruction into
-        /// the log, so both markers appear there too, inside a longer line. The last fenced block
-        /// wins, which is the one this build wrote.
+        /// Markers are matched as whole lines, and the last fenced block wins. Both rules earn
+        /// their keep against a lifecycle script, which is the one thing in a build that can
+        /// write to this log at the tenant's direction: the nonce means it cannot guess the
+        /// fence, and taking the last block means a forged earlier one is passed over.
         /// </para>
         /// </summary>
         internal static string? ExtractResolvedPackages(string log, string beginMarker, string endMarker)
@@ -513,7 +618,25 @@ namespace Blocks.FunctionRunner.Builds
 
             foreach (var candidate in candidates)
             {
-                if (File.Exists(candidate)) return File.ReadAllText(candidate);
+                if (!File.Exists(candidate)) continue;
+
+                var template = File.ReadAllText(candidate);
+
+                // Because the template deploys separately from the runner, a half-finished
+                // install can pair new code with the template that still ran `npm install` as a
+                // RUN step. That template would render with an unsubstituted placeholder and fail
+                // somewhere deep in npm, having first put tenant code back on the host kernel —
+                // the exact thing the install sandbox exists to prevent. Refuse it by name.
+                if (template.Contains("{{NPM_FLAGS}}", StringComparison.Ordinal) ||
+                    !template.Contains("{{DEPS_ARCHIVE}}", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"'{candidate}' is the pre-sandbox build template: it installs dependencies " +
+                        "in a RUN step, which executes on the Engine's default runtime rather than " +
+                        "under gVisor. Deploy the current runtime-image/function.Dockerfile.tmpl.");
+                }
+
+                return template;
             }
 
             throw new FileNotFoundException(

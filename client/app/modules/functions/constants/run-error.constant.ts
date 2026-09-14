@@ -17,7 +17,7 @@ export const RUN_ERROR_EXPLANATIONS: Record<RunErrorCode, string> = {
   ImagePullFailed:
     "The image could not be pulled — it is no longer on the registry. The build behind it has been invalidated, so testing or deploying again builds a new one.",
   TimedOut:
-    "The run passed its timeout and was stopped. Raise the timeout (max 60 s) or do less work per call.",
+    "The run passed its timeout and was stopped. Raise the timeout (max 90 s) or do less work per call.",
   SandboxStartFailed: "The sandbox failed to start. Nothing ran, so a replay is safe.",
   OutputActionFailed: "The function returned successfully, but an output action did not deliver.",
 };

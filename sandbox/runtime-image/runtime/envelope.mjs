@@ -110,10 +110,19 @@ export function parseEnvelope(raw) {
     fail('limits.timeoutMs must be a positive number');
   }
 
+  // --- maskedEnv -------------------------------------------------------------
+  // The env keys whose values came from a secret. The bootstrap turns these into the redaction
+  // list before any tenant code is imported. An envelope without the field simply masks nothing,
+  // so an older control plane keeps working — it just has no secrets to mask.
+  const env = envMap(doc.env);
+  const maskedEnv = stringArray(doc.maskedEnv, 'maskedEnv');
+
   return _freeze({
     run: frozenRun,
     context: ctxContext,
-    env: envMap(doc.env),
+    env,
+    /** The values to mask, resolved here so the bootstrap never has to look them up itself. */
+    maskedValues: _freeze(maskedEnv.map((key) => env[key]).filter((v) => typeof v === 'string')),
     input: doc.input === undefined ? null : doc.input,
     limits: _freeze({ timeoutMs }),
   });

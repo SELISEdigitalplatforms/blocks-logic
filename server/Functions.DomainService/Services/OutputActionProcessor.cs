@@ -140,7 +140,12 @@ namespace Functions.DomainService.Services
                     }
                     request.Headers.TryAddWithoutValidation("Idempotency-Key", idempotencyKey);
 
-                    if (body is not null)
+                    // GET and DELETE carry no body. RFC 9110 gives a GET payload no defined
+                    // semantics, and real vendors variously ignore it, strip it at a proxy, or
+                    // answer 400 — so a stored action that pairs one with a body (the editor used
+                    // to allow it) sends the request without it rather than something that looks
+                    // like it worked. The URL and headers still carry their substitutions.
+                    if (body is not null && MethodTakesBody(action.Method))
                     {
                         request.Content = new StringContent(body, Encoding.UTF8, "application/json");
                     }
@@ -206,6 +211,16 @@ namespace Functions.DomainService.Services
                 Attempts = attempts,
             };
         }
+
+        /// <summary>
+        /// Whether <paramref name="method"/> is one this processor will attach a body to. Mirrors
+        /// the proxy module's own <c>hasBody</c>, and the editor hides the body control for the
+        /// rest — this is the enforcement half, for actions stored before it did.
+        /// </summary>
+        internal static bool MethodTakesBody(string? method) =>
+            string.Equals(method, "POST", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(method, "PUT", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(method, "PATCH", StringComparison.OrdinalIgnoreCase);
 
         /// <summary>
         /// Resolves every <c>{{secret.&lt;id&gt;}}</c> placeholder across the URL, headers and

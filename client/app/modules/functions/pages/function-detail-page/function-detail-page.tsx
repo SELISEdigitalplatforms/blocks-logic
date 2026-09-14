@@ -503,8 +503,8 @@ export const FunctionDetailPage = () => {
                   <div className="ml-2 flex items-center gap-0.5 border-l pl-2">
                     <EditorToolButton
                       label="Search"
-                      hint="Find and replace"
-                      shortcut="Ctrl+F"
+                      hint="Find and replace — click again to close"
+                      shortcut="Ctrl+F · Esc"
                       icon={Search}
                       onClick={() => editorActions.current?.find()}
                     />

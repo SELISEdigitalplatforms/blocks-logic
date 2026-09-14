@@ -379,3 +379,107 @@ describe('bootstrap end to end', () => {
     assert.deepEqual(r.result.value, { delivered: true });
   });
 });
+
+// ---------------------------------------------------------------- redaction ----
+
+describe('secret redaction', () => {
+  const lines = (sink) => sink.written.map((l) => JSON.parse(l));
+  const newSink = () => {
+    const written = [];
+    const sink = (line) => written.push(line);
+    sink.written = written;
+    return sink;
+  };
+
+  test('masks a secret-backed value in the message, at any depth of data, and in a stack', () => {
+    const sink = newSink();
+    const writer = new ProtocolWriter(sink);
+    writer.useRedaction(['sk_live_abcdef123456']);
+
+    writer.log('error', 'calling with sk_live_abcdef123456');
+    writer.log('info', 'nested', { auth: { header: 'Bearer sk_live_abcdef123456' } });
+    writer.failure('USER_RUNTIME_ERROR', '401 from https://api?key=sk_live_abcdef123456', 'at f (sk_live_abcdef123456)');
+
+    const out = lines(sink);
+    assert.equal(out[0].msg, 'calling with [redacted]');
+    assert.equal(out[1].data.auth.header, 'Bearer [redacted]');
+    assert.equal(out[2].message, '401 from https://api?key=[redacted]');
+    assert.equal(out[2].stack, 'at f ([redacted])');
+    assert.ok(!sink.written.join('').includes('sk_live_abcdef123456'));
+  });
+
+  test('masks a value that reaches the line JSON-escaped', () => {
+    const sink = newSink();
+    const writer = new ProtocolWriter(sink);
+    const secret = 'pa"ss\\word-1234';
+    writer.useRedaction([secret]);
+
+    writer.log('info', `value is ${secret}`);
+
+    assert.ok(!sink.written.join('').includes('pa\\"ss'));
+    assert.match(lines(sink)[0].msg, /\[redacted\]/);
+  });
+
+  test('leaves a plain, non-secret variable alone', () => {
+    // Only the keys the envelope marked are masked: redacting every variable would hide the
+    // ordinary configuration people log on purpose.
+    const sink = newSink();
+    const writer = new ProtocolWriter(sink);
+    writer.useRedaction(['the-secret-value']);
+
+    writer.log('info', 'base is https://api.example.com');
+
+    assert.equal(lines(sink)[0].msg, 'base is https://api.example.com');
+  });
+
+  test('refuses to mask a value too short to be one, rather than shredding every line', () => {
+    const sink = newSink();
+    const writer = new ProtocolWriter(sink);
+    writer.useRedaction(['ab']);
+
+    writer.log('info', 'a table of absolute values');
+
+    assert.equal(lines(sink)[0].msg, 'a table of absolute values');
+  });
+
+  test('masks the longer of two overlapping secrets whole', () => {
+    const sink = newSink();
+    const writer = new ProtocolWriter(sink);
+    writer.useRedaction(['tok_123', 'tok_123_extended_tail']);
+
+    writer.log('info', 'used tok_123_extended_tail');
+
+    assert.equal(lines(sink)[0].msg, 'used [redacted]');
+  });
+
+  test('charges the log budget for the line it actually writes', () => {
+    const sink = newSink();
+    const writer = new ProtocolWriter(sink);
+    writer.useRedaction(['x'.repeat(200)]);
+
+    writer.log('info', 'x'.repeat(200));
+
+    // The written line is far shorter than the unredacted one; the budget must follow the
+    // bytes that left the process, not the bytes that never did.
+    assert.ok(writer.byteCount < 200, `byteCount was ${writer.byteCount}`);
+    assert.equal(writer.byteCount, Buffer.byteLength(sink.written[0], 'utf8'));
+  });
+
+  test('an envelope with no maskedEnv masks nothing and still parses', () => {
+    const env = parseEnvelope(JSON.stringify({
+      run: { id: 'r1' }, env: { API_BASE: 'https://x' },
+    }));
+    assert.deepEqual(env.maskedValues, []);
+  });
+
+  test('maskedEnv resolves to the values of the keys it names', () => {
+    const env = parseEnvelope(JSON.stringify({
+      run: { id: 'r1' },
+      env: { API_BASE: 'https://x', TOKEN: 'sk_live_9' },
+      maskedEnv: ['TOKEN', 'NOT_BOUND'],
+    }));
+    // A key that names nothing contributes nothing rather than an undefined entry.
+    assert.deepEqual(env.maskedValues, ['sk_live_9']);
+  });
+});
+

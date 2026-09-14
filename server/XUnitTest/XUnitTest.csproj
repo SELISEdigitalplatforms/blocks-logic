@@ -20,6 +20,10 @@
 	<ProjectReference Include="..\MailBoxSyncService\MailBoxSyncService.csproj" />
 	<ProjectReference Include="..\Worker\Worker.csproj" />
 	<ProjectReference Include="..\Functions.DomainService\Functions.DomainService.csproj" />
+	<!-- The runner's protocol constants, so the ceiling-parity test can compare the two halves
+	     directly instead of against copied literals. Contracts has no package references of its
+	     own, so this pulls nothing from the sandbox tree's separate package versions. -->
+	<ProjectReference Include="..\..\sandbox\src\Blocks.FunctionRunner.Contracts\Blocks.FunctionRunner.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>

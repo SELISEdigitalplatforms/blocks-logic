@@ -20,6 +20,13 @@ type OutputActionsEditorProps = {
   onChange: (value: IOutputAction[]) => void;
 };
 
+/**
+ * Methods this action will actually send a body with. Same rule as the proxy's routes card, and
+ * as `OutputActionProcessor.MethodTakesBody` on the host: RFC 9110 gives a GET payload no defined
+ * semantics, so offering a body for one promises something the call will not do.
+ */
+const hasBody = (method: string) => method === "POST" || method === "PUT" || method === "PATCH";
+
 const TIMEOUT_OPTIONS = [5, 10, 15, 20, 30];
 
 const newOutputAction = (): IOutputAction => ({
@@ -238,64 +245,71 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
               ))}
             </div>
 
-            <div className="flex flex-col gap-2">
-              <Label className="text-xs font-semibold" id={`fn-body-mode-${action.id}`}>
-                Body
-              </Label>
-              <div
-                className="flex flex-wrap gap-2"
-                role="radiogroup"
-                aria-labelledby={`fn-body-mode-${action.id}`}
-              >
-                {[
-                  { label: "Function result", isTemplate: false },
-                  { label: "Template", isTemplate: true },
-                ].map((option) => {
-                  const isSelected = (action.bodyTemplate != null) === option.isTemplate;
-                  return (
-                    <button
-                      key={option.label}
-                      type="button"
-                      role="radio"
-                      aria-checked={isSelected}
-                      className={cn(
-                        "rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors",
-                        isSelected
-                          ? "border-primary bg-blocks-primary-25 text-primary"
-                          : "border-border text-medium-emphasis hover:bg-surface-app",
-                      )}
-                      onClick={() =>
-                        update(index, { bodyTemplate: option.isTemplate ? "{{result}}" : null })
-                      }
-                    >
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
-              {action.bodyTemplate == null ? (
-                <p className="text-xs text-medium-emphasis">
-                  The returned value is sent as the JSON body, unchanged.
-                </p>
-              ) : (
-                <>
-                  <VariableTokenField
-                    multiline
-                    value={action.bodyTemplate}
-                    onChange={(next) => update(index, { bodyTemplate: next })}
-                    codec={secretIdRef}
-                    ariaLabel="Body template"
-                    placeholder={'{ "payload": {{result}}, "runId": "{{run.id}}" }'}
-                    className="min-h-[90px] resize-y font-mono text-xs"
-                  />
+            {!hasBody(action.method) ? (
+              <p className="text-xs text-medium-emphasis">
+                A <code className="font-mono">{action.method}</code> carries no body — the function
+                result is not sent. Use the URL or a header to pass anything the endpoint needs.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <Label className="text-xs font-semibold" id={`fn-body-mode-${action.id}`}>
+                  Body
+                </Label>
+                <div
+                  className="flex flex-wrap gap-2"
+                  role="radiogroup"
+                  aria-labelledby={`fn-body-mode-${action.id}`}
+                >
+                  {[
+                    { label: "Function result", isTemplate: false },
+                    { label: "Template", isTemplate: true },
+                  ].map((option) => {
+                    const isSelected = (action.bodyTemplate != null) === option.isTemplate;
+                    return (
+                      <button
+                        key={option.label}
+                        type="button"
+                        role="radio"
+                        aria-checked={isSelected}
+                        className={cn(
+                          "rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors",
+                          isSelected
+                            ? "border-primary bg-blocks-primary-25 text-primary"
+                            : "border-border text-medium-emphasis hover:bg-surface-app",
+                        )}
+                        onClick={() =>
+                          update(index, { bodyTemplate: option.isTemplate ? "{{result}}" : null })
+                        }
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {action.bodyTemplate == null ? (
                   <p className="text-xs text-medium-emphasis">
-                    <code className="font-mono">{"{{result}}"}</code> and{" "}
-                    <code className="font-mono">{"{{run.id}}"}</code> are substituted before the
-                    call.
+                    The returned value is sent as the JSON body, unchanged.
                   </p>
-                </>
-              )}
-            </div>
+                ) : (
+                  <>
+                    <VariableTokenField
+                      multiline
+                      value={action.bodyTemplate}
+                      onChange={(next) => update(index, { bodyTemplate: next })}
+                      codec={secretIdRef}
+                      ariaLabel="Body template"
+                      placeholder={'{ "payload": {{result}}, "runId": "{{run.id}}" }'}
+                      className="min-h-[90px] resize-y font-mono text-xs"
+                    />
+                    <p className="text-xs text-medium-emphasis">
+                      <code className="font-mono">{"{{result}}"}</code> and{" "}
+                      <code className="font-mono">{"{{run.id}}"}</code> are substituted before the
+                      call.
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </Card>
       ))}

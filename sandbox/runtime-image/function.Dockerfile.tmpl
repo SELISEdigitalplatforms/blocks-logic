@@ -3,59 +3,53 @@
 # the runner itself.
 #
 #   {{BASE_IMAGE}}            pinned runtime, e.g. 127.0.0.1:5000/blocks/functions-node:24-v1@sha256:…
-#   {{NPM_FLAGS}}             "--omit=dev --ignore-scripts" by default; the --ignore-scripts
-#                             is dropped only when the function has allowScripts set
+#   {{DEPS_ARCHIVE}}          the dependency tarball the install sandbox produced
 #   {{MAX_OLD_SPACE_MB}}      ~75 % of the run's memory ceiling, so V8 throws a catchable
 #                             heap error before the cgroup OOM killer where it can
-#   {{PACKAGES_BEGIN}}        per-build nonce markers fencing the resolved dependency list
-#   {{PACKAGES_END}}          BuildProcessor reads back out of the build log
+#
+# THERE IS NO `npm install` HERE, AND THERE MUST NOT BE ONE.
+#
+# `docker build` has no runtime selector: every RUN instruction executes on the Engine's
+# default runtime, which is deliberately runc. That is fine for the instructions below,
+# which run commands this repository wrote — but `npm install` fetches and, when a function
+# opts in, executes code the tenant chose, and running that under runc put tenant code on
+# the host kernel. It was the one place in the pipeline that escaped gVisor.
+#
+# So the install happens first, in a gVisor sandbox of its own (BuildSandboxProfile /
+# DependencyInstaller), and hands back node_modules as a tarball. This file only copies.
+# Re-introducing a RUN that touches tenant-chosen code would silently undo that.
 #
 # Dependencies are resolved fresh from package.json on every build. No lockfile is accepted
-# from the tenant and none is carried between builds: `npm ci` refuses to run without one and
-# used to be skipped silently, which produced images with no node_modules at all that still
-# reported SUCCEEDED and only failed at the first import. What was actually resolved is
-# recorded on the build (the {{PACKAGES_BEGIN}} block below) rather than pinned in advance.
-#
-# The build runs with no platform credentials, on the same restricted egress network as a
-# run, with its own CPU/memory/time budget (plan/PLAN-RUNNER-VM.md §A4).
+# from the tenant and none is carried between builds. What was actually resolved is recorded
+# on the build from the install sandbox's own output, not from anything asserted here.
 
 FROM {{BASE_IMAGE}}
 
 USER root
 WORKDIR /function
 
-# Manifest first: a source-only change reuses the dependency layer, which is what makes
-# Test-then-Deploy cheap for the same content-addressed image (DECISIONS D3).
+# Manifest first, then dependencies, then source — cheapest-to-change last, so a source-only
+# edit reuses the dependency layer. The archive is built with a fixed sort order and zeroed
+# timestamps, so an unchanged dependency tree is byte-identical and this layer caches
+# (DECISIONS D3).
 COPY manifest/ /function/
 
-# Any lockfile is removed first: the BuildProcessor already keeps them out of the context, and
-# one arriving another way would pin the install to versions the platform never screened.
-RUN set -eux; \
-    rm -f package-lock.json npm-shrinkwrap.json yarn.lock pnpm-lock.yaml; \
-    npm install {{NPM_FLAGS}} --no-audit --no-fund; \
-    npm cache clean --force >/dev/null 2>&1 || true
+# ADD, not COPY: Docker extracts a local tar archive in place, which preserves the modes and
+# the .bin symlinks npm creates. Copying the unpacked tree through the build context would
+# dereference those into duplicate files.
+ADD {{DEPS_ARCHIVE}} /function/
 
-# What npm actually resolved, for the build record. This is deliberately a separate step from
-# the install: the install layer above is meant to cache on the manifest, and a cached layer
-# prints nothing, so folding this into it would leave every rebuild of an unchanged manifest
-# with no idea what its own image contains. The markers carry this build's nonce, which makes
-# the command text unique and the layer always run — and means nothing else in the log,
-# including output from lifecycle scripts when a function opts into them, can pose as this
-# block. `npm ls` exits non-zero on any tree warning, hence the `|| true`.
-RUN set -eu; \
-    echo "{{PACKAGES_BEGIN}}"; \
-    npm ls --omit=dev --depth=0 --json 2>/dev/null || true; \
-    echo "{{PACKAGES_END}}"
-
-# Tenant source. Copied after the install so it never invalidates the dependency layer.
+# Tenant source. Copied after the dependencies so it never invalidates their layer.
 COPY src/ /function/
 
 # Everything the function needs is readable and nothing is writable, by anyone. The rootfs
-# is read-only at run time too; this makes the image correct on its own terms.
+# is read-only at run time too; this makes the image correct on its own terms. The chown also
+# normalises ownership of the extracted archive, whose entries were written by the sandbox.
 RUN set -eux; \
     chown -R root:root /function; \
     chmod -R a-w,a+rX /function; \
-    test -f /function/index.js || { echo "index.js is missing from the function source" >&2; exit 1; }
+    test -f /function/index.js || { echo "index.js is missing from the function source" >&2; exit 1; }; \
+    test -d /function/node_modules || { echo "node_modules is missing from the build" >&2; exit 1; }
 
 ENV NODE_OPTIONS=--max-old-space-size={{MAX_OLD_SPACE_MB}}
 

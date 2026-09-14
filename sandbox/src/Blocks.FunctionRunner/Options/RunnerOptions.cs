@@ -18,9 +18,15 @@ namespace Blocks.FunctionRunner.Options
         /// <summary>Identifies this runner in heartbeats, leases and results. Defaults to the hostname.</summary>
         public string RunnerId { get; set; } = Environment.MachineName;
 
-        /// <summary>Container runtime for tenant sandboxes. Never anything but runsc.</summary>
+        /// <summary>
+        /// Container runtime for tenant sandboxes, runs and builds alike. Never anything but
+        /// <c>runsc</c>: the startup guard compares it with <see cref="Contracts.Ceilings.SandboxRuntime"/>
+        /// and refuses to claim work when they differ, so setting it to anything else stops the
+        /// host rather than downgrading its isolation. It stays bindable only so a
+        /// misconfiguration is reported rather than silently ignored.
+        /// </summary>
         [Required]
-        public string Runtime { get; set; } = "runsc";
+        public string Runtime { get; set; } = Contracts.Ceilings.SandboxRuntime;
 
         /// <summary>The confined egress network created by provision/30-network.sh.</summary>
         [Required]
@@ -84,8 +90,17 @@ namespace Blocks.FunctionRunner.Options
         [Range(256, 16384)]
         public int BuildMemoryMb { get; set; } = 2048;
 
-        /// <summary>Refuse a build whose source runs npm lifecycle scripts unless it opts in.</summary>
-        public bool DenyPrivateScriptsOnBuild { get; set; } = true;
+        /// <summary>
+        /// The host's veto over <c>allowScripts</c>. When set, a build that asks to run npm
+        /// lifecycle scripts is refused here, whatever the control plane sent.
+        /// <para>
+        /// Off by default because the install now happens inside a gVisor sandbox like any other
+        /// tenant code, so honouring the opt-in no longer costs a kernel boundary. It exists so an
+        /// operator can shut the door on this VM — during an incident, or on a host that should
+        /// only ever build inert dependency trees — without waiting on a control-plane change.
+        /// </para>
+        /// </summary>
+        public bool DenyPrivateScriptsOnBuild { get; set; }
 
         /// <summary>Consume run jobs. Off turns this host into a build-only runner.</summary>
         public bool ProcessRuns { get; set; } = true;
