@@ -170,6 +170,12 @@ namespace Proxy.DomainService.Repositories
                     .Inc($"{bucket}.{nameof(ProxyStatsBucket.Calls)}", delta.Calls)
                     .Inc($"{bucket}.{nameof(ProxyStatsBucket.Errors)}", delta.Errors)
                     .Inc($"{bucket}.{nameof(ProxyStatsBucket.LatencyMsTotal)}", delta.LatencyMsTotal)
+                    // All-time counters, never $unset: back the Overview tile's all-time avgLatencyMs/errorRate.
+                    .Inc($"{nameof(ProxyDetailEntity.Stats)}.{nameof(ProxyStats.TotalCalls)}", delta.Calls)
+                    .Inc($"{nameof(ProxyDetailEntity.Stats)}.{nameof(ProxyStats.TotalErrors)}", delta.Errors)
+                    .Inc(
+                        $"{nameof(ProxyDetailEntity.Stats)}.{nameof(ProxyStats.TotalLatencyMsTotal)}",
+                        delta.LatencyMsTotal)
                     .Max(
                         $"{nameof(ProxyDetailEntity.Stats)}.{nameof(ProxyStats.LastCallAtUtc)}",
                         delta.LastCallAtUtc);

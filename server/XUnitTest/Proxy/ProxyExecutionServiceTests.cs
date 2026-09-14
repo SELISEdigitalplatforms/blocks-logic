@@ -62,6 +62,10 @@ namespace XUnitTest.Proxy
                     },
                 },
                 LastCallAtUtc = lastCall,
+                // Mirrors the bucket: for these single-bucket tests, all-time == the window.
+                TotalCalls = calls,
+                TotalErrors = errors,
+                TotalLatencyMsTotal = latencyMsTotal,
             };
             _proxies.Setup(r => r.GetAsync(Tenant, ProxyId)).ReturnsAsync(proxy);
         }
@@ -148,13 +152,18 @@ namespace XUnitTest.Proxy
         {
             _proxies.Setup(r => r.GetAsync(Tenant, ProxyId)).ReturnsAsync((ProxyDetailEntity?)null);
             _executions.Setup(r => r.AnyForProxyAsync(Tenant, ProxyId)).ReturnsAsync(true);
-            _executions.Setup(r => r.GetStatsAsync(Tenant, ProxyId, It.IsAny<DateTime>()))
+            // Window (24h) and all-time stats differ, so the DTO's fields can be attributed to the right query.
+            _executions.Setup(r => r.GetStatsAsync(Tenant, ProxyId, Now.AddHours(-24)))
                 .ReturnsAsync(new ProxyExecutionStats(2, 50, 0, InWindow));
+            _executions.Setup(r => r.GetStatsAsync(Tenant, ProxyId, DateTime.SpecifyKind(DateTime.MinValue, DateTimeKind.Utc)))
+                .ReturnsAsync(new ProxyExecutionStats(9, 200, 3, InWindow));
 
             var result = await _service.GetOverviewAsync(Tenant, new ProxyGetOverviewRequestDto { ProxyId = ProxyId });
 
             result.HttpStatus.Should().Be(200);
             result.Data!.Calls24h.Should().Be(2);
+            result.Data!.AvgLatencyMs.Should().Be(200);
+            result.Data!.ErrorRatePct.Should().Be(33.3);
             result.Data!.Methods.Should().BeEmpty();
             result.Data!.CredentialRefs.Should().BeEmpty();
         }

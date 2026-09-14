@@ -78,6 +78,45 @@ namespace XUnitTest.Proxy
             ProxyStatsWindow.Rollup(null, Now).Calls.Should().Be(0);
         }
 
+        // ---------- all-time rollup ----------
+
+        [Fact]
+        public void RollupAllTime_ReadsTheNeverPrunedCounters_NotTheBuckets()
+        {
+            // The buckets only hold the last ~25h; a bucket set old enough to be gone must not affect this.
+            var stats = StatsWith((Now.AddDays(-90), 5, 5, 5000));
+            stats.TotalCalls = 100;
+            stats.TotalErrors = 4;
+            stats.TotalLatencyMsTotal = 13_200;
+            stats.LastCallAtUtc = Now.AddMinutes(-1);
+
+            var rollup = ProxyStatsWindow.RollupAllTime(stats);
+
+            rollup.Calls.Should().Be(100);
+            rollup.AvgLatencyMs.Should().Be(132);
+            rollup.ErrorRatePct.Should().Be(4);
+            rollup.LastCallAtUtc.Should().Be(Now.AddMinutes(-1));
+        }
+
+        [Fact]
+        public void RollupAllTime_NoCalls_IsAllZero_ButKeepsLastCall()
+        {
+            var stats = new ProxyStats { LastCallAtUtc = Now.AddDays(-3) };
+
+            var rollup = ProxyStatsWindow.RollupAllTime(stats);
+
+            rollup.Calls.Should().Be(0);
+            rollup.AvgLatencyMs.Should().Be(0);
+            rollup.ErrorRatePct.Should().Be(0);
+            rollup.LastCallAtUtc.Should().Be(Now.AddDays(-3));
+        }
+
+        [Fact]
+        public void RollupAllTime_NullStats_IsEmpty()
+        {
+            ProxyStatsWindow.RollupAllTime(null).Calls.Should().Be(0);
+        }
+
         [Fact]
         public void ExpiredStamps_NameHoursThatHaveLeftTheRetainedWindow()
         {

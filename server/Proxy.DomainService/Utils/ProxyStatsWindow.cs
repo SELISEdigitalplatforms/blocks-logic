@@ -92,5 +92,25 @@ namespace Proxy.DomainService.Utils
                 Math.Round(errors * 100d / calls, 1, MidpointRounding.AwayFromZero),
                 stats.LastCallAtUtc);
         }
+
+        /// <summary>
+        /// Rolls up the all-time counters (<see cref="ProxyStats.TotalCalls"/> and friends), which are never
+        /// pruned unlike <see cref="ProxyStats.Buckets"/>. <see cref="ProxyStatsRollup.Calls"/> on the result
+        /// is the all-time call count, not a 24 h figure — callers that also want <c>calls24h</c> should use
+        /// <see cref="Rollup"/> for that instead.
+        /// </summary>
+        public static ProxyStatsRollup RollupAllTime(ProxyStats? stats)
+        {
+            if (stats is null || stats.TotalCalls == 0)
+            {
+                return ProxyStatsRollup.Empty with { LastCallAtUtc = stats?.LastCallAtUtc };
+            }
+
+            return new ProxyStatsRollup(
+                stats.TotalCalls,
+                (int)Math.Round((double)stats.TotalLatencyMsTotal / stats.TotalCalls, MidpointRounding.AwayFromZero),
+                Math.Round(stats.TotalErrors * 100d / stats.TotalCalls, 1, MidpointRounding.AwayFromZero),
+                stats.LastCallAtUtc);
+        }
     }
 }

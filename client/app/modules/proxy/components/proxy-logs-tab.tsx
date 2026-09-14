@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { Activity, Check, Copy, Loader2, Pause, Play } from "lucide-react";
 import { Badge } from "@/components/ui-kits/badge/badge";
 import { Button } from "@/components/ui-kits/button/button";
@@ -81,16 +81,34 @@ const ProxyLogsSkeleton = () => (
 /**
  * One labelled copy action. Swaps to a tick for the duration of the hook's cooldown so a click on a
  * value that looks identical to the last one still reads as having done something.
+ *
+ * `iconOnly` drops the label and the outline/background, leaving a bare icon — used for the
+ * hover-revealed copy affordances next to inline values (the forwarded URL, the response body).
  */
-const CopyButton = ({ label, value, title }: { label: string; value: string; title: string }) => {
+const CopyButton = ({
+  label,
+  value,
+  title,
+  iconOnly,
+  className,
+}: {
+  label: string;
+  value: string;
+  title: string;
+  iconOnly?: boolean;
+  className?: string;
+}) => {
   const { isCopying, copy } = useCopyToClipboard();
 
   return (
     <Button
       type="button"
-      variant="outline"
-      size="sm"
-      className="h-7 gap-1.5 px-2 text-xs font-medium"
+      variant={iconOnly ? "ghost" : "outline"}
+      size={iconOnly ? "icon" : "sm"}
+      className={cn(
+        iconOnly ? "h-6 w-6 shrink-0" : "h-7 gap-1.5 px-2 text-xs font-medium",
+        className,
+      )}
       title={title}
       aria-label={title}
       onClick={() =>
@@ -106,9 +124,49 @@ const CopyButton = ({ label, value, title }: { label: string; value: string; tit
       ) : (
         <Copy className="h-3.5 w-3.5" />
       )}
-      {label}
+      {!iconOnly && label}
     </Button>
   );
+};
+
+/** JSON syntax-token regex: quoted strings (keys when followed by `:`), booleans, null, numbers. */
+const JSON_TOKEN_RE =
+  /("(?:\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\btrue\b|\bfalse\b|\bnull\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g;
+
+const jsonTokenClass = (token: string) => {
+  if (token.startsWith('"'))
+    return /:\s*$/.test(token)
+      ? "text-sky-700 dark:text-sky-400"
+      : "text-emerald-700 dark:text-emerald-400";
+  if (token === "true" || token === "false") return "text-amber-700 dark:text-amber-400";
+  if (token === "null") return "text-rose-700 dark:text-rose-400";
+  return "text-purple-700 dark:text-purple-400";
+};
+
+/** Colorizes a pretty-printed JSON string; falls back to plain text for anything that doesn't parse. */
+const JsonHighlight = ({ text }: { text: string }) => {
+  try {
+    JSON.parse(text);
+  } catch {
+    return <>{text}</>;
+  }
+
+  const nodes: ReactNode[] = [];
+  let lastIndex = 0;
+  let key = 0;
+  JSON_TOKEN_RE.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = JSON_TOKEN_RE.exec(text))) {
+    if (match.index > lastIndex) nodes.push(text.slice(lastIndex, match.index));
+    nodes.push(
+      <span key={key++} className={jsonTokenClass(match[0])}>
+        {match[0]}
+      </span>,
+    );
+    lastIndex = match.index + match[0].length;
+  }
+  nodes.push(text.slice(lastIndex));
+  return <>{nodes}</>;
 };
 
 const LogDetails = ({ proxyId, log }: { proxyId: string; log: ProxyExecutionLog }) => {
@@ -130,38 +188,51 @@ const LogDetails = ({ proxyId, log }: { proxyId: string; log: ProxyExecutionLog 
 
   const curl = buildProxyCurl(detail, typeof window === "undefined" ? "" : window.location.origin);
 
+  const upstreamUrl = detail.upstreamUrl || detail.upstreamHost;
+  const formattedBody = detail.responseBody
+    ? formatProxyBody(detail.responseBody, detail.responseContentType)
+    : "";
+
   return (
     <div className="grid gap-3 border-t bg-muted/20 px-4 py-3 text-sm lg:grid-cols-2">
-      <div className="flex flex-wrap items-center justify-end gap-2 lg:col-span-2">
-        <CopyButton
-          label="cURL"
-          value={curl}
-          title="Copy this call as a curl command (credentials left as placeholders)"
-        />
-        <CopyButton
-          label="JSON"
-          value={JSON.stringify(detail, null, 2)}
-          title="Copy the whole log row as JSON"
-        />
-      </div>
-      <div>
-        <span className="text-xs font-medium uppercase text-muted-foreground">Forwarded to</span>
-        <div className="flex items-start gap-2">
-          <p className="break-all font-mono">{detail.upstreamUrl || detail.upstreamHost || "—"}</p>
-          {detail.upstreamUrl || detail.upstreamHost ? (
-            <CopyButton
-              label="URL"
-              value={detail.upstreamUrl || detail.upstreamHost}
-              title="Copy the forwarded upstream URL"
-            />
-          ) : null}
+      <div className="flex flex-wrap items-start justify-between gap-4 lg:col-span-2">
+        <div className="flex flex-wrap gap-6">
+          <div>
+            <span className="text-xs font-medium uppercase text-muted-foreground">
+              Forwarded to
+            </span>
+            <div className="group/url flex items-center gap-1">
+              <p className="break-all font-mono">{upstreamUrl || "—"}</p>
+              {upstreamUrl ? (
+                <CopyButton
+                  label="URL"
+                  value={upstreamUrl}
+                  title="Copy the forwarded upstream URL"
+                  iconOnly
+                  className="opacity-0 transition-opacity group-hover/url:opacity-100"
+                />
+              ) : null}
+            </div>
+          </div>
+          <div>
+            <span className="text-xs font-medium uppercase text-muted-foreground">Result</span>
+            <p>
+              {detail.status} {detail.statusText} in {detail.latencyMs}ms
+            </p>
+          </div>
         </div>
-      </div>
-      <div>
-        <span className="text-xs font-medium uppercase text-muted-foreground">Result</span>
-        <p>
-          {detail.status} {detail.statusText} in {detail.latencyMs}ms
-        </p>
+        <div className="flex shrink-0 gap-2">
+          <CopyButton
+            label="cURL"
+            value={curl}
+            title="Copy this call as a curl command (credentials left as placeholders)"
+          />
+          <CopyButton
+            label="JSON"
+            value={JSON.stringify(detail, null, 2)}
+            title="Copy the whole log row as JSON"
+          />
+        </div>
       </div>
       <div>
         <span className="text-xs font-medium uppercase text-muted-foreground">
@@ -176,24 +247,24 @@ const LogDetails = ({ proxyId, log }: { proxyId: string; log: ProxyExecutionLog 
         </div>
       ) : null}
       <div className="lg:col-span-2">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-medium uppercase text-muted-foreground">Response body</span>
-          {detail.responseBody ? (
-            <CopyButton
-              label="Body"
-              value={detail.responseBody}
-              title="Copy the stored response body"
-            />
-          ) : null}
-        </div>
+        <span className="text-xs font-medium uppercase text-muted-foreground">Response body</span>
         {isError ? (
           <p className="mt-1 text-red-700">Failed to load the response body.</p>
         ) : (
-          <pre className="mt-1 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-background p-3 text-xs">
-            {detail.responseBody
-              ? formatProxyBody(detail.responseBody, detail.responseContentType)
-              : "(empty response body)"}
-          </pre>
+          <div className="group/body relative mt-1">
+            <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-background p-3 text-xs">
+              {formattedBody ? <JsonHighlight text={formattedBody} /> : "(empty response body)"}
+            </pre>
+            {detail.responseBody ? (
+              <CopyButton
+                label="Body"
+                value={detail.responseBody}
+                title="Copy the stored response body"
+                iconOnly
+                className="absolute right-2 top-2 bg-background opacity-0 transition-opacity group-hover/body:opacity-100"
+              />
+            ) : null}
+          </div>
         )}
       </div>
     </div>
