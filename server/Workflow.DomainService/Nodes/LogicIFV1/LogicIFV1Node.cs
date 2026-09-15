@@ -14,15 +14,18 @@ namespace Workflow.DomainService.Nodes.LogicIFV1
 
         protected override Task<NodeExecutionResult> ExecuteAsync(NodeExecutionContext context, LogicIfV1Parameter? nodeparameters)
         {
+            var parameters = nodeparameters ?? new LogicIfV1Parameter();
+            var outputItems = new List<NodeOutputItem>();
+            var currentIndex = -1;
+
             try
             {
-                var parameters = nodeparameters ?? new LogicIfV1Parameter();
-                var outputItems = new List<NodeOutputItem>();
                 var conditionType = parameters.ConditionType?.Trim().ToLowerInvariant();
                 var useOr = conditionType == "or";
 
                 for (var i = 0; i < context.IterationCount; i++)
                 {
+                    currentIndex = i;
 
                     bool conditionMet = useOr
                         ? parameters.Conditions.Any(condition =>
@@ -63,7 +66,12 @@ namespace Workflow.DomainService.Nodes.LogicIFV1
             }
             catch (Exception ex)
             {
-                return Task.FromResult(NodeExecutionResult.Failed(ex.Message));
+                var inputItem = currentIndex >= 0 && currentIndex < context.InputItems.Count
+                    ? context.InputItems[currentIndex]
+                    : null;
+                var errorItem = TryBuildErrorOutputItem(inputItem, parameters.ToBsonDocument(), ex);
+                if (errorItem != null) outputItems.Add(errorItem);
+                return Task.FromResult(NodeExecutionResult.Failed(ex.Message, outputItems));
             }
         }
 

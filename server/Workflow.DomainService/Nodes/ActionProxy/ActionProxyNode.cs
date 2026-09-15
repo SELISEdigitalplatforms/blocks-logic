@@ -49,17 +49,19 @@ namespace Workflow.DomainService.Nodes.ActionProxy
         protected override async Task<NodeExecutionResult> ExecuteAsync(
             NodeExecutionContext context, ActionProxyParameters? nodeparameters)
         {
+            var parameters = nodeparameters ?? new ActionProxyParameters();
+            var outputItems = new List<NodeOutputItem>();
+            WorkflowItemExecutionEntity? currentInputItem = null;
+
             try
             {
-                var parameters = nodeparameters ?? new ActionProxyParameters();
                 if (string.IsNullOrWhiteSpace(parameters.Slug))
-                    return NodeExecutionResult.Failed("No proxy is selected on this node.");
+                    return NodeExecutionResult.Failed("No proxy is selected on this node.", outputItems);
                 if (string.IsNullOrWhiteSpace(parameters.RouteMethod))
-                    return NodeExecutionResult.Failed("No endpoint is selected on this node.");
+                    return NodeExecutionResult.Failed("No endpoint is selected on this node.", outputItems);
 
                 var method = parameters.RouteMethod.Trim().ToUpperInvariant();
                 var blocksContext = BlocksContext.GetContext();
-                var outputItems = new List<NodeOutputItem>();
 
                 // A proxy call is self-contained: the proxy, endpoint, path parameters, query and body all
                 // live on the node, so there is nothing an input item has to supply. With nothing wired to
@@ -77,14 +79,15 @@ namespace Workflow.DomainService.Nodes.ActionProxy
                 for (int i = 0; i < iterations; i++)
                 {
                     var inputItem = standalone ? StandaloneInputItem(context) : context.InputItems[i];
+                    currentInputItem = standalone ? null : inputItem;
 
                     var (pathSuffix, pathError) = BuildPathSuffix(parameters, inputItem, context);
                     if (pathError != null)
-                        return NodeExecutionResult.Failed(pathError);
+                        return NodeExecutionResult.Failed(pathError, outputItems);
 
                     var (body, contentType, bodyError) = PrepareBody(parameters, method, inputItem, context);
                     if (bodyError != null)
-                        return NodeExecutionResult.Failed(bodyError);
+                        return NodeExecutionResult.Failed(bodyError, outputItems);
 
                     var query = BuildQuery(parameters, inputItem, context);
 
@@ -110,11 +113,11 @@ namespace Workflow.DomainService.Nodes.ActionProxy
                     }, context.CancellationToken);
 
                     if (!result.Ok)
-                        return NodeExecutionResult.Failed(DescribeFailure(parameters, method, result));
+                        return NodeExecutionResult.Failed(DescribeFailure(parameters, method, result), outputItems);
 
                     var (responseBody, parseError) = ParseResponse(result);
                     if (parseError != null)
-                        return NodeExecutionResult.Failed(parseError);
+                        return NodeExecutionResult.Failed(parseError, outputItems);
 
                     BuildOutputItems(outputItems, responseBody, inputItem, parameters, standalone);
                 }
@@ -127,7 +130,9 @@ namespace Workflow.DomainService.Nodes.ActionProxy
             }
             catch (Exception ex)
             {
-                return NodeExecutionResult.Failed(ex.Message);
+                var errorItem = TryBuildErrorOutputItem(currentInputItem, parameters.ToBsonDocument(), ex);
+                if (errorItem != null) outputItems.Add(errorItem);
+                return NodeExecutionResult.Failed(ex.Message, outputItems);
             }
         }
 
