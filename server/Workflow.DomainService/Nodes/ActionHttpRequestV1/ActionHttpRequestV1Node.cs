@@ -37,16 +37,18 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
 
         protected override async Task<NodeExecutionResult> ExecuteAsync(NodeExecutionContext context, ActionHttpRequestV1Parameters? nodeparameters)
         {
+            var parameters = nodeparameters ?? new ActionHttpRequestV1Parameters();
+            var outputItems = new List<NodeOutputItem>();
+            var currentIndex = -1;
+
             try
             {
-                var parameters = nodeparameters ?? new ActionHttpRequestV1Parameters();
-                var outputItems = new List<NodeOutputItem>();
-
                 for (int i = 0; i < context.IterationCount; i++)
                 {
+                    currentIndex = i;
                     var (url, httpMethod, headers, bodyContent, contentType) = PrepareRequest(parameters, context.InputItems[i], context);
                     if (url == null)
-                        return NodeExecutionResult.Failed(bodyContent);
+                        return NodeExecutionResult.Failed(bodyContent, outputItems);
 
                     await ApplyAuthenticationAsync(parameters, headers, context.TenantId);
 
@@ -57,7 +59,12 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
             }
             catch (Exception ex)
             {
-                return NodeExecutionResult.Failed(ex.Message);
+                var inputItem = currentIndex >= 0 && currentIndex < context.InputItems.Count
+                    ? context.InputItems[currentIndex]
+                    : null;
+                var errorItem = TryBuildErrorOutputItem(inputItem, parameters.ToBsonDocument(), ex);
+                if (errorItem != null) outputItems.Add(errorItem);
+                return NodeExecutionResult.Failed(ex.Message, outputItems);
             }
         }
 

@@ -17,13 +17,15 @@ namespace Workflow.DomainService.Nodes.TransformSetFieldV1
 
         protected override async Task<NodeExecutionResult> ExecuteAsync(NodeExecutionContext context, TransformSetFieldV1Parameters? nodeparameters)
         {
+            var parameters = nodeparameters ?? new TransformSetFieldV1Parameters();
+            var outputItems = new List<NodeOutputItem>();
+            var currentIndex = -1;
+
             try
             {
-                var parameters = nodeparameters ?? new TransformSetFieldV1Parameters();
-                var outputItems = new List<NodeOutputItem>();
-
                 for (int i = 0; i < context.IterationCount; i++)
                 {
+                    currentIndex = i;
                     var inputElement = BsonJsonConverter.ToJsonElement(context.InputItems[i].Data.Output);
                     var mode = parameters.Mode.ToLower();
                     var currentItem = GetBaseItem(inputElement, parameters);
@@ -57,7 +59,12 @@ namespace Workflow.DomainService.Nodes.TransformSetFieldV1
             }
             catch (Exception ex)
             {
-                return NodeExecutionResult.Failed(ex.Message);
+                var inputItem = currentIndex >= 0 && currentIndex < context.InputItems.Count
+                    ? context.InputItems[currentIndex]
+                    : null;
+                var errorItem = TryBuildErrorOutputItem(inputItem, parameters.ToBsonDocument(), ex);
+                if (errorItem != null) outputItems.Add(errorItem);
+                return NodeExecutionResult.Failed(ex.Message, outputItems);
             }
         }
 

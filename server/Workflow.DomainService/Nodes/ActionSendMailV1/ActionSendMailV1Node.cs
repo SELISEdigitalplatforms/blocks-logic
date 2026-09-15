@@ -24,13 +24,16 @@ namespace Workflow.DomainService.Nodes.ActionSendMailV1
 
         protected override async Task<NodeExecutionResult> ExecuteAsync(NodeExecutionContext context, ActionSendMailV1Parameters? nodeparameters)
         {
+            var parameters = nodeparameters ?? new ActionSendMailV1Parameters();
+            var outputItems = new List<NodeOutputItem>();
+            var currentIndex = -1;
+
             try
             {
-                var parameters = nodeparameters ?? new ActionSendMailV1Parameters();
-                var outputItems = new List<NodeOutputItem>();
                 var blocksContext = BlocksContext.GetContext();
                 for (int i = 0; i < context.IterationCount; i++)
                 {
+                    currentIndex = i;
                     var to = parseExpression<string>(parameters.To, context.InputItems[i], context) ?? "";
                     var bodyDataContext = parameters.BodyDataContext.Keys.ToDictionary(key => key, key => parseExpression<string>(parameters.BodyDataContext[key], context.InputItems[i], context) ?? "");
 
@@ -78,8 +81,12 @@ namespace Workflow.DomainService.Nodes.ActionSendMailV1
             }
             catch (Exception ex)
             {
-
-                return NodeExecutionResult.Failed(ex.Message);
+                var inputItem = currentIndex >= 0 && currentIndex < context.InputItems.Count
+                    ? context.InputItems[currentIndex]
+                    : null;
+                var errorItem = TryBuildErrorOutputItem(inputItem, parameters.ToBsonDocument(), ex);
+                if (errorItem != null) outputItems.Add(errorItem);
+                return NodeExecutionResult.Failed(ex.Message, outputItems);
             }
         }
 

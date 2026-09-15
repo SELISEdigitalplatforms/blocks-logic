@@ -47,10 +47,11 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
             NodeExecutionContext context,
             ActionDataV1Parameters? nodeparameters)
         {
+            var parameters = nodeparameters ?? new ActionDataV1Parameters();
+            var outputItems = new List<NodeOutputItem>();
+
             try
             {
-                var parameters = nodeparameters ?? new ActionDataV1Parameters();
-
                 // Resolve missing parameters from execution context and configuration
 
                 if (string.IsNullOrEmpty(parameters.ApiBaseUrl))
@@ -62,31 +63,28 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                         _logger.LogWarning("ActionDataV1Node: ApiBaseUrl is empty. Set it in node parameters or configure 'ApiBaseUrl' in appsettings.");
                 }
 
-
-                List<NodeOutputItem> outputItems;
-
                 if (parameters.RawQueryMode)
                 {
-                    outputItems = await ExecuteRawQueryAsync(context, parameters);
+                    await ExecuteRawQueryAsync(context, parameters, outputItems);
                     return NodeExecutionResult.Successful(outputItems);
                 }
 
                 switch (parameters.ActionType.ToLower())
                 {
                     case "getdata":
-                        outputItems = await ExecuteGetDataAsync(context, parameters);
+                        await ExecuteGetDataAsync(context, parameters, outputItems);
                         break;
                     case "insertdata":
-                        outputItems = await ExecuteInsertDataAsync(context, parameters);
+                        await ExecuteInsertDataAsync(context, parameters, outputItems);
                         break;
                     case "updatedata":
-                        outputItems = await ExecuteUpdateDataAsync(context, parameters);
+                        await ExecuteUpdateDataAsync(context, parameters, outputItems);
                         break;
                     case "deletedata":
-                        outputItems = await ExecuteDeleteDataAsync(context, parameters);
+                        await ExecuteDeleteDataAsync(context, parameters, outputItems);
                         break;
                     default:
-                        return NodeExecutionResult.Failed($"Unknown action type: {parameters.ActionType}");
+                        return NodeExecutionResult.Failed($"Unknown action type: {parameters.ActionType}", outputItems);
                 }
 
                 return NodeExecutionResult.Successful(outputItems);
@@ -94,8 +92,13 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
             catch (Exception ex)
             {
                 _logger.LogError(ex, "ActionDataV1Node failed for {ActionType} on {CollectionName}",
-                    nodeparameters?.ActionType, nodeparameters?.CollectionName);
-                return NodeExecutionResult.Failed(ex.Message);
+                    parameters.ActionType, parameters.CollectionName);
+                var inputItem = context.InputItems.Count > 0
+                    ? context.InputItems[Math.Min(outputItems.Count, context.InputItems.Count - 1)]
+                    : null;
+                var errorItem = TryBuildErrorOutputItem(inputItem, parameters.ToBsonDocument(), ex);
+                if (errorItem != null) outputItems.Add(errorItem);
+                return NodeExecutionResult.Failed(ex.Message, outputItems);
             }
         }
 
@@ -103,10 +106,9 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
         /// <summary>
         /// Get Data: HTTP query to UDS GraphQL gateway
         /// </summary>
-        private async Task<List<NodeOutputItem>> ExecuteGetDataAsync(
-            NodeExecutionContext context, ActionDataV1Parameters parameters)
+        private async Task ExecuteGetDataAsync(
+            NodeExecutionContext context, ActionDataV1Parameters parameters, List<NodeOutputItem> outputItems)
         {
-            var outputItems = new List<NodeOutputItem>();
 
             // Build GraphQL query with field selection
             var whereClause = BuildWhereClause(parameters, context.InputItems[0], context);
@@ -164,17 +166,14 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                         : null
                 });
             }
-
-            return outputItems;
         }
 
         /// <summary>
         /// Insert Data: HTTP mutation to UDS GraphQL gateway
         /// </summary>
-        private async Task<List<NodeOutputItem>> ExecuteInsertDataAsync(
-            NodeExecutionContext context, ActionDataV1Parameters parameters)
+        private async Task ExecuteInsertDataAsync(
+            NodeExecutionContext context, ActionDataV1Parameters parameters, List<NodeOutputItem> outputItems)
         {
-            var outputItems = new List<NodeOutputItem>();
 
             for (int i = 0; i < context.IterationCount; i++)
             {
@@ -206,17 +205,14 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                     ParentItemIds = new List<string> { context.InputItems[i].Id }
                 });
             }
-
-            return outputItems;
         }
 
         /// <summary>
         /// Update Data: HTTP mutation to UDS GraphQL gateway
         /// </summary>
-        private async Task<List<NodeOutputItem>> ExecuteUpdateDataAsync(
-            NodeExecutionContext context, ActionDataV1Parameters parameters)
+        private async Task ExecuteUpdateDataAsync(
+            NodeExecutionContext context, ActionDataV1Parameters parameters, List<NodeOutputItem> outputItems)
         {
-            var outputItems = new List<NodeOutputItem>();
 
             for (int i = 0; i < context.IterationCount; i++)
             {
@@ -250,17 +246,14 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                     ParentItemIds = new List<string> { context.InputItems[i].Id }
                 });
             }
-
-            return outputItems;
         }
 
         /// <summary>
         /// Delete Data: HTTP mutation to UDS GraphQL gateway
         /// </summary>
-        private async Task<List<NodeOutputItem>> ExecuteDeleteDataAsync(
-            NodeExecutionContext context, ActionDataV1Parameters parameters)
+        private async Task ExecuteDeleteDataAsync(
+            NodeExecutionContext context, ActionDataV1Parameters parameters, List<NodeOutputItem> outputItems)
         {
-            var outputItems = new List<NodeOutputItem>();
 
             for (int i = 0; i < context.IterationCount; i++)
             {
@@ -291,8 +284,6 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                     ParentItemIds = new List<string> { context.InputItems[i].Id }
                 });
             }
-
-            return outputItems;
         }
 
         /// <summary>
@@ -300,10 +291,9 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
         /// Runs once per input item, resolving {{$json...}}/{{$node...}}/{{$context...}} placeholders
         /// embedded in RawQuery against that item before sending.
         /// </summary>
-        private async Task<List<NodeOutputItem>> ExecuteRawQueryAsync(
-            NodeExecutionContext context, ActionDataV1Parameters parameters)
+        private async Task ExecuteRawQueryAsync(
+            NodeExecutionContext context, ActionDataV1Parameters parameters, List<NodeOutputItem> outputItems)
         {
-            var outputItems = new List<NodeOutputItem>();
 
             for (int i = 0; i < context.IterationCount; i++)
             {
@@ -340,8 +330,6 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                     ParentItemIds = new List<string> { context.InputItems[i].Id }
                 });
             }
-
-            return outputItems;
         }
 
         #region Helpers

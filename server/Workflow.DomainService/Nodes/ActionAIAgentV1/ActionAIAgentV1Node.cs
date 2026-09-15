@@ -21,13 +21,15 @@ namespace Workflow.DomainService.Nodes.ActionAIAgentV1
 
         protected override async Task<NodeExecutionResult> ExecuteAsync(NodeExecutionContext context, ActionAIAgentV1Parameters? nodeparameters)
         {
+            var parameters = nodeparameters ?? new ActionAIAgentV1Parameters();
+            var outputItems = new List<NodeOutputItem>();
+            var currentIndex = -1;
+
             try
             {
-                var parameters = nodeparameters ?? new ActionAIAgentV1Parameters();
-                var outputItems = new List<NodeOutputItem>();
-
                 for (int i = 0; i < context.IterationCount; i++)
                 {
+                    currentIndex = i;
                     var input = parseExpression<string>(parameters.Input, context.InputItems[i], context) ?? "";
                     var response = await CallAIAgent(parameters.ApiBaseUrl, parameters.WidgetId, context.TenantId, input);
 
@@ -48,7 +50,12 @@ namespace Workflow.DomainService.Nodes.ActionAIAgentV1
             }
             catch (Exception ex)
             {
-                return NodeExecutionResult.Failed(ex.Message);
+                var inputItem = currentIndex >= 0 && currentIndex < context.InputItems.Count
+                    ? context.InputItems[currentIndex]
+                    : null;
+                var errorItem = TryBuildErrorOutputItem(inputItem, parameters.ToBsonDocument(), ex);
+                if (errorItem != null) outputItems.Add(errorItem);
+                return NodeExecutionResult.Failed(ex.Message, outputItems);
             }
         }
 
