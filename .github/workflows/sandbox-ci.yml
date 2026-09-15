@@ -1,0 +1,33 @@
+name: sandbox-ci
+
+on:
+  push:
+    branches: [feat/functions]
+    paths: [sandbox/**]
+  workflow_dispatch: {}
+
+concurrency:
+  group: sandbox-ci
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, function-sandbox]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write runner.env from secret
+        env:
+          SANDBOX_ENV: ${{ secrets.SANDBOX_ENV }}
+        run: |
+          umask 077
+          printf '%s\n' "$SANDBOX_ENV" > "$RUNNER_TEMP/runner.env"
+          chmod 600 "$RUNNER_TEMP/runner.env"
+
+      - name: Provision, build, test, install, verify
+        run: sudo ./sandbox/deploy.sh --env-file "$RUNNER_TEMP/runner.env"
+
+      - name: Clean up secret file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/runner.env"
