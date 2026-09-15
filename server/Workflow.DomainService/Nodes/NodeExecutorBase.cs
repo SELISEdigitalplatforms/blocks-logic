@@ -37,6 +37,9 @@ namespace Workflow.DomainService.Nodes
         /// - {{$json.field}} - current item data
         /// - {{$context.key}} - workflow context
         /// - {{$node["nodeName"].json.field}} - ancestor node output (automatically resolves via lineage)
+        /// - {{$VAR.name}} - configuration variable, resolved from Blocks Secrets by
+        ///   <see cref="Services.WorkflowEngineService"/> before the node runs (see
+        ///   <see cref="NodeExecutionContext.Variables"/>)
         /// </summary>
         protected T? parseExpression<T>(string text, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
         {
@@ -74,7 +77,22 @@ namespace Workflow.DomainService.Nodes
             if (expr.StartsWith("$context"))
                 return ResolveContextExpression(expr, context);
 
+            if (expr.StartsWith("$VAR."))
+                return ResolveVarExpression(expr, context);
+
             return "";
+        }
+
+        /// <summary>
+        /// Looks up a {{$VAR.name}} configuration variable in the map <see cref="Services.WorkflowEngineService"/>
+        /// resolved for this run. Every $VAR name found in the node's raw parameters is resolved (fail-closed)
+        /// before the executor runs, so a name reaching here should always be present; an absent one still
+        /// resolves to "" rather than throwing, matching the other expression kinds' behaviour on a bad path.
+        /// </summary>
+        private static string ResolveVarExpression(string expr, NodeExecutionContext context)
+        {
+            var name = expr.Substring(5); // strip "$VAR."
+            return context.Variables.TryGetValue(name, out var value) ? value : "";
         }
 
         private static string ResolveNodeReference(string expr, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)

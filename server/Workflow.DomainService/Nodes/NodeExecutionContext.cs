@@ -37,5 +37,12 @@ namespace Workflow.DomainService.Nodes
         public int AttemptNumber { get; set; } = 1;
         public CancellationToken CancellationToken { get; set; } = default;
         public IServiceProvider? ServiceProvider { get; set; }
+
+        /// <summary>
+        /// Configuration variables ({{$VAR.name}} tokens) referenced by this node's parameters, resolved
+        /// from Blocks Secrets once per run by <see cref="Services.WorkflowEngineService"/> before the
+        /// executor runs. Empty when the node's parameters reference no $VAR token.
+        /// </summary>
+        public IReadOnlyDictionary<string, string> Variables { get; init; } = new Dictionary<string, string>();
     }
 }

@@ -48,7 +48,8 @@ namespace XUnitTest.Workflow
         private static NodeExecutionContext Context(
             IReadOnlyList<WorkflowItemExecutionEntity> items,
             BsonDocument? workflowContext = null,
-            IReadOnlyDictionary<string, List<WorkflowItemExecutionEntity>>? ancestorOutputs = null)
+            IReadOnlyDictionary<string, List<WorkflowItemExecutionEntity>>? ancestorOutputs = null,
+            IReadOnlyDictionary<string, string>? variables = null)
             => new()
             {
                 WorkflowExecutionId = "exec-1",
@@ -57,7 +58,8 @@ namespace XUnitTest.Workflow
                 InputItems = items,
                 IterationCount = items.Count,
                 WorkflowContext = workflowContext ?? new BsonDocument(),
-                AncestorNodeOutputs = ancestorOutputs ?? new Dictionary<string, List<WorkflowItemExecutionEntity>>()
+                AncestorNodeOutputs = ancestorOutputs ?? new Dictionary<string, List<WorkflowItemExecutionEntity>>(),
+                Variables = variables ?? new Dictionary<string, string>()
             };
 
         [Fact]
@@ -99,6 +101,20 @@ namespace XUnitTest.Workflow
             var ctx = Context(new[] { item }, workflowContext: new BsonDocument());
 
             exec.Parse<string>("{{$context.missing}}", item, ctx).Should().BeEmpty();
+        }
+
+        [Theory]
+        [InlineData("{{$VAR.api-token}}")]
+        [InlineData("{{ $VAR.api-token }}")]
+        public void Parse_VariableExpression_ResolvesFromContextVariables(string expression)
+        {
+            var exec = new TestExecutor();
+            var item = Item(new BsonDocument("name", "abc"));
+            var ctx = Context(
+                new[] { item },
+                variables: new Dictionary<string, string> { ["api-token"] = "secret-value" });
+
+            exec.Parse<string>($"Bearer {expression}", item, ctx).Should().Be("Bearer secret-value");
         }
 
         [Fact]
