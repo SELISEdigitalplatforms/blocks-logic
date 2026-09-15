@@ -2,7 +2,6 @@
 import { Card, CardContent, CardHeader } from "@/components/ui-kits/card/card";
 import { WorkflowList } from "../../components/workflow-list";
 import { AddWorkflow } from "../../components/add-workflow";
-import { ImportWorkflow } from "../../components/import-workflow";
 import { WorkflowFilterToolBar } from "../../components/workflow-filter-toolbar";
 import { Pagination } from "@/components/ui-kits/pagination/pagination";
 import { useGetWorkflows } from "@blocks-workflow/hooks/use-workflow-api";
@@ -39,7 +38,6 @@ export const Workflows = () => {
             <CardHeader className="flex flex-row items-center justify-between mb-0">
               <WorkflowFilterToolBar />
               <div className="flex items-center gap-1">
-                <ImportWorkflow />
                 <AddWorkflow />
               </div>
             </CardHeader>
