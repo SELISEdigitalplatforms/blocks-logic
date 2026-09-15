@@ -56,6 +56,11 @@ if [ -n "$SEED_ENV_FILE" ]; then
   [ -z "$BAD_LINE" ] || die "--env-file '$SEED_ENV_FILE' line ${BAD_LINE%%:*} is not KEY=VALUE, a comment or blank"
 fi
 
+# Set whenever something the runner reads only at startup changes — runner.env is an
+# EnvironmentFile, so a change to it is invisible until the unit restarts. Phase 5 turns this
+# into a restart even when the published binaries are byte-identical.
+ENV_CHANGED=no
+
 PHASES=6
 phase() { printf '\n\033[1m[%d/%d] %s\033[0m\n' "$1" "$PHASES" "$2"; _logfile "PHASE $1/$PHASES $2"; }
 
@@ -63,6 +68,13 @@ START="$(date +%s)"
 
 # ---------------------------------------------------------------- 1. host ----
 phase 1 "Host provisioning"
+# Before make, because make is what runs the phases and a minimal cloud image has none:
+# without this the first command on a fresh host dies with "make: command not found"
+# before preflight can explain anything. nftables is here for the mirror-image reason —
+# preflight requires nft and nothing used to install it.
+step "Bootstrap tools"
+ensure_base_tools
+
 # preflight, docker, gVisor, egress network + firewall, service user, registry, dotnet,
 # log retention. Each script re-checks its own work and refuses to continue on failure.
 make -s -C "$HERE/provision" all
@@ -123,7 +135,7 @@ if [ -n "$SEED_ENV_FILE" ]; then
     [ -n "$seed_key" ] || continue
     seed_val="${seed_line#*=}"
     if set_env_val "$seed_key" "$seed_val" "Seeded by deploy.sh --env-file."; then
-      SEEDED=$((SEEDED + 1))
+      SEEDED=$((SEEDED + 1)); ENV_CHANGED=yes
       info "set $seed_key"          # the key, never the value
     else
       info "unchanged: $seed_key"
@@ -161,6 +173,7 @@ else
   if [ -z "$CURRENT_BASE" ] || [ "$(image_repo "$CURRENT_BASE")" = "$(image_repo "$RUNTIME_IMAGE_DIGEST")" ]; then
     if set_env_val RUNNER__BaseImage "$RUNTIME_IMAGE_DIGEST" \
          "Written by deploy.sh from the runtime image it published."; then
+      ENV_CHANGED=yes
       ok "base image pinned to $RUNTIME_IMAGE_DIGEST"
     else
       ok "base image already pinned to $RUNTIME_IMAGE_DIGEST"
@@ -246,8 +259,13 @@ fi
 # ------------------------------------------------------------- 5. install ----
 phase 5 "Install"
 WAS_ACTIVE=no
-systemctl is-active --quiet blocks-function-runner.service && WAS_ACTIVE=yes
-make -s -C "$HERE" install
+PID_BEFORE=
+if systemctl is-active --quiet blocks-function-runner.service; then
+  WAS_ACTIVE=yes
+  PID_BEFORE="$(systemctl show -p MainPID --value blocks-function-runner.service)"
+fi
+[ "$ENV_CHANGED" = no ] || info "runner.env changed — the unit will be restarted even if the binaries did not"
+FORCE_RESTART="$ENV_CHANGED" make -s -C "$HERE" install
 
 # -------------------------------------------------------------- 6. verify ----
 phase 6 "Verification"
@@ -285,11 +303,16 @@ ok "registry answering on ${REGISTRY_ADDR:-127.0.0.1:5000}"
 # fail this deploy, and one from this runner must not be missed.
 step "Runner heartbeat"
 INVOCATION="$(systemctl show -p InvocationID --value "$UNIT")"
-sleep 3   # the pid-stability check above already waited 5s; heartbeat interval is 5s
+# Scope to this deploy, not just this invocation: install only restarts the unit when the
+# binaries actually changed, so on a no-op redeploy the invocation is the one that has been
+# running for days — and a heartbeat failure from a VPN blip last Tuesday must not fail a
+# deploy that changed nothing.
+HB_SINCE="$(date '+%Y-%m-%d %H:%M:%S')"
+sleep 8   # two heartbeat intervals inside this window, whether or not the unit restarted
 # Captured once, then matched: piping into `grep -q` would let grep exit on the first
 # hit and SIGPIPE journalctl, and pipefail would report that as "no failures found" —
 # the failure mode that silently passes a broken deploy.
-JOURNAL="$(journalctl _SYSTEMD_INVOCATION_ID="$INVOCATION" --no-pager 2>/dev/null || true)"
+JOURNAL="$(journalctl _SYSTEMD_INVOCATION_ID="$INVOCATION" --since "$HB_SINCE" --no-pager 2>/dev/null || true)"
 if grep -q "Heartbeat failed" <<<"$JOURNAL"; then
   grep "Heartbeat failed" <<<"$JOURNAL" | tail -3
   die "the runner cannot reach Redis — heartbeats are failing (see above)"
@@ -301,5 +324,9 @@ fnctl doctor || die "fnctl doctor reported problems"
 
 printf '\n\033[1mdeployed\033[0m in %ds — runner %s on %s\n' \
   "$(( $(date +%s) - START ))" "$(env_val RUNNER__RunnerId)" "$(hostname -s)"
-[ "$WAS_ACTIVE" = yes ] && info "this replaced a running runner" || true
+if [ "$WAS_ACTIVE" = yes ]; then
+  [ "$PID1" = "$PID_BEFORE" ] \
+    && info "the runner was already current — it was not restarted" \
+    || info "this replaced a running runner"
+fi
 info "logs: make logs    state: make status    health: fnctl doctor"

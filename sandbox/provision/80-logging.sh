@@ -54,6 +54,14 @@ JOURNAL_MAX_USE=128M
 # short-lived; these bounds are really for the long-running infra containers.
 DOCKER_LOG_MAX_SIZE=10m
 DOCKER_LOG_MAX_FILE=3
+
+# --- Docker build cache --------------------------------------------------------
+# BuildKit's cache is the only thing on this host with no owner: ImageGc prunes
+# function images and the registry, nothing prunes build layers. The daemon enforces
+# this ceiling continuously, so it can never become the reason /var fills up.
+# A share of the disk, not a fixed size — right on a 20 GB VM and on a 500 GB one.
+# Floored at 512 MB internally; a cache smaller than one build only slows builds down.
+DOCKER_BUILD_CACHE_MAX_PERCENT=2
 CFG
 fi
 
@@ -64,6 +72,7 @@ JOURNAL_MAX_RETENTION="${JOURNAL_MAX_RETENTION:-}"
 JOURNAL_MAX_USE="${JOURNAL_MAX_USE:-128M}"
 DOCKER_LOG_MAX_SIZE="${DOCKER_LOG_MAX_SIZE:-10m}"
 DOCKER_LOG_MAX_FILE="${DOCKER_LOG_MAX_FILE:-3}"
+DOCKER_BUILD_CACHE_MAX_PERCENT="${DOCKER_BUILD_CACHE_MAX_PERCENT:-2}"
 
 # A typo here silently disables the limit, so refuse rather than pretend.
 [ -z "$JOURNAL_MAX_RETENTION" ] || [[ "$JOURNAL_MAX_RETENTION" =~ ^[0-9]+(s|m|h|d|w|month|y)$ ]] \
@@ -74,9 +83,13 @@ DOCKER_LOG_MAX_FILE="${DOCKER_LOG_MAX_FILE:-3}"
   || die "DOCKER_LOG_MAX_SIZE='$DOCKER_LOG_MAX_SIZE' is not a Docker size (e.g. 10m, 1g)"
 [[ "$DOCKER_LOG_MAX_FILE" =~ ^[0-9]+$ ]] \
   || die "DOCKER_LOG_MAX_FILE='$DOCKER_LOG_MAX_FILE' is not a number"
+{ [[ "$DOCKER_BUILD_CACHE_MAX_PERCENT" =~ ^[0-9]+$ ]] \
+  && [ "$DOCKER_BUILD_CACHE_MAX_PERCENT" -ge 1 ] && [ "$DOCKER_BUILD_CACHE_MAX_PERCENT" -le 50 ]; } \
+  || die "DOCKER_BUILD_CACHE_MAX_PERCENT='$DOCKER_BUILD_CACHE_MAX_PERCENT' is not a whole percentage between 1 and 50"
 
 info "journal: retention ${JOURNAL_MAX_RETENTION:-unlimited}, ceiling $JOURNAL_MAX_USE"
 info "docker:  ${DOCKER_LOG_MAX_SIZE} × ${DOCKER_LOG_MAX_FILE} per container"
+info "build cache: ${DOCKER_BUILD_CACHE_MAX_PERCENT}% of the disk = $(build_cache_max_mb "$DOCKER_BUILD_CACHE_MAX_PERCENT")MB"
 
 # ---------------------------------------------------------------- journald ----
 step "systemd-journald"
@@ -110,10 +123,14 @@ fi
 step "Docker log options"
 CUR_SIZE="$(jq -r '."log-opts"."max-size" // empty' /etc/docker/daemon.json 2>/dev/null || true)"
 CUR_FILE="$(jq -r '."log-opts"."max-file" // empty' /etc/docker/daemon.json 2>/dev/null || true)"
-if [ "$CUR_SIZE" = "$DOCKER_LOG_MAX_SIZE" ] && [ "$CUR_FILE" = "$DOCKER_LOG_MAX_FILE" ]; then
-  ok "daemon.json matches logging.conf ($CUR_SIZE × $CUR_FILE)"
+# Either spelling, because which one daemon.json carries depends on the Engine's version.
+CUR_CACHE="$(jq -r '(.builder.gc.policy[0] | (.maxUsedSpace // .keepStorage)) // empty' /etc/docker/daemon.json 2>/dev/null || true)"
+WANT_CACHE="$(build_cache_max_mb "$DOCKER_BUILD_CACHE_MAX_PERCENT")MB"
+if [ "$CUR_SIZE" = "$DOCKER_LOG_MAX_SIZE" ] && [ "$CUR_FILE" = "$DOCKER_LOG_MAX_FILE" ] && [ "$CUR_CACHE" = "$WANT_CACHE" ]; then
+  ok "daemon.json matches logging.conf ($CUR_SIZE × $CUR_FILE, build cache $CUR_CACHE)"
 else
-  warn "daemon.json has ${CUR_SIZE:-unset} × ${CUR_FILE:-unset}, logging.conf wants $DOCKER_LOG_MAX_SIZE × $DOCKER_LOG_MAX_FILE"
+  warn "daemon.json has ${CUR_SIZE:-unset} × ${CUR_FILE:-unset} and build cache ${CUR_CACHE:-unset};"
+  warn "logging.conf wants $DOCKER_LOG_MAX_SIZE × $DOCKER_LOG_MAX_FILE and build cache $WANT_CACHE"
   warn "run \`make -C provision docker\` to apply it (this restarts the Engine)"
 fi
 # Existing containers keep the options they were created with; only new ones pick these up.

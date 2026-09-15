@@ -40,11 +40,13 @@ install_if_changed() { # <src> <dest>
   if [ -f "$2" ] && cmp -s "$1" "$2"; then info "unchanged: $2"; return 1; fi
   install -m 0755 -o root -g root "$1" "$2"; ok "installed: $2"; return 0
 }
-install_if_changed "$STAGE/runsc" "$BIN/runsc" || true
-install_if_changed "$STAGE/containerd-shim-runsc-v1" "$BIN/containerd-shim-runsc-v1" || true
+# Whether anything actually landed decides whether the Engine is restarted below.
+RUNSC_CHANGED=no
+install_if_changed "$STAGE/runsc" "$BIN/runsc" && RUNSC_CHANGED=yes || true
+install_if_changed "$STAGE/containerd-shim-runsc-v1" "$BIN/containerd-shim-runsc-v1" && RUNSC_CHANGED=yes || true
 install -d -m 0755 -o root -g root "$SIDECAR_DIR"
 for f in "$STAGE"/gvisor-bin/*; do
-  install_if_changed "$f" "$SIDECAR_DIR/$(basename "$f")" || true
+  install_if_changed "$f" "$SIDECAR_DIR/$(basename "$f")" && RUNSC_CHANGED=yes || true
 done
 # Nothing but root may replace the runtime or its sidecars.
 chown -R root:root "$BIN/runsc" "$BIN/containerd-shim-runsc-v1" "$SIDECAR_DIR"
@@ -61,8 +63,23 @@ ok "runsc $RUNSC_VERSION on platform ${GVISOR_PLATFORM}"
 
 step "Daemon wiring"
 grep -q '"runsc"' /etc/docker/daemon.json || die "runsc runtime missing from /etc/docker/daemon.json"
-systemctl restart docker
-retry 10 2 -- docker info >/dev/null 2>&1 || die "docker did not come back after restart"
+
+# Restarting the Engine is never free here. blocks-fn-firewall.service is PartOf=docker.service
+# and the runner BindsTo the firewall, so a restart at this point stops the runner — which
+# phase 5 only puts back minutes later, after the configuration gate and the tests. It also
+# interrupts every sandbox on the host. So: only when runsc actually changed, or when the
+# daemon does not know the runtime yet.
+DOCKER_KNOWS_RUNSC=no
+docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -q '"runsc"' && DOCKER_KNOWS_RUNSC=yes || true
+if [ "$RUNSC_CHANGED" = yes ] || [ "$DOCKER_KNOWS_RUNSC" = no ]; then
+  info "restarting docker (runsc changed: $RUNSC_CHANGED, runtime already known: $DOCKER_KNOWS_RUNSC)"
+  RUNNER_WAS_ACTIVE=no; runner_active && RUNNER_WAS_ACTIVE=yes || true
+  systemctl restart docker
+  retry 10 2 -- docker info >/dev/null 2>&1 || die "docker did not come back after restart"
+  runner_resume "$RUNNER_WAS_ACTIVE"
+else
+  info "runsc unchanged and the Engine already exposes it - not restarting docker"
+fi
 RUNTIMES_JSON="$(docker info --format '{{json .Runtimes}}')"
 grep -q '"runsc"' <<<"$RUNTIMES_JSON" || die "docker does not know the runsc runtime"
 ok "docker exposes the runsc runtime"

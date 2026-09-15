@@ -15,6 +15,8 @@ SHELL := /bin/bash
 ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 SRC := $(ROOT)/src
 APP_DIR := /opt/blocks-function-runner
+# Publishing lands here first; install compares it against APP_DIR before restarting.
+STAGE_DIR := /opt/blocks-function-runner.stage
 SERVICE := blocks-function-runner.service
 export DOTNET_CLI_TELEMETRY_OPTOUT := 1
 export DOTNET_NOLOGO := 1
@@ -53,23 +55,34 @@ test:
 
 install: build
 	@echo "== publishing to $(APP_DIR)"
+	@rm -rf $(STAGE_DIR)
+	@install -d -m 0755 $(STAGE_DIR) $(APP_DIR)
 	@dotnet publish $(SRC)/Blocks.FunctionRunner/Blocks.FunctionRunner.csproj \
-	  -c Release -o $(APP_DIR) --nologo
+	  -c Release -o $(STAGE_DIR) --nologo
 	@dotnet publish $(SRC)/Blocks.FunctionRunner.Cli/Blocks.FunctionRunner.Cli.csproj \
-	  -c Release -o $(APP_DIR)/cli --nologo
-	@# A wrapper, not a copy: the apphost resolves its assemblies from its own directory.
-	@printf '#!/bin/sh\nexec %s/cli/fnctl "$$@"\n' '$(APP_DIR)' > /usr/local/bin/fnctl
-	@chmod 0755 /usr/local/bin/fnctl
-	@chown -R root:root $(APP_DIR)
-	@install -m 0644 $(ROOT)/deploy/$(SERVICE) /etc/systemd/system/$(SERVICE)
-	@# No runner.env fallback here: provision/40-runner-user.sh has already created it,
-	@# and this line could only ever run on a host that has no blocks-runner group for
-	@# `install -g` to use. It was dead, and it shipped the wrong variable prefix.
-	@systemctl daemon-reload
-	@systemctl enable $(SERVICE)
-	@# restart, not "enable --now": on an already-running unit the latter is a no-op and
-	@# would leave the old binaries serving after a publish.
-	@systemctl restart $(SERVICE)
+	  -c Release -o $(STAGE_DIR)/cli --nologo
+	@# Publish to a staging directory and sync from there, comparing by checksum (-c) rather
+	@# than timestamp: a rebuild rewrites every file with a new mtime, so an mtime comparison
+	@# would call every redeploy a change and restart the runner for nothing. rsync also
+	@# replaces files by rename, so the running executable is never written through.
+	@changed=$$(rsync -rlpc --delete --out-format='%n' $(STAGE_DIR)/ $(APP_DIR)/ | grep -cv '/$$' || true); \
+	 printf '   %s file(s) changed under %s\n' "$$changed" "$(APP_DIR)"; \
+	 printf '#!/bin/sh\nexec %s/cli/fnctl "$$@"\n' '$(APP_DIR)' > /usr/local/bin/fnctl; \
+	 chmod 0755 /usr/local/bin/fnctl; \
+	 chown -R root:root $(APP_DIR); \
+	 unit_changed=no; \
+	 cmp -s $(ROOT)/deploy/$(SERVICE) /etc/systemd/system/$(SERVICE) || unit_changed=yes; \
+	 install -m 0644 $(ROOT)/deploy/$(SERVICE) /etc/systemd/system/$(SERVICE); \
+	 [ "$$unit_changed" = no ] || systemctl daemon-reload; \
+	 systemctl enable $(SERVICE) >/dev/null 2>&1 || true; \
+	 if [ "$$changed" -gt 0 ] || [ "$$unit_changed" = yes ] || [ "$${FORCE_RESTART:-no}" = yes ] \
+	    || ! systemctl is-active --quiet $(SERVICE); then \
+	   echo "== restarting $(SERVICE) (binaries: $$changed, unit: $$unit_changed, forced: $${FORCE_RESTART:-no})"; \
+	   systemctl restart $(SERVICE); \
+	 else \
+	   echo "== $(SERVICE) is already running these binaries - not restarting"; \
+	 fi
+	@rm -rf $(STAGE_DIR)
 	@systemctl --no-pager --lines=0 status $(SERVICE) || true
 
 uninstall:

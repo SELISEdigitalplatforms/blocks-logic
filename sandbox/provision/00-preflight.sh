@@ -17,25 +17,37 @@ fact PREFLIGHT_AT "$(_stamp)"
 
 # ------------------------------------------------------------------ system ----
 step "System"
-. /etc/os-release
-fact OS_ID "$ID"; fact OS_VERSION "$VERSION_ID"; fact OS_CODENAME "${VERSION_CODENAME:-unknown}"
+detect_os
+fact OS_ID "$OS_ID"; fact OS_VERSION "$OS_VERSION_ID"; fact OS_CODENAME "$OS_CODENAME"
+fact OS_FAMILY "$OS_FAMILY"; fact PKG_MANAGER "${PKG_MANAGER:-none}"
 fact KERNEL "$(uname -r)"; fact ARCH "$(uname -m)"
-info "$ID $VERSION_ID (${VERSION_CODENAME:-?}) kernel $(uname -r) $(uname -m)"
+info "$OS_ID $OS_VERSION_ID (${OS_CODENAME}) family=$OS_FAMILY kernel=$(uname -r) $(uname -m)"
 require "architecture is x86_64" "$([ "$(uname -m)" = x86_64 ] && echo 0 || echo 1)"
 
-# Every later script installs with apt and names Ubuntu's packages, and 70-dotnet.sh takes
-# dotnet-sdk-10.0 straight from the distro archive — which no release before 26.04 carries. A
-# host that is not this is not a supported host, and finding that out half way through phase 1
-# (after Docker and gVisor are already installed) is the worst time to find it out.
-# FN_ALLOW_UNTESTED_OS=1 downgrades both checks to warnings for an operator who has read this.
-os_ok=0
-[ "$ID" = ubuntu ] || os_ok=1
-awk -v v="${VERSION_ID:-0}" 'BEGIN{split(v,p,"."); exit !((p[1]+0)>26 || ((p[1]+0)==26 && (p[2]+0)>=4))}' || os_ok=1
-if [ "${FN_ALLOW_UNTESTED_OS:-0}" = 1 ]; then
-  [ "$os_ok" = 0 ] || warn "FN_ALLOW_UNTESTED_OS=1 — continuing on $ID ${VERSION_ID:-?}, which is not Ubuntu 26.04 or newer"
+# Ubuntu 20.04+ / Debian 10+. Every install step has a path on all of them: Docker comes
+# from download.docker.com where the distro Engine is older than 20.10, and .NET 10 from
+# dotnet-install.sh where no package carries it. Anything outside the apt family is not
+# "untested", it is unimplemented — every script here installs with apt and names apt's
+# packages. FN_ALLOW_UNTESTED_OS=1 downgrades the refusal to a warning.
+if os_supported; then
+  ok "operating system: $OS_ID $OS_VERSION_ID"
+elif [ "${FN_ALLOW_UNTESTED_OS:-0}" = 1 ]; then
+  warn "FN_ALLOW_UNTESTED_OS=1 - continuing on $OS_ID $OS_VERSION_ID, which is not Ubuntu 20.04+ or Debian 10+"
+  [ "$OS_FAMILY" = debian ] || warn "this host is not apt-based: every install step below will fail"
   ok "operating system check overridden"
 else
-  require "Ubuntu 26.04 or newer (dotnet-sdk-10.0 comes from the distro archive; set FN_ALLOW_UNTESTED_OS=1 to override)" "$os_ok"
+  require "Ubuntu 20.04+ or Debian 10+ (set FN_ALLOW_UNTESTED_OS=1 to override)" 1
+fi
+
+# The two things a package cannot supply, so they are checked before anything is installed
+# and each says exactly how to fix it. Both need a reboot, which is why finding out here
+# rather than at the first sandbox matters.
+if ! awk 'BEGIN{split(ARGV[1],v,"."); exit !(v[1]>5 || (v[1]==5 && v[2]>=10))}' "$(uname -r)"; then
+  warn "kernel $(uname -r) is older than 5.10, which gVisor's systrap platform requires"
+  case "$OS_ID" in
+    ubuntu) warn "  fix: apt-get install --install-recommends linux-generic-hwe-${OS_VERSION_ID} && reboot" ;;
+    debian) warn "  fix: install the backports kernel (linux-image-amd64 from ${OS_CODENAME}-backports) && reboot" ;;
+  esac
 fi
 require "kernel >= 5.10 (gVisor systrap)" \
   "$(awk 'BEGIN{split(ARGV[1],v,"."); exit !(v[1]>5 || (v[1]==5 && v[2]>=10))}' "$(uname -r)" && echo 0 || echo 1)"
@@ -52,6 +64,14 @@ require "at least 20480 MB free on /var" "$([ "$DISK_MB" -ge 20480 ] && echo 0 |
 step "cgroup v2"
 CG_TYPE="$(stat -fc %T /sys/fs/cgroup 2>/dev/null || echo none)"
 fact CGROUP_TYPE "$CG_TYPE"
+# Ubuntu switched to the unified hierarchy in 21.10 and Debian in 11, so 20.04 and 10 land
+# here on a default install. It is a boot parameter, not a package: say so rather than let
+# the operator read a cgroup error out of a failed sandbox later.
+if [ "$CG_TYPE" != cgroup2fs ]; then
+  warn "this host boots the cgroup v1 (hybrid) hierarchy - every sandbox limit depends on v2"
+  warn "  fix: add systemd.unified_cgroup_hierarchy=1 to GRUB_CMDLINE_LINUX in /etc/default/grub,"
+  warn "       then update-grub (Ubuntu) or update-grub2 (Debian) and reboot"
+fi
 require "unified cgroup v2 hierarchy at /sys/fs/cgroup" "$([ "$CG_TYPE" = cgroup2fs ] && echo 0 || echo 1)"
 CG_CONTROLLERS="$(cat /sys/fs/cgroup/cgroup.controllers 2>/dev/null || true)"
 fact CGROUP_CONTROLLERS "$CG_CONTROLLERS"
