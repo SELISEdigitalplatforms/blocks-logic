@@ -9,7 +9,6 @@ using Workflow.DomainService.Nodes;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using System.Diagnostics.CodeAnalysis;
-using System.Text.RegularExpressions;
 using Proxy.DomainService.Services;
 
 namespace Workflow.DomainService.Services
@@ -24,11 +23,6 @@ namespace Workflow.DomainService.Services
         private readonly ILogger<WorkflowEngineService> _logger;
         private readonly IWorkflowNotificationService _workflowNotificationService;
         private readonly IProxyVariableResolver _variableResolver;
-
-        /// <summary>Matches a {{$VAR.name}} configuration-variable token in a node's raw parameters JSON.
-        /// Same token syntax and charset as Proxy.DomainService.Utils.ProxyVarRef.</summary>
-        private static readonly Regex VarRefPattern =
-            new(@"\{\{\$VAR\.([A-Za-z0-9._:-]+)\}\}", RegexOptions.None, TimeSpan.FromSeconds(2));
 
         public WorkflowEngineService(
             IWorkflowExecutionRepository workflowExecutionRepository,
@@ -243,10 +237,7 @@ namespace Workflow.DomainService.Services
         /// </summary>
         private async Task<IReadOnlyDictionary<string, string>> ResolveNodeVariablesAsync(BsonDocument parameters, string tenantId)
         {
-            var names = VarRefPattern.Matches(parameters.ToJson())
-                .Select(m => m.Groups[1].Value)
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
+            var names = WorkflowVariableRef.Names(parameters).ToList();
 
             if (names.Count == 0)
             {
