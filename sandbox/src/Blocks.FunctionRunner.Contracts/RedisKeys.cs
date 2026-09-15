@@ -72,8 +72,10 @@ namespace Blocks.FunctionRunner.Contracts
         // These three are effectively "how long a Worker or runner may be down without losing
         // work": Redis holds the payload, Mongo holds the record, and if a payload expires before
         // its consumer reaches it the stream entry survives with nothing left to apply. Everything
-        // they are genuinely needed for finishes in minutes (sync wait ≤ 60 s, retry backoff
-        // ≤ 300 s, reclaim at 90 s idle); the rest is outage headroom.
+        // they are genuinely needed for finishes in minutes (sync wait ≤ 180 s — the control
+        // plane's Functions:SyncWaitMaxSeconds, retry backoff ≤ 300 s, reclaim at 90 s idle);
+        // the rest is outage headroom. This once said 60 s against the control plane's 180 s,
+        // which made the headroom look three times larger than it is.
         // Mirrored in blocks-logic's FunctionQueueKeys and in plan/PROTOCOL.md — change all three.
         public static readonly TimeSpan RunTtl = TimeSpan.FromHours(6);
         public static readonly TimeSpan ResultTtl = TimeSpan.FromHours(6);

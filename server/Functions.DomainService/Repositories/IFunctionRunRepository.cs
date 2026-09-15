@@ -90,6 +90,27 @@ namespace Functions.DomainService.Repositories
         /// </summary>
         Task<bool> ResetForRetryAsync(string tenantId, string runId, int attempt, CancellationToken cancellationToken = default);
 
+        /// <summary>
+        /// Fails a run that never ran, but only while it is still non-terminal.
+        /// <para>
+        /// This is the dead-letter path (<see cref="Consumers.FunctionDeadLetterConsumer"/>) and
+        /// the condition is the whole point of it being its own method. A dead-lettered entry
+        /// says "no runner completed this", which is usually true and occasionally stale: a
+        /// runner can publish its result and be killed before acknowledging, leaving the entry to
+        /// be reclaimed, re-delivered past its budget and dead-lettered while a perfectly good
+        /// SUCCEEDED result is already in Mongo. Filtering on the status in the same update makes
+        /// that race a no-op instead of overwriting a real outcome with a false failure.
+        /// </para>
+        /// </summary>
+        /// <returns>True when this call is what marked the run failed.</returns>
+        Task<bool> FailIfNotTerminalAsync(
+            string tenantId,
+            string runId,
+            RunErrorCode errorCode,
+            string errorMessage,
+            DateTime completedAt,
+            CancellationToken cancellationToken = default);
+
         /// <summary>Flips only the status — used for the transient OUTPUT_PROCESSING step between a successful run and output delivery.</summary>
         Task ApplyStatusOnlyAsync(string tenantId, string runId, RunStatus status, CancellationToken cancellationToken = default);
 

@@ -4,7 +4,7 @@ export const DEFAULT_LIMITS_OPTIONS = {
   ceilingMemoryMb: 200,
   ceilingTimeoutSeconds: 90,
   minConcurrency: 1,
-  maxConcurrency: 5,
+  maxConcurrency: 25,
   defaultCpuMillicores: 100,
   defaultMemoryMb: 128,
   defaultTimeoutSeconds: 10,

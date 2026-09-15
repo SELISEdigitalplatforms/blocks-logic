@@ -126,8 +126,15 @@ namespace XUnitTest.Functions
             (FunctionLimits.Ceiling.MemoryMb * 1024L * 1024L).Should().Be(RunnerCeilings.MemoryBytes);
             (FunctionLimits.Ceiling.TmpfsMb * 1024L * 1024L).Should().Be(RunnerCeilings.TmpfsBytes);
 
-            // No counterpart on the runner: concurrency is a control-plane scheduling limit.
-            FunctionLimits.Ceiling.MaxConcurrency.Should().Be(5);
+            // Concurrency is scheduled by the control plane and clamped again by the runner, so
+            // the two do have to agree — comparing the constants is what keeps them agreeing.
+            FunctionLimits.Ceiling.MinConcurrency.Should().Be(RunnerCeilings.MinFunctionConcurrency);
+            FunctionLimits.Ceiling.MaxConcurrency.Should().Be(RunnerCeilings.MaxFunctionConcurrency);
+            FunctionLimits.Ceiling.DefaultConcurrency.Should().Be(RunnerCeilings.DefaultFunctionConcurrency);
+
+            // Raised from 5, which capped one function near 375 runs a minute. Pinned so that a
+            // later edit to one side has to be deliberate.
+            FunctionLimits.Ceiling.MaxConcurrency.Should().Be(25);
 
             // The value this change was about, pinned so a later edit to one side is deliberate.
             FunctionLimits.Ceiling.TimeoutSeconds.Should().Be(90);

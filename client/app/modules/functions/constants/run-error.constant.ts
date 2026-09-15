@@ -6,7 +6,7 @@ import { RunErrorCode } from "../types/run.types";
  */
 export const RUN_ERROR_EXPLANATIONS: Record<RunErrorCode, string> = {
   MemoryLimit:
-    "The function used more memory than its limit. Raise the memory limit (max 300 MB) or hold less in memory.",
+    "The function used more memory than its limit. Raise the memory limit (max 200 MB) or hold less in memory.",
   PidLimit: "The function started more than 64 processes or threads.",
   UserRuntimeError: "The handler threw. The stack is in the logs below.",
   RuntimeStartFailed:
@@ -20,6 +20,8 @@ export const RUN_ERROR_EXPLANATIONS: Record<RunErrorCode, string> = {
     "The run passed its timeout and was stopped. Raise the timeout (max 90 s) or do less work per call.",
   SandboxStartFailed: "The sandbox failed to start. Nothing ran, so a replay is safe.",
   OutputActionFailed: "The function returned successfully, but an output action did not deliver.",
+  Undeliverable:
+    "No runner ever picked this up, so nothing ran. It is safe to run again — but check the runners are healthy first, because the platform already gave up on delivering it once.",
 };
 
 /**

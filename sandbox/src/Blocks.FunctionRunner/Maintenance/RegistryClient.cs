@@ -1,4 +1,6 @@
 using System.Net;
+using System.Net.Http.Headers;
+using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Blocks.FunctionRunner.Options;
@@ -40,6 +42,18 @@ namespace Blocks.FunctionRunner.Maintenance
             _options = options.Value;
             _logger = logger;
             _http.Timeout = TimeSpan.FromSeconds(10);
+
+            // A shared registry is reached over TLS and, in every deployment worth the name,
+            // authenticated. Push and pull go through the Docker daemon and use its credential
+            // store; this admin call does not, so it carries its own. Set once here rather than
+            // per request: the header is constant for the process's lifetime.
+            if (!string.IsNullOrEmpty(_options.RegistryUsername))
+            {
+                var credentials = Convert.ToBase64String(
+                    Encoding.UTF8.GetBytes($"{_options.RegistryUsername}:{_options.RegistryPassword}"));
+                _http.DefaultRequestHeaders.Authorization =
+                    new AuthenticationHeaderValue("Basic", credentials);
+            }
         }
 
         public async Task<bool> DeleteManifestAsync(string repoDigest, CancellationToken cancellationToken = default)
@@ -49,7 +63,8 @@ namespace Blocks.FunctionRunner.Maintenance
                 return false;
             }
 
-            var url = $"http://{_options.Registry}/v2/{name}/manifests/{digest}";
+            var scheme = _options.UseRegistryTls ? "https" : "http";
+            var url = $"{scheme}://{_options.Registry}/v2/{name}/manifests/{digest}";
             try
             {
                 using var response = await _http.DeleteAsync(url, cancellationToken).ConfigureAwait(false);
@@ -60,7 +75,20 @@ namespace Blocks.FunctionRunner.Maintenance
                     return true;
                 }
 
-                if (response.StatusCode is HttpStatusCode.MethodNotAllowed or HttpStatusCode.Unauthorized)
+                if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+                {
+                    if (!_deleteUnsupportedLogged)
+                    {
+                        _deleteUnsupportedLogged = true;
+                        _logger.LogWarning(
+                            "The registry rejected a manifest delete as unauthorised ({Status}). Set " +
+                            "RUNNER__RegistryUsername and RUNNER__RegistryPassword, or turn this host's " +
+                            "registry pruning off with RUNNER__PruneRegistry=false", (int)response.StatusCode);
+                    }
+                    return false;
+                }
+
+                if (response.StatusCode is HttpStatusCode.MethodNotAllowed)
                 {
                     if (!_deleteUnsupportedLogged)
                     {

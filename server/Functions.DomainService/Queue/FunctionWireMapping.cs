@@ -65,6 +65,7 @@ namespace Functions.DomainService.Queue
             FunctionQueueKeys.Wire.ImagePullFailed => RunErrorCode.ImagePullFailed,
             FunctionQueueKeys.Wire.TimedOutCode => RunErrorCode.TimedOut,
             FunctionQueueKeys.Wire.SandboxStartFailed => RunErrorCode.SandboxStartFailed,
+            FunctionQueueKeys.Wire.Undeliverable => RunErrorCode.Undeliverable,
             _ => RunErrorCode.UserRuntimeError,
         };
 
@@ -87,6 +88,10 @@ namespace Functions.DomainService.Queue
                 RunErrorCode.UserRuntimeError => false,
                 RunErrorCode.ResultTooLarge => false,
                 RunErrorCode.ResultNotSerializable => false,
+                // The job was dead-lettered, which only happens once its delivery budget is
+                // already spent. Scheduling another attempt would re-enqueue work that the
+                // runners have collectively refused, and it would do so on a timer.
+                RunErrorCode.Undeliverable => false,
                 _ => true,
             };
         }

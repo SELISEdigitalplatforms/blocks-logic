@@ -53,6 +53,14 @@ async Task<int> DoctorAsync()
     var problems = 0;
     Console.WriteLine("Runner VM checks");
 
+    // What this host is actually configured with, not what most hosts are. Hardcoding these
+    // meant doctor reported a perfectly healthy non-default host as broken, and — worse — a
+    // host whose runner.env pointed somewhere else as fine.
+    var network = Setting("RUNNER__Network", "blocks-fn-egress");
+    var runsDir = Setting("RUNNER__RunsDir", "/var/lib/blocks-runner/runs");
+    var buildsDir = Setting("RUNNER__BuildsDir", "/var/lib/blocks-runner/builds");
+    var resolvConf = Setting("RUNNER__ResolvConf", "/etc/blocks-runner/resolv.conf");
+
     // --- gVisor: the one that is not negotiable --------------------------------
     try
     {
@@ -68,20 +76,22 @@ async Task<int> DoctorAsync()
 
         // Registered is not the same question as configured. RUNNER__Runtime is bound from
         // Genesis configuration, so a host can have gVisor installed and still be told to use
-        // something else; asking only the first question would report that host as fine.
-        var configuredRuntime = Environment.GetEnvironmentVariable("RUNNER__Runtime");
-        var runtimeOk = string.IsNullOrEmpty(configuredRuntime) || configuredRuntime == Ceilings.SandboxRuntime;
+        // something else; asking only the first question would report that host as fine. Read
+        // through Setting, not the environment alone: an operator's shell does not carry the
+        // unit's environment, so a runner.env pointing at runc went unnoticed here.
+        var configuredRuntime = Setting("RUNNER__Runtime", Ceilings.SandboxRuntime);
+        var runtimeOk = configuredRuntime == Ceilings.SandboxRuntime;
         problems += Report(runtimeOk, runtimeOk
-            ? $"configured runtime is {configuredRuntime ?? Ceilings.SandboxRuntime}"
+            ? $"configured runtime is {configuredRuntime}"
             : $"RUNNER__Runtime is '{configuredRuntime}', not '{Ceilings.SandboxRuntime}' — the runner will refuse all work");
         problems += Report(info.DefaultRuntime == "runc", $"default runtime is {info.DefaultRuntime}");
         problems += Report(info.CgroupVersion == "2", $"cgroup version {info.CgroupVersion}");
 
         var networks = await docker.Networks.ListNetworksAsync();
-        var net = networks.FirstOrDefault(n => n.Name == "blocks-fn-egress");
+        var net = networks.FirstOrDefault(n => n.Name == network);
         problems += Report(net is not null, net is not null
-            ? "network blocks-fn-egress exists"
-            : "network blocks-fn-egress MISSING — run provision/30-network.sh");
+            ? $"network {network} exists"
+            : $"network {network} MISSING — run provision/30-network.sh");
     }
     catch (Exception ex)
     {
@@ -89,9 +99,10 @@ async Task<int> DoctorAsync()
     }
 
     // --- the pieces a sandbox cannot start without -----------------------------
-    problems += Report(File.Exists("/etc/blocks-runner/resolv.conf"),
-        "/etc/blocks-runner/resolv.conf present (sandbox DNS depends on it)");
-    problems += Report(Directory.Exists("/var/lib/blocks-runner/runs"), "/var/lib/blocks-runner/runs present");
+    problems += Report(File.Exists(resolvConf), $"{resolvConf} present (sandbox DNS depends on it)");
+    problems += Report(Directory.Exists(runsDir), $"{runsDir} present");
+    // Builds fail the same way runs do without their directory, and nothing else checks it.
+    problems += Report(Directory.Exists(buildsDir), $"{buildsDir} present");
 
     // --- Redis ------------------------------------------------------------------
     // On a Key Vault host (BLOCKS_VAULT_TYPE=2) the connection string is resolved inside
@@ -164,10 +175,26 @@ async Task<int> GcAsync()
         return 0;
     }
 
+    // The base image must be the one the runner is configured with, not a default that happens
+    // to match on most hosts: it is the reference the sweep refuses to prune, and getting it
+    // wrong on a host pointed at another registry means deleting the image every build is FROM.
+    // The registry goes with it, because that is what decides whether manifests are deleted too.
     var options = Options.Create(new RunnerOptions
     {
-        BaseImage = GetOption("--base-image") ?? "127.0.0.1:5000/blocks/functions-node:24-v1",
+        BaseImage = GetOption("--base-image")
+            ?? Setting("RUNNER__BaseImage", "127.0.0.1:5000/blocks/functions-node:24-v1"),
+        Registry = Setting("RUNNER__Registry", "127.0.0.1:5000"),
+        // And the rest of what decides whether a manifest delete happens and succeeds. Left at
+        // their defaults, `fnctl gc` on a shared-registry host would delete manifests the runner
+        // deliberately leaves alone — the one mistake in this path that another host sees.
+        RegistryTls = Flag("RUNNER__RegistryTls"),
+        PruneRegistry = Flag("RUNNER__PruneRegistry"),
+        RegistryUsername = Setting("RUNNER__RegistryUsername", string.Empty),
+        RegistryPassword = Setting("RUNNER__RegistryPassword", string.Empty),
     });
+    Console.WriteLine(
+        $"base image: {options.Value.BaseImage}; registry {options.Value.Registry} " +
+        $"({(options.Value.ShouldPruneRegistry ? "manifests are deleted" : "manifests are left alone")})");
 
     // A one-off HttpClient, not AddHttpClient<>: fnctl is a standalone console tool with no DI
     // container of its own (unlike the runner, see ApplicationServiceCollectionExtensions).
@@ -217,30 +244,64 @@ string? GetOption(string name)
 
 bool HasFlag(string name) => Array.IndexOf(args, name) >= 0;
 
-// OnPrem hosts (BLOCKS_VAULT_TYPE=1) keep the connection string in the runner's env file,
-// so an operator on the box needs no extra configuration. Key Vault hosts have nothing
-// here to find, and that is the case that must return null rather than guessing.
-static string? RedisFromRunnerEnv()
+// A tri-state runner setting: null means "not set", which is what RunnerOptions reads as
+// "decide from the registry address". An unparseable value is treated as unset rather than as
+// false, so a typo cannot quietly turn registry pruning off (or on).
+static bool? Flag(string key)
+{
+    var raw = Environment.GetEnvironmentVariable(key);
+    if (string.IsNullOrWhiteSpace(raw)) raw = RunnerEnvValue(key);
+    return bool.TryParse(raw, out var value) ? value : null;
+}
+
+/// <summary>
+/// One value out of the runner's env file.
+/// <para>
+/// fnctl is normally run from an operator's shell, not from the unit, so <c>RUNNER__*</c> is
+/// almost never in this process's environment — the file is where the host's real configuration
+/// is. Reading it is what makes doctor check <i>this host</i> rather than a set of defaults that
+/// happen to be right on most of them.
+/// </para>
+/// </summary>
+static string? RunnerEnvValue(string key)
 {
     const string path = "/etc/blocks-runner/runner.env";
     try
     {
         if (!File.Exists(path)) return null;
+        string? found = null;
         foreach (var raw in File.ReadLines(path))
         {
             var line = raw.Trim();
             if (line.Length == 0 || line[0] == '#') continue;
-            const string key = "BlocksSecret__CacheConnectionString=";
-            if (!line.StartsWith(key, StringComparison.Ordinal)) continue;
-            var value = line[key.Length..].Trim().Trim('"', '\'');
-            return value.Length == 0 ? null : value;
+            if (!line.StartsWith(key + "=", StringComparison.Ordinal)) continue;
+            var value = line[(key.Length + 1)..].Trim().Trim('"', '\'');
+            // Last one wins, as it does for systemd's EnvironmentFile.
+            found = value.Length == 0 ? null : value;
         }
+        return found;
     }
     catch (IOException) { /* unreadable is the same as absent for this purpose */ }
     catch (UnauthorizedAccessException) { /* fnctl run as a non-root operator */ }
 
     return null;
 }
+
+/// <summary>
+/// A runner setting, in the order the runner itself resolves one: the process environment first
+/// (which is what the unit has), then the env file, then the built-in default.
+/// </summary>
+static string Setting(string key, string fallback)
+{
+    var fromEnvironment = Environment.GetEnvironmentVariable(key);
+    if (!string.IsNullOrWhiteSpace(fromEnvironment)) return fromEnvironment;
+    return RunnerEnvValue(key) ?? fallback;
+}
+
+// OnPrem hosts (BLOCKS_VAULT_TYPE=1) keep the connection string in the runner's env file,
+// so an operator on the box needs no extra configuration. Key Vault hosts have nothing
+// here to find, and that is the case that must return null rather than guessing.
+static string? RedisFromRunnerEnv() => RunnerEnvValue("BlocksSecret__CacheConnectionString");
 
 // The endpoint is printed on a terminal an operator may be sharing; the password is not.
 static string Redact(string connection) => string.Join(',', connection

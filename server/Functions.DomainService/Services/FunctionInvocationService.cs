@@ -439,9 +439,10 @@ namespace Functions.DomainService.Services
             }
 
             var maxSyncWaitSeconds = _configuration.GetValue("Functions:SyncWaitMaxSeconds", DefaultSyncWaitMaxSeconds);
-            var effectiveWaitSeconds = Math.Min(
+            var executionWaitSeconds = Math.Min(
                 maxSyncWaitSeconds, (waitTimeoutSeconds ?? limits.TimeoutSeconds) + SyncGraceSeconds);
-            return await WaitForResultAsync(tenantId, run.ItemId, effectiveWaitSeconds, cancellationToken);
+            return await WaitForResultAsync(
+                tenantId, run.ItemId, executionWaitSeconds, maxSyncWaitSeconds, cancellationToken);
         }
 
         private async Task EnqueueAsync(
@@ -475,33 +476,81 @@ namespace Functions.DomainService.Services
             ]);
         }
 
+        /// <summary>
+        /// Waits for a run to finish, giving it <paramref name="executionWaitSeconds"/> of actually
+        /// running before giving up, and never more than <paramref name="absoluteMaxSeconds"/> in total.
+        /// <para>
+        /// The two budgets exist because a run does not start when it is enqueued. Concurrency and
+        /// host admission both queue rather than reject (by design — nothing is ever refused for
+        /// volume), so under load a run can sit <c>QUEUED</c> for a while. Spending the caller's
+        /// whole allowance on that wait meant a synchronous caller was handed an unfinished answer
+        /// for a run that then went on to succeed, and the busier the platform the more often it
+        /// happened — exactly when a caller can least afford to re-poll. So queued time does not
+        /// consume the execution budget; it is bounded by the absolute cap instead, which is what
+        /// stops a caller being held forever behind a long queue.
+        /// </para>
+        /// </summary>
         private async Task<InvokeResultDto> WaitForResultAsync(
-            string tenantId, string runId, int waitSeconds, CancellationToken cancellationToken)
+            string tenantId,
+            string runId,
+            int executionWaitSeconds,
+            int absoluteMaxSeconds,
+            CancellationToken cancellationToken)
         {
-            var deadline = DateTime.UtcNow.AddSeconds(waitSeconds);
+            var hardDeadline = DateTime.UtcNow.AddSeconds(absoluteMaxSeconds);
+            var deadline = DateTime.UtcNow.AddSeconds(executionWaitSeconds);
+            if (deadline > hardDeadline) deadline = hardDeadline;
+
+            var lastStatus = RunStatus.Queued;
+            var hasLeftTheQueue = false;
 
             while (DateTime.UtcNow < deadline)
             {
                 var run = await _runRepository.GetByIdAsync(tenantId, runId, cancellationToken);
-                if (run is not null && FunctionWireMapping.IsTerminal(run.Status))
+                if (run is not null)
                 {
-                    return new InvokeResultDto
+                    lastStatus = run.Status;
+
+                    if (FunctionWireMapping.IsTerminal(run.Status))
                     {
-                        RunId = runId,
-                        Status = FunctionWireMapping.ToWire(run.Status),
-                        Result = run.Result,
-                        ErrorCode = run.ErrorCode == RunErrorCode.None ? null : run.ErrorCode.ToString(),
-                        ErrorMessage = run.ErrorMessage,
-                    };
+                        return new InvokeResultDto
+                        {
+                            RunId = runId,
+                            Status = FunctionWireMapping.ToWire(run.Status),
+                            Result = run.Result,
+                            ErrorCode = run.ErrorCode == RunErrorCode.None ? null : run.ErrorCode.ToString(),
+                            ErrorMessage = run.ErrorMessage,
+                        };
+                    }
+
+                    // Still queued: the run has not begun spending its own timeout, so neither
+                    // should the caller. Slide the execution budget forward, but only ever up to
+                    // the absolute cap — a run that never gets picked up must still return.
+                    if (!hasLeftTheQueue && run.Status == RunStatus.Queued)
+                    {
+                        deadline = DateTime.UtcNow.AddSeconds(executionWaitSeconds);
+                        if (deadline > hardDeadline) deadline = hardDeadline;
+                    }
+                    else
+                    {
+                        // Anchored once, on the first observation that it has started. After this
+                        // the deadline stops moving, so the budget measures execution only.
+                        hasLeftTheQueue = true;
+                    }
                 }
 
                 await Task.Delay(PollInterval, cancellationToken);
             }
 
-            // Still running after the wait window: the same 202 shape a non-waiting caller
-            // gets, so a client that gives up on Wait can fall back to polling GetRun exactly
-            // the way a fire-and-forget caller would.
-            return new InvokeResultDto { RunId = runId, Status = FunctionQueueKeys.Wire.Running };
+            // Not finished inside the window: the same 202 shape a non-waiting caller gets, so a
+            // client that gives up on Wait can fall back to polling GetRun exactly the way a
+            // fire-and-forget caller would. The status is the one last actually observed —
+            // reporting RUNNING for a run still sitting in the queue would misdescribe it.
+            return new InvokeResultDto
+            {
+                RunId = runId,
+                Status = FunctionWireMapping.ToWire(lastStatus),
+            };
         }
 
     }

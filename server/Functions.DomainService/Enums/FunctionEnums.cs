@@ -50,6 +50,14 @@ namespace Functions.DomainService.Enums
 
         /// <summary>An output action failed after the function itself had succeeded.</summary>
         OutputActionFailed = 10,
+
+        /// <summary>
+        /// The job never reached a runner. It exhausted its delivery budget, or no runner would
+        /// accept it, and the runner moved the entry to <c>functions:dead</c>. Nothing executed,
+        /// so a replay is safe — but retrying automatically is not, because the delivery budget
+        /// is already spent.
+        /// </summary>
+        Undeliverable = 11,
     }
 
     /// <summary>What caused a run. Carried into <c>ctx.run.invokedBy</c>.</summary>

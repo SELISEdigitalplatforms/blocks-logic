@@ -163,6 +163,22 @@ namespace Blocks.FunctionRunner.Builds
 
                 if (exitCode != 0)
                 {
+                    // A DNS failure is the one npm error whose text points nowhere near its cause.
+                    // Docker's embedded resolver is unreachable under gVisor, so every sandbox gets
+                    // the host's resolv.conf bind-mounted over its own; when that file is missing or
+                    // RUNNER__ResolvConf is wrong, every install in the fleet fails identically and
+                    // npm reports it as the registry being unreachable. Naming it here is the
+                    // difference between a one-line host fix and an afternoon spent on npm.
+                    if (LooksLikeDnsFailure(log))
+                    {
+                        return Failed(log,
+                            "the dependency install could not resolve the npm registry — this is a " +
+                            $"host DNS problem, not a package one. Check that '{_options.ResolvConf}' " +
+                            "exists and lists a reachable nameserver; it is bind-mounted over " +
+                            "/etc/resolv.conf in every sandbox because Docker's embedded resolver " +
+                            "does not work under gVisor.");
+                    }
+
                     return Failed(log, $"the dependency install failed (npm exited {exitCode})");
                 }
 
@@ -192,6 +208,23 @@ namespace Blocks.FunctionRunner.Builds
                     await RemoveAsync(containerId).ConfigureAwait(false);
                 }
             }
+        }
+
+        /// <summary>
+        /// Whether an install's output is a name-resolution failure rather than a package one.
+        /// <para>
+        /// Matched on npm's own codes, not on prose: <c>EAI_AGAIN</c> and <c>ENOTFOUND</c> are what
+        /// a getaddrinfo failure surfaces as, and <c>getaddrinfo</c> appears in the underlying
+        /// message. A registry that resolves but refuses (403, 404, ETARGET) is a real package
+        /// problem and must not be reported as a host fault.
+        /// </para>
+        /// </summary>
+        internal static bool LooksLikeDnsFailure(StringBuilder log)
+        {
+            var text = log.ToString();
+            return text.Contains("EAI_AGAIN", StringComparison.Ordinal)
+                || text.Contains("ENOTFOUND", StringComparison.Ordinal)
+                || text.Contains("getaddrinfo", StringComparison.Ordinal);
         }
 
         private static InstallResult Failed(StringBuilder log, string failure) =>

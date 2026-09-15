@@ -1,3 +1,4 @@
+using Blocks.FunctionRunner.Admission;
 using Blocks.FunctionRunner.Contracts;
 using Blocks.FunctionRunner.Health;
 using Blocks.FunctionRunner.Options;
@@ -22,6 +23,7 @@ namespace Blocks.FunctionRunner.Runs
         private readonly IDatabase _db;
         private readonly RunProcessor _processor;
         private readonly HeartbeatService _heartbeat;
+        private readonly HostBudget _budget;
         private readonly RunnerOptions _options;
         private readonly ILogger<RunConsumerService> _logger;
 
@@ -29,12 +31,14 @@ namespace Blocks.FunctionRunner.Runs
             IDatabase db,
             RunProcessor processor,
             HeartbeatService heartbeat,
+            HostBudget budget,
             IOptions<RunnerOptions> options,
             ILogger<RunConsumerService> logger)
         {
             _db = db;
             _processor = processor;
             _heartbeat = heartbeat;
+            _budget = budget;
             _options = options.Value;
             _logger = logger;
         }
@@ -51,9 +55,11 @@ namespace Blocks.FunctionRunner.Runs
                 _db, _logger, RedisKeys.RunsStream, RedisKeys.RunnerGroup, _options.RunnerId);
             await consumer.EnsureGroupAsync().ConfigureAwait(false);
 
+            // The capacity logged here is the budget's current view, not a configured number:
+            // it moves with the host while this loop runs.
             _logger.LogInformation(
                 "Consuming {Stream} as {Consumer} (capacity {Capacity})",
-                RedisKeys.RunsStream, _options.RunnerId, _options.MaxActiveSandboxes);
+                RedisKeys.RunsStream, _options.RunnerId, _budget.Capacity);
 
             var idleDelay = TimeSpan.FromMilliseconds(250);
             var reclaimEvery = TimeSpan.FromSeconds(30);

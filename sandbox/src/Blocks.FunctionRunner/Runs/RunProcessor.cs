@@ -158,6 +158,11 @@ namespace Blocks.FunctionRunner.Runs
                 var (status, errorCode, errorMessage) = RunOutcome.Map(
                     result.OomKilled, result.ExitCode, result.TimedOut, lease.CancelRequested, result.Output);
 
+                // What this run actually cost, fed back into admission. Reserving a run's whole
+                // limit is safe and wasteful; the budget narrows that to the observed p95 only
+                // because every completed run reports its peak here.
+                _budget.Observe(result.PeakMemoryBytes);
+
                 await CompleteAsync(
                     job, runKey, startedAt, status, errorCode, errorMessage, result.ExitCode, result.DurationMs,
                     result.PeakMemoryBytes, result.CpuUsageMs, result.Output.ResultJson, result.Output.Logs,

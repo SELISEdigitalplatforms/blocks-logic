@@ -123,6 +123,31 @@ namespace Functions.DomainService.Repositories
             await Collection(tenantId).InsertOneAsync(build, cancellationToken: cancellationToken);
         }
 
+        /// <summary>The build statuses past which a dead letter must not write.</summary>
+        internal static readonly BuildStatus[] TerminalStatuses = [BuildStatus.Succeeded, BuildStatus.Failed];
+
+        public async Task<bool> FailIfNotTerminalAsync(
+            string tenantId,
+            string buildId,
+            string errorMessage,
+            DateTime completedAt,
+            CancellationToken cancellationToken = default)
+        {
+            var filter = Builders<FunctionBuildEntity>.Filter.And(
+                Builders<FunctionBuildEntity>.Filter.Eq(b => b.ItemId, buildId),
+                Builders<FunctionBuildEntity>.Filter.Nin(b => b.Status, TerminalStatuses));
+
+            var update = Builders<FunctionBuildEntity>.Update
+                .Set(b => b.Status, BuildStatus.Failed)
+                .Set(b => b.ErrorMessage, errorMessage)
+                .Set(b => b.CompletedAt, completedAt)
+                .Set(b => b.LastUpdatedDate, DateTime.UtcNow);
+
+            var result = await Collection(tenantId).UpdateOneAsync(
+                filter, update, cancellationToken: cancellationToken);
+            return result.ModifiedCount > 0;
+        }
+
         public async Task<bool> ApplyResultAsync(
             string tenantId,
             string buildId,

@@ -22,7 +22,8 @@ export type RunErrorCode =
   | "ImagePullFailed"
   | "TimedOut"
   | "SandboxStartFailed"
-  | "OutputActionFailed";
+  | "OutputActionFailed"
+  | "Undeliverable";
 
 export type InvokedByType = "Http" | "Workflow" | "Test" | "Replay" | "Schedule" | "Event";
 

@@ -47,15 +47,67 @@ namespace Blocks.FunctionRunner.Options
         [Required]
         public string BuildsDir { get; set; } = "/var/lib/blocks-runner/builds";
 
-        /// <summary>Local image store.</summary>
+        /// <summary>
+        /// The image store this runner pushes to and pulls from. A loopback address is one registry
+        /// per host; anything else is shared with every other runner pointed at it, which changes
+        /// what this process may safely delete — see <see cref="PruneRegistry"/>.
+        /// </summary>
         public string Registry { get; set; } = "127.0.0.1:5000";
+
+        /// <summary>
+        /// Whether the registry admin API is reached over TLS. Null means "decide from
+        /// <see cref="Registry"/>": plain HTTP for loopback, HTTPS for anything else, which is the
+        /// only combination either is ever deployed as. Set it to override that.
+        /// </summary>
+        public bool? RegistryTls { get; set; }
+
+        /// <summary>Username for the registry admin API. Empty for an unauthenticated one.</summary>
+        public string RegistryUsername { get; set; } = string.Empty;
+
+        /// <summary>Password for <see cref="RegistryUsername"/>. Never logged.</summary>
+        public string RegistryPassword { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Whether this runner deletes manifests from the registry when it prunes its own image
+        /// store. Null means "decide from <see cref="Registry"/>" — true for loopback, false
+        /// otherwise — which is the safe reading of both shapes.
+        /// <para>
+        /// The distinction matters because the "still in use" test is the local container list.
+        /// On a per-host registry that is the whole truth. On a shared one it is one host's view:
+        /// a run executing on another host, on an image no deployed version pins (a Test build,
+        /// say), is invisible here — and deleting its manifest would pull the image out from
+        /// under it. So on a shared registry no runner deletes by default; reclaiming blobs there
+        /// is one owner's job, either a single runner with this set to true or the registry's own
+        /// garbage collection.
+        /// </para>
+        /// </summary>
+        public bool? PruneRegistry { get; set; }
+
+        /// <summary>True when <see cref="Registry"/> names a registry private to this host.</summary>
+        public bool IsRegistryHostLocal =>
+            Registry.StartsWith("127.", StringComparison.Ordinal)
+            || Registry.StartsWith("localhost:", StringComparison.OrdinalIgnoreCase)
+            || Registry.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+            || Registry.StartsWith("[::1]", StringComparison.Ordinal);
+
+        /// <summary>The effective value of <see cref="PruneRegistry"/>.</summary>
+        public bool ShouldPruneRegistry => PruneRegistry ?? IsRegistryHostLocal;
+
+        /// <summary>The effective value of <see cref="RegistryTls"/>.</summary>
+        public bool UseRegistryTls => RegistryTls ?? !IsRegistryHostLocal;
 
         /// <summary>Base image tenant images are built FROM, pinned by digest in production.</summary>
         public string BaseImage { get; set; } = "127.0.0.1:5000/blocks/functions-node:24-v1";
 
-        /// <summary>Sandboxes admitted at once. Overflow queues; nothing is rejected.</summary>
-        [Range(1, 100)]
-        public int MaxActiveSandboxes { get; set; } = Contracts.Ceilings.DefaultHostAdmission;
+        /// <summary>
+        /// Pins how many sandboxes run at once. Null — the default — means the number is
+        /// discovered from the host instead; see <see cref="Admission.HostBudget"/>. Set it only
+        /// to override that on a host where the measurement is known to be wrong, because a
+        /// pinned value stops the controller from following the machine in either direction.
+        /// <para>Overflow queues either way; nothing is ever rejected for volume.</para>
+        /// </summary>
+        [Range(1, 1000)]
+        public int? MaxActiveSandboxes { get; set; }
 
         /// <summary>Host memory withheld from admission arithmetic, in MB.</summary>
         [Range(0, 65536)]

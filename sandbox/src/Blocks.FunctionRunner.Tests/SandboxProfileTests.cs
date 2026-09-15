@@ -31,6 +31,55 @@ namespace Blocks.FunctionRunner.Tests
             Create().HostConfig.Runtime.Should().Be("runsc");
         }
 
+        /// <summary>
+        /// The shell restatement of this profile must say the same numbers.
+        /// <para>
+        /// <c>runtime-image/sandbox-profile.sh</c> exists because the pre-runner tooling needs the
+        /// profile before there is any .NET on the host, and <c>verify/verify.sh</c> checks a real
+        /// container against it. That makes a stale value there worse than useless: it is a
+        /// verification harness asserting the wrong contract and passing. It went stale exactly
+        /// that way — 200 millicores and 300 MB against a compiled 100 and 200 — so the two are
+        /// compared here rather than by a comment asking for care.
+        /// </para>
+        /// </summary>
+        [SkippableTheory]
+        [InlineData("FN_CPUS", "0.1")]
+        [InlineData("FN_MEMORY", "200m")]
+        [InlineData("FN_PIDS", "64")]
+        [InlineData("FN_TMPFS_SIZE", "64m")]
+        [InlineData("FN_UID", "10001")]
+        public void The_shell_profile_restates_the_compiled_ceilings(string variable, string expected)
+        {
+            var path = SandboxProfileScript();
+            Skip.If(path is null, "not running from a source checkout");
+
+            // Expectations are spelled out above and cross-checked against Ceilings below, so a
+            // change to either one alone fails: the table is what verify.sh must agree with, and
+            // these assertions are what say the table is still the truth.
+            $"{Ceilings.CpuMillicores / 1000.0:0.###}".Should().Be("0.1");
+            $"{Ceilings.MemoryBytes / 1024 / 1024}m".Should().Be("200m");
+            Ceilings.PidLimit.Should().Be(64);
+            $"{Ceilings.TmpfsBytes / 1024 / 1024}m".Should().Be("64m");
+            Ceilings.SandboxUid.Should().Be(10001);
+
+            var script = File.ReadAllText(path!);
+            script.Should().Contain($": \"${{{variable}:={expected}}}\"",
+                $"runtime-image/sandbox-profile.sh must default {variable} to {expected}");
+        }
+
+        /// <summary>The shell profile, found by walking up to the sandbox root.</summary>
+        private static string? SandboxProfileScript()
+        {
+            var dir = new DirectoryInfo(AppContext.BaseDirectory);
+            while (dir is not null)
+            {
+                var candidate = Path.Combine(dir.FullName, "runtime-image", "sandbox-profile.sh");
+                if (File.Exists(candidate)) return candidate;
+                dir = dir.Parent;
+            }
+            return null;
+        }
+
         [Fact]
         public void Configuration_cannot_move_a_sandbox_off_gvisor()
         {

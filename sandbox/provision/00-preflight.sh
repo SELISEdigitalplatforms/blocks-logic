@@ -22,6 +22,21 @@ fact OS_ID "$ID"; fact OS_VERSION "$VERSION_ID"; fact OS_CODENAME "${VERSION_COD
 fact KERNEL "$(uname -r)"; fact ARCH "$(uname -m)"
 info "$ID $VERSION_ID (${VERSION_CODENAME:-?}) kernel $(uname -r) $(uname -m)"
 require "architecture is x86_64" "$([ "$(uname -m)" = x86_64 ] && echo 0 || echo 1)"
+
+# Every later script installs with apt and names Ubuntu's packages, and 70-dotnet.sh takes
+# dotnet-sdk-10.0 straight from the distro archive — which no release before 26.04 carries. A
+# host that is not this is not a supported host, and finding that out half way through phase 1
+# (after Docker and gVisor are already installed) is the worst time to find it out.
+# FN_ALLOW_UNTESTED_OS=1 downgrades both checks to warnings for an operator who has read this.
+os_ok=0
+[ "$ID" = ubuntu ] || os_ok=1
+awk -v v="${VERSION_ID:-0}" 'BEGIN{split(v,p,"."); exit !((p[1]+0)>26 || ((p[1]+0)==26 && (p[2]+0)>=4))}' || os_ok=1
+if [ "${FN_ALLOW_UNTESTED_OS:-0}" = 1 ]; then
+  [ "$os_ok" = 0 ] || warn "FN_ALLOW_UNTESTED_OS=1 — continuing on $ID ${VERSION_ID:-?}, which is not Ubuntu 26.04 or newer"
+  ok "operating system check overridden"
+else
+  require "Ubuntu 26.04 or newer (dotnet-sdk-10.0 comes from the distro archive; set FN_ALLOW_UNTESTED_OS=1 to override)" "$os_ok"
+fi
 require "kernel >= 5.10 (gVisor systrap)" \
   "$(awk 'BEGIN{split(ARGV[1],v,"."); exit !(v[1]>5 || (v[1]==5 && v[2]>=10))}' "$(uname -r)" && echo 0 || echo 1)"
 
@@ -132,6 +147,74 @@ reach "gvisor storage"  "${GVISOR_BASE_URL}/${GVISOR_RELEASE}/${GVISOR_ARCH}/${G
 reach "docker hub"      "https://registry-1.docker.io/v2/" REACH_DOCKERHUB
 reach "npm registry"    "https://registry.npmjs.org/" REACH_NPM
 reach "nuget"           "https://api.nuget.org/v3/index.json" REACH_NUGET
+
+# ------------------------------------------------------- the Blocks endpoints ----
+# The runner's whole job is to reach the Blocks Redis, and on this network that means the VPN
+# is up. Nothing here used to check it, so a VM without the VPN passed all five earlier phases
+# and failed at the very end of deploy.sh on a heartbeat — after provisioning, building and
+# installing. Checking it first is the difference between a two-minute fix and a twenty-minute
+# one. Set FN_SKIP_ENDPOINT_PROBE=1 to go ahead anyway (reconciling a host during an outage).
+step "Blocks endpoints"
+
+# A plain TCP connect. bash's /dev/tcp rather than nc, which is not installed on a minimal
+# cloud image and would make this check depend on a package this script has not installed yet.
+tcp_open() { # tcp_open <host> <port>
+  timeout 5 bash -c "exec 3<>/dev/tcp/$1/$2" 2>/dev/null
+}
+
+RUNNER_ENV=/etc/blocks-runner/runner.env
+env_line() { # env_line <key> — a value from runner.env, or empty
+  [ -f "$RUNNER_ENV" ] || return 0
+  sed -n "s/^[[:space:]]*$1=//p" "$RUNNER_ENV" 2>/dev/null | tail -1 | tr -d '"'"'"'' | tr -d '[:space:]'
+}
+
+# Explicit beats discovered: a Key Vault host keeps nothing on disk to find, so this is the
+# only way to have the check run there at all.
+PROBE_TARGET="${FN_ENDPOINT_PROBE:-}"
+PROBE_LABEL="FN_ENDPOINT_PROBE"
+
+if [ -z "$PROBE_TARGET" ] && [ -f "$RUNNER_ENV" ]; then
+  case "$(env_line BLOCKS_VAULT_TYPE)" in
+    1)
+      # StackExchange form: host:port,password=…,ssl=True — take the first element.
+      CACHE="$(env_line BlocksSecret__CacheConnectionString)"
+      PROBE_TARGET="${CACHE%%,*}"
+      PROBE_LABEL="Blocks Redis (BlocksSecret__CacheConnectionString)"
+      ;;
+    2)
+      # Nothing on disk names Redis here; the vault is what must be reachable to find it, and
+      # it sits on the same private network, so it stands in for the same question.
+      VAULT_URL="$(env_line KeyVault__KeyVaultUrl)"
+      if [ -n "$VAULT_URL" ]; then
+        VAULT_HOST="${VAULT_URL#*://}"; VAULT_HOST="${VAULT_HOST%%/*}"
+        PROBE_TARGET="${VAULT_HOST%%:*}:443"
+        PROBE_LABEL="Azure Key Vault (KeyVault__KeyVaultUrl)"
+      fi
+      ;;
+  esac
+fi
+
+fact ENDPOINT_PROBE_TARGET "${PROBE_TARGET:-none}"
+if [ "${FN_SKIP_ENDPOINT_PROBE:-0}" = 1 ]; then
+  warn "FN_SKIP_ENDPOINT_PROBE=1 — not checking that this host can reach the Blocks endpoints"
+  fact ENDPOINT_PROBE skipped
+elif [ -z "$PROBE_TARGET" ]; then
+  # A fresh host has no runner.env yet, so this is the normal first-run outcome, not a fault.
+  info "no endpoint to probe yet — set FN_ENDPOINT_PROBE=host:port to check the VPN from here"
+  fact ENDPOINT_PROBE unknown
+else
+  PROBE_HOST="${PROBE_TARGET%:*}"; PROBE_PORT="${PROBE_TARGET##*:}"
+  if [ "$PROBE_HOST" = "$PROBE_PORT" ] || [ -z "$PROBE_PORT" ]; then
+    warn "cannot read a host:port out of '$PROBE_TARGET' — not probing"
+    fact ENDPOINT_PROBE unreadable
+  elif tcp_open "$PROBE_HOST" "$PROBE_PORT"; then
+    ok "$PROBE_LABEL reachable at $PROBE_HOST:$PROBE_PORT"
+    fact ENDPOINT_PROBE "ok:$PROBE_HOST:$PROBE_PORT"
+  else
+    fact ENDPOINT_PROBE "unreachable:$PROBE_HOST:$PROBE_PORT"
+    require "$PROBE_LABEL reachable at $PROBE_HOST:$PROBE_PORT — is the VPN up? (FN_SKIP_ENDPOINT_PROBE=1 to continue anyway)" 1
+  fi
+fi
 
 # ------------------------------------------------------------------ verdict ----
 step "Verdict"

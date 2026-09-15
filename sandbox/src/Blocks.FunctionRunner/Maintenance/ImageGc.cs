@@ -79,6 +79,15 @@ namespace Blocks.FunctionRunner.Maintenance
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            // Said once, plainly: "the registry keeps filling up" and "images vanish mid-run" are
+            // the two failures this setting decides between, and neither is diagnosable from the
+            // sweep's own logs, which look identical either way.
+            _logger.LogInformation(
+                "Image GC: registry {Registry} is treated as {Scope}; manifests {Action} deleted here",
+                _options.Registry,
+                _options.IsRegistryHostLocal ? "host-local" : "shared",
+                _options.ShouldPruneRegistry ? "are" : "are not");
+
             // Not at startup: the first sweep waits, so a host that is restarting because it is
             // unhealthy does not also start deleting things.
             try
@@ -167,9 +176,20 @@ namespace Blocks.FunctionRunner.Maintenance
 
                     // Only after the daemon let go of it: if the local delete is refused because a
                     // stopped sandbox still holds it, the registry copy is what the next pull needs.
-                    foreach (var repoDigest in image.RepoDigests ?? [])
+                    //
+                    // And only where this host owns the registry. The "still in use" test above is
+                    // this host's container list, which is the whole truth for a registry private to
+                    // it and one host's view of a shared one. On a shared registry another runner
+                    // can be executing the very image being pruned here — an image no deployed
+                    // version pins, so the keep set does not protect it either — and deleting the
+                    // manifest would take it out from under that run. The local copy still goes:
+                    // reclaiming disk here is safe, it is the shared copy that is not ours to drop.
+                    if (_options.ShouldPruneRegistry)
                     {
-                        await _registry.DeleteManifestAsync(repoDigest, token).ConfigureAwait(false);
+                        foreach (var repoDigest in image.RepoDigests ?? [])
+                        {
+                            await _registry.DeleteManifestAsync(repoDigest, token).ConfigureAwait(false);
+                        }
                     }
                 }
                 catch (DockerApiException ex)
@@ -253,27 +273,49 @@ namespace Blocks.FunctionRunner.Maintenance
             return false;
         }
 
+        /// <summary>
+        /// The repository part of an image reference — no tag, no digest.
+        /// <para>
+        /// A registry address carries a port, so the tag separator is only the last <c>:</c> when
+        /// it comes after the last <c>/</c>. Splitting on the first colon instead turned
+        /// <c>127.0.0.1:5000/blocks/functions-node:24-v1</c> into <c>127.0.0.1</c>, and since every
+        /// tenant image on a host-local registry is also tagged <c>127.0.0.1:5000/…</c>, the
+        /// base-image check below then matched all of them and Image GC pruned nothing at all.
+        /// </para>
+        /// </summary>
+        internal static string RepositoryOf(string reference)
+        {
+            var at = reference.IndexOf('@', StringComparison.Ordinal);
+            var withoutDigest = at > 0 ? reference[..at] : reference;
+
+            var lastSlash = withoutDigest.LastIndexOf('/');
+            var colon = withoutDigest.LastIndexOf(':');
+            return colon > lastSlash ? withoutDigest[..colon] : withoutDigest;
+        }
+
         private bool IsBaseImage(ImagesListResponse image)
         {
             var baseImage = _options.BaseImage;
             if (string.IsNullOrWhiteSpace(baseImage)) return false;
 
             // Compare on the repository, not the full reference: the base image is pinned by
-            // digest in production and by tag locally, and both must survive.
-            var baseRepo = baseImage.Split('@')[0].Split(':')[0];
+            // digest in production and by tag locally, and both must survive. The comparison is
+            // exact rather than a prefix — `…/functions-node` must not also match a tenant
+            // repository that merely starts with the same characters.
+            var baseRepo = RepositoryOf(baseImage);
 
             if (image.RepoTags is not null)
             {
                 foreach (var tag in image.RepoTags)
                 {
-                    if (tag.StartsWith(baseRepo, StringComparison.Ordinal)) return true;
+                    if (string.Equals(RepositoryOf(tag), baseRepo, StringComparison.Ordinal)) return true;
                 }
             }
             if (image.RepoDigests is not null)
             {
                 foreach (var digest in image.RepoDigests)
                 {
-                    if (digest.StartsWith(baseRepo, StringComparison.Ordinal)) return true;
+                    if (string.Equals(RepositoryOf(digest), baseRepo, StringComparison.Ordinal)) return true;
                 }
             }
 

@@ -14,16 +14,27 @@ SHELL := /bin/bash
 
 ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 # The verification harness deliberately lives outside this repository so no test material can
-# reach a VM (see README). The default is a checkout beside blocks-logic itself: a plain sibling
-# of sandbox/ would now be *inside* the repository, which is exactly what must not happen.
-# Point FUNCTION_RUNNER_TESTS somewhere else if yours is elsewhere:
+# reach a VM (see README). Where "outside" is depends on how the operator laid out their
+# checkouts, and the single hardcoded guess this used to carry — a sibling of blocks-logic —
+# was wrong on the machine it was written on, so `make verify` failed with a path nobody had.
+# Look in the places it is actually kept, in order, and take the first that is really there.
+FUNCTION_RUNNER_TESTS_CANDIDATES := \
+  $(ROOT)/../../../FunctionRunnerTests \
+  $(ROOT)/../../../../FunctionRunnerTests \
+  $(HOME)/FunctionRunnerTests
+FUNCTION_RUNNER_TESTS_FOUND := $(firstword \
+  $(patsubst %/verify/verify.sh,%,$(wildcard $(addsuffix /verify/verify.sh,$(FUNCTION_RUNNER_TESTS_CANDIDATES)))))
+
+# Override when yours is somewhere else again:
 #   make verify FUNCTION_RUNNER_TESTS=/path/to/FunctionRunnerTests
-FUNCTION_RUNNER_TESTS ?= $(ROOT)/../../../FunctionRunnerTests
+# With nothing found, fall back to the first candidate so need_harness below can name a path
+# rather than an empty string.
+FUNCTION_RUNNER_TESTS ?= $(or $(FUNCTION_RUNNER_TESTS_FOUND),$(firstword $(FUNCTION_RUNNER_TESTS_CANDIDATES)))
 VERIFY := $(FUNCTION_RUNNER_TESTS)/verify/verify.sh
 
 .PHONY: all preflight docker gvisor network runner-user registry dotnet logging \
         verify verify-host verify-sandbox verify-network \
-        facts firewall-show help
+        facts firewall-show harness help
 
 # `all` provisions the host and stops there: it must not depend on the test harness being
 # checked out next to it. Run `make verify` separately, or `../deploy.sh` for the lot.
@@ -53,14 +64,18 @@ verify-network: ; @$(call need_harness) $(VERIFY) network
 define need_harness
 test -x $(VERIFY) || { \
   echo "verification harness not found at $(VERIFY)"; \
-  echo "clone FunctionRunnerTests beside blocks-logic, or pass FUNCTION_RUNNER_TESTS=<path>"; \
+  echo "looked in:"; \
+  for d in $(FUNCTION_RUNNER_TESTS_CANDIDATES); do echo "  $$d"; done; \
+  echo "clone FunctionRunnerTests into one of those, or pass FUNCTION_RUNNER_TESTS=<path>"; \
   exit 1; };
 endef
 
+harness:       ; @echo "$(FUNCTION_RUNNER_TESTS)"
 facts:         ; @cat $(ROOT)/.facts
 firewall-show: ; @/usr/local/sbin/blocks-fn-firewall show
 
 help:
 	@echo "targets: preflight docker gvisor network runner-user registry dotnet"
 	@echo "         logging verify verify-{host,sandbox,network}"
-	@echo "         facts firewall-show"
+	@echo "         facts firewall-show harness"
+	@echo "harness: $(FUNCTION_RUNNER_TESTS)"

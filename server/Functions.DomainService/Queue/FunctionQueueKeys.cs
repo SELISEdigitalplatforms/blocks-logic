@@ -61,6 +61,14 @@ namespace Functions.DomainService.Queue
         /// <summary>Sorted set of runs awaiting a retry, scored by the epoch second they are due.</summary>
         public const string RetryQueue = "functions:retries";
 
+        /// <summary>
+        /// Prefix of the marker written when a dead-lettered job has been applied to Mongo. The
+        /// dead stream keeps its entries for forensics rather than deleting them on
+        /// acknowledgement, so a reclaim or a second Worker can re-deliver one that was already
+        /// applied; this makes the second pass a no-op instead of a duplicate audit record.
+        /// </summary>
+        public static string DeadApplied(string entryId) => $"function:dead-applied:{entryId}";
+
         // ---- time to live -------------------------------------------------------
         // This TTL is effectively "how long a Worker or runner may be down without losing work".
         // Redis holds the payload; Mongo holds the record. If the payload expires before a
@@ -72,6 +80,13 @@ namespace Functions.DomainService.Queue
         public static readonly TimeSpan RunTtl = TimeSpan.FromHours(6);
         public static readonly TimeSpan SourceTtl = TimeSpan.FromHours(1);
         public static readonly TimeSpan CancelTtl = TimeSpan.FromSeconds(120);
+
+        /// <summary>
+        /// How long a <see cref="DeadApplied"/> marker lives. Comfortably longer than the dead
+        /// stream's own retention window is not needed — only longer than the window in which an
+        /// unacknowledged entry can still be reclaimed, which is minutes.
+        /// </summary>
+        public static readonly TimeSpan DeadAppliedTtl = TimeSpan.FromHours(24);
 
         // ---- wire status strings ------------------------------------------------
         /// <summary>
@@ -102,6 +117,13 @@ namespace Functions.DomainService.Queue
             public const string ImagePullFailed = "IMAGE_PULL_FAILED";
             public const string TimedOutCode = "TIMED_OUT";
             public const string SandboxStartFailed = "SANDBOX_START_FAILED";
+
+            /// <summary>
+            /// Not sent by the runner — determined here, by
+            /// <see cref="Consumers.FunctionDeadLetterConsumer"/>, for a job the runner moved to
+            /// <see cref="DeadStream"/> without ever executing it.
+            /// </summary>
+            public const string Undeliverable = "UNDELIVERABLE";
 
             public const string BuildSucceeded = "SUCCEEDED";
             public const string BuildFailed = "FAILED";

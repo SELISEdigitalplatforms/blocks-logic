@@ -27,16 +27,28 @@ those files.
 | `deploy/` | the systemd unit (installed by `make install`) and an env-file reference |
 
 Verification and the sample functions live **outside this repository**, in `FunctionRunnerTests`,
-so no test material can reach a VM. Point `FUNCTION_RUNNER_TESTS` at your checkout; the default is
-a directory of that name beside `blocks-logic` itself, because a plain sibling of `sandbox/` would
-now be inside the repository, which is the one place it must not be.
+so no test material can reach a VM — a plain sibling of `sandbox/` would now be inside the
+repository, which is the one place it must not be. `make -C provision` looks for it beside
+`blocks-logic`, then beside the repository root, then in `$HOME`, and takes the first it finds;
+`make -C provision harness` prints which. Set `FUNCTION_RUNNER_TESTS` for anywhere else.
 
 ## Requirements
 
-x86_64, kernel ≥ 5.10, ≥ 2 CPUs, ≥ 4 GB RAM, ≥ 20 GB free on `/var`, cgroup v2, `nft`, root.
-Outbound access to the Ubuntu archive, `storage.googleapis.com/gvisor`, Docker Hub, the npm
-registry and `api.nuget.org`. `provision/00-preflight.sh` enforces all of it and refuses to let
+Ubuntu 26.04 or newer, x86_64, kernel ≥ 5.10, ≥ 2 CPUs, ≥ 4 GB RAM, ≥ 20 GB free on `/var`,
+cgroup v2, `nft`, root. Outbound access to the Ubuntu archive, `storage.googleapis.com/gvisor`,
+Docker Hub, the npm registry and `api.nuget.org`, and — because the runner's only job is to reach
+the Blocks Redis — the VPN. `provision/00-preflight.sh` enforces all of it and refuses to let
 anything else run if a check fails.
+
+The distribution is not incidental: every provisioning script installs with `apt` and names
+Ubuntu's packages, and `70-dotnet.sh` takes `dotnet-sdk-10.0` from the distro archive, which no
+earlier release carries. Two escape hatches, both deliberate and both loud:
+
+| Variable | Effect |
+|---|---|
+| `FN_ALLOW_UNTESTED_OS=1` | warn instead of refusing on anything but Ubuntu ≥ 26.04 |
+| `FN_ENDPOINT_PROBE=host:port` | probe this instead of what `runner.env` implies — the only way to check the VPN on a Key Vault host, which keeps no endpoint on disk |
+| `FN_SKIP_ENDPOINT_PROBE=1` | do not check the Blocks endpoints at all (reconciling a host during an outage) |
 
 ## Deploy
 
@@ -62,6 +74,23 @@ credentials on the VM. On a fresh host, phase 1 creates it from the template in
 `provision/40-runner-user.sh` and phase 3 then stops the deploy until you have filled it in — deliberately, because a
 runner started without real credentials does not crash, it sits in a retry loop looking
 healthy. Fill it in and re-run the same command.
+
+That stop is what makes a fresh host a two-pass deploy. When the credentials come from a
+configuration system rather than a person, hand them over and it is one:
+
+```bash
+sudo ./deploy.sh --env-file /run/blocks-runner.env
+```
+
+Every `KEY=VALUE` in that file is merged into `runner.env` before the gate reads it — replacing
+the commented placeholder where the template ships one, appending where it does not, and leaving
+every other line alone. Values are never echoed, only key names. The file must be `chmod 600`,
+because it holds exactly what `runner.env` holds and is usually left on the box afterwards.
+
+`RUNNER__BaseImage` is the one line `deploy.sh` writes on its own, immediately after phase 2, and
+it writes the *digest* of the image it just published rather than the tag — a tag moves under the
+next `build.sh`, and what a tenant image is `FROM` must not. Point it at a registry this host does
+not push to and `deploy.sh` leaves it alone and says so.
 
 Phase 6 proves the runner actually works rather than merely starting: the unit is active
 and its pid stable (not crash-looping), the egress firewall is loaded, the registry

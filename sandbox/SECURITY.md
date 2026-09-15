@@ -11,9 +11,9 @@ the runner, not by obscurity.
 | Kernel isolation | **gVisor (`runsc`) is mandatory**, for builds as well as runs. If it is missing the runner refuses all work and never falls back to `runc`. The runtime is compiled in, not read from configuration: a sandbox is created with the constant, and a host configured for anything else claims no work at all |
 | Privileges | `--cap-drop=ALL`, `no-new-privileges`, non-root `uid 10001` |
 | Filesystem | read-only root; `/tmp` is a `noexec,nosuid,nodev` tmpfs capped at 64 MB |
-| Memory | `--memory` = `--memory-swap`, so there is no swap to escape into |
+| Memory | 200 MB, with `--memory` = `--memory-swap`, so there is no swap to escape into |
 | Processes | PID ceiling 64 — note this counts **threads**, so a function gets far fewer than 64 processes |
-| CPU / time | 200 millicores ceiling; a hard kill at `timeout + 2 s`, because the in-process deadline cannot preempt a synchronous busy loop |
+| CPU / time | 100 millicores, a fixed allocation rather than a ceiling a function may choose under; 90 s wall clock with a hard kill at `timeout + 2 s`, because the in-process deadline cannot preempt a synchronous busy loop |
 | Mounts | exactly two: the read-only execution envelope and `resolv.conf`. **The container runtime socket is never mounted** |
 | Environment | an allowlist, not a filter — nothing is inherited from the host |
 | Network | public internet only. Denied: RFC1918, loopback, link-local, CGNAT, this VM's address **and its whole public /24**, plus IPv6 equivalents. Docker's embedded DNS does not work under gVisor, so a fixed `resolv.conf` is mounted instead — tenant lookups never touch the host resolver |

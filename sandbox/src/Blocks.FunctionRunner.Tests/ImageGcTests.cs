@@ -74,6 +74,40 @@ namespace Blocks.FunctionRunner.Tests
                 .WithMessage("*refusing to prune*");
         }
 
+        /// <summary>
+        /// The base image must survive every sweep, and nothing else may be mistaken for it.
+        /// <para>
+        /// This was wrong in a way that disabled Image GC entirely rather than loudly: the
+        /// repository was taken as everything before the first colon, which for the registry
+        /// address <c>127.0.0.1:5000/…</c> is <c>127.0.0.1</c> — a prefix every tenant image on a
+        /// host-local registry also carries. Every image looked like the base image, so nothing
+        /// was ever pruned and the disk filled up instead.
+        /// </para>
+        /// </summary>
+        [Theory]
+        // A registry port is not a tag separator.
+        [InlineData("127.0.0.1:5000/blocks/functions-node:24-v1", "127.0.0.1:5000/blocks/functions-node")]
+        [InlineData("127.0.0.1:5000/blocks/functions-node", "127.0.0.1:5000/blocks/functions-node")]
+        // A digest pin is stripped, tag or no tag.
+        [InlineData("127.0.0.1:5000/blocks/functions-node@sha256:abc", "127.0.0.1:5000/blocks/functions-node")]
+        [InlineData("registry.internal:5000/blocks/functions-node:24-v1@sha256:abc", "registry.internal:5000/blocks/functions-node")]
+        // And a reference with no registry at all still parses.
+        [InlineData("blocks-functions-node:24-v1", "blocks-functions-node")]
+        public void The_repository_of_a_reference_ignores_the_registry_port(string reference, string expected)
+        {
+            ImageGc.RepositoryOf(reference).Should().Be(expected);
+        }
+
+        [Theory]
+        // The tenant images that used to be mistaken for the base image, and so never pruned.
+        [InlineData("127.0.0.1:5000/fn/abc123:latest")]
+        [InlineData("127.0.0.1:5000/blocks/functions-node-something:1")]
+        public void A_tenant_image_is_not_the_base_image(string tenantReference)
+        {
+            var baseRepo = ImageGc.RepositoryOf("127.0.0.1:5000/blocks/functions-node:24-v1");
+            ImageGc.RepositoryOf(tenantReference).Should().NotBe(baseRepo);
+        }
+
         /// <summary>Deleting from the registry is as destructive as deleting locally; a sweep that
         /// refuses to prune must not reach this either.</summary>
         private sealed class RefusingRegistry : Blocks.FunctionRunner.Maintenance.IRegistryClient

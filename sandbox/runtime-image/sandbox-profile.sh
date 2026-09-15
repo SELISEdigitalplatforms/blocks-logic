@@ -9,8 +9,13 @@
 
 : "${FN_NETWORK:=blocks-fn-egress}"
 : "${FN_RESOLV_CONF:=/etc/blocks-runner/resolv.conf}"
-: "${FN_CPUS:=0.2}"                  # 200 millicores
-: "${FN_MEMORY:=300m}"               # 300 MB, swap equal
+# These restate Blocks.FunctionRunner.Contracts.Ceilings. They are deliberately not read from
+# it — this file has to work before any .NET exists on the host — which is exactly why they
+# went stale once, at 200 millicores and 300 MB against the compiled 100 and 200.
+# SandboxProfileTests now compares the two, so a change to Ceilings fails the suite until it
+# is made here too.
+: "${FN_CPUS:=0.1}"                  # 100 millicores
+: "${FN_MEMORY:=200m}"               # 200 MB, swap equal
 : "${FN_PIDS:=64}"
 : "${FN_TMPFS_SIZE:=64m}"
 : "${FN_UID:=10001}"

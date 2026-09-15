@@ -52,6 +52,10 @@ namespace Blocks.FunctionRunner.Utils
             services.AddSingleton<IDatabase>(sp =>
                 sp.GetRequiredService<Blocks.Genesis.ICacheClient>().CacheDatabase());
 
+            // Admission sizes itself from the host: the signals are what it reads, the footprint
+            // is what it has measured runs to cost, and the budget is the loop over the two.
+            services.AddSingleton<IHostSignals, ProcHostSignals>();
+            services.AddSingleton<SandboxFootprint>();
             services.AddSingleton<HostBudget>();
             // Typed client: Image GC deletes the registry's copy of an image as well as the
             // daemon's, so the two stores cannot drift apart.

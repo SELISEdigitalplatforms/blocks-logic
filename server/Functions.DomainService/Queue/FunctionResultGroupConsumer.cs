@@ -34,13 +34,23 @@ namespace Functions.DomainService.Queue
         private readonly ILogger _logger;
         private readonly string _stream;
         private readonly string _consumer;
+        private readonly bool _deleteOnAcknowledge;
 
-        public FunctionResultGroupConsumer(IDatabase db, ILogger logger, string stream, string consumer)
+        /// <param name="deleteOnAcknowledge">
+        /// Whether acknowledging also deletes the entry. True for the working result streams,
+        /// where the entry serves nothing once it is in Mongo and deleting is what keeps them
+        /// bounded. False for <c>functions:dead</c>, which exists to be read afterwards: those
+        /// entries are the forensic record of work that was lost, and
+        /// <see cref="Consumers.FunctionStreamTrimmer"/> ages them out on its own schedule.
+        /// </param>
+        public FunctionResultGroupConsumer(
+            IDatabase db, ILogger logger, string stream, string consumer, bool deleteOnAcknowledge = true)
         {
             _db = db;
             _logger = logger;
             _stream = stream;
             _consumer = consumer;
+            _deleteOnAcknowledge = deleteOnAcknowledge;
         }
 
         public async Task EnsureGroupAsync()
@@ -107,7 +117,10 @@ namespace Functions.DomainService.Queue
         public async Task AcknowledgeAsync(RedisValue id)
         {
             await _db.StreamAcknowledgeAsync(_stream, FunctionQueueKeys.LogicWorkerGroup, id);
-            await _db.StreamDeleteAsync(_stream, [id]);
+            if (_deleteOnAcknowledge)
+            {
+                await _db.StreamDeleteAsync(_stream, [id]);
+            }
         }
 
         /// <summary>How many times this entry has been delivered, across all Worker instances.</summary>

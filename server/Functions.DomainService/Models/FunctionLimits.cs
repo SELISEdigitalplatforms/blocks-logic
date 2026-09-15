@@ -17,7 +17,7 @@ namespace Functions.DomainService.Models
         public int MemoryMb { get; set; } = Ceiling.DefaultMemoryMb;
         public int TimeoutSeconds { get; set; } = Ceiling.DefaultTimeoutSeconds;
 
-        /// <summary>Concurrent runs of this function, 1–5. A scheduling limit, never a rejection.</summary>
+        /// <summary>Concurrent runs of this function, 1–25. A scheduling limit, never a rejection.</summary>
         public int Concurrency { get; set; } = Ceiling.DefaultConcurrency;
 
         /// <summary>
@@ -50,7 +50,12 @@ namespace Functions.DomainService.Models
             public const int LogLines = 10_000;
 
             public const int MinConcurrency = 1;
-            public const int MaxConcurrency = 5;
+
+            /// <summary>
+            /// Mirrors the runner's <c>Ceilings.MaxFunctionConcurrency</c>, which carries the
+            /// reasoning for the number. Runs beyond it queue; nothing is refused.
+            /// </summary>
+            public const int MaxConcurrency = 25;
 
             /// <summary>Defaults for a newly created function — deliberately below the ceilings.</summary>
             public const int DefaultCpuMillicores = 100;

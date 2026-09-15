@@ -273,6 +273,49 @@ namespace Functions.DomainService.Repositories
             return result.MatchedCount > 0;
         }
 
+        /// <summary>
+        /// The terminal statuses, as a value the Mongo filter can use. Kept beside the update
+        /// rather than derived from <c>FunctionWireMapping.IsTerminal</c> because a filter needs
+        /// the set, not a predicate — but the two must list the same statuses, and
+        /// <c>FunctionDeadLetterConsumerTests</c> asserts that they do.
+        /// </summary>
+        internal static readonly RunStatus[] TerminalStatuses =
+        [
+            RunStatus.Succeeded, RunStatus.Failed, RunStatus.TimedOut,
+            RunStatus.Cancelled, RunStatus.ResourceExceeded, RunStatus.OutputFailed,
+        ];
+
+        public async Task<bool> FailIfNotTerminalAsync(
+            string tenantId,
+            string runId,
+            RunErrorCode errorCode,
+            string errorMessage,
+            DateTime completedAt,
+            CancellationToken cancellationToken = default)
+        {
+            // One conditional update, not read-then-write: the status is both the thing being
+            // checked and the thing being set, so anything less than an atomic compare-and-set
+            // can lose a real result to a stale dead letter.
+            var filter = Builders<FunctionRunEntity>.Filter.And(
+                Builders<FunctionRunEntity>.Filter.Eq(r => r.ItemId, runId),
+                Builders<FunctionRunEntity>.Filter.Nin(r => r.Status, TerminalStatuses));
+
+            var update = Builders<FunctionRunEntity>.Update
+                .Set(r => r.Status, RunStatus.Failed)
+                .Set(r => r.ErrorCode, errorCode)
+                .Set(r => r.ErrorMessage, errorMessage)
+                .Set(r => r.CompletedAt, completedAt)
+                .Set(r => r.LastUpdatedDate, DateTime.UtcNow);
+
+            var result = await Collection(tenantId).UpdateOneAsync(
+                filter, update, cancellationToken: cancellationToken);
+
+            // ModifiedCount, not MatchedCount: a run that was already failed with this exact
+            // message matches the filter and changes nothing, and reporting that as "this call
+            // failed it" would write a duplicate audit record on every redelivery.
+            return result.ModifiedCount > 0;
+        }
+
         public Task ApplyStatusOnlyAsync(
             string tenantId, string runId, RunStatus status, CancellationToken cancellationToken = default)
         {

@@ -39,6 +39,23 @@ namespace Functions.DomainService.Repositories
 
         Task CreateAsync(string tenantId, FunctionBuildEntity build, CancellationToken cancellationToken = default);
 
+        /// <summary>
+        /// Fails a build that never ran, but only while it is still QUEUED or BUILDING.
+        /// <para>
+        /// The dead-letter path, and conditional for the same reason the run one is: an entry can
+        /// be dead-lettered after its build actually finished and reported, and overwriting a
+        /// SUCCEEDED build with a failure would throw away a perfectly good image digest and send
+        /// the next Test into a needless rebuild.
+        /// </para>
+        /// </summary>
+        /// <returns>True when this call is what marked the build failed.</returns>
+        Task<bool> FailIfNotTerminalAsync(
+            string tenantId,
+            string buildId,
+            string errorMessage,
+            DateTime completedAt,
+            CancellationToken cancellationToken = default);
+
         Task<bool> ApplyResultAsync(
             string tenantId,
             string buildId,

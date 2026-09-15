@@ -70,11 +70,14 @@ namespace Functions.DomainService.Utils
             return services;
         }
 
-        /// <summary>Worker only: the two consumers that apply results, plus the retry sweep.</summary>
+        /// <summary>Worker only: the consumers that apply results and dead letters, plus the sweeps.</summary>
         public static IServiceCollection AddFunctionsWorkerServices(this IServiceCollection services)
         {
             services.AddHostedService<FunctionResultConsumer>();
             services.AddHostedService<FunctionBuildResultConsumer>();
+            // The other end of the runner's dead letter. Without it a job the runner could never
+            // deliver leaves its record QUEUED for ever and nothing in the product says why.
+            services.AddHostedService<FunctionDeadLetterConsumer>();
             services.AddHostedService<FunctionRetryScheduler>();
             // Retention for the streams themselves. Reading an entry does not remove it, and
             // nothing else trims them, so without this the streams are the one unbounded thing

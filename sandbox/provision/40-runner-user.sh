@@ -66,13 +66,26 @@ else
 # Read by systemd (EnvironmentFile=). Contains the only credentials on this VM.
 # Owned root:$RUNNER_GROUP, mode 0640. Never bind-mounted into a sandbox.
 
+# Every key deploy/runner.env.example documents appears below, commented out where it
+# has a working default. The two files drifted once, silently, so they are now compared
+# by Blocks.FunctionRunner.Tests.RunnerEnvTemplateTests — add a key to one and that test
+# fails until it is added to the other.
+
 # --- Genesis bootstrap -------------------------------------------------------
 # 1 = read secrets from the environment, 2 = Azure Key Vault.
 BLOCKS_VAULT_TYPE=1
 DOTNET_ENVIRONMENT=Production
+# BlocksSecret__ServiceName=blocks-function-runner
 # BlocksSecret__CacheConnectionString=
 # BlocksSecret__DatabaseConnectionString=
 # BlocksSecret__RootDatabaseName=
+# BlocksSecret__LogConnectionString=
+# BlocksSecret__LogDatabaseName=
+#
+# Genesis validates delegated access at startup even for a worker that never calls IAM.
+# Point this at IAM's internal address, never the public host. deploy.sh warns when it is
+# unset, because a runner that cannot reach IAM fails in a way that reads like a Redis fault.
+# BLOCKS_IAM_BASE_URL=http://blocks-iam.internal
 
 # --- Runner identity and paths ----------------------------------------------
 RUNNER__RunnerId=$(hostname -s)
@@ -82,10 +95,37 @@ RUNNER__Registry=127.0.0.1:5000
 RUNNER__Network=${FN_NETWORK:-blocks-fn-egress}
 RUNNER__ResolvConf=${FN_RESOLV_CONF:-$CONF_DIR/resolv.conf}
 RUNNER__Runtime=runsc
+#
+# Written by deploy.sh after it publishes the runtime image, pinned to that image's digest.
+# Set it by hand only when this host builds FROM a registry deploy.sh did not push to.
+# RUNNER__BaseImage=
+#
+# A shared registry — anything but a loopback address — is reached over TLS and needs its own
+# credentials for the admin API image GC deletes through. Pruning a shared registry is one
+# owner's job; read deploy/runner.env.example before turning it on.
+# RUNNER__RegistryTls=
+# RUNNER__RegistryUsername=
+# RUNNER__RegistryPassword=
+# RUNNER__PruneRegistry=
 
 # --- Admission ---------------------------------------------------------------
-RUNNER__MaxActiveSandboxes=10
+# The sandbox count is measured from this host, so it is deliberately not written here.
+# See deploy/runner.env.example for how to pin it, and why you probably should not.
+# RUNNER__MaxActiveSandboxes=
 RUNNER__ReservedHostMemoryMb=2048
+
+# --- Work this runner consumes -----------------------------------------------
+# Both default to true. Split runs and builds across hosts once build volume is real: a
+# build's CPU and memory pressure shrinks run admission on the same host while it lasts.
+# RUNNER__ProcessRuns=true
+# RUNNER__ProcessBuilds=true
+# RUNNER__LeaseMs=30000
+# RUNNER__HeartbeatMs=5000
+# RUNNER__MaxAttempts=3
+#
+# The host's veto over a function's allowScripts opt-in. Off by default: the dependency
+# install runs inside a gVisor sandbox like any other tenant code.
+# RUNNER__DenyPrivateScriptsOnBuild=false
 
 # --- Egress ------------------------------------------------------------------
 # Informational: the enforced list lives in $CONF_DIR/deny-cidrs and is compiled

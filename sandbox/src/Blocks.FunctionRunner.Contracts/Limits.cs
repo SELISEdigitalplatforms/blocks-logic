@@ -35,13 +35,23 @@ namespace Blocks.FunctionRunner.Contracts
         public const long LogBytes = 1024 * 1024;
         public const int LogLines = 10_000;
 
-        /// <summary>Per-function concurrent runs: a range of 1–5, defaulting to 2.</summary>
+        /// <summary>
+        /// Per-function concurrent runs: a range of 1–25, defaulting to 2.
+        /// <para>
+        /// The ceiling was 5, which quietly capped one function at about 375 runs a minute at the
+        /// 800 ms a typical run takes — a throughput limit dressed up as a safety limit. It is
+        /// neither a memory nor a CPU bound: those are <see cref="HostBudget"/>'s job and it
+        /// enforces them across every function on the host at once, so a higher number here only
+        /// lets one function use capacity that would otherwise sit idle. Runs over the limit queue.
+        /// </para>
+        /// <para>
+        /// It is mirrored by <c>FunctionLimits.Ceiling.MaxConcurrency</c> in the control plane and
+        /// <c>DEFAULT_LIMITS_OPTIONS.maxConcurrency</c> in the client; the three move together.
+        /// </para>
+        /// </summary>
         public const int MinFunctionConcurrency = 1;
-        public const int MaxFunctionConcurrency = 5;
+        public const int MaxFunctionConcurrency = 25;
         public const int DefaultFunctionConcurrency = 2;
-
-        /// <summary>Sandboxes admitted at once on the 4-vCPU reference VM.</summary>
-        public const int DefaultHostAdmission = 10;
 
         /// <summary>uid and gid the function process runs as inside the sandbox.</summary>
         public const int SandboxUid = 10001;
