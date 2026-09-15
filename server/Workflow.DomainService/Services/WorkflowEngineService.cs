@@ -9,6 +9,8 @@ using Workflow.DomainService.Nodes;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using System.Diagnostics.CodeAnalysis;
+using System.Text.RegularExpressions;
+using Proxy.DomainService.Services;
 
 namespace Workflow.DomainService.Services
 {
@@ -21,13 +23,20 @@ namespace Workflow.DomainService.Services
 
         private readonly ILogger<WorkflowEngineService> _logger;
         private readonly IWorkflowNotificationService _workflowNotificationService;
+        private readonly IProxyVariableResolver _variableResolver;
+
+        /// <summary>Matches a {{$VAR.name}} configuration-variable token in a node's raw parameters JSON.
+        /// Same token syntax and charset as Proxy.DomainService.Utils.ProxyVarRef.</summary>
+        private static readonly Regex VarRefPattern =
+            new(@"\{\{\$VAR\.([A-Za-z0-9._:-]+)\}\}", RegexOptions.None, TimeSpan.FromSeconds(2));
 
         public WorkflowEngineService(
             IWorkflowExecutionRepository workflowExecutionRepository,
             IEnumerable<INodeExecutor> nodeExecutors,
             IMessageClient messageClient,
             ILogger<WorkflowEngineService> logger,
-            IWorkflowNotificationService workflowNotificationService
+            IWorkflowNotificationService workflowNotificationService,
+            IProxyVariableResolver variableResolver
             )
         {
             _workflowExecutionRepository = workflowExecutionRepository;
@@ -35,6 +44,7 @@ namespace Workflow.DomainService.Services
             _messageClient = messageClient;
             _logger = logger;
             _workflowNotificationService = workflowNotificationService;
+            _variableResolver = variableResolver;
         }
 
         /// <summary>
@@ -203,6 +213,12 @@ namespace Workflow.DomainService.Services
             var ancestorOutputs = await ResolveAncestorNodeOutputsAsync(execution, node.Id);
             _logger.LogInformation("Node {NodeId} Resolved {AncestorCount} ancestor node outputs.", node.Id, ancestorOutputs.Count);
 
+            // Resolve {{$VAR.name}} configuration variables referenced anywhere in this node's parameters,
+            // once per run. Fail-closed: ProxyVariableResolutionException propagates out of this method,
+            // caught by ExecuteNodeAsync's try/catch, so the node fails naming the unresolved variable(s)
+            // instead of running with a blank value silently substituted.
+            var variables = await ResolveNodeVariablesAsync(node.Parameters, execution.TenantId);
+
             // Build execution context
             return new NodeExecutionContext
             {
@@ -216,7 +232,28 @@ namespace Workflow.DomainService.Services
                 AncestorNodeOutputs = ancestorOutputs,
                 IterationCount = inputItems.Count,
                 HasUpstream = execution.WorkflowSnapshot.Edges.Any(e => e.Target == node.Id),
+                Variables = variables,
             };
+        }
+
+        /// <summary>
+        /// Scans a node's raw parameters for {{$VAR.name}} tokens and batch-resolves every distinct name to
+        /// its Blocks Secrets value via <see cref="_variableResolver"/>. Returns an empty map (no Key Vault
+        /// call) when the node's parameters reference no $VAR token.
+        /// </summary>
+        private async Task<IReadOnlyDictionary<string, string>> ResolveNodeVariablesAsync(BsonDocument parameters, string tenantId)
+        {
+            var names = VarRefPattern.Matches(parameters.ToJson())
+                .Select(m => m.Groups[1].Value)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
+            if (names.Count == 0)
+            {
+                return new Dictionary<string, string>();
+            }
+
+            return await _variableResolver.ResolveAsync(names, tenantId);
         }
 
         /// <summary>
