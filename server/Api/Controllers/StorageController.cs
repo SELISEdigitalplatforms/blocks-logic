@@ -63,6 +63,19 @@ namespace BlocksTemplate.Api.Controllers
             return await _storageDriverService.GetPerSignedUrlForUploadAsync(request);
         }
 
+        /// <summary>
+        /// <c>POST</c> — compatibility route for clients that cannot call the blocks-data API
+        /// directly. Delegates to the storage driver, which forwards to blocks-data's own
+        /// verification pipeline; this route does not duplicate any completion/verification logic.
+        /// </summary>
+        [HttpPost]
+        [Authorize]
+        public async Task<CompleteUploadResponse> CompleteUpload([FromBody] CompleteUploadRequest request)
+        {
+            return await _storageDriverService.CompleteUploadAsync(request);
+        }
+
+        /// <summary><c>GET</c> — a pre-signed download URL for one file.</summary>
         [HttpGet]
         [Authorize]
         public async Task<FileResponse?> GetFile(
