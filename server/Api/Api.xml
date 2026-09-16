@@ -248,6 +248,13 @@
         <member name="M:BlocksTemplate.Api.Controllers.StorageController.GetPreSignedUrlForUpload(DomainService.Storage.GetPreSignedUrlForUploadRequest)">
             <summary><c>POST</c> — a pre-signed URL the client uploads to directly.</summary>
         </member>
+        <member name="M:BlocksTemplate.Api.Controllers.StorageController.CompleteUpload(DomainService.Storage.CompleteUploadRequest)">
+            <summary>
+            <c>POST</c> — compatibility route for clients that cannot call the blocks-data API
+            directly. Delegates to the storage driver, which forwards to blocks-data's own
+            verification pipeline; this route does not duplicate any completion/verification logic.
+            </summary>
+        </member>
         <member name="M:BlocksTemplate.Api.Controllers.StorageController.GetFile(DomainService.Storage.GetFileRequest)">
             <summary><c>GET</c> — a pre-signed download URL for one file.</summary>
         </member>
