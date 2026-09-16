@@ -3,7 +3,7 @@ name: sandbox-ci
 on:
   push:
     branches: [feat/functions]
-    paths: [sandbox/**]
+    paths: [sandbox/**, .github/workflows/sandbox-ci.yml]
   workflow_dispatch: {}
 
 concurrency:
