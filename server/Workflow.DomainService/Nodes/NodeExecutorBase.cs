@@ -3,6 +3,8 @@ using MongoDB.Bson;
 using MongoDB.Bson.IO;
 using Newtonsoft.Json.Linq;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.DependencyInjection;
+using Proxy.DomainService.Services;
 
 namespace Workflow.DomainService.Nodes
 {
@@ -12,6 +14,11 @@ namespace Workflow.DomainService.Nodes
         public abstract string Version { get; }
 
         private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(2);
+
+        // Mirrors Proxy.DomainService.Utils.ProxyVarRef's syntax so a {{$VAR.name}} token means the same
+        // thing everywhere in Blocks: the literal "{{$VAR." prefix, a name in [A-Za-z0-9._:-], then "}}".
+        private static readonly Regex VariableReference =
+            new(@"\{\{\$VAR\.([A-Za-z0-9._:-]+)\}\}", RegexOptions.None, RegexTimeout);
 
         // Saved node parameters can carry an explicit JSON null for a field that used to be, or was
         // never, set (e.g. an older workflow saved before a "haveQuery" toggle existed). Newtonsoft
@@ -60,6 +67,32 @@ namespace Workflow.DomainService.Nodes
         public async Task<NodeExecutionResult> RunAsync(NodeExecutionContext context)
         {
             var json = context.Parameters.ToJson();
+
+            var variableNames = VariableReference.Matches(json)
+                .Select(m => m.Groups[1].Value)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
+            if (variableNames.Count > 0)
+            {
+                var resolver = context.ServiceProvider?.GetService<IProxyVariableResolver>();
+                if (resolver is null)
+                {
+                    return NodeExecutionResult.Failed(
+                        "This node references {{$VAR.name}} configuration variable(s), but no variable resolver is available in this environment.");
+                }
+
+                try
+                {
+                    context.ResolvedVariables = await resolver.ResolveAsync(variableNames, context.TenantId, context.CancellationToken);
+                }
+                catch (ProxyVariableResolutionException ex)
+                {
+                    return NodeExecutionResult.Failed(
+                        $"Could not resolve configuration variable(s): {string.Join(", ", ex.Names)}.");
+                }
+            }
+
             var parameters = Newtonsoft.Json.JsonConvert.DeserializeObject<TParameters>(json, ParameterDeserializationSettings);
             return await ExecuteAsync(context, parameters);
         }
@@ -107,7 +140,22 @@ namespace Workflow.DomainService.Nodes
             if (expr.StartsWith("$context"))
                 return ResolveContextExpression(expr, context);
 
+            if (expr.StartsWith("$VAR."))
+                return ResolveVarExpression(expr, context);
+
             return "";
+        }
+
+        /// <summary>
+        /// Looks up a {{$VAR.name}} configuration variable in <see cref="NodeExecutionContext.ResolvedVariables"/>,
+        /// which <see cref="RunAsync"/> populated (via <see cref="IProxyVariableResolver"/>) before this node's
+        /// parameters were deserialized. Never resolves on demand: every name in the node's parameters was
+        /// already resolved once, up front, or the node execution failed before reaching here.
+        /// </summary>
+        private static string ResolveVarExpression(string expr, NodeExecutionContext context)
+        {
+            var name = expr.Substring("$VAR.".Length);
+            return context.ResolvedVariables.TryGetValue(name, out var value) ? value : "";
         }
 
         private static string ResolveNodeReference(string expr, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
