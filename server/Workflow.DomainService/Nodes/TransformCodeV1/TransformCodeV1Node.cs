@@ -75,7 +75,7 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
             {
                 if (stopwatch.Elapsed > TimeSpan.FromSeconds(MaxTotalDurationSeconds))
                 {
-                    return NodeExecutionResult.Failed("Script execution exceeded max duration.");
+                    return NodeExecutionResult.Failed("Script execution exceeded max duration.", outputItems);
                 }
                 var current = inputItems[i];
                 var item = ToJObject(current.Data.Output ?? new BsonDocument(), current.Id);
@@ -89,7 +89,8 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
                 }
                 catch (Exception ex)
                 {
-                    return NodeExecutionResult.Failed(FormatScriptError(ex));
+                    AppendErrorOutputItem(outputItems, current, parameters.ToBsonDocument(), FormatScriptError(ex));
+                    continue;
                 }
 
                 var normalized = NormalizeResult(result);
@@ -98,7 +99,7 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
                 {
                     if (outputItems.Count + 1 > MaxOutputItems)
                     {
-                        return NodeExecutionResult.Failed("Too many output items.");
+                        return NodeExecutionResult.Failed("Too many output items.", outputItems);
                     }
 
                     var (outputToken, _) = ExtractOutputAndSourceId(token);
@@ -106,7 +107,7 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
                     var serializationError = SerializePayload(outputToken, ref serializedOutputBytes, out var bsonValue);
                     if (serializationError is not null)
                     {
-                        return NodeExecutionResult.Failed(serializationError);
+                        return NodeExecutionResult.Failed(serializationError, outputItems);
                     }
 
                     outputItems.Add(new NodeOutputItem
@@ -128,6 +129,7 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
 
         private NodeExecutionResult RunOnceForAllItems(NodeExecutionContext context, TransformCodeV1Parameters parameters, string script)
         {
+            var outputItems = new List<NodeOutputItem>();
             var engine = CreateEngine(context);
             JsValue result;
             try
@@ -136,23 +138,24 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
             }
             catch (Exception ex)
             {
-                return NodeExecutionResult.Failed(FormatScriptError(ex));
+                var errorItem = TryBuildErrorOutputItem(null, parameters.ToBsonDocument(), ex);
+                if (errorItem != null) outputItems.Add(errorItem);
+                return NodeExecutionResult.Failed(FormatScriptError(ex), outputItems);
             }
 
             var normalized = NormalizeResult(result);
             if (normalized.Count > MaxOutputItems)
             {
-                return NodeExecutionResult.Failed("Too many output items.");
+                return NodeExecutionResult.Failed("Too many output items.", outputItems);
             }
 
-            var outputItems = new List<NodeOutputItem>();
             long serializedOutputBytes = 0;
 
             foreach (var token in normalized)
             {
                 if (outputItems.Count + 1 > MaxOutputItems)
                 {
-                    return NodeExecutionResult.Failed("Too many output items.");
+                    return NodeExecutionResult.Failed("Too many output items.", outputItems);
                 }
 
                 var (outputToken, sourceId) = ExtractOutputAndSourceId(token);
@@ -160,7 +163,7 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
                 var serializationError = SerializePayload(outputToken, ref serializedOutputBytes, out var bsonValue);
                 if (serializationError is not null)
                 {
-                    return NodeExecutionResult.Failed(serializationError);
+                    return NodeExecutionResult.Failed(serializationError, outputItems);
                 }
 
                 var parentItem = !string.IsNullOrEmpty(sourceId)

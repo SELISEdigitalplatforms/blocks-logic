@@ -21,12 +21,12 @@ namespace Workflow.DomainService.Nodes.ActionAIAgentV1
 
         protected override async Task<NodeExecutionResult> ExecuteAsync(NodeExecutionContext context, ActionAIAgentV1Parameters? nodeparameters)
         {
-            try
-            {
-                var parameters = nodeparameters ?? new ActionAIAgentV1Parameters();
-                var outputItems = new List<NodeOutputItem>();
+            var parameters = nodeparameters ?? new ActionAIAgentV1Parameters();
+            var outputItems = new List<NodeOutputItem>();
 
-                for (int i = 0; i < context.IterationCount; i++)
+            for (int i = 0; i < context.IterationCount; i++)
+            {
+                try
                 {
                     var input = parseExpression<string>(parameters.Input, context.InputItems[i], context) ?? "";
                     var response = await CallAIAgent(parameters.ApiBaseUrl, parameters.WidgetId, context.TenantId, input);
@@ -43,13 +43,13 @@ namespace Workflow.DomainService.Nodes.ActionAIAgentV1
                         ParentItemIds = new List<string>() { context.InputItems[i].Id },
                     });
                 }
+                catch (Exception ex)
+                {
+                    AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
+                }
+            }
 
-                return NodeExecutionResult.Successful(outputItems);
-            }
-            catch (Exception ex)
-            {
-                return NodeExecutionResult.Failed(ex.Message);
-            }
+            return NodeExecutionResult.Successful(outputItems);
         }
 
         public static Task<bool> ValidateConfigurationAsync(JsonDocument parameters)

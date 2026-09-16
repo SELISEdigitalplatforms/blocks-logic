@@ -24,6 +24,63 @@ namespace Workflow.DomainService.Nodes
 
         protected abstract Task<NodeExecutionResult> ExecuteAsync(NodeExecutionContext context, TParameters? parameters);
 
+        /// <summary>
+        /// Builds a synthetic output item describing a caught exception, for inclusion in
+        /// NodeExecutionResult.Failed alongside any items already produced. Never throws itself.
+        /// </summary>
+        protected static NodeOutputItem? TryBuildErrorOutputItem(
+            WorkflowItemExecutionEntity? inputItem, BsonValue parameters, Exception ex, string branch = "source")
+        {
+            try
+            {
+                return new NodeOutputItem
+                {
+                    Data = new NodeOutputItemData
+                    {
+                        Input = inputItem?.Data.Output ?? new BsonDocument(),
+                        Output = new BsonDocument
+                        {
+                            { "error", true },
+                            { "message", ex.Message ?? ex.GetType().Name },
+                        },
+                        Parameters = parameters ?? new BsonDocument(),
+                    },
+                    Branch = branch,
+                    ParentItemIds = !string.IsNullOrEmpty(inputItem?.Id)
+                        ? new List<string> { inputItem!.Id }
+                        : new List<string>(),
+                };
+            }
+            catch
+            {
+                return null; // best-effort; never let error-item construction mask the real failure
+            }
+        }
+
+        protected static NodeOutputItem? TryBuildErrorOutputItem(
+            WorkflowItemExecutionEntity? inputItem, BsonValue parameters, string message, string branch = "source")
+            => TryBuildErrorOutputItem(inputItem, parameters, new Exception(message), branch);
+
+        protected static void AppendErrorOutputItem(
+            List<NodeOutputItem> outputItems,
+            WorkflowItemExecutionEntity? inputItem,
+            BsonValue parameters,
+            Exception ex)
+        {
+            var item = TryBuildErrorOutputItem(inputItem, parameters, ex);
+            if (item != null) outputItems.Add(item);
+        }
+
+        protected static void AppendErrorOutputItem(
+            List<NodeOutputItem> outputItems,
+            WorkflowItemExecutionEntity? inputItem,
+            BsonValue parameters,
+            string message)
+        {
+            var item = TryBuildErrorOutputItem(inputItem, parameters, message);
+            if (item != null) outputItems.Add(item);
+        }
+
         public async Task<NodeExecutionResult> RunAsync(NodeExecutionContext context)
         {
             var json = context.Parameters.ToJson();

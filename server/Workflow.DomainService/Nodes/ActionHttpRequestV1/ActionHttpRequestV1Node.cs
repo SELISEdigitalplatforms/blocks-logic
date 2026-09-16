@@ -37,28 +37,31 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
 
         protected override async Task<NodeExecutionResult> ExecuteAsync(NodeExecutionContext context, ActionHttpRequestV1Parameters? nodeparameters)
         {
-            try
-            {
-                var parameters = nodeparameters ?? new ActionHttpRequestV1Parameters();
-                var outputItems = new List<NodeOutputItem>();
+            var parameters = nodeparameters ?? new ActionHttpRequestV1Parameters();
+            var outputItems = new List<NodeOutputItem>();
 
-                for (int i = 0; i < context.IterationCount; i++)
+            for (int i = 0; i < context.IterationCount; i++)
+            {
+                try
                 {
                     var (url, httpMethod, headers, bodyContent, contentType) = PrepareRequest(parameters, context.InputItems[i], context);
                     if (url == null)
-                        return NodeExecutionResult.Failed(bodyContent);
+                    {
+                        AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), bodyContent);
+                        continue;
+                    }
 
                     await ApplyAuthenticationAsync(parameters, headers, context.TenantId);
 
                     var responseBody = await SendHttpRequestAsync(httpMethod, url, headers, bodyContent, contentType);
                     BuildOutputItems(outputItems, responseBody, context, parameters, i);
                 }
-                return NodeExecutionResult.Successful(outputItems);
+                catch (Exception ex)
+                {
+                    AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
+                }
             }
-            catch (Exception ex)
-            {
-                return NodeExecutionResult.Failed(ex.Message);
-            }
+            return NodeExecutionResult.Successful(outputItems);
         }
 
         /// <summary>
