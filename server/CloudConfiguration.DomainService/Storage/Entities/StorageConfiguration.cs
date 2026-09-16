@@ -21,5 +21,26 @@ namespace CloudConfiguration.DomainService.Storage.Entities
         public string SftpSecretKey { get; set; }
 
         #endregion
+
+        #region Phase1UploadSecurity
+
+        /// <summary>Lifetime of a generated upload URL, in seconds. Null/missing resolves to blocks-data's documented default (600).</summary>
+        public int? UploadUrlExpirySeconds { get; set; }
+
+        /// <summary>Lifetime of a generated download URL, in seconds. Null/missing resolves to blocks-data's documented default (300).</summary>
+        public int? DownloadUrlExpirySeconds { get; set; }
+
+        /// <summary>Maximum accepted upload size, in bytes. Null/missing resolves to blocks-data's documented default (5 MiB).</summary>
+        public long? MaxFileSizeInBytes { get; set; }
+
+        /// <summary>
+        /// Access modifiers ("Public"/"Private") for which upload completion (quarantine + synchronous
+        /// verification) is required. Stored as plain strings — not blocks-data's <c>AccessModifier</c> enum,
+        /// which this project does not reference — because blocks-data reads this same document and
+        /// deserializes the field as a string-represented enum list.
+        /// </summary>
+        public List<string> UploadCompletionRequiredFor { get; set; }
+
+        #endregion
     }
 }
