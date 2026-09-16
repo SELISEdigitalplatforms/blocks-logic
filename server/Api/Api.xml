@@ -41,46 +41,6 @@
             Get schedules.
             </summary>
         </member>
-        <!-- Badly formed XML comment ignored for member "T:BlocksTemplate.Api.Controllers.SecretController" -->
-        <member name="M:BlocksTemplate.Api.Controllers.SecretController.#ctor(Common.InternalService.Secret.Services.ISecretCatalogService)">
-            <summary>Takes the secret catalog service.</summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.SecretController.GetAll(Common.InternalService.Secret.GetSecretsRequest)">
-            <summary>
-            The tenant's platform secrets: <c>id</c> / <c>name</c> / <c>tags</c> only, never a value and never
-            the Blocks Secrets type. Optionally narrowed by <c>name</c>, <c>tag</c> and <c>search</c>. The
-            tenant and caller identity come from the ambient <c>BlocksContext</c> (this is an
-            <c>[Authorize]</c> route).
-            </summary>
-        </member>
-        <member name="T:BlocksTemplate.Api.Controllers.StorageController">
-            <summary>
-            Storage-provider configuration plus the pre-signed URL flow for uploads and downloads, routed as
-            <c>/api/Storage/{action}</c>. File bytes never pass through this API — callers get a URL and talk
-            to the provider directly.
-            </summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.StorageController.#ctor(CloudConfiguration.DomainService.Shared.Services.IConfigurationService,StorageDriver.IStorageDriverService)">
-            <summary>Takes the configuration service and the storage driver.</summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.StorageController.Save(CloudConfiguration.DomainService.Storage.RequestModel.SaveStorageConfigurationRequest)">
-            <summary><c>POST</c> — creates or updates a storage-provider configuration.</summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.StorageController.Gets(CloudConfiguration.DomainService.Storage.RequestModel.GetStorageConfigurationsRequest)">
-            <summary>
-            <c>GET</c> — every storage configuration for the tenant. The request object is accepted for
-            signature symmetry and is deliberately unused.
-            </summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.StorageController.Get(CloudConfiguration.DomainService.Storage.RequestModel.GetStorageConfigurationRequest)">
-            <summary><c>GET</c> — one storage configuration.</summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.StorageController.Delete(CloudConfiguration.DomainService.Storage.RequestModel.DeleteStorageConfigurationRequest)">
-            <summary><c>DELETE</c> — removes a storage configuration.</summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.StorageController.GetPreSignedUrlForUpload(DomainService.Storage.GetPreSignedUrlForUploadRequest)">
-            <summary><c>POST</c> — a pre-signed URL the client uploads to directly.</summary>
-        </member>
         <member name="M:BlocksTemplate.Api.Controllers.StorageController.CompleteUpload(DomainService.Storage.CompleteUploadRequest)">
             <summary>
             <c>POST</c> — compatibility route for clients that cannot call the blocks-data API
@@ -90,12 +50,6 @@
         </member>
         <member name="M:BlocksTemplate.Api.Controllers.StorageController.GetFile(DomainService.Storage.GetFileRequest)">
             <summary><c>GET</c> — a pre-signed download URL for one file.</summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.StorageController.GetFiles(DomainService.Storage.GetFilesRequest)">
-            <summary><c>POST</c> — pre-signed download URLs for several files in one call.</summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.StorageController.DeleteFile(DomainService.Storage.DeleteFileRequest)">
-            <summary><c>DELETE</c> via <c>POST</c> — removes a file from the provider.</summary>
         </member>
         <member name="T:BlocksTemplate.Api.GlobalApiRoutePrefixConvention">
             <summary>Prepends a segment (e.g. <c>api</c>) to every controller’s attribute route template.</summary>
