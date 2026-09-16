@@ -47,252 +47,260 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
             NodeExecutionContext context,
             ActionDataV1Parameters? nodeparameters)
         {
-            try
+            var parameters = nodeparameters ?? new ActionDataV1Parameters();
+            var outputItems = new List<NodeOutputItem>();
+
+            // Resolve missing parameters from execution context and configuration
+
+            if (string.IsNullOrEmpty(parameters.ApiBaseUrl))
             {
-                var parameters = nodeparameters ?? new ActionDataV1Parameters();
+                parameters.ApiBaseUrl = _configuration["ApiBaseUrl"] ?? "";
+                if (!string.IsNullOrEmpty(parameters.ApiBaseUrl))
+                    _logger.LogInformation("ActionDataV1Node: Resolved ApiBaseUrl from configuration: {ApiBaseUrl}", parameters.ApiBaseUrl);
+                else
+                    _logger.LogWarning("ActionDataV1Node: ApiBaseUrl is empty. Set it in node parameters or configure 'ApiBaseUrl' in appsettings.");
+            }
 
-                // Resolve missing parameters from execution context and configuration
-
-                if (string.IsNullOrEmpty(parameters.ApiBaseUrl))
-                {
-                    parameters.ApiBaseUrl = _configuration["ApiBaseUrl"] ?? "";
-                    if (!string.IsNullOrEmpty(parameters.ApiBaseUrl))
-                        _logger.LogInformation("ActionDataV1Node: Resolved ApiBaseUrl from configuration: {ApiBaseUrl}", parameters.ApiBaseUrl);
-                    else
-                        _logger.LogWarning("ActionDataV1Node: ApiBaseUrl is empty. Set it in node parameters or configure 'ApiBaseUrl' in appsettings.");
-                }
-
-
-                List<NodeOutputItem> outputItems;
-
-                if (parameters.RawQueryMode)
-                {
-                    outputItems = await ExecuteRawQueryAsync(context, parameters);
-                    return NodeExecutionResult.Successful(outputItems);
-                }
-
-                switch (parameters.ActionType.ToLower())
-                {
-                    case "getdata":
-                        outputItems = await ExecuteGetDataAsync(context, parameters);
-                        break;
-                    case "insertdata":
-                        outputItems = await ExecuteInsertDataAsync(context, parameters);
-                        break;
-                    case "updatedata":
-                        outputItems = await ExecuteUpdateDataAsync(context, parameters);
-                        break;
-                    case "deletedata":
-                        outputItems = await ExecuteDeleteDataAsync(context, parameters);
-                        break;
-                    default:
-                        return NodeExecutionResult.Failed($"Unknown action type: {parameters.ActionType}");
-                }
-
+            if (parameters.RawQueryMode)
+            {
+                await ExecuteRawQueryAsync(context, parameters, outputItems);
                 return NodeExecutionResult.Successful(outputItems);
             }
-            catch (Exception ex)
+
+            switch (parameters.ActionType.ToLower())
             {
-                _logger.LogError(ex, "ActionDataV1Node failed for {ActionType} on {CollectionName}",
-                    nodeparameters?.ActionType, nodeparameters?.CollectionName);
-                return NodeExecutionResult.Failed(ex.Message);
+                case "getdata":
+                    await ExecuteGetDataAsync(context, parameters, outputItems);
+                    break;
+                case "insertdata":
+                    await ExecuteInsertDataAsync(context, parameters, outputItems);
+                    break;
+                case "updatedata":
+                    await ExecuteUpdateDataAsync(context, parameters, outputItems);
+                    break;
+                case "deletedata":
+                    await ExecuteDeleteDataAsync(context, parameters, outputItems);
+                    break;
+                default:
+                    return NodeExecutionResult.Failed($"Unknown action type: {parameters.ActionType}", outputItems);
             }
+
+            return NodeExecutionResult.Successful(outputItems);
         }
 
 
         /// <summary>
         /// Get Data: HTTP query to UDS GraphQL gateway
         /// </summary>
-        private async Task<List<NodeOutputItem>> ExecuteGetDataAsync(
-            NodeExecutionContext context, ActionDataV1Parameters parameters)
+        private async Task ExecuteGetDataAsync(
+            NodeExecutionContext context, ActionDataV1Parameters parameters, List<NodeOutputItem> outputItems)
         {
-            var outputItems = new List<NodeOutputItem>();
-
-            // Build GraphQL query with field selection
-            var whereClause = BuildWhereClause(parameters, context.InputItems[0], context);
-            var fieldsList = BuildGetFieldsList(parameters);
-            var graphqlQuery = string.IsNullOrEmpty(whereClause)
-                ? $"{{ get{parameters.SchemaName}s {{ items {{ {fieldsList} }} totalCount }} }}"
-                : $"{{ get{parameters.SchemaName}s(where: {{ {whereClause} }}) {{ items {{ {fieldsList} }} totalCount }} }}";
-
-            var response = await SendGraphQLRequestAsync(parameters, graphqlQuery);
-            response.EnsureSuccessStatusCode();
-            var responseString = await response.Content.ReadAsStringAsync();
-            var responseJson = JsonDocument.Parse(responseString).RootElement;
-
-            // Extract items from response
-            if (responseJson.TryGetProperty("data", out var data))
+            try
             {
-                var queryKey = $"get{parameters.SchemaName}s";
-                if (data.TryGetProperty(queryKey, out var queryResult) &&
-                    queryResult.TryGetProperty("items", out var items) &&
-                    items.ValueKind == JsonValueKind.Array)
+                // Build GraphQL query with field selection
+                var whereClause = BuildWhereClause(parameters, context.InputItems[0], context);
+                var fieldsList = BuildGetFieldsList(parameters);
+                var graphqlQuery = string.IsNullOrEmpty(whereClause)
+                    ? $"{{ get{parameters.SchemaName}s {{ items {{ {fieldsList} }} totalCount }} }}"
+                    : $"{{ get{parameters.SchemaName}s(where: {{ {whereClause} }}) {{ items {{ {fieldsList} }} totalCount }} }}";
+
+                var response = await SendGraphQLRequestAsync(parameters, graphqlQuery);
+                response.EnsureSuccessStatusCode();
+                var responseString = await response.Content.ReadAsStringAsync();
+                var responseJson = JsonDocument.Parse(responseString).RootElement;
+
+                // Extract items from response
+                if (responseJson.TryGetProperty("data", out var data))
                 {
-                    foreach (var item in items.EnumerateArray())
+                    var queryKey = $"get{parameters.SchemaName}s";
+                    if (data.TryGetProperty(queryKey, out var queryResult) &&
+                        queryResult.TryGetProperty("items", out var items) &&
+                        items.ValueKind == JsonValueKind.Array)
                     {
-                        var bsonDoc = BsonDocument.Parse(item.GetRawText());
-                        outputItems.Add(new NodeOutputItem
+                        foreach (var item in items.EnumerateArray())
                         {
-                            Data = new NodeOutputItemData
+                            var bsonDoc = BsonDocument.Parse(item.GetRawText());
+                            outputItems.Add(new NodeOutputItem
                             {
-                                Input = context.InputItems.Count > 0 ? context.InputItems[0].Data.Input : new BsonDocument(),
-                                Output = bsonDoc,
-                                Parameters = parameters.ToBsonDocument(),
-                            },
-                            Branch = SourceBranch,
-                            ParentItemIds = context.InputItems.Count > 0
-                                ? new List<string> { context.InputItems[0].Id }
-                                : null
-                        });
+                                Data = new NodeOutputItemData
+                                {
+                                    Input = context.InputItems.Count > 0 ? context.InputItems[0].Data.Input : new BsonDocument(),
+                                    Output = bsonDoc,
+                                    Parameters = parameters.ToBsonDocument(),
+                                },
+                                Branch = SourceBranch,
+                                ParentItemIds = context.InputItems.Count > 0
+                                    ? new List<string> { context.InputItems[0].Id }
+                                    : null
+                            });
+                        }
                     }
                 }
-            }
 
-            if (outputItems.Count == 0)
-            {
-                outputItems.Add(new NodeOutputItem
+                if (outputItems.Count == 0)
                 {
-                    Data = new NodeOutputItemData
+                    outputItems.Add(new NodeOutputItem
                     {
-                        Input = context.InputItems.Count > 0 ? context.InputItems[0].Data.Input : new BsonDocument(),
-                        Output = BsonDocument.Parse(responseString),
-                        Parameters = parameters.ToBsonDocument(),
-                    },
-                    Branch = SourceBranch,
-                    ParentItemIds = context.InputItems.Count > 0
-                        ? new List<string> { context.InputItems[0].Id }
-                        : null
-                });
+                        Data = new NodeOutputItemData
+                        {
+                            Input = context.InputItems.Count > 0 ? context.InputItems[0].Data.Input : new BsonDocument(),
+                            Output = BsonDocument.Parse(responseString),
+                            Parameters = parameters.ToBsonDocument(),
+                        },
+                        Branch = SourceBranch,
+                        ParentItemIds = context.InputItems.Count > 0
+                            ? new List<string> { context.InputItems[0].Id }
+                            : null
+                    });
+                }
             }
-
-            return outputItems;
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "ActionDataV1Node GetData failed on {CollectionName}", parameters.CollectionName);
+                AppendErrorOutputItem(outputItems, context.InputItems.FirstOrDefault(), parameters.ToBsonDocument(), ex);
+            }
         }
 
         /// <summary>
         /// Insert Data: HTTP mutation to UDS GraphQL gateway
         /// </summary>
-        private async Task<List<NodeOutputItem>> ExecuteInsertDataAsync(
-            NodeExecutionContext context, ActionDataV1Parameters parameters)
+        private async Task ExecuteInsertDataAsync(
+            NodeExecutionContext context, ActionDataV1Parameters parameters, List<NodeOutputItem> outputItems)
         {
-            var outputItems = new List<NodeOutputItem>();
 
             for (int i = 0; i < context.IterationCount; i++)
             {
-                var data = BuildDataDocument(parameters, context.InputItems[i], context);
-                var inputFields = BuildGraphQLInputFields(data);
-                var graphqlQuery = $"mutation {{ insert{parameters.SchemaName}(input: {{ {inputFields} }}) {{ acknowledged totalImpactedData itemId }} }}";
-
-                var response = await SendGraphQLRequestAsync(parameters, graphqlQuery);
-                response.EnsureSuccessStatusCode();
-                var responseString = await response.Content.ReadAsStringAsync();
-                var responseJson = ParseMutationResponse(responseString, $"insert{parameters.SchemaName}");
-
-                outputItems.Add(new NodeOutputItem
+                try
                 {
-                    Data = new NodeOutputItemData
-                    {
-                        Input = context.InputItems[i].Data.Input,
-                        Output = new BsonDocument
-                        {
-                            { "action", "insertData" },
-                            { "collection", parameters.CollectionName },
-                            { "status", responseJson.Acknowledged ? "success" : "failed" },
-                            { "itemId", responseJson.ItemId ?? string.Empty },
-                            { "data", data }
-                        },
-                        Parameters = parameters.ToBsonDocument(),
-                    },
-                    Branch = SourceBranch,
-                    ParentItemIds = new List<string> { context.InputItems[i].Id }
-                });
-            }
+                    var data = BuildDataDocument(parameters, context.InputItems[i], context);
+                    var inputFields = BuildGraphQLInputFields(data);
+                    var graphqlQuery = $"mutation {{ insert{parameters.SchemaName}(input: {{ {inputFields} }}) {{ acknowledged totalImpactedData itemId }} }}";
 
-            return outputItems;
+                    var response = await SendGraphQLRequestAsync(parameters, graphqlQuery);
+                    response.EnsureSuccessStatusCode();
+                    var responseString = await response.Content.ReadAsStringAsync();
+                    var responseJson = ParseMutationResponse(responseString, $"insert{parameters.SchemaName}");
+
+                    outputItems.Add(new NodeOutputItem
+                    {
+                        Data = new NodeOutputItemData
+                        {
+                            Input = context.InputItems[i].Data.Input,
+                            Output = new BsonDocument
+                            {
+                                { "action", "insertData" },
+                                { "collection", parameters.CollectionName },
+                                { "status", responseJson.Acknowledged ? "success" : "failed" },
+                                { "itemId", responseJson.ItemId ?? string.Empty },
+                                { "data", data }
+                            },
+                            Parameters = parameters.ToBsonDocument(),
+                        },
+                        Branch = SourceBranch,
+                        ParentItemIds = new List<string> { context.InputItems[i].Id }
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "ActionDataV1Node InsertData failed on {CollectionName}", parameters.CollectionName);
+                    AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
+                }
+            }
         }
 
         /// <summary>
         /// Update Data: HTTP mutation to UDS GraphQL gateway
         /// </summary>
-        private async Task<List<NodeOutputItem>> ExecuteUpdateDataAsync(
-            NodeExecutionContext context, ActionDataV1Parameters parameters)
+        private async Task ExecuteUpdateDataAsync(
+            NodeExecutionContext context, ActionDataV1Parameters parameters, List<NodeOutputItem> outputItems)
         {
-            var outputItems = new List<NodeOutputItem>();
 
             for (int i = 0; i < context.IterationCount; i++)
             {
-                var whereClause = BuildWhereClause(parameters, context.InputItems[i], context);
-                var data = BuildDataDocument(parameters, context.InputItems[i], context);
-                var inputFields = BuildGraphQLInputFields(data);
-                var graphqlQuery = $"mutation {{ update{parameters.SchemaName}(where: {{ {whereClause} }}, input: {{ {inputFields} }}) {{ acknowledged totalImpactedData itemId }} }}";
-
-                var response = await SendGraphQLRequestAsync(parameters, graphqlQuery);
-                response.EnsureSuccessStatusCode();
-                var responseString = await response.Content.ReadAsStringAsync();
-                var responseJson = ParseMutationResponse(responseString, $"update{parameters.SchemaName}");
-
-                outputItems.Add(new NodeOutputItem
+                try
                 {
-                    Data = new NodeOutputItemData
-                    {
-                        Input = context.InputItems[i].Data.Input,
-                        Output = new BsonDocument
-                        {
-                            { "action", "updateData" },
-                            { "collection", parameters.CollectionName },
-                            { "status", responseJson.Acknowledged ? "success" : "failed" },
-                            { "itemId", responseJson.ItemId ?? string.Empty },
-                            { "where", whereClause },
-                            { "data", data }
-                        },
-                        Parameters = parameters.ToBsonDocument(),
-                    },
-                    Branch = SourceBranch,
-                    ParentItemIds = new List<string> { context.InputItems[i].Id }
-                });
-            }
+                    var whereClause = BuildWhereClause(parameters, context.InputItems[i], context);
+                    var data = BuildDataDocument(parameters, context.InputItems[i], context);
+                    var inputFields = BuildGraphQLInputFields(data);
+                    var graphqlQuery = $"mutation {{ update{parameters.SchemaName}(where: {{ {whereClause} }}, input: {{ {inputFields} }}) {{ acknowledged totalImpactedData itemId }} }}";
 
-            return outputItems;
+                    var response = await SendGraphQLRequestAsync(parameters, graphqlQuery);
+                    response.EnsureSuccessStatusCode();
+                    var responseString = await response.Content.ReadAsStringAsync();
+                    var responseJson = ParseMutationResponse(responseString, $"update{parameters.SchemaName}");
+
+                    outputItems.Add(new NodeOutputItem
+                    {
+                        Data = new NodeOutputItemData
+                        {
+                            Input = context.InputItems[i].Data.Input,
+                            Output = new BsonDocument
+                            {
+                                { "action", "updateData" },
+                                { "collection", parameters.CollectionName },
+                                { "status", responseJson.Acknowledged ? "success" : "failed" },
+                                { "itemId", responseJson.ItemId ?? string.Empty },
+                                { "where", whereClause },
+                                { "data", data }
+                            },
+                            Parameters = parameters.ToBsonDocument(),
+                        },
+                        Branch = SourceBranch,
+                        ParentItemIds = new List<string> { context.InputItems[i].Id }
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "ActionDataV1Node UpdateData failed on {CollectionName}", parameters.CollectionName);
+                    AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
+                }
+            }
         }
 
         /// <summary>
         /// Delete Data: HTTP mutation to UDS GraphQL gateway
         /// </summary>
-        private async Task<List<NodeOutputItem>> ExecuteDeleteDataAsync(
-            NodeExecutionContext context, ActionDataV1Parameters parameters)
+        private async Task ExecuteDeleteDataAsync(
+            NodeExecutionContext context, ActionDataV1Parameters parameters, List<NodeOutputItem> outputItems)
         {
-            var outputItems = new List<NodeOutputItem>();
 
             for (int i = 0; i < context.IterationCount; i++)
             {
-                var whereClause = BuildWhereClause(parameters, context.InputItems[i], context);
-                var graphqlQuery = $"mutation {{ delete{parameters.SchemaName}(where: {{ {whereClause} }}) {{ acknowledged totalImpactedData itemId message }} }}";
-
-                var response = await SendGraphQLRequestAsync(parameters, graphqlQuery);
-                response.EnsureSuccessStatusCode();
-                var responseString = await response.Content.ReadAsStringAsync();
-                var responseJson = ParseMutationResponse(responseString, $"delete{parameters.SchemaName}");
-
-                outputItems.Add(new NodeOutputItem
+                try
                 {
-                    Data = new NodeOutputItemData
-                    {
-                        Input = context.InputItems[i].Data.Input,
-                        Output = new BsonDocument
-                        {
-                            { "action", "deleteData" },
-                            { "collection", parameters.CollectionName },
-                            { "status", responseJson.Acknowledged ? "success" : "failed" },
-                            { "itemId", responseJson.ItemId ?? string.Empty },
-                            { "message", responseJson.Message ?? string.Empty },
-                        },
-                        Parameters = parameters.ToBsonDocument(),
-                    },
-                    Branch = SourceBranch,
-                    ParentItemIds = new List<string> { context.InputItems[i].Id }
-                });
-            }
+                    var whereClause = BuildWhereClause(parameters, context.InputItems[i], context);
+                    var graphqlQuery = $"mutation {{ delete{parameters.SchemaName}(where: {{ {whereClause} }}) {{ acknowledged totalImpactedData itemId message }} }}";
 
-            return outputItems;
+                    var response = await SendGraphQLRequestAsync(parameters, graphqlQuery);
+                    response.EnsureSuccessStatusCode();
+                    var responseString = await response.Content.ReadAsStringAsync();
+                    var responseJson = ParseMutationResponse(responseString, $"delete{parameters.SchemaName}");
+
+                    outputItems.Add(new NodeOutputItem
+                    {
+                        Data = new NodeOutputItemData
+                        {
+                            Input = context.InputItems[i].Data.Input,
+                            Output = new BsonDocument
+                            {
+                                { "action", "deleteData" },
+                                { "collection", parameters.CollectionName },
+                                { "status", responseJson.Acknowledged ? "success" : "failed" },
+                                { "itemId", responseJson.ItemId ?? string.Empty },
+                                { "message", responseJson.Message ?? string.Empty },
+                            },
+                            Parameters = parameters.ToBsonDocument(),
+                        },
+                        Branch = SourceBranch,
+                        ParentItemIds = new List<string> { context.InputItems[i].Id }
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "ActionDataV1Node DeleteData failed on {CollectionName}", parameters.CollectionName);
+                    AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
+                }
+            }
         }
 
         /// <summary>
@@ -300,48 +308,53 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
         /// Runs once per input item, resolving {{$json...}}/{{$node...}}/{{$context...}} placeholders
         /// embedded in RawQuery against that item before sending.
         /// </summary>
-        private async Task<List<NodeOutputItem>> ExecuteRawQueryAsync(
-            NodeExecutionContext context, ActionDataV1Parameters parameters)
+        private async Task ExecuteRawQueryAsync(
+            NodeExecutionContext context, ActionDataV1Parameters parameters, List<NodeOutputItem> outputItems)
         {
-            var outputItems = new List<NodeOutputItem>();
 
             for (int i = 0; i < context.IterationCount; i++)
             {
-                var resolvedQuery = parseExpression<string>(parameters.RawQuery, context.InputItems[i], context)
-                    ?? parameters.RawQuery;
-
-                var response = await SendGraphQLRequestAsync(parameters, resolvedQuery);
-                response.EnsureSuccessStatusCode();
-                var responseString = await response.Content.ReadAsStringAsync();
-                var responseJson = JsonDocument.Parse(responseString).RootElement;
-
-                if (responseJson.TryGetProperty("errors", out var errors) &&
-                    errors.ValueKind == JsonValueKind.Array && errors.GetArrayLength() > 0)
+                try
                 {
-                    var messages = errors.EnumerateArray()
-                        .Select(e => e.TryGetProperty("message", out var m) ? m.GetString() : null)
-                        .Where(m => !string.IsNullOrEmpty(m));
-                    throw new InvalidOperationException($"GraphQL error: {string.Join("; ", messages)}");
-                }
+                    var resolvedQuery = parseExpression<string>(parameters.RawQuery, context.InputItems[i], context)
+                        ?? parameters.RawQuery;
 
-                var outputDoc = responseJson.TryGetProperty("data", out var data)
-                    ? BsonDocument.Parse(data.GetRawText())
-                    : BsonDocument.Parse(responseString);
+                    var response = await SendGraphQLRequestAsync(parameters, resolvedQuery);
+                    response.EnsureSuccessStatusCode();
+                    var responseString = await response.Content.ReadAsStringAsync();
+                    var responseJson = JsonDocument.Parse(responseString).RootElement;
 
-                outputItems.Add(new NodeOutputItem
-                {
-                    Data = new NodeOutputItemData
+                    if (responseJson.TryGetProperty("errors", out var errors) &&
+                        errors.ValueKind == JsonValueKind.Array && errors.GetArrayLength() > 0)
                     {
-                        Input = context.InputItems[i].Data.Input,
-                        Output = outputDoc,
-                        Parameters = parameters.ToBsonDocument(),
-                    },
-                    Branch = SourceBranch,
-                    ParentItemIds = new List<string> { context.InputItems[i].Id }
-                });
-            }
+                        var messages = errors.EnumerateArray()
+                            .Select(e => e.TryGetProperty("message", out var m) ? m.GetString() : null)
+                            .Where(m => !string.IsNullOrEmpty(m));
+                        throw new InvalidOperationException($"GraphQL error: {string.Join("; ", messages)}");
+                    }
 
-            return outputItems;
+                    var outputDoc = responseJson.TryGetProperty("data", out var data)
+                        ? BsonDocument.Parse(data.GetRawText())
+                        : BsonDocument.Parse(responseString);
+
+                    outputItems.Add(new NodeOutputItem
+                    {
+                        Data = new NodeOutputItemData
+                        {
+                            Input = context.InputItems[i].Data.Input,
+                            Output = outputDoc,
+                            Parameters = parameters.ToBsonDocument(),
+                        },
+                        Branch = SourceBranch,
+                        ParentItemIds = new List<string> { context.InputItems[i].Id }
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "ActionDataV1Node RawQuery failed on {CollectionName}", parameters.CollectionName);
+                    AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
+                }
+            }
         }
 
         #region Helpers

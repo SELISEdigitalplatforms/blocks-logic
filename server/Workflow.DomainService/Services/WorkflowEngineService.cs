@@ -84,9 +84,10 @@ namespace Workflow.DomainService.Services
             // much as the executor itself throwing — must go through FailNodeExecutionAsync. Otherwise the
             // row is left "Running" forever with nothing to ever mark it Failed (this used to be the case
             // for everything built in the old PrepareNodeForExecutionAsync, which ran outside this try).
+            NodeExecutionContext? nodeExecutionContext = null;
             try
             {
-                var nodeExecutionContext = await BuildNodeExecutionContextAsync(dto, execution, node);
+                nodeExecutionContext = await BuildNodeExecutionContextAsync(dto, execution, node);
                 var executor = _nodeExecutors.First(ne => ne.NodeType == node.Type);
                 _logger.LogInformation("Node {NodeId} Using executor {ExecutorName}.", node.Id, executor.GetType().Name);
 
@@ -97,7 +98,7 @@ namespace Workflow.DomainService.Services
                 }
                 if (!result.IsSuccess)
                 {
-                    await FailNodeExecutionAsync(execution, nodeExecution, new Exception(result.ErrorMessage));
+                    await FailNodeExecutionAsync(execution, node, nodeExecutionContext, nodeExecution, new Exception(result.ErrorMessage), result.OutputItems);
                 }
                 else
                 {
@@ -108,7 +109,7 @@ namespace Workflow.DomainService.Services
             }
             catch (Exception ex)
             {
-                await FailNodeExecutionAsync(execution, nodeExecution, ex);
+                await FailNodeExecutionAsync(execution, node, nodeExecutionContext, nodeExecution, ex, outputItems: null);
             }
         }
 
@@ -534,20 +535,78 @@ namespace Workflow.DomainService.Services
         }
 
         /// <summary>
-        /// Node execution failed
+        /// Node execution failed. Persists any output items the executor produced (including a
+        /// synthetic error item) so the UI can show what happened, then marks the node and workflow Failed.
         /// </summary>
-        private async Task FailNodeExecutionAsync(WorkflowExecutionEntity execution, NodeExecutionEntity nodeExecution, Exception ex)
+        private async Task FailNodeExecutionAsync(
+            WorkflowExecutionEntity execution,
+            NodeEntity node,
+            NodeExecutionContext? context,
+            NodeExecutionEntity nodeExecution,
+            Exception ex,
+            List<NodeOutputItem>? outputItems)
         {
+            var persistedItems = new List<WorkflowItemExecutionEntity>();
+
+            if (outputItems is { Count: > 0 } && context is not null)
+            {
+                try
+                {
+                    int index = 0;
+                    foreach (var output in outputItems)
+                    {
+                        var parentIds = output.ParentItemIds ?? new List<string>();
+                        var ancestorMap = context.InputItems.Where(i => parentIds.Contains(i.Id))
+                            .SelectMany(i =>
+                            {
+                                var ancestors = i.AncestorMap != null ? i.AncestorMap : new Dictionary<string, string>();
+                                ancestors[i.NodeName] = i.Id;
+                                return ancestors;
+                            })
+                            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+
+                        var id = Guid.NewGuid().ToString().Replace("-", "");
+                        ancestorMap[node.Name] = id;
+                        persistedItems.Add(new WorkflowItemExecutionEntity
+                        {
+                            Id = id,
+                            WorkflowExecutionId = execution.Id,
+                            TenantId = execution.TenantId,
+                            NodeId = node.Id,
+                            NodeExecutionId = nodeExecution.Id,
+                            NodeName = node.Name,
+                            Branch = output.Branch,
+                            ParentItemIds = parentIds,
+                            AncestorMap = ancestorMap,
+                            Data = output.Data,
+                            ItemIndex = index++
+                        });
+                    }
+
+                    await _workflowExecutionRepository.AddItemsAsync(execution.TenantId, persistedItems);
+                }
+                catch (Exception persistEx)
+                {
+                    _logger.LogWarning(persistEx, "Failed to persist failure output items for node {NodeId}.", node.Id);
+                    persistedItems.Clear();
+                }
+            }
+
             nodeExecution.Status = NodeExecutionStatus.Failed;
             nodeExecution.EndedAt = DateTime.UtcNow;
             nodeExecution.Error = ex.ToString();
+            nodeExecution.OutputItemCount = persistedItems.Count;
+            nodeExecution.OutputCountsByBranch = persistedItems
+                .GroupBy(o => o.Branch)
+                .ToDictionary(g => g.Key, g => g.Count());
+
             execution.Status = WorkflowExecutionStatus.Failed;
             execution.ErrorMessage = ex.ToString();
             execution.FinishedAt = DateTime.UtcNow;
 
-            // Atomically update NodeExecution to Failed and mark workflow Failed
             await _workflowExecutionRepository.AtomicUpdateNodeExecutionFailedAsync(
-                execution.Id, execution.TenantId, nodeExecution.Id, ex.ToString());
+                execution.Id, execution.TenantId, nodeExecution.Id, ex.ToString(),
+                nodeExecution.OutputItemCount, nodeExecution.OutputCountsByBranch);
 
             await _workflowNotificationService.NotifyExecutionEventAsync(
                 execution,
@@ -567,7 +626,6 @@ namespace Workflow.DomainService.Services
                 data: execution.Id!,
                 message: $"Workflow '{execution.WorkflowSnapshot.Name}' failed: {ex.Message}");
 
-            // Atomically remove failed node from active tracking
             await _workflowExecutionRepository.AtomicCompleteNodeAsync(
                 execution.Id, execution.TenantId, nodeExecution.NodeId, new List<string>());
         }
