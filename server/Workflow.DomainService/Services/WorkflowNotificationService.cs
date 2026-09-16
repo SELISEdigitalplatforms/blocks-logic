@@ -5,6 +5,7 @@ using Blocks.Genesis;
 using DomainService.Notification;
 using Workflow.DomainService.Dtos;
 using Workflow.DomainService.Entities;
+using Workflow.DomainService.Utils;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -42,27 +43,73 @@ namespace Workflow.DomainService.Services
         }
 
 
-        public async Task<bool> Notify(List<string> userIds, NotificationData data)
+        public Task<bool> Notify(List<string> userIds, NotificationData data)
+        {
+            var denormalizedPayload = JsonSerializer.Serialize(new
+            {
+                Message = new
+                {
+                    title = data.Title,
+                    description = data.Description
+                },
+                Information = data.Information
+            });
+
+            return SendNotifyAsync(
+                userIds,
+                denormalizedPayload,
+                _configuration["WORKFLOW_NOTIFICATION_CONFIGURATION_NAME"],
+                data.ResponseKey,
+                data.ResponseValue);
+        }
+
+        public Task<bool> NotifyImportAsync(
+            List<string> userIds,
+            string correlationId,
+            bool isSuccess,
+            string title,
+            string description,
+            string? workflowId,
+            int issues)
+        {
+            var denormalizedPayload = JsonSerializer.Serialize(new
+            {
+                Message = new
+                {
+                    IsSuccess = isSuccess,
+                    title,
+                    description,
+                    workflowId,
+                    issues
+                }
+            });
+
+            return SendNotifyAsync(
+                userIds,
+                denormalizedPayload,
+                LogicConstants.WorkflowImportNotificationConfigurationName,
+                correlationId,
+                isSuccess.ToString());
+        }
+
+        private async Task<bool> SendNotifyAsync(
+            List<string> userIds,
+            string denormalizedPayload,
+            string? configurationName,
+            string responseKey,
+            string responseValue)
         {
             var payload = new
             {
                 ConnectionId = "",
                 Roles = new List<string> { },
                 UserIds = userIds,
-                DenormalizedPayload = JsonSerializer.Serialize(new
-                {
-                    Message = new
-                    {
-                        title = data.Title,
-                        description = data.Description
-                    },
-                    Information = data.Information
-                }),
+                DenormalizedPayload = denormalizedPayload,
                 SaveDenormalizedPayloadAsAnObject = false,
-                ConfigurationName = _configuration["WORKFLOW_NOTIFICATION_CONFIGURATION_NAME"],
+                ConfigurationName = configurationName,
                 ContentAvailable = true,
-                ResponseKey = data.ResponseKey,
-                ResponseValue = data.ResponseValue,
+                ResponseKey = responseKey,
+                ResponseValue = responseValue,
             };
             var blocksKey = BlocksContext.GetContext()?.TenantId;
             var salt = _tenants.GetTenantByID(blocksKey)?.TenantSalt;

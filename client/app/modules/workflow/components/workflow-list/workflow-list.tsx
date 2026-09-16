@@ -52,6 +52,7 @@ import { useScopedPath } from "@seliseblocks/genesis-os";
 import { RenameWorkflow } from "../rename-workflow/rename-workflow";
 import { Pen } from "lucide-react";
 import { AddWorkflow } from "../add-workflow";
+import { ImportWorkflow } from "../import-workflow";
 
 const WorkflowListSkeleton = ({ length }: { length: number }) => {
   return (
@@ -85,6 +86,12 @@ const WorkflowEmptyState = () => (
       <AddWorkflow
         variant="default"
         label="Create workflow"
+        hideLabelOnMobile={false}
+        showIcon={false}
+      />
+      <ImportWorkflow
+        variant="outline"
+        label="Import"
         hideLabelOnMobile={false}
         showIcon={false}
       />

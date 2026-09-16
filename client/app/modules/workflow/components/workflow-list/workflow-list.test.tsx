@@ -27,6 +27,9 @@ const svc = vi.hoisted(() => ({
 vi.mock("@/modules/workflow/services/workflow.service", () => ({
   workflowService: svc,
 }));
+vi.mock("@blocks-workflow/hooks/use-import-workflow", () => ({
+  useImportWorkflow: () => ({ importWorkflow: vi.fn(), isImporting: false }),
+}));
 
 import { WorkflowList } from "./workflow-list";
 
@@ -70,10 +73,10 @@ describe("WorkflowList", () => {
     expect(screen.getByText("Create workflow")).toBeTruthy();
   });
 
-  it("hides the Import control in the empty state", () => {
+  it("shows the Import control in the empty state", () => {
     const { container } = wrap(<WorkflowList workflow={[]} isLoading={false} />);
-    expect(screen.queryByRole("button", { name: /import/i })).toBeNull();
-    expect(container.querySelector('input[type="file"]')).toBeNull();
+    expect(screen.getByRole("button", { name: /import/i })).toBeTruthy();
+    expect(container.querySelector('input[type="file"]')).not.toBeNull();
   });
 
   it("hides the Export action from the row menu", async () => {
