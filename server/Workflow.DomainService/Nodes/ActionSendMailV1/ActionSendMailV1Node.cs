@@ -26,14 +26,12 @@ namespace Workflow.DomainService.Nodes.ActionSendMailV1
         {
             var parameters = nodeparameters ?? new ActionSendMailV1Parameters();
             var outputItems = new List<NodeOutputItem>();
-            var currentIndex = -1;
+            var blocksContext = BlocksContext.GetContext();
 
-            try
+            for (int i = 0; i < context.IterationCount; i++)
             {
-                var blocksContext = BlocksContext.GetContext();
-                for (int i = 0; i < context.IterationCount; i++)
+                try
                 {
-                    currentIndex = i;
                     var to = parseExpression<string>(parameters.To, context.InputItems[i], context) ?? "";
                     var bodyDataContext = parameters.BodyDataContext.Keys.ToDictionary(key => key, key => parseExpression<string>(parameters.BodyDataContext[key], context.InputItems[i], context) ?? "");
 
@@ -48,46 +46,47 @@ namespace Workflow.DomainService.Nodes.ActionSendMailV1
                     var tenantId = context.TenantId ?? "";
                     var securityData = BlocksContext.Create(tenantId, [], "", false, "", "", DateTime.MinValue, "", [], "", "", "", "", "", tenantId);
                     BlocksContext.SetContext(securityData, false);
-                    var response = await SendMailAsync(tenantId, to, parameters.Template, parameters.Language, bodyDataContext, attachments);
-                    BlocksContext.SetContext(blocksContext, false);
-                    // Built as a plain BsonDocument (not a Dictionary<string, object> run through
-                    // ToBsonDocument()) so non-primitive values (the Errors document, the
-                    // AttachmentsSent array) serialize as themselves rather than getting wrapped
-                    // in a polymorphic discriminator, which is what happens when the driver's
-                    // object serializer sees a declared type of `object` for a BsonValue/array.
-                    var output = new BsonDocument
+                    try
                     {
-                        { "Success", response.IsSuccess },
-                        { "Errors", response.Errors != null ? response.Errors.ToBsonDocument() : BsonNull.Value },
-                        { "To", to },
-                        { "AttachmentsSent", new BsonArray(attachments) },
-                        { "AttachmentCount", attachments.Count }
-                    };
-
-                    outputItems.Add(new NodeOutputItem
-                    {
-                        Data = new NodeOutputItemData
+                        var response = await SendMailAsync(tenantId, to, parameters.Template, parameters.Language, bodyDataContext, attachments);
+                        // Built as a plain BsonDocument (not a Dictionary<string, object> run through
+                        // ToBsonDocument()) so non-primitive values (the Errors document, the
+                        // AttachmentsSent array) serialize as themselves rather than getting wrapped
+                        // in a polymorphic discriminator, which is what happens when the driver's
+                        // object serializer sees a declared type of `object` for a BsonValue/array.
+                        var output = new BsonDocument
                         {
-                            Input = context.InputItems[i].Data.Output,
-                            Output = output,
-                            Parameters = parameters.ToBsonDocument(),
-                        },
-                        Branch = "source",
-                        ParentItemIds = new List<string>() { context.InputItems[i].Id },
-                    });
-                }
+                            { "Success", response.IsSuccess },
+                            { "Errors", response.Errors != null ? response.Errors.ToBsonDocument() : BsonNull.Value },
+                            { "To", to },
+                            { "AttachmentsSent", new BsonArray(attachments) },
+                            { "AttachmentCount", attachments.Count }
+                        };
 
-                return NodeExecutionResult.Successful(outputItems);
+                        outputItems.Add(new NodeOutputItem
+                        {
+                            Data = new NodeOutputItemData
+                            {
+                                Input = context.InputItems[i].Data.Output,
+                                Output = output,
+                                Parameters = parameters.ToBsonDocument(),
+                            },
+                            Branch = "source",
+                            ParentItemIds = new List<string>() { context.InputItems[i].Id },
+                        });
+                    }
+                    finally
+                    {
+                        BlocksContext.SetContext(blocksContext, false);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
+                }
             }
-            catch (Exception ex)
-            {
-                var inputItem = currentIndex >= 0 && currentIndex < context.InputItems.Count
-                    ? context.InputItems[currentIndex]
-                    : null;
-                var errorItem = TryBuildErrorOutputItem(inputItem, parameters.ToBsonDocument(), ex);
-                if (errorItem != null) outputItems.Add(errorItem);
-                return NodeExecutionResult.Failed(ex.Message, outputItems);
-            }
+
+            return NodeExecutionResult.Successful(outputItems);
         }
 
         public static Task<bool> ValidateConfigurationAsync(JsonDocument parameters)

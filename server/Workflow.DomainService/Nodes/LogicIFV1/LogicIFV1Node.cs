@@ -16,17 +16,13 @@ namespace Workflow.DomainService.Nodes.LogicIFV1
         {
             var parameters = nodeparameters ?? new LogicIfV1Parameter();
             var outputItems = new List<NodeOutputItem>();
-            var currentIndex = -1;
+            var conditionType = parameters.ConditionType?.Trim().ToLowerInvariant();
+            var useOr = conditionType == "or";
 
-            try
+            for (var i = 0; i < context.IterationCount; i++)
             {
-                var conditionType = parameters.ConditionType?.Trim().ToLowerInvariant();
-                var useOr = conditionType == "or";
-
-                for (var i = 0; i < context.IterationCount; i++)
+                try
                 {
-                    currentIndex = i;
-
                     bool conditionMet = useOr
                         ? parameters.Conditions.Any(condition =>
                     {
@@ -62,17 +58,12 @@ namespace Workflow.DomainService.Nodes.LogicIFV1
                         ParentItemIds = new List<string>() { context.InputItems[i].Id },
                     });
                 }
-                return Task.FromResult(NodeExecutionResult.Successful(outputItems));
+                catch (Exception ex)
+                {
+                    AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
+                }
             }
-            catch (Exception ex)
-            {
-                var inputItem = currentIndex >= 0 && currentIndex < context.InputItems.Count
-                    ? context.InputItems[currentIndex]
-                    : null;
-                var errorItem = TryBuildErrorOutputItem(inputItem, parameters.ToBsonDocument(), ex);
-                if (errorItem != null) outputItems.Add(errorItem);
-                return Task.FromResult(NodeExecutionResult.Failed(ex.Message, outputItems));
-            }
+            return Task.FromResult(NodeExecutionResult.Successful(outputItems));
         }
 
 

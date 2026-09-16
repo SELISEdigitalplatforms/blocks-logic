@@ -64,6 +64,30 @@ namespace Workflow.DomainService.Nodes
             }
         }
 
+        protected static NodeOutputItem? TryBuildErrorOutputItem(
+            WorkflowItemExecutionEntity? inputItem, BsonValue parameters, string message, string branch = "source")
+            => TryBuildErrorOutputItem(inputItem, parameters, new Exception(message), branch);
+
+        protected static void AppendErrorOutputItem(
+            List<NodeOutputItem> outputItems,
+            WorkflowItemExecutionEntity? inputItem,
+            BsonValue parameters,
+            Exception ex)
+        {
+            var item = TryBuildErrorOutputItem(inputItem, parameters, ex);
+            if (item != null) outputItems.Add(item);
+        }
+
+        protected static void AppendErrorOutputItem(
+            List<NodeOutputItem> outputItems,
+            WorkflowItemExecutionEntity? inputItem,
+            BsonValue parameters,
+            string message)
+        {
+            var item = TryBuildErrorOutputItem(inputItem, parameters, message);
+            if (item != null) outputItems.Add(item);
+        }
+
         public async Task<NodeExecutionResult> RunAsync(NodeExecutionContext context)
         {
             var json = context.Parameters.ToJson();

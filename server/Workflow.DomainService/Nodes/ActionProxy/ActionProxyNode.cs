@@ -51,43 +51,48 @@ namespace Workflow.DomainService.Nodes.ActionProxy
         {
             var parameters = nodeparameters ?? new ActionProxyParameters();
             var outputItems = new List<NodeOutputItem>();
-            WorkflowItemExecutionEntity? currentInputItem = null;
 
-            try
+            if (string.IsNullOrWhiteSpace(parameters.Slug))
+                return NodeExecutionResult.Failed("No proxy is selected on this node.", outputItems);
+            if (string.IsNullOrWhiteSpace(parameters.RouteMethod))
+                return NodeExecutionResult.Failed("No endpoint is selected on this node.", outputItems);
+
+            var method = parameters.RouteMethod.Trim().ToUpperInvariant();
+            var blocksContext = BlocksContext.GetContext();
+
+            // A proxy call is self-contained: the proxy, endpoint, path parameters, query and body all
+            // live on the node, so there is nothing an input item has to supply. With nothing wired to
+            // this node there is no producer to take items from, and iterating zero times would make the
+            // node silently succeed without ever calling the proxy — which is what makes a single-node
+            // test of a lone proxy node look like it does nothing.
+            //
+            // A node that DOES have an upstream keeps the zero-iteration behaviour exactly. An empty
+            // input there means an upstream branch that was not taken (the engine dispatches down every
+            // outgoing edge and relies on the zero-item node to prune), and firing anyway would call the
+            // third party on a path the workflow deliberately did not choose.
+            var standalone = context.IterationCount == 0 && !context.HasUpstream;
+            var iterations = standalone ? 1 : context.IterationCount;
+
+            for (int i = 0; i < iterations; i++)
             {
-                if (string.IsNullOrWhiteSpace(parameters.Slug))
-                    return NodeExecutionResult.Failed("No proxy is selected on this node.", outputItems);
-                if (string.IsNullOrWhiteSpace(parameters.RouteMethod))
-                    return NodeExecutionResult.Failed("No endpoint is selected on this node.", outputItems);
+                var inputItem = standalone ? StandaloneInputItem(context) : context.InputItems[i];
+                var errorParent = standalone ? null : inputItem;
 
-                var method = parameters.RouteMethod.Trim().ToUpperInvariant();
-                var blocksContext = BlocksContext.GetContext();
-
-                // A proxy call is self-contained: the proxy, endpoint, path parameters, query and body all
-                // live on the node, so there is nothing an input item has to supply. With nothing wired to
-                // this node there is no producer to take items from, and iterating zero times would make the
-                // node silently succeed without ever calling the proxy — which is what makes a single-node
-                // test of a lone proxy node look like it does nothing.
-                //
-                // A node that DOES have an upstream keeps the zero-iteration behaviour exactly. An empty
-                // input there means an upstream branch that was not taken (the engine dispatches down every
-                // outgoing edge and relies on the zero-item node to prune), and firing anyway would call the
-                // third party on a path the workflow deliberately did not choose.
-                var standalone = context.IterationCount == 0 && !context.HasUpstream;
-                var iterations = standalone ? 1 : context.IterationCount;
-
-                for (int i = 0; i < iterations; i++)
+                try
                 {
-                    var inputItem = standalone ? StandaloneInputItem(context) : context.InputItems[i];
-                    currentInputItem = standalone ? null : inputItem;
-
                     var (pathSuffix, pathError) = BuildPathSuffix(parameters, inputItem, context);
                     if (pathError != null)
-                        return NodeExecutionResult.Failed(pathError, outputItems);
+                    {
+                        AppendErrorOutputItem(outputItems, errorParent, parameters.ToBsonDocument(), pathError);
+                        continue;
+                    }
 
                     var (body, contentType, bodyError) = PrepareBody(parameters, method, inputItem, context);
                     if (bodyError != null)
-                        return NodeExecutionResult.Failed(bodyError, outputItems);
+                    {
+                        AppendErrorOutputItem(outputItems, errorParent, parameters.ToBsonDocument(), bodyError);
+                        continue;
+                    }
 
                     var query = BuildQuery(parameters, inputItem, context);
 
@@ -113,27 +118,31 @@ namespace Workflow.DomainService.Nodes.ActionProxy
                     }, context.CancellationToken);
 
                     if (!result.Ok)
-                        return NodeExecutionResult.Failed(DescribeFailure(parameters, method, result), outputItems);
+                    {
+                        AppendErrorOutputItem(outputItems, errorParent, parameters.ToBsonDocument(), DescribeFailure(parameters, method, result));
+                        continue;
+                    }
 
                     var (responseBody, parseError) = ParseResponse(result);
                     if (parseError != null)
-                        return NodeExecutionResult.Failed(parseError, outputItems);
+                    {
+                        AppendErrorOutputItem(outputItems, errorParent, parameters.ToBsonDocument(), parseError);
+                        continue;
+                    }
 
                     BuildOutputItems(outputItems, responseBody, inputItem, parameters, standalone);
                 }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    AppendErrorOutputItem(outputItems, errorParent, parameters.ToBsonDocument(), ex);
+                }
+            }
 
-                return NodeExecutionResult.Successful(outputItems);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                var errorItem = TryBuildErrorOutputItem(currentInputItem, parameters.ToBsonDocument(), ex);
-                if (errorItem != null) outputItems.Add(errorItem);
-                return NodeExecutionResult.Failed(ex.Message, outputItems);
-            }
+            return NodeExecutionResult.Successful(outputItems);
         }
 
         /// <summary>

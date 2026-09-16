@@ -19,13 +19,11 @@ namespace Workflow.DomainService.Nodes.TransformSetFieldV1
         {
             var parameters = nodeparameters ?? new TransformSetFieldV1Parameters();
             var outputItems = new List<NodeOutputItem>();
-            var currentIndex = -1;
 
-            try
+            for (int i = 0; i < context.IterationCount; i++)
             {
-                for (int i = 0; i < context.IterationCount; i++)
+                try
                 {
-                    currentIndex = i;
                     var inputElement = BsonJsonConverter.ToJsonElement(context.InputItems[i].Data.Output);
                     var mode = parameters.Mode.ToLower();
                     var currentItem = GetBaseItem(inputElement, parameters);
@@ -55,17 +53,12 @@ namespace Workflow.DomainService.Nodes.TransformSetFieldV1
                         ParentItemIds = new List<string>() { context.InputItems[i].Id },
                     });
                 }
-                return NodeExecutionResult.Successful(outputItems);
+                catch (Exception ex)
+                {
+                    AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
+                }
             }
-            catch (Exception ex)
-            {
-                var inputItem = currentIndex >= 0 && currentIndex < context.InputItems.Count
-                    ? context.InputItems[currentIndex]
-                    : null;
-                var errorItem = TryBuildErrorOutputItem(inputItem, parameters.ToBsonDocument(), ex);
-                if (errorItem != null) outputItems.Add(errorItem);
-                return NodeExecutionResult.Failed(ex.Message, outputItems);
-            }
+            return NodeExecutionResult.Successful(outputItems);
         }
 
         private JsonObject ParsedMappedValue(

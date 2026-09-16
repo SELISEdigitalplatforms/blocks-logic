@@ -89,9 +89,8 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
                 }
                 catch (Exception ex)
                 {
-                    var errorItem = TryBuildErrorOutputItem(current, parameters.ToBsonDocument(), ex);
-                    if (errorItem != null) outputItems.Add(errorItem);
-                    return NodeExecutionResult.Failed(FormatScriptError(ex), outputItems);
+                    AppendErrorOutputItem(outputItems, current, parameters.ToBsonDocument(), FormatScriptError(ex));
+                    continue;
                 }
 
                 var normalized = NormalizeResult(result);

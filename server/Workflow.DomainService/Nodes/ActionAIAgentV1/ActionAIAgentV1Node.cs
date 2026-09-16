@@ -23,13 +23,11 @@ namespace Workflow.DomainService.Nodes.ActionAIAgentV1
         {
             var parameters = nodeparameters ?? new ActionAIAgentV1Parameters();
             var outputItems = new List<NodeOutputItem>();
-            var currentIndex = -1;
 
-            try
+            for (int i = 0; i < context.IterationCount; i++)
             {
-                for (int i = 0; i < context.IterationCount; i++)
+                try
                 {
-                    currentIndex = i;
                     var input = parseExpression<string>(parameters.Input, context.InputItems[i], context) ?? "";
                     var response = await CallAIAgent(parameters.ApiBaseUrl, parameters.WidgetId, context.TenantId, input);
 
@@ -45,18 +43,13 @@ namespace Workflow.DomainService.Nodes.ActionAIAgentV1
                         ParentItemIds = new List<string>() { context.InputItems[i].Id },
                     });
                 }
+                catch (Exception ex)
+                {
+                    AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
+                }
+            }
 
-                return NodeExecutionResult.Successful(outputItems);
-            }
-            catch (Exception ex)
-            {
-                var inputItem = currentIndex >= 0 && currentIndex < context.InputItems.Count
-                    ? context.InputItems[currentIndex]
-                    : null;
-                var errorItem = TryBuildErrorOutputItem(inputItem, parameters.ToBsonDocument(), ex);
-                if (errorItem != null) outputItems.Add(errorItem);
-                return NodeExecutionResult.Failed(ex.Message, outputItems);
-            }
+            return NodeExecutionResult.Successful(outputItems);
         }
 
         public static Task<bool> ValidateConfigurationAsync(JsonDocument parameters)

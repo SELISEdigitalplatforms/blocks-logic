@@ -39,33 +39,29 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
         {
             var parameters = nodeparameters ?? new ActionHttpRequestV1Parameters();
             var outputItems = new List<NodeOutputItem>();
-            var currentIndex = -1;
 
-            try
+            for (int i = 0; i < context.IterationCount; i++)
             {
-                for (int i = 0; i < context.IterationCount; i++)
+                try
                 {
-                    currentIndex = i;
                     var (url, httpMethod, headers, bodyContent, contentType) = PrepareRequest(parameters, context.InputItems[i], context);
                     if (url == null)
-                        return NodeExecutionResult.Failed(bodyContent, outputItems);
+                    {
+                        AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), bodyContent);
+                        continue;
+                    }
 
                     await ApplyAuthenticationAsync(parameters, headers, context.TenantId);
 
                     var responseBody = await SendHttpRequestAsync(httpMethod, url, headers, bodyContent, contentType);
                     BuildOutputItems(outputItems, responseBody, context, parameters, i);
                 }
-                return NodeExecutionResult.Successful(outputItems);
+                catch (Exception ex)
+                {
+                    AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
+                }
             }
-            catch (Exception ex)
-            {
-                var inputItem = currentIndex >= 0 && currentIndex < context.InputItems.Count
-                    ? context.InputItems[currentIndex]
-                    : null;
-                var errorItem = TryBuildErrorOutputItem(inputItem, parameters.ToBsonDocument(), ex);
-                if (errorItem != null) outputItems.Add(errorItem);
-                return NodeExecutionResult.Failed(ex.Message, outputItems);
-            }
+            return NodeExecutionResult.Successful(outputItems);
         }
 
         /// <summary>
