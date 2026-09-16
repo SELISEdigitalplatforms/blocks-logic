@@ -36,6 +36,7 @@ import {
   Ban,
   Check,
   Copy,
+  Download,
   EllipsisVertical,
   Search,
   Trash,
@@ -53,6 +54,7 @@ import { RenameWorkflow } from "../rename-workflow/rename-workflow";
 import { Pen } from "lucide-react";
 import { AddWorkflow } from "../add-workflow";
 import { ImportWorkflow } from "../import-workflow";
+import { useExportWorkflow } from "../../hooks/use-export-workflow";
 
 const WorkflowListSkeleton = ({ length }: { length: number }) => {
   return (
@@ -129,6 +131,7 @@ export const WorkflowList = ({ workflow, isLoading, isFiltered }: WorkflowListPr
     data: {},
   });
   const scoped = useScopedPath();
+  const { exportWorkflow, isExporting } = useExportWorkflow();
 
   const [publishVersionName, setPublishVersionName] = useState("");
   const [publishDescription, setPublishDescription] = useState("");
@@ -306,6 +309,17 @@ export const WorkflowList = ({ workflow, isLoading, isFiltered }: WorkflowListPr
                   <Copy className="mr-2 h-4 w-4" />
                   <span>Duplicate</span>
                 </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  disabled={isExporting}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void exportWorkflow(info.row.original.itemId);
+                  }}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  <span>Export</span>
+                </DropdownMenuItem>
                 {!(info.row.original.isPublished) && (<DropdownMenuItem
                   className="cursor-pointer"
                   disabled={info.row.original.isPublished || !info.row.original.isDirty}
@@ -363,6 +377,8 @@ export const WorkflowList = ({ workflow, isLoading, isFiltered }: WorkflowListPr
       },
     ],
     [
+      exportWorkflow,
+      isExporting,
       publishDescription,
       publishNew,
       publishVersionName,
