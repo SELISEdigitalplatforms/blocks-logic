@@ -247,3 +247,33 @@ export interface ITriggerListenerResponse {
   errors: unknown;
   isSuccess: boolean;
 }
+
+export interface IImportWorkflowPayload {
+  fileId: string;
+  messageCoRelationId: string;
+}
+
+export interface IImportWorkflowResponse {
+  itemId?: string;
+  isSuccess: boolean;
+  errors?: unknown;
+}
+
+export interface IGetPreSignedUrlForUploadPayload {
+  itemId?: string;
+  name: string;
+  configurationName: string;
+  projectKey: string;
+  metaData: string;
+  parentDirectoryId: string;
+  tags: string;
+  accessModifier: string;
+  moduleName: number;
+}
+
+export interface IGetPreSignedUrlForUploadResponse {
+  errors: null | unknown;
+  isSuccess: boolean;
+  fileId: string;
+  uploadUrl: string;
+}
