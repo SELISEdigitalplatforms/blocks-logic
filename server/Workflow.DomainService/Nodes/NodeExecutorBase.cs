@@ -1,9 +1,10 @@
-using Workflow.DomainService.Entities;
+﻿using Workflow.DomainService.Entities;
 using MongoDB.Bson;
 using MongoDB.Bson.IO;
 using Newtonsoft.Json.Linq;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Proxy.DomainService.Services;
 
 namespace Workflow.DomainService.Nodes
@@ -14,6 +15,10 @@ namespace Workflow.DomainService.Nodes
         public abstract string Version { get; }
 
         private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(2);
+
+        // Grep handle for the {{$VAR.name}} trace below. Kept as a literal prefix inside the message
+        // template (not a structured field) so a plain text search over the log sink finds every line.
+        private const string VariableResolveLogCategory = "Workflow.VariableResolve";
 
         // Mirrors Proxy.DomainService.Utils.ProxyVarRef's syntax so a {{$VAR.name}} token means the same
         // thing everywhere in Blocks: the literal "{{$VAR." prefix, a name in [A-Za-z0-9._:-], then "}}".
@@ -94,8 +99,29 @@ namespace Workflow.DomainService.Nodes
 
             var variableNames = CollectVariableNames(context.Parameters).ToList();
 
+            var logger = context.ServiceProvider?.GetService<ILoggerFactory>()?.CreateLogger(VariableResolveLogCategory);
+            var nodeName = string.IsNullOrEmpty(context.NodeName) ? context.NodeId : context.NodeName;
+
+            // Emitted for EVERY node, including nodes that collected nothing. Without it, "this node has no
+            // {{$VAR}} tokens" and "this node has tokens the collector failed to see" produce identical output
+            // (silence), and those are exactly the two cases we are trying to tell apart. HasVarToken is a raw
+            // substring test over the serialized parameters, deliberately independent of the collector regex:
+            // HasVarToken true with Count 0 means the collector missed a token that is really there.
+            logger?.LogInformation(
+                "variable resolve log: node {NodeName} collected {Count} variable(s) [{Names}], parameters contain a $VAR token: {HasVarToken}",
+                nodeName,
+                variableNames.Count,
+                string.Join(", ", variableNames),
+                json.Contains("$VAR", StringComparison.Ordinal));
+
             if (variableNames.Count > 0)
             {
+                foreach (var name in variableNames)
+                {
+                    logger?.LogInformation(
+                        "variable resolve log: resolving variable {Name} for node {NodeName}", name, nodeName);
+                }
+
                 var resolver = context.ServiceProvider?.GetService<IProxyVariableResolver>();
                 if (resolver is null)
                 {
@@ -114,6 +140,25 @@ namespace Workflow.DomainService.Nodes
                     {
                         return NodeExecutionResult.Failed(
                             $"Could not resolve configuration variable(s): {string.Join(", ", unresolved)}.");
+                    }
+
+                    foreach (var name in variableNames)
+                    {
+                        // Only the NAME is ever logged, never the value: these are Key Vault secrets and the
+                        // log sink is not a place they may land. An empty value is reported as its own line
+                        // rather than silently omitted, so a missing pair in the trace always means the node
+                        // never reached this point at all.
+                        if (!string.IsNullOrEmpty(resolvedVariables[name]))
+                        {
+                            logger?.LogInformation(
+                                "variable resolve log: resolved variable {Name} for node {NodeName}", name, nodeName);
+                        }
+                        else
+                        {
+                            logger?.LogWarning(
+                                "variable resolve log: variable {Name} for node {NodeName} resolved to an EMPTY value",
+                                name, nodeName);
+                        }
                     }
 
                     context.ResolvedVariables = resolvedVariables;

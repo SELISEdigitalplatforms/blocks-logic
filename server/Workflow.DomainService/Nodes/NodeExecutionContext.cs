@@ -1,4 +1,4 @@
-using MongoDB.Bson;
+﻿using MongoDB.Bson;
 using Workflow.DomainService.Entities;
 
 namespace Workflow.DomainService.Nodes
@@ -18,6 +18,11 @@ namespace Workflow.DomainService.Nodes
 
         /// <summary>Id of the node being executed, for the same reason.</summary>
         public string NodeId { get; set; } = string.Empty;
+
+        /// <summary>Display name of the node being executed, as the workflow snapshot spells it. Carried
+        /// for log lines that a human has to correlate back to a node in the editor; <see cref="NodeId"/>
+        /// is the stable identity.</summary>
+        public string NodeName { get; set; } = string.Empty;
         public required string TenantId { get; set; }
         public required BsonDocument Parameters { get; set; }
         public required IReadOnlyList<WorkflowItemExecutionEntity> InputItems { get; set; }
