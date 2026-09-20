@@ -50,6 +50,7 @@ namespace Workflow.DomainService.Nodes.ActionProxy
             NodeExecutionContext context, ActionProxyParameters? nodeparameters)
         {
             var parameters = nodeparameters ?? new ActionProxyParameters();
+            parameters.HaveBody = ReadHaveBody(context.Parameters, parameters.HaveBody);
             var outputItems = new List<NodeOutputItem>();
 
             if (string.IsNullOrWhiteSpace(parameters.Slug))
@@ -395,6 +396,17 @@ namespace Workflow.DomainService.Nodes.ActionProxy
                     ParentItemIds = standalone ? new List<string>() : new List<string> { inputItem.Id }
                 });
             }
+        }
+
+        private static bool ReadHaveBody(BsonDocument rawParameters, bool fallback)
+        {
+            if (!rawParameters.TryGetValue("havebody", out var value))
+                return fallback;
+
+            if (value.IsBoolean)
+                return value.AsBoolean;
+
+            return bool.TryParse(value.ToString(), out var parsed) ? parsed : fallback;
         }
     }
 }

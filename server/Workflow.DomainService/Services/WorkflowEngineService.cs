@@ -215,7 +215,7 @@ namespace Workflow.DomainService.Services
                 NodeId = node.Id,
                 NodeName = node.Name,
                 TenantId = execution.TenantId,
-                Parameters = node.Parameters,
+                Parameters = (BsonDocument)node.Parameters.DeepClone(),
                 InputItems = inputItems,
                 WorkflowContext = execution.Context,
                 AncestorNodeOutputs = ancestorOutputs,

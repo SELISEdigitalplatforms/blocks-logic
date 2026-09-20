@@ -286,7 +286,13 @@ namespace Workflow.DomainService.Nodes
         private static string ResolveVarExpression(string expr, NodeExecutionContext context)
         {
             var name = expr.Substring("$VAR.".Length);
-            return context.ResolvedVariables.TryGetValue(name, out var value) ? value : "";
+            if (context.ResolvedVariables.TryGetValue(name, out var value))
+            {
+                return value;
+            }
+
+            throw new InvalidOperationException(
+                $"Configuration variable '{name}' was referenced during expression parsing, but it was not resolved before node execution.");
         }
 
         private static string ResolveNodeReference(string expr, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)

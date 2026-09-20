@@ -169,6 +169,19 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
+        public void Parse_VarExpressionWithoutResolvedValue_ThrowsInsteadOfReturningEmpty()
+        {
+            var exec = new TestExecutor();
+            var item = Item(new BsonDocument("name", "abc"));
+            var ctx = Context(new[] { item });
+
+            var act = () => exec.Parse<string>("{{$VAR.bbb}}", item, ctx);
+
+            act.Should().Throw<InvalidOperationException>()
+                .WithMessage("*bbb*not resolved*");
+        }
+
+        [Fact]
         public void Parse_TypedDouble_ParsesNumber()
         {
             var exec = new TestExecutor();

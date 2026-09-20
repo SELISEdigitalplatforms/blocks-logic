@@ -159,7 +159,7 @@ export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
       clientCredential_composite: "",
       clientId: "",
       clientSecret: "",
-      haveBody: false,
+      havebody: false,
       bodyContentType: "",
       body: "",
     },
