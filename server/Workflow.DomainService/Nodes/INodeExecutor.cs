@@ -28,7 +28,7 @@ namespace Workflow.DomainService.Nodes
         public static NodeExecutionResult Successful(List<NodeOutputItem> items)
             => new() { IsSuccess = true, OutputItems = items };
 
-        public static NodeExecutionResult Failed(string error)
-            => new() { IsSuccess = false, ErrorMessage = error };
+        public static NodeExecutionResult Failed(string error, List<NodeOutputItem>? outputItems = null)
+            => new() { IsSuccess = false, ErrorMessage = error, OutputItems = outputItems ?? new() };
     }
 }

@@ -158,7 +158,7 @@ namespace Workflow.DomainService.Repositories
         /// Atomically updates a specific NodeExecution entry to Failed status.
         /// Also marks the workflow execution as Failed.
         /// </summary>
-        public async Task AtomicUpdateNodeExecutionFailedAsync(string executionId, string tenantId, string nodeExecutionId, string error)
+        public async Task AtomicUpdateNodeExecutionFailedAsync(string executionId, string tenantId, string nodeExecutionId, string error, int outputItemCount, Dictionary<string, int> outputCountsByBranch)
         {
             var collection = GetCollection(tenantId);
             var filter = Builders<WorkflowExecutionEntity>.Filter.And(
@@ -170,6 +170,8 @@ namespace Workflow.DomainService.Repositories
                 .Set("NodeExecutions.$.Status", NodeExecutionStatus.Failed)
                 .Set("NodeExecutions.$.EndedAt", DateTime.UtcNow)
                 .Set("NodeExecutions.$.Error", error)
+                .Set("NodeExecutions.$.OutputItemCount", outputItemCount)
+                .Set("NodeExecutions.$.OutputCountsByBranch", outputCountsByBranch)
                 .Set(e => e.Status, WorkflowExecutionStatus.Failed)
                 .Set(e => e.ErrorMessage, error)
                 .Set(e => e.FinishedAt, DateTime.UtcNow);

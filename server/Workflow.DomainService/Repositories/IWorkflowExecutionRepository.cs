@@ -13,7 +13,7 @@ namespace Workflow.DomainService.Repositories
         Task AtomicFinalizeExecutionAsync(string executionId, string tenantId);
         Task AtomicAddNodeExecutionAsync(string executionId, string tenantId, NodeExecutionEntity nodeExecution);
         Task AtomicUpdateNodeExecutionCompletedAsync(string executionId, string tenantId, string nodeExecutionId, int outputItemCount, Dictionary<string, int> outputCountsByBranch, BsonDocument? contextUpdates);
-        Task AtomicUpdateNodeExecutionFailedAsync(string executionId, string tenantId, string nodeExecutionId, string error);
+        Task AtomicUpdateNodeExecutionFailedAsync(string executionId, string tenantId, string nodeExecutionId, string error, int outputItemCount, Dictionary<string, int> outputCountsByBranch);
         Task<List<WorkflowExecutionEntity>> GetByWorkflowIdAsync(string workflowId, string tenantId);
 
         // Item-based execution methods
