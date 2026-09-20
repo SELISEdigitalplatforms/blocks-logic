@@ -11,12 +11,10 @@ const MAX_DEPTH = 10;
  */
 export async function resolveSchemaFields(
   fields: IRemoteSchemaField[],
-  projectKey: string,
 ): Promise<ResolvedSchemaField[]> {
   // Fetch all DTO schemas to build a name lookup map
   const dtoSchemas = await dataService
     .getSchemaList({
-      projectKey,
       pageNo: 1,
       pageSize: 200,
       sortDescending: true,

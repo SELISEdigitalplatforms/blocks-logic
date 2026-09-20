@@ -14,6 +14,7 @@ export type NodeType =
   | "email"
   | "dataGateway"
   | "dataAction"
+  | "proxy"
   | "schedule";
 
 export type NodeCategory = "trigger" | "action" | "logic" | "transform";

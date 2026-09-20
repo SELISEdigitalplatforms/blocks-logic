@@ -2,9 +2,8 @@
 
 namespace Mail.DomainService.Template
 {
-    public class DeleteTemplateRequest : IProjectKey
+    public class DeleteTemplateRequest
     {
         public string ItemId { get; set; }
-        public string ProjectKey { get; set; }
     }
 }

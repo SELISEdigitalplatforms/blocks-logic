@@ -1,3 +1,4 @@
+using Blocks.Genesis;
 using FluentValidation;
 
 namespace Common.InternalService.Monitor
@@ -12,8 +13,7 @@ namespace Common.InternalService.Monitor
             ClassLevelCascadeMode = CascadeMode.Stop;
             RuleLevelCascadeMode = CascadeMode.Stop;
 
-            RuleFor(x => x.ProjectKey)
-                .NotEmpty().WithMessage("ProjectKey is required.")
+            RuleFor(x => x)
                 .MustAsync(HaveLessThanMaxMonitors).WithMessage("You cannot have more than 10 monitors for this project.");
 
             RuleFor(x => x.Name)
@@ -36,12 +36,13 @@ namespace Common.InternalService.Monitor
             return true;
         }
 
-        private async Task<bool> HaveLessThanMaxMonitors(string projectKey, CancellationToken cancellationToken)
+        private async Task<bool> HaveLessThanMaxMonitors(SaveMonitorConfigurationRequest request, CancellationToken cancellationToken)
         {
-            if (string.IsNullOrWhiteSpace(projectKey))
+            var tenantId = BlocksContext.GetContext()?.TenantId;
+            if (string.IsNullOrWhiteSpace(tenantId))
                 return true;
 
-            var monitors = await _monitorConfigurationRepoService.GetConfigurationListByTenantIdAsync(projectKey);
+            var monitors = await _monitorConfigurationRepoService.GetConfigurationListByTenantIdAsync(tenantId);
             return monitors.Count <= 10;
         }
 

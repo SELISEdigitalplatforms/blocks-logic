@@ -20,14 +20,14 @@ namespace Common.InternalService.Monitor
         }
 
         public Task<PaginatedResponse> GetMonitorListAsync(
-            string projectKey,
+            string tenantId,
             string? monitorSourceType,
             int pageNumber = 0,
             int pageSize = 10)
-            => _monitorConfigurationService.GetConfigurationListAsync(projectKey, monitorSourceType, pageNumber, pageSize);
+            => _monitorConfigurationService.GetConfigurationListAsync(tenantId, monitorSourceType, pageNumber, pageSize);
 
-        public Task<BaseApiResponse> GetMonitorListByRepoIdAsync(string projectKey, string repoId)
-            => _monitorConfigurationService.GetConfigurationListWithDowntimeByRepoIdAsync(projectKey, repoId);
+        public Task<BaseApiResponse> GetMonitorListByRepoIdAsync(string tenantId, string repoId)
+            => _monitorConfigurationService.GetConfigurationListWithDowntimeByRepoIdAsync(tenantId, repoId);
 
         public Task<BaseApiResponse> GetMonitorByIdAsync(string monitorId)
             => _monitorConfigurationService.GetConfigurationByIdAsync(monitorId);

@@ -1,7 +1,7 @@
 using System.Text.Json;
-using DomainService.Workflow.Entities;
-using DomainService.Workflow.Nodes;
-using DomainService.Workflow.Nodes.TriggerScheduleV1;
+using Workflow.DomainService.Entities;
+using Workflow.DomainService.Nodes;
+using Workflow.DomainService.Nodes.TriggerScheduleV1;
 using FluentAssertions;
 using MongoDB.Bson;
 

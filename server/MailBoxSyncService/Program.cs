@@ -1,5 +1,5 @@
 using Blocks.Genesis;
-using DomainService.Workflow.Utils;
+using Workflow.DomainService.Utils;
 using MailBoxSyncService.Services;
 using SeliseBlocks.ConfigurationDriver;
 

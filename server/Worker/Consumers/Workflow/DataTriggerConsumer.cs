@@ -1,6 +1,6 @@
 using Blocks.Genesis;
-using DomainService.Workflow.Nodes.TriggerDataV1;
-using DomainService.Workflow.Services;
+using Workflow.DomainService.Nodes.TriggerDataV1;
+using Workflow.DomainService.Services;
 
 namespace Worker.Consumers.Workflow
 {

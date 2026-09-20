@@ -9,7 +9,14 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { CalendarClock, EllipsisVertical, ArrowRightFromLine, Pen, Trash } from "lucide-react";
+import {
+  CalendarClock,
+  EllipsisVertical,
+  ArrowRightFromLine,
+  Pen,
+  Search,
+  Trash,
+} from "lucide-react";
 import { Skeleton } from "@/components/ui-kits/skeleton/skeleton";
 import {
   Table,
@@ -61,6 +68,9 @@ type ScheduleListProps = {
   schedules: ISchedule[];
   isLoading: boolean;
   onCreateSchedule: () => void;
+  /** True when a search term is narrowing the list, so a zero-row result is "no matches" rather
+   * than "nothing has ever been created" — the two need different copy. */
+  isFiltered?: boolean;
 };
 
 const ScheduleEmptyState = ({ onCreateSchedule }: { onCreateSchedule: () => void }) => (
@@ -80,10 +90,23 @@ const ScheduleEmptyState = ({ onCreateSchedule }: { onCreateSchedule: () => void
   </div>
 );
 
+const ScheduleNoResultsState = () => (
+  <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-12 text-center">
+    <div className="flex h-14 w-14 items-center justify-center rounded-md bg-primary/10 text-primary">
+      <Search className="h-7 w-7" />
+    </div>
+    <h4 className="mt-5 text-lg font-semibold text-high-emphasis">No schedules found</h4>
+    <p className="mt-2 max-w-md text-sm text-muted-foreground">
+      No schedules match your search. Try adjusting it.
+    </p>
+  </div>
+);
+
 export const ScheduleList = ({
   schedules,
   isLoading,
   onCreateSchedule,
+  isFiltered,
 }: ScheduleListProps) => {
   const navigate = useNavigate();
   const scoped = useScopedPath();
@@ -257,7 +280,11 @@ export const ScheduleList = ({
   return (
     <>
       {!isLoading && !schedules.length ? (
-        <ScheduleEmptyState onCreateSchedule={onCreateSchedule} />
+        isFiltered ? (
+          <ScheduleNoResultsState />
+        ) : (
+          <ScheduleEmptyState onCreateSchedule={onCreateSchedule} />
+        )
       ) : (
         <Table className="border-separate border-spacing-y-4">
           <TableHeader className="[&_tr]:border-0">

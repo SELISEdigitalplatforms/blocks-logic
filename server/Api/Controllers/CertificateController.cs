@@ -4,12 +4,14 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BlocksTemplate.Api.Controllers
 {
+    /// <summary>Certificate storage for the tenant, routed as <c>/api/Certificate/{action}</c>.</summary>
     [ApiController]
     [Route("[controller]/[action]")]
     public class CertificateController : ControllerBase
     {
         private readonly ICertificateStorageService _certificateStorageService;
 
+        /// <summary>Takes the certificate storage service.</summary>
         public CertificateController(ICertificateStorageService certificateStorageService)
         {
             _certificateStorageService = certificateStorageService;
@@ -27,7 +29,7 @@ namespace BlocksTemplate.Api.Controllers
         [HttpPost]
         [Authorize]
         public Task<UploadCertificateResponse> UploadCertificate(
-            [FromForm] IFormFile? certificate,
+            IFormFile? certificate,
             [FromQuery] bool isThirdParty)
         {
             return _certificateStorageService.UploadPublicCertificateAsync(new UploadCertificateRequest

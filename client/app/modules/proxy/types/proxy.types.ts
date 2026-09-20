@@ -1,0 +1,507 @@
+export type ProxyMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
+export type ProxyKeyValue = {
+  key: string;
+  /**
+   * Stored verbatim, including any `{{$VAR.name}}` configuration-variable token. The token is
+   * resolved server-side on the forward / Test path only; nothing about a variable's value ever
+   * reaches the console.
+   */
+  value: string;
+};
+
+/**
+ * A per-method override of the shared config. A `null` member inherits the shared
+ * value; a non-null member (including an empty list) replaces it for that method.
+ */
+export type ProxyMethodOverride = {
+  method: ProxyMethod;
+  upstream: string | null;
+  headers: ProxyKeyValue[] | null;
+  query: ProxyKeyValue[] | null;
+};
+
+export type ProxyStatus = "live" | "paused";
+
+/**
+ * How the gateway treats the upstream JSON response body before relaying it. `"all"` — relay it
+ * byte-for-byte (today's behaviour). `"select"` — project it to {@link Proxy.responseInclude}
+ * (structural subset), fail-closed on a non-2xx / non-JSON / oversized upstream. Unlike
+ * {@link ProxyBodyMode} this is a *persisted* field, not view-state.
+ */
+export type ProxyResponseMode = "all" | "select";
+
+/**
+ * "Who can call it". `"blocksToken"` — the caller sends a Blocks token; identity, roles and
+ * permissions arrive on the request and {@link ProxyAccess.roles} / {@link ProxyAccess.permissions}
+ * may narrow the callers further. `"public"` — anyone with the URL; no identity. Never public by
+ * omission: a proxy saved without the block is token-only.
+ */
+export type ProxyAccessKind = "blocksToken" | "public";
+
+/** How the roles and permissions lists combine when both carry values. */
+export type ProxyAccessCombine = "or" | "and";
+
+/** Within one list: `"any"` — hold at least one entry; `"all"` — hold every entry. */
+export type ProxyAccessRuleMode = "any" | "all";
+
+export type ProxyAccessRule = {
+  mode: ProxyAccessRuleMode;
+  /** Role slugs or permission resource keys. Empty ⇒ no restriction from this list. */
+  values: string[];
+};
+
+/**
+ * One policy per proxy — every declared endpoint shares it, because the gateway is one catch-all
+ * route and the endpoints are data. Mirrors the server's `EndpointAccessPolicy`.
+ */
+export type ProxyAccess = {
+  kind: ProxyAccessKind;
+  combine: ProxyAccessCombine;
+  roles: ProxyAccessRule;
+  permissions: ProxyAccessRule;
+  /** Round-tripped only; the proxy form does not edit it. */
+  organizationId?: string;
+};
+
+/**
+ * One endpoint a proxy is allowed to reach. `path` is the client-facing template appended after
+ * `/api/proxy/gateway/{slug}`; `{name}` segments are parameters the caller must supply. The gateway
+ * refuses any path not matching a declared route, so this list is what a consumer may call.
+ */
+/**
+ * One endpoint a proxy is allowed to reach. Mirrors the server's `ProxyRouteConfig` field for field,
+ * including the members the form does not yet edit: a route read off the wire must be able to go back
+ * unchanged, or saving an unrelated field would quietly drop configuration the console cannot show.
+ *
+ * A `null` override means "inherit the proxy-wide value". An empty array is NOT the same thing: it is
+ * an explicit "none", which is how a route opts out of a proxy-wide body merge.
+ */
+export type ProxyRoute = {
+  method: ProxyMethod;
+  /** Client-facing template, no leading slash. `""` is the base path. e.g. `orders/{id}/refunds`. */
+  path: string;
+  /** Template appended to the upstream. `null` ⇒ no rewrite; {@link path} is used verbatim. */
+  upstreamPath: string | null;
+  headers: ProxyKeyValue[] | null;
+  query: ProxyKeyValue[] | null;
+  bodyMerge: ProxyKeyValue[] | null;
+  responseMode: ProxyResponseMode | null;
+  responseInclude: string[] | null;
+};
+
+export type Proxy = {
+  id: string;
+  name: string;
+  slug: string;
+  upstreamUrl: string;
+  upstreamMasked: string;
+  methods: ProxyMethod[];
+  enabled: boolean;
+  headers: ProxyKeyValue[];
+  query: ProxyKeyValue[];
+  /**
+   * Fields merged into the top level of the client's JSON body on POST/PUT/PATCH forwards.
+   * Empty ⇒ the body is forwarded byte-for-byte. There is no mode flag — pass-through is
+   * `bodyMerge.length === 0` everywhere.
+   */
+  bodyMerge: ProxyKeyValue[];
+  methodConfigs: ProxyMethodOverride[];
+  /** The endpoint allowlist. Empty ⇒ the base path only. Populated by the detail read, not the list. */
+  routes: ProxyRoute[];
+  /** Persisted. `"all"` ⇒ relay the upstream response unchanged. */
+  responseMode: ProxyResponseMode;
+  /** Field-path expressions kept when {@link responseMode} is `"select"` (`data.user.email`, `items[].id`). */
+  responseInclude: string[];
+  /** Who can call the gateway route. Populated by the detail read; the list row carries the default. */
+  access: ProxyAccess;
+  calls24h: number;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+/**
+ * A node in the "Choose fields" tree builder. Component state only — never persisted (the form
+ * stores the flattened {@link Proxy.responseInclude} path list) and never read off a response DTO.
+ */
+export type ResponseFieldNode = {
+  /** Stable local uid. */
+  id: string;
+  /** Editable segment key (`""` while a freshly added row is unnamed). */
+  key: string;
+  /** Renders / stores as `key[]`. */
+  isList: boolean;
+  children: ResponseFieldNode[];
+};
+
+/**
+ * Frontend-only view state for the "Request body" card. Never sent on a request DTO (the
+ * mapper reads it to decide whether to emit `bodyMerge`, then drops it) and never read off a
+ * response DTO (it is derived from `bodyMerge.length` on load).
+ */
+export type ProxyBodyMode = "passthrough" | "merge";
+
+/** Where a connection credential row is delivered. Headers cover almost every vendor. */
+export type ProxyCredentialSendAs = "header" | "query";
+
+/**
+ * One row of the connection's "sent with every request" list. The server keeps headers and query
+ * as two lists; the form shows them as one so the credential has a single home.
+ */
+export type ProxyCredentialRow = ProxyKeyValue & { sendAs: ProxyCredentialSendAs };
+
+export type ProxyFormValues = Pick<
+  Proxy,
+  | "name"
+  | "upstreamUrl"
+  | "methods"
+  | "headers"
+  | "query"
+  | "bodyMerge"
+  | "methodConfigs"
+  | "routes"
+  | "responseMode"
+  | "responseInclude"
+  | "access"
+> & {
+  bodyMode: ProxyBodyMode;
+  /** Form-only. When present it is the source of truth for `headers` and `query`. */
+  credentials?: ProxyCredentialRow[];
+};
+
+/**
+ * The result of a "Fill from test connection" run — a Test executed with filtering forced off
+ * (`responseMode: "all"`, `responseInclude: []`) so the sample is always the full response shape.
+ */
+export type SampleResult = {
+  ok: boolean;
+  status: number;
+  contentType?: string;
+  body: string;
+  bytes: number;
+  error?: string;
+};
+
+export type ProxyBackendDto = Record<string, unknown>;
+
+export type ProxyError =
+  | { code: "PROXY_VALIDATION"; message: string; errors?: Record<string, string> }
+  | { code: "PROXY_NOT_FOUND"; message: string }
+  | { code: "PROXY_REVERT_CONFLICT"; message: string; errors?: Record<string, string> };
+
+/**
+ * One field's `- before` / `+ after` pair in a change-history row. Values arrive
+ * already masked from the server; `before == null` means the field/row did not
+ * exist before, `after == null` means it was removed.
+ */
+export type ProxyFieldChange = {
+  field: string;
+  label: string;
+  before?: string | null;
+  after?: string | null;
+};
+
+/** One page of the proxy list plus the server-side total, for the list screen's pagination. */
+export type ProxyListPage = {
+  items: Proxy[];
+  totalCount: number;
+};
+
+export type ProxyListParams = {
+  searchKey?: string;
+  isActive?: boolean;
+  pageNumber?: number;
+  pageSize?: number;
+};
+
+export type ProxyLogFilter = "all" | "ok" | "client" | "server";
+
+/** The `statusClass` values the server accepts on the execution endpoints. */
+export type ProxyStatusClass = "all" | "2xx" | "4xx" | "5xx";
+
+// ---------------------------------------------------------------------------
+// Backend DTOs — mirror server/Proxy.DomainService/Dtos/*. The mapper is the
+// only place these are turned into the frontend models above.
+// ---------------------------------------------------------------------------
+
+/** Blocks.Genesis BaseQueryListResponse<T>. */
+export type BaseQueryListResponse<T> = {
+  data: T | null;
+  totalCount: number;
+  errors?: Record<string, string> | null;
+};
+
+/** Blocks.Genesis BaseQueryResponse<T>. */
+export type BaseQueryResponse<T> = {
+  data: T | null;
+  errors?: Record<string, string> | null;
+};
+
+/** Blocks.Genesis BaseMutationResponse (+ the SPEC §3.4 code/message). */
+export type BaseMutationResponseDto = {
+  isSuccess: boolean;
+  itemId?: string | null;
+  errors?: Record<string, string> | null;
+  code?: string | null;
+  message?: string | null;
+};
+
+export type ProxyKeyValueDto = {
+  key: string;
+  value: string;
+};
+
+export type ProxyKeyValueInputDto = {
+  key: string;
+  value: string;
+};
+
+/** Mirrors server `ProxyMethodConfigDto` / `ProxyMethodConfigInputDto`. */
+export type ProxyRouteDto = {
+  method: string;
+  path: string;
+  upstreamPath?: string | null;
+  headers?: ProxyKeyValueDto[] | null;
+  query?: ProxyKeyValueDto[] | null;
+  bodyMerge?: ProxyKeyValueDto[] | null;
+  responseMode?: string | null;
+  responseInclude?: string[] | null;
+};
+
+export type ProxyMethodConfigDto = {
+  method: string;
+  upstream?: string | null;
+  headers?: ProxyKeyValueDto[] | null;
+  query?: ProxyKeyValueDto[] | null;
+};
+
+/** Mirrors server `ProxyAccessRuleDto`: `{ mode: "any" | "all", values }`. */
+export type ProxyAccessRuleDto = {
+  mode?: string | null;
+  values?: string[] | null;
+};
+
+/**
+ * Mirrors server `ProxyAccessDto` / `ProxyAccessInputDto`. The server's wire vocabulary is
+ * `"BlocksToken" | "Public"` and `"Or" | "And"`; the mapper is the only place that translates.
+ */
+export type ProxyAccessDto = {
+  kind?: string | null;
+  organizationId?: string | null;
+  roles?: ProxyAccessRuleDto | null;
+  permissions?: ProxyAccessRuleDto | null;
+  combine?: string | null;
+};
+
+export type ProxyListItemDto = {
+  itemId: string;
+  name: string;
+  slug: string;
+  upstreamMasked: string;
+  methods: string[];
+  enabled: boolean;
+  injectedCredential: boolean;
+  headerCount: number;
+  queryCount: number;
+  calls24h: number;
+  createdDate: string;
+  lastUpdatedDate: string;
+};
+
+export type ProxyDetailDto = {
+  itemId: string;
+  name: string;
+  slug: string;
+  path: string;
+  upstream: string;
+  upstreamMasked: string;
+  methods: string[];
+  enabled: boolean;
+  headers: ProxyKeyValueDto[];
+  query: ProxyKeyValueDto[];
+  bodyMerge?: ProxyKeyValueDto[] | null;
+  methodConfigs: ProxyMethodConfigDto[];
+  routes?: ProxyRouteDto[] | null;
+  responseMode?: string | null;
+  responseInclude?: string[] | null;
+  access?: ProxyAccessDto | null;
+  currentVersion: number;
+  createdDate: string;
+  createdBy?: string | null;
+  lastUpdatedDate: string;
+  lastUpdatedBy?: string | null;
+};
+
+export type ProxyVersionDto = {
+  itemId: string;
+  versionNumber: number;
+  /** "Create" | "ConfigUpdate" | "Toggle" | "Revert" | "Delete". */
+  kind: string;
+  changeSummary: string;
+  changes: ProxyFieldChange[];
+  who?: string | null;
+  /** Display name captured at write time; null for older rows / system changes. */
+  whoName?: string | null;
+  whenUtc: string;
+  versionLabel: string;
+};
+
+export type ProxyExecutionListItemDto = {
+  itemId: string;
+  startedAtUtc: string;
+  requestMethod: string;
+  requestPath: string;
+  statusCode: number;
+  latencyMs: number;
+  outcome: string;
+  upstreamHost: string;
+};
+
+export type ProxyExecutionDetailDto = {
+  itemId: string;
+  proxyId: string;
+  proxySlug: string;
+  startedAtUtc: string;
+  finishedAtUtc: string;
+  latencyMs: number;
+  requestMethod: string;
+  requestPath: string;
+  requestQuery: string;
+  upstreamUrl: string;
+  upstreamHost: string;
+  injectedHeaderKeys: string[];
+  injectedQueryKeys: string[];
+  statusCode: number;
+  upstreamStatusCode?: number | null;
+  outcome: string;
+  errorMessage?: string | null;
+  responseContentType?: string | null;
+  responseBodyBytes: number;
+  responseBody?: string | null;
+  responseBodyTruncatedForDisplay: boolean;
+};
+
+export type ProxyOverviewDto = {
+  calls24h: number;
+  avgLatencyMs: number;
+  errorRatePct: number;
+  errorRateIsHigh: boolean;
+  credentialRefs: string[];
+  methods: string[];
+  lastCallAtUtc?: string | null;
+};
+
+export type ProxyTestResponseDto = {
+  ok: boolean;
+  status: number;
+  outcome: string;
+  latencyMs: number;
+  upstreamUrl: string;
+  upstreamHost: string;
+  injectedHeaderKeys: string[];
+  injectedQueryKeys: string[];
+  responseContentType?: string | null;
+  responseBody?: string | null;
+  responseFilterApplied?: boolean;
+  responseFilterNote?: string | null;
+  responseBodyBytes?: number;
+  errorMessage?: string | null;
+};
+
+export type ProxyOverview = {
+  calls24h: number;
+  avgLatencyMs: number;
+  errorRatePct: number;
+  errorRateIsHigh: boolean;
+  credentialRefs: string[];
+  methods: ProxyMethod[];
+  lastCallAtUtc: string | null;
+};
+
+export type ProxyExecutionLog = {
+  id: string;
+  proxyId: string;
+  timeUtc: string;
+  method: ProxyMethod;
+  path: string;
+  /** Raw client query string without the leading `?`; only on the on-demand detail row. */
+  requestQuery?: string;
+  status: number;
+  statusText: string;
+  latencyMs: number;
+  upstreamHost: string;
+  upstreamUrl: string;
+  injectedHeaderKeys: string[];
+  injectedQueryKeys: string[];
+  responseBody: string;
+  responseContentType?: string;
+  /** Server outcome enum, e.g. "Success" | "UpstreamUnreachable" | "VariableResolutionFailed". */
+  outcome?: string;
+  /** Short, safe diagnostic for a failed attempt; only populated on the on-demand detail row. */
+  errorMessage?: string;
+};
+
+/** One page of the Request logs list: the mapped rows plus the unpaged 24h match count. */
+export type ProxyExecutionPage = {
+  rows: ProxyExecutionLog[];
+  totalCount: number;
+  /**
+   * The window top the server computed this page against. Send it back with the next page so the
+   * offsets keep addressing the same rows; rows arriving in between would otherwise shift every
+   * later row down and make the reader see duplicates and gaps.
+   */
+  asOfUtc?: string;
+};
+
+export type ProxyVersionHistory = {
+  id: string;
+  proxyId: string;
+  versionLabel: string;
+  versionNumber: number;
+  kind: "create" | "edit" | "toggle" | "revert" | "delete";
+  summary: string;
+  /** User id of who made the change; falls back to "Unknown". */
+  actor: string;
+  /** Display name captured at write time, if the server recorded one. */
+  actorName?: string;
+  whenUtc: string;
+  changes: ProxyFieldChange[];
+};
+
+export type ProxyTestRequest = {
+  proxyId?: string;
+  draft?: ProxyFormValues;
+  method: ProxyMethod;
+  pathSuffix?: string;
+  query?: string;
+  body?: string;
+  contentType?: string;
+};
+
+export type ProxyTestResponse = {
+  ok: boolean;
+  status: number;
+  statusText: string;
+  latencyMs: number;
+  meta: string;
+  responseBody: string;
+  /** Content-Type relayed to the client (`application/json; charset=utf-8` after a Select projection). */
+  contentType?: string;
+  /** `null` | `"Applied"` | `"EmptyResult"` | `"WholePrimitive"` | `"Failed"`. */
+  responseFilterNote?: string | null;
+  /** `true` iff a response filter ran and produced output for this Test. */
+  responseFilterApplied?: boolean;
+  /** Size of the body relayed to the client, in bytes (post-projection under Select). */
+  responseBodyBytes: number;
+};
+
+export type ProxyMutationResponse = {
+  isSuccess: boolean;
+  itemId?: string;
+  data?: Proxy;
+  errors?: string | Record<string, string> | null;
+  /** Stable failure code from SPEC §3.4 (e.g. PROXY_SLUG_CONFLICT); null on success. */
+  code?: string | null;
+  /** Human-readable failure message when the server provides one. */
+  message?: string | null;
+};

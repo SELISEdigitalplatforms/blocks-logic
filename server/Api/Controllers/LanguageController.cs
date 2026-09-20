@@ -4,12 +4,14 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BlocksTemplate.Api.Controllers
 {
+    /// <summary>Language reference data, routed as <c>/api/Language/{action}</c>.</summary>
     [ApiController]
     [Route("[controller]/[action]")]
     public class LanguageController : ControllerBase
     {
         private readonly ILanguageManagementService _languageManagementService;
 
+        /// <summary>Takes the language management service.</summary>
         public LanguageController(
             ILanguageManagementService languageManagementService)
         {

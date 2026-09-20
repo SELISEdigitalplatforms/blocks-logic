@@ -122,8 +122,7 @@ namespace Mail.DomainService.Mails
                         Language = mail?.Language,
                         To = mail?.To ?? [],
                         AttachmentCount = attachmentCount,
-                        SentOnUtc = DateTime.UtcNow,
-                        ProjectKey = BlocksContext.GetContext()?.TenantId
+                        SentOnUtc = DateTime.UtcNow
                     }
                 });
 

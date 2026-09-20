@@ -14,7 +14,6 @@ import {
   MOCK_WORKFLOW_ID_1,
   MOCK_WORKFLOW_EXECUTION_ID_1,
 } from "../test-utils/__mocks__";
-import { TEST_PROJECT_KEY } from "@/test-utils/__mocks__/data.mock";
 import { workflowService } from "../services/workflow.service";
 import {
   useGetWorkflows,
@@ -35,13 +34,13 @@ describe("useGetWorkflows", () => {
   it("should return workflow list on success", async () => {
     vi.mocked(workflowService.getWorkflows).mockResolvedValue(mockGetWorkflowsResponse);
 
-    const { result } = renderHook(() => useGetWorkflows({ projectKey: TEST_PROJECT_KEY }), {
+    const { result } = renderHook(() => useGetWorkflows({}), {
       wrapper: createWrapper(),
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual(mockGetWorkflowsResponse);
-    expect(workflowService.getWorkflows).toHaveBeenCalledWith({ projectKey: TEST_PROJECT_KEY });
+    expect(workflowService.getWorkflows).toHaveBeenCalledWith({});
   });
 });
 
@@ -52,7 +51,7 @@ describe("useGetWorkflowById", () => {
     vi.mocked(workflowService.getWorkflowById).mockResolvedValue(mockGetWorkflowByIdResponse);
 
     const { result } = renderHook(
-      () => useGetWorkflowById({ id: MOCK_WORKFLOW_ID_1, projectKey: TEST_PROJECT_KEY }),
+      () => useGetWorkflowById({ id: MOCK_WORKFLOW_ID_1 }),
       { wrapper: createWrapper() },
     );
 
@@ -60,8 +59,8 @@ describe("useGetWorkflowById", () => {
     expect(result.current.data).toEqual(mockGetWorkflowByIdResponse);
   });
 
-  it("should not fetch when id and projectKey are both empty", () => {
-    const { result } = renderHook(() => useGetWorkflowById({ id: "", projectKey: "" }), {
+  it("should not fetch when id is empty", () => {
+    const { result } = renderHook(() => useGetWorkflowById({ id: "" }), {
       wrapper: createWrapper(),
     });
 
@@ -78,7 +77,7 @@ describe("useCreateWorkflow", () => {
 
     const { result } = renderHook(() => useCreateWorkflow(), { wrapper: createWrapper() });
 
-    const payload = { name: "New Workflow", projectKey: TEST_PROJECT_KEY };
+    const payload = { name: "New Workflow" };
     await act(async () => {
       await result.current.mutateAsync(payload);
     });
@@ -99,7 +98,6 @@ describe("useDuplicateWorkflow", () => {
     const payload = {
       name: "Copy of Workflow",
       workflowId: MOCK_WORKFLOW_ID_1,
-      projectKey: TEST_PROJECT_KEY,
     };
     await act(async () => {
       await result.current.mutateAsync(payload);
@@ -118,7 +116,7 @@ describe("useUpdateWorkflow", () => {
 
     const { result } = renderHook(() => useUpdateWorkflow(), { wrapper: createWrapper() });
 
-    const payload = { itemId: MOCK_WORKFLOW_ID_1, projectKey: TEST_PROJECT_KEY };
+    const payload = { itemId: MOCK_WORKFLOW_ID_1 };
     await act(async () => {
       await result.current.mutateAsync(payload);
     });
@@ -136,7 +134,7 @@ describe("useDeleteWorkflow", () => {
 
     const { result } = renderHook(() => useDeleteWorkflow(), { wrapper: createWrapper() });
 
-    const payload = { id: MOCK_WORKFLOW_ID_1, projectKey: TEST_PROJECT_KEY };
+    const payload = { id: MOCK_WORKFLOW_ID_1 };
     await act(async () => {
       await result.current.mutateAsync(payload);
     });
@@ -156,7 +154,7 @@ describe("useGetWorkflowExecutions", () => {
 
     const { result } = renderHook(
       () =>
-        useGetWorkflowExecutions({ projectKey: TEST_PROJECT_KEY, workflowId: MOCK_WORKFLOW_ID_1 }),
+        useGetWorkflowExecutions({ workflowId: MOCK_WORKFLOW_ID_1 }),
       { wrapper: createWrapper() },
     );
 
@@ -166,7 +164,7 @@ describe("useGetWorkflowExecutions", () => {
 
   it("should not fetch when workflowId is empty", () => {
     const { result } = renderHook(
-      () => useGetWorkflowExecutions({ projectKey: TEST_PROJECT_KEY, workflowId: "" }),
+      () => useGetWorkflowExecutions({ workflowId: "" }),
       { wrapper: createWrapper() },
     );
 
@@ -186,7 +184,6 @@ describe("useGetWorkflowExecutionById", () => {
     const { result } = renderHook(
       () =>
         useGetWorkflowExecutionById({
-          projectKey: TEST_PROJECT_KEY,
           executionId: MOCK_WORKFLOW_EXECUTION_ID_1,
         }),
       { wrapper: createWrapper() },
@@ -198,7 +195,7 @@ describe("useGetWorkflowExecutionById", () => {
 
   it("should not fetch when executionId is empty", () => {
     const { result } = renderHook(
-      () => useGetWorkflowExecutionById({ projectKey: TEST_PROJECT_KEY, executionId: "" }),
+      () => useGetWorkflowExecutionById({ executionId: "" }),
       { wrapper: createWrapper() },
     );
 

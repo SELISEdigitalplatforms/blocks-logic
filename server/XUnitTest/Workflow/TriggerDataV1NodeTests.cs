@@ -1,7 +1,7 @@
 using System.Text.Json;
-using DomainService.Workflow.Entities;
-using DomainService.Workflow.Nodes;
-using DomainService.Workflow.Nodes.TriggerDataV1;
+using Workflow.DomainService.Entities;
+using Workflow.DomainService.Nodes;
+using Workflow.DomainService.Nodes.TriggerDataV1;
 using FluentAssertions;
 using MongoDB.Bson;
 
@@ -18,7 +18,7 @@ namespace XUnitTest.Workflow
                 {
                     { "CollectionName", "Orders" },
                     { "Operation", "Inserted" },
-                    { "ProjectKey", "pk" }
+                    { "TenantId", "pk" }
                 },
                 InputItems = new List<WorkflowItemExecutionEntity>(),
                 IterationCount = 0,

@@ -81,7 +81,6 @@ export interface IGetWorkflowExecutionsPayload {
 export interface WorkflowExecution {
   id: string;
   workflowId: string;
-  projectKey: string;
   status: number;
   executionMode: WorkflowExecutionMode;
   startedAt: string;

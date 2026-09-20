@@ -27,8 +27,6 @@ const svc = vi.hoisted(() => ({
 vi.mock("@/modules/workflow/services/workflow.service", () => ({
   workflowService: svc,
 }));
-vi.mock("../../utils/download-json.util", () => ({ downloadJson: vi.fn() }));
-import { downloadJson } from "../../utils/download-json.util";
 
 import { WorkflowList } from "./workflow-list";
 
@@ -72,13 +70,13 @@ describe("WorkflowList", () => {
     expect(screen.getByText("Create workflow")).toBeTruthy();
   });
 
-  it("shows an Import control in the empty state (H4)", () => {
+  it("hides the Import control in the empty state", () => {
     const { container } = wrap(<WorkflowList workflow={[]} isLoading={false} />);
-    expect(screen.getByRole("button", { name: /import/i })).toBeTruthy();
-    expect(container.querySelector('input[type="file"]')).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /import/i })).toBeNull();
+    expect(container.querySelector('input[type="file"]')).toBeNull();
   });
 
-  it("exports a workflow from the row menu (H1, H2)", async () => {
+  it("hides the Export action from the row menu", async () => {
     const user = userEvent.setup();
     wrap(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -86,9 +84,8 @@ describe("WorkflowList", () => {
     );
     const triggers = screen.getAllByRole("button");
     await user.click(triggers[triggers.length - 1]);
-    await user.click(await screen.findByText("Export"));
-    await waitFor(() => expect(svc.getWorkflowById).toHaveBeenCalledWith({ id: "42" }));
-    await waitFor(() => expect(downloadJson).toHaveBeenCalled());
+    expect(screen.queryByText("Export")).toBeNull();
+    expect(svc.getWorkflowById).not.toHaveBeenCalled();
     expect(navigate).not.toHaveBeenCalled();
   });
 
