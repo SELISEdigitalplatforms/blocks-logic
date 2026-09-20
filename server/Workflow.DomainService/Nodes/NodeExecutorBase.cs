@@ -23,13 +23,7 @@ namespace Workflow.DomainService.Nodes
         // Mirrors Proxy.DomainService.Utils.ProxyVarRef's syntax so a {{$VAR.name}} token means the same
         // thing everywhere in Blocks: the literal "{{$VAR." prefix, a name in [A-Za-z0-9._:-], then "}}".
         private static readonly Regex VariableReference =
-            new(@"\{\{\s*\$VAR\.([A-Za-z0-9._:-]+)\s*\}\}", RegexOptions.None, RegexTimeout);
-
-        private static readonly Regex ExpressionReference =
-            new(@"\{\{([^{}]+)\}\}", RegexOptions.None, RegexTimeout);
-
-        private static readonly Regex VariableExpression =
-            new(@"^\$VAR\.([A-Za-z0-9._:-]+)$", RegexOptions.None, RegexTimeout);
+            new(@"\{\{\$VAR\.([A-Za-z0-9._:-]+)\}\}", RegexOptions.None, RegexTimeout);
 
         // Saved node parameters can carry an explicit JSON null for a field that used to be, or was
         // never, set (e.g. an older workflow saved before a "haveQuery" toggle existed). Newtonsoft
@@ -104,15 +98,9 @@ namespace Workflow.DomainService.Nodes
             var json = context.Parameters.ToJson();
 
             var variableNames = CollectVariableNames(context.Parameters).ToList();
-            var malformedVariableExpressions = CollectMalformedVariableExpressions(context.Parameters).ToList();
 
             var logger = context.ServiceProvider?.GetService<ILoggerFactory>()?.CreateLogger(VariableResolveLogCategory);
             var nodeName = string.IsNullOrEmpty(context.NodeName) ? context.NodeId : context.NodeName;
-
-            logger?.LogInformation(
-                "variable resolve log: node {NodeName} raw parameters: {ParametersJson}",
-                nodeName,
-                json);
 
             // Emitted for EVERY node, including nodes that collected nothing. Without it, "this node has no
             // {{$VAR}} tokens" and "this node has tokens the collector failed to see" produce identical output
@@ -125,17 +113,6 @@ namespace Workflow.DomainService.Nodes
                 variableNames.Count,
                 string.Join(", ", variableNames),
                 json.Contains("$VAR", StringComparison.Ordinal));
-
-            if (malformedVariableExpressions.Count > 0)
-            {
-                logger?.LogWarning(
-                    "variable resolve log: node {NodeName} found malformed variable expression(s) [{Expressions}]",
-                    nodeName,
-                    string.Join(", ", malformedVariableExpressions));
-
-                return NodeExecutionResult.Failed(
-                    $"Invalid configuration variable expression(s): {string.Join(", ", malformedVariableExpressions)}. Use {{{{$VAR.name}}}}.");
-            }
 
             if (variableNames.Count > 0)
             {
@@ -158,17 +135,6 @@ namespace Workflow.DomainService.Nodes
                     var unresolved = variableNames
                         .Where(name => !resolvedVariables.ContainsKey(name))
                         .ToList();
-                    var empty = variableNames
-                        .Where(name => resolvedVariables.TryGetValue(name, out var value) && string.IsNullOrEmpty(value))
-                        .ToList();
-
-                    logger?.LogInformation(
-                        "variable resolve log: node {NodeName} resolver returned {ResolvedCount} variable(s) [{ResolvedNames}], unresolved [{UnresolvedNames}], empty [{EmptyNames}]",
-                        nodeName,
-                        resolvedVariables.Count,
-                        string.Join(", ", resolvedVariables.Keys),
-                        string.Join(", ", unresolved),
-                        string.Join(", ", empty));
 
                     if (unresolved.Count > 0)
                     {
@@ -262,65 +228,6 @@ namespace Workflow.DomainService.Nodes
             }
         }
 
-        private static IEnumerable<string> CollectMalformedVariableExpressions(BsonValue value)
-        {
-            var seen = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var expression in CollectMalformedVariableExpressionsCore(value))
-            {
-                if (seen.Add(expression))
-                {
-                    yield return expression;
-                }
-            }
-        }
-
-        private static IEnumerable<string> CollectMalformedVariableExpressionsCore(BsonValue value)
-        {
-            if (value == null || value.IsBsonNull)
-            {
-                yield break;
-            }
-
-            if (value.IsString)
-            {
-                foreach (Match match in ExpressionReference.Matches(value.AsString))
-                {
-                    var expression = match.Groups[1].Value.Trim();
-                    if (expression.StartsWith("$VAR", StringComparison.Ordinal)
-                        && !VariableExpression.IsMatch(expression))
-                    {
-                        yield return match.Value;
-                    }
-                }
-
-                yield break;
-            }
-
-            if (value.IsBsonDocument)
-            {
-                foreach (var element in value.AsBsonDocument)
-                {
-                    foreach (var expression in CollectMalformedVariableExpressionsCore(element.Value))
-                    {
-                        yield return expression;
-                    }
-                }
-
-                yield break;
-            }
-
-            if (value.IsBsonArray)
-            {
-                foreach (var item in value.AsBsonArray)
-                {
-                    foreach (var expression in CollectMalformedVariableExpressionsCore(item))
-                    {
-                        yield return expression;
-                    }
-                }
-            }
-        }
-
         /// <summary>
         /// Parse expressions like {{$json.fieldName}} from input items
         /// Supports:
@@ -367,10 +274,6 @@ namespace Workflow.DomainService.Nodes
             if (expr.StartsWith("$VAR."))
                 return ResolveVarExpression(expr, context);
 
-            if (expr.StartsWith("$VAR", StringComparison.Ordinal))
-                throw new InvalidOperationException(
-                    $"Invalid configuration variable expression '{expr}'. Use {{{{$VAR.name}}}}.");
-
             return "";
         }
 
@@ -383,24 +286,10 @@ namespace Workflow.DomainService.Nodes
         private static string ResolveVarExpression(string expr, NodeExecutionContext context)
         {
             var name = expr.Substring("$VAR.".Length);
-            var logger = context.ServiceProvider?.GetService<ILoggerFactory>()?.CreateLogger(VariableResolveLogCategory);
-            var nodeName = string.IsNullOrEmpty(context.NodeName) ? context.NodeId : context.NodeName;
             if (context.ResolvedVariables.TryGetValue(name, out var value))
             {
-                logger?.LogInformation(
-                    "variable resolve log: parseExpression for node {NodeName} read variable {Name}; value present: {Present}; value empty: {IsEmpty}",
-                    nodeName,
-                    name,
-                    true,
-                    string.IsNullOrEmpty(value));
-
                 return value;
             }
-
-            logger?.LogError(
-                "variable resolve log: parseExpression for node {NodeName} tried variable {Name}, but it was not present in ResolvedVariables",
-                nodeName,
-                name);
 
             throw new InvalidOperationException(
                 $"Configuration variable '{name}' was referenced during expression parsing, but it was not resolved before node execution.");

@@ -282,51 +282,5 @@ namespace XUnitTest.Workflow
             result.ErrorMessage.Should().Contain("bbb");
             exec.LastParameters.Should().BeNull();
         }
-
-        [Fact]
-        public async Task RunAsync_ResolvesConfigurationVariableWithWhitespaceInsideExpression()
-        {
-            var services = new ServiceCollection()
-                .AddSingleton<IProxyVariableResolver, FakeVariableResolver>()
-                .BuildServiceProvider();
-
-            var exec = new TestExecutor();
-            var item = Item(new BsonDocument("name", "abc"));
-            var ctx = Context(new[] { item });
-            ctx.ServiceProvider = services;
-            ctx.Parameters = new BsonDocument
-            {
-                { "Name", "{{ $VAR.bbb }}" },
-            };
-
-            var result = await exec.RunAsync(ctx);
-
-            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
-            exec.LastParameters.Should().NotBeNull();
-            exec.Parse<string>(exec.LastParameters!.Name, item, ctx).Should().Be("1234567890");
-        }
-
-        [Fact]
-        public async Task RunAsync_FailsMalformedConfigurationVariableExpressionBeforeExecute()
-        {
-            var services = new ServiceCollection()
-                .AddSingleton<IProxyVariableResolver, FakeVariableResolver>()
-                .BuildServiceProvider();
-
-            var exec = new TestExecutor();
-            var item = Item(new BsonDocument("name", "abc"));
-            var ctx = Context(new[] { item });
-            ctx.ServiceProvider = services;
-            ctx.Parameters = new BsonDocument
-            {
-                { "Name", "{{ $VAR bbb }}" },
-            };
-
-            var result = await exec.RunAsync(ctx);
-
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("Invalid configuration variable expression");
-            exec.LastParameters.Should().BeNull();
-        }
     }
 }
