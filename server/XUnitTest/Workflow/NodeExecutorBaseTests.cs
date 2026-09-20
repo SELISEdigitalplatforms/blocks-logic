@@ -1,7 +1,10 @@
 using Workflow.DomainService.Entities;
 using Workflow.DomainService.Nodes;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using MongoDB.Bson;
+using Proxy.DomainService.Services;
+using Workflow.DomainService.Nodes.TransformSetFieldV1;
 
 namespace XUnitTest.Workflow
 {
@@ -29,6 +32,27 @@ namespace XUnitTest.Workflow
         {
             public string Name { get; set; } = string.Empty;
             public int Count { get; set; }
+        }
+
+        private sealed class FakeVariableResolver : IProxyVariableResolver
+        {
+            public Dictionary<string, string> Values { get; } = new()
+            {
+                ["keyboth"] = "resolved-keyboth",
+                ["bbb"] = "1234567890",
+            };
+
+            public Task<IReadOnlyDictionary<string, string>> ResolveAsync(
+                IReadOnlyCollection<string> names,
+                string tenantId,
+                CancellationToken ct = default)
+            {
+                IReadOnlyDictionary<string, string> values = Values
+                    .Where(kvp => names.Contains(kvp.Key, StringComparer.Ordinal))
+                    .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.Ordinal);
+
+                return Task.FromResult(values);
+            }
         }
 
         private static WorkflowItemExecutionEntity Item(BsonDocument output, Dictionary<string, string>? ancestors = null)
@@ -178,6 +202,72 @@ namespace XUnitTest.Workflow
             exec.LastParameters.Should().NotBeNull();
             exec.LastParameters!.Name.Should().Be("wf");
             exec.LastParameters.Count.Should().Be(7);
+        }
+
+        [Fact]
+        public async Task RunAsync_ResolvesConfigurationVariablesInNestedSetFieldMappings()
+        {
+            var services = new ServiceCollection()
+                .AddSingleton<IProxyVariableResolver, FakeVariableResolver>()
+                .BuildServiceProvider();
+
+            var exec = new TransformSetFieldV1Node();
+            var item = Item(new BsonDocument { { "page", 0 }, { "pageSize", 1 } });
+            var ctx = Context(new[] { item });
+            ctx.ServiceProvider = services;
+            ctx.Parameters = new BsonDocument
+            {
+                { "mode", "manual_mapping" },
+                { "manualMappingFields", new BsonArray
+                    {
+                        new BsonDocument
+                        {
+                            { "key", "var" },
+                            { "type", "string" },
+                            { "value", "{{$VAR.keyboth}}" },
+                        },
+                        new BsonDocument
+                        {
+                            { "key", "bbb" },
+                            { "type", "string" },
+                            { "value", "{{$VAR.bbb}}" },
+                        },
+                    }
+                },
+            };
+
+            var result = await exec.RunAsync(ctx);
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            result.OutputItems.Should().ContainSingle();
+            var output = result.OutputItems[0].Data.Output.AsBsonDocument;
+            output["var"].AsString.Should().Be("resolved-keyboth");
+            output["bbb"].AsString.Should().Be("1234567890");
+        }
+
+        [Fact]
+        public async Task RunAsync_FailsWhenResolverOmitsAReferencedConfigurationVariable()
+        {
+            var resolver = new FakeVariableResolver();
+            resolver.Values.Remove("bbb");
+            var services = new ServiceCollection()
+                .AddSingleton<IProxyVariableResolver>(resolver)
+                .BuildServiceProvider();
+
+            var exec = new TestExecutor();
+            var item = Item(new BsonDocument("name", "abc"));
+            var ctx = Context(new[] { item });
+            ctx.ServiceProvider = services;
+            ctx.Parameters = new BsonDocument
+            {
+                { "Name", "{{$VAR.bbb}}" },
+            };
+
+            var result = await exec.RunAsync(ctx);
+
+            result.IsSuccess.Should().BeFalse();
+            result.ErrorMessage.Should().Contain("bbb");
+            exec.LastParameters.Should().BeNull();
         }
     }
 }
