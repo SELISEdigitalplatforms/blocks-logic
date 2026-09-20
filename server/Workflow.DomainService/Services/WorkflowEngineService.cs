@@ -1,4 +1,4 @@
-﻿using Blocks.Genesis;
+using Blocks.Genesis;
 using Workflow.DomainService.Events;
 using Workflow.DomainService.Repositories;
 using Workflow.DomainService.Enums;
@@ -213,7 +213,6 @@ namespace Workflow.DomainService.Services
                 WorkflowExecutionId = dto.WorkflowExecutionId,
                 WorkflowId = execution.WorkflowId,
                 NodeId = node.Id,
-                NodeName = node.Name,
                 TenantId = execution.TenantId,
                 Parameters = (BsonDocument)node.Parameters.DeepClone(),
                 InputItems = inputItems,
