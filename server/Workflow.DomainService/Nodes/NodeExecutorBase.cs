@@ -92,10 +92,7 @@ namespace Workflow.DomainService.Nodes
         {
             var json = context.Parameters.ToJson();
 
-            var variableNames = VariableReference.Matches(json)
-                .Select(m => m.Groups[1].Value)
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
+            var variableNames = CollectVariableNames(context.Parameters).ToList();
 
             if (variableNames.Count > 0)
             {
@@ -108,7 +105,18 @@ namespace Workflow.DomainService.Nodes
 
                 try
                 {
-                    context.ResolvedVariables = await resolver.ResolveAsync(variableNames, context.TenantId, context.CancellationToken);
+                    var resolvedVariables = await resolver.ResolveAsync(variableNames, context.TenantId, context.CancellationToken);
+                    var unresolved = variableNames
+                        .Where(name => !resolvedVariables.ContainsKey(name))
+                        .ToList();
+
+                    if (unresolved.Count > 0)
+                    {
+                        return NodeExecutionResult.Failed(
+                            $"Could not resolve configuration variable(s): {string.Join(", ", unresolved)}.");
+                    }
+
+                    context.ResolvedVariables = resolvedVariables;
                 }
                 catch (ProxyVariableResolutionException ex)
                 {
@@ -119,6 +127,60 @@ namespace Workflow.DomainService.Nodes
 
             var parameters = Newtonsoft.Json.JsonConvert.DeserializeObject<TParameters>(json, ParameterDeserializationSettings);
             return await ExecuteAsync(context, parameters);
+        }
+
+        private static IEnumerable<string> CollectVariableNames(BsonValue value)
+        {
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var name in CollectVariableNamesCore(value))
+            {
+                if (seen.Add(name))
+                {
+                    yield return name;
+                }
+            }
+        }
+
+        private static IEnumerable<string> CollectVariableNamesCore(BsonValue value)
+        {
+            if (value == null || value.IsBsonNull)
+            {
+                yield break;
+            }
+
+            if (value.IsString)
+            {
+                foreach (Match match in VariableReference.Matches(value.AsString))
+                {
+                    yield return match.Groups[1].Value;
+                }
+
+                yield break;
+            }
+
+            if (value.IsBsonDocument)
+            {
+                foreach (var element in value.AsBsonDocument)
+                {
+                    foreach (var name in CollectVariableNamesCore(element.Value))
+                    {
+                        yield return name;
+                    }
+                }
+
+                yield break;
+            }
+
+            if (value.IsBsonArray)
+            {
+                foreach (var item in value.AsBsonArray)
+                {
+                    foreach (var name in CollectVariableNamesCore(item))
+                    {
+                        yield return name;
+                    }
+                }
+            }
         }
 
         /// <summary>
