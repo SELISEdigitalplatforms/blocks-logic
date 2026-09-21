@@ -1,9 +1,11 @@
-using Blocks.Genesis;
+﻿using Blocks.Genesis;
 using FluentAssertions;
 using Mail.DomainService.Dtos;
 using Mail.DomainService.Entities;
 using Mail.DomainService.Mails;
+using Mail.DomainService.Mails.Strategies;
 using Mail.DomainService.Services;
+using MailKit.Security;
 using Mail.DomainService.Utilities;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -28,7 +30,12 @@ namespace XUnitTest.Mail
         private readonly RecordingSmtpClient _smtp = new();
         private readonly MailStatusEventOptions _statusOptions = new();
 
-        private SendMailService CreateService()
+        /// <param name="senders">
+        /// Overrides the registered outbound senders. The default keeps the legacy providers
+        /// wired to the recording client, so the existing assertions still exercise a real
+        /// MailKit message build.
+        /// </param>
+        private SendMailService CreateService(params IOutboundMailSender[] senders)
         {
             var services = new ServiceCollection();
             services.AddSingleton<MailKitSmtpClient>(_smtp);
@@ -37,10 +44,15 @@ namespace XUnitTest.Mail
                 services.BuildServiceProvider(),
                 NullLogger<SmtpClientProvider>.Instance);
 
+            var registry = new OutboundMailSenderRegistry(
+                senders.Length > 0
+                    ? senders
+                    : [new AmazonSesMailSender(provider), new ZohoMailSender(provider)]);
+
             return new SendMailService(
                 NullLogger<SendMailService>.Instance,
                 _repository.Object,
-                provider,
+                registry,
                 _resolver.Object,
                 _messageClient.Object,
                 Options.Create(_statusOptions));
@@ -248,6 +260,8 @@ namespace XUnitTest.Mail
 
                 public Task ConnectAsync(string host, int port, bool useSsl) => Task.CompletedTask;
                 public Task AuthenticateAsync(string userName, string password) => Task.CompletedTask;
+                public Task ConnectAsync(string host, int port, SecureSocketOptions socketOptions) => Task.CompletedTask;
+                public Task AuthenticateAsync(SaslMechanism mechanism) => Task.CompletedTask;
                 public Task DisconnectAsync(bool quit) => Task.CompletedTask;
                 public void Dispose() { }
 

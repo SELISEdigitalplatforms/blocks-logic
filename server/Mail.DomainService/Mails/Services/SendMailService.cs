@@ -1,6 +1,7 @@
 ﻿using Blocks.Genesis;
 using Mail.DomainService.Dtos;
 using Mail.DomainService.Entities;
+using Mail.DomainService.Mails.Strategies;
 using Mail.DomainService.Services;
 using Mail.DomainService.Utilities;
 using Microsoft.Extensions.Logging;
@@ -11,9 +12,16 @@ namespace Mail.DomainService.Mails
 {
     public class SendMailService : ISendMailService
     {
+        /// <summary>
+        /// The generic failure every provider reports. Unchanged and deliberately uninformative:
+        /// it is a public contract that consumers already branch on, and the detail belongs in
+        /// logs rather than in an event that crosses a service boundary.
+        /// </summary>
+        private const string FailedToAcceptError = "The SMTP server did not accept the message.";
+
         private readonly ILogger<SendMailService> _logger;
         private readonly IMailRepository _mailRepository;
-        private readonly SmtpClientProvider _smtpClientProvider;
+        private readonly IOutboundMailSenderRegistry _senderRegistry;
         private readonly IMailAttachmentResolver _attachmentResolver;
         private readonly IMessageClient _messageClient;
         private readonly MailStatusEventOptions _statusEventOptions;
@@ -21,7 +29,7 @@ namespace Mail.DomainService.Mails
         public SendMailService(
             ILogger<SendMailService> logger,
             IMailRepository mailRepository,
-            SmtpClientProvider smtpClientProvider,
+            IOutboundMailSenderRegistry senderRegistry,
             IMailAttachmentResolver attachmentResolver,
             IMessageClient messageClient,
             IOptions<MailStatusEventOptions> statusEventOptions
@@ -29,7 +37,7 @@ namespace Mail.DomainService.Mails
         {
             _logger = logger;
             _mailRepository = mailRepository;
-            _smtpClientProvider = smtpClientProvider;
+            _senderRegistry = senderRegistry;
             _attachmentResolver = attachmentResolver;
             _messageClient = messageClient;
             _statusEventOptions = statusEventOptions.Value;
@@ -63,7 +71,20 @@ namespace Mail.DomainService.Mails
                 return false;
             }
 
-            var smtpClient = _smtpClientProvider.GetSmtpClient(mailToBeSent);
+            // Provider first, before any transport is resolved. An unregistered provider is a
+            // controlled failure here rather than a null reference escaping this method: the
+            // resolver used to hand back null and the send dereferenced it, which took down the
+            // consumer instead of reporting the send.
+            if (!_senderRegistry.TryResolve(mailToBeSent.MailServerConfiguration.Provider, out var sender))
+            {
+                _logger.LogError(
+                    "MAIL FAILED (provider): itemId={ItemId} has provider {Provider}, which no outbound sender is registered for. No secret or network access was attempted.",
+                    mailToBeSent.ItemId,
+                    mailToBeSent.MailServerConfiguration.Provider);
+                await PublishStatusAsync(mailToBeSent.ItemId, mailToBeSent.CorrelationId, mailToBeSent, 0, FailedToAcceptError);
+                return false;
+            }
+
             var mailBody = BuildMailBody(mailToBeSent);
 
             try
@@ -82,15 +103,15 @@ namespace Mail.DomainService.Mails
                 return false;
             }
 
-            var success = await smtpClient.SendAsync(mailToBeSent, mailBody);
-            LogOutcome(success, mailToBeSent, mailBody.Attachments.Count);
+            var success = await sender.SendAsync(mailToBeSent, mailBody);
+            LogOutcome(success, mailToBeSent, mailBody.Attachments.Count, sender.EmitsOwnFailureDiagnostic);
 
             await PublishStatusAsync(
                 mailToBeSent.ItemId,
                 mailToBeSent.CorrelationId,
                 mailToBeSent,
                 mailBody.Attachments.Count,
-                success ? null : "The SMTP server did not accept the message.");
+                success ? null : FailedToAcceptError);
 
             return success;
         }
@@ -145,7 +166,13 @@ namespace Mail.DomainService.Mails
             }
         }
 
-        private void LogOutcome(bool success, MailToBeSent mailToBeSent, int attachmentCount)
+        /// <param name="senderAlreadyDiagnosed">
+        /// Whether the sender has already emitted its own classified error for this failure. A
+        /// provider-neutral flag rather than a check on the provider id, so this stays free of a
+        /// per-provider branch: a sender that says nothing still gets the summary below, and one
+        /// that classifies its own failures is not reported twice with two different stories.
+        /// </param>
+        private void LogOutcome(bool success, MailToBeSent mailToBeSent, int attachmentCount, bool senderAlreadyDiagnosed = false)
         {
             var logMessage = string.Format(
                 "MAIL {0}:\nItemId: {1}\nCorrelationId: {2}\nTo: HIDDEN recipients ({3})\nSubject: {4}\nTime: {5}\nTemplate Name: {6}\nAttachments: {7}",
@@ -160,6 +187,13 @@ namespace Mail.DomainService.Mails
 
             if (success)
             {
+                _logger.LogInformation("{LogMessage}", logMessage);
+            }
+            else if (senderAlreadyDiagnosed)
+            {
+                // Downgraded, not suppressed: the summary still carries the subject, template and
+                // attachment count that the sender's classified error does not, but it stops
+                // competing with it as a second top-level failure for one send.
                 _logger.LogInformation("{LogMessage}", logMessage);
             }
             else

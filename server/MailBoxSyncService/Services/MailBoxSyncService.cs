@@ -1,10 +1,11 @@
-using Blocks.Genesis;
+﻿using Blocks.Genesis;
 using Mail.DomainService.Entities;
 using Mail.DomainService.Mails;
 using Mail.DomainService.Shared.Enums;
 using Mail.DomainService.Utilities;
 using MailBoxSyncService.Entities;
 using MailKit.Security;
+using System.Collections.Concurrent;
 
 namespace MailBoxSyncService.Services
 {
@@ -13,19 +14,30 @@ namespace MailBoxSyncService.Services
         private readonly IMailRepository _repository;
         private readonly IMessageClient _messageClient;
         private readonly IImapClientFactory _imapClientFactory;
-        private readonly IDictionary<string, IImapClientWrapper> _mapClientMapper;
+
+        /// <summary>
+        /// Live IMAP sessions, keyed by tenant, configuration and provider.
+        /// </summary>
+        /// <remarks>
+        /// The key used to be the username alone. This service is a singleton, so two tenants that
+        /// happened to configure the same mailbox username shared one authenticated session and
+        /// each read the other's inbox — the username is not an identity here, it is a field two
+        /// unrelated records can hold the same value in. Concurrent because the map outlives any
+        /// single sync and nothing guarantees two configurations are never processed at once.
+        /// </remarks>
+        private readonly ConcurrentDictionary<string, IImapClientWrapper> _mapClientMapper;
 
         public MailBoxSyncService(IMailRepository repository, IMessageClient messageClient, IImapClientFactory imapClientFactory)
         {
             _repository = repository;
             _messageClient = messageClient;
             _imapClientFactory = imapClientFactory;
-            _mapClientMapper = new Dictionary<string, IImapClientWrapper>();
+            _mapClientMapper = new ConcurrentDictionary<string, IImapClientWrapper>();
         }
 
         public async Task SyncInboxAsync(MailServerConfiguration config, string tenantId)
         {
-            var client = await GetOrReconnectImapClientAsync(config);
+            var client = await GetOrReconnectImapClientAsync(config, tenantId);
 
             var inbox = client.Inbox;
             await inbox.OpenAsync(MailKit.FolderAccess.ReadOnly);
@@ -76,20 +88,33 @@ namespace MailBoxSyncService.Services
             });
         }
 
-        private async Task<IImapClientWrapper> GetOrReconnectImapClientAsync(MailServerConfiguration config)
+        /// <summary>
+        /// The connection-cache key: the tenant, the configuration and the provider together.
+        /// </summary>
+        /// <remarks>
+        /// All three, because none of them is unique on its own. Two tenants can hold the same
+        /// configuration name and the same mailbox username, and a tenant can hold two
+        /// configurations against the same host.
+        /// </remarks>
+        internal static string ConnectionKey(MailServerConfiguration config, string tenantId) =>
+            string.Join('\u001f', tenantId, config.ItemId, (int)config.Provider);
+
+        private async Task<IImapClientWrapper> GetOrReconnectImapClientAsync(MailServerConfiguration config, string tenantId)
         {
-            if (_mapClientMapper.TryGetValue(config.SenderUserName, out var client))
+            var key = ConnectionKey(config, tenantId);
+
+            if (_mapClientMapper.TryGetValue(key, out var client))
             {
                 if (client.IsConnected && client.IsAuthenticated)
                     return client;
 
-                CleanupClient(config.SenderUserName, client);
+                CleanupClient(key, client);
             }
 
-            return await ConnectImapClientAsync(config);
+            return await ConnectImapClientAsync(config, key);
         }
 
-        private async Task<IImapClientWrapper> ConnectImapClientAsync(MailServerConfiguration config)
+        private async Task<IImapClientWrapper> ConnectImapClientAsync(MailServerConfiguration config, string key)
         {
             var client = _imapClientFactory.Create();
 
@@ -106,7 +131,14 @@ namespace MailBoxSyncService.Services
                     config.SenderUserName,
                     config.AccountPassword);
 
-                _mapClientMapper[config.SenderUserName] = client;
+                // Replacing an entry disposes whatever it displaced: a reconnect that raced
+                // another would otherwise leak the loser's authenticated session.
+                if (_mapClientMapper.TryGetValue(key, out var displaced) && !ReferenceEquals(displaced, client))
+                {
+                    CleanupClient(key, displaced);
+                }
+
+                _mapClientMapper[key] = client;
                 return client;
             }
             catch
@@ -128,7 +160,7 @@ namespace MailBoxSyncService.Services
             }
             finally
             {
-                _mapClientMapper.Remove(key);
+                _mapClientMapper.TryRemove(key, out _);
             }
         }
 

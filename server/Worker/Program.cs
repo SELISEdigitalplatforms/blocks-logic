@@ -1,4 +1,4 @@
-using Blocks.Extension.DependencyInjection;
+﻿using Blocks.Extension.DependencyInjection;
 using Blocks.Genesis;
 using Blocks.Secrets;
 using DomainService.Shared;
@@ -9,6 +9,8 @@ using Workflow.DomainService.Nodes.TriggerDataV1;
 using Workflow.DomainService.Utils;
 using Mail.DomainService.Dtos;
 using Mail.DomainService.Mails;
+using Mail.DomainService.Mails.Office365;
+using Mail.DomainService.Mails.Strategies;
 using Mail.DomainService.Shared.Utilities;
 using Scheduler.DomainService.Models;
 using Scheduler.DomainService.Utils;
@@ -53,6 +55,17 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             services.AddSingleton<SmtpClientProvider>();
             services.AddSingleton<MicrosoftSmtpClient>();
             services.AddSingleton<MailKitSmtpClient>();
+
+            // The same outbound strategies the API registers. Registered here too because the
+            // worker builds its own container, and this is the host that actually sends: the
+            // queue consumer is where most mail goes out.
+            services.AddSingleton<IOutboundMailSender, AmazonSesMailSender>();
+            services.AddSingleton<IOutboundMailSender, ZohoMailSender>();
+            services.AddSingleton<Office365SmtpClient>();
+            services.AddSingleton<IOutboundMailSender>(sp => sp.GetRequiredService<Office365SmtpClient>());
+            services.AddSingleton<IOutboundMailSenderRegistry, OutboundMailSenderRegistry>();
+            services.AddSingleton<IOffice365TokenAcquirer, AzureOffice365TokenAcquirer>();
+            services.AddSingleton<IOffice365TokenProvider, Office365TokenProvider>();
             services.RegisterAllMailApplicationServices();
 
             services.AddWorkflowExecutionEngine();

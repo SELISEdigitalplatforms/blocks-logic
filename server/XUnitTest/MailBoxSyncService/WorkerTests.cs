@@ -1,5 +1,6 @@
-using Blocks.Genesis;
+﻿using Blocks.Genesis;
 using Mail.DomainService.Entities;
+using Mail.DomainService.Mails.Strategies;
 using MailBoxSyncService.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -16,9 +17,17 @@ namespace XUnitTest.MailBoxSyncService
                 IMailBoxSyncService mailBoxSyncService,
                 ILogger<global::MailBoxSyncService.Worker> logger,
                 IConfiguration configuration)
-                : base(mailRepository, mailBoxSyncService, logger, configuration)
+                : base(mailRepository, mailBoxSyncService, LegacyRegistry(mailBoxSyncService), logger, configuration)
             {
             }
+
+            /// <summary>
+            /// The real legacy pollers over the mocked sync service, so these tests still assert
+            /// what the worker ultimately calls rather than that it consulted a registry.
+            /// </summary>
+            private static IInboundMailPollerRegistry LegacyRegistry(IMailBoxSyncService syncService) =>
+                new InboundMailPollerRegistry(
+                    [new AmazonSesImapPoller(syncService), new ZohoImapPoller(syncService)]);
 
             public Task RunAsync(CancellationToken token) => ExecuteAsync(token);
         }
