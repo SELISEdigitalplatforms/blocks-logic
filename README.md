@@ -115,7 +115,7 @@ dotnet run --project server/Api/Api.csproj
 
 Vite exposes env vars prefixed with **`BLOCKS_`** (see **`client/vite.config.ts`**). Copy **`client/.env.example`** → **`client/.env`** and set values as needed:
 
-- **`BLOCKS_API_BASE_URL`**: base URL the client uses for API calls.
+- **`BLOCKS_API_BASE_URL`**: external backend target for Vite's local `/api` proxy. Browser calls to Logic use the page origin.
 - **`BLOCKS_X_BLOCKS_KEY`**: Genesis / Blocks project key when your environment requires it.
 - **`BLOCKS_IAM_BASE_URL`**: IAM base URL for the OIDC sign-in flow.
 - **`BLOCKS_OIDC_CLIENT_ID`**: OIDC client id used by the sign-in flow.
