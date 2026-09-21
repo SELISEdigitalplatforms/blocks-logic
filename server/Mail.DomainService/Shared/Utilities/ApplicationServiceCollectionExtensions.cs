@@ -36,7 +36,9 @@ namespace Mail.DomainService.Shared.Utilities
             // Office 365 token path. The provider opens its own DI scope for ISecretService, so it
             // is safe as a singleton even though ISecretService is scoped.
             services.AddSingleton<IOffice365TokenAcquirer, AzureOffice365TokenAcquirer>();
-            services.AddSingleton<IOffice365TokenProvider, Office365TokenProvider>();
+            services.AddSingleton<ISystemClock, SystemClock>();
+            services.Configure<Office365TokenCacheOptions>(_ => { });
+            services.AddSingleton<IOffice365TokenProvider, CachingOffice365TokenProvider>();
             services.AddSingleton<Office365SmtpClient>();
             services.AddTransient<MailKitSmtpClient>();
             services.AddTransient<MicrosoftSmtpClient>();

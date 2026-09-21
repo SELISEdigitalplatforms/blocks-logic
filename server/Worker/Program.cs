@@ -65,7 +65,9 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             services.AddSingleton<IOutboundMailSender>(sp => sp.GetRequiredService<Office365SmtpClient>());
             services.AddSingleton<IOutboundMailSenderRegistry, OutboundMailSenderRegistry>();
             services.AddSingleton<IOffice365TokenAcquirer, AzureOffice365TokenAcquirer>();
-            services.AddSingleton<IOffice365TokenProvider, Office365TokenProvider>();
+            services.AddSingleton<ISystemClock, SystemClock>();
+            services.Configure<Office365TokenCacheOptions>(_ => { });
+            services.AddSingleton<IOffice365TokenProvider, CachingOffice365TokenProvider>();
             services.RegisterAllMailApplicationServices();
 
             services.AddWorkflowExecutionEngine();
