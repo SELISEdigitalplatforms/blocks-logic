@@ -111,7 +111,7 @@ namespace Workflow.DomainService.Services
                 ResponseKey = responseKey,
                 ResponseValue = responseValue,
             };
-            var blocksKey = BlocksContext.GetContext()?.TenantId;
+            var blocksKey = _configuration["RootTenantId"];
             var salt = _tenants.GetTenantByID(blocksKey)?.TenantSalt;
             var actulalSecret = _cryptoService.Hash(blocksKey, salt);
 
