@@ -42,6 +42,7 @@ describe("useWorkflowActions", () => {
     expect(mutations.publishNew).toHaveBeenCalledWith({
       workflowId: "w1",
       name: "N",
+      description: "D",
     });
     expect(onSuccess).toHaveBeenCalled();
     expect(toasts.showSuccessToast).toHaveBeenCalled();

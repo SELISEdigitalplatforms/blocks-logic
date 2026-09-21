@@ -1,6 +1,4 @@
 using Blocks.Genesis;
-using CloudConfiguration.DomainService.Captcha.RequestModel;
-using CloudConfiguration.DomainService.IAM.RequestModel;
 using CloudConfiguration.DomainService.Mail.RequestModel;
 using CloudConfiguration.DomainService.Notification.RequestModel;
 using CloudConfiguration.DomainService.Shared.Services;
@@ -42,8 +40,6 @@ namespace XUnitTest.Storage
 
             _sut = new ConfigurationService(
                 _repository.Object,
-                Mock.Of<IValidator<SaveCaptchaConfigurationRequest>>(),
-                Mock.Of<IValidator<SaveIamConfigurationRequest>>(),
                 Mock.Of<IValidator<SaveNotificatonConfigurationRequest>>(),
                 storageValidator.Object,
                 Mock.Of<IValidator<MailConfiguration>>(),
@@ -139,8 +135,6 @@ namespace XUnitTest.Storage
 
             var sut = new ConfigurationService(
                 _repository.Object,
-                Mock.Of<IValidator<SaveCaptchaConfigurationRequest>>(),
-                Mock.Of<IValidator<SaveIamConfigurationRequest>>(),
                 Mock.Of<IValidator<SaveNotificatonConfigurationRequest>>(),
                 storageValidator.Object,
                 Mock.Of<IValidator<MailConfiguration>>(),

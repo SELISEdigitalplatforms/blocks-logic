@@ -35,7 +35,6 @@ namespace XUnitTest.Controllers
 
             var result = await _controller.Gets(new GetMailConfigurationsRequest
             {
-                ProjectKey = "pk",
                 PageNumber = 1,
                 PageSize = 200
             });

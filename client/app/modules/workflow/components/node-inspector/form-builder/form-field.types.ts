@@ -18,6 +18,7 @@ export type FormFieldType =
   | "fixed-key-value-pairs"
   | "key-type-value-pairs"
   | "array"
+  | "expression-list"
   | "schema-fields"
   | "schema-field-picker"
   | "conditions"
@@ -49,7 +50,7 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
   displayValue?: (
     data: Whole,
     config: {
-      projectKey: string;
+      tenantId: string;
       workflowId: string;
       nodeId: string;
       store: WorkflowStore;
@@ -60,7 +61,7 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
     value: unknown,
     data: Whole,
     config: {
-      projectKey: string;
+      tenantId: string;
       workflowId: string;
       nodeId: string;
       store: WorkflowStore;
@@ -72,7 +73,7 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
     | ((
         data: Whole,
         config: {
-          projectKey: string;
+          tenantId: string;
           workflowId: string;
           store: WorkflowStore;
           executionMode?: number;
@@ -83,7 +84,7 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
     | ((
         data: Whole,
         config: {
-          projectKey: string;
+          tenantId: string;
           workflowId: string;
           nodeId: string;
           store: WorkflowStore;
@@ -91,6 +92,12 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
         },
       ) => Promise<string[]>);
   fixedKeysDependencies?: string[];
+  /**
+   * Parameter keys whose value changes should re-run an async `options` function. Without this an
+   * async option list is fetched once per mount, which is wrong for a dropdown that narrows itself
+   * from another field. Mirrors `fixedKeysDependencies`.
+   */
+  optionsDependencies?: string[];
   copyable?: boolean;
   maxLength?: number;
   minLength?: number;
@@ -120,7 +127,7 @@ export interface FieldProps<T = unknown> {
   onChange: (value: T) => void;
   data: Record<string, unknown>;
   config: {
-    projectKey: string;
+    tenantId: string;
     workflowId: string;
     nodeId: string;
     store: WorkflowStore;

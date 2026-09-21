@@ -1,6 +1,3 @@
-export interface IGetClientsPayload {
-  projectKey: string;
-}
 export interface IClientConfigResponse {
   scope: string;
   itemId: string;

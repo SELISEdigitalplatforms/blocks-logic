@@ -1,4 +1,3 @@
-import { TEST_PROJECT_KEY } from "@/test-utils/__mocks__/data.mock";
 import type {
   ExecutedItem,
   Workflow,
@@ -100,7 +99,6 @@ export const mockWorkflow1: Workflow = {
 export const mockWorkflowExecution1: WorkflowExecution = {
   id: MOCK_WORKFLOW_EXECUTION_ID_1,
   workflowId: MOCK_WORKFLOW_ID_1,
-  projectKey: TEST_PROJECT_KEY,
   status: 2,
   startedAt: "2026-02-10T08:00:00Z",
   finishedAt: "2026-02-10T08:00:05Z",
@@ -112,7 +110,6 @@ export const mockWorkflowExecution1: WorkflowExecution = {
 export const mockWorkflowExecution2: WorkflowExecution = {
   id: "d4e5-f6a7-b8c9-0002",
   workflowId: MOCK_WORKFLOW_ID_1,
-  projectKey: TEST_PROJECT_KEY,
   status: 3,
   startedAt: "2026-02-11T09:00:00Z",
   finishedAt: "2026-02-11T09:00:10Z",

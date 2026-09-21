@@ -1,6 +1,6 @@
 using Blocks.Genesis;
 using Mail.DomainService.Mails;
-using DomainService.Workflow.Services;
+using Workflow.DomainService.Services;
 
 namespace Worker.Consumers.Workflow
 {

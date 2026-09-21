@@ -2,6 +2,7 @@ import React from "react";
 import { render, type RenderOptions } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactFlowProvider } from "@xyflow/react";
+import { NuqsTestingAdapter } from "nuqs/adapters/testing";
 import { TooltipProvider } from "@/components/ui-kits/tooltip/tooltip";
 import {
   WorkflowStoreProvider,
@@ -43,13 +44,15 @@ export const renderWithProviders = (ui: React.ReactElement, options: Options = {
 
   const Wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
     <QueryClientProvider client={queryClient}>
-      <ReactFlowProvider>
-        <TooltipProvider>
-          <WorkflowStoreProvider>
-            <Seeder seed={seedWorkflow}>{children}</Seeder>
-          </WorkflowStoreProvider>
-        </TooltipProvider>
-      </ReactFlowProvider>
+      <NuqsTestingAdapter hasMemory>
+        <ReactFlowProvider>
+          <TooltipProvider>
+            <WorkflowStoreProvider>
+              <Seeder seed={seedWorkflow}>{children}</Seeder>
+            </WorkflowStoreProvider>
+          </TooltipProvider>
+        </ReactFlowProvider>
+      </NuqsTestingAdapter>
     </QueryClientProvider>
   );
 

@@ -1,6 +1,6 @@
-using DomainService.Workflow.Entities;
-using DomainService.Workflow.Nodes;
-using DomainService.Workflow.Nodes.TransformCodeV1;
+using Workflow.DomainService.Entities;
+using Workflow.DomainService.Nodes;
+using Workflow.DomainService.Nodes.TransformCodeV1;
 using FluentAssertions;
 using MongoDB.Bson;
 

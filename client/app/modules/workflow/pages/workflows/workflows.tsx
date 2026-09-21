@@ -2,7 +2,6 @@
 import { Card, CardContent, CardHeader } from "@/components/ui-kits/card/card";
 import { WorkflowList } from "../../components/workflow-list";
 import { AddWorkflow } from "../../components/add-workflow";
-import { ImportWorkflow } from "../../components/import-workflow";
 import { WorkflowFilterToolBar } from "../../components/workflow-filter-toolbar";
 import { Pagination } from "@/components/ui-kits/pagination/pagination";
 import { useGetWorkflows } from "@blocks-workflow/hooks/use-workflow-api";
@@ -13,7 +12,6 @@ export const Workflows = () => {
   const { data, isLoading, isFetching } = useGetWorkflows({
     pageSize: Number(queryParams.pageSize),
     pageNumber: Number(queryParams.page),
-    // projectKey: tenantId,
     search: queryParams.search || "",
     isPublished:
       queryParams.isPublished === "all"
@@ -24,7 +22,8 @@ export const Workflows = () => {
   });
   const workflows = data?.data || [];
   const isListLoading = isLoading || isFetching;
-  const isEmpty = !isListLoading && workflows.length === 0;
+  const isFiltered = !!queryParams.search || queryParams.isPublished !== "all";
+  const isEmpty = !isListLoading && workflows.length === 0 && !isFiltered;
 
   return (
     <>
@@ -39,13 +38,12 @@ export const Workflows = () => {
             <CardHeader className="flex flex-row items-center justify-between mb-0">
               <WorkflowFilterToolBar />
               <div className="flex items-center gap-1">
-                <ImportWorkflow />
                 <AddWorkflow />
               </div>
             </CardHeader>
           )}
           <CardContent>
-            <WorkflowList workflow={workflows} isLoading={isListLoading} />
+            <WorkflowList workflow={workflows} isLoading={isListLoading} isFiltered={isFiltered} />
 
             {!!data?.totalCount && (
               <div className="mt-5 flex justify-end">
@@ -53,7 +51,7 @@ export const Workflows = () => {
                   totalCount={data?.totalCount || 0}
                   page={queryParams.page}
                   pageSize={queryParams.pageSize}
-                  pageSizeOptions={[5, 10]}
+                  pageSizeOptions={[10, 20]}
                   onChange={(page) => setQueryParams((params) => ({ ...params, page }))}
                   onPageSizeChange={(pageSize) =>
                     setQueryParams((params) => ({

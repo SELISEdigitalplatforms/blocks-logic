@@ -6,8 +6,10 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using INotificationService = global::DomainService.Notification.INotificationService;
-using NotificationData = global::DomainService.Workflow.Dtos.NotificationData;
-using WorkflowNotificationService = global::DomainService.Workflow.Services.WorkflowNotificationService;
+using NotificationData = global::Workflow.DomainService.Dtos.NotificationData;
+using WorkflowNotificationService = global::Workflow.DomainService.Services.WorkflowNotificationService;
+
+using XUnitTest.TestHelpers;
 
 namespace XUnitTest.Notifications
 {
@@ -77,6 +79,7 @@ namespace XUnitTest.Notifications
             Exception? shouldThrow = null,
             string? notificationUrl = "https://notify.example.com/send")
         {
+            TestBlocksContext.Set("tenant-1");
             var handler = new StubHandler(status, body, shouldThrow);
             var factory = new Mock<IHttpClientFactory>();
             factory.Setup(f => f.CreateClient(It.IsAny<string>()))
@@ -191,14 +194,14 @@ namespace XUnitTest.Notifications
         }
 
         [Fact]
-        public async Task The_request_carries_the_tenant_key_and_the_derived_secret()
+        public async Task The_request_carries_the_current_tenant_and_the_derived_secret()
         {
             var (sut, handler) = Build();
 
             await sut.Notify(["user-1"], Data());
 
             handler.Request!.Headers.GetValues("x-blocks-key").Should().ContainSingle()
-                .Which.Should().Be("root-tenant");
+                .Which.Should().Be("tenant-1");
             handler.Request.Headers.GetValues("Secret").Should().ContainSingle()
                 .Which.Should().Be("hashed-secret");
         }

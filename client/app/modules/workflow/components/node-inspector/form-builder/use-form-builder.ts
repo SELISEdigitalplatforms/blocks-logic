@@ -14,7 +14,7 @@ import { useWorkflowStoreApi, WorkflowStore } from "@/modules/workflow/store";
 import { useProjectStore } from "@seliseblocks/genesis-os";
 
 export interface FormBuilderConfig {
-  projectKey: string;
+  tenantId: string;
   workflowId: string;
   nodeId: string;
   store: WorkflowStore;
@@ -74,7 +74,7 @@ export const useFormBuilder = ({
 
   const config: FormBuilderConfig = useMemo(
     () => ({
-      projectKey: tenantId,
+      tenantId,
       workflowId: workflowId || "",
       nodeId: selectedNode?.id || "",
       store,

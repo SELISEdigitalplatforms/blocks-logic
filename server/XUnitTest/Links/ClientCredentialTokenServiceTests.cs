@@ -1,7 +1,6 @@
 using System.Net;
 using System.Text;
-using DomainService.MagicLink.Models;
-using DomainService.MagicLink.Service;
+using Workflow.DomainService.Services;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -125,7 +124,7 @@ namespace XUnitTest.Links
         }
 
         [Fact]
-        public async Task The_project_key_is_sent_as_the_blocks_key_header()
+        public async Task The_tenant_id_is_sent_as_the_blocks_key_header()
         {
             var (sut, handler) = Build();
 

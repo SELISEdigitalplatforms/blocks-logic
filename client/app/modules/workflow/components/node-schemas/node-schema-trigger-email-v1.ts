@@ -50,17 +50,17 @@ export const NodeSchemaTriggerEmailV1: NodeSchemaDefinition = {
         required: true,
         options: (_data, config) => {
           return emailService
-            .fetchEmailConfigs(config.projectKey, 0, 200)
+            .fetchEmailConfigs(0, 200)
             .then((res) =>
               res
                 .filter((item) => Boolean(item.isInbound) && Boolean(item.itemId))
                 .map((item) => ({
-                  value: `${item.itemId}_${config.projectKey}`,
+                  value: `${item.itemId}_${config.tenantId}`,
                   label: item.name || item.itemId,
                 })),
             );
         },
-        onChange: (value: unknown, _data, config) => {
+        onChange: (value: unknown) => {
           const composite = String(value ?? "");
           const separator = composite.indexOf("_");
           const mailbox =
@@ -68,7 +68,6 @@ export const NodeSchemaTriggerEmailV1: NodeSchemaDefinition = {
           return {
             mailbox_composite: value,
             mailServerConfigurationId: mailbox,
-            projectKey: config.projectKey,
           };
         },
       },
@@ -87,7 +86,6 @@ export const NodeSchemaTriggerEmailV1: NodeSchemaDefinition = {
     parameters: {
       mailbox_composite: "",
       mailServerConfigurationId: "",
-      projectKey: "",
       testSubject: "",
     },
     settings: {},

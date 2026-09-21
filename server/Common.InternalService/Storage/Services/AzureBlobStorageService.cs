@@ -20,7 +20,7 @@ namespace Common.InternalService.Storage
             _containerClient.CreateIfNotExists(PublicAccessType.Blob);
         }
 
-        public async Task<Stream?> DownloadFileAsync(string fileName, string? projectKey = null, string? itemId = null, string? versionId = null)
+        public async Task<Stream?> DownloadFileAsync(string fileName, string? tenantId = null, string? itemId = null, string? versionId = null)
         {
             var blobClient = _containerClient.GetBlobClient(fileName);
 
@@ -96,7 +96,7 @@ namespace Common.InternalService.Storage
             return blobClient.GenerateSasUri(sasBuilder).ToString();
         }
 
-        public Task<bool> UploadFileToSftpAsync(string fileName, string projectKey, string itemId, string versionId, Microsoft.AspNetCore.Http.IFormFile file)
+        public Task<bool> UploadFileToSftpAsync(string fileName, string tenantId, string itemId, string versionId, Microsoft.AspNetCore.Http.IFormFile file)
         {
             throw new NotImplementedException();
         }

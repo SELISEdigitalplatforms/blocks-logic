@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Blocks.Genesis;
-using DomainService.Workflow.Nodes.TriggerScheduleV1;
-using DomainService.Workflow.Services;
+using Workflow.DomainService.Nodes.TriggerScheduleV1;
+using Workflow.DomainService.Services;
 using Scheduler.DomainService.Models;
 
 namespace Worker.Consumers.Workflow

@@ -11,7 +11,7 @@ namespace Mail.DomainService.Dtos
     /// This reports the outcome of handing the message to the SMTP server. Delivery, bounce and
     /// complaint arrive later and out of band, and land on <c>MailBoxEntity</c>.
     /// </remarks>
-    public class MailSentEvent : IProjectKey
+    public class MailSentEvent
     {
         /// <summary>Id of the persisted mail. The key to every log line about this send.</summary>
         public string ItemId { get; set; } = string.Empty;
@@ -34,6 +34,5 @@ namespace Mail.DomainService.Dtos
 
         public DateTime SentOnUtc { get; set; }
 
-        public string? ProjectKey { get; set; }
     }
 }

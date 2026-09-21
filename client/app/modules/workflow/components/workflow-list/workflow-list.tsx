@@ -36,8 +36,8 @@ import {
   Ban,
   Check,
   Copy,
-  Download,
   EllipsisVertical,
+  Search,
   Trash,
   Workflow,
 } from "lucide-react";
@@ -52,9 +52,6 @@ import { useScopedPath } from "@seliseblocks/genesis-os";
 import { RenameWorkflow } from "../rename-workflow/rename-workflow";
 import { Pen } from "lucide-react";
 import { AddWorkflow } from "../add-workflow";
-import { ImportWorkflow } from "../import-workflow";
-import { useExportWorkflow } from "../../hooks/use-export-workflow";
-
 
 const WorkflowListSkeleton = ({ length }: { length: number }) => {
   return (
@@ -91,22 +88,31 @@ const WorkflowEmptyState = () => (
         hideLabelOnMobile={false}
         showIcon={false}
       />
-      <ImportWorkflow
-        variant="outline"
-        label="Import"
-        hideLabelOnMobile={false}
-        showIcon={false}
-      />
     </div>
+  </div>
+);
+
+const WorkflowNoResultsState = () => (
+  <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-12 text-center">
+    <div className="flex h-14 w-14 items-center justify-center rounded-md bg-primary/10 text-primary">
+      <Search className="h-7 w-7" />
+    </div>
+    <h4 className="mt-5 text-lg font-semibold text-high-emphasis">No workflows found</h4>
+    <p className="mt-2 max-w-md text-sm text-muted-foreground">
+      No workflows match your search or filter. Try adjusting them.
+    </p>
   </div>
 );
 
 type WorkflowListProps = {
   workflow: WorkflowSummary[];
   isLoading: boolean;
+  /** True when a search term or status filter is narrowing the list, so a zero-row result is
+   * "no matches" rather than "nothing has ever been created" — the two need different copy. */
+  isFiltered?: boolean;
 };
 
-export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
+export const WorkflowList = ({ workflow, isLoading, isFiltered }: WorkflowListProps) => {
   const navigate = useNavigate();
   const [modal, setModal] = useState<{
     type: "delete" | "publish" | "publish_new" | "unpublish" | "duplicate" | "rename" | null;
@@ -116,7 +122,6 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
     data: {},
   });
   const scoped = useScopedPath();
-  const { exportWorkflow, isExporting } = useExportWorkflow();
 
   const [publishVersionName, setPublishVersionName] = useState("");
   const [publishDescription, setPublishDescription] = useState("");
@@ -294,18 +299,6 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
                   <Copy className="mr-2 h-4 w-4" />
                   <span>Duplicate</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="cursor-pointer"
-                  disabled={isExporting}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void exportWorkflow(info.row.original.itemId);
-                  }}
-                >
-                  <Download className="mr-2 h-4 w-4" />
-                  <span>Export</span>
-                </DropdownMenuItem>
-
                 {!(info.row.original.isPublished) && (<DropdownMenuItem
                   className="cursor-pointer"
                   disabled={info.row.original.isPublished || !info.row.original.isDirty}
@@ -369,8 +362,6 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
       publishUnversioned,
       scoped,
       unpublish,
-      exportWorkflow,
-      isExporting,
     ],
   );
 
@@ -396,7 +387,11 @@ export const WorkflowList = ({ workflow, isLoading }: WorkflowListProps) => {
   return (
     <>
       {!isLoading && !workflow.length ? (
-        <WorkflowEmptyState />
+        isFiltered ? (
+          <WorkflowNoResultsState />
+        ) : (
+          <WorkflowEmptyState />
+        )
       ) : (
         <Table className="border-separate border-spacing-y-4">
           <TableHeader className="[&_tr]:border-0">

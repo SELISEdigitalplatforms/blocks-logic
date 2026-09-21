@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Controllers
 {
+    /// <summary>Mail/notification template lookups, routed as <c>/api/Template/{action}</c>.</summary>
     [ApiController]
     [Route("[controller]/[action]")]
 
@@ -15,6 +16,7 @@ namespace Api.Controllers
     {
         private readonly ITemplateService _templateService;
 
+        /// <summary>Takes the template service.</summary>
         public TemplateController( ITemplateService templateService )
         {
             _templateService = templateService;
@@ -22,6 +24,7 @@ namespace Api.Controllers
 
 
 
+        /// <summary><c>GET</c> — the tenant's templates, filtered by the query string.</summary>
         [HttpGet]
         [Authorize]
         public async Task<GetAllTemplatesResponse> Gets ( [FromQuery] GetAllTemplates request )

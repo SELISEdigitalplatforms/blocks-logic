@@ -71,7 +71,6 @@ namespace MailBoxSyncService.Services
                 Payload = new EmailTriggerEvent
                 {
                     Type = EmailTriggerType.Inbound,
-                    ProjectKey = tenantId,
                     Mail = entity
                 }
             });

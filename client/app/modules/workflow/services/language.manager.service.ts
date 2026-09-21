@@ -4,9 +4,9 @@ import { ILanguageConfig } from "../models/language";
 
 class LanguageManagerService {
   private readonly LogicHttpClient = serviceInstances.logicService;
-  fetchBlocksLanguages = (projectKey: string): Promise<ILanguageConfig[]> => {
+  fetchBlocksLanguages = (): Promise<ILanguageConfig[]> => {
     return this.LogicHttpClient.get(
-      `${LANGUAGE_ENDPOINTS.GETS}?projectKey=${projectKey}`,
+      `${LANGUAGE_ENDPOINTS.GETS}`,
       undefined,
       { absoluteUrl: true },
     );

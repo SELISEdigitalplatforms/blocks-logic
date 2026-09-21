@@ -18,6 +18,13 @@ export type RuntimeKey = string;
  */
 export const getRuntimeEnv = (_key?: RuntimeKey): string => "";
 
+/**
+ * Mirrors the SDK helper: a project carrying its own custom domain resolves to that app's
+ * `blocksapi.` host; anything else falls back to the shared public host, which is unset here.
+ */
+export const getProjectBlocksApiUrl = (project?: { customDomain?: string | null } | null): string =>
+  project?.customDomain ? `blocksapi.${project.customDomain}` : "";
+
 type HttpClientOptions = {
   baseURL?: string;
   blocksKey?: string;
@@ -70,6 +77,14 @@ export class HttpError extends Error {
 
 // Returns a path scoper; the identity keeps navigation targets predictable.
 export const useScopedPath = () => (path: string) => path;
+
+// Cross-app redirect prefetch stand-in. Reports "ready" with a no-op redirect so
+// components that gate a button on `isReady` render it enabled in tests.
+export const usePrefetchRedirect = (_options?: unknown) => ({
+  isFetching: false,
+  isReady: true,
+  redirect: () => {},
+});
 
 // Theme hook stand-in.
 export const useTheme = () => ({

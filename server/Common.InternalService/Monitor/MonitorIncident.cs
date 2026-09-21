@@ -9,7 +9,6 @@ namespace Common.InternalService.Monitor
         public string MonitorId { get; set; }
         public string MonitorName { get; set; }
         public string MonitorUrl { get; set; }
-        public string ProjectKey { get; set; }
         public DateTime StartTime { get; set; } = DateTime.UtcNow;
         public DateTime? EndTime { get; set; }
 
