@@ -10,10 +10,8 @@ namespace DomainService.Notification
     {
         private readonly IDbContextProvider _dbContextProvider;
         private readonly IBlocksSecret _blocksSecret;
-        private IMongoDatabase _clientDb;
 
         private const string _notificationCollection = "OfflineNotifications";
-        private const string _rootDatabaseName = "BlocksRootDb";
         private readonly ILogger<NotificationRepository> _logger;
 
         public NotificationRepository(IDbContextProvider dbContextProvider, IBlocksSecret blocksSecret, ILogger<NotificationRepository> logger)
@@ -26,14 +24,13 @@ namespace DomainService.Notification
 
         private IMongoDatabase ResolvedClientDb()
         {
-            var blocksContext = BlocksContext.GetContext();
-                _logger.LogInformation($"Blocks Context {blocksContext.ToString()}");
+            var blocksContext = BlocksContext.GetContext() ?? throw new InvalidOperationException("Tenant context is required.");
             if (blocksContext.Impersonated)
-                {
-                    return _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, _rootDatabaseName);
-                }
+            {
+                return _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, _blocksSecret.RootDatabaseName);
+            }
 
-                return _dbContextProvider.GetDatabase(blocksContext.TenantId);
+            return _dbContextProvider.GetDatabase(blocksContext.TenantId);
         }
 
         private IMongoDatabase? TryGetDatabase(Func<IMongoDatabase> resolve, string source)
@@ -56,7 +53,7 @@ namespace DomainService.Notification
         /// the root database when its producer was impersonating and in the tenant database otherwise.
         /// One user's notifications are therefore split across both, and reads have to look in both.
         ///
-        /// The two dedupe passes collapse the list back to one entry when the tenant already is the root
+        /// Deduplication collapses the list back to one entry when the tenant already is the root
         /// database, so a single-database tenant behaves exactly as it did before.
         /// </summary>
         private List<IMongoDatabase> ResolvedClientDbs()
@@ -68,11 +65,11 @@ namespace DomainService.Notification
                 string.IsNullOrWhiteSpace(tenantId)
                     ? null
                     : TryGetDatabase(() => _dbContextProvider.GetDatabase(tenantId), "tenant"),
-                TryGetDatabase(() => _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, _rootDatabaseName), "root"),
+                TryGetDatabase(() => _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, _blocksSecret.RootDatabaseName), "root"),
             };
 
             var seenDatabases = new HashSet<IMongoDatabase>();
-            var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var seenTargets = new HashSet<(IMongoClient Client, string Name)>();
             var databases = new List<IMongoDatabase>();
 
             foreach (var database in candidates)
@@ -80,7 +77,7 @@ namespace DomainService.Notification
                 if (database is null || !seenDatabases.Add(database)) continue;
 
                 var name = database.DatabaseNamespace?.DatabaseName;
-                if (name is not null && !seenNames.Add(name)) continue;
+                if (name is not null && !seenTargets.Add((database.Client, name))) continue;
 
                 databases.Add(database);
             }
@@ -96,15 +93,15 @@ namespace DomainService.Notification
 
         public void Save<T>(T data, string collectionName = "")
         {
-            _clientDb = ResolvedClientDb();
-            IMongoCollection<T> collection = _clientDb.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? (typeof(T).Name + "s") : collectionName);
+            var database = ResolvedClientDb();
+            IMongoCollection<T> collection = database.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? (typeof(T).Name + "s") : collectionName);
             collection.InsertOne(data);
         }
 
         public async Task<T> GetItemAsync<T>(Expression<Func<T, bool>> filterExpression, string collectionName = "")
         {
-            _clientDb = ResolvedClientDb();
-            var collection = _clientDb.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? typeof(T).Name + "s" : collectionName);
+            var database = ResolvedClientDb();
+            var collection = database.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? typeof(T).Name + "s" : collectionName);
             var filterBuilder = Builders<T>.Filter;
             var filter = filterBuilder.Where(filterExpression);
 
@@ -114,8 +111,8 @@ namespace DomainService.Notification
 
         public async Task<List<T>> GetItemsAsync<T>(Expression<Func<T, bool>> filterExpression, string collectionName = "")
         {
-            _clientDb = ResolvedClientDb();
-            var collection = _clientDb.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? typeof(T).Name + "s" : collectionName);
+            var database = ResolvedClientDb();
+            var collection = database.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? typeof(T).Name + "s" : collectionName);
             var filterBuilder = Builders<T>.Filter;
             var filter = filterBuilder.Where(filterExpression);
 
@@ -125,36 +122,36 @@ namespace DomainService.Notification
 
         public async Task SaveAsync<T>(T data, string collectionName = "")
         {
-            _clientDb = ResolvedClientDb();
-            IMongoCollection<T> collection = _clientDb.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? (typeof(T).Name + "s") : collectionName);
+            var database = ResolvedClientDb();
+            IMongoCollection<T> collection = database.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? (typeof(T).Name + "s") : collectionName);
             await collection.InsertOneAsync(data);
         }
 
         public async Task SaveAsync<T>(List<T> listOfData)
         {
-            _clientDb = ResolvedClientDb();
-            IMongoCollection<T> collection = _clientDb.GetCollection<T>(typeof(T).Name + "s");
+            var database = ResolvedClientDb();
+            IMongoCollection<T> collection = database.GetCollection<T>(typeof(T).Name + "s");
            await collection.InsertManyAsync(listOfData);
         }
 
         public async Task DeleteAsync<T>(Expression<Func<T, bool>> dataFilters)
         {
-            _clientDb = ResolvedClientDb();
-            IMongoCollection<T> collection = _clientDb.GetCollection<T>(typeof(T).Name + "s");
+            var database = ResolvedClientDb();
+            IMongoCollection<T> collection = database.GetCollection<T>(typeof(T).Name + "s");
             await collection.DeleteManyAsync(dataFilters);
         }
 
         public IQueryable<T> GetItems<T>()
         {
-            _clientDb = ResolvedClientDb();
-            return _clientDb.GetCollection<T>(typeof(T).Name + "s").AsQueryable();
+            var database = ResolvedClientDb();
+            return database.GetCollection<T>(typeof(T).Name + "s").AsQueryable();
         }
 
         public async Task UpdateNotificationAsReadByUserIdAsync(string userId)
         {
-            _clientDb = ResolvedClientDb();
+            var database = ResolvedClientDb();
             var builder = Builders<OfflineNotification>.Filter;
-            var collection = _clientDb.GetCollection<OfflineNotification>(_notificationCollection);
+            var collection = database.GetCollection<OfflineNotification>(_notificationCollection);
 
             // Match all notifications visible to this user (aligned with GetNotificationsAsync scope)
             var userNotificationFilter = builder.Or(
@@ -179,14 +176,14 @@ namespace DomainService.Notification
 
         public async Task UpdateNotificationAsReadByUserIdAsync(string userId, string notificationId)
         {
-            _clientDb = ResolvedClientDb();
+            var database = ResolvedClientDb();
             var builder = Builders<OfflineNotification>.Filter;
             var filter = builder.Where(p => p.Id == notificationId);
 
             var updateDefinition = new UpdateDefinitionBuilder<OfflineNotification>().AddToSet(p => p.ReadByUserIds,
                 userId.ToString());
 
-            await _clientDb.GetCollection<OfflineNotification>(_notificationCollection).UpdateOneAsync(filter, updateDefinition);
+            await database.GetCollection<OfflineNotification>(_notificationCollection).UpdateOneAsync(filter, updateDefinition);
         }
 
         //public async Task<GetNotificationsResponse> GetNotificationsAsync(GetNotificationsRequest request)
@@ -254,8 +251,8 @@ namespace DomainService.Notification
         }
         public async Task<GetNotificationsResponse> GetNotificationsAsync ( GetNotificationsRequest request )
         {
-            _clientDb = ResolvedClientDb();
-            var collection = _clientDb.GetCollection<OfflineNotification>("OfflineNotifications");
+            var database = ResolvedClientDb();
+            var collection = database.GetCollection<OfflineNotification>("OfflineNotifications");
             var builder = Builders<OfflineNotification>.Filter;
             var filter = FilterDefinition<OfflineNotification>.Empty;
             var userId = BlocksContext.GetContext()?.UserId;

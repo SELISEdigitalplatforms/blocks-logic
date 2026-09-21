@@ -27,6 +27,7 @@ namespace XUnitTest.Notifications
         {
             BlocksContext.IsTestMode = true;
             _secret.SetupGet(s => s.DatabaseConnectionString).Returns("conn");
+            _secret.SetupGet(s => s.RootDatabaseName).Returns("BlocksRootDb");
             _provider.Setup(p => p.GetDatabase(It.IsAny<string>())).Returns(_db.Object);
             _provider.Setup(p => p.GetDatabase(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>())).Returns(_db.Object);
             _logger.Setup(l => l.Log(It.IsAny<LogLevel>(), It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), It.IsAny<Exception>(), It.IsAny<Func<It.IsAnyType, Exception, string>>()));

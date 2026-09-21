@@ -18,20 +18,8 @@ namespace DomainService.Projects
         {
             _dbContextProvider = dbContextProvider;
             _blocksSecret = blocksSecret;
-            _clientDb = ResolvedClientDb();
+            _clientDb = _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, _blocksSecret.RootDatabaseName);
         }
-        private IMongoDatabase ResolvedClientDb()
-        {
-            var blocksContext = BlocksContext.GetContext();
-
-            if (blocksContext.Impersonated)
-            {
-                return _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, "BlocksRootDb");
-            }
-
-            return _dbContextProvider.GetDatabase(blocksContext.TenantId);
-        }
-
         public async Task<List<GroupedProjectsDto>> GetAllByLastModifiedDateAsync(GetProjectsRequest request)
         {
             var collection = _clientDb.GetCollection<Project>(IdentifierConstants.TenantCollectionName);
@@ -81,7 +69,7 @@ namespace DomainService.Projects
 
         private async Task<List<Project>> GetNosharedProjectsAsync(List<Project> sharedProjects, string tenantGroupId)
         {
-            var projectCollection = _dbContextProvider.GetCollection<Project>(IdentifierConstants.TenantCollectionName);
+            var projectCollection = _clientDb.GetCollection<Project>(IdentifierConstants.TenantCollectionName);
             var filter = Builders<Project>.Filter.Nin(p => p.TenantId, sharedProjects?.Select(doc => doc?.TenantId)) &
                          Builders<Project>.Filter.Where(p => p.IsDisabled == false) &
                          Builders<Project>.Filter.Where(p => p.TenantGroupId == tenantGroupId);
@@ -127,7 +115,7 @@ namespace DomainService.Projects
 
         public async Task<List<Project>> GetProjectPeoplesAsync(string tenantGroupId)
         {
-            var projectPeopleCollection = _dbContextProvider.GetCollection<ProjectPeople>(IdentifierConstants.ProjectPeopleCollectionName);
+            var projectPeopleCollection = _clientDb.GetCollection<ProjectPeople>(IdentifierConstants.ProjectPeopleCollectionName);
 
             var projectPeopleFilter = Builders<ProjectPeople>.Filter.And(
                 Builders<ProjectPeople>.Filter.Eq(mc => mc.UserId, BlocksContext.GetContext()?.UserId),
@@ -138,7 +126,7 @@ namespace DomainService.Projects
             var documentsCursor = await projectPeopleCollection.FindAsync(projectPeopleFilter);
             var documents = await documentsCursor.ToListAsync();
 
-            var projectCollection = _dbContextProvider.GetCollection<Project>(IdentifierConstants.TenantCollectionName);
+            var projectCollection = _clientDb.GetCollection<Project>(IdentifierConstants.TenantCollectionName);
             var filter = Builders<Project>.Filter.In(p => p.TenantId, documents?.Select(doc => doc?.TenantId)) &
                          Builders<Project>.Filter.Where(p => p.IsDisabled == false);
 
@@ -172,7 +160,7 @@ namespace DomainService.Projects
         {
             var filter = Builders<Tenant>.Filter.Eq(x => x.TenantGroupId, projectGroupId);
 
-            var tenantIds = await _dbContextProvider.GetCollection<Tenant>(IdentifierConstants.TenantCollectionName)
+            var tenantIds = await _clientDb.GetCollection<Tenant>(IdentifierConstants.TenantCollectionName)
                 .Find(filter)
                 .Project(x => x.TenantId)
                 .ToListAsync();

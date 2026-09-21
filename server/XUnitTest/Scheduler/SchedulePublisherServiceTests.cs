@@ -29,7 +29,11 @@ namespace XUnitTest.Scheduler
             _service = CreateService(HttpStatusCode.OK);
         }
 
-        public void Dispose() => _service.Dispose();
+        public void Dispose()
+        {
+            _service.Dispose();
+            BlocksContext.ClearContext();
+        }
 
         private SchedulePublisherService CreateService(HttpStatusCode code, bool fail = false)
         {
@@ -229,9 +233,16 @@ namespace XUnitTest.Scheduler
                     },
                 });
 
+            string? publishedTenant = null;
+            _messageClient.Setup(m => m.SendToConsumerAsync(It.IsAny<ConsumerMessage<PublishScheduleCommand>>()))
+                .Callback(() => publishedTenant = BlocksContext.GetContext()?.TenantId)
+                .Returns(Task.CompletedTask);
+            XUnitTest.TestHelpers.TestBlocksContext.Set("unrelated-worker-owner");
             CreateService(HttpStatusCode.OK);
             await _service.Publish(schedule.ItemId, "tenant-1");
 
+            Assert.Equal("tenant-1", publishedTenant);
+            _scheduleRepository.Verify(r => r.GetByIdAsync(schedule.ItemId, "tenant-1"), Times.Once);
             _messageClient.Verify(m => m.SendToConsumerAsync(It.Is<ConsumerMessage<PublishScheduleCommand>>(c =>
                 c.ConsumerName == "configured-queue")), Times.Once);
         }
