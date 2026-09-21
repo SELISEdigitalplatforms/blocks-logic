@@ -1,3 +1,4 @@
+using Mail.DomainService.Entities;
 using MailBoxSyncService.Services;
 
 namespace MailBoxSyncService
@@ -72,7 +73,20 @@ namespace MailBoxSyncService
                     return;
                 }
 
-                var configs = await _mailRepository.GetImapConfigurationsAsync(tenant);
+                List<MailServerConfiguration> configs;
+                try
+                {
+                    configs = await _mailRepository.GetImapConfigurationsAsync(tenant);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error loading inbound mail configurations for tenant '{TenantId}'", tenant.TenantId);
+                    continue;
+                }
                 foreach (var config in configs)
                 {
                     try

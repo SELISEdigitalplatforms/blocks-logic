@@ -178,6 +178,8 @@ API, Worker, and MailBoxSyncService use the published Genesis 4.2.2 package. Run
 
 The scheduler discovers enabled tenants from main's configured root database and scans their stored connections. It logs each failed tenant and continues scanning healthy tenants; a root registry failure propagates. Job registration and queue publishing retain the scheduled tenant ID. Notification configuration and notification writes resolve their database per operation, including when repositories are singletons. Identifier project/membership metadata remains on main/root; managed-service reads retain their tenant/impersonation semantics. Mailbox, workflow, proxy, and monitoring stores retain their existing ownership.
 
+Notification listing, subscription-filter queries, and read-status updates cover both the current tenant database and main/root, where impersonated writes can land. An unresolved placement fails the read rather than returning an incomplete page. Mailbox sync skips a tenant whose inbound configuration database is unavailable and continues with the other tenants in that polling cycle.
+
 Routing regression tests include scheduler connection selection/failure isolation, scheduled-message context, and concurrent notification writes and refreshed placement using the real Genesis provider. Local integration tests use disposable databases; run a compatible local MongoDB (4.4 or newer for the currently resolved driver), then:
 
 ```powershell
