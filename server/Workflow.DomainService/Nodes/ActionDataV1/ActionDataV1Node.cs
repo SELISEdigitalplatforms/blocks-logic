@@ -104,7 +104,7 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                     ? $"{{ get{parameters.SchemaName}s {{ items {{ {fieldsList} }} totalCount }} }}"
                     : $"{{ get{parameters.SchemaName}s(where: {{ {whereClause} }}) {{ items {{ {fieldsList} }} totalCount }} }}";
 
-                var response = await SendGraphQLRequestAsync(parameters, graphqlQuery);
+                var response = await SendGraphQLRequestAsync(parameters, graphqlQuery, context.TenantId);
                 response.EnsureSuccessStatusCode();
                 var responseString = await response.Content.ReadAsStringAsync();
                 var responseJson = JsonDocument.Parse(responseString).RootElement;
@@ -176,7 +176,7 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                     var inputFields = BuildGraphQLInputFields(data);
                     var graphqlQuery = $"mutation {{ insert{parameters.SchemaName}(input: {{ {inputFields} }}) {{ acknowledged totalImpactedData itemId }} }}";
 
-                    var response = await SendGraphQLRequestAsync(parameters, graphqlQuery);
+                    var response = await SendGraphQLRequestAsync(parameters, graphqlQuery, context.TenantId);
                     response.EnsureSuccessStatusCode();
                     var responseString = await response.Content.ReadAsStringAsync();
                     var responseJson = ParseMutationResponse(responseString, $"insert{parameters.SchemaName}");
@@ -224,7 +224,7 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                     var inputFields = BuildGraphQLInputFields(data);
                     var graphqlQuery = $"mutation {{ update{parameters.SchemaName}(where: {{ {whereClause} }}, input: {{ {inputFields} }}) {{ acknowledged totalImpactedData itemId }} }}";
 
-                    var response = await SendGraphQLRequestAsync(parameters, graphqlQuery);
+                    var response = await SendGraphQLRequestAsync(parameters, graphqlQuery, context.TenantId);
                     response.EnsureSuccessStatusCode();
                     var responseString = await response.Content.ReadAsStringAsync();
                     var responseJson = ParseMutationResponse(responseString, $"update{parameters.SchemaName}");
@@ -271,7 +271,7 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                     var whereClause = BuildWhereClause(parameters, context.InputItems[i], context);
                     var graphqlQuery = $"mutation {{ delete{parameters.SchemaName}(where: {{ {whereClause} }}) {{ acknowledged totalImpactedData itemId message }} }}";
 
-                    var response = await SendGraphQLRequestAsync(parameters, graphqlQuery);
+                    var response = await SendGraphQLRequestAsync(parameters, graphqlQuery, context.TenantId);
                     response.EnsureSuccessStatusCode();
                     var responseString = await response.Content.ReadAsStringAsync();
                     var responseJson = ParseMutationResponse(responseString, $"delete{parameters.SchemaName}");
@@ -319,7 +319,7 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                     var resolvedQuery = parseExpression<string>(parameters.RawQuery, context.InputItems[i], context)
                         ?? parameters.RawQuery;
 
-                    var response = await SendGraphQLRequestAsync(parameters, resolvedQuery);
+                    var response = await SendGraphQLRequestAsync(parameters, resolvedQuery, context.TenantId);
                     response.EnsureSuccessStatusCode();
                     var responseString = await response.Content.ReadAsStringAsync();
                     var responseJson = JsonDocument.Parse(responseString).RootElement;
@@ -364,7 +364,7 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
         /// (client credentials or Blocks delegated token). Shared by all action types.
         /// </summary>
         private async Task<HttpResponseMessage> SendGraphQLRequestAsync(
-            ActionDataV1Parameters parameters, string graphqlQuery)
+            ActionDataV1Parameters parameters, string graphqlQuery, string tenantId)
         {
             var httpClient = _httpClientFactory.CreateClient();
             var requestUrl = $"{parameters.ApiBaseUrl}/api/gateway";
@@ -386,11 +386,11 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                     ItemId = parameters.ClientId,
                     ClientSecret = parameters.ClientSecret
                 };
-                var token = await _clientCredentialTokenService.GetTokenAsync(clientCredentialEntity, BlocksContext.GetContext()?.TenantId);
+                var token = await _clientCredentialTokenService.GetTokenAsync(clientCredentialEntity, tenantId);
                 request.Headers.Add("Authorization", $"Bearer {token}");
             }
 
-            request.Headers.Add("x-blocks-key", BlocksContext.GetContext()?.TenantId);
+            request.Headers.Add("x-blocks-key", tenantId);
             request.Content = new StringContent(
                 JsonSerializer.Serialize(new { query = graphqlQuery, variables = new { } }),
                 System.Text.Encoding.UTF8,
