@@ -7,6 +7,7 @@ using XUnitTest.TestHelpers;
 using DomainService.ManagedService;
 using DomainService.ManagedService.Services;
 using DomainService.Shared.Entities;
+using DomainService.Shared;
 using Mail.DomainService.Entities;
 using MailBoxSyncService.Services;
 
@@ -16,6 +17,50 @@ public class NotificationPlacementTests : IDisposable
 {
     private readonly TenantPlacementFixture _fixture = new();
     public void Dispose() => _fixture.Dispose();
+
+    [Fact]
+    public async Task NotificationListingAndReadStatus_IncludeTenantAndRootPlacements()
+    {
+        TestBlocksContext.Set("dev", "same-user");
+        var repository = new NotificationRepository(_fixture.Provider, _fixture.Secret, NullLogger<NotificationRepository>.Instance);
+        var collectionName = "OfflineNotifications";
+        await _fixture.Dev.GetCollection<OfflineNotification>(collectionName).InsertOneAsync(new OfflineNotification
+        {
+            Id = "dev-note", Payload = new PayloadData { UserId = "same-user" },
+            ReadByUserIds = [], CreatedTime = DateTime.UtcNow.AddMinutes(-1)
+        });
+        await _fixture.Main.GetCollection<OfflineNotification>(collectionName).InsertOneAsync(new OfflineNotification
+        {
+            Id = "root-note", Payload = new PayloadData { UserId = "same-user" },
+            ReadByUserIds = [], CreatedTime = DateTime.UtcNow
+        });
+        await _fixture.Other.GetCollection<OfflineNotification>(collectionName).InsertOneAsync(new OfflineNotification
+        {
+            Id = "other-note", Payload = new PayloadData { UserId = "same-user" },
+            ReadByUserIds = [], CreatedTime = DateTime.UtcNow
+        });
+
+        var page = await repository.GetNotificationsAsync(new GetNotificationsRequest { Page = 0, PageSize = 1 });
+        Assert.Equal("root-note", Assert.Single(page.Notifications).Id);
+        Assert.Equal(2, page.TotalNotificationsCount);
+        Assert.Equal(2, page.UnReadNotificationsCount);
+        var secondPage = await repository.GetNotificationsAsync(new GetNotificationsRequest { Page = 1, PageSize = 1 });
+        Assert.Equal("dev-note", Assert.Single(secondPage.Notifications).Id);
+        var filtered = await repository.GetNotificationItemsAcrossPlacementsAsync(n => n.Payload.UserId == "same-user");
+        Assert.Equal(new[] { "dev-note", "root-note" }, filtered.Select(n => n.Id).OrderBy(id => id));
+
+        await repository.UpdateNotificationAsReadByUserIdAsync("same-user", "root-note");
+        var rootNote = await _fixture.Main.GetCollection<OfflineNotification>(collectionName)
+            .Find(n => n.Id == "root-note").SingleAsync();
+        Assert.Contains("same-user", rootNote.ReadByUserIds);
+
+        await repository.UpdateNotificationAsReadByUserIdAsync("same-user");
+        var devNote = await _fixture.Dev.GetCollection<OfflineNotification>(collectionName)
+            .Find(n => n.Id == "dev-note").SingleAsync();
+        Assert.Contains("same-user", devNote.ReadByUserIds);
+        Assert.Equal(0, await _fixture.Other.GetCollection<OfflineNotification>(collectionName)
+            .CountDocumentsAsync(n => n.ReadByUserIds.Contains("same-user")));
+    }
 
     [Fact]
     public async Task SharedRepositories_ConstructWithoutContext_AndKeepConcurrentTenantWritesSeparate()

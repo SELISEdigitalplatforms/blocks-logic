@@ -53,8 +53,8 @@ namespace XUnitTest.Notification
         }
 
         private void SetupNotifications(params OfflineNotification[] notifications) =>
-            _repository.Setup(r => r.GetItemsAsync(
-                    It.IsAny<Expression<Func<OfflineNotification, bool>>>(), It.IsAny<string>()))
+            _repository.Setup(r => r.GetNotificationItemsAcrossPlacementsAsync(
+                    It.IsAny<Expression<Func<OfflineNotification, bool>>>()))
                 .ReturnsAsync(notifications.ToList());
 
         private static OfflineNotification Notification(
@@ -96,8 +96,8 @@ namespace XUnitTest.Notification
                 Request(OfflineNotificationOrder.CreatedTime, "orders"));
 
             result.Select(n => n.Id).Should().Equal("n-new", "n-middle", "n-old");
-            _repository.Verify(r => r.GetItemsAsync(
-                It.IsAny<Expression<Func<OfflineNotification, bool>>>(), It.IsAny<string>()), Times.Once);
+            _repository.Verify(r => r.GetNotificationItemsAcrossPlacementsAsync(
+                It.IsAny<Expression<Func<OfflineNotification, bool>>>()), Times.Once);
         }
 
         [Fact]
@@ -140,8 +140,8 @@ namespace XUnitTest.Notification
                 Request(OfflineNotificationOrder.CreatedTime, null));
 
             result.Should().BeEmpty("without a filter there is nothing to select on");
-            _repository.Verify(r => r.GetItemsAsync(
-                It.IsAny<Expression<Func<OfflineNotification, bool>>>(), It.IsAny<string>()), Times.Never);
+            _repository.Verify(r => r.GetNotificationItemsAcrossPlacementsAsync(
+                It.IsAny<Expression<Func<OfflineNotification, bool>>>()), Times.Never);
         }
 
         [Fact]
@@ -183,8 +183,8 @@ namespace XUnitTest.Notification
             });
 
             result.Should().BeEmpty();
-            _repository.Verify(r => r.GetItemsAsync(
-                It.IsAny<Expression<Func<OfflineNotification, bool>>>(), It.IsAny<string>()), Times.Never);
+            _repository.Verify(r => r.GetNotificationItemsAcrossPlacementsAsync(
+                It.IsAny<Expression<Func<OfflineNotification, bool>>>()), Times.Never);
         }
 
         [Fact]

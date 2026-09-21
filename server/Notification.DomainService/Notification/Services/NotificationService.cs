@@ -142,7 +142,7 @@ namespace DomainService.Notification
 
         private async Task<List<OfflineNotification>> GetUnReadNotificationsByUserIdOrderByReadStatus(string userId, SubscriptionFilter subscriptionFilterData)
         {
-            var offlineNotifications = (await _notificationRepository.GetItemsAsync<OfflineNotification>(p => ((!string.IsNullOrWhiteSpace(p.Payload.UserId) && p.Payload.UserId == userId) || p.Payload.NotificationType == NotificationReceiverTypes.BroadcastReceiverType.ToString())
+            var offlineNotifications = (await _notificationRepository.GetNotificationItemsAcrossPlacementsAsync(p => ((!string.IsNullOrWhiteSpace(p.Payload.UserId) && p.Payload.UserId == userId) || p.Payload.NotificationType == NotificationReceiverTypes.BroadcastReceiverType.ToString())
                                        && p.Payload.SubscriptionFilters.Contains(subscriptionFilterData))).ToList();
 
             if (offlineNotifications.Any())
@@ -192,7 +192,7 @@ namespace DomainService.Notification
                 return [];
 
             var statList = statusList.ToList();
-            var notificationList = (await _notificationRepository.GetItemsAsync<OfflineNotification>(p =>
+            var notificationList = (await _notificationRepository.GetNotificationItemsAcrossPlacementsAsync(p =>
                                               ((!string.IsNullOrWhiteSpace(p.Payload.UserId) && p.Payload.UserId == userId) || p.Payload.NotificationType == NotificationReceiverTypes.BroadcastReceiverType.ToString()) &&
                                                p.Payload.SubscriptionFilters.Any(sf =>
                                                statList.Contains(sf.Context) &&
@@ -206,7 +206,7 @@ namespace DomainService.Notification
             if (subscriptionFilterData == null)
                 return [];
 
-            var notificationList = (await _notificationRepository.GetItemsAsync<OfflineNotification>(p =>
+            var notificationList = (await _notificationRepository.GetNotificationItemsAcrossPlacementsAsync(p =>
                                                     ((!string.IsNullOrWhiteSpace(p.Payload.UserId) && p.Payload.UserId == userId) || p.Payload.NotificationType == NotificationReceiverTypes.BroadcastReceiverType.ToString()) &&
                                                     p.Payload.SubscriptionFilters.Any(sf =>
                                                     sf.ActionName == subscriptionFilterData.ActionName && sf.Value == subscriptionFilterData.Value))).OrderByDescending(p => p.CreatedTime);

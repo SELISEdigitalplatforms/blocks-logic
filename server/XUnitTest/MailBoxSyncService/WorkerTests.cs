@@ -79,6 +79,38 @@ namespace XUnitTest.MailBoxSyncService
                 Times.Once);
         }
 
+        [Fact]
+        public async Task ExecuteAsync_ContinuesWithHealthyTenant_WhenAnotherPlacementCannotLoadConfigurations()
+        {
+            var mailRepository = new Mock<IMailRepository>();
+            var syncService = new Mock<IMailBoxSyncService>();
+            var logger = new Mock<ILogger<global::MailBoxSyncService.Worker>>();
+            var unavailable = CreateTenant();
+            unavailable.TenantId = "dev";
+            var healthy = CreateTenant();
+            healthy.TenantId = "other";
+            var config = new MailServerConfiguration { ItemId = "other-config", IsInbound = true };
+            mailRepository.Setup(r => r.GetTenantsAsync()).ReturnsAsync(new List<Tenant> { unavailable, healthy });
+            mailRepository.Setup(r => r.GetImapConfigurationsAsync(unavailable)).ThrowsAsync(new TimeoutException());
+            mailRepository.Setup(r => r.GetImapConfigurationsAsync(healthy)).ReturnsAsync(new List<MailServerConfiguration> { config });
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            syncService.Setup(s => s.SyncInboxAsync(config, healthy.TenantId))
+                .Returns(() =>
+                {
+                    cts.Cancel();
+                    return Task.CompletedTask;
+                });
+
+            var worker = new TestWorker(mailRepository.Object, syncService.Object, logger.Object, CreateConfig());
+            await worker.RunAsync(cts.Token);
+
+            syncService.Verify(s => s.SyncInboxAsync(config, healthy.TenantId), Times.Once);
+            logger.Verify(x => x.Log(LogLevel.Error, It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains("dev")),
+                It.IsAny<Exception>(), It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
+        }
+
         private static Tenant CreateTenant()
         {
             return new Tenant

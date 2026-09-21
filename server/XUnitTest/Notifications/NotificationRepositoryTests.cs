@@ -298,5 +298,15 @@ namespace XUnitTest.Notifications
             result.Notifications.Should().BeEmpty();
             result.TotalNotificationsCount.Should().Be(0);
         }
+
+        [Fact]
+        public async Task GetNotificationsAsync_FailsWhenTenantPlacementCannotBeResolved()
+        {
+            SetContext();
+            _provider.Setup(p => p.GetDatabase("tenant-1")).Throws(new TimeoutException());
+
+            await Assert.ThrowsAsync<TimeoutException>(() => Build().GetNotificationsAsync(
+                new GetNotificationsRequest { Page = 0, PageSize = 10 }));
+        }
     }
 }
