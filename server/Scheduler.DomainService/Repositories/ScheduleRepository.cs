@@ -99,10 +99,10 @@ namespace Scheduler.DomainService.Repositories
 
         public async Task<List<SchedularDto>> GetSchedulesFromAllTenantsAsync()
         {
-            var tenants = _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, "BlocksRootDb")
+            var tenants = await _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, _blocksSecret.RootDatabaseName)
                     .GetCollection<Tenant>("Tenants")
-                    .Find(FilterDefinition<Tenant>.Empty)
-                    .ToList();
+                    .Find(Builders<Tenant>.Filter.Eq(t => t.IsDisabled, false))
+                    .ToListAsync();
 
             const int batchSize = 10;
             List<SchedularDto> schedularDtos = [];
@@ -112,9 +112,13 @@ namespace Scheduler.DomainService.Repositories
                 var batch = tenants.Skip(i).Take(batchSize);
                 var tasks = batch.Select(async tenant =>
                 {
+                    if (tenant.IsDisabled) return null;
                     try
                     {
-                        var schedulesCollection = _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, tenant.DBName)
+                        if (string.IsNullOrWhiteSpace(tenant.TenantId) || string.IsNullOrWhiteSpace(tenant.DbConnectionString) || string.IsNullOrWhiteSpace(tenant.DBName))
+                            throw new InvalidOperationException("Tenant database placement is incomplete.");
+
+                        var schedulesCollection = _dbContextProvider.GetDatabase(tenant.DbConnectionString, tenant.DBName)
                                                   .GetCollection<Schedule>(CollectionName);
 
                         var filter = Builders<Schedule>.Filter.Ne(x => x.IsActive, false);
