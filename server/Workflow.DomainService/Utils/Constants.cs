@@ -6,7 +6,7 @@ namespace Workflow.DomainService.Utils
 {
     public static class LogicConstants
     {
-        public const string NodeExecutionQueue = "blocks_logic_workflow_node_execute_listener";
+        public const string NodeExecutionQueue = "blocks_logic_workflow_node_execute_listener_test_nuzat";
         public const string EmailTriggerQueue = CommunicationConstants.EmailTriggerQueueName;
         public const string DataTriggerQueue = "blocks_logic_workflow_data_trigger_listener";
         public const string SchedulerTriggerQueue = SchedulerConstants.WorkflowSchedulerTriggerQueue;
