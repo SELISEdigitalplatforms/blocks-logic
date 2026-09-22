@@ -6,6 +6,7 @@ import {
   preflightWorkflowFile,
   remapAndSanitiseWorkflow,
   replaceIdsInString,
+  extractImportNotification,
 } from "./workflow-import";
 
 const HEX32 = /^[0-9a-f]{32}$/;
@@ -220,5 +221,41 @@ describe("remapAndSanitiseWorkflow", () => {
     const out = remapAndSanitiseWorkflow(rootOf() as never);
     expect(out).toEqual({ nodes: [], edges: [], settings: {}, issues: 0 });
     expect(importSuccessMessage(0)).toBe("Workflow imported.");
+  });
+});
+
+describe("extractImportNotification", () => {
+  it("reads camelCase SignalR envelopes", () => {
+    const out = extractImportNotification({
+      responseKey: "cor-1",
+      denormalizedPayload: JSON.stringify({
+        Message: { IsSuccess: true, workflowId: "wf-1", issues: 2 },
+      }),
+    });
+    expect(out).toEqual({
+      correlationId: "cor-1",
+      isSuccess: true,
+      workflowId: "wf-1",
+      issues: 2,
+      description: undefined,
+    });
+  });
+
+  it("reads PascalCase ResponseKey and nested arguments", () => {
+    const out = extractImportNotification({
+      arguments: [
+        {
+          ResponseKey: "cor-9",
+          denormalizedPayload: JSON.stringify({
+            Message: { IsSuccess: false, description: "nope" },
+          }),
+        },
+      ],
+    });
+    expect(out).toMatchObject({
+      correlationId: "cor-9",
+      isSuccess: false,
+      description: "nope",
+    });
   });
 });

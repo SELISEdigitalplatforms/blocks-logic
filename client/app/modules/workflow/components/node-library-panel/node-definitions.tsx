@@ -126,7 +126,6 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		category: "action",
 		version: "v1",
 		defaultName: "Proxy",
-		isComingSoon: true,
 		handleSpec: {
 			source: ["source"],
 			target: ["target"],

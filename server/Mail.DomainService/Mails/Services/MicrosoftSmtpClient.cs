@@ -118,7 +118,7 @@ namespace Mail.DomainService.Mails
                             mailToBeSent.MailServerConfiguration.Port,
                             mailBody.Attachments.Count);
 
-                        if (mailToBeSent.MailServerConfiguration.IsEnableSnsConfiguration)
+                        if (mailToBeSent.MailServerConfiguration.SendsSnsHeaders())
                         {
                             mail.Headers.Add("X-SES-CONFIGURATION-SET", _configuration["SnsConfigurationName"]);
                             mail.Headers.Add("X-Tenant-Id", BlocksContext.GetContext()?.TenantId);

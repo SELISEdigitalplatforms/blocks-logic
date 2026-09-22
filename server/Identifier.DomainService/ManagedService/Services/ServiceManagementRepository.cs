@@ -8,7 +8,6 @@ namespace DomainService.ManagedService.Services
     public class ServiceManagementRepository : IServiceManagementRepository
     {
         private readonly IDbContextProvider _dbContextProvider;
-        private IMongoDatabase _clientDb;
         private readonly IBlocksSecret _blocksSecret;
         public ServiceManagementRepository(IDbContextProvider dbContextProvider, IBlocksSecret blocksSecret )
         {
@@ -18,18 +17,18 @@ namespace DomainService.ManagedService.Services
 
         private IMongoDatabase ResolvedClientDb ( )
         {
-            var blocksContext = BlocksContext.GetContext();
+            var blocksContext = BlocksContext.GetContext() ?? throw new InvalidOperationException("Tenant context is required.");
             if (blocksContext.Impersonated)
             {
-                return _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, "BlocksRootDb");
+                return _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, _blocksSecret.RootDatabaseName);
             }
             return _dbContextProvider.GetDatabase(blocksContext.TenantId);
         }
 
         public async Task<(IQueryable<BlocksManagedService>, long)> GetAllServicesAsync ( GetAllServiceRequest request )
         {
-             _clientDb = ResolvedClientDb();
-            var collection = _clientDb.GetCollection<BlocksManagedService>("BlocksManagedServices");
+            var database = ResolvedClientDb();
+            var collection = database.GetCollection<BlocksManagedService>("BlocksManagedServices");
             var filter = Builders<BlocksManagedService>.Filter.Eq(s => s.TenantId, BlocksContext.GetContext()?.TenantId ?? string.Empty);
 
             if (!string.IsNullOrWhiteSpace(request?.Filter?.ServiceName))

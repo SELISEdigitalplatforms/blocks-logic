@@ -1,5 +1,5 @@
 import { serviceInstances } from "@/lib/http-client";
-import { WORKFLOW_ENDPOINTS } from "../constants/endpoint.constant";
+import { WORKFLOW_ENDPOINTS, STORAGE_ENDPOINTS } from "../constants/endpoint.constant";
 import {
   IGetWorkflowsPayload,
   IGetWorkflowsResponse,
@@ -38,6 +38,10 @@ import {
   ITriggerListenerPayload,
   ITriggerListenerResponse,
   IStepExecutePayload,
+  IImportWorkflowPayload,
+  IImportWorkflowResponse,
+  IGetPreSignedUrlForUploadPayload,
+  IGetPreSignedUrlForUploadResponse,
 } from "../types/workflow.service.type";
 
 export class WorkflowService {
@@ -139,6 +143,30 @@ export class WorkflowService {
 
   triggerListener = (payload: ITriggerListenerPayload): Promise<ITriggerListenerResponse> => {
     return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.TRIGGER_LISTENER}`, payload);
+  }
+
+  importWorkflow = (payload: IImportWorkflowPayload): Promise<IImportWorkflowResponse> => {
+    return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.IMPORT}`, payload);
+  }
+
+  getPreSignedUrlForUpload = (
+    payload: IGetPreSignedUrlForUploadPayload,
+  ): Promise<IGetPreSignedUrlForUploadResponse> => {
+    return this.LogicHttpClient.post(`${STORAGE_ENDPOINTS.GET_PRESIGNED_URL}`, payload);
+  }
+
+  uploadFileToPresignedUrl = async (url: string, file: File): Promise<void> => {
+    const response = await fetch(url, {
+      method: "PUT",
+      headers: {
+        "Content-Type": file.type || "application/json",
+        "x-ms-blob-type": "Blockblob",
+      },
+      body: file,
+    });
+    if (!response.ok) {
+      throw new Error("Failed to upload the workflow file.");
+    }
   }
 }
 

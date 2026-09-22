@@ -8,7 +8,9 @@ export type ImportErrorCode =
   | "IMPORT_BAD_SHAPE"
   | "CREATE_FAILED"
   | "UPDATE_FAILED"
-  | "EXPORT_FAILED";
+  | "EXPORT_FAILED"
+  | "ENQUEUE_FAILED"
+  | "UPLOAD_FAILED";
 
 export const IMPORT_ERROR_MESSAGES: Record<ImportErrorCode, string> = {
   IMPORT_TOO_LARGE: "This file is larger than the 5 MB limit.",
@@ -18,9 +20,13 @@ export const IMPORT_ERROR_MESSAGES: Record<ImportErrorCode, string> = {
   CREATE_FAILED: "Could not create the workflow. Please try again.",
   UPDATE_FAILED: "The workflow was created but its contents could not be saved.",
   EXPORT_FAILED: "Could not export this workflow. Please try again.",
+  ENQUEUE_FAILED: "Could not start the import. Please try again.",
+  UPLOAD_FAILED: "Could not upload the workflow file. Please try again.",
 };
 
 export const IMPORT_SUCCESS_MESSAGE = "Workflow imported.";
+
+export const IMPORT_STARTED_MESSAGE = "Import started. You'll be notified when it's ready.";
 
 export const importSuccessMessage = (issues: number): string =>
   issues > 0
@@ -228,3 +234,82 @@ export const remapAndSanitiseWorkflow = (root: WorkflowImportRoot): RemappedWork
 
   return { nodes, edges, settings, issues };
 };
+
+export type WorkflowImportNotification = {
+  correlationId: string;
+  isSuccess: boolean;
+  workflowId?: string;
+  issues: number;
+  description?: string;
+};
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+
+const readString = (record: Record<string, unknown> | null, ...keys: string[]): string | undefined => {
+  if (!record) return undefined;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.length > 0) return value;
+  }
+  return undefined;
+};
+
+const parseMaybeJson = (value: unknown): unknown => {
+  if (typeof value !== "string") return value;
+  const trimmed = value.endsWith("\x1e") ? value.slice(0, -1) : value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+};
+
+const toBoolean = (value: unknown): boolean | undefined => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    if (value.toLowerCase() === "true") return true;
+    if (value.toLowerCase() === "false") return false;
+  }
+  return undefined;
+};
+
+export const extractImportNotification = (data: unknown): WorkflowImportNotification | null => {
+  const outer = asRecord(parseMaybeJson(data));
+  if (!outer) return null;
+
+  const envelope = asRecord(outer.arguments)
+    ? null
+    : outer;
+  const firstArg = Array.isArray(outer.arguments) ? asRecord(outer.arguments[0]) : null;
+  const source = firstArg ?? asRecord(outer.message) ?? envelope;
+  if (!source) return null;
+
+  const payload = parseMaybeJson(
+    source.denormalizedPayload ?? source.DenormalizedPayload ?? source.payload ?? source,
+  );
+  const payloadRecord = asRecord(payload);
+  const message = asRecord(payloadRecord?.Message) ?? asRecord(payloadRecord?.message) ?? payloadRecord;
+  const correlationId =
+    readString(source, "responseKey", "ResponseKey", "correlationId", "CorrelationId") ??
+    readString(payloadRecord, "responseKey", "ResponseKey") ??
+    readString(message, "correlationId", "CorrelationId");
+  if (!correlationId) return null;
+
+  const isSuccess =
+    toBoolean(message?.IsSuccess) ??
+    toBoolean(message?.isSuccess) ??
+    toBoolean(source.ResponseValue) ??
+    toBoolean(source.responseValue) ??
+    true;
+
+  const issuesRaw = message?.issues ?? message?.Issues;
+  const issues = typeof issuesRaw === "number" && Number.isFinite(issuesRaw) ? issuesRaw : 0;
+  const workflowId = readString(message, "workflowId", "WorkflowId");
+  const description = readString(message, "description", "Description");
+
+  return { correlationId, isSuccess, workflowId, issues, description };
+};
+
