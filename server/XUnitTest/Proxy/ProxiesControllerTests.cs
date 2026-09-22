@@ -57,6 +57,19 @@ namespace XUnitTest.Proxy
         }
 
         [Fact]
+        public async Task List_MissingTenantContext_Returns401_InsteadOfEmptyList()
+        {
+            TestBlocksContext.Clear();
+
+            var result = await _controller.List(new ProxyGetAllRequestDto());
+
+            StatusOf(result).Should().Be(401);
+            _proxyService.Verify(
+                s => s.GetAllAsync(It.IsAny<string>(), It.IsAny<ProxyGetAllRequestDto>()),
+                Times.Never);
+        }
+
+        [Fact]
         public async Task Get_ReturnsOk_WithServiceResult()
         {
             var expected = new ProxyGetResponseDto();
