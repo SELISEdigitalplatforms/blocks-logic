@@ -60,4 +60,11 @@ export const navigationMenus: Menu[] = [
     path: "/app/workflow",
     icon: Workflow,
   },
+  {
+    id: "service-proxy",
+    type: "menu",
+    name: "Proxy",
+    path: "/app/proxy",
+    icon: ProxyIcon,
+  },
 ];
