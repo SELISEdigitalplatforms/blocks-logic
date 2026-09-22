@@ -10,6 +10,8 @@ namespace Workflow.DomainService.Utils
         public const string EmailTriggerQueue = CommunicationConstants.EmailTriggerQueueName;
         public const string DataTriggerQueue = "blocks_logic_workflow_data_trigger_listener";
         public const string SchedulerTriggerQueue = SchedulerConstants.WorkflowSchedulerTriggerQueue;
+        public const string WorkflowImportQueue = "blocks_logic_workflow_import_listener";
+        public const string WorkflowImportNotificationConfigurationName = "workflow-import";
         public const string LogicMailQueueName = "blocks_email_listener";
         public const string MigrationCompletionTopic = "blocks_migration_topic1";
         public const string AccessTokenCookieName = "access_token";
@@ -53,6 +55,7 @@ namespace Workflow.DomainService.Utils
                                              ConsumerSubscription.BindToQueue(EmailTriggerQueue),
                                              ConsumerSubscription.BindToQueue(DataTriggerQueue),
                                              ConsumerSubscription.BindToQueue(SchedulerTriggerQueue),
+                                             ConsumerSubscription.BindToQueue(WorkflowImportQueue),
                                              ConsumerSubscription.BindToQueue(LogicMailQueueName),
                                              ConsumerSubscription.BindToQueue(CommunicationConstants.MailStatusQueueName),
                                              ConsumerSubscription.BindToQueue(MigrationCompletionTopic),
@@ -68,7 +71,7 @@ namespace Workflow.DomainService.Utils
             {
                 AzureServiceBusConfiguration = new AzureServiceBusConfiguration
                 {
-                    Queues = [NodeExecutionQueue, EmailTriggerQueue, DataTriggerQueue, SchedulerTriggerQueue, LogicMailQueueName, CommunicationConstants.MailStatusQueueName, SchedulerConstants.ScheduleJobRegistryQueueName],
+                    Queues = [NodeExecutionQueue, EmailTriggerQueue, DataTriggerQueue, SchedulerTriggerQueue, WorkflowImportQueue, LogicMailQueueName, CommunicationConstants.MailStatusQueueName, SchedulerConstants.ScheduleJobRegistryQueueName],
                     Topics = [MigrationCompletionTopic]
                 }
             };

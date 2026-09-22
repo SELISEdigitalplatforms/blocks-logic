@@ -27,6 +27,16 @@ const svc = vi.hoisted(() => ({
 vi.mock("@/modules/workflow/services/workflow.service", () => ({
   workflowService: svc,
 }));
+const exportHook = vi.hoisted(() => ({
+  exportWorkflow: vi.fn(),
+  isExporting: false,
+}));
+vi.mock("@blocks-workflow/hooks/use-import-workflow", () => ({
+  useImportWorkflow: () => ({ importWorkflow: vi.fn(), isImporting: false }),
+}));
+vi.mock("../../hooks/use-export-workflow", () => ({
+  useExportWorkflow: () => exportHook,
+}));
 
 import { WorkflowList } from "./workflow-list";
 
@@ -70,13 +80,13 @@ describe("WorkflowList", () => {
     expect(screen.getByText("Create workflow")).toBeTruthy();
   });
 
-  it("hides the Import control in the empty state", () => {
+  it("shows the Import control in the empty state", () => {
     const { container } = wrap(<WorkflowList workflow={[]} isLoading={false} />);
-    expect(screen.queryByRole("button", { name: /import/i })).toBeNull();
-    expect(container.querySelector('input[type="file"]')).toBeNull();
+    expect(screen.getByRole("button", { name: /import/i })).toBeTruthy();
+    expect(container.querySelector('input[type="file"]')).not.toBeNull();
   });
 
-  it("hides the Export action from the row menu", async () => {
+  it("exports from the row menu", async () => {
     const user = userEvent.setup();
     wrap(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -84,8 +94,8 @@ describe("WorkflowList", () => {
     );
     const triggers = screen.getAllByRole("button");
     await user.click(triggers[triggers.length - 1]);
-    expect(screen.queryByText("Export")).toBeNull();
-    expect(svc.getWorkflowById).not.toHaveBeenCalled();
+    await user.click(await screen.findByText("Export"));
+    expect(exportHook.exportWorkflow).toHaveBeenCalledWith("42");
     expect(navigate).not.toHaveBeenCalled();
   });
 

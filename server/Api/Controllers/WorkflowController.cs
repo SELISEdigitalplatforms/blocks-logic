@@ -20,16 +20,19 @@ namespace Utilities.Api.Controllers
         private readonly IWorkflowService _workflowService;
         private readonly IWorkflowVersionService _workflowVersionService;
         private readonly IWorkflowExecutionService _workflowExecutionService;
+        private readonly IWorkflowImportService _workflowImportService;
 
-        /// <summary>Takes the workflow, version and execution services.</summary>
+        /// <summary>Takes the workflow, version, execution and import services.</summary>
         public WorkflowController(
             IWorkflowService workflowService,
             IWorkflowVersionService workflowVersionService,
-            IWorkflowExecutionService workflowExecutionService)
+            IWorkflowExecutionService workflowExecutionService,
+            IWorkflowImportService workflowImportService)
         {
             _workflowService = workflowService;
             _workflowVersionService = workflowVersionService;
             _workflowExecutionService = workflowExecutionService;
+            _workflowImportService = workflowImportService;
         }
 
         /// <summary><c>POST</c> — the tenant's workflows, filtered and paged by the request body.</summary>
@@ -79,6 +82,27 @@ namespace Utilities.Api.Controllers
         {
             var tenantId = GetTenantId();
             var result = await _workflowService.UpdateAsync(tenantId, dto);
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// <c>POST</c> — enqueues a workflow import. The file must already be in storage.
+        /// Returns immediately; completion is delivered via the <c>workflow-import</c> notification.
+        /// </summary>
+        [Authorize]
+        [HttpPost]
+        public async Task<IActionResult> Import([FromBody] WorkflowImportRequestDto dto)
+        {
+            if (dto == null || string.IsNullOrWhiteSpace(dto.FileId))
+            {
+                return BadRequest(new BaseMutationResponse
+                {
+                    IsSuccess = false,
+                    Errors = new Dictionary<string, string> { { "Message", "FileId is required" } },
+                });
+            }
+
+            var result = await _workflowImportService.EnqueueAsync(dto);
             return Ok(result);
         }
 
