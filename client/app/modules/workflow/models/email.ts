@@ -18,8 +18,10 @@ export interface IEmailTemplate {
 }
 
 export enum MailServiceProvider {
-  AmazonSes,
-  Zoho,
+  AmazonSes = 0,
+  Zoho = 1,
+  /** Exchange Online SMTP with OAuth client credentials. Outbound only. */
+  Office365Smtp = 2,
 }
 
 export interface IEmailConfig {

@@ -1,5 +1,7 @@
 ﻿using Mail.DomainService.Entities;
 using Mail.DomainService.Mails;
+using Mail.DomainService.Mails.Office365;
+using Mail.DomainService.Mails.Strategies;
 using Mail.DomainService.Services;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,6 +25,21 @@ namespace Mail.DomainService.Shared.Utilities
 
             services.AddSingleton<IMailRepository, MailRepository>();
             services.AddSingleton<SmtpClientProvider>();
+
+            // Outbound strategies. Adding a provider is one more AddSingleton here plus its
+            // sender; nothing in SendMailService changes.
+            services.AddSingleton<IOutboundMailSender, AmazonSesMailSender>();
+            services.AddSingleton<IOutboundMailSender, ZohoMailSender>();
+            services.AddSingleton<IOutboundMailSender, Office365SmtpClient>();
+            services.AddSingleton<IOutboundMailSenderRegistry, OutboundMailSenderRegistry>();
+
+            // Office 365 token path. The provider opens its own DI scope for ISecretService, so it
+            // is safe as a singleton even though ISecretService is scoped.
+            services.AddSingleton<IOffice365TokenAcquirer, AzureOffice365TokenAcquirer>();
+            services.AddSingleton<ISystemClock, SystemClock>();
+            services.Configure<Office365TokenCacheOptions>(_ => { });
+            services.AddSingleton<IOffice365TokenProvider, CachingOffice365TokenProvider>();
+            services.AddSingleton<Office365SmtpClient>();
             services.AddTransient<MailKitSmtpClient>();
             services.AddTransient<MicrosoftSmtpClient>();
             services.AddSingleton<ISendMailService, SendMailService>();
