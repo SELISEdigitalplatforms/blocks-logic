@@ -359,6 +359,13 @@
         <member name="M:BlocksTemplate.Api.Controllers.StorageController.GetPreSignedUrlForUpload(DomainService.Storage.GetPreSignedUrlForUploadRequest)">
             <summary><c>POST</c> — a pre-signed URL the client uploads to directly.</summary>
         </member>
+        <member name="M:BlocksTemplate.Api.Controllers.StorageController.CompleteUpload(DomainService.Storage.CompleteUploadRequest)">
+            <summary>
+            <c>POST</c> — compatibility route for clients that cannot call the blocks-data API
+            directly. Delegates to the storage driver, which forwards to blocks-data's own
+            verification pipeline; this route does not duplicate any completion/verification logic.
+            </summary>
+        </member>
         <member name="M:BlocksTemplate.Api.Controllers.StorageController.GetFile(DomainService.Storage.GetFileRequest)">
             <summary><c>GET</c> — a pre-signed download URL for one file.</summary>
         </member>
@@ -626,8 +633,8 @@
             token; the tenant always comes from <see cref="T:Blocks.Genesis.BlocksContext"/> and is never taken from the payload.
             </summary>
         </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.#ctor(Workflow.DomainService.Services.IWorkflowService,Workflow.DomainService.Services.IWorkflowVersionService,Workflow.DomainService.Services.IWorkflowExecutionService)">
-            <summary>Takes the workflow, version and execution services.</summary>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.#ctor(Workflow.DomainService.Services.IWorkflowService,Workflow.DomainService.Services.IWorkflowVersionService,Workflow.DomainService.Services.IWorkflowExecutionService,Workflow.DomainService.Services.IWorkflowImportService)">
+            <summary>Takes the workflow, version, execution and import services.</summary>
         </member>
         <member name="M:Utilities.Api.Controllers.WorkflowController.GetAll(Workflow.DomainService.Dtos.WorkflowGetsRequestDto)">
             <summary><c>POST</c> — the tenant's workflows, filtered and paged by the request body.</summary>
@@ -643,6 +650,12 @@
         </member>
         <member name="M:Utilities.Api.Controllers.WorkflowController.Update(Workflow.DomainService.Dtos.WorkflowUpdateRequestDto)">
             <summary><c>PUT</c> — rewrites a workflow's name, description and node graph.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.Import(Workflow.DomainService.Dtos.WorkflowImportRequestDto)">
+            <summary>
+            <c>POST</c> — enqueues a workflow import. The file must already be in storage.
+            Returns immediately; completion is delivered via the <c>workflow-import</c> notification.
+            </summary>
         </member>
         <member name="M:Utilities.Api.Controllers.WorkflowController.Delete(Workflow.DomainService.Dtos.WorkflowDeleteRequestDto)">
             <summary><c>DELETE</c> — removes a workflow by id.</summary>

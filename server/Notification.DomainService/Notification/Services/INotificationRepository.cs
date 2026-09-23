@@ -13,6 +13,7 @@ namespace DomainService.Notification
         Task SaveAsync<T>(T data, string collectionName = "");
         Task<T> GetItemAsync<T>(Expression<Func<T, bool>> filterExpression, string collectionName = "");
         Task<List<T>> GetItemsAsync<T>(Expression<Func<T, bool>> filterExpression, string collectionName = "");
+        Task<List<OfflineNotification>> GetNotificationItemsAcrossPlacementsAsync(Expression<Func<OfflineNotification, bool>> filterExpression);
         Task DeleteAsync<T>(Expression<Func<T, bool>> dataFilters);
         Task SaveAsync<T>(List<T> listOfData);
         Task UpdateNotificationAsReadByUserIdAsync(string userId);

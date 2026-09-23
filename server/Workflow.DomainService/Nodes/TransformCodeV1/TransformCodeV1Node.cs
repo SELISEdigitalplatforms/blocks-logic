@@ -75,7 +75,7 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
             {
                 if (stopwatch.Elapsed > TimeSpan.FromSeconds(MaxTotalDurationSeconds))
                 {
-                    return NodeExecutionResult.Failed("Script execution exceeded max duration.");
+                    return NodeExecutionResult.Failed("Script execution exceeded max duration.", outputItems);
                 }
                 var current = inputItems[i];
                 var item = ToJObject(current.Data.Output ?? new BsonDocument(), current.Id);
@@ -89,7 +89,8 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
                 }
                 catch (Exception ex)
                 {
-                    return NodeExecutionResult.Failed(FormatScriptError(ex));
+                    AppendErrorOutputItem(outputItems, current, parameters.ToBsonDocument(), FormatScriptError(ex));
+                    continue;
                 }
 
                 var normalized = NormalizeResult(result);
@@ -98,7 +99,7 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
                 {
                     if (outputItems.Count + 1 > MaxOutputItems)
                     {
-                        return NodeExecutionResult.Failed("Too many output items.");
+                        return NodeExecutionResult.Failed("Too many output items.", outputItems);
                     }
 
                     var (outputToken, _) = ExtractOutputAndSourceId(token);
@@ -106,7 +107,7 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
                     var serializationError = SerializePayload(outputToken, ref serializedOutputBytes, out var bsonValue);
                     if (serializationError is not null)
                     {
-                        return NodeExecutionResult.Failed(serializationError);
+                        return NodeExecutionResult.Failed(serializationError, outputItems);
                     }
 
                     outputItems.Add(new NodeOutputItem
@@ -128,6 +129,7 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
 
         private NodeExecutionResult RunOnceForAllItems(NodeExecutionContext context, TransformCodeV1Parameters parameters, string script)
         {
+            var outputItems = new List<NodeOutputItem>();
             var engine = CreateEngine(context);
             JsValue result;
             try
@@ -136,23 +138,24 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
             }
             catch (Exception ex)
             {
-                return NodeExecutionResult.Failed(FormatScriptError(ex));
+                var errorItem = TryBuildErrorOutputItem(null, parameters.ToBsonDocument(), ex);
+                if (errorItem != null) outputItems.Add(errorItem);
+                return NodeExecutionResult.Failed(FormatScriptError(ex), outputItems);
             }
 
             var normalized = NormalizeResult(result);
             if (normalized.Count > MaxOutputItems)
             {
-                return NodeExecutionResult.Failed("Too many output items.");
+                return NodeExecutionResult.Failed("Too many output items.", outputItems);
             }
 
-            var outputItems = new List<NodeOutputItem>();
             long serializedOutputBytes = 0;
 
             foreach (var token in normalized)
             {
                 if (outputItems.Count + 1 > MaxOutputItems)
                 {
-                    return NodeExecutionResult.Failed("Too many output items.");
+                    return NodeExecutionResult.Failed("Too many output items.", outputItems);
                 }
 
                 var (outputToken, sourceId) = ExtractOutputAndSourceId(token);
@@ -160,12 +163,10 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
                 var serializationError = SerializePayload(outputToken, ref serializedOutputBytes, out var bsonValue);
                 if (serializationError is not null)
                 {
-                    return NodeExecutionResult.Failed(serializationError);
+                    return NodeExecutionResult.Failed(serializationError, outputItems);
                 }
 
-                var parentItem = !string.IsNullOrEmpty(sourceId)
-                    ? context.InputItems.FirstOrDefault(i => i.Id == sourceId)
-                    : null;
+                var parentItem = FindLineageItem(context, sourceId);
 
                 List<string> parentIds;
                 string branch;
@@ -330,10 +331,42 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
         }
 
         private static JObject AncestorEntry(WorkflowItemExecutionEntity ancestor)
-            => new()
+            => ToN8nItem(ancestor.Data?.Output ?? new BsonDocument(), ancestor.Id);
+
+        private static WorkflowItemExecutionEntity? FindLineageItem(NodeExecutionContext context, string? sourceId)
+        {
+            if (string.IsNullOrEmpty(sourceId))
             {
-                ["json"] = BsonValueToJToken(ancestor.Data?.Output ?? new BsonDocument()),
-            };
+                return null;
+            }
+
+            var direct = context.InputItems.FirstOrDefault(i => i.Id == sourceId);
+            if (direct is not null)
+            {
+                return direct;
+            }
+
+            if (context.AncestorNodeOutputs == null)
+            {
+                return null;
+            }
+
+            foreach (var items in context.AncestorNodeOutputs.Values)
+            {
+                if (items is null)
+                {
+                    continue;
+                }
+
+                var match = items.FirstOrDefault(i => i.Id == sourceId);
+                if (match is not null)
+                {
+                    return match;
+                }
+            }
+
+            return null;
+        }
 
         private static JObject GenerateAncestorPerItem(IReadOnlyDictionary<string, WorkflowItemExecutionEntity> ancestorsById, WorkflowItemExecutionEntity item)
         {

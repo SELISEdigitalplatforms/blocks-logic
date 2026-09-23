@@ -1,7 +1,10 @@
 using Workflow.DomainService.Entities;
 using Workflow.DomainService.Nodes;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using MongoDB.Bson;
+using Proxy.DomainService.Services;
+using Workflow.DomainService.Nodes.TransformSetFieldV1;
 
 namespace XUnitTest.Workflow
 {
@@ -31,7 +34,28 @@ namespace XUnitTest.Workflow
             public int Count { get; set; }
         }
 
-        private static WorkflowItemExecutionEntity Item(BsonDocument output, Dictionary<string, string>? ancestors = null)
+        private sealed class FakeVariableResolver : IProxyVariableResolver
+        {
+            public Dictionary<string, string> Values { get; } = new()
+            {
+                ["keyboth"] = "resolved-keyboth",
+                ["bbb"] = "1234567890",
+            };
+
+            public Task<IReadOnlyDictionary<string, string>> ResolveAsync(
+                IReadOnlyCollection<string> names,
+                string tenantId,
+                CancellationToken ct = default)
+            {
+                IReadOnlyDictionary<string, string> values = Values
+                    .Where(kvp => names.Contains(kvp.Key, StringComparer.Ordinal))
+                    .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.Ordinal);
+
+                return Task.FromResult(values);
+            }
+        }
+
+        private static WorkflowItemExecutionEntity Item(BsonValue output, Dictionary<string, string>? ancestors = null)
             => new()
             {
                 Id = "item-1",
@@ -114,6 +138,91 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
+        public void Parse_JsonArrayIndex_ReturnsElement()
+        {
+            var exec = new TestExecutor();
+            var item = Item(new BsonDocument
+            {
+                { "ids", new BsonArray { 10, 20 } },
+                { "items", new BsonArray
+                    {
+                        new BsonDocument
+                        {
+                            { "name", "a" },
+                            { "tags", new BsonArray { "first", "second" } },
+                        },
+                    }
+                },
+                { "user", new BsonDocument("name", "a") },
+                { "note", BsonNull.Value },
+            });
+            var ctx = Context(new[] { item });
+
+            exec.Parse<string>("{{$json.output.ids[0]}}", item, ctx).Should().Be("10");
+            exec.Parse<string>("{{$json.output.items[0].name}}", item, ctx).Should().Be("a");
+            exec.Parse<string>("{{$json.output.items[0].tags[1]}}", item, ctx).Should().Be("second");
+            exec.Parse<string>("{{$json.output.ids.[0]}}", item, ctx).Should().Be("10");
+
+            var ids = MongoDB.Bson.Serialization.BsonSerializer.Deserialize<BsonArray>(
+                exec.Parse<string>("{{$json.output.ids}}", item, ctx));
+            ids.Select(value => value.ToInt32()).Should().Equal(10, 20);
+
+            var user = MongoDB.Bson.Serialization.BsonSerializer.Deserialize<BsonDocument>(
+                exec.Parse<string>("{{$json.output.user}}", item, ctx));
+            user["name"].AsString.Should().Be("a");
+
+            exec.Parse<string>("{{$json.output.missing}}", item, ctx).Should().BeEmpty();
+            exec.Parse<string>("{{$json.output.ids[9]}}", item, ctx).Should().BeEmpty();
+            exec.Parse<string>("{{$json.output.ids[x]}}", item, ctx).Should().BeEmpty();
+            exec.Parse<string>("{{$json.output.note}}", item, ctx).Should().Be("null");
+        }
+
+        [Fact]
+        public void Parse_JsonRootArrayIndex_ReturnsElement()
+        {
+            var exec = new TestExecutor();
+            var item = Item(new BsonArray { "alpha", "beta" });
+            var ctx = Context(new[] { item });
+
+            exec.Parse<string>("{{$json.output[0]}}", item, ctx).Should().Be("alpha");
+            exec.Parse<string>("{{$json.output[1]}}", item, ctx).Should().Be("beta");
+            exec.Parse<string>("{{$json.output.missing}}", item, ctx).Should().BeEmpty();
+        }
+
+        [Fact]
+        public void Parse_NodeReference_ResolvesAncestorArrayIndex()
+        {
+            var exec = new TestExecutor();
+            var ancestorItem = Item(new BsonDocument("ids", new BsonArray { 10, 20 }));
+            var inputItem = Item(new BsonDocument("name", "abc"),
+                ancestors: new Dictionary<string, string> { { "Prev", ancestorItem.Id } });
+            var ctx = Context(new[] { inputItem }, ancestorOutputs: new Dictionary<string, List<WorkflowItemExecutionEntity>>
+            {
+                { "Prev", new List<WorkflowItemExecutionEntity> { ancestorItem } },
+            });
+
+            exec.Parse<string>("{{$node[\"Prev\"].json.output.ids[0]}}", inputItem, ctx)
+                .Should().Be("10");
+        }
+
+        [Fact]
+        public void Parse_ScalarOutput_ReturnsPlainText()
+        {
+            var exec = new TestExecutor();
+            var ctx = Context(Array.Empty<WorkflowItemExecutionEntity>());
+
+            var text = Item(new BsonString("hello"));
+            exec.Parse<string>("{{$json.output}}", text, ctx).Should().Be("hello");
+            exec.Parse<string>("{{$json.output.missing}}", text, ctx).Should().BeEmpty();
+
+            var flag = Item(BsonBoolean.True);
+            exec.Parse<string>("{{$json.output}}", flag, ctx).Should().Be("true");
+
+            var number = Item(new BsonInt32(42));
+            exec.Parse<string>("{{$json.output}}", number, ctx).Should().Be("42");
+        }
+
+        [Fact]
         public void Parse_NodeReference_ResolvesAncestorOutput()
         {
             var exec = new TestExecutor();
@@ -142,6 +251,19 @@ namespace XUnitTest.Workflow
 
             exec.Parse<string>("{{$node[\"Prev\"].json.output.greeting}}", inputItem, ctx)
                 .Should().BeEmpty();
+        }
+
+        [Fact]
+        public void Parse_VarExpressionWithoutResolvedValue_ThrowsInsteadOfReturningEmpty()
+        {
+            var exec = new TestExecutor();
+            var item = Item(new BsonDocument("name", "abc"));
+            var ctx = Context(new[] { item });
+
+            var act = () => exec.Parse<string>("{{$VAR.bbb}}", item, ctx);
+
+            act.Should().Throw<InvalidOperationException>()
+                .WithMessage("*bbb*not resolved*");
         }
 
         [Fact]
@@ -178,6 +300,72 @@ namespace XUnitTest.Workflow
             exec.LastParameters.Should().NotBeNull();
             exec.LastParameters!.Name.Should().Be("wf");
             exec.LastParameters.Count.Should().Be(7);
+        }
+
+        [Fact]
+        public async Task RunAsync_ResolvesConfigurationVariablesInNestedSetFieldMappings()
+        {
+            var services = new ServiceCollection()
+                .AddSingleton<IProxyVariableResolver, FakeVariableResolver>()
+                .BuildServiceProvider();
+
+            var exec = new TransformSetFieldV1Node();
+            var item = Item(new BsonDocument { { "page", 0 }, { "pageSize", 1 } });
+            var ctx = Context(new[] { item });
+            ctx.ServiceProvider = services;
+            ctx.Parameters = new BsonDocument
+            {
+                { "mode", "manual_mapping" },
+                { "manualMappingFields", new BsonArray
+                    {
+                        new BsonDocument
+                        {
+                            { "key", "var" },
+                            { "type", "string" },
+                            { "value", "{{$VAR.keyboth}}" },
+                        },
+                        new BsonDocument
+                        {
+                            { "key", "bbb" },
+                            { "type", "string" },
+                            { "value", "{{$VAR.bbb}}" },
+                        },
+                    }
+                },
+            };
+
+            var result = await exec.RunAsync(ctx);
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            result.OutputItems.Should().ContainSingle();
+            var output = result.OutputItems[0].Data.Output.AsBsonDocument;
+            output["var"].AsString.Should().Be("resolved-keyboth");
+            output["bbb"].AsString.Should().Be("1234567890");
+        }
+
+        [Fact]
+        public async Task RunAsync_FailsWhenResolverOmitsAReferencedConfigurationVariable()
+        {
+            var resolver = new FakeVariableResolver();
+            resolver.Values.Remove("bbb");
+            var services = new ServiceCollection()
+                .AddSingleton<IProxyVariableResolver>(resolver)
+                .BuildServiceProvider();
+
+            var exec = new TestExecutor();
+            var item = Item(new BsonDocument("name", "abc"));
+            var ctx = Context(new[] { item });
+            ctx.ServiceProvider = services;
+            ctx.Parameters = new BsonDocument
+            {
+                { "Name", "{{$VAR.bbb}}" },
+            };
+
+            var result = await exec.RunAsync(ctx);
+
+            result.IsSuccess.Should().BeFalse();
+            result.ErrorMessage.Should().Contain("bbb");
+            exec.LastParameters.Should().BeNull();
         }
     }
 }

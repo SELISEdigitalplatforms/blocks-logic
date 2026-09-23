@@ -92,7 +92,12 @@ namespace Utilities.Api.Controllers
         [HttpGet]
         public async Task<IActionResult> List([FromQuery] ProxyGetAllRequestDto dto)
         {
-            var result = await _proxyService.GetAllAsync(GetTenantId(), dto);
+            if (!TryGetTenantId(out var tenantId, out var error))
+            {
+                return error;
+            }
+
+            var result = await _proxyService.GetAllAsync(tenantId, dto);
             return Ok(result);
         }
 
@@ -104,7 +109,12 @@ namespace Utilities.Api.Controllers
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] ProxyCreateRequestDto dto)
         {
-            var result = await _proxyService.CreateAsync(GetTenantId(), dto);
+            if (!TryGetTenantId(out var tenantId, out var error))
+            {
+                return error;
+            }
+
+            var result = await _proxyService.CreateAsync(tenantId, dto);
             return StatusCode(result.HttpStatus, result);
         }
 
@@ -116,7 +126,12 @@ namespace Utilities.Api.Controllers
         [HttpGet("{proxyId}")]
         public async Task<IActionResult> Get(string proxyId)
         {
-            var result = await _proxyService.GetAsync(GetTenantId(), new ProxyGetRequestDto { ItemId = proxyId });
+            if (!TryGetTenantId(out var tenantId, out var error))
+            {
+                return error;
+            }
+
+            var result = await _proxyService.GetAsync(tenantId, new ProxyGetRequestDto { ItemId = proxyId });
             return Ok(result);
         }
 
@@ -128,8 +143,13 @@ namespace Utilities.Api.Controllers
         [HttpPut("{proxyId}")]
         public async Task<IActionResult> Update(string proxyId, [FromBody] ProxyUpdateRequestDto dto)
         {
+            if (!TryGetTenantId(out var tenantId, out var error))
+            {
+                return error;
+            }
+
             dto.ItemId = proxyId;
-            var result = await _proxyService.UpdateAsync(GetTenantId(), dto);
+            var result = await _proxyService.UpdateAsync(tenantId, dto);
             return StatusCode(result.HttpStatus, result);
         }
 
@@ -142,8 +162,13 @@ namespace Utilities.Api.Controllers
         [HttpPatch("{proxyId}")]
         public async Task<IActionResult> SetEnabled(string proxyId, [FromBody] ProxyToggleRequestDto dto)
         {
+            if (!TryGetTenantId(out var tenantId, out var error))
+            {
+                return error;
+            }
+
             dto.ItemId = proxyId;
-            var result = await _proxyService.ToggleAsync(GetTenantId(), dto);
+            var result = await _proxyService.ToggleAsync(tenantId, dto);
             return StatusCode(result.HttpStatus, result);
         }
 
@@ -156,7 +181,12 @@ namespace Utilities.Api.Controllers
         [HttpDelete("{proxyId}")]
         public async Task<IActionResult> Delete(string proxyId)
         {
-            var result = await _proxyService.DeleteAsync(GetTenantId(), new ProxyDeleteRequestDto { ItemId = proxyId });
+            if (!TryGetTenantId(out var tenantId, out var error))
+            {
+                return error;
+            }
+
+            var result = await _proxyService.DeleteAsync(tenantId, new ProxyDeleteRequestDto { ItemId = proxyId });
             return StatusCode(result.HttpStatus, result);
         }
 
@@ -169,8 +199,13 @@ namespace Utilities.Api.Controllers
         [HttpGet("{proxyId}/versions")]
         public async Task<IActionResult> ListVersions(string proxyId, [FromQuery] ProxyGetVersionsRequestDto dto)
         {
+            if (!TryGetTenantId(out var tenantId, out var error))
+            {
+                return error;
+            }
+
             dto.ProxyId = proxyId;
-            var result = await _proxyVersionService.GetVersionsAsync(GetTenantId(), dto);
+            var result = await _proxyVersionService.GetVersionsAsync(tenantId, dto);
             return StatusCode(result.HttpStatus, result);
         }
 
@@ -184,8 +219,13 @@ namespace Utilities.Api.Controllers
         [HttpPost("{proxyId}/versions/{versionId}/revert")]
         public async Task<IActionResult> Revert(string proxyId, string versionId)
         {
+            if (!TryGetTenantId(out var tenantId, out var error))
+            {
+                return error;
+            }
+
             var dto = new ProxyRevertRequestDto { ProxyId = proxyId, VersionId = versionId };
-            var result = await _proxyVersionService.RevertAsync(GetTenantId(), dto);
+            var result = await _proxyVersionService.RevertAsync(tenantId, dto);
             return StatusCode(result.HttpStatus, result);
         }
 
@@ -200,9 +240,14 @@ namespace Utilities.Api.Controllers
         [HttpPost("test")]
         public async Task<IActionResult> Test([FromBody] ProxyTestRequestDto dto)
         {
+            if (!TryGetTenantId(out var tenantId, out var error))
+            {
+                return error;
+            }
+
             var context = BlocksContext.GetContext();
             var outcome = await _proxyTestService.TestAsync(
-                context?.TenantId ?? string.Empty, context?.UserId, dto);
+                tenantId, context?.UserId, dto);
 
             return outcome.IsSuccess
                 ? Ok(outcome.Result)
@@ -220,8 +265,13 @@ namespace Utilities.Api.Controllers
         [HttpGet("{proxyId}/executions")]
         public async Task<IActionResult> ListExecutions(string proxyId, [FromQuery] ProxyGetExecutionsRequestDto dto)
         {
+            if (!TryGetTenantId(out var tenantId, out var error))
+            {
+                return error;
+            }
+
             dto.ProxyId = proxyId;
-            var result = await _proxyExecutionService.GetExecutionsAsync(GetTenantId(), dto);
+            var result = await _proxyExecutionService.GetExecutionsAsync(tenantId, dto);
             return StatusCode(result.HttpStatus, result);
         }
 
@@ -235,8 +285,13 @@ namespace Utilities.Api.Controllers
         [HttpGet("{proxyId}/executions/{executionId}")]
         public async Task<IActionResult> GetExecution(string proxyId, string executionId)
         {
+            if (!TryGetTenantId(out var tenantId, out var error))
+            {
+                return error;
+            }
+
             var dto = new ProxyGetExecutionRequestDto { ProxyId = proxyId, ItemId = executionId };
-            var result = await _proxyExecutionService.GetExecutionAsync(GetTenantId(), dto);
+            var result = await _proxyExecutionService.GetExecutionAsync(tenantId, dto);
             return StatusCode(result.HttpStatus, result);
         }
 
@@ -250,8 +305,13 @@ namespace Utilities.Api.Controllers
         [HttpGet("{proxyId}/overview")]
         public async Task<IActionResult> GetOverview(string proxyId)
         {
+            if (!TryGetTenantId(out var tenantId, out var error))
+            {
+                return error;
+            }
+
             var dto = new ProxyGetOverviewRequestDto { ProxyId = proxyId };
-            var result = await _proxyExecutionService.GetOverviewAsync(GetTenantId(), dto);
+            var result = await _proxyExecutionService.GetOverviewAsync(tenantId, dto);
             return StatusCode(result.HttpStatus, result);
         }
 
@@ -459,10 +519,23 @@ namespace Utilities.Api.Controllers
             return (buffer.Length == 0 ? null : buffer.ToArray(), false);
         }
 
-        private static string GetTenantId()
+        private bool TryGetTenantId(out string tenantId, out IActionResult error)
         {
             var context = BlocksContext.GetContext();
-            return context?.TenantId ?? string.Empty;
+            tenantId = context?.TenantId ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(tenantId))
+            {
+                error = null!;
+                return true;
+            }
+
+            _logger.LogWarning("Proxy control-plane request rejected because no tenant context was available.");
+            error = Unauthorized(new
+            {
+                code = ProxyErrorCodes.TenantContextRequired,
+                message = "Tenant context is required.",
+            });
+            return false;
         }
     }
 }

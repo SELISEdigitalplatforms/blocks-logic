@@ -3,6 +3,11 @@ import { WorkflowNode } from "../../../../models/node.model";
 import { useWorkflow } from "../../../../hooks/use-workflow";
 
 const validateExpression = (content: string, nodes: WorkflowNode[]): boolean => {
+  // Check if it's the workflow variable format
+  if (/^VAR\.[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(content)) {
+    return true;
+  }
+
   // Check if it's the simple json.input format
   if (/^json\.input(?:(?:\.[a-zA-Z0-9_]+|\[\d+\]|\["[^"]+"\]|\['[^']+'\])*)$/.test(content)) {
     return true;

@@ -11,5 +11,6 @@
 	<ProjectReference Include="..\Scheduler.DomainService\Scheduler.DomainService.csproj" />
 	<ProjectReference Include="..\Proxy.DomainService\Proxy.DomainService.csproj" />
 	<ProjectReference Include="..\Common.InternalService\Common.InternalService.csproj" />
+	<PackageReference Include="SeliseBlocks.StorageDriver.OS" />
   </ItemGroup>
 </Project>

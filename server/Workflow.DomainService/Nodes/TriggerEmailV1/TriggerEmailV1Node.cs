@@ -14,9 +14,9 @@ namespace Workflow.DomainService.Nodes.TriggerEmailV1
 
         protected override async Task<NodeExecutionResult> ExecuteAsync(NodeExecutionContext context, TriggerEmailV1Parameters? nodeparameters)
         {
+            var parameters = nodeparameters ?? new TriggerEmailV1Parameters();
             try
             {
-                var parameters = nodeparameters ?? new TriggerEmailV1Parameters();
                 var inputItems = context.WorkflowContext["Input"].AsBsonArray;
                 var outputItems = inputItems.Select(item => new NodeOutputItem
                 {
@@ -34,7 +34,9 @@ namespace Workflow.DomainService.Nodes.TriggerEmailV1
             }
             catch (Exception ex)
             {
-                return NodeExecutionResult.Failed(ex.Message);
+                var errorItem = TryBuildErrorOutputItem(null, parameters.ToBsonDocument(), ex);
+                var outputItems = errorItem != null ? new List<NodeOutputItem> { errorItem } : new List<NodeOutputItem>();
+                return NodeExecutionResult.Failed(ex.Message, outputItems);
             }
         }
 

@@ -13,9 +13,9 @@ namespace Workflow.DomainService.Nodes.TriggerWebhookV1
 
         protected override async Task<NodeExecutionResult> ExecuteAsync(NodeExecutionContext context, TriggerWebhookV1Parameters? nodeparameters)
         {
+            var parameters = nodeparameters ?? new TriggerWebhookV1Parameters();
             try
             {
-                var parameters = nodeparameters ?? new TriggerWebhookV1Parameters();
                 var inputItems = context.WorkflowContext["Input"].AsBsonArray;
                 var outputItems = inputItems.Select(item => new NodeOutputItem
                 {
@@ -33,7 +33,9 @@ namespace Workflow.DomainService.Nodes.TriggerWebhookV1
             }
             catch (Exception ex)
             {
-                return NodeExecutionResult.Failed(ex.Message);
+                var errorItem = TryBuildErrorOutputItem(null, parameters.ToBsonDocument(), ex);
+                var outputItems = errorItem != null ? new List<NodeOutputItem> { errorItem } : new List<NodeOutputItem>();
+                return NodeExecutionResult.Failed(ex.Message, outputItems);
             }
         }
 

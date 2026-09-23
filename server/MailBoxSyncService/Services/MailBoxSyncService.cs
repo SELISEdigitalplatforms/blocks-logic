@@ -1,10 +1,12 @@
-using Blocks.Genesis;
+﻿using Blocks.Genesis;
 using Mail.DomainService.Entities;
 using Mail.DomainService.Mails;
 using Mail.DomainService.Shared.Enums;
 using Mail.DomainService.Utilities;
 using MailBoxSyncService.Entities;
 using MailKit.Security;
+using Microsoft.Extensions.Logging.Abstractions;
+using System.Collections.Concurrent;
 
 namespace MailBoxSyncService.Services
 {
@@ -13,19 +15,46 @@ namespace MailBoxSyncService.Services
         private readonly IMailRepository _repository;
         private readonly IMessageClient _messageClient;
         private readonly IImapClientFactory _imapClientFactory;
-        private readonly IDictionary<string, IImapClientWrapper> _mapClientMapper;
 
-        public MailBoxSyncService(IMailRepository repository, IMessageClient messageClient, IImapClientFactory imapClientFactory)
+        /// <summary>
+        /// Live IMAP sessions, keyed by tenant, configuration and provider.
+        /// </summary>
+        /// <remarks>
+        /// The key used to be the username alone. This service is a singleton, so two tenants that
+        /// happened to configure the same mailbox username shared one authenticated session and
+        /// each read the other's inbox — the username is not an identity here, it is a field two
+        /// unrelated records can hold the same value in. Concurrent because the map outlives any
+        /// single sync and nothing guarantees two configurations are never processed at once.
+        /// </remarks>
+        private readonly ConcurrentDictionary<string, IImapClientWrapper> _mapClientMapper;
+
+        private readonly ILogger<MailBoxSyncService> _logger;
+
+        public MailBoxSyncService(
+            IMailRepository repository,
+            IMessageClient messageClient,
+            IImapClientFactory imapClientFactory,
+            ILogger<MailBoxSyncService>? logger = null)
         {
             _repository = repository;
             _messageClient = messageClient;
             _imapClientFactory = imapClientFactory;
-            _mapClientMapper = new Dictionary<string, IImapClientWrapper>();
+            _logger = logger ?? NullLogger<MailBoxSyncService>.Instance;
+            _mapClientMapper = new ConcurrentDictionary<string, IImapClientWrapper>();
         }
 
-        public async Task SyncInboxAsync(MailServerConfiguration config, string tenantId)
+        public Task SyncInboxAsync(MailServerConfiguration config, string tenantId) =>
+            SyncInboxCoreAsync(config, tenantId, saslMechanism: null);
+
+        public Task SyncInboxAsync(MailServerConfiguration config, string tenantId, SaslMechanism saslMechanism)
         {
-            var client = await GetOrReconnectImapClientAsync(config);
+            ArgumentNullException.ThrowIfNull(saslMechanism);
+            return SyncInboxCoreAsync(config, tenantId, saslMechanism);
+        }
+
+        private async Task SyncInboxCoreAsync(MailServerConfiguration config, string tenantId, SaslMechanism? saslMechanism)
+        {
+            var client = await GetOrReconnectImapClientAsync(config, tenantId, saslMechanism);
 
             var inbox = client.Inbox;
             await inbox.OpenAsync(MailKit.FolderAccess.ReadOnly);
@@ -56,9 +85,59 @@ namespace MailBoxSyncService.Services
                 };
 
                 await _repository.InsertAsync(entity, tenantId);
-                await EnqueueInboxEmailInsertionMessage(entity, tenantId);
+
+                try
+                {
+                    await EnqueueInboxEmailInsertionMessage(entity, tenantId);
+                }
+                catch (Exception ex)
+                {
+                    // The mail is already stored, so a failed trigger must not stop the rest of
+                    // the inbox from syncing: one bad message would otherwise block every message
+                    // after it on every poll.
+                    _logger.LogError(
+                        ex,
+                        "Mail {MessageId} was saved but its email trigger could not be published for tenant '{TenantId}' using config '{ConfigId}'",
+                        entity.MessageId,
+                        tenantId,
+                        config.ItemId);
+                }
             }
         }
+
+        /// <summary>
+        /// Upper bound on the body carried by a trigger event. Service Bus caps a message at
+        /// 256 KB on the Standard tier; UTF-8 can take three bytes per character, so this keeps
+        /// the body under ~180 KB with room for the rest of the envelope.
+        /// </summary>
+        internal const int MaxTriggerBodyLength = 60_000;
+
+        /// <summary>
+        /// The mail as a trigger event carries it: everything except the raw MIME, and the body
+        /// capped.
+        /// </summary>
+        /// <remarks>
+        /// The raw MIME holds every attachment base64-encoded, so a single attached file used to
+        /// push the event past the broker's size limit and the trigger was lost. It stays in the
+        /// stored <see cref="MailBoxEntity"/>, which a consumer can load by <c>ItemId</c>.
+        /// </remarks>
+        internal static MailBoxEntity ForTrigger(MailBoxEntity entity) => new()
+        {
+            ItemId = entity.ItemId,
+            MessageId = entity.MessageId,
+            MailServerConfigurationId = entity.MailServerConfigurationId,
+            Subject = entity.Subject,
+            From = entity.From,
+            To = entity.To,
+            Date = entity.Date,
+            Body = entity.Body is { Length: > MaxTriggerBodyLength } body
+                ? body[..MaxTriggerBodyLength]
+                : entity.Body,
+            Status = entity.Status,
+            Error = entity.Error,
+            IsInbound = entity.IsInbound,
+            RawMime = null!
+        };
 
         private async Task EnqueueInboxEmailInsertionMessage(MailBoxEntity entity, string tenantId)
         {
@@ -71,42 +150,82 @@ namespace MailBoxSyncService.Services
                 Payload = new EmailTriggerEvent
                 {
                     Type = EmailTriggerType.Inbound,
-                    Mail = entity
+                    Mail = ForTrigger(entity)
                 }
             });
         }
 
-        private async Task<IImapClientWrapper> GetOrReconnectImapClientAsync(MailServerConfiguration config)
+        /// <summary>
+        /// The connection-cache key: the tenant, the configuration and the provider together.
+        /// </summary>
+        /// <remarks>
+        /// All three, because none of them is unique on its own. Two tenants can hold the same
+        /// configuration name and the same mailbox username, and a tenant can hold two
+        /// configurations against the same host.
+        /// </remarks>
+        internal static string ConnectionKey(MailServerConfiguration config, string tenantId) =>
+            string.Join('\u001f', tenantId, config.ItemId, (int)config.Provider);
+
+        private async Task<IImapClientWrapper> GetOrReconnectImapClientAsync(
+            MailServerConfiguration config,
+            string tenantId,
+            SaslMechanism? saslMechanism)
         {
-            if (_mapClientMapper.TryGetValue(config.SenderUserName, out var client))
+            var key = ConnectionKey(config, tenantId);
+
+            if (_mapClientMapper.TryGetValue(key, out var client))
             {
                 if (client.IsConnected && client.IsAuthenticated)
                     return client;
 
-                CleanupClient(config.SenderUserName, client);
+                CleanupClient(key, client);
             }
 
-            return await ConnectImapClientAsync(config);
+            return await ConnectImapClientAsync(config, key, saslMechanism);
         }
 
-        private async Task<IImapClientWrapper> ConnectImapClientAsync(MailServerConfiguration config)
+        /// <summary>
+        /// The record's explicit security mode when it has one; otherwise the legacy
+        /// <c>EnableSSL</c> reading, which is what every record had before the mode existed.
+        /// </summary>
+        internal static SecureSocketOptions SocketOptionsFor(MailServerConfiguration config) => config.SecurityMode switch
+        {
+            MailSecurityMode.SslOnConnect => SecureSocketOptions.SslOnConnect,
+            MailSecurityMode.StartTls => SecureSocketOptions.StartTls,
+            MailSecurityMode.None => SecureSocketOptions.None,
+            _ => config.EnableSSL ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls
+        };
+
+        private async Task<IImapClientWrapper> ConnectImapClientAsync(
+            MailServerConfiguration config,
+            string key,
+            SaslMechanism? saslMechanism)
         {
             var client = _imapClientFactory.Create();
 
             try
             {
-                await client.ConnectAsync(
-                    config.Host,
-                    config.Port,
-                    config.EnableSSL
-                        ? SecureSocketOptions.SslOnConnect
-                        : SecureSocketOptions.StartTls);
+                await client.ConnectAsync(config.Host, config.Port, SocketOptionsFor(config));
 
-                await client.AuthenticateAsync(
-                    config.SenderUserName,
-                    config.AccountPassword);
+                if (saslMechanism is not null)
+                {
+                    await client.AuthenticateAsync(saslMechanism);
+                }
+                else
+                {
+                    await client.AuthenticateAsync(
+                        config.SenderUserName,
+                        config.AccountPassword);
+                }
 
-                _mapClientMapper[config.SenderUserName] = client;
+                // Replacing an entry disposes whatever it displaced: a reconnect that raced
+                // another would otherwise leak the loser's authenticated session.
+                if (_mapClientMapper.TryGetValue(key, out var displaced) && !ReferenceEquals(displaced, client))
+                {
+                    CleanupClient(key, displaced);
+                }
+
+                _mapClientMapper[key] = client;
                 return client;
             }
             catch
@@ -128,7 +247,7 @@ namespace MailBoxSyncService.Services
             }
             finally
             {
-                _mapClientMapper.Remove(key);
+                _mapClientMapper.TryRemove(key, out _);
             }
         }
 

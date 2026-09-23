@@ -1,10 +1,12 @@
-using Blocks.Extension.DependencyInjection;
+﻿using Blocks.Extension.DependencyInjection;
 using Blocks.Genesis;
 using Blocks.Secrets;
 using DomainService.Shared;
+using DomainService.Projects;
 using Proxy.DomainService;
 using Workflow.DomainService;
 using Workflow.DomainService.Events;
+using Workflow.DomainService.Import;
 using Workflow.DomainService.Nodes.TriggerDataV1;
 using Workflow.DomainService.Utils;
 using Mail.DomainService.Dtos;
@@ -54,8 +56,19 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             services.AddSingleton<SmtpClientProvider>();
             services.AddSingleton<MicrosoftSmtpClient>();
             services.AddSingleton<MailKitSmtpClient>();
+
+            // Outbound senders are registered here. AddApplicationServices calls this again;
+            // the sender registrations are idempotent so that second call does not add another
+            // AmazonSes (or any other provider) to IEnumerable<IOutboundMailSender>.
             services.RegisterAllMailApplicationServices();
 
+            services.AddSingleton<IWorkflowImportTenantSlugResolver>(sp =>
+            {
+                var repo = sp.GetService<IProjectRepository>();
+                return repo is null
+                    ? new NullWorkflowImportTenantSlugResolver()
+                    : new ProjectTenantSlugResolver(repo);
+            });
             services.AddWorkflowExecutionEngine();
             // The Proxy action node resolves IProxyGatewayService, and node executors are
             // constructed here in the worker, not in the API host. AddBlocksSecrets supplies the
@@ -65,6 +78,7 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             services.AddBlocksSecrets();
             services.AddProxyServices();
             services.AddSingleton<IConsumer<AddExcuationNodeEvent>, AddExcuationNodeConsumer>();
+            services.AddSingleton<IConsumer<WorkflowImportEvent>, WorkflowImportConsumer>();
             services.AddSingleton<IConsumer<DataChangeEvent>, DataTriggerConsumer>();
             services.AddSingleton<IConsumer<EmailTriggerEvent>, EmailTriggerConsumer>();
             services.AddSingleton<IConsumer<PublishScheduleCommand>, SchedulerTriggerConsumer>();

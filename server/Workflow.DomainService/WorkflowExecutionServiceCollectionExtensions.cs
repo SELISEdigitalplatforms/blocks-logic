@@ -1,5 +1,6 @@
 using Workflow.DomainService.Repositories;
 using Workflow.DomainService.Services;
+using Workflow.DomainService.Import;
 using Workflow.DomainService.Nodes;
 using Workflow.DomainService.Nodes.ActionAIAgentV1;
 using Workflow.DomainService.Nodes.ActionSendMailV1;
@@ -7,6 +8,7 @@ using Workflow.DomainService.Nodes.ActionHttpRequestV1;
 using Workflow.DomainService.Nodes.ActionDataV1;
 using Workflow.DomainService.Nodes.ActionProxy;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Blocks.Extension.DependencyInjection;
 using Common.InternalService.Access;
 using Workflow.DomainService.Nodes.TriggerEmailV1;
@@ -31,6 +33,8 @@ namespace Workflow.DomainService
         {
             // register business services
             services.AddSingleton<IWorkflowService, WorkflowService>();
+            services.TryAddSingleton<IWorkflowImportTenantSlugResolver, NullWorkflowImportTenantSlugResolver>();
+            services.AddSingleton<IWorkflowImportService, WorkflowImportService>();
             services.AddSingleton<IWorkflowExecutionService, WorkflowExecutionService>();
             services.AddSingleton<IWorkflowEngineService, WorkflowEngineService>();
             services.AddSingleton<IWorkflowNotificationService, WorkflowNotificationService>();

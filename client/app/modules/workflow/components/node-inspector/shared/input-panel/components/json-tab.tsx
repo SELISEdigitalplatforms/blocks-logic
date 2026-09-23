@@ -1,4 +1,4 @@
-import { DraggableProperty } from "./draggable-property";
+import { DraggableArrayIndex, DraggableProperty } from "./draggable-property";
 import { formatCellValue } from "../utils/format.util";
 
 function RecursiveJsonViewer({ data, depth = 0, prefixPath = "", nodeName, hasSinglePredecessor, isDraggable = true }: { data: unknown; depth?: number; prefixPath?: string; nodeName: string; hasSinglePredecessor: boolean; isDraggable?: boolean }) {
@@ -34,7 +34,17 @@ function RecursiveJsonViewer({ data, depth = 0, prefixPath = "", nodeName, hasSi
         return (
           <div key={key} className="flex flex-col">
             <div className="flex items-center" style={{ marginLeft: `${(depth + 1) * 1}rem` }}>
-              {!isArray && (
+              {isArray ? (
+                <DraggableArrayIndex
+                  expressionPath={currentPath}
+                  label={`[${key}]`}
+                  depth={0}
+                  nodeName={nodeName}
+                  hasSinglePredecessor={hasSinglePredecessor}
+                  isDraggable={isDraggable}
+                  showColon={false}
+                />
+              ) : (
                 <DraggableProperty
                   fieldKey={key}
                   prefixPath={prefixPath}
