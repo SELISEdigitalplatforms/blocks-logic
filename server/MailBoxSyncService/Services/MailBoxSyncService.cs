@@ -35,9 +35,18 @@ namespace MailBoxSyncService.Services
             _mapClientMapper = new ConcurrentDictionary<string, IImapClientWrapper>();
         }
 
-        public async Task SyncInboxAsync(MailServerConfiguration config, string tenantId)
+        public Task SyncInboxAsync(MailServerConfiguration config, string tenantId) =>
+            SyncInboxCoreAsync(config, tenantId, saslMechanism: null);
+
+        public Task SyncInboxAsync(MailServerConfiguration config, string tenantId, SaslMechanism saslMechanism)
         {
-            var client = await GetOrReconnectImapClientAsync(config, tenantId);
+            ArgumentNullException.ThrowIfNull(saslMechanism);
+            return SyncInboxCoreAsync(config, tenantId, saslMechanism);
+        }
+
+        private async Task SyncInboxCoreAsync(MailServerConfiguration config, string tenantId, SaslMechanism? saslMechanism)
+        {
+            var client = await GetOrReconnectImapClientAsync(config, tenantId, saslMechanism);
 
             var inbox = client.Inbox;
             await inbox.OpenAsync(MailKit.FolderAccess.ReadOnly);
@@ -99,7 +108,10 @@ namespace MailBoxSyncService.Services
         internal static string ConnectionKey(MailServerConfiguration config, string tenantId) =>
             string.Join('\u001f', tenantId, config.ItemId, (int)config.Provider);
 
-        private async Task<IImapClientWrapper> GetOrReconnectImapClientAsync(MailServerConfiguration config, string tenantId)
+        private async Task<IImapClientWrapper> GetOrReconnectImapClientAsync(
+            MailServerConfiguration config,
+            string tenantId,
+            SaslMechanism? saslMechanism)
         {
             var key = ConnectionKey(config, tenantId);
 
@@ -111,25 +123,42 @@ namespace MailBoxSyncService.Services
                 CleanupClient(key, client);
             }
 
-            return await ConnectImapClientAsync(config, key);
+            return await ConnectImapClientAsync(config, key, saslMechanism);
         }
 
-        private async Task<IImapClientWrapper> ConnectImapClientAsync(MailServerConfiguration config, string key)
+        /// <summary>
+        /// The record's explicit security mode when it has one; otherwise the legacy
+        /// <c>EnableSSL</c> reading, which is what every record had before the mode existed.
+        /// </summary>
+        internal static SecureSocketOptions SocketOptionsFor(MailServerConfiguration config) => config.SecurityMode switch
+        {
+            MailSecurityMode.SslOnConnect => SecureSocketOptions.SslOnConnect,
+            MailSecurityMode.StartTls => SecureSocketOptions.StartTls,
+            MailSecurityMode.None => SecureSocketOptions.None,
+            _ => config.EnableSSL ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls
+        };
+
+        private async Task<IImapClientWrapper> ConnectImapClientAsync(
+            MailServerConfiguration config,
+            string key,
+            SaslMechanism? saslMechanism)
         {
             var client = _imapClientFactory.Create();
 
             try
             {
-                await client.ConnectAsync(
-                    config.Host,
-                    config.Port,
-                    config.EnableSSL
-                        ? SecureSocketOptions.SslOnConnect
-                        : SecureSocketOptions.StartTls);
+                await client.ConnectAsync(config.Host, config.Port, SocketOptionsFor(config));
 
-                await client.AuthenticateAsync(
-                    config.SenderUserName,
-                    config.AccountPassword);
+                if (saslMechanism is not null)
+                {
+                    await client.AuthenticateAsync(saslMechanism);
+                }
+                else
+                {
+                    await client.AuthenticateAsync(
+                        config.SenderUserName,
+                        config.AccountPassword);
+                }
 
                 // Replacing an entry disposes whatever it displaced: a reconnect that raced
                 // another would otherwise leak the loser's authenticated session.

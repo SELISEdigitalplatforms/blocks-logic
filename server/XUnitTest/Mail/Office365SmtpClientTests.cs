@@ -103,6 +103,50 @@ namespace XUnitTest.Mail
         }
 
         [Fact]
+        public async Task Send_PasswordRecord_UsesStartTlsAndTheMailboxPassword_WithoutAToken()
+        {
+            using var _ = TenantContext();
+
+            var mail = AMail();
+            var config = mail.MailServerConfiguration;
+            config.AuthenticationType = MailAuthenticationType.Password;
+            config.TenantId = null;
+            config.ClientId = null;
+            config.ClientSecretReference = null;
+            config.MailboxAddress = null;
+            config.SenderUserName = "support@contoso.com";
+            config.AccountPassword = "password1";
+
+            var result = await Client().SendAsync(mail, ABody());
+
+            result.Should().BeTrue();
+            _session.ConnectedHost.Should().Be("smtp.office365.com");
+            _session.SocketOptions.Should().Be(SecureSocketOptions.StartTls);
+            _session.UsedPasswordAuthenticate.Should().BeTrue();
+            _session.Mechanism.Should().BeNull();
+            _session.SendCount.Should().Be(1);
+            _tokens.Verify(
+                t => t.GetTokenAsync(It.IsAny<Office365TokenRequest>(), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
+        public async Task Send_PasswordRecordWithoutAPassword_FailsClosedBeforeConnecting()
+        {
+            using var _ = TenantContext();
+
+            var mail = AMail();
+            mail.MailServerConfiguration.AuthenticationType = MailAuthenticationType.Password;
+            mail.MailServerConfiguration.SenderUserName = "support@contoso.com";
+            mail.MailServerConfiguration.AccountPassword = "";
+
+            var result = await Client().SendAsync(mail, ABody());
+
+            result.Should().BeFalse();
+            _session.ConnectedHost.Should().BeNull();
+        }
+
+        [Fact]
         public async Task Send_RequestsTheTokenForTheConfigurationsOwnTenantAndApplication()
         {
             using var _ = TenantContext("blocks-tenant");

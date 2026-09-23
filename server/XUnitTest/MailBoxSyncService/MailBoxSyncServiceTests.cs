@@ -47,10 +47,21 @@ namespace XUnitTest.MailBoxSyncService
 
             public IImapFolderWrapper Inbox => _folder;
 
+            public SecureSocketOptions? SocketOptions { get; private set; }
+            public SaslMechanism? Mechanism { get; private set; }
+
             public Task ConnectAsync(string host, int port, SecureSocketOptions options)
             {
                 ConnectCalls++;
+                SocketOptions = options;
                 IsConnected = true;
+                return Task.CompletedTask;
+            }
+
+            public Task AuthenticateAsync(SaslMechanism mechanism)
+            {
+                Mechanism = mechanism;
+                IsAuthenticated = true;
                 return Task.CompletedTask;
             }
 
@@ -329,6 +340,44 @@ namespace XUnitTest.MailBoxSyncService
             await service.SyncInboxAsync(config, "tenant-123");
 
             factory.CreateCalls.Should().Be(2);
+        }
+
+        [Fact]
+        public async Task SyncInboxAsync_WithASaslMechanism_AuthenticatesWithItInsteadOfThePassword()
+        {
+            var config = new MailServerConfiguration
+            {
+                ItemId = "config-o365",
+                Provider = MailServiceProvider.Office365Smtp,
+                IsInbound = true,
+                Host = "outlook.office365.com",
+                Port = 993,
+                SecurityMode = MailSecurityMode.SslOnConnect,
+                MailboxAddress = "support@contoso.com"
+            };
+
+            var fakeClient = new FakeImapClient(new List<MimeMessage>());
+            var factory = new FakeImapClientFactory(new[] { fakeClient });
+            var service = new global::MailBoxSyncService.Services.MailBoxSyncService(_mockRepository.Object, _mockMessageClient.Object, factory);
+
+            await service.SyncInboxAsync(config, "tenant-123", new SaslMechanismOAuth2("support@contoso.com", "token"));
+
+            fakeClient.Mechanism.Should().BeOfType<SaslMechanismOAuth2>();
+            fakeClient.AuthenticateCalls.Should().Be(0);
+            fakeClient.SocketOptions.Should().Be(SecureSocketOptions.SslOnConnect);
+        }
+
+        [Theory]
+        [InlineData(MailSecurityMode.Legacy, true, SecureSocketOptions.SslOnConnect)]
+        [InlineData(MailSecurityMode.Legacy, false, SecureSocketOptions.StartTls)]
+        [InlineData(MailSecurityMode.SslOnConnect, false, SecureSocketOptions.SslOnConnect)]
+        [InlineData(MailSecurityMode.StartTls, true, SecureSocketOptions.StartTls)]
+        public void SocketOptionsFor_PrefersTheExplicitModeAndFallsBackToEnableSsl(
+            MailSecurityMode mode, bool enableSsl, SecureSocketOptions expected)
+        {
+            var config = new MailServerConfiguration { SecurityMode = mode, EnableSSL = enableSsl };
+
+            global::MailBoxSyncService.Services.MailBoxSyncService.SocketOptionsFor(config).Should().Be(expected);
         }
 
         private static SesEventNotification CreateSesEvent(string eventType)

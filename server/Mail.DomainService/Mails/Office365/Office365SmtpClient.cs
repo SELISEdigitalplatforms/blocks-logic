@@ -10,7 +10,8 @@ using Microsoft.Extensions.Logging;
 namespace Mail.DomainService.Mails.Office365
 {
     /// <summary>
-    /// Sends through Exchange Online with STARTTLS and SASL XOAUTH2.
+    /// Sends through Exchange Online with STARTTLS, authenticating with SASL XOAUTH2 or, for a
+    /// password record, the mailbox username and password.
     /// </summary>
     /// <remarks>
     /// Never enters the legacy <c>SmtpClient</c> branch, whatever the record stores in that field:
@@ -53,6 +54,17 @@ namespace Mail.DomainService.Mails.Office365
                 return false;
             }
 
+            if (configuration.AuthenticationType == MailAuthenticationType.Password)
+            {
+                // No token and no vault: the mailbox credentials are on the record, the same way
+                // they are for the other password providers.
+                return await SendAsync(
+                    mailToBeSent,
+                    mailBody,
+                    client => client.AuthenticateAsync(configuration.SenderUserName, configuration.AccountPassword))
+                    .ConfigureAwait(false);
+            }
+
             string accessToken;
             try
             {
@@ -80,14 +92,17 @@ namespace Mail.DomainService.Mails.Office365
                 return false;
             }
 
-            return await SendWithTokenAsync(mailToBeSent, mailBody, configuration, accessToken).ConfigureAwait(false);
+            return await SendAsync(
+                mailToBeSent,
+                mailBody,
+                client => client.AuthenticateAsync(new SaslMechanismOAuth2(configuration.MailboxAddress, accessToken)))
+                .ConfigureAwait(false);
         }
 
-        private async Task<bool> SendWithTokenAsync(
+        private async Task<bool> SendAsync(
             MailToBeSent mailToBeSent,
             MailBody mailBody,
-            MailServerConfiguration configuration,
-            string accessToken)
+            Func<IMailKitSmtpClient, Task> authenticate)
         {
             var message = MailMessageComposer.Compose(mailToBeSent, mailBody);
 
@@ -108,8 +123,7 @@ namespace Mail.DomainService.Mails.Office365
                     Office365ConfigurationContract.SmtpPort,
                     SecureSocketOptions.StartTls).ConfigureAwait(false);
 
-                await client.AuthenticateAsync(
-                    new SaslMechanismOAuth2(configuration.MailboxAddress, accessToken)).ConfigureAwait(false);
+                await authenticate(client).ConfigureAwait(false);
 
                 await client.SendAsync(message).ConfigureAwait(false);
 

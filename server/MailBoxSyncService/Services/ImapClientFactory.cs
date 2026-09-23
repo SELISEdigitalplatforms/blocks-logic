@@ -17,6 +17,9 @@ namespace MailBoxSyncService.Services
         IImapFolderWrapper Inbox { get; }
         Task ConnectAsync(string host, int port, SecureSocketOptions options);
         Task AuthenticateAsync(string userName, string password);
+
+        /// <summary>Authenticates with a SASL mechanism, for XOAUTH2.</summary>
+        Task AuthenticateAsync(SaslMechanism mechanism);
     }
 
     public interface IImapFolderWrapper
@@ -49,6 +52,7 @@ namespace MailBoxSyncService.Services
 
         public Task ConnectAsync(string host, int port, SecureSocketOptions options) => _client.ConnectAsync(host, port, options);
         public Task AuthenticateAsync(string userName, string password) => _client.AuthenticateAsync(userName, password);
+        public Task AuthenticateAsync(SaslMechanism mechanism) => _client.AuthenticateAsync(mechanism);
         public void Dispose() => _client.Dispose();
     }
 

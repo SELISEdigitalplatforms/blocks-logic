@@ -22,12 +22,13 @@ namespace XUnitTest.Mail
 
             var senders = services.Where(d => d.ServiceType == typeof(IOutboundMailSender)).ToList();
 
-            senders.Should().HaveCount(3);
+            senders.Should().HaveCount(4);
             senders.Select(d => d.ImplementationType).Should().BeEquivalentTo(
             [
                 typeof(AmazonSesMailSender),
                 typeof(ZohoMailSender),
-                typeof(Office365SmtpClient)
+                typeof(Office365SmtpClient),
+                typeof(GmailMailSender)
             ]);
             services.Count(d => d.ServiceType == typeof(IOutboundMailSenderRegistry)).Should().Be(1);
         }
