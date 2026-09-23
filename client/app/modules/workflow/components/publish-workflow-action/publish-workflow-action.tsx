@@ -9,7 +9,10 @@ import { Button } from "@/components/ui-kits/button/button";
 import { ChevronDown, Loader2 } from "lucide-react";
 import { useParams } from "react-router";
 import { useWorkflowActions } from "../../hooks/use-workflow-actions";
-import { PublishConfirmationModal, UnpublishConfirmationModal } from "../workflow-confirmation-modals";
+import {
+  PublishConfirmationModal,
+  UnpublishConfirmationModal,
+} from "../workflow-confirmation-modals";
 import { PublishWorkflowModal } from "../publish-workflow-modal/publish-workflow-modal";
 
 interface PublishWorkflowActionProps {
@@ -26,7 +29,7 @@ export const PublishWorkflowAction = ({
   onActionComplete,
 }: PublishWorkflowActionProps) => {
   const { id: workflowId } = useParams<{ id: string }>();
-  
+
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
   const [isPublishConfirmOpen, setIsPublishConfirmOpen] = useState(false);
   const [isUnpublishDialogOpen, setIsUnpublishDialogOpen] = useState(false);
@@ -78,39 +81,58 @@ export const PublishWorkflowAction = ({
   };
 
   const isPending = isPublishingNew || isPublishingUnversioned || isUnpublishing;
-
+  const isPublishedAndClean = isPublished && !isDirty;
+  const isPublishDisabled = isPending || hasUnsavedChanges || isPublishedAndClean;
+  const isDropdownDisabled = isPending || hasUnsavedChanges;
 
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" className="gap-2" disabled={isPending || hasUnsavedChanges}>
+        <div className="inline-flex overflow-hidden rounded-sm border border-input bg-background">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 rounded-none border-0 border-r border-input px-4 hover:bg-accent disabled:opacity-50"
+            disabled={isPublishDisabled}
+            onClick={handleOpenPublishDialog}
+          >
             {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-            Publish
-            <ChevronDown className="h-4 w-4" />
+            {isPublishedAndClean && <span className="h-2.5 w-2.5 rounded-full bg-green-500" />}
+            {isPublishedAndClean ? "Published" : "Publish"}
           </Button>
-        </DropdownMenuTrigger>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label="Open publish actions"
+              className="rounded-none border-0 px-3 hover:bg-accent"
+              disabled={isDropdownDisabled}
+            >
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+        </div>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem 
+          <DropdownMenuItem
             onClick={(e) => {
-              if (hasUnsavedChanges || (isPublished && !isDirty)) {
+              if (hasUnsavedChanges || isPublishedAndClean) {
                 e.preventDefault();
                 return;
               }
               handleOpenPublishDialog();
-            }} 
-            disabled={hasUnsavedChanges || (isPublished && !isDirty)}
+            }}
+            disabled={hasUnsavedChanges || isPublishedAndClean}
           >
             Publish
           </DropdownMenuItem>
-          <DropdownMenuItem 
+          <DropdownMenuItem
             onClick={(e) => {
               if (!isPublished) {
                 e.preventDefault();
                 return;
               }
               setIsUnpublishDialogOpen(true);
-            }} 
+            }}
             disabled={!isPublished}
           >
             Unpublish
@@ -145,5 +167,3 @@ export const PublishWorkflowAction = ({
     </>
   );
 };
-
-

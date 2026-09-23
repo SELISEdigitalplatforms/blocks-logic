@@ -52,7 +52,6 @@ describe("PublishWorkflowAction", () => {
     const user = userEvent.setup();
     wrap(<PublishWorkflowAction isPublished={false} isDirty={false} />);
     await user.click(screen.getByRole("button", { name: /Publish/ }));
-    await user.click(await screen.findByRole("menuitem", { name: "Publish" }));
     const dialog = await screen.findByRole("dialog");
     await user.click(within(dialog).getByRole("button", { name: "Publish" }));
     await waitFor(() => expect(svc.publishWorkflow).toHaveBeenCalled());
@@ -62,22 +61,29 @@ describe("PublishWorkflowAction", () => {
     const user = userEvent.setup();
     wrap(<PublishWorkflowAction isPublished={false} isDirty={true} />);
     await user.click(screen.getByRole("button", { name: /Publish/ }));
-    await user.click(await screen.findByRole("menuitem", { name: "Publish" }));
     const dialog = await screen.findByRole("dialog");
     await user.click(within(dialog).getByRole("button", { name: "Publish" }));
-    await waitFor(() =>
-      expect(svc.publishWorkflowNewVersion).toHaveBeenCalled(),
-    );
+    await waitFor(() => expect(svc.publishWorkflowNewVersion).toHaveBeenCalled());
   });
 
   it("unpublishes a published workflow from the confirmation", async () => {
     const user = userEvent.setup();
     wrap(<PublishWorkflowAction isPublished isDirty={false} />);
-    await user.click(screen.getByRole("button", { name: /Publish/ }));
+    await user.click(screen.getByRole("button", { name: "Open publish actions" }));
     await user.click(await screen.findByRole("menuitem", { name: "Unpublish" }));
     const dialog = await screen.findByRole("dialog");
     await user.click(within(dialog).getByRole("button", { name: "Unpublish" }));
     await waitFor(() => expect(svc.unpublishWorkflow).toHaveBeenCalled());
+  });
+
+  it("keeps publish available from the chevron menu", async () => {
+    const user = userEvent.setup();
+    wrap(<PublishWorkflowAction isPublished={false} isDirty={false} />);
+    await user.click(screen.getByRole("button", { name: "Open publish actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Publish" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Publish" }));
+    await waitFor(() => expect(svc.publishWorkflow).toHaveBeenCalled());
   });
 });
 
@@ -142,9 +148,11 @@ describe("WorkflowVersionActionDropdown", () => {
     await user.click(screen.getByText("Menu"));
     await user.click(await screen.findByText("Restore version"));
     await waitFor(() => expect(svc.restoreWorkflow).toHaveBeenCalled());
-    await waitFor(() => expect(toasts.showSuccessToast).toHaveBeenCalledWith({
-      description: "Workflow version successfully restored.",
-    }));
+    await waitFor(() =>
+      expect(toasts.showSuccessToast).toHaveBeenCalledWith({
+        description: "Workflow version successfully restored.",
+      }),
+    );
   });
 
   it("shows error toast when restoring a version fails", async () => {
@@ -157,9 +165,11 @@ describe("WorkflowVersionActionDropdown", () => {
     );
     await user.click(screen.getByText("Menu"));
     await user.click(await screen.findByText("Restore version"));
-    await waitFor(() => expect(toasts.showErrorToast).toHaveBeenCalledWith({
-      errors: "Restore failed",
-    }));
+    await waitFor(() =>
+      expect(toasts.showErrorToast).toHaveBeenCalledWith({
+        errors: "Restore failed",
+      }),
+    );
   });
 
   it("opens the publish confirmation for an unpublished version", async () => {
@@ -171,9 +181,7 @@ describe("WorkflowVersionActionDropdown", () => {
     );
     await user.click(screen.getByText("Menu"));
     await user.click(await screen.findByText("Publish version"));
-    await waitFor(() =>
-      expect(document.querySelector("[role='dialog']")).toBeTruthy(),
-    );
+    await waitFor(() => expect(document.querySelector("[role='dialog']")).toBeTruthy());
   });
 
   it("offers unpublish for a published version", async () => {
