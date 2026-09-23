@@ -5,6 +5,7 @@ using Mail.DomainService.Shared.Enums;
 using Mail.DomainService.Utilities;
 using MailBoxSyncService.Entities;
 using MailKit.Security;
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Collections.Concurrent;
 
 namespace MailBoxSyncService.Services
@@ -27,11 +28,18 @@ namespace MailBoxSyncService.Services
         /// </remarks>
         private readonly ConcurrentDictionary<string, IImapClientWrapper> _mapClientMapper;
 
-        public MailBoxSyncService(IMailRepository repository, IMessageClient messageClient, IImapClientFactory imapClientFactory)
+        private readonly ILogger<MailBoxSyncService> _logger;
+
+        public MailBoxSyncService(
+            IMailRepository repository,
+            IMessageClient messageClient,
+            IImapClientFactory imapClientFactory,
+            ILogger<MailBoxSyncService>? logger = null)
         {
             _repository = repository;
             _messageClient = messageClient;
             _imapClientFactory = imapClientFactory;
+            _logger = logger ?? NullLogger<MailBoxSyncService>.Instance;
             _mapClientMapper = new ConcurrentDictionary<string, IImapClientWrapper>();
         }
 
@@ -77,9 +85,59 @@ namespace MailBoxSyncService.Services
                 };
 
                 await _repository.InsertAsync(entity, tenantId);
-                await EnqueueInboxEmailInsertionMessage(entity, tenantId);
+
+                try
+                {
+                    await EnqueueInboxEmailInsertionMessage(entity, tenantId);
+                }
+                catch (Exception ex)
+                {
+                    // The mail is already stored, so a failed trigger must not stop the rest of
+                    // the inbox from syncing: one bad message would otherwise block every message
+                    // after it on every poll.
+                    _logger.LogError(
+                        ex,
+                        "Mail {MessageId} was saved but its email trigger could not be published for tenant '{TenantId}' using config '{ConfigId}'",
+                        entity.MessageId,
+                        tenantId,
+                        config.ItemId);
+                }
             }
         }
+
+        /// <summary>
+        /// Upper bound on the body carried by a trigger event. Service Bus caps a message at
+        /// 256 KB on the Standard tier; UTF-8 can take three bytes per character, so this keeps
+        /// the body under ~180 KB with room for the rest of the envelope.
+        /// </summary>
+        internal const int MaxTriggerBodyLength = 60_000;
+
+        /// <summary>
+        /// The mail as a trigger event carries it: everything except the raw MIME, and the body
+        /// capped.
+        /// </summary>
+        /// <remarks>
+        /// The raw MIME holds every attachment base64-encoded, so a single attached file used to
+        /// push the event past the broker's size limit and the trigger was lost. It stays in the
+        /// stored <see cref="MailBoxEntity"/>, which a consumer can load by <c>ItemId</c>.
+        /// </remarks>
+        internal static MailBoxEntity ForTrigger(MailBoxEntity entity) => new()
+        {
+            ItemId = entity.ItemId,
+            MessageId = entity.MessageId,
+            MailServerConfigurationId = entity.MailServerConfigurationId,
+            Subject = entity.Subject,
+            From = entity.From,
+            To = entity.To,
+            Date = entity.Date,
+            Body = entity.Body is { Length: > MaxTriggerBodyLength } body
+                ? body[..MaxTriggerBodyLength]
+                : entity.Body,
+            Status = entity.Status,
+            Error = entity.Error,
+            IsInbound = entity.IsInbound,
+            RawMime = null!
+        };
 
         private async Task EnqueueInboxEmailInsertionMessage(MailBoxEntity entity, string tenantId)
         {
@@ -92,7 +150,7 @@ namespace MailBoxSyncService.Services
                 Payload = new EmailTriggerEvent
                 {
                     Type = EmailTriggerType.Inbound,
-                    Mail = entity
+                    Mail = ForTrigger(entity)
                 }
             });
         }
