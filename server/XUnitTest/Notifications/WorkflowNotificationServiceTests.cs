@@ -9,6 +9,7 @@ using INotificationService = global::DomainService.Notification.INotificationSer
 using NotificationData = global::Workflow.DomainService.Dtos.NotificationData;
 using WorkflowNotificationService = global::Workflow.DomainService.Services.WorkflowNotificationService;
 
+using Workflow.DomainService.Utils;
 using XUnitTest.TestHelpers;
 
 namespace XUnitTest.Notifications
@@ -240,6 +241,26 @@ namespace XUnitTest.Notifications
 
             handler.RequestBody.Should().Contain("workflowId");
             handler.RequestBody.Should().Contain("wf-1");
+        }
+
+        [Fact]
+        public async Task NotifyImportAsync_UsesTheImportConfigurationAndCorrelationId()
+        {
+            var (sut, handler) = Build();
+
+            await sut.NotifyImportAsync(
+                ["user-1"],
+                "cor-9",
+                isSuccess: true,
+                title: "Workflow imported",
+                description: "Your workflow is ready.",
+                workflowId: "wf-imported",
+                issues: 0);
+
+            handler.RequestBody.Should().Contain(LogicConstants.WorkflowImportNotificationConfigurationName);
+            handler.RequestBody.Should().Contain("cor-9");
+            handler.RequestBody.Should().Contain("wf-imported");
+            handler.RequestBody.Should().Contain("Workflow imported");
         }
     }
 }

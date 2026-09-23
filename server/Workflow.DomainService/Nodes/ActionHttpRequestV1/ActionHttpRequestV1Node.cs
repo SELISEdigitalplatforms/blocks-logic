@@ -38,6 +38,7 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
         protected override async Task<NodeExecutionResult> ExecuteAsync(NodeExecutionContext context, ActionHttpRequestV1Parameters? nodeparameters)
         {
             var parameters = nodeparameters ?? new ActionHttpRequestV1Parameters();
+            parameters.HaveBody = ReadHaveBody(context.Parameters, parameters.HaveBody);
             var outputItems = new List<NodeOutputItem>();
 
             for (int i = 0; i < context.IterationCount; i++)
@@ -212,6 +213,17 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
                 "html" => "text/html",
                 _ => bodyContentType // Use as-is if not recognized
             };
+        }
+
+        private static bool ReadHaveBody(BsonDocument rawParameters, bool fallback)
+        {
+            if (!rawParameters.TryGetValue("havebody", out var value))
+                return fallback;
+
+            if (value.IsBoolean)
+                return value.AsBoolean;
+
+            return bool.TryParse(value.ToString(), out var parsed) ? parsed : fallback;
         }
 
 

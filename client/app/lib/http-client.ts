@@ -5,6 +5,7 @@ import {
   getRollbar,
 } from "@seliseblocks/genesis-os/observability";
 import { SERVICE_NAME } from "@/constants/service.constant";
+import { getLogicBaseUrl } from "@/lib/logic-base-url";
 
 const reportHttpFailure = createHttpFailureReporter(
   getRollbar({ service: SERVICE_NAME }),
@@ -27,7 +28,7 @@ export const serviceInstances = {
     onError: reportHttpFailure,
   }),
   logicService: new HttpClient({
-    baseURL: getRuntimeEnv("BLOCKS_LOGIC_BASE_URL") || "",
+    baseURL: getLogicBaseUrl(),
     blocksKey: getRuntimeEnv("BLOCKS_X_BLOCKS_KEY") || "",
     onError: reportHttpFailure,
   }),

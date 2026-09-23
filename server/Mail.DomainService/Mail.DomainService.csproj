@@ -1,6 +1,16 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <!-- The Office 365 failure-code mapping is exercised directly: it is a lookup table, and
+         driving every branch of it through a live SMTP session would prove less. -->
+    <InternalsVisibleTo Include="XUnitTest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Office 365 outbound: Azure.Identity for the Exchange Online client-credentials token,
+         SeliseBlocks.Secrets.OS for resolving the client secret in its tenant at send time. -->
+    <PackageReference Include="Azure.Identity" />
+    <PackageReference Include="SeliseBlocks.Secrets.OS" />
     <PackageReference Include="FluentValidation" />
     <PackageReference Include="MailKit" />
     <PackageReference Include="Microsoft.Graph" />

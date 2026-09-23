@@ -1,5 +1,6 @@
-using Blocks.Genesis;
+﻿using Blocks.Genesis;
 using Mail.DomainService.Entities;
+using Mail.DomainService.Mails.Strategies;
 using MailBoxSyncService.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -16,9 +17,17 @@ namespace XUnitTest.MailBoxSyncService
                 IMailBoxSyncService mailBoxSyncService,
                 ILogger<global::MailBoxSyncService.Worker> logger,
                 IConfiguration configuration)
-                : base(mailRepository, mailBoxSyncService, logger, configuration)
+                : base(mailRepository, mailBoxSyncService, LegacyRegistry(mailBoxSyncService), logger, configuration)
             {
             }
+
+            /// <summary>
+            /// The real legacy pollers over the mocked sync service, so these tests still assert
+            /// what the worker ultimately calls rather than that it consulted a registry.
+            /// </summary>
+            private static IInboundMailPollerRegistry LegacyRegistry(IMailBoxSyncService syncService) =>
+                new InboundMailPollerRegistry(
+                    [new AmazonSesImapPoller(syncService), new ZohoImapPoller(syncService)]);
 
             public Task RunAsync(CancellationToken token) => ExecuteAsync(token);
         }
@@ -77,6 +86,38 @@ namespace XUnitTest.MailBoxSyncService
                     It.IsAny<Exception>(),
                     It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 Times.Once);
+        }
+
+        [Fact]
+        public async Task ExecuteAsync_ContinuesWithHealthyTenant_WhenAnotherPlacementCannotLoadConfigurations()
+        {
+            var mailRepository = new Mock<IMailRepository>();
+            var syncService = new Mock<IMailBoxSyncService>();
+            var logger = new Mock<ILogger<global::MailBoxSyncService.Worker>>();
+            var unavailable = CreateTenant();
+            unavailable.TenantId = "dev";
+            var healthy = CreateTenant();
+            healthy.TenantId = "other";
+            var config = new MailServerConfiguration { ItemId = "other-config", IsInbound = true };
+            mailRepository.Setup(r => r.GetTenantsAsync()).ReturnsAsync(new List<Tenant> { unavailable, healthy });
+            mailRepository.Setup(r => r.GetImapConfigurationsAsync(unavailable)).ThrowsAsync(new TimeoutException());
+            mailRepository.Setup(r => r.GetImapConfigurationsAsync(healthy)).ReturnsAsync(new List<MailServerConfiguration> { config });
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            syncService.Setup(s => s.SyncInboxAsync(config, healthy.TenantId))
+                .Returns(() =>
+                {
+                    cts.Cancel();
+                    return Task.CompletedTask;
+                });
+
+            var worker = new TestWorker(mailRepository.Object, syncService.Object, logger.Object, CreateConfig());
+            await worker.RunAsync(cts.Token);
+
+            syncService.Verify(s => s.SyncInboxAsync(config, healthy.TenantId), Times.Once);
+            logger.Verify(x => x.Log(LogLevel.Error, It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains("dev")),
+                It.IsAny<Exception>(), It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
         }
 
         private static Tenant CreateTenant()

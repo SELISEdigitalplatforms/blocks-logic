@@ -5,8 +5,10 @@ using Workflow.DomainService.Nodes.ActionSendMailV1;
 using FluentAssertions;
 using Mail.DomainService;
 using Mail.DomainService.Mails;
+using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using MongoDB.Bson;
+using Proxy.DomainService.Services;
 
 namespace XUnitTest.Workflow
 {
@@ -17,6 +19,20 @@ namespace XUnitTest.Workflow
     /// </summary>
     public class ActionSendMailV1NodeTests
     {
+        private sealed class FakeVariableResolver : IProxyVariableResolver
+        {
+            public Task<IReadOnlyDictionary<string, string>> ResolveAsync(
+                IReadOnlyCollection<string> names,
+                string tenantId,
+                CancellationToken ct = default)
+            {
+                IReadOnlyDictionary<string, string> values = names
+                    .ToDictionary(name => name, name => name == "keyboth" ? "resolved-keyboth" : "");
+
+                return Task.FromResult(values);
+            }
+        }
+
         // ----- Test data helpers -------------------------------------------------
 
         private static WorkflowItemExecutionEntity Item(
@@ -112,6 +128,34 @@ namespace XUnitTest.Workflow
             output["AttachmentsSent"].AsBsonArray.Should().BeEmpty();
             mailService.Verify(m => m.ProcessMailToAnyAsync(
                 It.Is<SendMailToAny>(r => !r.Attachments.Any())), Times.Once);
+        }
+
+        [Fact]
+        public async Task RunAsync_BodyDataContextConfigurationVariable_IsResolvedBeforeSend()
+        {
+            var items = new List<WorkflowItemExecutionEntity> { Item("a", new BsonDocument()) };
+            var ctx = Context(items, attachments: null);
+            ctx.ServiceProvider = new ServiceCollection()
+                .AddSingleton<IProxyVariableResolver, FakeVariableResolver>()
+                .BuildServiceProvider();
+            ctx.Parameters["BodyDataContext"] = new BsonDocument
+            {
+                { "DisplayName", "{{$VAR.keyboth}}" },
+                { "HostName", "maria" },
+            };
+
+            SendMailToAny? captured = null;
+            var mailService = new Mock<IMailService>();
+            mailService.Setup(m => m.ProcessMailToAnyAsync(It.IsAny<SendMailToAny>()))
+                .Callback<SendMailToAny>(request => captured = request)
+                .ReturnsAsync(Success());
+
+            var result = await new ActionSendMailV1Node(mailService.Object).RunAsync(ctx);
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            captured.Should().NotBeNull();
+            captured!.BodyDataContext["DisplayName"].Should().Be("resolved-keyboth");
+            captured.BodyDataContext["HostName"].Should().Be("maria");
         }
 
         [Fact]

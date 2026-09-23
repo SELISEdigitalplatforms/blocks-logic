@@ -37,5 +37,13 @@ namespace Workflow.DomainService.Nodes
         public int AttemptNumber { get; set; } = 1;
         public CancellationToken CancellationToken { get; set; } = default;
         public IServiceProvider? ServiceProvider { get; set; }
+
+        /// <summary>
+        /// Every <c>{{$VAR.name}}</c> configuration variable referenced anywhere in <see cref="Parameters"/>,
+        /// already resolved to its Blocks Secrets value by <see cref="NodeExecutorBase{TParameters}.RunAsync"/>
+        /// before <c>ExecuteAsync</c> runs. Consulted (never fetched) by <c>parseExpression</c>.
+        /// </summary>
+        public IReadOnlyDictionary<string, string> ResolvedVariables { get; set; } =
+            new Dictionary<string, string>();
     }
 }

@@ -239,3 +239,10 @@ export const useExecuteTriggerListener = () => {
     },
   });
 };
+
+export const useEnqueueWorkflowImport = () => {
+  return useMutation({
+    mutationKey: ["workflow", "import"],
+    mutationFn: workflowService.importWorkflow,
+  });
+};

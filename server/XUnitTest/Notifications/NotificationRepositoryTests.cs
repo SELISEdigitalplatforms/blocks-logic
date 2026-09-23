@@ -27,6 +27,7 @@ namespace XUnitTest.Notifications
         {
             BlocksContext.IsTestMode = true;
             _secret.SetupGet(s => s.DatabaseConnectionString).Returns("conn");
+            _secret.SetupGet(s => s.RootDatabaseName).Returns("BlocksRootDb");
             _provider.Setup(p => p.GetDatabase(It.IsAny<string>())).Returns(_db.Object);
             _provider.Setup(p => p.GetDatabase(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>())).Returns(_db.Object);
             _logger.Setup(l => l.Log(It.IsAny<LogLevel>(), It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), It.IsAny<Exception>(), It.IsAny<Func<It.IsAnyType, Exception, string>>()));
@@ -296,6 +297,16 @@ namespace XUnitTest.Notifications
 
             result.Notifications.Should().BeEmpty();
             result.TotalNotificationsCount.Should().Be(0);
+        }
+
+        [Fact]
+        public async Task GetNotificationsAsync_FailsWhenTenantPlacementCannotBeResolved()
+        {
+            SetContext();
+            _provider.Setup(p => p.GetDatabase("tenant-1")).Throws(new TimeoutException());
+
+            await Assert.ThrowsAsync<TimeoutException>(() => Build().GetNotificationsAsync(
+                new GetNotificationsRequest { Page = 0, PageSize = 10 }));
         }
     }
 }

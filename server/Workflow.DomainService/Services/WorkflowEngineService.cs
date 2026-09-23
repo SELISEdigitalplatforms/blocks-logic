@@ -21,13 +21,15 @@ namespace Workflow.DomainService.Services
 
         private readonly ILogger<WorkflowEngineService> _logger;
         private readonly IWorkflowNotificationService _workflowNotificationService;
+        private readonly IServiceProvider _serviceProvider;
 
         public WorkflowEngineService(
             IWorkflowExecutionRepository workflowExecutionRepository,
             IEnumerable<INodeExecutor> nodeExecutors,
             IMessageClient messageClient,
             ILogger<WorkflowEngineService> logger,
-            IWorkflowNotificationService workflowNotificationService
+            IWorkflowNotificationService workflowNotificationService,
+            IServiceProvider serviceProvider
             )
         {
             _workflowExecutionRepository = workflowExecutionRepository;
@@ -35,6 +37,7 @@ namespace Workflow.DomainService.Services
             _messageClient = messageClient;
             _logger = logger;
             _workflowNotificationService = workflowNotificationService;
+            _serviceProvider = serviceProvider;
         }
 
         /// <summary>
@@ -211,12 +214,13 @@ namespace Workflow.DomainService.Services
                 WorkflowId = execution.WorkflowId,
                 NodeId = node.Id,
                 TenantId = execution.TenantId,
-                Parameters = node.Parameters,
+                Parameters = (BsonDocument)node.Parameters.DeepClone(),
                 InputItems = inputItems,
                 WorkflowContext = execution.Context,
                 AncestorNodeOutputs = ancestorOutputs,
                 IterationCount = inputItems.Count,
                 HasUpstream = execution.WorkflowSnapshot.Edges.Any(e => e.Target == node.Id),
+                ServiceProvider = _serviceProvider,
             };
         }
 

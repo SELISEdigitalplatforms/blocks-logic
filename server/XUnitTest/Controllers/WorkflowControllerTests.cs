@@ -16,12 +16,17 @@ namespace XUnitTest.Controllers
         private readonly Mock<IWorkflowService> _workflowService = new();
         private readonly Mock<IWorkflowVersionService> _versionService = new();
         private readonly Mock<IWorkflowExecutionService> _executionService = new();
+        private readonly Mock<IWorkflowImportService> _importService = new();
         private readonly WorkflowController _controller;
 
         public WorkflowControllerTests()
         {
             TestBlocksContext.Set("tenant-abc");
-            _controller = new WorkflowController(_workflowService.Object, _versionService.Object, _executionService.Object);
+            _controller = new WorkflowController(
+                _workflowService.Object,
+                _versionService.Object,
+                _executionService.Object,
+                _importService.Object);
         }
 
         public void Dispose() => TestBlocksContext.Clear();
@@ -88,6 +93,28 @@ namespace XUnitTest.Controllers
             var result = await _controller.Duplicate(new WorkflowDuplicateRequestDto { Name = "wf", WorkflowId = "wf" });
 
             result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status201Created);
+        }
+
+        [Fact]
+        public async Task Import_ReturnsOk_WhenFileIdPresent()
+        {
+            _importService.Setup(s => s.EnqueueAsync(It.IsAny<WorkflowImportRequestDto>()))
+                .ReturnsAsync(new BaseMutationResponse { IsSuccess = true });
+
+            var result = await _controller.Import(new WorkflowImportRequestDto { FileId = "file-1", MessageCoRelationId = "cor-1" });
+
+            result.Should().BeOfType<OkObjectResult>();
+            _importService.Verify(s => s.EnqueueAsync(It.Is<WorkflowImportRequestDto>(d =>
+                d.FileId == "file-1" && d.MessageCoRelationId == "cor-1")), Times.Once);
+        }
+
+        [Fact]
+        public async Task Import_ReturnsBadRequest_WhenFileIdMissing()
+        {
+            var result = await _controller.Import(new WorkflowImportRequestDto { FileId = "  " });
+
+            result.Should().BeOfType<BadRequestObjectResult>();
+            _importService.Verify(s => s.EnqueueAsync(It.IsAny<WorkflowImportRequestDto>()), Times.Never);
         }
 
         [Fact]

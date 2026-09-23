@@ -1,4 +1,5 @@
 import { getRuntimeEnv } from "@seliseblocks/genesis-os";
+import { getLogicBaseUrl } from "@/lib/logic-base-url";
 
 const BLOCKS_IAM_BASE_URL = getRuntimeEnv("BLOCKS_IAM_BASE_URL");
 const AUTH_OIDC_SUBPATH = "/oidc";
@@ -19,7 +20,7 @@ export const API_BASES = {
   STUDIO: "/api",
   WORKFLOW: "/api",
   LOCALIZATION: getRuntimeEnv("BLOCKS_LOCALIZATION_BASE_URL") + "/api",
-  LOGIC: getRuntimeEnv("BLOCKS_LOGIC_BASE_URL") + "/api",
+  LOGIC: getLogicBaseUrl() + "/api",
 } as const;
 
 
