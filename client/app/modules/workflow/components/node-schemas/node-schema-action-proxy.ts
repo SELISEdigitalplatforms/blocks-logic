@@ -1,5 +1,8 @@
 import { NodeGuideActionProxy } from "../node-guides";
-import { DetailSection } from "../node-inspector/form-builder/form-field.types";
+import {
+  ReadonlyDetailField,
+  ReadonlyDetails,
+} from "../node-inspector/form-builder/form-field.types";
 import { NodeSchemaDefinition } from "./node-schema.type";
 import { proxyService } from "@/modules/proxy/services/proxy.service";
 import { Proxy, ProxyMethod } from "@/modules/proxy/types";
@@ -52,18 +55,36 @@ const joinUpstream = (base: string, path: string) => {
   return rest ? `${root}/${rest}` : root;
 };
 
+const toRecord = (rows: { key: string; value: string }[]) =>
+  Object.fromEntries(rows.map((row) => [row.key, row.value]));
+
+/** A locked field of the endpoint configuration panel; ids are prefixed to stay unique. */
+const locked = (
+  field: Omit<ReadonlyDetailField["field"], "key">,
+  value: unknown,
+): ReadonlyDetailField => ({
+  field: { ...field, id: `routeConfig-${field.id}`, key: `routeConfig.${field.id}` },
+  value,
+});
+
+const ACCESS_OPTIONS = [
+  { value: "blocksToken", label: "Blocks token required" },
+  { value: "public", label: "Public (anyone with the URL)" },
+];
+
+const ruleLabel = (list: string, mode: string) =>
+  `${list} (caller needs ${mode === "all" ? "all" : "any"})`;
+
 /**
- * The selected endpoint's effective configuration, as read-only sections. Values are shown in full,
- * exactly as saved: anyone who can open the proxy page already sees them there.
+ * The selected endpoint's effective configuration, one locked form field per setting. Values are
+ * shown in full, exactly as saved: anyone who can open the proxy page already sees them there.
  */
 export const buildProxyRouteDetails = (
   proxy: Proxy,
   method: string,
   path: string,
-): DetailSection[] => {
-  const editLink: DetailSection = {
-    link: { label: "Edit proxy", path: `proxy/${proxy.id}/edit` },
-  };
+): ReadonlyDetails => {
+  const link = { label: "Edit proxy", path: `proxy/${proxy.id}/edit` };
 
   // An empty allowlist means the base path only, once per method the proxy accepts.
   const route =
@@ -71,44 +92,138 @@ export const buildProxyRouteDetails = (
       ? proxy.routes.find((candidate) => candidate.method === method && candidate.path === path)
       : null;
   if (route === undefined) {
-    return [
-      { title: "Endpoint", text: "Endpoint no longer exists on this proxy." },
-      editLink,
-    ];
+    return { fields: [], message: "This endpoint no longer exists on the proxy.", link };
   }
 
   const effective = resolveEffectiveRoute(proxy, method as ProxyMethod, route);
-  const sections: DetailSection[] = [
-    {
-      title: "Forwards to",
-      text: `${method} ${joinUpstream(effective.upstreamUrl, route?.upstreamPath ?? path)}`,
-    },
-    {
-      title: "Headers added",
-      rows: effective.headers.map((row) => ({ key: row.key, value: row.value, tag: row.source })),
-    },
-    {
-      title: "Query parameters added",
-      note: "Win over a Query Parameters row below with the same key.",
-      rows: effective.query.map((row) => ({ key: row.key, value: row.value, tag: row.source })),
-    },
+  const access = proxy.access;
+  const fields: ReadonlyDetailField[] = [
+    locked({ id: "method", type: "text", label: "Method" }, method),
+    locked(
+      {
+        id: "upstream",
+        type: "text",
+        label: "Forwards to",
+        info: "The upstream URL this endpoint calls.",
+        copyable: true,
+      },
+      joinUpstream(effective.upstreamUrl, route?.upstreamPath ?? path),
+    ),
+    locked(
+      { id: "access", type: "radio", label: "Who can call it", options: ACCESS_OPTIONS },
+      access?.kind ?? "blocksToken",
+    ),
   ];
 
-  if (BODY_METHODS.includes(method)) {
-    sections.push({
-      title: "Body fields merged",
-      note: "Override same-name keys in Body.",
-      rows: effective.bodyMerge.map((row) => ({ key: row.key, value: row.value })),
-    });
+  if (access && access.kind !== "public") {
+    fields.push(
+      locked(
+        { id: "roles", type: "expression-list", label: ruleLabel("Roles", access.roles.mode) },
+        access.roles.values,
+      ),
+      locked(
+        {
+          id: "permissions",
+          type: "expression-list",
+          label: ruleLabel("Permissions", access.permissions.mode),
+        },
+        access.permissions.values,
+      ),
+    );
+    if (access.roles.values.length > 0 && access.permissions.values.length > 0) {
+      fields.push(
+        locked(
+          {
+            id: "combine",
+            type: "radio",
+            label: "Roles and permissions",
+            options: [
+              { value: "or", label: "Either list is enough" },
+              { value: "and", label: "Both lists must match" },
+            ],
+          },
+          access.combine,
+        ),
+      );
+    }
   }
 
-  sections.push(
-    effective.responseMode === "select"
-      ? { title: "Response", text: "Only these fields:", items: effective.responseInclude }
-      : { title: "Response", text: "Whole response" },
-    editLink,
+  fields.push(
+    locked(
+      {
+        id: "headers",
+        type: "key-value-pairs",
+        label: "Headers added",
+        info: "Sent with every call to this endpoint: the connection's headers, with the endpoint's own rows replacing same-name ones.",
+        keyLabel: "Header",
+        valueLabel: "Value",
+      },
+      toRecord(effective.headers),
+    ),
+    locked(
+      {
+        id: "query",
+        type: "key-value-pairs",
+        label: "Query parameters added",
+        info: "Win over a Query Parameters row below with the same key.",
+        keyLabel: "Parameter",
+        valueLabel: "Value",
+      },
+      toRecord(effective.query),
+    ),
   );
-  return sections;
+
+  if (BODY_METHODS.includes(method)) {
+    const merges = effective.bodyMerge.length > 0;
+    fields.push(
+      locked(
+        {
+          id: "bodyMergeOn",
+          type: "switch",
+          label: "Merge fields into the body",
+          info: "Configured fields override same-name keys in Body.",
+        },
+        merges,
+      ),
+    );
+    if (merges) {
+      fields.push(
+        locked(
+          {
+            id: "bodyMerge",
+            type: "key-value-pairs",
+            label: "Body fields merged",
+            keyLabel: "Field",
+            valueLabel: "Value",
+          },
+          toRecord(effective.bodyMerge),
+        ),
+      );
+    }
+  }
+
+  const selects = effective.responseMode === "select";
+  fields.push(
+    locked(
+      {
+        id: "responseSelect",
+        type: "switch",
+        label: "Return selected fields only",
+        info: "Off: the whole upstream response is returned.",
+      },
+      selects,
+    ),
+  );
+  if (selects) {
+    fields.push(
+      locked(
+        { id: "responseInclude", type: "expression-list", label: "Response fields" },
+        effective.responseInclude,
+      ),
+    );
+  }
+
+  return { fields, link };
 };
 
 export const NodeSchemaActionProxy: NodeSchemaDefinition = {
@@ -211,9 +326,9 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
         detailsDependencies: ["proxyId", "routeMethod", "routePath"],
         details: async (data) => {
           const proxyId = String(data.proxyId ?? "");
-          if (!proxyId) return [];
+          if (!proxyId) return { fields: [] };
           const proxy = await getProxyCached(proxyId);
-          if (!proxy) return [{ title: "Endpoint", text: "This proxy no longer exists." }];
+          if (!proxy) return { fields: [], message: "This proxy no longer exists." };
           return buildProxyRouteDetails(
             proxy,
             String(data.routeMethod ?? ""),

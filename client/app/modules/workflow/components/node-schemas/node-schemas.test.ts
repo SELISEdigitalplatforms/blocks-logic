@@ -828,8 +828,10 @@ describe("action proxy v1", () => {
         ...overrides,
       }) as never;
 
-    const section = (sections: { title?: string }[], title: string) =>
-      sections.find((candidate) => candidate.title === title) as Record<string, unknown> | undefined;
+    type Details = ReturnType<typeof buildProxyRouteDetails>;
+    const entry = (details: Details, id: string) =>
+      details.fields.find((candidate) => candidate.field.id === `routeConfig-${id}`);
+    const valueOf = (details: Details, id: string) => entry(details, id)?.value;
 
     it("is a transient read-only panel right after Endpoint, shown once an endpoint is picked", () => {
       const params = NodeSchemaActionProxy.schema.parameters;
@@ -843,34 +845,41 @@ describe("action proxy v1", () => {
       });
     });
 
-    it("shows a GET endpoint's upstream, headers, query and response, with no body section", () => {
-      const sections = buildProxyRouteDetails(proxy(), "GET", "orders/{id}");
+    it("shows a GET endpoint's settings as one form field each, with no body fields", () => {
+      const details = buildProxyRouteDetails(proxy(), "GET", "orders/{id}");
 
-      expect(section(sections, "Forwards to")?.text).toBe(
-        "GET https://api.vendor.test/v1/orders/{id}",
-      );
-      expect(section(sections, "Headers added")?.rows).toEqual([
-        { key: "Authorization", value: "{{$VAR.vendor-key}}", tag: "connection" },
-      ]);
-      expect(section(sections, "Query parameters added")?.rows).toEqual([
-        { key: "api_key", value: "abc", tag: "connection" },
-      ]);
-      expect(section(sections, "Body fields merged")).toBeUndefined();
-      expect(section(sections, "Response")?.text).toBe("Whole response");
-      expect(sections.at(-1)).toEqual({ link: { label: "Edit proxy", path: "proxy/p1/edit" } });
+      expect(entry(details, "method")?.field.type).toBe("text");
+      expect(valueOf(details, "method")).toBe("GET");
+      expect(entry(details, "upstream")?.field).toMatchObject({ type: "text", copyable: true });
+      expect(valueOf(details, "upstream")).toBe("https://api.vendor.test/v1/orders/{id}");
+      expect(entry(details, "access")?.field.type).toBe("radio");
+      expect(valueOf(details, "access")).toBe("blocksToken");
+      expect(entry(details, "headers")?.field.type).toBe("key-value-pairs");
+      expect(valueOf(details, "headers")).toEqual({ Authorization: "{{$VAR.vendor-key}}" });
+      expect(valueOf(details, "query")).toEqual({ api_key: "abc" });
+      expect(entry(details, "bodyMergeOn")).toBeUndefined();
+      expect(entry(details, "responseSelect")?.field.type).toBe("switch");
+      expect(valueOf(details, "responseSelect")).toBe(false);
+      expect(entry(details, "responseInclude")).toBeUndefined();
+      expect(details.link).toEqual({ label: "Edit proxy", path: "proxy/p1/edit" });
     });
 
-    it("adds the merged body fields for a POST endpoint", () => {
-      const sections = buildProxyRouteDetails(proxy(), "POST", "orders");
+    it("gives every field a unique, prefixed id", () => {
+      const details = buildProxyRouteDetails(proxy(), "POST", "orders");
+      const ids = details.fields.map((candidate) => candidate.field.id);
+      expect(new Set(ids).size).toBe(ids.length);
+      expect(ids.every((id) => id.startsWith("routeConfig-"))).toBe(true);
+    });
 
-      expect(section(sections, "Body fields merged")).toMatchObject({
-        note: "Override same-name keys in Body.",
-        rows: [{ key: "tenant", value: "acme" }],
-      });
+    it("adds the body merge switch and fields for a POST endpoint", () => {
+      const details = buildProxyRouteDetails(proxy(), "POST", "orders");
+
+      expect(valueOf(details, "bodyMergeOn")).toBe(true);
+      expect(valueOf(details, "bodyMerge")).toEqual({ tenant: "acme" });
     });
 
     it("shows an endpoint header replacing the connection's, and the endpoint's own response shape", () => {
-      const sections = buildProxyRouteDetails(
+      const details = buildProxyRouteDetails(
         proxy({
           routes: [
             route({
@@ -885,34 +894,61 @@ describe("action proxy v1", () => {
         "orders/{id}",
       );
 
-      expect(section(sections, "Forwards to")?.text).toBe(
-        "GET https://api.vendor.test/v1/v2/orders/{id}",
+      expect(valueOf(details, "upstream")).toBe("https://api.vendor.test/v1/v2/orders/{id}");
+      expect(valueOf(details, "headers")).toEqual({ authorization: "Bearer other" });
+      expect(valueOf(details, "responseSelect")).toBe(true);
+      expect(entry(details, "responseInclude")?.field.type).toBe("expression-list");
+      expect(valueOf(details, "responseInclude")).toEqual(["data.id", "items[].name"]);
+    });
+
+    it("shows the caller access rules", () => {
+      const details = buildProxyRouteDetails(
+        proxy({
+          access: {
+            kind: "blocksToken",
+            combine: "and",
+            roles: { mode: "all", values: ["admin"] },
+            permissions: { mode: "any", values: ["orders.read"] },
+          },
+        }),
+        "GET",
+        "orders/{id}",
       );
-      expect(section(sections, "Headers added")?.rows).toEqual([
-        { key: "authorization", value: "Bearer other", tag: "endpoint" },
-      ]);
-      expect(section(sections, "Response")).toMatchObject({
-        text: "Only these fields:",
-        items: ["data.id", "items[].name"],
-      });
+
+      expect(entry(details, "roles")?.field.label).toBe("Roles (caller needs all)");
+      expect(valueOf(details, "roles")).toEqual(["admin"]);
+      expect(valueOf(details, "permissions")).toEqual(["orders.read"]);
+      expect(valueOf(details, "combine")).toBe("and");
+
+      const open = buildProxyRouteDetails(
+        proxy({
+          access: {
+            kind: "public",
+            combine: "or",
+            roles: { mode: "any", values: [] },
+            permissions: { mode: "any", values: [] },
+          },
+        }),
+        "GET",
+        "orders/{id}",
+      );
+      expect(valueOf(open, "access")).toBe("public");
+      expect(entry(open, "roles")).toBeUndefined();
     });
 
     it("treats an empty allowlist as the base path", () => {
-      const sections = buildProxyRouteDetails(proxy({ routes: [] }), "POST", "");
+      const details = buildProxyRouteDetails(proxy({ routes: [] }), "POST", "");
 
-      expect(section(sections, "Forwards to")?.text).toBe("POST https://api.vendor.test/v1");
-      expect(section(sections, "Body fields merged")?.rows).toEqual([
-        { key: "tenant", value: "acme" },
-      ]);
+      expect(valueOf(details, "upstream")).toBe("https://api.vendor.test/v1");
+      expect(valueOf(details, "bodyMerge")).toEqual({ tenant: "acme" });
     });
 
     it("says so when the saved endpoint was removed from the proxy", () => {
-      const sections = buildProxyRouteDetails(proxy(), "DELETE", "orders/{id}");
+      const details = buildProxyRouteDetails(proxy(), "DELETE", "orders/{id}");
 
-      expect(sections[0]).toEqual({
-        title: "Endpoint",
-        text: "Endpoint no longer exists on this proxy.",
-      });
+      expect(details.fields).toEqual([]);
+      expect(details.message).toBe("This endpoint no longer exists on the proxy.");
+      expect(details.link).toEqual({ label: "Edit proxy", path: "proxy/p1/edit" });
     });
 
     it("shares one proxy fetch between the Endpoint options and the panel", async () => {
@@ -920,12 +956,10 @@ describe("action proxy v1", () => {
       const data = { proxyId: "p1", routeMethod: "GET", routePath: "orders/{id}" };
 
       await field(NodeSchemaActionProxy, "route_composite").options(data, {});
-      const sections = await field(NodeSchemaActionProxy, "routeConfig").details(data, {});
+      const details = await field(NodeSchemaActionProxy, "routeConfig").details(data, {});
 
       expect(getProxy).toHaveBeenCalledTimes(1);
-      expect(section(sections, "Forwards to")?.text).toBe(
-        "GET https://api.vendor.test/v1/orders/{id}",
-      );
+      expect(valueOf(details, "upstream")).toBe("https://api.vendor.test/v1/orders/{id}");
     });
   });
 });

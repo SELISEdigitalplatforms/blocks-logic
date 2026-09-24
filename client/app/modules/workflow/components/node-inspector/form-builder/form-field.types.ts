@@ -35,29 +35,20 @@ export interface SelectOption {
   disabled?: boolean;
 }
 
-/** One locked row of a `readonly-details` section. */
-export interface DetailRow {
-  key: string;
-  value: string;
-  /** Where the row comes from, shown as a small badge (e.g. "connection"). */
-  tag?: string;
+/** One locked field of a `readonly-details` field: an ordinary field schema and the value it shows. */
+export interface ReadonlyDetailField {
+  field: FieldSchema;
+  value: unknown;
 }
 
 /**
- * One block of a `readonly-details` field. Content is any of `text` (a single value), `rows`
- * (key/value pairs) and `items` (a plain list); `link` opens a page of the app in a new tab.
+ * What a `readonly-details` loader returns. Each field renders through its normal component, locked
+ * (read-only and disabled); `message` replaces them when there is nothing to show, and `link` opens
+ * a page of the app in a new tab (`path` is relative to the current app scope, e.g. `proxy/p1/edit`).
  */
-export interface DetailSection {
-  /** Omitted for a footer-only section such as a link. */
-  title?: string;
-  /** One muted line under the title. */
-  note?: string;
-  text?: string;
-  rows?: DetailRow[];
-  items?: string[];
-  /** Shown when `rows` or `items` is empty. Default "None". */
-  empty?: string;
-  /** `path` is relative to the current app scope, e.g. `proxy/p1/edit`. */
+export interface ReadonlyDetails {
+  fields: ReadonlyDetailField[];
+  message?: string;
   link?: { label: string; path: string };
 }
 
@@ -132,7 +123,7 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
       store: WorkflowStore;
       executionMode?: number;
     },
-  ) => Promise<DetailSection[]>;
+  ) => Promise<ReadonlyDetails>;
   /** Parameter keys whose change re-runs `details`. Mirrors `optionsDependencies`. */
   detailsDependencies?: string[];
   /**
