@@ -57,6 +57,7 @@ namespace Proxy.DomainService.Services
                 ItemId = p.ItemId,
                 Name = p.Name,
                 Slug = p.Slug,
+                Upstream = p.Upstream,
                 UpstreamMasked = ProxyUpstreamMasker.Mask(p.Upstream),
                 Methods = p.Methods.Select(m => m.Wire()).ToList(),
                 Enabled = p.Enabled,
