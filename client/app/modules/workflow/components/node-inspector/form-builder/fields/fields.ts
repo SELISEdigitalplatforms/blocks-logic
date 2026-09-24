@@ -24,6 +24,7 @@ import { SchemaFieldsField } from "./schema-fields-field";
 import { SchemaFieldPickerField } from "./schema-field-picker-field";
 import { TabWithTextField } from "./tab-with-text-field";
 import { CalloutAccordionDisplayField } from "./callout-accordion-display-field";
+import { ReadonlyDetailsField } from "./readonly-details-field";
 
 /**
  * Registry of all field components mapped by their field type.
@@ -59,6 +60,7 @@ export const FIELD_COMPONENTS_REGISTRY: Record<
   "schema-field-picker": SchemaFieldPickerField,
   "tab-with-text": TabWithTextField,
   "callout-accordion-display": CalloutAccordionDisplayField,
+  "readonly-details": ReadonlyDetailsField,
 };
 
 // DEADCODE 2026-07-29: extension hook with no callers in client, e2e or tests; commented pending review

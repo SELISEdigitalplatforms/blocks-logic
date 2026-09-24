@@ -61,7 +61,11 @@ import { NodeSchemaActionAiAgentV1 } from "./node-schema-action-aiAgent-v1";
 import { NodeSchemaActionSendMailV1 } from "./node-schema-action-sendMail-v1";
 import { NodeSchemaActionHttpRequestV1 } from "./node-schema-action-httpRequest-v1";
 import { NodeSchemaActionDataActionV1 } from "./node-schema-action-dataAction-v1";
-import { NodeSchemaActionProxy } from "./node-schema-action-proxy";
+import {
+  NodeSchemaActionProxy,
+  buildProxyRouteDetails,
+  clearProxyDetailCache,
+} from "./node-schema-action-proxy";
 import { NodeSchemaTransformSetFieldV1 } from "./node-schema-transform-setfield-v1";
 import { NodeSchemaTransformCodeV1 } from "./node-schema-transform-code-v1";
 import { NodeSchemaLogicIfV1 } from "./node-schema-logic-if-v1";
@@ -758,6 +762,8 @@ describe("data action v1", () => {
 });
 
 describe("action proxy v1", () => {
+  beforeEach(() => clearProxyDetailCache());
+
   it("loads only active proxies through the current list filter", async () => {
     getProxies.mockResolvedValue({
       items: [
@@ -790,6 +796,137 @@ describe("action proxy v1", () => {
       { value: "POST:::", label: "POST /" },
     ]);
     expect(getProxy).toHaveBeenCalledWith("p1");
+  });
+
+  describe("endpoint configuration panel", () => {
+    const route = (overrides: Record<string, unknown> = {}) => ({
+      method: "GET",
+      path: "orders/{id}",
+      upstreamPath: null,
+      headers: null,
+      query: null,
+      bodyMerge: null,
+      responseMode: null,
+      responseInclude: null,
+      ...overrides,
+    });
+
+    const proxy = (overrides: Record<string, unknown> = {}) =>
+      ({
+        id: "p1",
+        slug: "vendor",
+        name: "Vendor",
+        upstreamUrl: "https://api.vendor.test/v1/",
+        methods: ["GET", "POST"],
+        headers: [{ key: "Authorization", value: "{{$VAR.vendor-key}}" }],
+        query: [{ key: "api_key", value: "abc" }],
+        bodyMerge: [{ key: "tenant", value: "acme" }],
+        methodConfigs: [],
+        routes: [route(), route({ method: "POST", path: "orders" })],
+        responseMode: "all",
+        responseInclude: [],
+        ...overrides,
+      }) as never;
+
+    const section = (sections: { title?: string }[], title: string) =>
+      sections.find((candidate) => candidate.title === title) as Record<string, unknown> | undefined;
+
+    it("is a transient read-only panel right after Endpoint, shown once an endpoint is picked", () => {
+      const params = NodeSchemaActionProxy.schema.parameters;
+      const index = params.findIndex((p) => p.key === "routeConfig");
+      expect(params[index - 1].key).toBe("route_composite");
+      expect(params[index]).toMatchObject({
+        type: "readonly-details",
+        transient: true,
+        dependsOn: { key: "route_composite", value: "", operator: "notEquals" },
+        detailsDependencies: ["proxyId", "routeMethod", "routePath"],
+      });
+    });
+
+    it("shows a GET endpoint's upstream, headers, query and response, with no body section", () => {
+      const sections = buildProxyRouteDetails(proxy(), "GET", "orders/{id}");
+
+      expect(section(sections, "Forwards to")?.text).toBe(
+        "GET https://api.vendor.test/v1/orders/{id}",
+      );
+      expect(section(sections, "Headers added")?.rows).toEqual([
+        { key: "Authorization", value: "{{$VAR.vendor-key}}", tag: "connection" },
+      ]);
+      expect(section(sections, "Query parameters added")?.rows).toEqual([
+        { key: "api_key", value: "abc", tag: "connection" },
+      ]);
+      expect(section(sections, "Body fields merged")).toBeUndefined();
+      expect(section(sections, "Response")?.text).toBe("Whole response");
+      expect(sections.at(-1)).toEqual({ link: { label: "Edit proxy", path: "proxy/p1/edit" } });
+    });
+
+    it("adds the merged body fields for a POST endpoint", () => {
+      const sections = buildProxyRouteDetails(proxy(), "POST", "orders");
+
+      expect(section(sections, "Body fields merged")).toMatchObject({
+        note: "Override same-name keys in Body.",
+        rows: [{ key: "tenant", value: "acme" }],
+      });
+    });
+
+    it("shows an endpoint header replacing the connection's, and the endpoint's own response shape", () => {
+      const sections = buildProxyRouteDetails(
+        proxy({
+          routes: [
+            route({
+              upstreamPath: "v2/orders/{id}",
+              headers: [{ key: "authorization", value: "Bearer other" }],
+              responseMode: "select",
+              responseInclude: ["data.id", "items[].name"],
+            }),
+          ],
+        }),
+        "GET",
+        "orders/{id}",
+      );
+
+      expect(section(sections, "Forwards to")?.text).toBe(
+        "GET https://api.vendor.test/v1/v2/orders/{id}",
+      );
+      expect(section(sections, "Headers added")?.rows).toEqual([
+        { key: "authorization", value: "Bearer other", tag: "endpoint" },
+      ]);
+      expect(section(sections, "Response")).toMatchObject({
+        text: "Only these fields:",
+        items: ["data.id", "items[].name"],
+      });
+    });
+
+    it("treats an empty allowlist as the base path", () => {
+      const sections = buildProxyRouteDetails(proxy({ routes: [] }), "POST", "");
+
+      expect(section(sections, "Forwards to")?.text).toBe("POST https://api.vendor.test/v1");
+      expect(section(sections, "Body fields merged")?.rows).toEqual([
+        { key: "tenant", value: "acme" },
+      ]);
+    });
+
+    it("says so when the saved endpoint was removed from the proxy", () => {
+      const sections = buildProxyRouteDetails(proxy(), "DELETE", "orders/{id}");
+
+      expect(sections[0]).toEqual({
+        title: "Endpoint",
+        text: "Endpoint no longer exists on this proxy.",
+      });
+    });
+
+    it("shares one proxy fetch between the Endpoint options and the panel", async () => {
+      getProxy.mockResolvedValue(proxy());
+      const data = { proxyId: "p1", routeMethod: "GET", routePath: "orders/{id}" };
+
+      await field(NodeSchemaActionProxy, "route_composite").options(data, {});
+      const sections = await field(NodeSchemaActionProxy, "routeConfig").details(data, {});
+
+      expect(getProxy).toHaveBeenCalledTimes(1);
+      expect(section(sections, "Forwards to")?.text).toBe(
+        "GET https://api.vendor.test/v1/orders/{id}",
+      );
+    });
   });
 });
 

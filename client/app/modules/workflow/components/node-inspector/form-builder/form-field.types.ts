@@ -25,13 +25,40 @@ export type FormFieldType =
   | "expression"
   | "display"
   | "callout-accordion-display"
-  | "tab-with-text";
+  | "tab-with-text"
+  | "readonly-details";
 
 export interface SelectOption {
   value: string | number | boolean;
   label: string;
   description?: string;
   disabled?: boolean;
+}
+
+/** One locked row of a `readonly-details` section. */
+export interface DetailRow {
+  key: string;
+  value: string;
+  /** Where the row comes from, shown as a small badge (e.g. "connection"). */
+  tag?: string;
+}
+
+/**
+ * One block of a `readonly-details` field. Content is any of `text` (a single value), `rows`
+ * (key/value pairs) and `items` (a plain list); `link` opens a page of the app in a new tab.
+ */
+export interface DetailSection {
+  /** Omitted for a footer-only section such as a link. */
+  title?: string;
+  /** One muted line under the title. */
+  note?: string;
+  text?: string;
+  rows?: DetailRow[];
+  items?: string[];
+  /** Shown when `rows` or `items` is empty. Default "None". */
+  empty?: string;
+  /** `path` is relative to the current app scope, e.g. `proxy/p1/edit`. */
+  link?: { label: string; path: string };
 }
 
 export interface FieldSchema<Whole = Record<string, unknown>> {
@@ -92,6 +119,22 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
         },
       ) => Promise<string[]>);
   fixedKeysDependencies?: string[];
+  /**
+   * Content loader for a `readonly-details` field. Runs on mount and again whenever a key in
+   * `detailsDependencies` changes; nothing it returns is written to the node parameters.
+   */
+  details?: (
+    data: Whole,
+    config: {
+      tenantId: string;
+      workflowId: string;
+      nodeId: string;
+      store: WorkflowStore;
+      executionMode?: number;
+    },
+  ) => Promise<DetailSection[]>;
+  /** Parameter keys whose change re-runs `details`. Mirrors `optionsDependencies`. */
+  detailsDependencies?: string[];
   /**
    * Parameter keys whose value changes should re-run an async `options` function. Without this an
    * async option list is fetched once per mount, which is wrong for a dropdown that narrows itself
