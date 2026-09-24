@@ -163,7 +163,7 @@ describe("ProxyForm", () => {
     );
   });
 
-  it("inserts configuration variables into endpoint override values", async () => {
+  it("replaces endpoint override values with configuration variables", async () => {
     const user = userEvent.setup();
     renderWithProviders(
       <MemoryRouter>
@@ -173,6 +173,7 @@ describe("ProxyForm", () => {
 
     await user.click(screen.getByRole("button", { name: "What this endpoint sends and returns" }));
     await user.click(screen.getByRole("switch", { name: "Extra headers for endpoint 1" }));
+    await user.type(screen.getByPlaceholderText("Enter value"), "Bearer old");
     await user.click(
       await screen.findByRole("button", {
         name: "Insert a configuration variable into extra headers value",

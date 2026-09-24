@@ -1,4 +1,4 @@
-import { ReactNode, useRef } from "react";
+import { ReactNode } from "react";
 import { Control, useFieldArray } from "react-hook-form";
 import { Plus, Trash2, Variable } from "lucide-react";
 import { Badge } from "@/components/ui-kits/badge/badge";
@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui-kits/select/select";
 import { ProxyCredentialRow, ProxyFormValues, SecretListItem } from "../types";
-import { buildVarToken, containsVarRef, insertToken } from "../utils";
+import { buildVarToken, containsVarRef } from "../utils";
 import { VariableInsertMenu } from "./variable-insert-menu";
 import { VariablesButton } from "./variables-button";
 
@@ -42,8 +42,7 @@ type Props = VariablePickerProps & {
 
 /**
  * The value cell for one key/value row: a free-text input plus a compact `{{$VAR.name}}` picker.
- * Selecting a variable inserts its token at the caret (falling back to the end of the value);
- * the user can also type the token by hand.
+ * Selecting a variable replaces the value with its token; the user can also type the token by hand.
  */
 const ValueCell = ({
   control,
@@ -55,22 +54,13 @@ const ValueCell = ({
   variablesError,
 }: Pick<Props, "control" | "name" | "label"> &
   VariablePickerProps & { index: number }) => {
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const caretRef = useRef<number | null>(null);
-
-  const rememberCaret = () => {
-    caretRef.current = inputRef.current?.selectionStart ?? null;
-  };
-
   return (
     <FormField
       control={control}
       name={`${name}.${index}.value`}
       render={({ field: valueField }) => {
         const insert = (variableName: string) => {
-          const current: string = valueField.value ?? "";
-          const caret = caretRef.current ?? current.length;
-          valueField.onChange(insertToken(current, caret, buildVarToken(variableName)));
+          valueField.onChange(buildVarToken(variableName));
         };
 
         return (
@@ -81,13 +71,6 @@ const ValueCell = ({
                 placeholder="Enter value"
                 className="font-mono text-xs"
                 {...valueField}
-                ref={(el) => {
-                  inputRef.current = el;
-                  valueField.ref(el);
-                }}
-                onSelect={rememberCaret}
-                onKeyUp={rememberCaret}
-                onClick={rememberCaret}
               />
             </FormControl>
             <VariableInsertMenu

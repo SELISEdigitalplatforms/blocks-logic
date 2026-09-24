@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useFormContext } from "react-hook-form";
 import { FlaskConical, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui-kits/badge/badge";
@@ -32,7 +32,6 @@ import {
 import {
   buildVarToken,
   containsVarRef,
-  insertToken,
   parseRouteTemplate,
   trimRoutePath,
 } from "../utils";
@@ -573,18 +572,9 @@ const RouteValueCell = ({
   variablesLoading,
   variablesError,
 }: RouteValueCellProps) => {
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const caretRef = useRef<number | null>(null);
-
-  const rememberCaret = () => {
-    caretRef.current = inputRef.current?.selectionStart ?? null;
-  };
-
   const insert = (variableName: string) => {
-    const current = row.value ?? "";
-    const caret = caretRef.current ?? current.length;
     patchRow(index, name, rowIndex, {
-      value: insertToken(current, caret, buildVarToken(variableName)),
+      value: buildVarToken(variableName),
     });
   };
 
@@ -592,14 +582,10 @@ const RouteValueCell = ({
     <div className="min-w-0 flex-1">
       <div className="flex items-center gap-1.5">
         <Input
-          ref={inputRef}
           className="h-8 font-mono text-xs"
           placeholder="Enter value"
           value={row.value}
           onChange={(event) => patchRow(index, name, rowIndex, { value: event.target.value })}
-          onClick={rememberCaret}
-          onKeyUp={rememberCaret}
-          onSelect={rememberCaret}
         />
         <VariableInsertMenu
           variables={variables}
