@@ -127,6 +127,26 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
   /** Parameter keys whose change re-runs `details`. Mirrors `optionsDependencies`. */
   detailsDependencies?: string[];
   /**
+   * Values the field shows but the user cannot change, loaded from outside the node (e.g. a proxy's
+   * config). Never saved on the node. How each type uses them:
+   * - `switch`: `true` forces it on and disables it.
+   * - `key-value-pairs`: a `Record<string, string>` shown as locked rows above the user's own.
+   * - `json-code-editor`: a `Record<string, string>` of top-level keys prefilled into the JSON,
+   *   locked, and stripped from the value before it is saved.
+   */
+  locked?: (
+    data: Whole,
+    config: {
+      tenantId: string;
+      workflowId: string;
+      nodeId: string;
+      store: WorkflowStore;
+      executionMode?: number;
+    },
+  ) => Promise<unknown>;
+  /** Parameter keys whose change re-runs `locked`. Mirrors `optionsDependencies`. */
+  lockedDependencies?: string[];
+  /**
    * Parameter keys whose value changes should re-run an async `options` function. Without this an
    * async option list is fetched once per mount, which is wrong for a dropdown that narrows itself
    * from another field. Mirrors `fixedKeysDependencies`.

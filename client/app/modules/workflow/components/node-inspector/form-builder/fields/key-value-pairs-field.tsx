@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { Input } from "@/components/ui-kits/input/input";
 import { Button } from "@/components/ui-kits/button/button";
-import { Trash2 } from "lucide-react";
+import { Lock, Trash2 } from "lucide-react";
 import { FieldProps } from "../form-field.types";
 import { ExpressionInputField } from "./expression-input-field";
 import { cn } from "@/lib/utils";
 import { ExpressionHighlighter, VariablePickerConfig } from "../utils/expression-highlighter";
 import { pickerTarget, showsVariablePicker } from "./secret-picker";
+import { useLockedValue } from "../utils/use-locked-value";
 
 interface KeyValuePair {
   key: string;
@@ -71,6 +72,11 @@ export const KeyValuePairsField = ({
   // Add empty pair if no pairs exist
   const [keyValuePairs, setKeyValuePairs] = useState<KeyValuePair[]>(pairs);
 
+  // Rows set outside the node (e.g. a proxy's config): shown first, locked, never saved.
+  const { locked } = useLockedValue<Record<string, string>>(field, data, config);
+  const lockedPairs = Object.entries(locked ?? {});
+  const lockedKeys = new Set(lockedPairs.map(([key]) => key));
+
   const handleAddPair = () => {
     setKeyValuePairs([...keyValuePairs, { key: "", value: "" }]);
   };
@@ -107,7 +113,7 @@ export const KeyValuePairsField = ({
     onChange(result);
   };
 
-  if (!keyValuePairs.length && !field.disabled)
+  if (!keyValuePairs.length && !lockedPairs.length && !field.disabled)
     return (
       <div className="flex h-32 w-full items-center justify-center rounded border border-dashed">
         <Button variant="ghost" className="text-primary" onClick={() => handleAddPair()}>
@@ -118,6 +124,36 @@ export const KeyValuePairsField = ({
 
   return (
     <div className="space-y-3">
+      {lockedPairs.map(([key, lockedValue], index) => (
+        <div key={`locked-${key}`} className="flex items-center gap-1">
+          <span
+            className="flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground"
+            title="Locked, can't be changed"
+          >
+            <Lock aria-label="Locked" className="h-3.5 w-3.5" />
+          </span>
+          <div className="flex-1">
+            <DroppableKeyInput
+              id={`${field.id}-locked-key-${index}`}
+              value={key}
+              onChange={() => {}}
+              placeholder={field.keyLabel || "Key"}
+              disabled
+              readOnly
+              isMultiline={false}
+            />
+            <ExpressionInputField
+              value={lockedValue}
+              onChange={() => {}}
+              readOnly
+              data={data}
+              config={config}
+              field={{ ...field, id: `${field.id}-locked-val-${index}` }}
+              className="rounded-t-none border-t-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+            />
+          </div>
+        </div>
+      ))}
       {keyValuePairs.map((pair, index) => (
         <div key={index} className="group flex items-center gap-1">
           <Button
@@ -161,6 +197,11 @@ export const KeyValuePairsField = ({
               variablePicker={variablePicker}
               className="rounded-t-none border-t-0 focus-visible:ring-0 focus-visible:ring-offset-0"
             />
+            {lockedKeys.has(pair.key.trim()) && (
+              <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                A locked row sets &quot;{pair.key.trim()}&quot;; its value is sent instead.
+              </p>
+            )}
           </div>
         </div>
       ))}

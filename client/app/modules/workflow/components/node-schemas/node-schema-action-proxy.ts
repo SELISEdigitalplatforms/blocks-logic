@@ -58,6 +58,40 @@ const joinUpstream = (base: string, path: string) => {
 const toRecord = (rows: { key: string; value: string }[]) =>
   Object.fromEntries(rows.map((row) => [row.key, row.value]));
 
+/**
+ * The declared route for `method` + `path`: `null` for the base path of a proxy with an empty
+ * allowlist (the base path only, once per method it accepts), `undefined` when the endpoint is gone.
+ */
+const findRoute = (proxy: Proxy, method: string, path: string) =>
+  proxy.routes.length > 0
+    ? proxy.routes.find((candidate) => candidate.method === method && candidate.path === path)
+    : null;
+
+/** The selected endpoint's effective config, or null when there is no proxy or endpoint. */
+const effectiveRouteFor = async (data: Record<string, unknown>) => {
+  const proxyId = String(data.proxyId ?? "");
+  if (!proxyId) return null;
+  const proxy = await getProxyCached(proxyId);
+  if (!proxy) return null;
+  const method = String(data.routeMethod ?? "");
+  const route = findRoute(proxy, method, String(data.routePath ?? ""));
+  if (route === undefined) return null;
+  return resolveEffectiveRoute(proxy, method as ProxyMethod, route);
+};
+
+/** Parameter keys that pick the endpoint; the locked loaders re-run when they change. */
+const ENDPOINT_KEYS = ["proxyId", "routeMethod", "routePath"];
+
+/** The proxy config's query params for the selected endpoint, as locked rows. */
+export const configQuery = async (data: Record<string, unknown>) =>
+  toRecord((await effectiveRouteFor(data))?.query ?? []);
+
+/** The proxy config's body fields for the selected endpoint, on body methods only. */
+export const configBody = async (data: Record<string, unknown>) =>
+  BODY_METHODS.includes(String(data.routeMethod ?? ""))
+    ? toRecord((await effectiveRouteFor(data))?.bodyMerge ?? [])
+    : {};
+
 /** A locked field of the endpoint configuration panel; ids are prefixed to stay unique. */
 const locked = (
   field: Omit<ReadonlyDetailField["field"], "key">,
@@ -86,11 +120,7 @@ export const buildProxyRouteDetails = (
 ): ReadonlyDetails => {
   const link = { label: "Edit proxy", path: `proxy/${proxy.id}/edit` };
 
-  // An empty allowlist means the base path only, once per method the proxy accepts.
-  const route =
-    proxy.routes.length > 0
-      ? proxy.routes.find((candidate) => candidate.method === method && candidate.path === path)
-      : null;
+  const route = findRoute(proxy, method, path);
   if (route === undefined) {
     return { fields: [], message: "This endpoint no longer exists on the proxy.", link };
   }
@@ -160,47 +190,7 @@ export const buildProxyRouteDetails = (
       },
       toRecord(effective.headers),
     ),
-    locked(
-      {
-        id: "query",
-        type: "key-value-pairs",
-        label: "Query parameters added",
-        info: "Win over a Query Parameters row below with the same key.",
-        keyLabel: "Parameter",
-        valueLabel: "Value",
-      },
-      toRecord(effective.query),
-    ),
   );
-
-  if (BODY_METHODS.includes(method)) {
-    const merges = effective.bodyMerge.length > 0;
-    fields.push(
-      locked(
-        {
-          id: "bodyMergeOn",
-          type: "switch",
-          label: "Merge fields into the body",
-          info: "Configured fields override same-name keys in Body.",
-        },
-        merges,
-      ),
-    );
-    if (merges) {
-      fields.push(
-        locked(
-          {
-            id: "bodyMerge",
-            type: "key-value-pairs",
-            label: "Body fields merged",
-            keyLabel: "Field",
-            valueLabel: "Value",
-          },
-          toRecord(effective.bodyMerge),
-        ),
-      );
-    }
-  }
 
   const selects = effective.responseMode === "select";
   fields.push(
@@ -357,8 +347,10 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
         id: "haveQuery",
         type: "switch",
         label: "Send Query Parameters",
-        info: "Whether the call carries query-string parameters. The proxy's own configured query values override any key that collides.",
+        info: "Whether the call carries query-string parameters. Always on when the proxy config adds query parameters to this endpoint.",
         key: "haveQuery",
+        locked: async (data) => Object.keys(await configQuery(data)).length > 0,
+        lockedDependencies: ENDPOINT_KEYS,
         dependsOn: {
           key: "route_composite",
           value: "",
@@ -373,16 +365,20 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
           value: true,
         },
         label: "Query Parameters",
-        info: "Sent with the call as the query string. Values accept expressions; a key whose value resolves to empty is dropped.",
+        info: "Sent with the call as the query string. Locked rows come from the proxy config and can't be changed here; add your own below them. Values accept expressions; a key whose value resolves to empty is dropped.",
         key: "queryParams",
+        locked: configQuery,
+        lockedDependencies: ENDPOINT_KEYS,
         defaultValue: {},
       },
       {
         id: "haveBody",
         type: "switch",
         label: "Send Body",
-        info: "Whether the request carries a JSON body. The proxy merges its configured body fields into it.",
+        info: "Whether the request carries a JSON body. Always on when the proxy config merges body fields into this endpoint.",
         key: "havebody",
+        locked: async (data) => Object.keys(await configBody(data)).length > 0,
+        lockedDependencies: ENDPOINT_KEYS,
         dependsOn: {
           key: "routeMethod",
           value: ["POST", "PUT", "PATCH"],
@@ -397,8 +393,10 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
           value: true,
         },
         label: "Body",
-        info: "JSON body forwarded to the upstream. Must be a JSON object when the endpoint merges configured body fields.",
+        info: "JSON body forwarded to the upstream. Keys from the proxy config are prefilled and locked; add your own fields around them. Must be a JSON object when the proxy config merges body fields.",
         key: "body",
+        locked: configBody,
+        lockedDependencies: ENDPOINT_KEYS,
       },
     ],
     settings: [],

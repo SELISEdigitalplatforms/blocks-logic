@@ -852,12 +852,13 @@ describe("action proxy v1", () => {
       expect(valueOf(details, "method")).toBe("GET");
       expect(entry(details, "upstream")?.field).toMatchObject({ type: "text", copyable: true });
       expect(valueOf(details, "upstream")).toBe("https://api.vendor.test/v1/orders/{id}");
-      expect(entry(details, "access")?.field.type).toBe("radio");
+      expect(entry(details, "access")?.field).toMatchObject({ type: "radio", label: "Authentication" });
       expect(valueOf(details, "access")).toBe("blocksToken");
       expect(entry(details, "headers")?.field.type).toBe("key-value-pairs");
       expect(valueOf(details, "headers")).toEqual({ Authorization: "{{$VAR.vendor-key}}" });
-      expect(valueOf(details, "query")).toEqual({ api_key: "abc" });
-      expect(entry(details, "bodyMergeOn")).toBeUndefined();
+      // Query params and body fields live on the node's own fields, locked there.
+      expect(entry(details, "query")).toBeUndefined();
+      expect(entry(details, "bodyMerge")).toBeUndefined();
       expect(entry(details, "responseSelect")?.field.type).toBe("switch");
       expect(valueOf(details, "responseSelect")).toBe(false);
       expect(entry(details, "responseInclude")).toBeUndefined();
@@ -871,11 +872,37 @@ describe("action proxy v1", () => {
       expect(ids.every((id) => id.startsWith("routeConfig-"))).toBe(true);
     });
 
-    it("adds the body merge switch and fields for a POST endpoint", () => {
-      const details = buildProxyRouteDetails(proxy(), "POST", "orders");
+    it("locks the config's query params and body fields onto the node's own fields", async () => {
+      getProxy.mockResolvedValue(proxy());
+      const get = { proxyId: "p1", routeMethod: "GET", routePath: "orders/{id}" };
+      const post = { proxyId: "p1", routeMethod: "POST", routePath: "orders" };
+      const locked = (key: string, data: Record<string, unknown>) =>
+        field(NodeSchemaActionProxy, key).locked(data, {});
 
-      expect(valueOf(details, "bodyMergeOn")).toBe(true);
-      expect(valueOf(details, "bodyMerge")).toEqual({ tenant: "acme" });
+      expect(await locked("haveQuery", get)).toBe(true);
+      expect(await locked("queryParams", get)).toEqual({ api_key: "abc" });
+      expect(await locked("havebody", post)).toBe(true);
+      expect(await locked("body", post)).toEqual({ tenant: "acme" });
+      // No body on a GET, and nothing for an endpoint that is gone.
+      expect(await locked("body", get)).toEqual({});
+      expect(await locked("havebody", { ...post, routePath: "gone" })).toBe(false);
+      expect(await locked("queryParams", { ...get, proxyId: "" })).toEqual({});
+
+      for (const key of ["haveQuery", "queryParams", "havebody", "body"]) {
+        expect(field(NodeSchemaActionProxy, key).lockedDependencies).toEqual([
+          "proxyId",
+          "routeMethod",
+          "routePath",
+        ]);
+      }
+    });
+
+    it("leaves the switches free when the config adds no query or body", async () => {
+      getProxy.mockResolvedValue(proxy({ query: [], bodyMerge: [] }));
+      const post = { proxyId: "p1", routeMethod: "POST", routePath: "orders" };
+
+      expect(await field(NodeSchemaActionProxy, "haveQuery").locked(post, {})).toBe(false);
+      expect(await field(NodeSchemaActionProxy, "havebody").locked(post, {})).toBe(false);
     });
 
     it("shows an endpoint header replacing the connection's, and the endpoint's own response shape", () => {
@@ -940,7 +967,6 @@ describe("action proxy v1", () => {
       const details = buildProxyRouteDetails(proxy({ routes: [] }), "POST", "");
 
       expect(valueOf(details, "upstream")).toBe("https://api.vendor.test/v1");
-      expect(valueOf(details, "bodyMerge")).toEqual({ tenant: "acme" });
     });
 
     it("says so when the saved endpoint was removed from the proxy", () => {
