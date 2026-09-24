@@ -7,6 +7,12 @@ import { FieldSchema, FormFieldType } from "./form-field.types";
 import { FIELD_COMPONENTS_REGISTRY } from "./fields";
 import { FormBuilderConfig } from "./use-form-builder";
 
+/** Types that render their own labels, or none. */
+const UNLABELLED_TYPES: ReadonlySet<FormFieldType> = new Set<FormFieldType>([
+  "tab-with-text",
+  "readonly-details",
+]);
+
 interface FormFieldRendererProps {
   field: FieldSchema;
   value: unknown;
@@ -40,7 +46,7 @@ export const FormFieldRenderer = ({
 
   return (
     <div className="space-y-3">
-      {field.label && field.type !== "tab-with-text" && (
+      {field.label && !UNLABELLED_TYPES.has(field.type) && (
         <div className="flex items-center gap-2">
           <Label
             htmlFor={field.id}

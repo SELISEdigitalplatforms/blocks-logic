@@ -51,7 +51,8 @@ const LockedField = ({
 
 /**
  * Locked view of settings the schema loads (e.g. the proxy endpoint a node calls), each shown with
- * the form-builder's own field component, read-only. Stores nothing: it always shows what the
+ * the form-builder's own field component, read-only, at the same level as the form's other fields
+ * (the renderer draws no label for this field). Stores nothing: it always shows what the
  * loader returns now, and re-runs when a key in `detailsDependencies` changes.
  */
 export const ReadonlyDetailsField = ({ field, data, config }: FieldProps<unknown>) => {
@@ -90,7 +91,8 @@ export const ReadonlyDetailsField = ({ field, data, config }: FieldProps<unknown
   const renderKey = JSON.stringify(dependencyValues);
 
   return (
-    <div id={field.id} className="space-y-4 rounded-md border bg-muted/20 p-3">
+    // No container of its own: the fields sit in the form like the node's other fields.
+    <div id={field.id} className="space-y-6">
       {details.message ? (
         <p className="text-sm text-muted-foreground">{details.message}</p>
       ) : null}

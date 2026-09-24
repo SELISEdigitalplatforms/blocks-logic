@@ -110,7 +110,7 @@ export const buildProxyRouteDetails = (
       joinUpstream(effective.upstreamUrl, route?.upstreamPath ?? path),
     ),
     locked(
-      { id: "access", type: "radio", label: "Who can call it", options: ACCESS_OPTIONS },
+      { id: "access", type: "radio", label: "Authentication", options: ACCESS_OPTIONS },
       access?.kind ?? "blocksToken",
     ),
   ];
