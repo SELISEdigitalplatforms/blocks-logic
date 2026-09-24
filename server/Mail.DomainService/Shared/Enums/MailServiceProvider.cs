@@ -18,9 +18,10 @@ namespace Mail.DomainService.Shared.Enums
         Zoho = 1,
 
         /// <summary>
-        /// Exchange Online. Outbound SMTP (STARTTLS) with OAuth client credentials (SASL XOAUTH2)
-        /// or a mailbox password; inbound IMAP (implicit TLS) with OAuth client credentials only.
-        /// The name predates inbound support and is kept because the value is persisted.
+        /// Exchange Online. Outbound through Microsoft Graph with OAuth client credentials, or SMTP
+        /// (STARTTLS) with a mailbox password; inbound IMAP (implicit TLS) with OAuth client
+        /// credentials only. The name predates Graph and inbound support and is kept because the
+        /// value is persisted; the record shape is the same for both outbound transports.
         /// </summary>
         Office365Smtp = 2,
 

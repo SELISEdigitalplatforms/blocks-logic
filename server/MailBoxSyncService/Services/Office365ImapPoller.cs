@@ -11,10 +11,10 @@ namespace MailBoxSyncService.Services
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Uses the same client-credentials token path as the Office 365 sender. The scope
-    /// <c>https://outlook.office365.com/.default</c> covers IMAP as well as SMTP; what differs is
-    /// on the Microsoft side: the Entra app needs the <c>IMAP.AccessAsApp</c> application
-    /// permission, and its Exchange service principal needs <c>FullAccess</c> on the mailbox.
+    /// Uses the same client-credentials token path as the Office 365 sender, but for the Exchange
+    /// Online scope rather than Graph: IMAP is an Exchange protocol and refuses a Graph token. The
+    /// Entra app needs the <c>IMAP.AccessAsApp</c> application permission, and its Exchange service
+    /// principal needs <c>FullAccess</c> on the mailbox.
     /// </para>
     /// <para>
     /// A token is requested on every poll but the caching provider returns the held one until it
@@ -62,7 +62,8 @@ namespace MailBoxSyncService.Services
                     tenantId,
                     configuration.TenantId!,
                     configuration.ClientId!,
-                    configuration.ClientSecretReference!),
+                    configuration.ClientSecretReference!,
+                    Office365TokenScopes.ExchangeOnline),
                 cancellationToken).ConfigureAwait(false);
 
             await _syncService.SyncInboxAsync(

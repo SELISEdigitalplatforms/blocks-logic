@@ -1,5 +1,3 @@
-using Blocks.Genesis;
-using Blocks.Secrets;
 using FluentAssertions;
 using MailKit.Net.Smtp;
 using MailKit.Security;
@@ -9,42 +7,30 @@ using Mail.DomainService.Mails.Office365;
 using Mail.DomainService.Shared.Enums;
 using Microsoft.Extensions.Logging.Abstractions;
 using MimeKit;
-using Moq;
 
 namespace XUnitTest.Mail
 {
     /// <summary>
-    /// H3, H4, H5 and C1–C4: the Office 365 session, and every failure path failing closed.
+    /// The Office 365 password transport: SMTP with STARTTLS and the mailbox credentials. OAuth
+    /// records go through Graph and are covered by <see cref="Office365GraphMailSenderTests"/>.
     /// </summary>
     public class Office365SmtpClientTests
     {
-        private const string Token = "an-access-token";
-
-        private readonly Mock<IOffice365TokenProvider> _tokens = new();
         private readonly RecordingSession _session = new();
 
-        public Office365SmtpClientTests()
-        {
-            _tokens
-                .Setup(t => t.GetTokenAsync(It.IsAny<Office365TokenRequest>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(Token);
-        }
-
-        private TestableOffice365SmtpClient Client() => new(_tokens.Object, _session);
+        private TestableOffice365SmtpClient Client() => new(_session);
 
         private static MailServerConfiguration Config() => new()
         {
             ItemId = "cfg-1",
             Provider = MailServiceProvider.Office365Smtp,
             IsInbound = false,
-            AuthenticationType = MailAuthenticationType.OAuthClientCredentials,
+            AuthenticationType = MailAuthenticationType.Password,
             SecurityMode = MailSecurityMode.StartTls,
             Host = "smtp.office365.com",
             Port = 587,
-            TenantId = "contoso-tenant",
-            ClientId = "mailer-app",
-            ClientSecretReference = "secret-1",
-            MailboxAddress = "mailer@contoso.com",
+            SenderUserName = "support@contoso.com",
+            AccountPassword = "password1",
             SenderName = "Contoso Notifications",
             SenderAddress = "notifications@contoso.com",
             IsEnableSnsConfiguration = false
@@ -65,110 +51,27 @@ namespace XUnitTest.Mail
             Attachments = []
         };
 
-        private static IDisposable TenantContext(string tenantId = "blocks-tenant")
-        {
-            var previous = BlocksContext.GetContext();
-            BlocksContext.SetContext(
-                BlocksContext.Create(tenantId, [], "user", true, "", "", DateTime.MaxValue, "", [], "", "", "", "", "", tenantId),
-                true);
-            return new Restore(previous);
-        }
-
-        private sealed class Restore(BlocksContext? previous) : IDisposable
-        {
-            public void Dispose() => BlocksContext.SetContext(previous!, previous is not null);
-        }
-
-        // ---------- H3 / H4 / H5 ----------
-
         [Fact]
-        public async Task Send_ConnectsWithStartTls_AuthenticatesWithXoauth2_AndSendsOnce()
+        public async Task Send_UsesStartTlsAndTheMailboxPassword_AndSendsOnce()
         {
-            using var _ = TenantContext();
-
             var result = await Client().SendAsync(AMail(), ABody());
 
             result.Should().BeTrue();
             _session.ConnectedHost.Should().Be("smtp.office365.com");
             _session.ConnectedPort.Should().Be(587);
             _session.SocketOptions.Should().Be(SecureSocketOptions.StartTls);
-            _session.Mechanism.Should().BeOfType<SaslMechanismOAuth2>();
-            _session.Mechanism!.Credentials.UserName.Should().Be("mailer@contoso.com");
+            _session.AuthenticatedAs.Should().Be("support@contoso.com");
+            _session.Mechanism.Should().BeNull("a password record never presents a token");
             _session.SendCount.Should().Be(1);
             _session.Disconnected.Should().BeTrue();
 
-            // The password overloads belong to the legacy providers and must never be reached.
+            // The bool-SSL connect belongs to the legacy providers and must never be reached.
             _session.UsedPasswordConnect.Should().BeFalse();
-            _session.UsedPasswordAuthenticate.Should().BeFalse();
-        }
-
-        [Fact]
-        public async Task Send_PasswordRecord_UsesStartTlsAndTheMailboxPassword_WithoutAToken()
-        {
-            using var _ = TenantContext();
-
-            var mail = AMail();
-            var config = mail.MailServerConfiguration;
-            config.AuthenticationType = MailAuthenticationType.Password;
-            config.TenantId = null;
-            config.ClientId = null;
-            config.ClientSecretReference = null;
-            config.MailboxAddress = null;
-            config.SenderUserName = "support@contoso.com";
-            config.AccountPassword = "password1";
-
-            var result = await Client().SendAsync(mail, ABody());
-
-            result.Should().BeTrue();
-            _session.ConnectedHost.Should().Be("smtp.office365.com");
-            _session.SocketOptions.Should().Be(SecureSocketOptions.StartTls);
-            _session.UsedPasswordAuthenticate.Should().BeTrue();
-            _session.Mechanism.Should().BeNull();
-            _session.SendCount.Should().Be(1);
-            _tokens.Verify(
-                t => t.GetTokenAsync(It.IsAny<Office365TokenRequest>(), It.IsAny<CancellationToken>()),
-                Times.Never);
-        }
-
-        [Fact]
-        public async Task Send_PasswordRecordWithoutAPassword_FailsClosedBeforeConnecting()
-        {
-            using var _ = TenantContext();
-
-            var mail = AMail();
-            mail.MailServerConfiguration.AuthenticationType = MailAuthenticationType.Password;
-            mail.MailServerConfiguration.SenderUserName = "support@contoso.com";
-            mail.MailServerConfiguration.AccountPassword = "";
-
-            var result = await Client().SendAsync(mail, ABody());
-
-            result.Should().BeFalse();
-            _session.ConnectedHost.Should().BeNull();
-        }
-
-        [Fact]
-        public async Task Send_RequestsTheTokenForTheConfigurationsOwnTenantAndApplication()
-        {
-            using var _ = TenantContext("blocks-tenant");
-
-            await Client().SendAsync(AMail(), ABody());
-
-            _tokens.Verify(
-                t => t.GetTokenAsync(
-                    It.Is<Office365TokenRequest>(r =>
-                        r.BlocksTenantId == "blocks-tenant"
-                        && r.EntraTenantId == "contoso-tenant"
-                        && r.ClientId == "mailer-app"
-                        && r.ClientSecretReference == "secret-1"),
-                    It.IsAny<CancellationToken>()),
-                Times.Once);
         }
 
         [Fact]
         public async Task Send_NeverAddsSesHeaders()
         {
-            using var _ = TenantContext();
-
             await Client().SendAsync(AMail(), ABody());
 
             var headers = _session.Sent!.Headers.Select(h => h.Field).ToList();
@@ -180,8 +83,6 @@ namespace XUnitTest.Mail
         [Fact]
         public async Task Send_ComposesTheSameMessageTheLegacySenderWould()
         {
-            using var _ = TenantContext();
-
             await Client().SendAsync(AMail(), ABody());
 
             _session.Sent!.Subject.Should().Be("Invoice");
@@ -193,7 +94,6 @@ namespace XUnitTest.Mail
         [Fact]
         public async Task Send_DisconnectFailureAfterAcceptance_KeepsTheSuccessAndDoesNotResend()
         {
-            using var _ = TenantContext();
             _session.ThrowOnDisconnect = new IOException("connection reset");
 
             var result = await Client().SendAsync(AMail(), ABody());
@@ -202,98 +102,9 @@ namespace XUnitTest.Mail
             _session.SendCount.Should().Be(1);
         }
 
-        // ---------- C1 ----------
-
-        [Fact]
-        public async Task Send_InvalidConfiguration_FailsBeforeTheSecretAndTheSocket()
-        {
-            using var _ = TenantContext();
-            var mail = AMail();
-            mail.MailServerConfiguration.Port = 25;
-
-            var result = await Client().SendAsync(mail, ABody());
-
-            result.Should().BeFalse();
-            _tokens.Verify(t => t.GetTokenAsync(It.IsAny<Office365TokenRequest>(), It.IsAny<CancellationToken>()), Times.Never);
-            _session.ConnectedHost.Should().BeNull();
-        }
-
-        [Fact]
-        public async Task Send_WithoutATenantContext_FailsBeforeTheSecret()
-        {
-            var mail = AMail();
-
-            var result = await Client().SendAsync(mail, ABody());
-
-            result.Should().BeFalse();
-            _tokens.Verify(t => t.GetTokenAsync(It.IsAny<Office365TokenRequest>(), It.IsAny<CancellationToken>()), Times.Never);
-        }
-
-        // ---------- C4 ----------
-
-        [Fact]
-        public async Task Send_SnsEnabled_FailsClosedWithoutConnecting()
-        {
-            using var _ = TenantContext();
-            var mail = AMail();
-            mail.MailServerConfiguration.IsEnableSnsConfiguration = true;
-
-            var result = await Client().SendAsync(mail, ABody());
-
-            result.Should().BeFalse();
-            _session.ConnectedHost.Should().BeNull();
-        }
-
-        // ---------- C2 ----------
-
-        [Fact]
-        public async Task Send_SecretResolutionFailure_MakesNoSmtpConnection()
-        {
-            using var _ = TenantContext();
-            _tokens
-                .Setup(t => t.GetTokenAsync(It.IsAny<Office365TokenRequest>(), It.IsAny<CancellationToken>()))
-                .ThrowsAsync(new SecretNotFoundException("secret-1"));
-
-            var result = await Client().SendAsync(AMail(), ABody());
-
-            result.Should().BeFalse();
-            _session.ConnectedHost.Should().BeNull();
-        }
-
-        [Fact]
-        public async Task Send_VaultOutage_MakesNoSmtpConnection()
-        {
-            using var _ = TenantContext();
-            _tokens
-                .Setup(t => t.GetTokenAsync(It.IsAny<Office365TokenRequest>(), It.IsAny<CancellationToken>()))
-                .ThrowsAsync(new SecretVaultException("down", "Get", "secret-1"));
-
-            var result = await Client().SendAsync(AMail(), ABody());
-
-            result.Should().BeFalse();
-            _session.ConnectedHost.Should().BeNull();
-        }
-
-        [Fact]
-        public async Task Send_TokenAcquisitionFailure_MakesNoSmtpConnection()
-        {
-            using var _ = TenantContext();
-            _tokens
-                .Setup(t => t.GetTokenAsync(It.IsAny<Office365TokenRequest>(), It.IsAny<CancellationToken>()))
-                .ThrowsAsync(new InvalidOperationException("AADSTS7000215"));
-
-            var result = await Client().SendAsync(AMail(), ABody());
-
-            result.Should().BeFalse();
-            _session.ConnectedHost.Should().BeNull();
-        }
-
-        // ---------- C3 ----------
-
         [Fact]
         public async Task Send_AuthenticationRejected_ReturnsFalseAndDoesNotSend()
         {
-            using var _ = TenantContext();
             _session.ThrowOnAuthenticate = new AuthenticationException("rejected");
 
             var result = await Client().SendAsync(AMail(), ABody());
@@ -305,7 +116,6 @@ namespace XUnitTest.Mail
         [Fact]
         public async Task Send_SubmissionFailure_PerformsNoResend()
         {
-            using var _ = TenantContext();
             _session.ThrowOnSend = new SmtpProtocolException("broken");
 
             var result = await Client().SendAsync(AMail(), ABody());
@@ -360,8 +170,8 @@ namespace XUnitTest.Mail
         {
             private readonly RecordingSession _session;
 
-            public TestableOffice365SmtpClient(IOffice365TokenProvider tokens, RecordingSession session)
-                : base(tokens, NullLogger<Office365SmtpClient>.Instance)
+            public TestableOffice365SmtpClient(RecordingSession session)
+                : base(NullLogger<Office365SmtpClient>.Instance)
             {
                 _session = session;
             }
@@ -375,11 +185,11 @@ namespace XUnitTest.Mail
             public int ConnectedPort { get; private set; }
             public SecureSocketOptions? SocketOptions { get; private set; }
             public SaslMechanism? Mechanism { get; private set; }
+            public string? AuthenticatedAs { get; private set; }
             public MimeMessage? Sent { get; private set; }
             public int SendCount { get; private set; }
             public bool Disconnected { get; private set; }
             public bool UsedPasswordConnect { get; private set; }
-            public bool UsedPasswordAuthenticate { get; private set; }
 
             public Exception? ThrowOnAuthenticate { get; set; }
             public Exception? ThrowOnSend { get; set; }
@@ -393,7 +203,8 @@ namespace XUnitTest.Mail
 
             public Task AuthenticateAsync(string userName, string password)
             {
-                UsedPasswordAuthenticate = true;
+                if (ThrowOnAuthenticate is not null) throw ThrowOnAuthenticate;
+                AuthenticatedAs = userName;
                 return Task.CompletedTask;
             }
 
@@ -407,7 +218,6 @@ namespace XUnitTest.Mail
 
             public Task AuthenticateAsync(SaslMechanism mechanism)
             {
-                if (ThrowOnAuthenticate is not null) throw ThrowOnAuthenticate;
                 Mechanism = mechanism;
                 return Task.CompletedTask;
             }

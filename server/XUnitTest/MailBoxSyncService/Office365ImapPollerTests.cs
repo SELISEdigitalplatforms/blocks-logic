@@ -50,7 +50,8 @@ namespace XUnitTest.MailBoxSyncService
                     r.BlocksTenantId == "blocks-tenant"
                     && r.EntraTenantId == "contoso-tenant"
                     && r.ClientId == "mailer-app"
-                    && r.ClientSecretReference == "secret-1"),
+                    && r.ClientSecretReference == "secret-1"
+                    && r.Scope == Office365TokenScopes.ExchangeOnline),
                 It.IsAny<CancellationToken>()), Times.Once);
 
             _sync.Verify(s => s.SyncInboxAsync(
