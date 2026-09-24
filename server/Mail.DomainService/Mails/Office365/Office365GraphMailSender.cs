@@ -360,7 +360,7 @@ namespace Mail.DomainService.Mails.Office365
         /// documented identifier rather than prose, so it is safe to branch on; the message text
         /// beside it never is, and is never read.
         /// </remarks>
-        internal static string Classify(Exception exception) => exception switch
+        public static string Classify(Exception exception) => exception switch
         {
             ODataError odata => Classify(odata.ResponseStatusCode, odata.Error?.Code),
             ApiException api => Classify(api.ResponseStatusCode, null),
@@ -369,7 +369,7 @@ namespace Mail.DomainService.Mails.Office365
             _ => Office365FailureCode.GraphFailed
         };
 
-        internal static string Classify(int status, string? code) => code switch
+        public static string Classify(int status, string? code) => code switch
         {
             "ErrorSendAsDenied" => Office365FailureCode.SendAsDenied,
             "ErrorInvalidRecipients" => Office365FailureCode.RecipientRejected,
@@ -398,7 +398,7 @@ namespace Mail.DomainService.Mails.Office365
         /// and nothing else. The code is reduced to identifier characters and bounded, so a
         /// response cannot write arbitrary text into the log.
         /// </remarks>
-        internal static string? Describe(Exception exception) => exception switch
+        public static string? Describe(Exception exception) => exception switch
         {
             ODataError odata => $"graph status {odata.ResponseStatusCode} code {SafeCode(odata.Error?.Code)}",
             ApiException api => $"graph status {api.ResponseStatusCode}",

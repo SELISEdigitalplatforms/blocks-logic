@@ -11,10 +11,13 @@ namespace Mail.DomainService.Mails.Office365
     /// </remarks>
     public static class Office365TokenScopes
     {
-        /// <summary>Exchange Online, for IMAP with SASL XOAUTH2.</summary>
+        /// <summary>
+        /// Exchange Online, for IMAP or SMTP with SASL XOAUTH2. Nothing requests it today: both
+        /// directions of Office 365 go through Graph.
+        /// </summary>
         public const string ExchangeOnline = "https://outlook.office365.com/.default";
 
-        /// <summary>Microsoft Graph, for outbound mail through <c>sendMail</c>.</summary>
+        /// <summary>Microsoft Graph, for outbound <c>sendMail</c> and the inbound delta read.</summary>
         public const string Graph = "https://graph.microsoft.com/.default";
     }
 

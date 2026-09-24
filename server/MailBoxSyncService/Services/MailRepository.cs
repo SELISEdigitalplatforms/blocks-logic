@@ -1,5 +1,6 @@
 using Blocks.Genesis;
 using Mail.DomainService.Entities;
+using MailBoxSyncService.Entities;
 using MongoDB.Driver;
 
 namespace MailBoxSyncService.Services
@@ -45,6 +46,23 @@ namespace MailBoxSyncService.Services
             var filter = Builders<MailServerConfiguration>.Filter.Where(c => c.IsInbound);
             return await (await configCollection.FindAsync(filter)).ToListAsync();
         }
+
+        public async Task<MailBoxSyncCursor?> GetSyncCursorAsync(string configurationId, string tenantId)
+        {
+            var collection = SyncCursors(tenantId);
+            var filter = Builders<MailBoxSyncCursor>.Filter.Eq(x => x.ConfigurationId, configurationId);
+            return await collection.Find(filter).FirstOrDefaultAsync();
+        }
+
+        public async Task SaveSyncCursorAsync(MailBoxSyncCursor cursor, string tenantId)
+        {
+            var collection = SyncCursors(tenantId);
+            var filter = Builders<MailBoxSyncCursor>.Filter.Eq(x => x.ConfigurationId, cursor.ConfigurationId);
+            await collection.ReplaceOneAsync(filter, cursor, new ReplaceOptions { IsUpsert = true });
+        }
+
+        private IMongoCollection<MailBoxSyncCursor> SyncCursors(string tenantId) =>
+            _dbContextProvider.GetDatabase(tenantId).GetCollection<MailBoxSyncCursor>($"{nameof(MailBoxSyncCursor)}s");
     }
 
     public interface IMailRepository
@@ -53,5 +71,7 @@ namespace MailBoxSyncService.Services
         Task InsertAsync(MailBoxEntity mail, string tenantId);
         Task<List<Tenant>> GetTenantsAsync();
         Task<List<MailServerConfiguration>> GetImapConfigurationsAsync(Tenant tenant);
+        Task<MailBoxSyncCursor?> GetSyncCursorAsync(string configurationId, string tenantId);
+        Task SaveSyncCursorAsync(MailBoxSyncCursor cursor, string tenantId);
     }
 }

@@ -124,23 +124,23 @@ namespace Mail.DomainService.Mails.Office365
 
         public Task DeleteDraftAsync(string mailbox, string draftId, CancellationToken cancellationToken = default) =>
             _client.Users[mailbox].Messages[draftId].DeleteAsync(cancellationToken: cancellationToken);
+    }
 
-        /// <summary>
-        /// Hands the already-acquired token to Kiota, for Graph only.
-        /// </summary>
-        /// <remarks>
-        /// The token is bought and cached by <see cref="IOffice365TokenProvider"/>; this only
-        /// presents it. Any other host — an upload session's Outlook URL above all — gets no token.
-        /// </remarks>
-        private sealed class StaticAccessTokenProvider(string accessToken) : IAccessTokenProvider
-        {
-            public AllowedHostsValidator AllowedHostsValidator { get; } = new([Office365GraphMailSender.GraphHost]);
+    /// <summary>
+    /// Hands the already-acquired token to Kiota, for Graph only.
+    /// </summary>
+    /// <remarks>
+    /// The token is bought and cached by <see cref="IOffice365TokenProvider"/>; this only
+    /// presents it. Any other host — an upload session's Outlook URL above all — gets no token.
+    /// </remarks>
+    internal sealed class StaticAccessTokenProvider(string accessToken) : IAccessTokenProvider
+    {
+        public AllowedHostsValidator AllowedHostsValidator { get; } = new([Office365GraphMailSender.GraphHost]);
 
-            public Task<string> GetAuthorizationTokenAsync(
-                Uri uri,
-                Dictionary<string, object>? additionalAuthenticationContext = null,
-                CancellationToken cancellationToken = default) =>
-                Task.FromResult(AllowedHostsValidator.IsUrlHostValid(uri) ? accessToken : string.Empty);
-        }
+        public Task<string> GetAuthorizationTokenAsync(
+            Uri uri,
+            Dictionary<string, object>? additionalAuthenticationContext = null,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(AllowedHostsValidator.IsUrlHostValid(uri) ? accessToken : string.Empty);
     }
 }

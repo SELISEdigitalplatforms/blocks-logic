@@ -44,7 +44,8 @@ namespace Mail.DomainService.Mails.Office365
         /// <remarks>
         /// <c>Mail.Send</c> not granted or not consented, an application access policy that
         /// excludes the mailbox, or — for a message too large to send in one request —
-        /// <c>Mail.ReadWrite</c> missing for the draft it has to be built in.
+        /// <c>Mail.ReadWrite</c> missing for the draft it has to be built in. Inbound, it means
+        /// <c>Mail.Read</c> is not granted or the access policy excludes the mailbox.
         /// </remarks>
         public const string PermissionDenied = "O365_PERMISSION_DENIED";
 
