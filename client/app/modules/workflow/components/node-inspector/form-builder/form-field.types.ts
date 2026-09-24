@@ -163,9 +163,8 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
   };
   transient?: boolean;
   /**
-   * Show the `{{$VAR.name}}` secret picker on this field's value input(s). Default true on eligible
-   * types (text, textarea, expression, key-value / fixed-key-value / key-type-value pairs,
-   * expression-list). Set false where the resolved value would be logged or echoed back.
+   * Show the in-field `{{$VAR.name}}` key button on this field's expression-highlighted inputs.
+   * Default true; set false to hide it. Always hidden while the field is read-only or disabled.
    */
   variablePicker?: boolean;
 }
@@ -185,6 +184,11 @@ export interface FieldProps<T = unknown> {
   readOnly?: boolean;
   className?: string;
   placeholder?: string;
+  /**
+   * Set false to hide the in-field `{{$VAR.name}}` key button when reusing a field component
+   * outside a schema. Same effect as `variablePicker: false` on the field schema.
+   */
+  variablePicker?: boolean;
 }
 
 export type FormField = FieldSchema;

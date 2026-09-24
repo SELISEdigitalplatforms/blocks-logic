@@ -1,4 +1,6 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
+import { SecretPicker } from "../fields/secret-picker";
 import { WorkflowNode } from "../../../../models/node.model";
 import { useWorkflow } from "../../../../hooks/use-workflow";
 
@@ -135,8 +137,19 @@ const ensureSelectionStyles = () => {
 
 type ChildProps = {
   onScroll?: React.UIEventHandler<HTMLElement>;
+  onFocus?: React.FocusEventHandler<HTMLElement>;
   className?: string;
   style?: React.CSSProperties;
+  disabled?: boolean;
+  readOnly?: boolean;
+};
+
+/** The in-field `{{$VAR.name}}` key button. The token is inserted at the caret. */
+export type VariablePickerConfig = {
+  /** What the picker fills, for its accessible name, e.g. "Headers row 2 value". */
+  target: string;
+  /** Receives the whole new value, with the token inserted. */
+  onChange: (next: string) => void;
 };
 
 type Control = HTMLInputElement | HTMLTextAreaElement;
@@ -147,6 +160,7 @@ export const ExpressionHighlighter = ({
   isMultiline = true,
   fontClassName = "",
   disableHighlighting = false,
+  variablePicker,
 }: {
   children: React.ReactElement<ChildProps>;
   value: string;
@@ -154,10 +168,38 @@ export const ExpressionHighlighter = ({
   /** @deprecated the backdrop now copies the control's computed font. */
   fontClassName?: string;
   disableHighlighting?: boolean;
+  /**
+   * Shows a key button at the input's right end, on hover or focus, listing the tenant's secrets.
+   * Hidden while the control is disabled or read-only.
+   */
+  variablePicker?: VariablePickerConfig | null;
 }) => {
   const { nodes } = useWorkflow();
   const backdropRef = useRef<HTMLDivElement | null>(null);
   const controlRef = useRef<Control | null>(null);
+  // Until the control has been focused its caret is meaningless, so a pick appends instead.
+  const focusedRef = useRef(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const picker =
+    variablePicker && !children.props.disabled && !children.props.readOnly ? variablePicker : null;
+
+  const insertToken = (token: string) => {
+    if (!picker) return;
+    const control = controlRef.current;
+    const current = value || "";
+    const useCaret = control && focusedRef.current;
+    const start = useCaret ? (control.selectionStart ?? current.length) : current.length;
+    const end = useCaret ? (control.selectionEnd ?? start) : start;
+    picker.onChange(current.slice(0, start) + token + current.slice(end));
+
+    const caret = start + token.length;
+    setTimeout(() => {
+      const node = controlRef.current;
+      if (!node) return;
+      node.focus();
+      node.setSelectionRange(caret, caret);
+    }, 0);
+  };
 
   /** Give the backdrop the control's exact content box and text metrics. */
   const syncBackdrop = useCallback(() => {
@@ -226,26 +268,50 @@ export const ExpressionHighlighter = ({
     if (!disableHighlighting) syncBackdrop();
   }, [value, disableHighlighting, syncBackdrop]);
 
+  // Callers turn highlighting off only for disabled or read-only controls, where there is no picker.
   if (disableHighlighting) {
     return children;
   }
 
   const childRef = (children as unknown as { ref?: React.Ref<Control> }).ref;
 
-  const enhancedChild = React.cloneElement(children, {
-    spellCheck: false,
+  const refAndFocus = {
     ref: (node: Control | null) => {
       attachControl(node);
       if (typeof childRef === "function") childRef(node);
       else if (childRef && typeof childRef === "object")
         (childRef as React.MutableRefObject<Control | null>).current = node;
     },
+    onFocus: (e: React.FocusEvent<HTMLElement>) => {
+      focusedRef.current = true;
+      children.props.onFocus?.(e);
+    },
+  };
+
+  const pickerButton = picker ? (
+    <div
+      className={cn(
+        "absolute right-1 z-20 opacity-0 transition-opacity group-hover/var:opacity-100 group-focus-within/var:opacity-100",
+        isMultiline ? "top-1" : "top-1/2 -translate-y-1/2",
+        pickerOpen && "opacity-100",
+      )}
+    >
+      <SecretPicker target={picker.target} onPick={insertToken} onOpenChange={setPickerOpen} />
+    </div>
+  ) : null;
+
+  const enhancedChild = React.cloneElement(children, {
+    spellCheck: false,
+    ...refAndFocus,
     onScroll: (e: React.UIEvent<HTMLElement>) => {
       syncBackdrop();
       children.props.onScroll?.(e);
     },
-    className:
-      `${children.props.className || ""} expression-highlighter-control relative z-10 caret-black dark:caret-white`.trim(),
+    className: cn(
+      children.props.className,
+      "expression-highlighter-control relative z-10 caret-black dark:caret-white",
+      picker && "pr-9",
+    ),
     // Inline so it beats the control's own utility classes: the text is invisible, the
     // caret is not, and the coloured backdrop shows through.
     style: {
@@ -256,7 +322,9 @@ export const ExpressionHighlighter = ({
   } as Partial<ChildProps>);
 
   return (
-    <div className={`relative w-full bg-background rounded-md ${fontClassName}`.trim()}>
+    <div
+      className={cn("relative w-full bg-background rounded-md", picker && "group/var", fontClassName)}
+    >
       <div
         ref={backdropRef}
         className="absolute overflow-hidden pointer-events-none z-0 box-border m-0 text-foreground"
@@ -270,6 +338,7 @@ export const ExpressionHighlighter = ({
         )}
       </div>
       {enhancedChild}
+      {pickerButton}
     </div>
   );
 };

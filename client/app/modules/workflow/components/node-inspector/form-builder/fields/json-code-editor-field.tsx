@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Textarea } from "@/components/ui-kits/textarea/textarea";
 import { FieldProps } from "../form-field.types";
 import { ExpressionHighlighter } from "../utils/expression-highlighter";
+import { pickerTarget, showsVariablePicker } from "./secret-picker";
 import { cn } from "@/lib/utils";
 
 const EXPRESSION_REGEX = /\{\{\$.*?\}\}/g;
@@ -37,14 +38,29 @@ const validateJson = (value: string): string | null => {
   }
 };
 
-export const JsonCodeEditor = ({ field, value, onChange, readOnly }: FieldProps<string>) => {
+export const JsonCodeEditor = ({
+  field,
+  value,
+  onChange,
+  readOnly,
+  variablePicker,
+}: FieldProps<string>) => {
   const [touched, setTouched] = useState(false);
   const jsonError = useMemo(() => validateJson(value || ""), [value]);
   const showError = touched && Boolean(jsonError) && !field.disabled && !readOnly;
 
   return (
     <div className={cn("relative flex-1")}>
-      <ExpressionHighlighter value={value || ""} isMultiline={true} fontClassName="font-mono">
+      <ExpressionHighlighter
+        value={value || ""}
+        isMultiline={true}
+        fontClassName="font-mono"
+        variablePicker={
+          showsVariablePicker(field, readOnly, variablePicker)
+            ? { target: pickerTarget(field), onChange: (next) => onChange(next) }
+            : null
+        }
+      >
         <Textarea
           id={field.id}
           value={value || ""}
@@ -58,6 +74,7 @@ export const JsonCodeEditor = ({ field, value, onChange, readOnly }: FieldProps<
           }
           onBlur={() => setTouched(true)}
           placeholder={field.placeholder}
+          readOnly={readOnly}
           className={cn(
             "font-mono text-sm",
             showError &&

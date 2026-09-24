@@ -48,8 +48,6 @@ export const NodeSchemaActionAiAgentV1: NodeSchemaDefinition = {
         id: "path",
         type: "textarea",
         label: "Input",
-        // No secret picker: sent to the model provider and can be echoed back in the stored response.
-        variablePicker: false,
         info: "Enter your message to the agent",
         key: "input",
         required: true,

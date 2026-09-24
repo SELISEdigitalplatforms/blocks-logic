@@ -331,8 +331,6 @@ export const NodeSchemaTriggerScheduleV1: NodeSchemaDefinition = {
         id: "cronExpression",
         type: "text",
         label: "Cron Expression",
-        // No secret picker: a schedule, not a value a secret belongs in.
-        variablePicker: false,
         info: "5-field cron expression (minute-based), e.g. */10 * * * *",
         key: "cronExpression",
         required: true,

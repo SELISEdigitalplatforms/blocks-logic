@@ -11,8 +11,11 @@ vi.mock("@/services/secret.service", async () => {
 
 import { FieldSchema } from "../form-field.types";
 import { NodeSchemaActionProxy } from "../../../node-schemas/node-schema-action-proxy";
+import { ConditionsField } from "./conditions-field";
 import { ExpressionListField } from "./expression-list-field";
 import { FixedKeyValuePairsField } from "./fixed-key-value-pairs-field";
+import { GraphqlCodeEditor } from "./graphql-code-editor-field";
+import { JsonCodeEditor } from "./json-code-editor-field";
 import { KeyTypeValueField } from "./key-type-value-field";
 import { KeyValuePairsField } from "./key-value-pairs-field";
 import { showsVariablePicker } from "./secret-picker";
@@ -21,6 +24,8 @@ import { TextareaField } from "./textarea-field";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const cfg: any = { tenantId: "pk", workflowId: "wf", nodeId: "n1" };
+
+const TOKEN = "{{$VAR.stripe-api-key}}";
 
 const field = (extra: Partial<FieldSchema> = {}): FieldSchema => ({
   id: "f",
@@ -32,68 +37,67 @@ const field = (extra: Partial<FieldSchema> = {}): FieldSchema => ({
 
 const pickers = () => screen.queryAllByRole("button", { name: /insert a configuration variable/i });
 
-/**
- * Opens a picker and picks the first mock secret, once the secrets have loaded. Takes a getter: the
- * disabled placeholder trigger is swapped for a new element when the list arrives.
- */
-const pick = async (user: ReturnType<typeof userEvent.setup>, trigger: () => HTMLElement) => {
-  await vi.waitFor(() => expect(trigger().hasAttribute("disabled")).toBe(false));
-  await user.click(trigger());
-  await user.click(await screen.findByRole("menuitem", { name: "stripe-api-key" }));
+/** Opens a picker's popover and picks the first mock secret once the list has loaded. */
+const pick = async (user: ReturnType<typeof userEvent.setup>, trigger: HTMLElement) => {
+  await user.click(trigger);
+  await user.click(await screen.findByRole("option", { name: "stripe-api-key" }));
 };
 
 describe("showsVariablePicker", () => {
-  it("is on by default for eligible types only", () => {
-    for (const type of [
-      "text",
-      "textarea",
-      "expression",
-      "key-value-pairs",
-      "fixed-key-value-pairs",
-      "key-type-value-pairs",
-      "expression-list",
-    ] as const) {
-      expect(showsVariablePicker(field({ type }))).toBe(true);
-    }
-    for (const type of [
-      "select",
-      "number",
-      "switch",
-      "json-code-editor",
-      "conditions",
-      "schema-fields",
-    ] as const) {
-      expect(showsVariablePicker(field({ type }))).toBe(false);
-    }
-  });
-
-  it("is off when opted out, read-only or disabled", () => {
+  it("is on by default, off when opted out, read-only or disabled", () => {
+    expect(showsVariablePicker(field())).toBe(true);
+    expect(showsVariablePicker(field({ type: "json-code-editor" }))).toBe(true);
     expect(showsVariablePicker(field({ variablePicker: false }))).toBe(false);
     expect(showsVariablePicker(field(), true)).toBe(false);
     expect(showsVariablePicker(field({ disabled: true }))).toBe(false);
   });
 
-  it("is opted out on the proxy node's path and query params", () => {
-    const params = NodeSchemaActionProxy.schema.parameters;
-    expect(params.find((p) => p.key === "pathParams")?.variablePicker).toBe(false);
-    expect(params.find((p) => p.key === "queryParams")?.variablePicker).toBe(false);
+  it("is not opted out anywhere on the proxy node", () => {
+    for (const param of NodeSchemaActionProxy.schema.parameters) {
+      expect(param.variablePicker).not.toBe(false);
+    }
   });
 });
 
 describe("secret picker on workflow fields", () => {
-  it("renders on a text field by default and replaces the value with the token", async () => {
+  it("appends the token to a text field that was never focused", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     renderWithProviders(
-      <TextField field={field()} value="typed" onChange={onChange} data={{}} config={cfg} />,
+      <TextField field={field()} value="Bearer " onChange={onChange} data={{}} config={cfg} />,
     );
 
     expect(pickers()).toHaveLength(1);
-    await pick(user, () => pickers()[0]);
-    expect(onChange).toHaveBeenLastCalledWith("{{$VAR.stripe-api-key}}");
+    await pick(user, pickers()[0]);
+    expect(onChange).toHaveBeenLastCalledWith(`Bearer ${TOKEN}`);
   });
 
-  it("is hidden when opted out, read-only, or copyable", () => {
+  it("inserts the token at the caret, replacing the selection", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    renderWithProviders(
+      <TextField field={field()} value="a-XX-b" onChange={onChange} data={{}} config={cfg} />,
+    );
+
+    const input = screen.getByRole("textbox") as HTMLInputElement;
+    input.focus();
+    input.setSelectionRange(2, 4);
+    await pick(user, pickers()[0]);
+    expect(onChange).toHaveBeenLastCalledWith(`a-${TOKEN}-b`);
+  });
+
+  it("lists the secrets in a popover", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <TextField field={field()} value="" onChange={vi.fn()} data={{}} config={cfg} />,
+    );
+
+    await user.click(pickers()[0]);
+    expect(await screen.findByText("Configuration variables")).toBeTruthy();
+    expect(screen.getByRole("option", { name: "stripe-api-key" })).toBeTruthy();
+  });
+
+  it("is hidden when opted out, read-only, disabled, or copyable", () => {
     const { rerender } = renderWithProviders(
       <TextField
         field={field({ variablePicker: false })}
@@ -112,6 +116,17 @@ describe("secret picker on workflow fields", () => {
 
     rerender(
       <TextField
+        field={field({ disabled: true })}
+        value=""
+        onChange={vi.fn()}
+        data={{}}
+        config={cfg}
+      />,
+    );
+    expect(pickers()).toHaveLength(0);
+
+    rerender(
+      <TextField
         field={field({ copyable: true })}
         value=""
         onChange={vi.fn()}
@@ -122,20 +137,18 @@ describe("secret picker on workflow fields", () => {
     expect(pickers()).toHaveLength(0);
   });
 
-  it("renders on a textarea", () => {
+  it.each([
+    ["textarea", TextareaField],
+    ["json-code-editor", JsonCodeEditor],
+    ["graphql-code-editor", GraphqlCodeEditor],
+  ] as const)("renders on a %s", (type, Component) => {
     renderWithProviders(
-      <TextareaField
-        field={field({ type: "textarea" })}
-        value=""
-        onChange={vi.fn()}
-        data={{}}
-        config={cfg}
-      />,
+      <Component field={field({ type })} value="" onChange={vi.fn()} data={{}} config={cfg} />,
     );
     expect(pickers()).toHaveLength(1);
   });
 
-  it("puts one picker on each key-value row and replaces only that row's value", async () => {
+  it("puts a picker on each key-value key and value, changing only that input", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     renderWithProviders(
@@ -148,12 +161,10 @@ describe("secret picker on workflow fields", () => {
       />,
     );
 
-    expect(pickers()).toHaveLength(2);
-    await pick(user, () => screen.getByRole("button", { name: /into Headers row 2 value/ }));
-    expect(onChange).toHaveBeenLastCalledWith({
-      Authorization: "x",
-      Accept: "{{$VAR.stripe-api-key}}",
-    });
+    expect(pickers()).toHaveLength(4);
+    await pick(user, screen.getByRole("button", { name: /into Headers row 2 value/ }));
+    expect(onChange).toHaveBeenLastCalledWith({ Authorization: "x", Accept: `json${TOKEN}` });
+    expect(screen.getByRole("button", { name: /into Headers row 1 key/ })).toBeTruthy();
   });
 
   it("puts a picker on each fixed-key value", async () => {
@@ -162,7 +173,7 @@ describe("secret picker on workflow fields", () => {
     renderWithProviders(
       <FixedKeyValuePairsField
         field={field({ type: "fixed-key-value-pairs", label: "Map", fixedKeys: ["name", "code"] })}
-        value={{ name: "a", code: "b" }}
+        value={{ name: "a", code: "" }}
         onChange={onChange}
         data={{}}
         config={cfg}
@@ -170,17 +181,18 @@ describe("secret picker on workflow fields", () => {
     );
 
     expect(pickers()).toHaveLength(2);
-    await pick(user, () => screen.getByRole("button", { name: /into Map code value/ }));
-    expect(onChange).toHaveBeenLastCalledWith({ name: "a", code: "{{$VAR.stripe-api-key}}" });
+    await pick(user, screen.getByRole("button", { name: /into Map code value/ }));
+    expect(onChange).toHaveBeenLastCalledWith({ name: "a", code: TOKEN });
   });
 
-  it("offers the picker on string rows of key-type-value pairs only", () => {
+  it("puts a picker on key-type-value keys and non-array values", () => {
     renderWithProviders(
       <KeyTypeValueField
         field={field({ type: "key-type-value-pairs", label: "Fields" })}
         value={[
           { key: "a", type: "string", value: "" },
           { key: "b", type: "number", value: "1" },
+          { key: "c", type: "array", value: [] },
         ]}
         onChange={vi.fn()}
         data={{}}
@@ -188,8 +200,24 @@ describe("secret picker on workflow fields", () => {
       />,
     );
 
-    expect(pickers()).toHaveLength(1);
-    expect(screen.getByRole("button", { name: /into Fields row 1 value/ })).toBeTruthy();
+    expect(pickers()).toHaveLength(5);
+    expect(screen.getByRole("button", { name: /into Fields row 2 value/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /into Fields row 3 value/ })).toBeNull();
+  });
+
+  it("puts a picker on both condition operands", () => {
+    renderWithProviders(
+      <ConditionsField
+        field={field({ type: "conditions", label: "Conditions" })}
+        value={[{ left: "a", operator: "equals", right: "b", type: "string" }]}
+        onChange={vi.fn()}
+        data={{}}
+        config={cfg}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /condition 1 left operand/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /condition 1 right operand/ })).toBeTruthy();
   });
 
   it("puts a picker on each expression-list item", async () => {
@@ -198,7 +226,7 @@ describe("secret picker on workflow fields", () => {
     renderWithProviders(
       <ExpressionListField
         field={field({ type: "expression-list", label: "Items" })}
-        value={["one", "two"]}
+        value={["", "two"]}
         onChange={onChange}
         data={{}}
         config={cfg}
@@ -206,8 +234,59 @@ describe("secret picker on workflow fields", () => {
     );
 
     expect(pickers()).toHaveLength(2);
-    await pick(user, () => screen.getByRole("button", { name: /into Items item 1/ }));
-    expect(onChange).toHaveBeenLastCalledWith(["{{$VAR.stripe-api-key}}", "two"]);
+    await pick(user, screen.getByRole("button", { name: /into Items item 1/ }));
+    expect(onChange).toHaveBeenLastCalledWith([TOKEN, "two"]);
+  });
+
+  // Every field that wraps an input in ExpressionHighlighter, with a value that renders an input.
+  const HIGHLIGHTED_FIELDS = [
+    ["text", TextField, "a"],
+    ["textarea", TextareaField, "a"],
+    ["json-code-editor", JsonCodeEditor, "{}"],
+    ["graphql-code-editor", GraphqlCodeEditor, "query"],
+    ["expression-list", ExpressionListField, ["a"]],
+    ["key-value-pairs", KeyValuePairsField, { a: "1" }],
+    ["fixed-key-value-pairs", FixedKeyValuePairsField, { a: "1" }],
+    ["key-type-value-pairs", KeyTypeValueField, [{ key: "a", type: "string", value: "1" }]],
+    ["conditions", ConditionsField, [{ left: "a", operator: "equals", right: "b" }]],
+  ] as const;
+
+  const renderField = (
+    [type, Component, value]: (typeof HIGHLIGHTED_FIELDS)[number],
+    props: { readOnly?: boolean; disabled?: boolean; variablePicker?: boolean } = {},
+  ) => {
+    const { disabled, ...rest } = props;
+    const Field = Component as React.ComponentType<Record<string, unknown>>;
+    return renderWithProviders(
+      <Field
+        field={field({ type, fixedKeys: ["a"], disabled })}
+        value={value}
+        onChange={vi.fn()}
+        data={{}}
+        config={cfg}
+        {...rest}
+      />,
+    );
+  };
+
+  it.each(HIGHLIGHTED_FIELDS)("shows the key button on an editable %s", (...entry) => {
+    renderField(entry);
+    expect(pickers().length).toBeGreaterThan(0);
+  });
+
+  it.each(HIGHLIGHTED_FIELDS)("never shows the key button on a read-only %s", (...entry) => {
+    renderField(entry, { readOnly: true });
+    expect(pickers()).toHaveLength(0);
+  });
+
+  it.each(HIGHLIGHTED_FIELDS)("never shows the key button on a disabled %s", (...entry) => {
+    renderField(entry, { disabled: true });
+    expect(pickers()).toHaveLength(0);
+  });
+
+  it.each(HIGHLIGHTED_FIELDS)("hides the key button on a %s reused with variablePicker={false}", (...entry) => {
+    renderField(entry, { variablePicker: false });
+    expect(pickers()).toHaveLength(0);
   });
 
   it("is hidden on every row when the field is read-only", () => {

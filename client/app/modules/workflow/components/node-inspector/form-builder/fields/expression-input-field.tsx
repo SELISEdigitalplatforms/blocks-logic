@@ -7,7 +7,7 @@ import { Edge } from "@xyflow/react";
 import { EditorNode } from "@blocks-workflow/models/node.model";
 import { cn } from "@/lib/utils";
 import { ExpressionHighlighter } from "../utils/expression-highlighter";
-import { pickerTarget, SecretPicker, showsVariablePicker } from "./secret-picker";
+import { pickerTarget, showsVariablePicker } from "./secret-picker";
 
 interface AncestorNode {
   id: string;
@@ -92,8 +92,6 @@ export const ExpressionInputField = ({
   variablePicker = true,
   pickerLabel,
 }: FieldProps<string> & {
-  /** An embedding field turns the picker off for one row (e.g. a non-string key-type-value row). */
-  variablePicker?: boolean;
   /** Accessible-name suffix for the picker, e.g. "row 2 value". */
   pickerLabel?: string;
 }) => {
@@ -276,11 +274,17 @@ export const ExpressionInputField = ({
   const filteredSuggestions = showSuggestions ? getFilteredSuggestions() : [];
 
   const isDisabled = typeof field.disabled === "function" ? false : field.disabled || readOnly;
-  const picker = variablePicker && showsVariablePicker(field, readOnly);
+  const picker = showsVariablePicker(field, readOnly, variablePicker);
 
   return (
-    <div className={cn("relative flex-1", picker && "flex items-center gap-1.5")}>
-      <ExpressionHighlighter value={(value as string) || ""} isMultiline={false}>
+    <div className={cn("relative flex-1")}>
+      <ExpressionHighlighter
+        value={(value as string) || ""}
+        isMultiline={false}
+        variablePicker={
+          picker ? { target: pickerTarget(field, pickerLabel), onChange: (next) => onChange(next) } : null
+        }
+      >
         <Input
           ref={inputRef}
           id={field.id}
@@ -293,9 +297,6 @@ export const ExpressionInputField = ({
           className={cn("", className)}
         />
       </ExpressionHighlighter>
-      {picker && (
-        <SecretPicker target={pickerTarget(field, pickerLabel)} onPick={(token) => onChange(token)} />
-      )}
 
       {showSuggestions && filteredSuggestions.length > 0 && (
         <div

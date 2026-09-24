@@ -7,7 +7,8 @@ import { Trash2 } from "lucide-react";
 import { FieldProps } from "../form-field.types";
 import { ExpressionInputField } from "./expression-input-field";
 import { cn } from "@/lib/utils";
-import { ExpressionHighlighter } from "../utils/expression-highlighter";
+import { ExpressionHighlighter, VariablePickerConfig } from "../utils/expression-highlighter";
+import { pickerTarget, showsVariablePicker } from "./secret-picker";
 
 interface KeyValuePair {
   key: string;
@@ -22,6 +23,7 @@ function DroppableKeyInput({
   disabled,
   readOnly,
   isMultiline,
+  variablePicker,
 }: {
   id: string;
   value: string;
@@ -30,10 +32,11 @@ function DroppableKeyInput({
   disabled?: boolean;
   readOnly?: boolean;
   isMultiline: boolean;
+  variablePicker?: VariablePickerConfig | null;
 }) {
   return (
     <div className={cn("relative flex-1")}>
-      <ExpressionHighlighter value={value || ""} isMultiline={isMultiline}>
+      <ExpressionHighlighter value={value || ""} isMultiline={isMultiline} variablePicker={variablePicker}>
         <Input
           id={id}
           placeholder={placeholder}
@@ -57,6 +60,7 @@ export const KeyValuePairsField = ({
   readOnly,
   data,
   config,
+  variablePicker,
 }: FieldProps<Record<string, unknown>>) => {
   // Convert object to key-value pairs array
   const pairs = Object.entries(value || {}).map(([key, val]) => ({
@@ -135,6 +139,14 @@ export const KeyValuePairsField = ({
               disabled={field.disabled as boolean}
               readOnly={readOnly}
               isMultiline={false}
+              variablePicker={
+                showsVariablePicker(field, readOnly, variablePicker)
+                  ? {
+                      target: pickerTarget(field, `row ${index + 1} key`),
+                      onChange: (next) => handleKeyChange(index, next),
+                    }
+                  : null
+              }
             />
 
             <ExpressionInputField
@@ -146,6 +158,7 @@ export const KeyValuePairsField = ({
               config={config}
               field={{ ...field, id: `${field.id}-val-${index}` }}
               pickerLabel={`row ${index + 1} value`}
+              variablePicker={variablePicker}
               className="rounded-t-none border-t-0 focus-visible:ring-0 focus-visible:ring-offset-0"
             />
           </div>

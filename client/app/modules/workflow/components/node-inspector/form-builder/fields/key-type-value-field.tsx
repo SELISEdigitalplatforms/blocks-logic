@@ -8,6 +8,7 @@ import { FieldProps } from "../form-field.types";
 import { ExpressionInputField } from "./expression-input-field";
 import { cn } from "@/lib/utils";
 import { ExpressionHighlighter } from "../utils/expression-highlighter";
+import { pickerTarget, showsVariablePicker } from "./secret-picker";
 import {
   Select,
   SelectContent,
@@ -42,6 +43,7 @@ export const KeyTypeValueField = ({
   readOnly,
   data,
   config,
+  variablePicker,
 }: FieldProps<KeyTypeValue[]>) => {
   // Use array directly
   const pairs: KeyTypeValue[] = Array.isArray(value) ? value : [];
@@ -122,7 +124,18 @@ export const KeyTypeValueField = ({
           </Button>
           <div className="flex-1 flex flex-col border rounded-md bg-background">
             <div className="flex flex-col border-b border-border min-w-0">
-              <ExpressionHighlighter value={pair.key || ""} isMultiline={false}>
+              <ExpressionHighlighter
+                value={pair.key || ""}
+                isMultiline={false}
+                variablePicker={
+                  showsVariablePicker(field, readOnly, variablePicker)
+                    ? {
+                        target: pickerTarget(field, `row ${index + 1} key`),
+                        onChange: (next) => handleKeyChange(index, next),
+                      }
+                    : null
+                }
+              >
                 <Input
                   placeholder={field.keyLabel || "Key"}
                   value={pair.key}
@@ -172,8 +185,8 @@ export const KeyTypeValueField = ({
                   data={data}
                   config={config}
                   field={field}
-                  variablePicker={pair.type === "string"}
                   pickerLabel={`row ${index + 1} value`}
+                  variablePicker={variablePicker}
                   className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent min-h-[40px]"
                 />
               )}
