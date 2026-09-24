@@ -1,12 +1,11 @@
 import { Badge } from "@/components/ui-kits/badge/badge";
 import { ProxyKeyValue } from "../types";
-import { containsVarRef } from "../utils";
 
 type Row = ProxyKeyValue & { tag?: string };
 
 /**
- * Locked key/value rows: configured values shown in full, exactly as saved. A value holding a
- * `{{$VAR.name}}` token gets the "variable" badge; `tag` names where the row comes from.
+ * Locked key/value rows: configured values shown in full, exactly as saved. `tag` names where
+ * the row comes from.
  */
 export const ReadonlyConfigRows = ({
   rows,
@@ -31,11 +30,6 @@ export const ReadonlyConfigRows = ({
           <span className="min-w-0 flex-1 break-all font-mono text-muted-foreground">
             {row.value}
           </span>
-          {containsVarRef(row.value) ? (
-            <Badge variant="secondary" className="rounded px-1.5 py-0 text-[10px]">
-              variable
-            </Badge>
-          ) : null}
           {row.tag ? (
             <Badge variant="outline" className="rounded px-1.5 py-0 text-[10px] font-normal">
               {row.tag}

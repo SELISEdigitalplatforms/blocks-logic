@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useFormContext } from "react-hook-form";
 import { FlaskConical, Plus, Trash2 } from "lucide-react";
-import { Badge } from "@/components/ui-kits/badge/badge";
 import {
   Accordion,
   AccordionContent,
@@ -31,7 +30,6 @@ import {
 } from "../types";
 import {
   buildVarToken,
-  containsVarRef,
   keyCollisions,
   KeyCollision,
   parseRouteTemplate,
@@ -647,11 +645,6 @@ const RouteValueCell = ({
           ariaLabel={`Insert a configuration variable into ${label.toLowerCase()} value`}
         />
       </div>
-      {containsVarRef(row.value ?? "") ? (
-        <Badge variant="secondary" className="mt-1 w-fit rounded px-1.5 py-0 text-[10px]">
-          variable
-        </Badge>
-      ) : null}
     </div>
   );
 };

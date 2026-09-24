@@ -182,7 +182,7 @@ describe("ProxyForm", () => {
     await user.click(await screen.findByRole("menuitem", { name: "stripe-api-key" }));
 
     expect(screen.getByDisplayValue("{{$VAR.stripe-api-key}}")).toBeTruthy();
-    expect(screen.getByText("variable")).toBeTruthy();
+    expect(screen.queryByText("variable")).toBeNull();
   });
 
   it("shows an inline url validation message instead of relying on native validation", async () => {
