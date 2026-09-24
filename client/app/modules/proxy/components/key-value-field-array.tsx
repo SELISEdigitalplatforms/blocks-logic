@@ -15,7 +15,7 @@ import {
 import { ProxyCredentialRow, ProxyFormValues, ProxyKeyValue, SecretListItem } from "../types";
 import { buildVarToken, containsVarRef, KeyCollision, KeyKind, keyCollisions } from "../utils";
 import { KeyCollisionWarning } from "./key-collision-warning";
-import { VariableInsertMenu } from "./variable-insert-menu";
+import { VariableInsertMenu } from "@/components/variable-insert-menu";
 import { VariablesButton } from "./variables-button";
 
 type VariablePickerProps = {

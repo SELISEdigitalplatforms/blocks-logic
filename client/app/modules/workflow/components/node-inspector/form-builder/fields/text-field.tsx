@@ -7,6 +7,7 @@ import { Copy, Check } from "lucide-react";
 import { FieldProps } from "../form-field.types";
 import { ExpressionHighlighter } from "../utils/expression-highlighter";
 import { cn } from "@/lib/utils";
+import { pickerTarget, SecretPicker, showsVariablePicker } from "./secret-picker";
 
 export const TextField = ({
 	field,
@@ -22,8 +23,10 @@ export const TextField = ({
 		setTimeout(() => setCopied(false), 2000);
 	};
 
+	const picker = !field.copyable && showsVariablePicker(field, readOnly);
+
 	return (
-		<div className={cn("relative flex-1")}>
+		<div className={cn("relative flex-1", picker && "flex items-center gap-1.5")}>
 			<ExpressionHighlighter
 				value={value || ""}
 				isMultiline={false}
@@ -47,6 +50,7 @@ export const TextField = ({
 					className={`${field.copyable ? "pr-10" : ""}`}
 				/>
 			</ExpressionHighlighter>
+			{picker && <SecretPicker target={pickerTarget(field)} onPick={onChange} />}
 			{field.copyable && (
 				<Button
 					type="button"

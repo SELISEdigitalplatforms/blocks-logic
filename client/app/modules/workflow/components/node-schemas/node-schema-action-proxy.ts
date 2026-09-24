@@ -110,6 +110,9 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
         defaultValue: {},
         keyLabel: "Parameter",
         valueLabel: "Value",
+        // The resolved path is stored in plain text on the proxy's execution log, so a secret here
+        // would be written out. Credentials belong in the proxy's own config.
+        variablePicker: false,
         dependsOn: {
           key: "hasPathParams",
           value: true,
@@ -140,6 +143,8 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
         label: "Query Parameters",
         info: "Sent with the call as the query string. Values accept expressions; a key whose value resolves to empty is dropped.",
         key: "queryParams",
+        // The query string is stored in plain text on the proxy's execution log.
+        variablePicker: false,
         defaultValue: {},
       },
       {

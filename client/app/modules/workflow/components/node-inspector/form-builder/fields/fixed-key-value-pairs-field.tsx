@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui-kits/textarea/textarea";
 import { FieldProps } from "../form-field.types";
 import { ExpressionHighlighter } from "../utils/expression-highlighter";
 import { cn } from "@/lib/utils";
+import { pickerTarget, SecretPicker, showsVariablePicker } from "./secret-picker";
 
 const toRecord = (value: unknown): Record<string, unknown> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
@@ -141,6 +142,8 @@ export const FixedKeyValuePairsField = ({
     }
   }, [keys]);
 
+  const picker = showsVariablePicker(field, readOnly);
+
   const handleValueChange = (key: string, nextValue: string) => {
     onChange({
       ...buildValueForKeys(keys, currentValue),
@@ -174,16 +177,24 @@ export const FixedKeyValuePairsField = ({
               disabled={field.disabled as boolean}
               className="rounded-b-none bg-muted/40 focus-visible:ring-0 focus-visible:ring-offset-0"
             />
-          <DroppableValueTextarea
-            id={`${field.id}-val-${key}`}
-            placeholder={field.placeholder || "Value"}
-            value={String(currentValue[key] ?? "")}
-            onChange={readOnly ? () => {} : (v) => handleValueChange(key, v)}
-            readOnly={readOnly}
-            rows={1}
-            disabled={field.disabled as boolean}
-            className="min-h-9 resize-y rounded-t-none border-t-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-          />
+          <div className="flex items-start gap-1.5">
+            <DroppableValueTextarea
+              id={`${field.id}-val-${key}`}
+              placeholder={field.placeholder || "Value"}
+              value={String(currentValue[key] ?? "")}
+              onChange={readOnly ? () => {} : (v) => handleValueChange(key, v)}
+              readOnly={readOnly}
+              rows={1}
+              disabled={field.disabled as boolean}
+              className="min-h-9 resize-y rounded-t-none border-t-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+            />
+            {picker && (
+              <SecretPicker
+                target={pickerTarget(field, `${key} value`)}
+                onPick={(token) => handleValueChange(key, token)}
+              />
+            )}
+          </div>
         </div>
       ))}
     </div>

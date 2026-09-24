@@ -75,6 +75,8 @@ export const NodeSchemaTriggerEmailV1: NodeSchemaDefinition = {
         id: "test-subject",
         type: "text",
         label: "Test Subject",
+        // No secret picker: test data that becomes the trigger's stored output.
+        variablePicker: false,
         info: "If an inbound email's Subject exactly matches this value (case-insensitive), this execution runs in Test mode against the current draft workflow instead of the published version.",
         key: "testSubject",
         required: false,

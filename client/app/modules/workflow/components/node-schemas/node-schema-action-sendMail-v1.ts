@@ -92,6 +92,8 @@ export const NodeSchemaActionSendMailV1: NodeSchemaDefinition = {
         id: "to-email",
         type: "text",
         label: "To Email",
+        // No secret picker: echoed as `To` in the node's stored output.
+        variablePicker: false,
         info: "Email address of the recipient.",
         key: "To",
         required: true,
@@ -120,6 +122,8 @@ export const NodeSchemaActionSendMailV1: NodeSchemaDefinition = {
         id: "attachments",
         type: "expression-list",
         label: "Attachments",
+        // No secret picker: echoed as `AttachmentsSent` in the node's stored output.
+        variablePicker: false,
         info: 'Storage File IDs to attach. Use a literal File ID, or an expression such as {{$json.output.fileId}} or {{$node["NodeName"].json.output.fileId}} to resolve it per run.',
         key: "Attachments",
         required: false,

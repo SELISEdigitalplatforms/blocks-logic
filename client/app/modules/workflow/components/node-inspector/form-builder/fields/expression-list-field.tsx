@@ -7,6 +7,7 @@ import { Trash2 } from "lucide-react";
 import { FieldProps } from "../form-field.types";
 import { cn } from "@/lib/utils";
 import { ExpressionHighlighter } from "../utils/expression-highlighter";
+import { pickerTarget, SecretPicker, showsVariablePicker } from "./secret-picker";
 
 /**
  * Repeatable, single-column list of expression-highlighted text rows.
@@ -27,6 +28,7 @@ export const ExpressionListField = ({
   const [items, setItems] = useState<string[]>(Array.isArray(value) ? value : []);
 
   const isDisabled = typeof field.disabled === "function" ? false : field.disabled || readOnly;
+  const picker = showsVariablePicker(field, readOnly);
 
   const commit = (next: string[]) => {
     setItems(next);
@@ -86,6 +88,12 @@ export const ExpressionListField = ({
               />
             </ExpressionHighlighter>
           </div>
+          {picker && (
+            <SecretPicker
+              target={pickerTarget(field, `item ${index + 1}`)}
+              onPick={(token) => handleChange(index, token)}
+            />
+          )}
         </div>
       ))}
       <Button

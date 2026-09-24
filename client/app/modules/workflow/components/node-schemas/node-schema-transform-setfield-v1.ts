@@ -23,6 +23,8 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
         id: "set-fields",
         type: "key-type-value-pairs",
         label: "Set Fields",
+        // No secret picker: the resolved values become the node's stored output.
+        variablePicker: false,
         info: "Set fields",
         key: "manualMappingFields",
         dependsOn: {
@@ -81,6 +83,8 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
         id: "include-fields",
         type: "text",
         label: "Fields to Include",
+        // No secret picker: field names, not values.
+        variablePicker: false,
         info: "Fields to include in the output items",
         key: "includedFields",
         dependsOn: {
@@ -92,6 +96,8 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
         id: "exclude-fields",
         type: "text",
         label: "Fields to Exclude",
+        // No secret picker: field names, not values.
+        variablePicker: false,
         info: "Fields to exclude from the output items",
         key: "excludeFields",
         dependsOn: {

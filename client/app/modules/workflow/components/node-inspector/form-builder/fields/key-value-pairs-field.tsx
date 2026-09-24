@@ -145,6 +145,7 @@ export const KeyValuePairsField = ({
               data={data}
               config={config}
               field={{ ...field, id: `${field.id}-val-${index}` }}
+              pickerLabel={`row ${index + 1} value`}
               className="rounded-t-none border-t-0 focus-visible:ring-0 focus-visible:ring-offset-0"
             />
           </div>

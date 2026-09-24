@@ -172,6 +172,8 @@ export const KeyTypeValueField = ({
                   data={data}
                   config={config}
                   field={field}
+                  variablePicker={pair.type === "string"}
+                  pickerLabel={`row ${index + 1} value`}
                   className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent min-h-[40px]"
                 />
               )}

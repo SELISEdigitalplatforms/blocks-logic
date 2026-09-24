@@ -119,6 +119,12 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
     operator?: "equals" | "notEquals" | "in";
   };
   transient?: boolean;
+  /**
+   * Show the `{{$VAR.name}}` secret picker on this field's value input(s). Default true on eligible
+   * types (text, textarea, expression, key-value / fixed-key-value / key-type-value pairs,
+   * expression-list). Set false where the resolved value would be logged or echoed back.
+   */
+  variablePicker?: boolean;
 }
 
 export interface FieldProps<T = unknown> {

@@ -39,7 +39,7 @@ import {
 } from "../utils";
 import { KeyCollisionWarning } from "./key-collision-warning";
 import { ProxyTestPanel } from "./proxy-test-panel";
-import { VariableInsertMenu } from "./variable-insert-menu";
+import { VariableInsertMenu } from "@/components/variable-insert-menu";
 
 type VariablePickerProps = {
   variables?: SecretListItem[];

@@ -7,6 +7,7 @@ import { Edge } from "@xyflow/react";
 import { EditorNode } from "@blocks-workflow/models/node.model";
 import { cn } from "@/lib/utils";
 import { ExpressionHighlighter } from "../utils/expression-highlighter";
+import { pickerTarget, SecretPicker, showsVariablePicker } from "./secret-picker";
 
 interface AncestorNode {
   id: string;
@@ -88,7 +89,14 @@ export const ExpressionInputField = ({
   config,
   className,
   placeholder="",
-}: FieldProps<string>) => {
+  variablePicker = true,
+  pickerLabel,
+}: FieldProps<string> & {
+  /** An embedding field turns the picker off for one row (e.g. a non-string key-type-value row). */
+  variablePicker?: boolean;
+  /** Accessible-name suffix for the picker, e.g. "row 2 value". */
+  pickerLabel?: string;
+}) => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [cursorPosition, setCursorPosition] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -268,9 +276,10 @@ export const ExpressionInputField = ({
   const filteredSuggestions = showSuggestions ? getFilteredSuggestions() : [];
 
   const isDisabled = typeof field.disabled === "function" ? false : field.disabled || readOnly;
+  const picker = variablePicker && showsVariablePicker(field, readOnly);
 
   return (
-    <div className={cn("relative flex-1")}>
+    <div className={cn("relative flex-1", picker && "flex items-center gap-1.5")}>
       <ExpressionHighlighter value={(value as string) || ""} isMultiline={false}>
         <Input
           ref={inputRef}
@@ -284,11 +293,14 @@ export const ExpressionInputField = ({
           className={cn("", className)}
         />
       </ExpressionHighlighter>
+      {picker && (
+        <SecretPicker target={pickerTarget(field, pickerLabel)} onPick={(token) => onChange(token)} />
+      )}
 
       {showSuggestions && filteredSuggestions.length > 0 && (
         <div
           ref={suggestionsRef}
-          className="absolute z-50 mt-1 w-full rounded-md border border-border bg-popover shadow-lg"
+          className="absolute left-0 top-full z-50 mt-1 w-full rounded-md border border-border bg-popover shadow-lg"
         >
           <div className="max-h-60 overflow-y-auto p-1">
             {filteredSuggestions.map((suggestion, index) => (

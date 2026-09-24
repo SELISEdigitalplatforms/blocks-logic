@@ -8,12 +8,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui-kits/dropdown-menu/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui-kits/tooltip/tooltip";
-import { SecretListItem } from "../types";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
+import { SecretListItem } from "@/models/secret";
 
 type Props = {
   variables?: SecretListItem[];
