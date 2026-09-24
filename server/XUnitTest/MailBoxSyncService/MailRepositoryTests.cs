@@ -1,6 +1,7 @@
 using Blocks.Genesis;
 using FluentAssertions;
 using Mail.DomainService.Entities;
+using MailBoxSyncService.Entities;
 using MailBoxSyncService.Services;
 using MongoDB.Driver;
 using Moq;
@@ -34,6 +35,24 @@ namespace XUnitTest.MailBoxSyncService
             await _repository.InsertAsync(mail, tenantId);
 
             _mockMailCollection.Verify(c => c.InsertOneAsync(mail, null, default), Times.Once);
+        }
+
+        [Fact]
+        public async Task SaveSyncCursorAsync_UpsertsTheConfigurationsCursorInTheTenantDatabase()
+        {
+            var cursor = new MailBoxSyncCursor { ConfigurationId = "cfg-in", MailboxAddress = "support@contoso.com", Cursor = "https://graph.microsoft.com/v1.0/delta" };
+            var collection = new Mock<IMongoCollection<MailBoxSyncCursor>>();
+
+            _mockDbContextProvider.Setup(db => db.GetDatabase("tenant-123")).Returns(_mockDatabase.Object);
+            _mockDatabase.Setup(db => db.GetCollection<MailBoxSyncCursor>("MailBoxSyncCursors", null)).Returns(collection.Object);
+
+            await _repository.SaveSyncCursorAsync(cursor, "tenant-123");
+
+            collection.Verify(c => c.ReplaceOneAsync(
+                It.IsAny<FilterDefinition<MailBoxSyncCursor>>(),
+                cursor,
+                It.Is<ReplaceOptions>(o => o.IsUpsert),
+                default), Times.Once);
         }
 
         [Fact]

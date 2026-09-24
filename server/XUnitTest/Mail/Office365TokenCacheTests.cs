@@ -41,8 +41,11 @@ namespace XUnitTest.Mail
                 NullLogger<CachingOffice365TokenProvider>.Instance);
         }
 
-        private static Office365TokenRequest Request(string tenant = "blocks-tenant", string reference = "secret-1") =>
-            new(tenant, "contoso-tenant", "mailer-app", reference);
+        private static Office365TokenRequest Request(
+            string tenant = "blocks-tenant",
+            string reference = "secret-1",
+            string scope = Office365TokenScopes.Graph) =>
+            new(tenant, "contoso-tenant", "mailer-app", reference, scope);
 
         /// <summary>Blocks Secrets refuses an unauthenticated or untenanted context.</summary>
         private static IDisposable TenantContext()
@@ -148,6 +151,25 @@ namespace XUnitTest.Mail
             _acquirer.Calls.Should().Be(3, "each key is its own credential and its own token");
         }
 
+        [Fact]
+        public async Task OneApplication_HoldsAGraphTokenAndAnExchangeTokenSeparately()
+        {
+            using var _ = TenantContext();
+            var provider = Provider();
+
+            // The sender and the IMAP poller share one application and one cache. Either token
+            // handed to the other resource is refused, so they must never collide on a key.
+            var graph = await provider.GetTokenAsync(Request(scope: Office365TokenScopes.Graph));
+            var exchange = await provider.GetTokenAsync(Request(scope: Office365TokenScopes.ExchangeOnline));
+
+            _acquirer.Calls.Should().Be(2);
+            exchange.Should().NotBe(graph);
+            _acquirer.Scopes.Should().Equal(Office365TokenScopes.Graph, Office365TokenScopes.ExchangeOnline);
+
+            (await provider.GetTokenAsync(Request(scope: Office365TokenScopes.Graph))).Should().Be(graph);
+            _acquirer.Calls.Should().Be(2, "each scope's token is reused on its own key");
+        }
+
         // ---------- C1 ----------
 
         [Fact]
@@ -241,6 +263,7 @@ namespace XUnitTest.Mail
             public TaskCompletionSource? Gate { get; set; }
             public ManualResetEventSlim Started { get; } = new(false);
             public string? LastSecret { get; private set; }
+            public System.Collections.Concurrent.ConcurrentQueue<string> Scopes { get; } = new();
 
             public async Task<Office365AccessToken> AcquireAsync(
                 Office365TokenRequest request,
@@ -249,6 +272,7 @@ namespace XUnitTest.Mail
             {
                 Interlocked.Increment(ref _calls);
                 LastSecret = clientSecret;
+                Scopes.Enqueue(request.Scope);
                 Started.Set();
 
                 if (Gate is not null)

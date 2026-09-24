@@ -47,15 +47,18 @@ namespace Mail.DomainService.Mails.Office365
     /// <remarks>
     /// Every field participates, and all of them compare ordinally. The Blocks tenant is in the
     /// key because a token is bought with that tenant's secret; the reference is in it because a
-    /// configuration repointed at a different secret must not keep using the old token.
+    /// configuration repointed at a different secret must not keep using the old token. The scope
+    /// is in it because one application holds a Graph token and an Exchange token at once, and
+    /// either one presented to the other resource is refused.
     /// </remarks>
     public readonly record struct Office365TokenCacheKey(
         string BlocksTenantId,
         string EntraTenantId,
         string ClientId,
-        string ClientSecretReference)
+        string ClientSecretReference,
+        string Scope)
     {
         public static Office365TokenCacheKey From(Office365TokenRequest request) =>
-            new(request.BlocksTenantId, request.EntraTenantId, request.ClientId, request.ClientSecretReference);
+            new(request.BlocksTenantId, request.EntraTenantId, request.ClientId, request.ClientSecretReference, request.Scope);
     }
 }

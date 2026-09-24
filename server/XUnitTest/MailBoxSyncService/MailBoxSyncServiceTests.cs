@@ -342,6 +342,33 @@ namespace XUnitTest.MailBoxSyncService
             factory.CreateCalls.Should().Be(2);
         }
 
+        [Fact]
+        public async Task StoreInboundAsync_StoresANewMessage_AndPublishesItsTrigger()
+        {
+            var stored = await _service.StoreInboundAsync(PasswordConfig(), "tenant-123", MessageWithId("new@example.com"));
+
+            stored.Should().BeTrue();
+            _mockRepository.Verify(r => r.InsertAsync(
+                It.Is<MailBoxEntity>(m =>
+                    m.MessageId == "new@example.com"
+                    && m.MailServerConfigurationId == "config-1"
+                    && m.Status == MailStatus.Received
+                    && m.IsInbound),
+                "tenant-123"), Times.Once);
+            _mockMessageClient.Verify(c => c.SendToConsumerAsync(It.IsAny<ConsumerMessage<EmailTriggerEvent>>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task StoreInboundAsync_AnAlreadyStoredMessage_WritesNothing()
+        {
+            _mockRepository.Setup(r => r.ExistsAsync("seen@example.com", "tenant-123")).ReturnsAsync(true);
+
+            var stored = await _service.StoreInboundAsync(PasswordConfig(), "tenant-123", MessageWithId("seen@example.com"));
+
+            stored.Should().BeFalse();
+            _mockRepository.Verify(r => r.InsertAsync(It.IsAny<MailBoxEntity>(), It.IsAny<string>()), Times.Never);
+        }
+
         private static MimeMessage MessageWithId(string id, string body = "body")
         {
             var message = new MimeMessage();

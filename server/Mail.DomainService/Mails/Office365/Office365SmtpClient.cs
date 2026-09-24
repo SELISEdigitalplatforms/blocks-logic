@@ -1,109 +1,39 @@
-using Blocks.Genesis;
-using Blocks.Secrets;
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using Mail.DomainService.Entities;
-using Mail.DomainService.Mails.Strategies;
-using Mail.DomainService.Shared.Enums;
 using Microsoft.Extensions.Logging;
 
 namespace Mail.DomainService.Mails.Office365
 {
     /// <summary>
-    /// Sends through Exchange Online with STARTTLS, authenticating with SASL XOAUTH2 or, for a
-    /// password record, the mailbox username and password.
+    /// Sends a password record through Exchange Online SMTP with STARTTLS and the mailbox
+    /// username and password.
     /// </summary>
     /// <remarks>
-    /// Never enters the legacy <c>SmtpClient</c> branch, whatever the record stores in that field:
-    /// the registry selects by provider first, so the transport question is already answered by
-    /// the time this runs. It never adds SES headers either — those belong to a different provider
-    /// and the contract refuses a record that asks for them.
+    /// Only the password half of Office 365. An OAuth record goes through Microsoft Graph
+    /// (<see cref="Office365GraphMailSender"/>) instead, which needs no SMTP AUTH on the tenant or
+    /// the mailbox and no Exchange service principal. Graph has no username/password mode, so this
+    /// is the only transport a password record can take.
+    /// <para>
+    /// Reached only through <see cref="Office365MailSender"/>, which has already validated the
+    /// record. It never adds SES headers — those belong to a different provider and the contract
+    /// refuses a record that asks for them.
+    /// </para>
     /// </remarks>
-    public class Office365SmtpClient : IOutboundMailSender, ISmtpClient
+    public class Office365SmtpClient : ISmtpClient
     {
-        private readonly IOffice365TokenProvider _tokenProvider;
         private readonly ILogger<Office365SmtpClient> _logger;
 
-        public Office365SmtpClient(IOffice365TokenProvider tokenProvider, ILogger<Office365SmtpClient> logger)
+        public Office365SmtpClient(ILogger<Office365SmtpClient> logger)
         {
-            _tokenProvider = tokenProvider;
             _logger = logger;
         }
 
-        public MailServiceProvider Provider => MailServiceProvider.Office365Smtp;
-
-        /// <summary>
-        /// True: every failure path here emits exactly one classified Office 365 error, so the
-        /// orchestrator's generic summary would be a second, less useful account of the same send.
-        /// </summary>
-        public bool EmitsOwnFailureDiagnostic => true;
-
         protected virtual IMailKitSmtpClient CreateSmtpClient() => new MailKitSmtpClientAdapter();
 
-        public async Task<bool> SendAsync(MailToBeSent mailToBeSent, MailBody mailBody)
+        public virtual async Task<bool> SendAsync(MailToBeSent mailToBeSent, MailBody mailBody)
         {
             var configuration = mailToBeSent.MailServerConfiguration;
-            var blocksTenantId = BlocksContext.GetContext()?.TenantId;
-
-            var invalid = Office365ConfigurationContract.Validate(configuration, blocksTenantId);
-            if (invalid is not null)
-            {
-                // Before any secret or network access, which is the point: a bad record costs one
-                // log line, not a vault read and a socket.
-                LogFailure(Office365FailureCode.ConfigInvalid, mailToBeSent, exception: null, reason: invalid);
-                return false;
-            }
-
-            if (configuration.AuthenticationType == MailAuthenticationType.Password)
-            {
-                // No token and no vault: the mailbox credentials are on the record, the same way
-                // they are for the other password providers.
-                return await SendAsync(
-                    mailToBeSent,
-                    mailBody,
-                    client => client.AuthenticateAsync(configuration.SenderUserName, configuration.AccountPassword))
-                    .ConfigureAwait(false);
-            }
-
-            string accessToken;
-            try
-            {
-                accessToken = await _tokenProvider.GetTokenAsync(
-                    new Office365TokenRequest(
-                        blocksTenantId!,
-                        configuration.TenantId!,
-                        configuration.ClientId!,
-                        configuration.ClientSecretReference!))
-                    .ConfigureAwait(false);
-            }
-            catch (SecretVaultException ex)
-            {
-                LogFailure(Office365FailureCode.VaultUnavailable, mailToBeSent, ex);
-                return false;
-            }
-            catch (SecretException ex)
-            {
-                LogFailure(Office365FailureCode.SecretResolutionFailed, mailToBeSent, ex);
-                return false;
-            }
-            catch (Exception ex)
-            {
-                LogFailure(Office365FailureCode.TokenAcquisitionFailed, mailToBeSent, ex);
-                return false;
-            }
-
-            return await SendAsync(
-                mailToBeSent,
-                mailBody,
-                client => client.AuthenticateAsync(new SaslMechanismOAuth2(configuration.MailboxAddress, accessToken)))
-                .ConfigureAwait(false);
-        }
-
-        private async Task<bool> SendAsync(
-            MailToBeSent mailToBeSent,
-            MailBody mailBody,
-            Func<IMailKitSmtpClient, Task> authenticate)
-        {
             var message = MailMessageComposer.Compose(mailToBeSent, mailBody);
 
             using var client = CreateSmtpClient();
@@ -123,7 +53,7 @@ namespace Mail.DomainService.Mails.Office365
                     Office365ConfigurationContract.SmtpPort,
                     SecureSocketOptions.StartTls).ConfigureAwait(false);
 
-                await authenticate(client).ConfigureAwait(false);
+                await client.AuthenticateAsync(configuration.SenderUserName, configuration.AccountPassword).ConfigureAwait(false);
 
                 await client.SendAsync(message).ConfigureAwait(false);
 
@@ -192,29 +122,13 @@ namespace Mail.DomainService.Mails.Office365
             _ => Office365FailureCode.SmtpFailed
         };
 
-        /// <summary>
-        /// The one classified error per failed send.
-        /// </summary>
-        /// <remarks>
-        /// Carries the code, the mail id, the correlation id, the provider, the fixed endpoint and
-        /// the exception type — and nothing else. No token, no secret, no secret reference, no
-        /// recipient, no message body, and no raw provider text: the exception is passed to the
-        /// logger as an exception so the sanitization policy applies to it, rather than being
-        /// interpolated into the message.
-        /// </remarks>
-        private void LogFailure(string code, MailToBeSent mailToBeSent, Exception? exception, string? reason = null)
-        {
-            _logger.LogError(
-                exception,
-                "MAIL FAILED (Office 365): FailureCode={FailureCode} ItemId={ItemId} CorrelationId={CorrelationId} Provider={Provider} Host={Host} Port={Port} ExceptionType={ExceptionType} Reason={Reason}",
+        private void LogFailure(string code, MailToBeSent mailToBeSent, Exception exception) =>
+            Office365FailureLog.Write(
+                _logger,
                 code,
-                mailToBeSent.ItemId,
-                mailToBeSent.CorrelationId ?? "none",
-                nameof(MailServiceProvider.Office365Smtp),
+                mailToBeSent,
                 Office365ConfigurationContract.SmtpHost,
                 Office365ConfigurationContract.SmtpPort,
-                exception?.GetType().Name ?? "none",
-                reason ?? "none");
-        }
+                exception);
     }
 }
