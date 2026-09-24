@@ -162,8 +162,8 @@ describe("KeyValueFieldArray", () => {
       await user.click(screen.getByRole("menuitem", { name: "stripe-api-key" }));
 
       expect(value.value).toBe("{{$VAR.stripe-api-key}}");
-      // the value now reads as a variable
-      expect(screen.getByText("variable")).toBeTruthy();
+      // no badge under the input: the token itself is the indicator
+      expect(screen.queryByText("variable")).toBeNull();
     });
 
     it("offers only the variable names passed in", async () => {

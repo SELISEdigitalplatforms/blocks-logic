@@ -77,11 +77,6 @@ const ValueCell = ({
                 ariaLabel={`Insert a configuration variable into ${label.toLowerCase()} value`}
               />
             </div>
-            {containsVarRef(valueField.value ?? "") ? (
-              <Badge variant="secondary" className="mt-1 w-fit rounded px-1.5 py-0 text-[10px]">
-                variable
-              </Badge>
-            ) : null}
             <FormMessage />
           </FormItem>
         );
