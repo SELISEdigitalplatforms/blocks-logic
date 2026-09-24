@@ -137,18 +137,17 @@ const ensureSelectionStyles = () => {
 
 type ChildProps = {
   onScroll?: React.UIEventHandler<HTMLElement>;
-  onFocus?: React.FocusEventHandler<HTMLElement>;
   className?: string;
   style?: React.CSSProperties;
   disabled?: boolean;
   readOnly?: boolean;
 };
 
-/** The in-field `{{$VAR.name}}` key button. The token is inserted at the caret. */
+/** The in-field `{{$VAR.name}}` key button. A pick replaces the whole value with the token. */
 export type VariablePickerConfig = {
   /** What the picker fills, for its accessible name, e.g. "Headers row 2 value". */
   target: string;
-  /** Receives the whole new value, with the token inserted. */
+  /** Receives the new value: the picked token. */
   onChange: (next: string) => void;
 };
 
@@ -177,27 +176,19 @@ export const ExpressionHighlighter = ({
   const { nodes } = useWorkflow();
   const backdropRef = useRef<HTMLDivElement | null>(null);
   const controlRef = useRef<Control | null>(null);
-  // Until the control has been focused its caret is meaningless, so a pick appends instead.
-  const focusedRef = useRef(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const picker =
     variablePicker && !children.props.disabled && !children.props.readOnly ? variablePicker : null;
 
+  // A pick replaces the whole value, as the proxy form's picker does.
   const insertToken = (token: string) => {
     if (!picker) return;
-    const control = controlRef.current;
-    const current = value || "";
-    const useCaret = control && focusedRef.current;
-    const start = useCaret ? (control.selectionStart ?? current.length) : current.length;
-    const end = useCaret ? (control.selectionEnd ?? start) : start;
-    picker.onChange(current.slice(0, start) + token + current.slice(end));
-
-    const caret = start + token.length;
+    picker.onChange(token);
     setTimeout(() => {
       const node = controlRef.current;
       if (!node) return;
       node.focus();
-      node.setSelectionRange(caret, caret);
+      node.setSelectionRange(token.length, token.length);
     }, 0);
   };
 
@@ -275,16 +266,12 @@ export const ExpressionHighlighter = ({
 
   const childRef = (children as unknown as { ref?: React.Ref<Control> }).ref;
 
-  const refAndFocus = {
+  const refProps = {
     ref: (node: Control | null) => {
       attachControl(node);
       if (typeof childRef === "function") childRef(node);
       else if (childRef && typeof childRef === "object")
         (childRef as React.MutableRefObject<Control | null>).current = node;
-    },
-    onFocus: (e: React.FocusEvent<HTMLElement>) => {
-      focusedRef.current = true;
-      children.props.onFocus?.(e);
     },
   };
 
@@ -302,7 +289,7 @@ export const ExpressionHighlighter = ({
 
   const enhancedChild = React.cloneElement(children, {
     spellCheck: false,
-    ...refAndFocus,
+    ...refProps,
     onScroll: (e: React.UIEvent<HTMLElement>) => {
       syncBackdrop();
       children.props.onScroll?.(e);

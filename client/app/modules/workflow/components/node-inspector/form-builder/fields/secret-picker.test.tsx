@@ -60,7 +60,7 @@ describe("showsVariablePicker", () => {
 });
 
 describe("secret picker on workflow fields", () => {
-  it("appends the token to a text field that was never focused", async () => {
+  it("replaces the field's text with the picked token", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     renderWithProviders(
@@ -69,21 +69,7 @@ describe("secret picker on workflow fields", () => {
 
     expect(pickers()).toHaveLength(1);
     await pick(user, pickers()[0]);
-    expect(onChange).toHaveBeenLastCalledWith(`Bearer ${TOKEN}`);
-  });
-
-  it("inserts the token at the caret, replacing the selection", async () => {
-    const user = userEvent.setup();
-    const onChange = vi.fn();
-    renderWithProviders(
-      <TextField field={field()} value="a-XX-b" onChange={onChange} data={{}} config={cfg} />,
-    );
-
-    const input = screen.getByRole("textbox") as HTMLInputElement;
-    input.focus();
-    input.setSelectionRange(2, 4);
-    await pick(user, pickers()[0]);
-    expect(onChange).toHaveBeenLastCalledWith(`a-${TOKEN}-b`);
+    expect(onChange).toHaveBeenLastCalledWith(TOKEN);
   });
 
   it("lists the secrets in a popover", async () => {
@@ -163,7 +149,7 @@ describe("secret picker on workflow fields", () => {
 
     expect(pickers()).toHaveLength(4);
     await pick(user, screen.getByRole("button", { name: /into Headers row 2 value/ }));
-    expect(onChange).toHaveBeenLastCalledWith({ Authorization: "x", Accept: `json${TOKEN}` });
+    expect(onChange).toHaveBeenLastCalledWith({ Authorization: "x", Accept: TOKEN });
     expect(screen.getByRole("button", { name: /into Headers row 1 key/ })).toBeTruthy();
   });
 
