@@ -47,11 +47,16 @@ export const Proxies = () => {
         {!isEmpty && (
           <CardHeader className="mb-0 flex flex-row items-center justify-between">
             <ProxyFilterToolBar />
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <VariablesButton className="hidden" />
-              <Button className="gap-2" onClick={() => navigate(scoped("proxy/new"))}>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-primary hover:text-primary"
+                onClick={() => navigate(scoped("proxy/new"))}
+              >
                 <Plus className="h-4 w-4" />
-                Add proxy
+                <span className="sr-only sm:not-sr-only sm:ml-2.5">Add proxy</span>
               </Button>
             </div>
           </CardHeader>
