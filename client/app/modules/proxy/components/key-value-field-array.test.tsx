@@ -4,7 +4,7 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
 import { Form } from "@/components/ui-kits/form/form";
-import { ProxyFormValues, SecretListItem } from "../types";
+import { ProxyCredentialRow, ProxyFormValues, SecretListItem } from "../types";
 import { KeyValueFieldArray } from "./key-value-field-array";
 
 const VARIABLES: SecretListItem[] = [
@@ -80,7 +80,47 @@ const FooterHarness = () => {
   );
 };
 
+const CredentialsHarness = ({ credentials }: { credentials: ProxyCredentialRow[] }) => {
+  const form = useForm<ProxyFormValues>({ defaultValues: { ...baseDefaults, credentials } });
+
+  return (
+    <Form {...form}>
+      <KeyValueFieldArray
+        control={form.control}
+        name="credentials"
+        label="Credentials"
+        addLabel="Add"
+        sendAsColumn
+      />
+    </Form>
+  );
+};
+
+const duplicateWarnings = () =>
+  screen.queryAllByText(
+    (_, element) =>
+      element?.tagName === "P" && /^Duplicate — only the last/.test(element.textContent ?? ""),
+  );
+
 describe("KeyValueFieldArray", () => {
+  it("warns on duplicate credential keys within the same delivery only", () => {
+    renderWithProviders(
+      <CredentialsHarness
+        credentials={[
+          { key: "X-Api-Key", value: "1", sendAs: "header" },
+          { key: "x-api-key", value: "2", sendAs: "header" },
+          { key: "api_key", value: "3", sendAs: "query" },
+          { key: "API_KEY", value: "4", sendAs: "query" },
+          { key: "X-Api-Key", value: "5", sendAs: "query" },
+        ]}
+      />,
+    );
+
+    // The two header rows collide (case-insensitive); the query rows differ in case, and the
+    // query row named like a header is a different kind.
+    expect(duplicateWarnings()).toHaveLength(2);
+  });
+
   it("adds and removes injected rows", async () => {
     const user = userEvent.setup();
     renderWithProviders(<Harness />);
@@ -109,8 +149,7 @@ describe("KeyValueFieldArray", () => {
   });
 
   describe("configuration-variable picker", () => {
-    const trigger = () =>
-      screen.getByRole("button", { name: /insert a configuration variable/i });
+    const trigger = () => screen.getByRole("button", { name: /insert a configuration variable/i });
 
     it("lists the tenant's variables and replaces the value with the token", async () => {
       const user = userEvent.setup();

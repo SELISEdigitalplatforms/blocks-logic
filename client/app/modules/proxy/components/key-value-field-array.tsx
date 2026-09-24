@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { Control, useFieldArray } from "react-hook-form";
+import { Control, useFieldArray, useWatch } from "react-hook-form";
 import { Plus, Trash2, Variable } from "lucide-react";
 import { Badge } from "@/components/ui-kits/badge/badge";
 import { Button } from "@/components/ui-kits/button/button";
@@ -12,8 +12,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui-kits/select/select";
-import { ProxyCredentialRow, ProxyFormValues, SecretListItem } from "../types";
-import { buildVarToken, containsVarRef } from "../utils";
+import { ProxyCredentialRow, ProxyFormValues, ProxyKeyValue, SecretListItem } from "../types";
+import { buildVarToken, containsVarRef, KeyCollision, KeyKind, keyCollisions } from "../utils";
+import { KeyCollisionWarning } from "./key-collision-warning";
 import { VariableInsertMenu } from "./variable-insert-menu";
 import { VariablesButton } from "./variables-button";
 
@@ -52,8 +53,7 @@ const ValueCell = ({
   variables,
   variablesLoading,
   variablesError,
-}: Pick<Props, "control" | "name" | "label"> &
-  VariablePickerProps & { index: number }) => {
+}: Pick<Props, "control" | "name" | "label"> & VariablePickerProps & { index: number }) => {
   return (
     <FormField
       control={control}
@@ -64,34 +64,58 @@ const ValueCell = ({
         };
 
         return (
-        <FormItem>
-          <div className="flex items-center gap-1.5">
-            <FormControl>
-              <Input
-                placeholder="Enter value"
-                className="font-mono text-xs"
-                {...valueField}
+          <FormItem>
+            <div className="flex items-center gap-1.5">
+              <FormControl>
+                <Input placeholder="Enter value" className="font-mono text-xs" {...valueField} />
+              </FormControl>
+              <VariableInsertMenu
+                variables={variables}
+                variablesLoading={variablesLoading}
+                variablesError={variablesError}
+                onPick={insert}
+                ariaLabel={`Insert a configuration variable into ${label.toLowerCase()} value`}
               />
-            </FormControl>
-            <VariableInsertMenu
-              variables={variables}
-              variablesLoading={variablesLoading}
-              variablesError={variablesError}
-              onPick={insert}
-              ariaLabel={`Insert a configuration variable into ${label.toLowerCase()} value`}
-            />
-          </div>
-          {containsVarRef(valueField.value ?? "") ? (
-            <Badge variant="secondary" className="mt-1 w-fit rounded px-1.5 py-0 text-[10px]">
-              variable
-            </Badge>
-          ) : null}
-          <FormMessage />
-        </FormItem>
+            </div>
+            {containsVarRef(valueField.value ?? "") ? (
+              <Badge variant="secondary" className="mt-1 w-fit rounded px-1.5 py-0 text-[10px]">
+                variable
+              </Badge>
+            ) : null}
+            <FormMessage />
+          </FormItem>
         );
       }}
     />
   );
+};
+
+type Row = ProxyKeyValue & { sendAs?: ProxyCredentialRow["sendAs"] };
+
+/**
+ * Which kind of key each row is, for the same-name checks. Credential rows follow their delivery;
+ * body fields have their own uniqueness validation, so they get none.
+ */
+const rowKind = (name: Props["name"], row: Row | undefined): KeyKind | null => {
+  if (name === "credentials") return row?.sendAs === "query" ? "query" : "header";
+  if (name === "headers") return "header";
+  if (name === "query") return "query";
+  return null;
+};
+
+/** Duplicate-key checks, run within each kind so a header and a query param may share a name. */
+const duplicateCollisions = (name: Props["name"], rows: Row[]): (KeyCollision | undefined)[] => {
+  const out: (KeyCollision | undefined)[] = rows.map(() => undefined);
+  (["header", "query"] as const).forEach((kind) => {
+    const indexes = rows.flatMap((row, i) => (rowKind(name, row) === kind ? [i] : []));
+    const collisions = keyCollisions(
+      indexes.map((i) => rows[i]),
+      [],
+      kind,
+    );
+    indexes.forEach((rowIndex, i) => (out[rowIndex] = collisions[i]));
+  });
+  return out;
 };
 
 export const KeyValueFieldArray = ({
@@ -109,6 +133,8 @@ export const KeyValueFieldArray = ({
   variablesError,
 }: Props) => {
   const { fields, append, remove } = useFieldArray({ control, name });
+  const liveRows = (useWatch({ control, name }) ?? []) as Row[];
+  const collisions = duplicateCollisions(name, liveRows);
 
   const addButton = (
     <Button
@@ -163,73 +189,84 @@ export const KeyValueFieldArray = ({
             <span className="text-sm font-medium">{label}</span>
           ) : null}
           <div className="space-y-2">
-            {fields.map((field, index) => (
-              <div
-                key={field.id}
-                className={
-                  sendAsColumn
-                    ? "grid gap-2 bg-background md:grid-cols-[1fr_1fr_130px_auto]"
-                    : "grid gap-2 bg-background md:grid-cols-[1fr_1fr_auto]"
-                }
-              >
-                <FormField
-                  control={control}
-                  name={`${name}.${index}.key`}
-                  render={({ field: keyField }) => (
-                    <FormItem>
-                      <FormControl>
-                        <Input
-                          placeholder="Enter key"
-                          className="font-mono text-xs"
-                          {...keyField}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <ValueCell
-                  control={control}
-                  name={name}
-                  index={index}
-                  label={label}
-                  variables={variables}
-                  variablesLoading={variablesLoading}
-                  variablesError={variablesError}
-                />
-                {sendAsColumn ? (
-                  <FormField
-                    control={control}
-                    name={`credentials.${index}.sendAs`}
-                    render={({ field: sendAsField }) => (
-                      <FormItem>
-                        <Select value={sendAsField.value} onValueChange={sendAsField.onChange}>
+            {fields.map((field, index) => {
+              const kind = rowKind(name, liveRows[index]);
+              return (
+                <div key={field.id}>
+                  <div
+                    className={
+                      sendAsColumn
+                        ? "grid gap-2 bg-background md:grid-cols-[1fr_1fr_130px_auto]"
+                        : "grid gap-2 bg-background md:grid-cols-[1fr_1fr_auto]"
+                    }
+                  >
+                    <FormField
+                      control={control}
+                      name={`${name}.${index}.key`}
+                      render={({ field: keyField }) => (
+                        <FormItem>
                           <FormControl>
-                            <SelectTrigger aria-label="Send as" className="text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
+                            <Input
+                              placeholder="Enter key"
+                              className="font-mono text-xs"
+                              {...keyField}
+                            />
                           </FormControl>
-                          <SelectContent>
-                            <SelectItem value="header">as header</SelectItem>
-                            <SelectItem value="query">as query param</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </FormItem>
-                    )}
-                  />
-                ) : null}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  aria-label={`Remove ${label.toLowerCase()} row`}
-                  className="h-10 w-10 text-muted-foreground hover:text-destructive"
-                  onClick={() => remove(index)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <ValueCell
+                      control={control}
+                      name={name}
+                      index={index}
+                      label={label}
+                      variables={variables}
+                      variablesLoading={variablesLoading}
+                      variablesError={variablesError}
+                    />
+                    {sendAsColumn ? (
+                      <FormField
+                        control={control}
+                        name={`credentials.${index}.sendAs`}
+                        render={({ field: sendAsField }) => (
+                          <FormItem>
+                            <Select value={sendAsField.value} onValueChange={sendAsField.onChange}>
+                              <FormControl>
+                                <SelectTrigger aria-label="Send as" className="text-xs">
+                                  <SelectValue />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="header">as header</SelectItem>
+                                <SelectItem value="query">as query param</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </FormItem>
+                        )}
+                      />
+                    ) : null}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Remove ${label.toLowerCase()} row`}
+                      className="h-10 w-10 text-muted-foreground hover:text-destructive"
+                      onClick={() => remove(index)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  {kind ? (
+                    <KeyCollisionWarning
+                      rowKey={liveRows[index]?.key ?? ""}
+                      kind={kind}
+                      collision={collisions[index]}
+                    />
+                  ) : null}
+                </div>
+              );
+            })}
             {!fields.length ? (
               <div className="rounded-lg border border-dashed bg-muted/20 px-4 py-3">
                 <p className="text-xs text-muted-foreground">No injected values.</p>
@@ -245,9 +282,7 @@ export const KeyValueFieldArray = ({
           {variablesError ||
           (!variablesLoading && Array.isArray(variables) && variables.length === 0) ? (
             <p className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-              {variablesError
-                ? "Unable to load secret keys."
-                : "No configuration variables yet."}
+              {variablesError ? "Unable to load secret keys." : "No configuration variables yet."}
               <VariablesButton className="h-7 px-2 text-xs" />
             </p>
           ) : null}
