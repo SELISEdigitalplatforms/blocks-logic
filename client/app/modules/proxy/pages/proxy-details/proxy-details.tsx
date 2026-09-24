@@ -204,12 +204,10 @@ const EndpointsSection = ({
 const MetricCard = ({
   label,
   value,
-  note,
   danger,
 }: {
   label: string;
   value: string;
-  note: string;
   danger?: boolean;
 }) => (
   <Card className="rounded-xl">
@@ -218,7 +216,6 @@ const MetricCard = ({
       <p className={cn("mt-2 text-2xl font-bold", danger ? "text-destructive" : "text-foreground")}>
         {value}
       </p>
-      <p className="mt-1 text-sm text-muted-foreground">{note}</p>
     </CardContent>
   </Card>
 );
@@ -231,7 +228,6 @@ const ProxyOverviewSkeleton = () => (
           <CardContent className="space-y-3 p-0">
             <Skeleton className="h-3 w-24" />
             <Skeleton className="h-8 w-20" />
-            <Skeleton className="h-4 w-28" />
           </CardContent>
         </Card>
       ))}
@@ -554,19 +550,16 @@ export const ProxyDetails = () => {
               <>
                 <div className="grid gap-4 md:grid-cols-3">
                   <MetricCard
-                    label="Calls 24h"
+                    label="Last 24h calls"
                     value={calls24h.toLocaleString()}
-                    note="through the proxy"
                   />
                   <MetricCard
                     label="Avg latency"
                     value={`${averageLatency} ms`}
-                    note="end to end"
                   />
                   <MetricCard
                     label="Error rate"
                     value={`${errorRate}%`}
-                    note="4xx + 5xx"
                     danger={errorRateIsHigh}
                   />
                 </div>
