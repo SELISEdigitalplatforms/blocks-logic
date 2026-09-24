@@ -1,3 +1,6 @@
+import { Button } from "@/components/ui-kits/button/button";
+import { copyToClipboard } from "@blocks-workflow/utils/copy-to-clipboard";
+import { Copy } from "lucide-react";
 import { DraggableArrayIndex, DraggableProperty } from "./draggable-property";
 import { formatCellValue } from "../utils/format.util";
 
@@ -87,8 +90,23 @@ export function JsonTab({ rows, nodeName, hasSinglePredecessor, isDraggable = tr
     return <p className="text-xs text-low-emphasis">No runtime input data available.</p>;
   }
 
+  const json = JSON.stringify(rows, null, 2);
+
   return (
     <div className="flex flex-col gap-3">
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          variant="ghost"
+          size="xxs"
+          className="h-7 px-2 text-low-emphasis"
+          aria-label="Copy input JSON"
+          title="Copy input JSON"
+          onClick={() => void copyToClipboard(json)}
+        >
+          <Copy className="h-4 w-4" />
+        </Button>
+      </div>
       {rows.map((row, index) => (
         <div key={index} className="rounded border border-border/60 p-2">
           <p className="mb-1 text-xs font-semibold text-medium-emphasis">item {index + 1}:</p>
