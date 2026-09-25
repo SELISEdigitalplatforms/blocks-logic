@@ -102,8 +102,8 @@ const locked = (
 });
 
 const ACCESS_OPTIONS = [
-  { value: "blocksToken", label: "Blocks token required" },
-  { value: "public", label: "Public (anyone with the URL)" },
+  { value: "blocksToken", label: "Blocks token" },
+  { value: "public", label: "Public" },
 ];
 
 const ruleLabel = (list: string, mode: string) =>
@@ -118,11 +118,9 @@ export const buildProxyRouteDetails = (
   method: string,
   path: string,
 ): ReadonlyDetails => {
-  const link = { label: "Edit proxy", path: `proxy/${proxy.id}/edit` };
-
   const route = findRoute(proxy, method, path);
   if (route === undefined) {
-    return { fields: [], message: "This endpoint no longer exists on the proxy.", link };
+    return { fields: [], message: "This endpoint no longer exists on the proxy." };
   }
 
   const effective = resolveEffectiveRoute(proxy, method as ProxyMethod, route);
@@ -207,13 +205,18 @@ export const buildProxyRouteDetails = (
   if (selects) {
     fields.push(
       locked(
-        { id: "responseInclude", type: "expression-list", label: "Response fields" },
+        {
+          id: "responseInclude",
+          type: "path-list",
+          label: "Response fields",
+          info: "The only fields returned in the response body. Nested fields are written with dots.",
+        },
         effective.responseInclude,
       ),
     );
   }
 
-  return { fields, link };
+  return { fields };
 };
 
 export const NodeSchemaActionProxy: NodeSchemaDefinition = {

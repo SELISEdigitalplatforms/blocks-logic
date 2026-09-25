@@ -17,6 +17,7 @@ import { TextField } from "./text-field";
 import { TextareaField } from "./textarea-field";
 import { ExpressionInputField } from "./expression-input-field";
 import { ExpressionListField } from "./expression-list-field";
+import { PathListField } from "./path-list-field";
 import { FixedKeyValuePairsField } from "./fixed-key-value-pairs-field";
 import { DisplayField } from "./display-field";
 import { ConditionsField } from "./conditions-field";
@@ -54,6 +55,7 @@ export const FIELD_COMPONENTS_REGISTRY: Record<
   conditions: ConditionsField,
   array: ArrayField,
   "expression-list": ExpressionListField,
+  "path-list": PathListField,
   expression: ExpressionInputField,
   display: DisplayField,
   "schema-fields": SchemaFieldsField,

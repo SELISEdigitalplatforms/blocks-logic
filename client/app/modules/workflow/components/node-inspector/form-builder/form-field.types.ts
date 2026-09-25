@@ -19,6 +19,7 @@ export type FormFieldType =
   | "key-type-value-pairs"
   | "array"
   | "expression-list"
+  | "path-list"
   | "schema-fields"
   | "schema-field-picker"
   | "conditions"

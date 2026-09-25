@@ -862,7 +862,7 @@ describe("action proxy v1", () => {
       expect(entry(details, "responseSelect")?.field.type).toBe("switch");
       expect(valueOf(details, "responseSelect")).toBe(false);
       expect(entry(details, "responseInclude")).toBeUndefined();
-      expect(details.link).toEqual({ label: "Edit proxy", path: "proxy/p1/edit" });
+      expect(details.link).toBeUndefined();
     });
 
     it("gives every field a unique, prefixed id", () => {
@@ -924,7 +924,7 @@ describe("action proxy v1", () => {
       expect(valueOf(details, "upstream")).toBe("https://api.vendor.test/v1/v2/orders/{id}");
       expect(valueOf(details, "headers")).toEqual({ authorization: "Bearer other" });
       expect(valueOf(details, "responseSelect")).toBe(true);
-      expect(entry(details, "responseInclude")?.field.type).toBe("expression-list");
+      expect(entry(details, "responseInclude")?.field.type).toBe("path-list");
       expect(valueOf(details, "responseInclude")).toEqual(["data.id", "items[].name"]);
     });
 
@@ -974,7 +974,7 @@ describe("action proxy v1", () => {
 
       expect(details.fields).toEqual([]);
       expect(details.message).toBe("This endpoint no longer exists on the proxy.");
-      expect(details.link).toEqual({ label: "Edit proxy", path: "proxy/p1/edit" });
+      expect(details.link).toBeUndefined();
     });
 
     it("shares one proxy fetch between the Endpoint options and the panel", async () => {
