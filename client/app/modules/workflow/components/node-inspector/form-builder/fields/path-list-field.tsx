@@ -11,8 +11,9 @@ const splitPath = (path: string) => {
 
 /**
  * Read-only list of dotted field paths (e.g. the response fields a proxy returns), sorted by name
- * so nested paths sit under their parents. The parent segments are dimmed to make the leaf stand
- * out, and a long list scrolls inside its own box. Value shape is `string[]`.
+ * so nested paths sit under their parents. Each path is a chip styled like the input panel's
+ * schema fields, with the parent segments dimmed; a long list scrolls inside its own box.
+ * Value shape is `string[]`.
  */
 export const PathListField = ({ field, value, className }: FieldProps<string[]>) => {
   const paths = (Array.isArray(value) ? value : [])
@@ -20,25 +21,26 @@ export const PathListField = ({ field, value, className }: FieldProps<string[]>)
     .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base", numeric: true }));
 
   return (
-    <div
+    <ul
       id={field.id}
-      className={cn("overflow-hidden rounded-md border border-input bg-muted/30", className)}
+      className={cn(
+        "flex max-h-48 flex-col items-start gap-1 overflow-y-auto rounded border border-border/60 p-2",
+        className,
+      )}
     >
-      <div className="flex items-center justify-between border-b border-input px-3 py-1.5 text-xs text-muted-foreground">
-        <span>Field</span>
-        <span>{paths.length}</span>
-      </div>
-      <ul className="max-h-48 divide-y divide-border overflow-y-auto">
-        {paths.map((path) => {
-          const { parent, leaf } = splitPath(path);
-          return (
-            <li key={path} className="break-all px-3 py-1.5 font-mono text-xs" title={path}>
-              <span className="text-muted-foreground">{parent}</span>
-              <span className="text-foreground">{leaf}</span>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
+      {paths.map((path) => {
+        const { parent, leaf } = splitPath(path);
+        return (
+          <li
+            key={path}
+            title={path}
+            className="break-all rounded-md border border-border/80 bg-white px-1.5 py-0.5 font-mono text-xs shadow-sm dark:bg-gray-800"
+          >
+            <span className="text-low-emphasis">{parent}</span>
+            <span className="text-high-emphasis">{leaf}</span>
+          </li>
+        );
+      })}
+    </ul>
   );
 };

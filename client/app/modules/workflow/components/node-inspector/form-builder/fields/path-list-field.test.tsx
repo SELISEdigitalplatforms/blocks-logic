@@ -9,7 +9,7 @@ const cfg: any = { tenantId: "pk", workflowId: "wf", nodeId: "n1" };
 const field: FieldSchema = { id: "fields", key: "fields", type: "path-list" };
 
 describe("PathListField", () => {
-  it("lists the paths sorted by name, nested ones under their parent, with a count", () => {
+  it("lists the paths sorted by name, nested ones under their parent", () => {
     renderWithProviders(
       <PathListField
         field={field}
@@ -22,6 +22,5 @@ describe("PathListField", () => {
 
     const rows = screen.getAllByRole("listitem").map((row) => row.textContent);
     expect(rows).toEqual(["Amount", "id", "items[].sku", "user.address.city", "user.name"]);
-    expect(screen.getByText("5")).toBeTruthy();
   });
 });
