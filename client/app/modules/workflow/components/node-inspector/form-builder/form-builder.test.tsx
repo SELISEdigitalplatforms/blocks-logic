@@ -234,4 +234,19 @@ describe("FormBuilder", () => {
     expect(payload.keep).toBe("x");
     expect("temp" in payload).toBe(false);
   });
+
+  it("keeps every write when two forced switches save in the same commit", async () => {
+    const spy = vi.fn();
+    const forced = (id: string): FieldSchema => ({
+      id,
+      key: id,
+      type: "switch",
+      label: id,
+      locked: async () => true,
+    });
+    render([forced("first"), forced("second")], {}, spy);
+    await waitFor(() =>
+      expect(spy).toHaveBeenLastCalledWith(expect.objectContaining({ first: true, second: true })),
+    );
+  });
 });
