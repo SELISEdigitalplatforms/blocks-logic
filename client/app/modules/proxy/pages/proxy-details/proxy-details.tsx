@@ -549,19 +549,9 @@ export const ProxyDetails = () => {
             ) : (
               <>
                 <div className="grid gap-4 md:grid-cols-3">
-                  <MetricCard
-                    label="Last 24h calls"
-                    value={calls24h.toLocaleString()}
-                  />
-                  <MetricCard
-                    label="Avg latency"
-                    value={`${averageLatency} ms`}
-                  />
-                  <MetricCard
-                    label="Error rate"
-                    value={`${errorRate}%`}
-                    danger={errorRateIsHigh}
-                  />
+                  <MetricCard label="Last 24h calls" value={calls24h.toLocaleString()} />
+                  <MetricCard label="Avg latency" value={`${averageLatency} ms`} />
+                  <MetricCard label="Error rate" value={`${errorRate}%`} danger={errorRateIsHigh} />
                 </div>
 
                 <Card className="rounded-xl">
@@ -586,7 +576,7 @@ export const ProxyDetails = () => {
                         <p className="text-2xl font-bold leading-none">{addedCount}</p>
                         <p className="mt-3 text-sm text-primary">{addedSummary}</p>
                       </ConfigurationStepCard>
-                      <ConfigurationStepCard eyebrow="Third party receives">
+                      <ConfigurationStepCard eyebrow="Forwards to">
                         <p className="break-all font-mono text-sm text-foreground">
                           {proxy.upstreamUrl}
                         </p>
@@ -609,7 +599,9 @@ export const ProxyDetails = () => {
                       <p className="mt-1 text-sm font-medium">
                         {proxy.access.kind === "public" ? "Public" : "Blocks token"}
                       </p>
-                      <p className="text-xs text-muted-foreground">{describeProxyAccess(proxy.access)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {describeProxyAccess(proxy.access)}
+                      </p>
                     </div>
                     <EndpointsSection proxy={proxy} clientUrlFor={clientUrlFor} />
                   </CardContent>
