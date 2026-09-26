@@ -9,7 +9,11 @@ const toasts = vi.hoisted(() => ({
   showSuccessToast: vi.fn(),
   showInfoToast: vi.fn(),
 }));
+const clipboard = vi.hoisted(() => ({
+  copyToClipboard: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("@/hooks/use-toast", () => toasts);
+vi.mock("@blocks-workflow/utils/copy-to-clipboard", () => clipboard);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const node = (extra: Record<string, unknown> = {}): any => ({
@@ -28,7 +32,9 @@ const seedSelected = (extra: Record<string, unknown> = {}) => (store: any) => {
   store.setState({ selectedNode: n, editorMode: "editor" });
 };
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 describe("OutputPanel", () => {
   it("renders nothing without a selected node", () => {
@@ -107,6 +113,10 @@ describe("OutputPanel", () => {
     await user.click(screen.getByRole("tab", { name: "JSON" }));
     await waitFor(() =>
       expect(document.querySelector("pre code")).toBeTruthy(),
+    );
+    await user.click(screen.getByRole("button", { name: "Copy output JSON" }));
+    expect(clipboard.copyToClipboard).toHaveBeenCalledWith(
+      JSON.stringify([{ name: "Ada" }], null, 2),
     );
   });
 

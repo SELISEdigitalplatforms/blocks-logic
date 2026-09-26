@@ -214,6 +214,7 @@ namespace XUnitTest.Proxy
 
             result.TotalCount.Should().Be(2);
             var row = result.Data!.Single();
+            row.Upstream.Should().Be("https://api.stripe.com/v1/charges");
             row.UpstreamMasked.Should().Be("api.st••••.com/•••");
             row.InjectedCredential.Should().BeTrue();
             row.HeaderCount.Should().Be(1);

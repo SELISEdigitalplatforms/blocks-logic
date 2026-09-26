@@ -1,10 +1,9 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { useProjectStore, useScopedPath } from "@seliseblocks/genesis-os";
-import { EllipsisVertical, Eye, EyeOff, Loader2, Pause, Pen, Play, Trash2 } from "lucide-react";
+import { EllipsisVertical, Loader2, Pause, Pen, Play, Trash2 } from "lucide-react";
 import PageBreadcrumb from "@/components/breadcrumb/breadcrumb";
 import { BREADCRUMB_CUSTOM_TITLES } from "@/constants/breadcrumb-custom-title";
-import { Badge } from "@/components/ui-kits/badge/badge";
 import { Button } from "@/components/ui-kits/button/button";
 import { Card, CardContent, CardHeader } from "@/components/ui-kits/card/card";
 import {
@@ -27,7 +26,7 @@ import { cn } from "@/lib/utils";
 import { getProxyClientUrl } from "../../constants";
 import { useGetProxyById, useGetProxyOverview, useToggleProxy } from "../../hooks";
 import { Proxy, ProxyKeyValue, ProxyRoute, ResponseFieldNode } from "../../types";
-import { containsVarRef, describeProxyAccess, pathsToTree } from "../../utils";
+import { describeProxyAccess, pathsToTree } from "../../utils";
 import { ProxyMethodBadge } from "../../components/proxy-method-badge";
 import { ProxyMethodChips } from "../../components/proxy-method-chips";
 import { ProxyStatusBadge } from "../../components/proxy-status-badge";
@@ -63,14 +62,6 @@ const KeyValueRows = ({
             >
               <div className="flex min-w-0 items-center gap-2">
                 <span className="truncate font-mono font-semibold text-foreground">{row.key}</span>
-                {containsVarRef(row.value) ? (
-                  <Badge
-                    variant="success"
-                    className="w-fit shrink-0 font-mono text-[11px] font-bold leading-none tracking-normal lowercase"
-                  >
-                    variable
-                  </Badge>
-                ) : null}
               </div>
               {/* Values are shown as configured: a variable reference already hides the secret behind its name. */}
               <span className="min-w-0 break-all font-mono text-muted-foreground">{row.value}</span>
@@ -213,12 +204,10 @@ const EndpointsSection = ({
 const MetricCard = ({
   label,
   value,
-  note,
   danger,
 }: {
   label: string;
   value: string;
-  note: string;
   danger?: boolean;
 }) => (
   <Card className="rounded-xl">
@@ -227,7 +216,6 @@ const MetricCard = ({
       <p className={cn("mt-2 text-2xl font-bold", danger ? "text-destructive" : "text-foreground")}>
         {value}
       </p>
-      <p className="mt-1 text-sm text-muted-foreground">{note}</p>
     </CardContent>
   </Card>
 );
@@ -240,7 +228,6 @@ const ProxyOverviewSkeleton = () => (
           <CardContent className="space-y-3 p-0">
             <Skeleton className="h-3 w-24" />
             <Skeleton className="h-8 w-20" />
-            <Skeleton className="h-4 w-28" />
           </CardContent>
         </Card>
       ))}
@@ -382,7 +369,6 @@ export const ProxyDetails = () => {
   const { pathname } = useLocation();
   const params = useParams<{ proxyId?: string }>();
   const proxyId = params.proxyId;
-  const [showUpstream, setShowUpstream] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const { data: proxy, isLoading, isFetched } = useGetProxyById(proxyId);
@@ -563,22 +549,9 @@ export const ProxyDetails = () => {
             ) : (
               <>
                 <div className="grid gap-4 md:grid-cols-3">
-                  <MetricCard
-                    label="Calls 24h"
-                    value={calls24h.toLocaleString()}
-                    note="through the proxy"
-                  />
-                  <MetricCard
-                    label="Avg latency"
-                    value={`${averageLatency} ms`}
-                    note="end to end"
-                  />
-                  <MetricCard
-                    label="Error rate"
-                    value={`${errorRate}%`}
-                    note="4xx + 5xx"
-                    danger={errorRateIsHigh}
-                  />
+                  <MetricCard label="Last 24h calls" value={calls24h.toLocaleString()} />
+                  <MetricCard label="Avg latency" value={`${averageLatency} ms`} />
+                  <MetricCard label="Error rate" value={`${errorRate}%`} danger={errorRateIsHigh} />
                 </div>
 
                 <Card className="rounded-xl">
@@ -599,31 +572,14 @@ export const ProxyDetails = () => {
                           listed below
                         </p>
                       </ConfigurationStepCard>
-                      <ConfigurationStepCard eyebrow="→ Blocks adds" active>
+                      <ConfigurationStepCard eyebrow="Blocks adds" active>
                         <p className="text-2xl font-bold leading-none">{addedCount}</p>
                         <p className="mt-3 text-sm text-primary">{addedSummary}</p>
                       </ConfigurationStepCard>
-                      <ConfigurationStepCard eyebrow="→ Third party receives">
-                        <div className="flex items-start gap-2">
-                          <p className="min-w-0 break-all font-mono text-sm text-foreground">
-                            {showUpstream ? proxy.upstreamUrl : proxy.upstreamMasked}
-                          </p>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
-                            aria-label={`${showUpstream ? "Hide" : "Reveal"} third party endpoint`}
-                            title={`${showUpstream ? "Hide" : "Reveal"} third party endpoint`}
-                            onClick={() => setShowUpstream((value) => !value)}
-                          >
-                            {showUpstream ? (
-                              <EyeOff className="h-4 w-4" />
-                            ) : (
-                              <Eye className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </div>
+                      <ConfigurationStepCard eyebrow="Forwards to">
+                        <p className="break-all font-mono text-sm text-foreground">
+                          {proxy.upstreamUrl}
+                        </p>
                       </ConfigurationStepCard>
                     </div>
                     <KeyValueRows
@@ -643,7 +599,9 @@ export const ProxyDetails = () => {
                       <p className="mt-1 text-sm font-medium">
                         {proxy.access.kind === "public" ? "Public" : "Blocks token"}
                       </p>
-                      <p className="text-xs text-muted-foreground">{describeProxyAccess(proxy.access)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {describeProxyAccess(proxy.access)}
+                      </p>
                     </div>
                     <EndpointsSection proxy={proxy} clientUrlFor={clientUrlFor} />
                   </CardContent>

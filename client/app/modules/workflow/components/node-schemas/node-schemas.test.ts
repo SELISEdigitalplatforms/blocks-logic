@@ -61,7 +61,11 @@ import { NodeSchemaActionAiAgentV1 } from "./node-schema-action-aiAgent-v1";
 import { NodeSchemaActionSendMailV1 } from "./node-schema-action-sendMail-v1";
 import { NodeSchemaActionHttpRequestV1 } from "./node-schema-action-httpRequest-v1";
 import { NodeSchemaActionDataActionV1 } from "./node-schema-action-dataAction-v1";
-import { NodeSchemaActionProxy } from "./node-schema-action-proxy";
+import {
+  NodeSchemaActionProxy,
+  buildProxyRouteDetails,
+  clearProxyDetailCache,
+} from "./node-schema-action-proxy";
 import { NodeSchemaTransformSetFieldV1 } from "./node-schema-transform-setfield-v1";
 import { NodeSchemaTransformCodeV1 } from "./node-schema-transform-code-v1";
 import { NodeSchemaLogicIfV1 } from "./node-schema-logic-if-v1";
@@ -758,6 +762,8 @@ describe("data action v1", () => {
 });
 
 describe("action proxy v1", () => {
+  beforeEach(() => clearProxyDetailCache());
+
   it("loads only active proxies through the current list filter", async () => {
     getProxies.mockResolvedValue({
       items: [
@@ -790,6 +796,197 @@ describe("action proxy v1", () => {
       { value: "POST:::", label: "POST /" },
     ]);
     expect(getProxy).toHaveBeenCalledWith("p1");
+  });
+
+  describe("endpoint configuration panel", () => {
+    const route = (overrides: Record<string, unknown> = {}) => ({
+      method: "GET",
+      path: "orders/{id}",
+      upstreamPath: null,
+      headers: null,
+      query: null,
+      bodyMerge: null,
+      responseMode: null,
+      responseInclude: null,
+      ...overrides,
+    });
+
+    const proxy = (overrides: Record<string, unknown> = {}) =>
+      ({
+        id: "p1",
+        slug: "vendor",
+        name: "Vendor",
+        upstreamUrl: "https://api.vendor.test/v1/",
+        methods: ["GET", "POST"],
+        headers: [{ key: "Authorization", value: "{{$VAR.vendor-key}}" }],
+        query: [{ key: "api_key", value: "abc" }],
+        bodyMerge: [{ key: "tenant", value: "acme" }],
+        methodConfigs: [],
+        routes: [route(), route({ method: "POST", path: "orders" })],
+        responseMode: "all",
+        responseInclude: [],
+        ...overrides,
+      }) as never;
+
+    type Details = ReturnType<typeof buildProxyRouteDetails>;
+    const entry = (details: Details, id: string) =>
+      details.fields.find((candidate) => candidate.field.id === `routeConfig-${id}`);
+    const valueOf = (details: Details, id: string) => entry(details, id)?.value;
+
+    it("is a transient read-only panel right after Endpoint, shown once an endpoint is picked", () => {
+      const params = NodeSchemaActionProxy.schema.parameters;
+      const index = params.findIndex((p) => p.key === "routeConfig");
+      expect(params[index - 1].key).toBe("route_composite");
+      expect(params[index]).toMatchObject({
+        type: "readonly-details",
+        transient: true,
+        dependsOn: { key: "route_composite", value: "", operator: "notEquals" },
+        detailsDependencies: ["proxyId", "routeMethod", "routePath"],
+      });
+    });
+
+    it("shows a GET endpoint's settings as one form field each, with no body fields", () => {
+      const details = buildProxyRouteDetails(proxy(), "GET", "orders/{id}");
+
+      expect(entry(details, "method")?.field.type).toBe("text");
+      expect(valueOf(details, "method")).toBe("GET");
+      expect(entry(details, "upstream")?.field).toMatchObject({ type: "text", copyable: true });
+      expect(valueOf(details, "upstream")).toBe("https://api.vendor.test/v1/orders/{id}");
+      expect(entry(details, "access")?.field).toMatchObject({ type: "radio", label: "Authentication" });
+      expect(valueOf(details, "access")).toBe("blocksToken");
+      expect(entry(details, "headers")?.field.type).toBe("key-value-pairs");
+      expect(valueOf(details, "headers")).toEqual({ Authorization: "{{$VAR.vendor-key}}" });
+      // Query params and body fields live on the node's own fields, locked there.
+      expect(entry(details, "query")).toBeUndefined();
+      expect(entry(details, "bodyMerge")).toBeUndefined();
+      expect(entry(details, "responseSelect")?.field.type).toBe("switch");
+      expect(valueOf(details, "responseSelect")).toBe(false);
+      expect(entry(details, "responseInclude")).toBeUndefined();
+      expect(details.link).toBeUndefined();
+    });
+
+    it("gives every field a unique, prefixed id", () => {
+      const details = buildProxyRouteDetails(proxy(), "POST", "orders");
+      const ids = details.fields.map((candidate) => candidate.field.id);
+      expect(new Set(ids).size).toBe(ids.length);
+      expect(ids.every((id) => id.startsWith("routeConfig-"))).toBe(true);
+    });
+
+    it("locks the config's query params and body fields onto the node's own fields", async () => {
+      getProxy.mockResolvedValue(proxy());
+      const get = { proxyId: "p1", routeMethod: "GET", routePath: "orders/{id}" };
+      const post = { proxyId: "p1", routeMethod: "POST", routePath: "orders" };
+      const locked = (key: string, data: Record<string, unknown>) =>
+        field(NodeSchemaActionProxy, key).locked(data, {});
+
+      expect(await locked("haveQuery", get)).toBe(true);
+      expect(await locked("queryParams", get)).toEqual({ api_key: "abc" });
+      expect(await locked("havebody", post)).toBe(true);
+      expect(await locked("body", post)).toEqual({ tenant: "acme" });
+      // No body on a GET, and nothing for an endpoint that is gone.
+      expect(await locked("body", get)).toEqual({});
+      expect(await locked("havebody", { ...post, routePath: "gone" })).toBe(false);
+      expect(await locked("queryParams", { ...get, proxyId: "" })).toEqual({});
+
+      for (const key of ["haveQuery", "queryParams", "havebody", "body"]) {
+        expect(field(NodeSchemaActionProxy, key).lockedDependencies).toEqual([
+          "proxyId",
+          "routeMethod",
+          "routePath",
+        ]);
+      }
+    });
+
+    it("leaves the switches free when the config adds no query or body", async () => {
+      getProxy.mockResolvedValue(proxy({ query: [], bodyMerge: [] }));
+      const post = { proxyId: "p1", routeMethod: "POST", routePath: "orders" };
+
+      expect(await field(NodeSchemaActionProxy, "haveQuery").locked(post, {})).toBe(false);
+      expect(await field(NodeSchemaActionProxy, "havebody").locked(post, {})).toBe(false);
+    });
+
+    it("shows an endpoint header replacing the connection's, and the endpoint's own response shape", () => {
+      const details = buildProxyRouteDetails(
+        proxy({
+          routes: [
+            route({
+              upstreamPath: "v2/orders/{id}",
+              headers: [{ key: "authorization", value: "Bearer other" }],
+              responseMode: "select",
+              responseInclude: ["data.id", "items[].name"],
+            }),
+          ],
+        }),
+        "GET",
+        "orders/{id}",
+      );
+
+      expect(valueOf(details, "upstream")).toBe("https://api.vendor.test/v1/v2/orders/{id}");
+      expect(valueOf(details, "headers")).toEqual({ authorization: "Bearer other" });
+      expect(valueOf(details, "responseSelect")).toBe(true);
+      expect(entry(details, "responseInclude")?.field.type).toBe("path-list");
+      expect(valueOf(details, "responseInclude")).toEqual(["data.id", "items[].name"]);
+    });
+
+    it("shows the caller access rules", () => {
+      const details = buildProxyRouteDetails(
+        proxy({
+          access: {
+            kind: "blocksToken",
+            combine: "and",
+            roles: { mode: "all", values: ["admin"] },
+            permissions: { mode: "any", values: ["orders.read"] },
+          },
+        }),
+        "GET",
+        "orders/{id}",
+      );
+
+      expect(entry(details, "roles")?.field.label).toBe("Roles (caller needs all)");
+      expect(valueOf(details, "roles")).toEqual(["admin"]);
+      expect(valueOf(details, "permissions")).toEqual(["orders.read"]);
+      expect(valueOf(details, "combine")).toBe("and");
+
+      const open = buildProxyRouteDetails(
+        proxy({
+          access: {
+            kind: "public",
+            combine: "or",
+            roles: { mode: "any", values: [] },
+            permissions: { mode: "any", values: [] },
+          },
+        }),
+        "GET",
+        "orders/{id}",
+      );
+      expect(valueOf(open, "access")).toBe("public");
+      expect(entry(open, "roles")).toBeUndefined();
+    });
+
+    it("treats an empty allowlist as the base path", () => {
+      const details = buildProxyRouteDetails(proxy({ routes: [] }), "POST", "");
+
+      expect(valueOf(details, "upstream")).toBe("https://api.vendor.test/v1");
+    });
+
+    it("says so when the saved endpoint was removed from the proxy", () => {
+      const details = buildProxyRouteDetails(proxy(), "DELETE", "orders/{id}");
+
+      expect(details.fields).toEqual([]);
+      expect(details.message).toBe("This endpoint no longer exists on the proxy.");
+      expect(details.link).toBeUndefined();
+    });
+
+    it("shares one proxy fetch between the Endpoint options and the panel", async () => {
+      getProxy.mockResolvedValue(proxy());
+      const data = { proxyId: "p1", routeMethod: "GET", routePath: "orders/{id}" };
+
+      await field(NodeSchemaActionProxy, "route_composite").options(data, {});
+      const details = await field(NodeSchemaActionProxy, "routeConfig").details(data, {});
+
+      expect(getProxy).toHaveBeenCalledTimes(1);
+      expect(valueOf(details, "upstream")).toBe("https://api.vendor.test/v1/orders/{id}");
+    });
   });
 });
 

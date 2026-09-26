@@ -18,6 +18,9 @@ namespace Proxy.DomainService.Dtos
 
         public string Slug { get; set; } = string.Empty;
 
+        /// <summary>The full upstream URL, as the detail read returns it. Shown unmasked in the console list.</summary>
+        public string Upstream { get; set; } = string.Empty;
+
         /// <summary>Host with middle labels obscured + <c>/&#8226;&#8226;&#8226;</c> (see <see cref="Utils.ProxyUpstreamMasker"/>).</summary>
         public string UpstreamMasked { get; set; } = string.Empty;
 

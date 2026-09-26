@@ -1,5 +1,5 @@
-import { ReactNode, useEffect, useState } from "react";
-import { Activity, Check, Copy, Loader2, Pause, Play } from "lucide-react";
+import { ReactNode, useState } from "react";
+import { Activity, Check, ChevronRight, Copy, Loader2, Pause, Play } from "lucide-react";
 import { Badge } from "@/components/ui-kits/badge/badge";
 import { Button } from "@/components/ui-kits/button/button";
 import { Card, CardContent } from "@/components/ui-kits/card/card";
@@ -44,7 +44,7 @@ const outcomeLabel = (outcome?: string) =>
   outcome && outcome !== "Success" ? (OUTCOME_LABELS[outcome] ?? outcome) : "";
 
 const logSkeletonClass = "bg-slate-200 dark:bg-muted";
-const logTableGridClass = "grid-cols-[170px_96px_minmax(300px,1fr)_96px_112px]";
+const logTableGridClass = "grid-cols-[20px_170px_96px_minmax(300px,1fr)_96px_112px]";
 
 const ProxyLogsSkeleton = () => (
   <div className="space-y-4" role="status" aria-label="Loading request logs">
@@ -63,13 +63,13 @@ const ProxyLogsSkeleton = () => (
     </div>
     <div className="overflow-hidden rounded-sm border">
       <div className={cn("grid gap-4 px-4 py-3", logTableGridClass)}>
-        {Array.from({ length: 5 }).map((_, index) => (
+        {Array.from({ length: 6 }).map((_, index) => (
           <Skeleton key={index} className={cn("h-4 w-full", logSkeletonClass)} />
         ))}
       </div>
       {Array.from({ length: 5 }).map((_, rowIndex) => (
         <div key={rowIndex} className={cn("grid gap-4 border-t px-4 py-3", logTableGridClass)}>
-          {Array.from({ length: 5 }).map((_, cellIndex) => (
+          {Array.from({ length: 6 }).map((_, cellIndex) => (
             <Skeleton key={cellIndex} className={cn("h-4 w-full", logSkeletonClass)} />
           ))}
         </div>
@@ -154,9 +154,8 @@ const JsonHighlight = ({ text }: { text: string }) => {
   const nodes: ReactNode[] = [];
   let lastIndex = 0;
   let key = 0;
-  JSON_TOKEN_RE.lastIndex = 0;
-  let match: RegExpExecArray | null;
-  while ((match = JSON_TOKEN_RE.exec(text))) {
+  // matchAll iterates a copy of the regex, so the shared global's lastIndex is never touched.
+  for (const match of text.matchAll(JSON_TOKEN_RE)) {
     if (match.index > lastIndex) nodes.push(text.slice(lastIndex, match.index));
     nodes.push(
       <span key={key++} className={jsonTokenClass(match[0])}>
@@ -169,6 +168,8 @@ const JsonHighlight = ({ text }: { text: string }) => {
   return <>{nodes}</>;
 };
 
+const logDetailsId = (logId: string) => `proxy-log-details-${logId}`;
+
 const LogDetails = ({ proxyId, log }: { proxyId: string; log: ProxyExecutionLog }) => {
   // The list row carries only summary fields; the upstream response body, forwarded
   // URL and injected keys are fetched on demand from `GET /api/Proxies/{proxyId}/executions/{executionId}`.
@@ -179,17 +180,17 @@ const LogDetails = ({ proxyId, log }: { proxyId: string; log: ProxyExecutionLog 
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 border-t bg-muted/20 px-4 py-6 text-sm text-muted-foreground">
+      <div
+        id={logDetailsId(log.id)}
+        className="flex items-center gap-2 border-t bg-muted/20 px-4 py-6 text-sm text-muted-foreground"
+      >
         <Loader2 className="h-4 w-4 animate-spin" />
         Loading response...
       </div>
     );
   }
 
-  const curl = buildProxyCurl(
-    detail,
-    typeof window === "undefined" ? "" : window.location.origin,
-  );
+  const curl = buildProxyCurl(detail, typeof window === "undefined" ? "" : window.location.origin);
 
   const upstreamUrl = detail.upstreamUrl || detail.upstreamHost;
   const formattedBody = detail.responseBody
@@ -197,7 +198,10 @@ const LogDetails = ({ proxyId, log }: { proxyId: string; log: ProxyExecutionLog 
     : "";
 
   return (
-    <div className="grid gap-3 border-t bg-muted/20 px-4 py-3 text-sm lg:grid-cols-2">
+    <div
+      id={logDetailsId(log.id)}
+      className="grid gap-3 border-t bg-muted/20 px-4 py-3 text-sm lg:grid-cols-2"
+    >
       <div className="flex flex-wrap items-start justify-between gap-4 lg:col-span-2">
         <div className="flex flex-wrap gap-6">
           <div>
@@ -302,9 +306,9 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
   const totalCount = logPage?.totalCount ?? 0;
   const servedAsOf = logPage?.asOfUtc;
 
-  useEffect(() => {
-    if (!live && !asOfUtc && servedAsOf) setAsOfUtc(servedAsOf);
-  }, [live, asOfUtc, servedAsOf]);
+  // Pin during render rather than in an effect: the guard makes it settle after one extra pass.
+  if (!live && !asOfUtc && servedAsOf) setAsOfUtc(servedAsOf);
+
   const {
     data: allRowsPage,
     isFetched: hasFetchedAllRows,
@@ -388,6 +392,7 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
             <tr>
               <th colSpan={5} className="p-0 text-left font-medium">
                 <div className={cn("grid gap-4 px-4 py-2", logTableGridClass)}>
+                  <span aria-hidden="true" />
                   <span role="columnheader">TIME</span>
                   <span role="columnheader">METHOD</span>
                   <span role="columnheader">PATH</span>
@@ -405,26 +410,43 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
                 </td>
               </tr>
             ) : (
-              data.map((log) => (
-                <tr key={log.id} className="border-t align-top">
-                  <td colSpan={5} className="p-0">
-                    <button
-                      type="button"
-                      className={cn("grid w-full gap-4 px-4 py-3 text-left", logTableGridClass)}
-                      onClick={() => setExpandedId((id) => (id === log.id ? null : log.id))}
-                    >
-                      <span>{new Date(log.timeUtc).toLocaleTimeString()}</span>
-                      <ProxyMethodBadge method={log.method} />
-                      <span className="truncate font-mono text-xs">{log.path}</span>
-                      <Badge variant="outline" className={cn("w-fit", statusClass(log.status))}>
-                        {log.status}
-                      </Badge>
-                      <span>{log.latencyMs}ms</span>
-                    </button>
-                    {expandedId === log.id ? <LogDetails proxyId={proxy.id} log={log} /> : null}
-                  </td>
-                </tr>
-              ))
+              data.map((log) => {
+                const expanded = expandedId === log.id;
+                return (
+                  <tr key={log.id} className="border-t align-top">
+                    <td colSpan={5} className="p-0">
+                      <button
+                        type="button"
+                        aria-expanded={expanded}
+                        aria-controls={expanded ? logDetailsId(log.id) : undefined}
+                        className={cn(
+                          "grid w-full gap-4 px-4 py-3 text-left hover:bg-muted/40",
+                          expanded && "bg-muted/30",
+                          logTableGridClass,
+                        )}
+                        onClick={() => setExpandedId((id) => (id === log.id ? null : log.id))}
+                      >
+                        <ChevronRight
+                          aria-hidden="true"
+                          data-testid="log-row-chevron"
+                          className={cn(
+                            "mt-0.5 h-4 w-4 text-muted-foreground transition-transform",
+                            expanded && "rotate-90",
+                          )}
+                        />
+                        <span>{new Date(log.timeUtc).toLocaleTimeString()}</span>
+                        <ProxyMethodBadge method={log.method} />
+                        <span className="truncate font-mono text-xs">{log.path}</span>
+                        <Badge variant="outline" className={cn("w-fit", statusClass(log.status))}>
+                          {log.status}
+                        </Badge>
+                        <span>{log.latencyMs}ms</span>
+                      </button>
+                      {expanded ? <LogDetails proxyId={proxy.id} log={log} /> : null}
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

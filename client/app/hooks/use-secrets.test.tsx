@@ -4,7 +4,7 @@ import { makeHookWrapper } from "@/test-utils/test-providers/render";
 
 vi.mock("@/services/secret.service", async () => {
   const actual = await import("@/services/secret.service");
-  const { mockSecretService } = await import("../test-support/mock-secret-service");
+  const { mockSecretService } = await import("@/modules/proxy/test-support/mock-secret-service");
   return { ...actual, secretService: mockSecretService };
 });
 

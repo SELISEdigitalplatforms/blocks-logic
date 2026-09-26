@@ -25,6 +25,7 @@ describe("proxy mapper", () => {
       itemId: "p1",
       name: "Stripe Payments",
       slug: "stripe-payments",
+      upstream: "https://api.stripe.com/v1/charges",
       upstreamMasked: "api.st****.com/***",
       methods: ["GET", "POST", "TRACE"],
       enabled: true,
@@ -39,6 +40,7 @@ describe("proxy mapper", () => {
     expect(mapProxyListItemDtoToProxy(dto)).toMatchObject({
       id: "p1",
       slug: "stripe-payments",
+      upstreamUrl: "https://api.stripe.com/v1/charges",
       upstreamMasked: "api.st****.com/***",
       methods: ["GET", "POST"],
       enabled: true,

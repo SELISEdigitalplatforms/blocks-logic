@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useLayoutEffect, useRef } from "react";
 import { FieldSchema } from "./form-field.types";
 import { useWorkflow } from "@blocks-workflow/hooks";
 import {
@@ -86,9 +86,16 @@ export const useFormBuilder = ({
 
   const isWorkflowExecuted = !!selectedNode?.data?.isWorkflowExecuted;
 
+  // The latest data, including writes not yet rendered: fields that write from an effect (a forced
+  // switch) can fire in the same commit, and each must build on the one before it.
+  const dataRef = useRef(data);
+  useLayoutEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
   const handleChange = useCallback(
     (field: FieldSchema, value: unknown) => {
-      let updated = setValueByPath(data, field.key, value);
+      let updated = setValueByPath(dataRef.current, field.key, value);
 
       // Run field-level side-effects (e.g., recalculate cronExpression)
       let sideEffectKeys: string[] = [];
@@ -103,9 +110,10 @@ export const useFormBuilder = ({
       updated = cascadeFieldResets(fields, field.key, updated, sideEffectKeys);
 
       const persisted = stripTransientKeys(updated, fields);
+      dataRef.current = persisted;
       onChange(persisted);
     },
-    [data, fields, onChange, config],
+    [fields, onChange, config],
   );
 
   const visibleFields = useMemo(
