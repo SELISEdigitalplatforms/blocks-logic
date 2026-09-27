@@ -2,6 +2,7 @@ using Workflow.DomainService.Entities;
 using MongoDB.Bson;
 using MongoDB.Bson.IO;
 using Newtonsoft.Json.Linq;
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.DependencyInjection;
 using Proxy.DomainService.Services;
@@ -218,10 +219,10 @@ namespace Workflow.DomainService.Nodes
         {
 
             if (expr.StartsWith("$node"))
-                return ResolveNodeReference(expr, inputItem, context);
+                return ResolveNodeReferenceByBsonType(expr, inputItem, context);
 
             if (expr.StartsWith("$json"))
-                return ResolveJsonExpression(expr, inputItem, context);
+                return ResolveJsonExpressionByBsonType(expr, inputItem, context);
 
             if (expr.StartsWith("$context"))
                 return ResolveContextExpression(expr, context);
@@ -354,5 +355,171 @@ namespace Workflow.DomainService.Nodes
 
         private static string BsonToJson(BsonDocument doc) =>
             doc.ToJson(new JsonWriterSettings { OutputMode = JsonOutputMode.RelaxedExtendedJson });
+
+        /// <summary>
+        /// Same ancestor lookup as <see cref="ResolveNodeReference"/>, but the path after
+        /// <c>.json.output</c> may be empty, <c>.field</c>, or <c>[index]</c>, and the value is
+        /// read with <see cref="SelectOutputPathByBsonType"/>.
+        /// </summary>
+        private static string ResolveNodeReferenceByBsonType(string expr, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
+        {
+            var nodeMatch = Regex.Match(
+                expr,
+                @"^\$node\[""(?<node>[^""]+)""\]\.json\.output(?<path>(?:\.(?<dotted>.+)|(?<bracket>\[.+))?)$",
+                RegexOptions.None,
+                RegexTimeout);
+            if (!nodeMatch.Success)
+                return "";
+
+            var nodeName = nodeMatch.Groups["node"].Value;
+            var path = nodeMatch.Groups["dotted"].Success
+                ? nodeMatch.Groups["dotted"].Value
+                : nodeMatch.Groups["bracket"].Value;
+
+            if (!inputItem.AncestorMap.TryGetValue(nodeName, out var ancestorId) || ancestorId == null)
+                return "";
+            var ancestorItem = context.AncestorNodeOutputs.TryGetValue(nodeName, out var items)
+                ? items.FirstOrDefault(i => i.Id == ancestorId)
+                : null;
+
+            if (ancestorItem?.Data?.Output is null)
+                return "";
+            return SelectOutputPathByBsonType(ancestorItem.Data.Output, path);
+        }
+
+        /// <summary>
+        /// Reads <c>$json</c> / <c>$json.output</c> without assuming a dot before the next segment.
+        /// <c>$json.output.ids[0]</c> and <c>$json.output[0]</c> both keep the index.
+        /// </summary>
+        private static string ResolveJsonExpressionByBsonType(string expr, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
+        {
+            var output = inputItem.Data?.Output;
+            if (output is null)
+                return "";
+
+            if (expr.StartsWith("$json.output.", StringComparison.Ordinal))
+                return SelectOutputPathByBsonType(output, expr.Substring("$json.output.".Length));
+
+            if (expr.StartsWith("$json.output[", StringComparison.Ordinal))
+                return SelectOutputPathByBsonType(output, expr.Substring("$json.output".Length));
+
+            return FormatSelectedBsonValue(output);
+        }
+
+        /// <summary>
+        /// Walks <paramref name="path"/> on <paramref name="output"/> using <see cref="BsonType"/>.
+        /// A <see cref="BsonType.Array"/> consumes <c>[n]</c>. A <see cref="BsonType.Document"/> consumes a property name.
+        /// A dot immediately before <c>[</c> is ignored. Missing names and out-of-range indexes return empty.
+        /// </summary>
+        private static string SelectOutputPathByBsonType(BsonValue output, string path)
+        {
+            if (output is null)
+                return "";
+            if (string.IsNullOrEmpty(path))
+                return FormatSelectedBsonValue(output);
+
+            var current = output;
+            var index = 0;
+            while (index < path.Length)
+            {
+                if (path[index] == '.')
+                {
+                    index++;
+                    continue;
+                }
+
+                if (path[index] == '[')
+                {
+                    if (!TryReadPathIndex(path, ref index, out var elementIndex) || !TrySelectArrayElement(current, elementIndex, out current))
+                        return "";
+                    continue;
+                }
+
+                if (!TryReadPathName(path, ref index, out var name) || !TrySelectProperty(current, name, out current))
+                    return "";
+            }
+
+            return FormatSelectedBsonValue(current);
+        }
+
+        private static bool TryReadPathIndex(string path, ref int index, out int elementIndex)
+        {
+            elementIndex = -1;
+            var close = path.IndexOf(']', index + 1);
+            if (close < 0)
+                return false;
+
+            var raw = path.Substring(index + 1, close - index - 1);
+            if (raw.Length == 0 || !int.TryParse(raw, NumberStyles.None, CultureInfo.InvariantCulture, out elementIndex) || elementIndex < 0)
+                return false;
+
+            index = close + 1;
+            return true;
+        }
+
+        private static bool TryReadPathName(string path, ref int index, out string name)
+        {
+            var start = index;
+            while (index < path.Length && path[index] != '.' && path[index] != '[')
+                index++;
+
+            if (index == start)
+            {
+                name = "";
+                return false;
+            }
+
+            name = path.Substring(start, index - start);
+            return true;
+        }
+
+        private static bool TrySelectProperty(BsonValue current, string name, out BsonValue selected)
+        {
+            if (current is not null && current.IsBsonDocument && current.AsBsonDocument.TryGetValue(name, out var value))
+            {
+                selected = value;
+                return true;
+            }
+
+            selected = BsonNull.Value;
+            return false;
+        }
+
+        private static bool TrySelectArrayElement(BsonValue current, int elementIndex, out BsonValue selected)
+        {
+            if (current is not null && current.IsBsonArray)
+            {
+                var array = current.AsBsonArray;
+                if ((uint)elementIndex < (uint)array.Count)
+                {
+                    selected = array[elementIndex];
+                    return true;
+                }
+            }
+
+            selected = BsonNull.Value;
+            return false;
+        }
+
+        /// <summary>
+        /// Leaf text for a selected BSON value. Documents, arrays, and extended types stay JSON.
+        /// Strings, booleans, null, and numbers are plain text.
+        /// </summary>
+        private static string FormatSelectedBsonValue(BsonValue? value)
+        {
+            if (value is null || value.IsBsonNull)
+                return "null";
+
+            return value.BsonType switch
+            {
+                BsonType.String => value.AsString,
+                BsonType.Boolean => value.AsBoolean ? "true" : "false",
+                BsonType.Int32 => value.AsInt32.ToString(CultureInfo.InvariantCulture),
+                BsonType.Int64 => value.AsInt64.ToString(CultureInfo.InvariantCulture),
+                BsonType.Double => Newtonsoft.Json.JsonConvert.SerializeObject(value.AsDouble),
+                BsonType.Decimal128 => value.AsDecimal.ToString(CultureInfo.InvariantCulture),
+                _ => value.ToJson(new JsonWriterSettings { OutputMode = JsonOutputMode.RelaxedExtendedJson }),
+            };
+        }
     }
 }

@@ -166,9 +166,7 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
                     return NodeExecutionResult.Failed(serializationError, outputItems);
                 }
 
-                var parentItem = !string.IsNullOrEmpty(sourceId)
-                    ? context.InputItems.FirstOrDefault(i => i.Id == sourceId)
-                    : null;
+                var parentItem = FindLineageItem(context, sourceId);
 
                 List<string> parentIds;
                 string branch;
@@ -333,10 +331,42 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
         }
 
         private static JObject AncestorEntry(WorkflowItemExecutionEntity ancestor)
-            => new()
+            => ToN8nItem(ancestor.Data?.Output ?? new BsonDocument(), ancestor.Id);
+
+        private static WorkflowItemExecutionEntity? FindLineageItem(NodeExecutionContext context, string? sourceId)
+        {
+            if (string.IsNullOrEmpty(sourceId))
             {
-                ["json"] = BsonValueToJToken(ancestor.Data?.Output ?? new BsonDocument()),
-            };
+                return null;
+            }
+
+            var direct = context.InputItems.FirstOrDefault(i => i.Id == sourceId);
+            if (direct is not null)
+            {
+                return direct;
+            }
+
+            if (context.AncestorNodeOutputs == null)
+            {
+                return null;
+            }
+
+            foreach (var items in context.AncestorNodeOutputs.Values)
+            {
+                if (items is null)
+                {
+                    continue;
+                }
+
+                var match = items.FirstOrDefault(i => i.Id == sourceId);
+                if (match is not null)
+                {
+                    return match;
+                }
+            }
+
+            return null;
+        }
 
         private static JObject GenerateAncestorPerItem(IReadOnlyDictionary<string, WorkflowItemExecutionEntity> ancestorsById, WorkflowItemExecutionEntity item)
         {

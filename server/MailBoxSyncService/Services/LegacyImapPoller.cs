@@ -46,4 +46,17 @@ namespace MailBoxSyncService.Services
 
         public override MailServiceProvider Provider => MailServiceProvider.Zoho;
     }
+
+    /// <summary>
+    /// Gmail over <c>imap.gmail.com:993</c> with the account address and an App Password — the
+    /// same username/password session the other password providers use.
+    /// </summary>
+    public sealed class GmailImapPoller : LegacyImapPoller
+    {
+        public GmailImapPoller(IMailBoxSyncService syncService) : base(syncService)
+        {
+        }
+
+        public override MailServiceProvider Provider => MailServiceProvider.Gmail;
+    }
 }

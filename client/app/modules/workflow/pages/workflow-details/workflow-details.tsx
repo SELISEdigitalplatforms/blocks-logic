@@ -1,12 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui-kits/tabs/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui-kits/tabs/tabs";
 import { Button } from "@/components/ui-kits/button/button";
 import { ScrollText, Save, Loader2, AlertCircle, X } from "lucide-react";
 import PageBreadcrumb from "@/components/breadcrumb/breadcrumb";
@@ -30,9 +25,7 @@ type WorkflowDetailPageProps = {
   workflowId: string;
 };
 
-export const WorkflowDetailsContent = ({
-  workflowId,
-}: WorkflowDetailPageProps) => {
+export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) => {
   const navigate = useNavigate();
   const scoped = useScopedPath();
 
@@ -41,8 +34,10 @@ export const WorkflowDetailsContent = ({
 
   const { hasUnsavedChanges, setWorkflow, setLastSuccessfulExecutionData } = useWorkflow();
 
-  const { data, isLoading, isFetched, isFetching, isFetchedAfterMount, refetch } = useGetWorkflowById({id: workflowId});
-  const { data: lastExecutionData, isFetched: isLastExecutionFetched } = useGetLastSuccessfulExecution({workflowId});
+  const { data, isLoading, isFetched, isFetching, isFetchedAfterMount, refetch } =
+    useGetWorkflowById({ id: workflowId });
+  const { data: lastExecutionData, isFetched: isLastExecutionFetched } =
+    useGetLastSuccessfulExecution({ workflowId });
 
   useEffect(() => {
     if (isLastExecutionFetched && lastExecutionData) {
@@ -56,7 +51,7 @@ export const WorkflowDetailsContent = ({
         const workflowData = data.data;
         setWorkflow(workflowData);
       } else {
-        showErrorToast({"errors": "Workflow not found"});
+        showErrorToast({ errors: "Workflow not found" });
         navigate(scoped("/app/workflow"));
       }
     }
@@ -71,22 +66,19 @@ export const WorkflowDetailsContent = ({
   });
 
   const handleManualSave = () => saveNow();
-  const showDirtyBanner = !isLoading
-    && isFetchedAfterMount
-    && data?.data?.isDirty
-    && !isDirtyBannerDismissed;
+  const showDirtyBanner =
+    !isLoading && isFetchedAfterMount && data?.data?.isDirty && !isDirtyBannerDismissed;
 
   useEffect(() => {
     setIsDirtyBannerDismissed(false);
   }, [workflowId, data?.data?.isDirty]);
 
-  BREADCRUMB_CUSTOM_TITLES[`/workflow/${workflowId}`] =
-    data?.data?.name || "Workflow Details";
+  BREADCRUMB_CUSTOM_TITLES[`/workflow/${workflowId}`] = data?.data?.name || "Workflow Details";
   return (
     <>
       <div className="flex h-full flex-col">
         <div className="px-4 mt-4">
-          <PageBreadcrumb breadcrumbIndex={3}/>
+          <PageBreadcrumb breadcrumbIndex={3} />
         </div>
 
         {showDirtyBanner && (
@@ -94,7 +86,9 @@ export const WorkflowDetailsContent = ({
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <AlertCircle className="h-5 w-5 text-amber-500" />
-                <p className="text-sm font-medium">You have unadapted changes. Please click on the Publish button to adapt them.</p>
+                <p className="text-sm font-medium">
+                  You have unadapted changes. Please click on the Publish button to adapt them.
+                </p>
               </div>
               <button
                 type="button"
@@ -126,65 +120,59 @@ export const WorkflowDetailsContent = ({
                 <TabsTrigger value="versions">Versions</TabsTrigger>
               </TabsList>
 
-              {activeTab==="editor" && (<div className="flex items-center gap-4">
-                <div className={`text-sm font-medium ${data?.data?.isPublished ? "text-green-500" : "text-yellow-500"}`}>
+              {activeTab === "editor" && (
+                <div className="flex items-center gap-4">
+                  {/* <div className={`text-sm font-medium ${data?.data?.isPublished ? "text-green-500" : "text-yellow-500"}`}>
                   {data?.data?.isPublished ? "Published" : "Unpublished"}
                 </div>
                 <Separator
                   orientation="vertical"
                   className="h-4 bg-muted-foreground"
-                />
-                <div className="text-sm text-muted-foreground">
-                  {isSaving ? (
-                    <span className="flex items-center gap-1">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      Saving...
-                    </span>
-                  ) : data?.data?.lastUpdatedDate ? (
-                    `Last saved: ${format(new Date(data.data.lastUpdatedDate), "dd/MM/yyyy, hh:mm a")}`
-                  ) : (
-                    "Not saved yet"
+                /> */}
+                  <div className="text-sm text-muted-foreground">
+                    {isSaving ? (
+                      <span className="flex items-center gap-1">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Saving...
+                      </span>
+                    ) : data?.data?.lastUpdatedDate ? (
+                      `Last saved: ${format(new Date(data.data.lastUpdatedDate), "dd/MM/yyyy, hh:mm a")}`
+                    ) : (
+                      "Not saved yet"
+                    )}
+                  </div>
+                  {hasUnsavedChanges && !isSaving && (
+                    <span className="text-xs text-orange-500">Unsaved changes</span>
                   )}
-                </div>
-                {hasUnsavedChanges && !isSaving && (
-                  <span className="text-xs text-orange-500">
-                    Unsaved changes
-                  </span>
-                )}
-                <Separator
-                  orientation="vertical"
-                  className="h-4 bg-muted-foreground"
-                />
-                <div className="flex items-center gap-2">
-                  <PublishWorkflowAction 
-                    isDirty={data?.data?.isDirty} 
-                    hasUnsavedChanges={hasUnsavedChanges}
-                    isPublished={data?.data?.isPublished} 
-                    onActionComplete={() => refetch()} 
-                  />
-                </div>
-                <Separator
-                  orientation="vertical"
-                  className="h-4 bg-muted-foreground"
-                />
-                {/* <Button variant="outline" size="sm" className="gap-2">
+                  <Separator orientation="vertical" className="h-4 bg-muted-foreground" />
+                  <div className="flex items-center gap-2">
+                    <PublishWorkflowAction
+                      isDirty={data?.data?.isDirty}
+                      hasUnsavedChanges={hasUnsavedChanges}
+                      isPublished={data?.data?.isPublished}
+                      onActionComplete={() => refetch()}
+                    />
+                  </div>
+                  <Separator orientation="vertical" className="h-4 bg-muted-foreground" />
+                  {/* <Button variant="outline" size="sm" className="gap-2">
                   <ScrollText className="h-4 w-4" />
                   Logs
                 </Button> */}
-                <Button
-                  size="sm"
-                  onClick={handleManualSave}
-                  disabled={isSaving || !hasUnsavedChanges}
-                  className="gap-2"
-                >
-                  {isSaving ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Save className="h-4 w-4" />
-                  )}
-                  Save
-                </Button>
-              </div>)}
+                  <Button
+                    size="sm"
+                    onClick={handleManualSave}
+                    disabled={isSaving || !hasUnsavedChanges}
+                    className="gap-2"
+                  >
+                    {isSaving ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4" />
+                    )}
+                    Save
+                  </Button>
+                </div>
+              )}
             </div>
 
             <TabsContent value="editor" className="flex-1 overflow-hidden">

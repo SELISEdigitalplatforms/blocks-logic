@@ -22,14 +22,29 @@ namespace XUnitTest.Mail
 
             var senders = services.Where(d => d.ServiceType == typeof(IOutboundMailSender)).ToList();
 
-            senders.Should().HaveCount(3);
+            senders.Should().HaveCount(4);
             senders.Select(d => d.ImplementationType).Should().BeEquivalentTo(
             [
                 typeof(AmazonSesMailSender),
                 typeof(ZohoMailSender),
-                typeof(Office365SmtpClient)
+                typeof(Office365MailSender),
+                typeof(GmailMailSender)
             ]);
             services.Count(d => d.ServiceType == typeof(IOutboundMailSenderRegistry)).Should().Be(1);
+        }
+
+        [Fact]
+        public void TheOffice365Sender_ResolvesWithBothTransports()
+        {
+            var services = new ServiceCollection();
+            services.AddLogging();
+            services.RegisterAllMailApplicationServices();
+
+            using var provider = services.BuildServiceProvider();
+
+            provider.GetServices<IOutboundMailSender>().OfType<Office365MailSender>().Should().ContainSingle();
+            provider.GetRequiredService<Office365GraphMailSender>().Should().NotBeNull();
+            provider.GetRequiredService<Office365SmtpClient>().Should().NotBeNull();
         }
     }
 }

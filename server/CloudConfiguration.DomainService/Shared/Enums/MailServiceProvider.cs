@@ -9,6 +9,7 @@ namespace CloudConfiguration.DomainService.Shared.Enums
     {
         AmazonSes = 0,
         Zoho = 1,
-        Office365Smtp = 2
+        Office365Smtp = 2,
+        Gmail = 3
     }
 }

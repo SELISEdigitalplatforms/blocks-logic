@@ -383,6 +383,47 @@ namespace Workflow.DomainService.Services
         }
 
         /// <summary>
+        /// Direct inputs first, then ancestor items. <see cref="AncestorMapMerger"/> keeps the first
+        /// candidate for an id, so a direct input wins when the same item is also loaded as an ancestor.
+        /// Ancestor-only ids (for example a Code <c>.all()</c> source that is not the immediate input)
+        /// are still found.
+        /// </summary>
+        private static IEnumerable<WorkflowItemExecutionEntity> LineageCandidates(NodeExecutionContext context)
+        {
+            if (context.InputItems != null)
+            {
+                foreach (var item in context.InputItems)
+                {
+                    if (item != null)
+                    {
+                        yield return item;
+                    }
+                }
+            }
+
+            if (context.AncestorNodeOutputs == null)
+            {
+                yield break;
+            }
+
+            foreach (var items in context.AncestorNodeOutputs.Values)
+            {
+                if (items == null)
+                {
+                    continue;
+                }
+
+                foreach (var item in items)
+                {
+                    if (item != null)
+                    {
+                        yield return item;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
         /// Node completed successfully: persist items, update metadata, and return next node events
         /// </summary>
         private async Task<List<AddExcuationNodeEvent>> CompleteNodeExecutionAsync(NodeExecutionContext context, WorkflowExecutionEntity execution, NodeEntity node, NodeExecutionEntity nodeExecution, NodeExecutionResult result, string completionNodeId)
@@ -392,22 +433,11 @@ namespace Workflow.DomainService.Services
             int index = 0;
             foreach (var output in result.OutputItems)
             {
-                var parentIds = output.ParentItemIds;
-                // generate ancestor map for expression access in downstream nodes. merge parent ancestor maps and add direct parents.
-                // also add self to ancestor map to allow referencing own output in expressions (e.g. for loops)
-                var ancestorMap = context.InputItems.Where(i => parentIds.Contains(i.Id))
-                    .SelectMany(i =>
-                    {
-                        var ancestors = i.AncestorMap != null ? i.AncestorMap : new Dictionary<string, string>();
-                        ancestors[i.NodeName] = i.Id; // add direct parent
-                        return ancestors;
-                    })
-                    .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-
-
-
+                var parentIds = output.ParentItemIds ?? new List<string>();
+                // Keep a node name only when every parent agrees on the item id. The output always
+                // references itself so downstream expressions can read this node's own item.
                 var id = Guid.NewGuid().ToString().Replace("-", "");
-                ancestorMap.Add(node.Name, id);
+                var ancestorMap = AncestorMapMerger.Merge(parentIds, LineageCandidates(context), id, node.Name);
                 outputItems.Add(new WorkflowItemExecutionEntity
                 {
                     Id = id,
@@ -560,17 +590,8 @@ namespace Workflow.DomainService.Services
                     foreach (var output in outputItems)
                     {
                         var parentIds = output.ParentItemIds ?? new List<string>();
-                        var ancestorMap = context.InputItems.Where(i => parentIds.Contains(i.Id))
-                            .SelectMany(i =>
-                            {
-                                var ancestors = i.AncestorMap != null ? i.AncestorMap : new Dictionary<string, string>();
-                                ancestors[i.NodeName] = i.Id;
-                                return ancestors;
-                            })
-                            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-
                         var id = Guid.NewGuid().ToString().Replace("-", "");
-                        ancestorMap[node.Name] = id;
+                        var ancestorMap = AncestorMapMerger.Merge(parentIds, LineageCandidates(context), id, node.Name);
                         persistedItems.Add(new WorkflowItemExecutionEntity
                         {
                             Id = id,
@@ -829,24 +850,14 @@ namespace Workflow.DomainService.Services
                 }).ToList(),
                 execution.TenantId);
 
-            var parentAncestorMap = new Dictionary<string, string>();
-            foreach (var pi in parentItems)
-            {
-                if (pi.AncestorMap != null)
-                    foreach (var kvp in pi.AncestorMap)
-                        parentAncestorMap[kvp.Key] = kvp.Value;
-                parentAncestorMap[pi.NodeName] = pi.Id;
-            }
+            var parentIds = parentItems.Select(pi => pi.Id).ToList();
 
             var outputItems = new List<WorkflowItemExecutionEntity>();
             int index = 0;
             foreach (var pinValue in node.PinData!)
             {
                 var id = Guid.NewGuid().ToString().Replace("-", "");
-                var ancestorMap = new Dictionary<string, string>(parentAncestorMap)
-                {
-                    [node.Name] = id
-                };
+                var ancestorMap = AncestorMapMerger.Merge(parentIds, parentItems, id, node.Name);
 
                 outputItems.Add(new WorkflowItemExecutionEntity
                 {

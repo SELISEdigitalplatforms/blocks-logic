@@ -4,11 +4,18 @@ import { Textarea } from "@/components/ui-kits/textarea/textarea";
 import { FieldProps } from "../form-field.types";
 import { ExpressionHighlighter } from "../utils/expression-highlighter";
 import { cn } from "@/lib/utils";
+import { pickerTarget, showsVariablePicker } from "./secret-picker";
 
-export const TextareaField = ({ field, value, onChange, readOnly, }: FieldProps<string>) => {
+export const TextareaField = ({ field, value, onChange, readOnly, variablePicker }: FieldProps<string>) => {
+  const picker = showsVariablePicker(field, readOnly, variablePicker);
+
   return (
     <div className={cn("relative flex-1")}>
-      <ExpressionHighlighter value={value || ""} isMultiline={true}>
+      <ExpressionHighlighter
+        value={value || ""}
+        isMultiline={true}
+        variablePicker={picker ? { target: pickerTarget(field), onChange } : null}
+      >
       <Textarea
         id={field.id}
         value={value || ""}

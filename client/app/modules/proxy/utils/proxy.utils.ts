@@ -89,18 +89,8 @@ export const slugifyProxyName = (name: string) =>
     .replace(/^-+|-+$/g, "")
     .slice(0, 80);
 
-/**
- * Configuration-variable token: the literal `{{$VAR.` prefix, a name in `[A-Za-z0-9._:-]`, then
- * `}}`. Mirrors the server regex in `Proxy.DomainService/Utils/ProxyVarRef.cs` — case-sensitive,
- * so `{{ $VAR.x }}` / `{{$var.x}}` / `${SECRET.X}` are literal text, not tokens.
- */
-export const VAR_REF_RE = /\{\{\$VAR\.[A-Za-z0-9._:-]+\}\}/;
-
-/** True when `value` contains at least one `{{$VAR.name}}` token. */
-export const containsVarRef = (value: string) => VAR_REF_RE.test(value);
-
-/** The token literal for a variable name, e.g. `buildVarToken("api-key") === "{{$VAR.api-key}}"`. */
-export const buildVarToken = (name: string) => `{{$VAR.${name}}}`;
+// The `{{$VAR.name}}` token helpers are shared with the workflow inputs.
+export { VAR_REF_RE, buildVarToken, containsVarRef } from "@/lib/var-token";
 
 /** Inserts `token` into `value` at `caret` (clamped); a caret past the end appends. */
 export const insertToken = (value: string, caret: number, token: string) => {

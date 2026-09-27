@@ -30,6 +30,13 @@ namespace XUnitTest.Workflow
 
         private sealed class CaptureHandler : HttpMessageHandler
         {
+            private readonly string _responseBody;
+
+            public CaptureHandler(string responseBody = "{\"ok\":true}")
+            {
+                _responseBody = responseBody;
+            }
+
             public string? Content { get; private set; }
 
             protected override async Task<HttpResponseMessage> SendAsync(
@@ -42,7 +49,7 @@ namespace XUnitTest.Workflow
 
                 return new HttpResponseMessage(HttpStatusCode.OK)
                 {
-                    Content = new StringContent("{\"ok\":true}")
+                    Content = new StringContent(_responseBody)
                 };
             }
         }
@@ -113,6 +120,71 @@ namespace XUnitTest.Workflow
 
             result.IsSuccess.Should().BeTrue(result.ErrorMessage);
             handler.Content.Should().Be("{\"data\":\"resolved-bbb\"}");
+        }
+
+        [Fact]
+        public async Task RunAsync_RootJsonArray_SplitsIntoOneItemPerElement()
+        {
+            var result = await RunWithResponse("[{\"id\":1},{\"id\":2}]");
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            result.OutputItems.Should().HaveCount(2);
+            result.OutputItems[0].Data.Output["id"].ToInt32().Should().Be(1);
+            result.OutputItems[1].Data.Output["id"].ToInt32().Should().Be(2);
+        }
+
+        [Theory]
+        [InlineData("47092838")]
+        [InlineData("true")]
+        [InlineData("\"hello\"")]
+        public async Task RunAsync_RootJsonScalar_StoresThatValue(string responseBody)
+        {
+            var result = await RunWithResponse(responseBody);
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            result.OutputItems.Should().ContainSingle();
+            var output = result.OutputItems[0].Data.Output;
+            output.IsBsonDocument.Should().BeFalse();
+            output.ToString().Should().Be(responseBody == "\"hello\"" ? "hello" : responseBody);
+        }
+
+        [Fact]
+        public async Task RunAsync_NonJsonBody_ProducesErrorItem()
+        {
+            var result = await RunWithResponse("not-json");
+
+            result.OutputItems.Should().ContainSingle();
+            var output = result.OutputItems[0].Data.Output.AsBsonDocument;
+            output["error"].AsBoolean.Should().BeTrue();
+            output.Contains("message").Should().BeTrue();
+        }
+
+        private static async Task<NodeExecutionResult> RunWithResponse(string responseBody)
+        {
+            var services = new ServiceCollection()
+                .AddSingleton<IProxyVariableResolver, FakeVariableResolver>()
+                .BuildServiceProvider();
+            var context = new NodeExecutionContext
+            {
+                WorkflowExecutionId = "exec-1",
+                TenantId = "tenant-1",
+                Parameters = new BsonDocument
+                {
+                    { "httpMethod", "GET" },
+                    { "url", "https://example.test/items" },
+                },
+                InputItems = new List<WorkflowItemExecutionEntity> { Item() },
+                IterationCount = 1,
+                WorkflowContext = new BsonDocument(),
+                ServiceProvider = services,
+            };
+            var node = new ActionHttpRequestV1Node(
+                new TestHttpClientFactory(new CaptureHandler(responseBody)),
+                Mock.Of<IWorkflowAuthService>(),
+                Mock.Of<IClientCredentialTokenService>(),
+                NullLogger<ActionHttpRequestV1Node>.Instance);
+
+            return await node.RunAsync(context);
         }
     }
 }

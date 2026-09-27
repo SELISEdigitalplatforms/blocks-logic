@@ -46,4 +46,18 @@ namespace Mail.DomainService.Mails.Strategies
 
         public override MailServiceProvider Provider => MailServiceProvider.Zoho;
     }
+
+    /// <summary>
+    /// Gmail over <c>smtp.gmail.com:587</c> with an App Password. blocks-os fixes the host, port
+    /// and <c>EnableSSL = false</c>, which MailKit reads as STARTTLS when offered — and Gmail
+    /// always offers it — so the existing password path needs nothing new.
+    /// </summary>
+    public sealed class GmailMailSender : LegacySmtpSender
+    {
+        public GmailMailSender(SmtpClientProvider smtpClientProvider) : base(smtpClientProvider)
+        {
+        }
+
+        public override MailServiceProvider Provider => MailServiceProvider.Gmail;
+    }
 }

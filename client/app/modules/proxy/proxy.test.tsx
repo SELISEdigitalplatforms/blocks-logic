@@ -51,8 +51,7 @@ describe("Proxy feature", () => {
     expect(screen.getByText(/1,248 calls 24h/i)).toBeTruthy();
   });
 
-  it("renders detail overview and reveals the upstream endpoint", async () => {
-    const user = userEvent.setup();
+  it("renders detail overview with the upstream endpoint in full", async () => {
     renderWithProviders(
       <MemoryRouter initialEntries={["/proxy/p1"]}>
         <Routes>
@@ -71,10 +70,8 @@ describe("Proxy feature", () => {
     // The base URL appears once in the summary card and once per base-path endpoint (p1 has two).
     expect((await screen.findAllByText("/logic/v4/proxy/gateway/stripe-payments")).length).toBeGreaterThan(0);
     expect(screen.getByText("Authorization")).toBeTruthy();
-    expect(screen.getAllByText("variable").length).toBeGreaterThan(0);
 
-    // The upstream endpoint is the only masked value on the page; header/query values render as-is.
-    await user.click(screen.getByRole("button", { name: /reveal third party endpoint/i }));
+    // Header/query values and the upstream endpoint all render as configured, nothing masked.
     expect(screen.getAllByText("https://api.stripe.com/v1/charges").length).toBeGreaterThan(0);
   });
 

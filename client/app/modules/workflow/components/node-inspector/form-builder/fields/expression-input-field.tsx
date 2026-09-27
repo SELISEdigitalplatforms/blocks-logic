@@ -7,6 +7,7 @@ import { Edge } from "@xyflow/react";
 import { EditorNode } from "@blocks-workflow/models/node.model";
 import { cn } from "@/lib/utils";
 import { ExpressionHighlighter } from "../utils/expression-highlighter";
+import { pickerTarget, showsVariablePicker } from "./secret-picker";
 
 interface AncestorNode {
   id: string;
@@ -88,7 +89,12 @@ export const ExpressionInputField = ({
   config,
   className,
   placeholder="",
-}: FieldProps<string>) => {
+  variablePicker = true,
+  pickerLabel,
+}: FieldProps<string> & {
+  /** Accessible-name suffix for the picker, e.g. "row 2 value". */
+  pickerLabel?: string;
+}) => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [cursorPosition, setCursorPosition] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -268,10 +274,17 @@ export const ExpressionInputField = ({
   const filteredSuggestions = showSuggestions ? getFilteredSuggestions() : [];
 
   const isDisabled = typeof field.disabled === "function" ? false : field.disabled || readOnly;
+  const picker = showsVariablePicker(field, readOnly, variablePicker);
 
   return (
     <div className={cn("relative flex-1")}>
-      <ExpressionHighlighter value={(value as string) || ""} isMultiline={false}>
+      <ExpressionHighlighter
+        value={(value as string) || ""}
+        isMultiline={false}
+        variablePicker={
+          picker ? { target: pickerTarget(field, pickerLabel), onChange: (next) => onChange(next) } : null
+        }
+      >
         <Input
           ref={inputRef}
           id={field.id}
@@ -288,7 +301,7 @@ export const ExpressionInputField = ({
       {showSuggestions && filteredSuggestions.length > 0 && (
         <div
           ref={suggestionsRef}
-          className="absolute z-50 mt-1 w-full rounded-md border border-border bg-popover shadow-lg"
+          className="absolute left-0 top-full z-50 mt-1 w-full rounded-md border border-border bg-popover shadow-lg"
         >
           <div className="max-h-60 overflow-y-auto p-1">
             {filteredSuggestions.map((suggestion, index) => (

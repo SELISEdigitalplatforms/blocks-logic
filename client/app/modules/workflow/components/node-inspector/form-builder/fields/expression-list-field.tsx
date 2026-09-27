@@ -7,6 +7,7 @@ import { Trash2 } from "lucide-react";
 import { FieldProps } from "../form-field.types";
 import { cn } from "@/lib/utils";
 import { ExpressionHighlighter } from "../utils/expression-highlighter";
+import { pickerTarget, showsVariablePicker } from "./secret-picker";
 
 /**
  * Repeatable, single-column list of expression-highlighted text rows.
@@ -23,10 +24,12 @@ export const ExpressionListField = ({
   onChange,
   readOnly,
   className,
+  variablePicker,
 }: FieldProps<string[]>) => {
   const [items, setItems] = useState<string[]>(Array.isArray(value) ? value : []);
 
   const isDisabled = typeof field.disabled === "function" ? false : field.disabled || readOnly;
+  const picker = showsVariablePicker(field, readOnly, variablePicker);
 
   const commit = (next: string[]) => {
     setItems(next);
@@ -75,7 +78,18 @@ export const ExpressionListField = ({
             <Trash2 className="h-4 w-4" />
           </Button>
           <div className="relative flex-1">
-            <ExpressionHighlighter value={item || ""} isMultiline={false}>
+            <ExpressionHighlighter
+              value={item || ""}
+              isMultiline={false}
+              variablePicker={
+                picker
+                  ? {
+                      target: pickerTarget(field, `item ${index + 1}`),
+                      onChange: (next) => handleChange(index, next),
+                    }
+                  : null
+              }
+            >
               <Input
                 id={`${field.id}-${index}`}
                 value={item}
