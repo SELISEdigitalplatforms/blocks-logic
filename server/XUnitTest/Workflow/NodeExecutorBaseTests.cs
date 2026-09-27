@@ -55,7 +55,7 @@ namespace XUnitTest.Workflow
             }
         }
 
-        private static WorkflowItemExecutionEntity Item(BsonDocument output, Dictionary<string, string>? ancestors = null)
+        private static WorkflowItemExecutionEntity Item(BsonValue output, Dictionary<string, string>? ancestors = null)
             => new()
             {
                 Id = "item-1",
@@ -135,6 +135,91 @@ namespace XUnitTest.Workflow
             var result = exec.Parse<string>("{{$json}}", item, ctx);
             result.Should().Contain("abc");
             result.Should().Contain("count");
+        }
+
+        [Fact]
+        public void Parse_JsonArrayIndex_ReturnsElement()
+        {
+            var exec = new TestExecutor();
+            var item = Item(new BsonDocument
+            {
+                { "ids", new BsonArray { 10, 20 } },
+                { "items", new BsonArray
+                    {
+                        new BsonDocument
+                        {
+                            { "name", "a" },
+                            { "tags", new BsonArray { "first", "second" } },
+                        },
+                    }
+                },
+                { "user", new BsonDocument("name", "a") },
+                { "note", BsonNull.Value },
+            });
+            var ctx = Context(new[] { item });
+
+            exec.Parse<string>("{{$json.output.ids[0]}}", item, ctx).Should().Be("10");
+            exec.Parse<string>("{{$json.output.items[0].name}}", item, ctx).Should().Be("a");
+            exec.Parse<string>("{{$json.output.items[0].tags[1]}}", item, ctx).Should().Be("second");
+            exec.Parse<string>("{{$json.output.ids.[0]}}", item, ctx).Should().Be("10");
+
+            var ids = MongoDB.Bson.Serialization.BsonSerializer.Deserialize<BsonArray>(
+                exec.Parse<string>("{{$json.output.ids}}", item, ctx));
+            ids.Select(value => value.ToInt32()).Should().Equal(10, 20);
+
+            var user = MongoDB.Bson.Serialization.BsonSerializer.Deserialize<BsonDocument>(
+                exec.Parse<string>("{{$json.output.user}}", item, ctx));
+            user["name"].AsString.Should().Be("a");
+
+            exec.Parse<string>("{{$json.output.missing}}", item, ctx).Should().BeEmpty();
+            exec.Parse<string>("{{$json.output.ids[9]}}", item, ctx).Should().BeEmpty();
+            exec.Parse<string>("{{$json.output.ids[x]}}", item, ctx).Should().BeEmpty();
+            exec.Parse<string>("{{$json.output.note}}", item, ctx).Should().Be("null");
+        }
+
+        [Fact]
+        public void Parse_JsonRootArrayIndex_ReturnsElement()
+        {
+            var exec = new TestExecutor();
+            var item = Item(new BsonArray { "alpha", "beta" });
+            var ctx = Context(new[] { item });
+
+            exec.Parse<string>("{{$json.output[0]}}", item, ctx).Should().Be("alpha");
+            exec.Parse<string>("{{$json.output[1]}}", item, ctx).Should().Be("beta");
+            exec.Parse<string>("{{$json.output.missing}}", item, ctx).Should().BeEmpty();
+        }
+
+        [Fact]
+        public void Parse_NodeReference_ResolvesAncestorArrayIndex()
+        {
+            var exec = new TestExecutor();
+            var ancestorItem = Item(new BsonDocument("ids", new BsonArray { 10, 20 }));
+            var inputItem = Item(new BsonDocument("name", "abc"),
+                ancestors: new Dictionary<string, string> { { "Prev", ancestorItem.Id } });
+            var ctx = Context(new[] { inputItem }, ancestorOutputs: new Dictionary<string, List<WorkflowItemExecutionEntity>>
+            {
+                { "Prev", new List<WorkflowItemExecutionEntity> { ancestorItem } },
+            });
+
+            exec.Parse<string>("{{$node[\"Prev\"].json.output.ids[0]}}", inputItem, ctx)
+                .Should().Be("10");
+        }
+
+        [Fact]
+        public void Parse_ScalarOutput_ReturnsPlainText()
+        {
+            var exec = new TestExecutor();
+            var ctx = Context(Array.Empty<WorkflowItemExecutionEntity>());
+
+            var text = Item(new BsonString("hello"));
+            exec.Parse<string>("{{$json.output}}", text, ctx).Should().Be("hello");
+            exec.Parse<string>("{{$json.output.missing}}", text, ctx).Should().BeEmpty();
+
+            var flag = Item(BsonBoolean.True);
+            exec.Parse<string>("{{$json.output}}", flag, ctx).Should().Be("true");
+
+            var number = Item(new BsonInt32(42));
+            exec.Parse<string>("{{$json.output}}", number, ctx).Should().Be("42");
         }
 
         [Fact]

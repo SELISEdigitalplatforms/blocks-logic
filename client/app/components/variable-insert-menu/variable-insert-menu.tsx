@@ -8,26 +8,22 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui-kits/dropdown-menu/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui-kits/tooltip/tooltip";
-import { SecretListItem } from "../types";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
+import { SecretListItem } from "@/models/secret";
 
 type Props = {
   variables?: SecretListItem[];
   variablesLoading?: boolean;
   variablesError?: boolean;
-  /** Called with the chosen variable NAME (not the token) so the caller can insert at its caret. */
+  /** Called with the chosen variable NAME (not the token) so the caller can set its value. */
   onPick: (name: string) => void;
   ariaLabel: string;
 };
 
 /**
  * A compact icon-button dropdown that lists the tenant's secret keys. Selecting one calls
- * `onPick(name)`; the caller turns that into a `{{$VAR.name}}` token and inserts it at the value
- * field's caret. While loading, on error, or when the tenant has no usable key the trigger is a
+ * `onPick(name)`; the caller turns that into a `{{$VAR.name}}` token and sets the value field.
+ * While loading, on error, or when the tenant has no usable key the trigger is a
  * plain disabled button with an explanatory tooltip — the menu is not rendered at all.
  */
 export const VariableInsertMenu = ({

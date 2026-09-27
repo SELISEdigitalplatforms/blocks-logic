@@ -1,4 +1,4 @@
-import { DraggableProperty } from "./draggable-property";
+import { DraggableArrayIndex, DraggableProperty } from "./draggable-property";
 import { formatCellValue } from "../utils/format.util";
 
 export function RecursiveSchemaViewer({ data, depth = 0, prefixPath = "", nodeName, hasSinglePredecessor, showValues = true, isDraggable = true, showColon = true }: { data: unknown; depth?: number; prefixPath?: string; nodeName: string; hasSinglePredecessor: boolean; showValues?: boolean; isDraggable?: boolean; showColon?: boolean }) {
@@ -46,7 +46,15 @@ export function RecursiveSchemaViewer({ data, depth = 0, prefixPath = "", nodeNa
                   showColon={showColon}
                 />
               ) : (
-                <span className={`px-2 py-1 ${showColon ? 'text-medium-emphasis text-xs border border-dashed border-border/80 rounded bg-surface-app' : 'text-low-emphasis text-xs'}`} style={{ marginLeft: `${depth * 1}rem` }}>[{key}]:</span>
+                <DraggableArrayIndex
+                  expressionPath={currentPath}
+                  label={`[${key}]`}
+                  depth={depth}
+                  nodeName={nodeName}
+                  hasSinglePredecessor={hasSinglePredecessor}
+                  isDraggable={isDraggable}
+                  showColon={showColon}
+                />
               )}
               {(!childIsObj && showValues) && <span className="text-low-emphasis text-xs">{formatCellValue(val)}</span>}
             </div>

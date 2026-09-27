@@ -297,6 +297,69 @@ namespace XUnitTest.Workflow
                 .Select(t => t.ToInt32()).Should().Equal(1, 2, 3);
         }
 
+        [Fact]
+        public async Task RunAsync_AllMode_All_PairsEachOutputToItsAncestorSource()
+        {
+            var items = new List<WorkflowItemExecutionEntity>
+            {
+                Item("in", new BsonDocument { { "value", "alpha" } }),
+            };
+            var ancestors = new List<WorkflowItemExecutionEntity>
+            {
+                Item("p1", new BsonDocument { { "v", 1 } }, branch: "left", nodeName: "Prev"),
+                Item("p2", new BsonDocument { { "v", 2 } }, branch: "right", nodeName: "Prev"),
+            };
+            var ctx = Context(items, AllMode, "return $node['Prev'].all();");
+            ctx.AncestorNodeOutputs = new Dictionary<string, List<WorkflowItemExecutionEntity>>
+            {
+                { "Prev", ancestors },
+            };
+
+            var result = await new TransformCodeV1Node().RunAsync(ctx);
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            result.OutputItems.Should().HaveCount(2);
+
+            result.OutputItems[0].Data.Output.AsBsonDocument.Contains("__id").Should().BeFalse();
+            result.OutputItems[0].Data.Output["v"].ToInt32().Should().Be(1);
+            result.OutputItems[0].ParentItemIds.Should().BeEquivalentTo(new[] { "p1" });
+            result.OutputItems[0].Branch.Should().Be("left");
+            result.OutputItems[0].Data.Input["v"].ToInt32().Should().Be(1);
+
+            result.OutputItems[1].Data.Output.AsBsonDocument.Contains("__id").Should().BeFalse();
+            result.OutputItems[1].Data.Output["v"].ToInt32().Should().Be(2);
+            result.OutputItems[1].ParentItemIds.Should().BeEquivalentTo(new[] { "p2" });
+            result.OutputItems[1].Branch.Should().Be("right");
+        }
+
+        [Fact]
+        public async Task RunAsync_AllMode_WrappedAll_FallsBackToEveryDirectInput()
+        {
+            var items = new List<WorkflowItemExecutionEntity>
+            {
+                Item("a", new BsonDocument { { "n", 1 } }),
+                Item("b", new BsonDocument { { "n", 2 } }),
+            };
+            var ancestors = new List<WorkflowItemExecutionEntity>
+            {
+                Item("p1", new BsonDocument { { "v", 1 } }, nodeName: "Prev"),
+                Item("p2", new BsonDocument { { "v", 2 } }, nodeName: "Prev"),
+            };
+            var ctx = Context(items, AllMode, "return { source: $node['Prev'].all() };");
+            ctx.AncestorNodeOutputs = new Dictionary<string, List<WorkflowItemExecutionEntity>>
+            {
+                { "Prev", ancestors },
+            };
+
+            var result = await new TransformCodeV1Node().RunAsync(ctx);
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            result.OutputItems.Should().HaveCount(1);
+            result.OutputItems[0].Data.Output.AsBsonDocument.Contains("__id").Should().BeFalse();
+            result.OutputItems[0].ParentItemIds.Should().BeEquivalentTo(new[] { "a", "b" });
+            result.OutputItems[0].Branch.Should().Be("source");
+        }
+
         // ----- Each mode: $json / $item / $node.<X>.json -----------------------
 
         [Fact]

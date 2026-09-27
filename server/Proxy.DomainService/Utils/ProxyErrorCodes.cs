@@ -6,6 +6,9 @@ namespace Proxy.DomainService.Utils
         /// <summary>400 &mdash; a field on the create / update payload failed validation.</summary>
         public const string Validation = "PROXY_VALIDATION";
 
+        /// <summary>401 &mdash; an authorized proxy control-plane request had no tenant context.</summary>
+        public const string TenantContextRequired = "PROXY_TENANT_CONTEXT_REQUIRED";
+
         /// <summary>409 &mdash; a proxy whose derived slug already exists for the tenant.</summary>
         public const string SlugConflict = "PROXY_SLUG_CONFLICT";
 

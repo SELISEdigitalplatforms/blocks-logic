@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { cva, type VariantProps } from "class-variance-authority";
 
 const switchVariants = cva(
-  "relative cursor-pointer rounded-full border-[1px] border-solid transition-colors duration-200",
+  "group relative cursor-pointer rounded-full border-[1px] border-solid transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50",
   {
     variants: {
       size: {
@@ -22,7 +22,7 @@ const switchVariants = cva(
 );
 
 const switchThumbVariants = cva(
-  "block cursor-pointer rounded-full transition-transform duration-200 will-change-transform",
+  "block cursor-pointer rounded-full transition-transform duration-200 will-change-transform group-disabled:cursor-not-allowed",
   {
     variants: {
       size: {

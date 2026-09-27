@@ -21,6 +21,7 @@ namespace XUnitTest.Mail
             ((int)MailServiceProvider.AmazonSes).Should().Be(0);
             ((int)MailServiceProvider.Zoho).Should().Be(1);
             ((int)MailServiceProvider.Office365Smtp).Should().Be(2);
+            ((int)MailServiceProvider.Gmail).Should().Be(3);
         }
 
         [Fact]
@@ -166,11 +167,70 @@ namespace XUnitTest.Mail
         }
 
         [Fact]
-        public void TheExchangeScope_IsExact()
+        public void Validate_APasswordRecordWithCredentials_Passes()
         {
-            // A token for Graph or a resource-specific scope is issued happily and then refused by
-            // SMTP, surfacing as an authentication failure with nothing pointing at the scope.
-            AzureOffice365TokenAcquirer.ExchangeOnlineScope.Should().Be("https://outlook.office365.com/.default");
+            var config = Valid();
+            config.AuthenticationType = MailAuthenticationType.Password;
+            config.TenantId = null;
+            config.ClientId = null;
+            config.ClientSecretReference = null;
+            config.MailboxAddress = null;
+            config.SenderUserName = "support@contoso.com";
+            config.AccountPassword = "password1";
+
+            Office365ConfigurationContract.Validate(config, "blocks-tenant").Should().BeNull();
+        }
+
+        private static MailServerConfiguration ValidInbound()
+        {
+            var config = Valid();
+            config.IsInbound = true;
+            config.Host = "outlook.office365.com";
+            config.Port = 993;
+            config.SecurityMode = MailSecurityMode.SslOnConnect;
+            return config;
+        }
+
+        [Fact]
+        public void ValidateInbound_AWellFormedImapRecord_Passes()
+        {
+            Office365ConfigurationContract.ValidateInbound(ValidInbound(), "blocks-tenant").Should().BeNull();
+        }
+
+        [Theory]
+        [InlineData("outbound")]
+        [InlineData("password")]
+        [InlineData("host")]
+        [InlineData("port")]
+        [InlineData("security")]
+        [InlineData("reference")]
+        [InlineData("tenant-context")]
+        public void ValidateInbound_RejectsEachViolation(string violation)
+        {
+            var config = ValidInbound();
+            string? blocksTenantId = "blocks-tenant";
+
+            switch (violation)
+            {
+                case "outbound": config.IsInbound = false; break;
+                case "password": config.AuthenticationType = MailAuthenticationType.Password; break;
+                case "host": config.Host = "smtp.office365.com"; break;
+                case "port": config.Port = 143; break;
+                case "security": config.SecurityMode = MailSecurityMode.StartTls; break;
+                case "reference": config.ClientSecretReference = null; break;
+                case "tenant-context": blocksTenantId = null; break;
+            }
+
+            Office365ConfigurationContract.ValidateInbound(config, blocksTenantId).Should().NotBeNull();
+        }
+
+        [Fact]
+        public void TheScopes_AreExact()
+        {
+            // A token for the wrong resource is issued happily and then refused by the one it is
+            // presented to, surfacing as an authentication failure with nothing pointing at the scope.
+            Office365TokenScopes.ExchangeOnline.Should().Be("https://outlook.office365.com/.default");
+            Office365TokenScopes.Graph.Should().Be("https://graph.microsoft.com/.default");
         }
     }
 }

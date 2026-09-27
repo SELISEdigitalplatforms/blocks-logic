@@ -1,7 +1,6 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useFormContext } from "react-hook-form";
 import { FlaskConical, Plus, Trash2 } from "lucide-react";
-import { Badge } from "@/components/ui-kits/badge/badge";
 import {
   Accordion,
   AccordionContent,
@@ -31,13 +30,14 @@ import {
 } from "../types";
 import {
   buildVarToken,
-  containsVarRef,
-  insertToken,
+  keyCollisions,
+  KeyCollision,
   parseRouteTemplate,
   trimRoutePath,
 } from "../utils";
+import { KeyCollisionWarning } from "./key-collision-warning";
 import { ProxyTestPanel } from "./proxy-test-panel";
-import { VariableInsertMenu } from "./variable-insert-menu";
+import { VariableInsertMenu } from "@/components/variable-insert-menu";
 
 type VariablePickerProps = {
   variables?: SecretListItem[];
@@ -98,6 +98,27 @@ const OVERRIDE_LABELS: Record<RowOverrideName, { title: string; on: string; off:
   },
 };
 
+/**
+ * How many distinct connection keys an endpoint's extra rows replace. Duplicates of one key count
+ * once, since only one row reaches the vendor.
+ */
+const countReplaced = (
+  rows: ProxyKeyValue[] | null,
+  connection: ProxyKeyValue[],
+  kind: "header" | "query",
+) => {
+  const list = rows ?? [];
+  const replaced = new Set<string>();
+  keyCollisions(list, connection, kind).forEach((collision, i) => {
+    if (!collision.replacesConnection) return;
+    const key = list[i].key.trim();
+    replaced.add(kind === "header" ? key.toLowerCase() : key);
+  });
+  return replaced.size;
+};
+
+const plural = (count: number, one: string, many: string) => (count === 1 ? one : many);
+
 const joinPath = (base: string, suffix: string) => {
   const root = base.replace(/\/+$/, "");
   const rest = trimRoutePath(suffix);
@@ -120,6 +141,17 @@ export const ProxyRoutesCard = ({
 }: Props) => {
   const { watch, setValue, getValues, formState } = useFormContext<ProxyFormValues>();
   const routes = watch("routes") ?? [];
+  // The connection's rows, split by where they are sent. `credentials` is the form's source of truth
+  // when present; the endpoint comparison only looks at rows with the matching delivery.
+  const credentials = watch("credentials");
+  const connectionHeaders = watch("headers");
+  const connectionQuery = watch("query");
+  const connection = credentials
+    ? {
+        headers: credentials.filter((row) => row.sendAs === "header"),
+        query: credentials.filter((row) => row.sendAs === "query"),
+      }
+    : { headers: connectionHeaders ?? [], query: connectionQuery ?? [] };
 
   const [testOpenFor, setTestOpenFor] = useState<number | null>(null);
   const [testPath, setTestPath] = useState("");
@@ -228,8 +260,18 @@ export const ProxyRoutesCard = ({
             ? `${route.query.length} extra query ${route.query.length === 1 ? "param" : "params"}`
             : null,
         ].filter(Boolean);
+        const replacedHeaders = countReplaced(route.headers, connection.headers, "header");
+        const replacedQuery = countReplaced(route.query, connection.query, "query");
+        const replacesSummary = [
+          replacedHeaders
+            ? `replaces ${replacedHeaders} connection ${plural(replacedHeaders, "header", "headers")}`
+            : null,
+          replacedQuery
+            ? `replaces ${replacedQuery} connection query ${plural(replacedQuery, "param", "params")}`
+            : null,
+        ].filter(Boolean);
         const sendsSummary = sends.length
-          ? sends.join(" · ")
+          ? [...sends, ...replacesSummary].join(" · ")
           : hasBody(route.method)
             ? "Body as your client sent it, with the connection’s headers and query"
             : "Only the connection’s headers and query";
@@ -495,6 +537,7 @@ export const ProxyRoutesCard = ({
                     index={index}
                     name="headers"
                     route={route}
+                    connectionRows={connection.headers}
                     toggleOverride={toggleOverride}
                     patchRow={patchRow}
                     patch={patch}
@@ -506,6 +549,7 @@ export const ProxyRoutesCard = ({
                     index={index}
                     name="query"
                     route={route}
+                    connectionRows={connection.query}
                     toggleOverride={toggleOverride}
                     patchRow={patchRow}
                     patch={patch}
@@ -551,6 +595,11 @@ type OverrideRowsProps = {
   patch: (index: number, changes: Partial<ProxyRoute>) => void;
   /** Shown when the slot is on but empty, for the one slot where that means something. */
   note?: string;
+  /**
+   * The connection's rows of the same kind. Headers and query only: an endpoint's row with the same
+   * key replaces the connection's, which the slot warns about.
+   */
+  connectionRows?: ProxyKeyValue[];
 } & VariablePickerProps;
 
 type RouteValueCellProps = VariablePickerProps & {
@@ -573,18 +622,9 @@ const RouteValueCell = ({
   variablesLoading,
   variablesError,
 }: RouteValueCellProps) => {
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const caretRef = useRef<number | null>(null);
-
-  const rememberCaret = () => {
-    caretRef.current = inputRef.current?.selectionStart ?? null;
-  };
-
   const insert = (variableName: string) => {
-    const current = row.value ?? "";
-    const caret = caretRef.current ?? current.length;
     patchRow(index, name, rowIndex, {
-      value: insertToken(current, caret, buildVarToken(variableName)),
+      value: buildVarToken(variableName),
     });
   };
 
@@ -592,14 +632,10 @@ const RouteValueCell = ({
     <div className="min-w-0 flex-1">
       <div className="flex items-center gap-1.5">
         <Input
-          ref={inputRef}
           className="h-8 font-mono text-xs"
           placeholder="Enter value"
           value={row.value}
           onChange={(event) => patchRow(index, name, rowIndex, { value: event.target.value })}
-          onClick={rememberCaret}
-          onKeyUp={rememberCaret}
-          onSelect={rememberCaret}
         />
         <VariableInsertMenu
           variables={variables}
@@ -609,11 +645,6 @@ const RouteValueCell = ({
           ariaLabel={`Insert a configuration variable into ${label.toLowerCase()} value`}
         />
       </div>
-      {containsVarRef(row.value ?? "") ? (
-        <Badge variant="secondary" className="mt-1 w-fit rounded px-1.5 py-0 text-[10px]">
-          variable
-        </Badge>
-      ) : null}
     </div>
   );
 };
@@ -627,6 +658,7 @@ const OverrideRows = ({
   patchRow,
   patch,
   note,
+  connectionRows,
   variables,
   variablesLoading,
   variablesError,
@@ -636,6 +668,9 @@ const OverrideRows = ({
   const rows = route[name] ?? null;
   const on = rows !== null;
   const labels = OVERRIDE_LABELS[name];
+  const kind = name === "headers" ? "header" : name === "query" ? "query" : null;
+  const collisions: KeyCollision[] =
+    kind && rows ? keyCollisions(rows, connectionRows ?? [], kind) : [];
 
   return (
     <div className="rounded border p-2">
@@ -654,38 +689,47 @@ const OverrideRows = ({
       {on ? (
         <div className="mt-2 space-y-2">
           {(rows ?? []).map((row, rowIndex) => (
-            <div key={`${name}-${rowIndex}`} className="flex items-center gap-2">
-              <Input
-                className="h-8 flex-1 text-xs"
-                placeholder="Enter key"
-                value={row.key}
-                onChange={(event) => patchRow(index, name, rowIndex, { key: event.target.value })}
-              />
-              <RouteValueCell
-                index={index}
-                name={name}
-                rowIndex={rowIndex}
-                row={row}
-                label={labels.title}
-                patchRow={patchRow}
-                variables={variables}
-                variablesLoading={variablesLoading}
-                variablesError={variablesError}
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="shrink-0 text-muted-foreground hover:text-destructive"
-                aria-label={`Remove ${labels.title.toLowerCase()} row ${rowIndex + 1}`}
-                onClick={() =>
-                  patch(index, {
-                    [name]: (rows ?? []).filter((_, i) => i !== rowIndex),
-                  } as Partial<ProxyRoute>)
-                }
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
+            <div key={`${name}-${rowIndex}`}>
+              <div className="flex items-center gap-2">
+                <Input
+                  className="h-8 flex-1 text-xs"
+                  placeholder="Enter key"
+                  value={row.key}
+                  onChange={(event) => patchRow(index, name, rowIndex, { key: event.target.value })}
+                />
+                <RouteValueCell
+                  index={index}
+                  name={name}
+                  rowIndex={rowIndex}
+                  row={row}
+                  label={labels.title}
+                  patchRow={patchRow}
+                  variables={variables}
+                  variablesLoading={variablesLoading}
+                  variablesError={variablesError}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="shrink-0 text-muted-foreground hover:text-destructive"
+                  aria-label={`Remove ${labels.title.toLowerCase()} row ${rowIndex + 1}`}
+                  onClick={() =>
+                    patch(index, {
+                      [name]: (rows ?? []).filter((_, i) => i !== rowIndex),
+                    } as Partial<ProxyRoute>)
+                  }
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              {kind ? (
+                <KeyCollisionWarning
+                  rowKey={row.key}
+                  kind={kind}
+                  collision={collisions[rowIndex]}
+                />
+              ) : null}
             </div>
           ))}
           <Button

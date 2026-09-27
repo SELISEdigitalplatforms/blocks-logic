@@ -67,10 +67,10 @@ namespace Proxy.DomainService.Repositories
             }
         }
 
-        private static FilterDefinition<ProxyDetailEntity> BuildListFilter(string tenantId, string? search, bool? isActive)
+        private static FilterDefinition<ProxyDetailEntity> BuildListFilter(string? search, bool? isActive)
         {
             var builder = Builders<ProxyDetailEntity>.Filter;
-            var filter = builder.Eq(p => p.TenantId, tenantId);
+            var filter = builder.Empty;
 
             if (!string.IsNullOrWhiteSpace(search))
             {
@@ -86,39 +86,54 @@ namespace Proxy.DomainService.Repositories
             return filter;
         }
 
+        private static ProxyDetailEntity? NormalizeTenant(ProxyDetailEntity? proxy, string tenantId)
+        {
+            if (proxy != null && !string.Equals(proxy.TenantId, tenantId, StringComparison.Ordinal))
+            {
+                proxy.TenantId = tenantId;
+            }
+
+            return proxy;
+        }
+
         public async Task<ProxyDetailEntity?> GetAsync(string tenantId, string itemId)
         {
             var collection = GetCollection(tenantId);
-            var filter = Builders<ProxyDetailEntity>.Filter.Eq(p => p.TenantId, tenantId)
-                         & Builders<ProxyDetailEntity>.Filter.Eq(p => p.ItemId, itemId);
-            return await collection.Find(filter).FirstOrDefaultAsync();
+            var filter = Builders<ProxyDetailEntity>.Filter.Eq(p => p.ItemId, itemId);
+            return NormalizeTenant(await collection.Find(filter).FirstOrDefaultAsync(), tenantId);
         }
 
         public async Task<ProxyDetailEntity?> GetBySlugAsync(string tenantId, string slug)
         {
             var collection = GetCollection(tenantId);
             await EnsureIndexesAsync(tenantId, collection);
-            var filter = Builders<ProxyDetailEntity>.Filter.Eq(p => p.TenantId, tenantId)
-                         & Builders<ProxyDetailEntity>.Filter.Eq(p => p.Slug, slug);
-            return await collection.Find(filter).FirstOrDefaultAsync();
+            var filter = Builders<ProxyDetailEntity>.Filter.Eq(p => p.Slug, slug);
+            return NormalizeTenant(await collection.Find(filter).FirstOrDefaultAsync(), tenantId);
         }
 
         public async Task<List<ProxyDetailEntity>> GetAllAsync(
             string tenantId, string? search, bool? isActive, int pageSize, int pageNumber)
         {
             var collection = GetCollection(tenantId);
-            return await collection
-                .Find(BuildListFilter(tenantId, search, isActive))
+            var proxies = await collection
+                .Find(BuildListFilter(search, isActive))
                 .SortByDescending(p => p.CreatedDate)
                 .Skip(pageNumber * pageSize)
                 .Limit(pageSize)
                 .ToListAsync();
+
+            foreach (var proxy in proxies)
+            {
+                NormalizeTenant(proxy, tenantId);
+            }
+
+            return proxies;
         }
 
         public async Task<long> CountAsync(string tenantId, string? search, bool? isActive)
         {
             var collection = GetCollection(tenantId);
-            return await collection.CountDocumentsAsync(BuildListFilter(tenantId, search, isActive));
+            return await collection.CountDocumentsAsync(BuildListFilter(search, isActive));
         }
 
         public async Task InsertAsync(ProxyDetailEntity proxy)
@@ -130,17 +145,20 @@ namespace Proxy.DomainService.Repositories
 
         public async Task ReplaceAsync(ProxyDetailEntity proxy)
         {
+            if (string.IsNullOrWhiteSpace(proxy.TenantId))
+            {
+                throw new InvalidOperationException("TenantId is required for a proxy.");
+            }
+
             var collection = GetCollection(proxy.TenantId);
-            var filter = Builders<ProxyDetailEntity>.Filter.Eq(p => p.TenantId, proxy.TenantId)
-                         & Builders<ProxyDetailEntity>.Filter.Eq(p => p.ItemId, proxy.ItemId);
+            var filter = Builders<ProxyDetailEntity>.Filter.Eq(p => p.ItemId, proxy.ItemId);
             await collection.ReplaceOneAsync(filter, proxy);
         }
 
         public async Task DeleteAsync(string tenantId, string itemId)
         {
             var collection = GetCollection(tenantId);
-            var filter = Builders<ProxyDetailEntity>.Filter.Eq(p => p.TenantId, tenantId)
-                         & Builders<ProxyDetailEntity>.Filter.Eq(p => p.ItemId, itemId);
+            var filter = Builders<ProxyDetailEntity>.Filter.Eq(p => p.ItemId, itemId);
             await collection.DeleteOneAsync(filter);
         }
 
@@ -160,8 +178,7 @@ namespace Proxy.DomainService.Repositories
             var models = new List<WriteModel<ProxyDetailEntity>>(deltas.Count);
             foreach (var delta in deltas)
             {
-                var filter = Builders<ProxyDetailEntity>.Filter.Eq(p => p.TenantId, tenantId)
-                             & Builders<ProxyDetailEntity>.Filter.Eq(p => p.ItemId, delta.ProxyId);
+                var filter = Builders<ProxyDetailEntity>.Filter.Eq(p => p.ItemId, delta.ProxyId);
 
                 // Dotted paths into the bucket map: $inc creates the hour's sub-document and its fields when
                 // they are missing, so the first call of an hour needs no separate insert and no upsert race.

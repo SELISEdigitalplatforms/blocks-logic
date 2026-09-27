@@ -28,9 +28,7 @@ describe("ProxyLogsTab", () => {
   });
 
   it("shows visible loading skeletons while request logs load", () => {
-    vi.spyOn(proxyService, "getExecutions").mockImplementation(
-      () => new Promise(() => undefined),
-    );
+    vi.spyOn(proxyService, "getExecutions").mockImplementation(() => new Promise(() => undefined));
 
     renderWithProviders(<ProxyLogsTab proxy={PROXY_MOCK_DATA[0]} active={true} />);
 
@@ -51,6 +49,34 @@ describe("ProxyLogsTab", () => {
     expect(await screen.findByText(/Upstream timeout/)).toBeTruthy();
   });
 
+  it("shows a chevron on each row that rotates and toggles aria-expanded", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ProxyLogsTab proxy={PROXY_MOCK_DATA[0]} active={true} />);
+
+    expect(await screen.findByText("3 of 3 requests")).toBeTruthy();
+    const rowButton = screen
+      .getAllByText("/api/proxy/gateway/stripe-payments/charges")[0]
+      .closest("button")!;
+    const chevron = rowButton.querySelector('[data-testid="log-row-chevron"]')!;
+
+    expect(screen.getAllByTestId("log-row-chevron")).toHaveLength(3);
+    expect(rowButton.getAttribute("aria-expanded")).toBe("false");
+    expect(rowButton.getAttribute("aria-controls")).toBeNull();
+    expect(chevron.getAttribute("class")).not.toContain("rotate-90");
+
+    await user.click(rowButton);
+
+    expect(rowButton.getAttribute("aria-expanded")).toBe("true");
+    expect(chevron.getAttribute("class")).toContain("rotate-90");
+    const controls = rowButton.getAttribute("aria-controls")!;
+    await waitFor(() => expect(document.getElementById(controls)).toBeTruthy());
+
+    await user.click(rowButton);
+
+    expect(rowButton.getAttribute("aria-expanded")).toBe("false");
+    expect(chevron.getAttribute("class")).not.toContain("rotate-90");
+  });
+
   it("paginates the logs table through the Pagination component", async () => {
     const user = userEvent.setup();
     const rows = PROXY_MOCK_EXECUTION_LOGS.filter((log) => log.proxyId === PROXY_MOCK_DATA[0].id);
@@ -66,7 +92,11 @@ describe("ProxyLogsTab", () => {
 
     getExecutions.mockClear();
     const nextButton = [...container.querySelectorAll("button")].find(
-      (button) => button.querySelector(".lucide-chevron-right") && !button.disabled,
+      // Row buttons carry a chevron too; the pager's buttons are the ones without aria-expanded.
+      (button) =>
+        button.querySelector(".lucide-chevron-right") &&
+        !button.hasAttribute("aria-expanded") &&
+        !button.disabled,
     );
     await user.click(nextButton!);
 

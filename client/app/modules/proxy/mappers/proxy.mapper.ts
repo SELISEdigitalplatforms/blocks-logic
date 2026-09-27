@@ -319,7 +319,7 @@ export const mapProxyListItemDtoToProxy = (dto: ProxyListItemDto): Proxy => ({
   id: dto.itemId,
   name: dto.name,
   slug: dto.slug,
-  upstreamUrl: "",
+  upstreamUrl: dto.upstream ?? "",
   upstreamMasked: dto.upstreamMasked,
   methods: toMethods(dto.methods),
   enabled: dto.enabled,
