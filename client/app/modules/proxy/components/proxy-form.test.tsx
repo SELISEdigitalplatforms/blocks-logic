@@ -173,6 +173,7 @@ describe("ProxyForm", () => {
 
     await user.click(screen.getByRole("button", { name: "What this endpoint sends and returns" }));
     await user.click(screen.getByRole("switch", { name: "Extra headers for endpoint 1" }));
+    await user.type(screen.getByPlaceholderText("Enter value"), "Bearer ");
     await user.click(
       await screen.findByRole("button", {
         name: "Insert a configuration variable into extra headers value",
@@ -180,7 +181,7 @@ describe("ProxyForm", () => {
     );
     await user.click(await screen.findByRole("option", { name: /stripe-api-key/ }));
 
-    expect(screen.getByDisplayValue("{{$VAR.stripe-api-key}}")).toBeTruthy();
+    expect(screen.getByDisplayValue("Bearer {{$VAR.stripe-api-key}}")).toBeTruthy();
     expect(screen.getByText(/uses a variable/i)).toBeTruthy();
   });
 

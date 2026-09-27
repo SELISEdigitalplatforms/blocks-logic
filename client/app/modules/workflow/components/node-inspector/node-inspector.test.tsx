@@ -19,6 +19,9 @@ const toasts = vi.hoisted(() => ({
   showSuccessToast: vi.fn(),
   showInfoToast: vi.fn(),
 }));
+const clipboard = vi.hoisted(() => ({
+  copyToClipboard: vi.fn().mockResolvedValue(undefined),
+}));
 const workflowServiceMock = vi.hoisted(() => ({
   triggerListener: vi.fn().mockResolvedValue({}),
   stepExecute: vi.fn().mockResolvedValue({}),
@@ -26,6 +29,7 @@ const workflowServiceMock = vi.hoisted(() => ({
   getWorkflowExecutionById: vi.fn().mockResolvedValue({ data: {} }),
 }));
 vi.mock("@/hooks/use-toast", () => toasts);
+vi.mock("@blocks-workflow/utils/copy-to-clipboard", () => clipboard);
 vi.mock("../../services/workflow.service", () => ({
   workflowService: workflowServiceMock,
 }));
@@ -43,7 +47,9 @@ const node = (id: string, extra: Record<string, unknown> = {}): any => ({
   ...extra,
 });
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 describe("InputPanel", () => {
   it("returns null without a selected node", () => {
@@ -75,6 +81,10 @@ describe("InputPanel", () => {
     await user.click(screen.getByRole("tab", { name: "Table" }));
     await user.click(screen.getByRole("tab", { name: "JSON" }));
     await waitFor(() => expect(screen.getAllByText(/item 1/).length).toBeGreaterThan(0));
+    await user.click(screen.getByRole("button", { name: "Copy input JSON" }));
+    expect(clipboard.copyToClipboard).toHaveBeenCalledWith(
+      JSON.stringify([{ name: "Ada" }], null, 2),
+    );
   });
 });
 

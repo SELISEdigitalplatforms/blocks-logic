@@ -6,6 +6,7 @@ using Mail.DomainService.Utilities;
 using MailBoxSyncService.Entities;
 using MailKit.Security;
 using Microsoft.Extensions.Logging.Abstractions;
+using MimeKit;
 using System.Collections.Concurrent;
 
 namespace MailBoxSyncService.Services
@@ -62,47 +63,53 @@ namespace MailBoxSyncService.Services
             for (int i = 0; i < inbox.Count; i++)
             {
                 var message = await inbox.GetMessageAsync(i);
-
-                if (string.IsNullOrWhiteSpace(message.MessageId))
-                    continue;
-
-                if (await _repository.ExistsAsync(message.MessageId, tenantId))
-                    continue;
-
-                var entity = new MailBoxEntity
-                {
-                    ItemId = Guid.NewGuid().ToString(),
-                    MessageId = message.MessageId,
-                    MailServerConfigurationId = config.ItemId,
-                    Subject = message.Subject ?? "",
-                    From = message.From.FirstOrDefault()?.ToString() ?? "",
-                    To = string.Join(",", message.To),
-                    Date = message.Date.UtcDateTime,
-                    RawMime = message.ToString(),
-                    Body = message.TextBody,
-                    Status = MailStatus.Received,
-                    IsInbound = true
-                };
-
-                await _repository.InsertAsync(entity, tenantId);
-
-                try
-                {
-                    await EnqueueInboxEmailInsertionMessage(entity, tenantId);
-                }
-                catch (Exception ex)
-                {
-                    // The mail is already stored, so a failed trigger must not stop the rest of
-                    // the inbox from syncing: one bad message would otherwise block every message
-                    // after it on every poll.
-                    _logger.LogError(
-                        ex,
-                        "Mail {MessageId} was saved but its email trigger could not be published for tenant '{TenantId}' using config '{ConfigId}'",
-                        entity.MessageId,
-                        tenantId,
-                        config.ItemId);
-                }
+                await StoreInboundAsync(config, tenantId, message);
             }
+        }
+
+        public async Task<bool> StoreInboundAsync(MailServerConfiguration config, string tenantId, MimeMessage message)
+        {
+            if (string.IsNullOrWhiteSpace(message.MessageId))
+                return false;
+
+            if (await _repository.ExistsAsync(message.MessageId, tenantId))
+                return false;
+
+            var entity = new MailBoxEntity
+            {
+                ItemId = Guid.NewGuid().ToString(),
+                MessageId = message.MessageId,
+                MailServerConfigurationId = config.ItemId,
+                Subject = message.Subject ?? "",
+                From = message.From.FirstOrDefault()?.ToString() ?? "",
+                To = string.Join(",", message.To),
+                Date = message.Date.UtcDateTime,
+                RawMime = message.ToString(),
+                Body = message.TextBody,
+                Status = MailStatus.Received,
+                IsInbound = true
+            };
+
+            await _repository.InsertAsync(entity, tenantId);
+
+            try
+            {
+                await EnqueueInboxEmailInsertionMessage(entity, tenantId);
+            }
+            catch (Exception ex)
+            {
+                // The mail is already stored, so a failed trigger must not stop the rest of
+                // the inbox from syncing: one bad message would otherwise block every message
+                // after it on every poll.
+                _logger.LogError(
+                    ex,
+                    "Mail {MessageId} was saved but its email trigger could not be published for tenant '{TenantId}' using config '{ConfigId}'",
+                    entity.MessageId,
+                    tenantId,
+                    config.ItemId);
+            }
+
+            return true;
         }
 
         /// <summary>

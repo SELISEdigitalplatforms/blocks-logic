@@ -225,11 +225,12 @@ namespace XUnitTest.Mail
         }
 
         [Fact]
-        public void TheExchangeScope_IsExact()
+        public void TheScopes_AreExact()
         {
-            // A token for Graph or a resource-specific scope is issued happily and then refused by
-            // SMTP, surfacing as an authentication failure with nothing pointing at the scope.
-            AzureOffice365TokenAcquirer.ExchangeOnlineScope.Should().Be("https://outlook.office365.com/.default");
+            // A token for the wrong resource is issued happily and then refused by the one it is
+            // presented to, surfacing as an authentication failure with nothing pointing at the scope.
+            Office365TokenScopes.ExchangeOnline.Should().Be("https://outlook.office365.com/.default");
+            Office365TokenScopes.Graph.Should().Be("https://graph.microsoft.com/.default");
         }
     }
 }

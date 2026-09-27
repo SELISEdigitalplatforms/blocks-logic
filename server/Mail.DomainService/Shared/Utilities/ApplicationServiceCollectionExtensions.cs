@@ -34,12 +34,18 @@ namespace Mail.DomainService.Shared.Utilities
             // the same provider makes OutboundMailSenderRegistry throw while building its dictionary.
             services.TryAddEnumerable(ServiceDescriptor.Singleton<IOutboundMailSender, AmazonSesMailSender>());
             services.TryAddEnumerable(ServiceDescriptor.Singleton<IOutboundMailSender, ZohoMailSender>());
-            services.TryAddEnumerable(ServiceDescriptor.Singleton<IOutboundMailSender, Office365SmtpClient>());
+            services.TryAddEnumerable(ServiceDescriptor.Singleton<IOutboundMailSender, Office365MailSender>());
             services.TryAddEnumerable(ServiceDescriptor.Singleton<IOutboundMailSender, GmailMailSender>());
             services.TryAddSingleton<IOutboundMailSenderRegistry, OutboundMailSenderRegistry>();
 
             services.RegisterOffice365TokenServices();
-            services.AddSingleton<Office365SmtpClient>();
+            services.TryAddSingleton<Office365SmtpClient>();
+            services.TryAddSingleton<Office365GraphMailSender>();
+
+            // A plain client: no Graph SDK middleware, so nothing retries a send that may already
+            // have been accepted. The timeout bounds one request, and a large draft upload is
+            // many requests.
+            services.AddHttpClient(Office365GraphMailSender.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(100));
             services.AddTransient<MailKitSmtpClient>();
             services.AddTransient<MicrosoftSmtpClient>();
             services.AddSingleton<ISendMailService, SendMailService>();

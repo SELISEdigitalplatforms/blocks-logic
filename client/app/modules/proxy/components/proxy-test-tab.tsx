@@ -20,8 +20,20 @@ import { cn } from "@/lib/utils";
 import { getProxyClientUrl } from "../constants";
 import { useSendProxyTestRequest } from "../hooks";
 import { Proxy, ProxyMethod, ProxyRoute, ProxyTestResponse } from "../types";
-import { fillRouteParams, formatProxyBody, parseRouteTemplate } from "../utils";
+import {
+  buildPrefillBody,
+  buildPrefillQuery,
+  EffectiveRouteConfig,
+  fillRouteParams,
+  formatProxyBody,
+  jsonBodyKeys,
+  overriddenKeys,
+  parseRouteTemplate,
+  queryStringKeys,
+  resolveEffectiveRoute,
+} from "../utils";
 import { ProxyMethodBadge } from "./proxy-method-badge";
+import { ReadonlyConfigRows } from "./readonly-config-rows";
 
 type Props = {
   proxy: Proxy;
@@ -34,6 +46,65 @@ const BODY_METHODS: ProxyMethod[] = ["POST", "PUT", "PATCH"];
 const routeKey = (route: ProxyRoute) => `${route.method} ${route.path}`;
 
 const routeLabel = (route: ProxyRoute) => (route.path ? `/${route.path}` : "/ (base path)");
+
+/** The routes the picker offers for a method. An empty allowlist means "base path only" server-side. */
+const routesFor = (proxy: Proxy, method: ProxyMethod): ProxyRoute[] =>
+  proxy.routes.length
+    ? proxy.routes.filter((route) => route.method === method)
+    : [
+        {
+          method,
+          path: "",
+          upstreamPath: null,
+          headers: null,
+          query: null,
+          bodyMerge: null,
+          responseMode: null,
+          responseInclude: null,
+        },
+      ];
+
+/** What the query and body inputs start with for a route: the proxy's own configured values. */
+const prefillFor = (effective: EffectiveRouteConfig, method: ProxyMethod) => ({
+  query: buildPrefillQuery(effective.query),
+  body: BODY_METHODS.includes(method) ? buildPrefillBody(effective.bodyMerge) : "",
+});
+
+const initialPrefill = (proxy: Proxy) => {
+  const method = proxy.methods[0] ?? "GET";
+  return prefillFor(resolveEffectiveRoute(proxy, method, routesFor(proxy, method)[0]), method);
+};
+
+/** "`a` is" / "`a`, `b` are" — the keys the proxy sets regardless of what is typed. */
+const OverrideNote = ({ keys, what }: { keys: string[]; what: string }) => {
+  if (!keys.length) return null;
+  const one = keys.length === 1;
+  return (
+    <p className="text-xs text-amber-700 dark:text-amber-400">
+      {keys.map((key, index) => (
+        <span key={key}>
+          {index ? ", " : null}
+          <code className="font-mono">{key}</code>
+        </span>
+      ))}{" "}
+      {one ? "is" : "are"} set by the proxy — {one ? "its" : "their"} configured{" "}
+      {one ? "value is" : "values are"} sent regardless of what&apos;s typed in this {what}.
+    </p>
+  );
+};
+
+const ResetLink = ({ onClick, label }: { onClick: () => void; label: string }) => (
+  <Button
+    type="button"
+    variant="link"
+    size="sm"
+    className="h-auto p-0 text-xs"
+    aria-label={label}
+    onClick={onClick}
+  >
+    Reset to config
+  </Button>
+);
 
 /** Short badge for the response-filter outcome of a Test (SPEC 5.6). */
 const filterBadge = (note: string | null | undefined) => {
@@ -71,37 +142,33 @@ export const ProxyTestTab = ({ proxy }: Props) => {
   const [method, setMethod] = useState<ProxyMethod>(proxy.methods[0] ?? "GET");
   const [selectedRoute, setSelectedRoute] = useState<string | null>(null);
   const [params, setParams] = useState<Record<string, string>>({});
-  const [query, setQuery] = useState("");
-  const [body, setBody] = useState("");
+  // Seeded from the proxy's configuration and re-seeded only on a method or route change, so edits
+  // survive re-renders.
+  const [query, setQuery] = useState(() => initialPrefill(proxy).query);
+  const [body, setBody] = useState(() => initialPrefill(proxy).body);
   const [response, setResponse] = useState<ProxyTestResponse | null>(null);
 
-  // An empty allowlist means "base path only" server-side, so offer exactly that one route.
-  const routes = useMemo<ProxyRoute[]>(
-    () =>
-      proxy.routes.length
-        ? proxy.routes.filter((route) => route.method === method)
-        : [
-            {
-              method,
-              path: "",
-              upstreamPath: null,
-              headers: null,
-              query: null,
-              bodyMerge: null,
-              responseMode: null,
-              responseInclude: null,
-            },
-          ],
-    [method, proxy.routes],
-  );
+  const routes = useMemo(() => routesFor(proxy, method), [proxy, method]);
 
   const route = routes.find((candidate) => routeKey(candidate) === selectedRoute) ?? routes[0];
+  const effective = useMemo(
+    () => resolveEffectiveRoute(proxy, method, route),
+    [proxy, method, route],
+  );
   const parsedRoute = parseRouteTemplate(route?.path ?? "");
   const paramNames = parsedRoute.ok ? parsedRoute.params : [];
   const missingParams = paramNames.filter((name) => !params[name]?.trim());
   const pathSuffix = route ? fillRouteParams(route.path, params) : "";
   const trimmedQuery = query.trim().replace(/^\?/, "");
   const sendsBody = BODY_METHODS.includes(method);
+  const overriddenQuery = overriddenKeys(queryStringKeys(query), effective.query);
+  const overriddenBody = sendsBody ? overriddenKeys(jsonBodyKeys(body), effective.bodyMerge) : [];
+
+  const prefill = (nextMethod: ProxyMethod, nextRoute: ProxyRoute | undefined) => {
+    const next = prefillFor(resolveEffectiveRoute(proxy, nextMethod, nextRoute), nextMethod);
+    setQuery(next.query);
+    setBody(next.body);
+  };
 
   // The exact URL a client would call for this route, so a Test reads as the real request.
   const requestUrl = `${getProxyClientUrl(selectedProject, proxy.slug, pathSuffix)}${
@@ -120,6 +187,16 @@ export const ProxyTestTab = ({ proxy }: Props) => {
     // Route lists are per method; fall the picker back to the first route of the new method.
     setSelectedRoute(null);
     setParams({});
+    prefill(next, routesFor(proxy, next)[0]);
+  };
+
+  const changeRoute = (key: string) => {
+    setSelectedRoute(key);
+    setParams({});
+    prefill(
+      method,
+      routes.find((candidate) => routeKey(candidate) === key),
+    );
   };
 
   const runTest = async () => {
@@ -164,13 +241,7 @@ export const ProxyTestTab = ({ proxy }: Props) => {
             <div className="space-y-2">
               <Label htmlFor="proxy-test-route">Route</Label>
               {route ? (
-                <Select
-                  value={routeKey(route)}
-                  onValueChange={(value) => {
-                    setSelectedRoute(value);
-                    setParams({});
-                  }}
-                >
+                <Select value={routeKey(route)} onValueChange={changeRoute}>
                   <SelectTrigger id="proxy-test-route" aria-label="Test route">
                     <SelectValue />
                   </SelectTrigger>
@@ -210,7 +281,13 @@ export const ProxyTestTab = ({ proxy }: Props) => {
           ) : null}
 
           <div className="space-y-2">
-            <Label htmlFor="proxy-test-query">Query string</Label>
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor="proxy-test-query">Query string</Label>
+              <ResetLink
+                label="Reset query string to config"
+                onClick={() => setQuery(buildPrefillQuery(effective.query))}
+              />
+            </div>
             <Input
               id="proxy-test-query"
               value={query}
@@ -221,11 +298,18 @@ export const ProxyTestTab = ({ proxy }: Props) => {
             <p className="text-xs text-muted-foreground">
               Sent alongside the query parameters the proxy injects server-side.
             </p>
+            <OverrideNote keys={overriddenQuery} what="query string" />
           </div>
 
           {sendsBody ? (
             <div className="space-y-2">
-              <Label htmlFor="proxy-test-body">Request body (JSON)</Label>
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="proxy-test-body">Request body (JSON)</Label>
+                <ResetLink
+                  label="Reset body to config"
+                  onClick={() => setBody(buildPrefillBody(effective.bodyMerge))}
+                />
+              </div>
               <Textarea
                 id="proxy-test-body"
                 value={body}
@@ -233,15 +317,28 @@ export const ProxyTestTab = ({ proxy }: Props) => {
                 placeholder="{ }"
                 className="min-h-28 font-mono"
               />
-              {proxy.bodyMerge.length ? (
+              {effective.bodyMerge.length ? (
                 <p className="text-xs text-muted-foreground">
-                  {proxy.bodyMerge.length} configured field
-                  {proxy.bodyMerge.length === 1 ? " is" : "s are"} merged into this body
+                  {effective.bodyMerge.length} configured field
+                  {effective.bodyMerge.length === 1 ? " is" : "s are"} merged into this body
                   server-side.
                 </p>
               ) : null}
+              <OverrideNote keys={overriddenBody} what="body" />
             </div>
           ) : null}
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Headers the proxy adds</p>
+            <ReadonlyConfigRows
+              label="Headers the proxy adds"
+              rows={effective.headers.map((row) => ({ ...row, tag: row.source }))}
+              empty="No headers are added on this endpoint."
+            />
+            <p className="text-xs text-muted-foreground">
+              Attached server-side on every call. Headers sent by the caller are not forwarded.
+            </p>
+          </div>
 
           <div className="flex flex-wrap items-center gap-3 rounded-sm border bg-muted/20 px-3 py-2">
             <ProxyMethodBadge method={method} />

@@ -297,6 +297,8 @@ export type ProxyListItemDto = {
   itemId: string;
   name: string;
   slug: string;
+  /** Full upstream URL. Absent from servers that predate it; the list then falls back to the masked one. */
+  upstream?: string;
   upstreamMasked: string;
   methods: string[];
   enabled: boolean;

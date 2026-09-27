@@ -8,7 +8,8 @@ import { Trash2, Plus } from "lucide-react";
 import { FieldProps } from "../form-field.types";
 import { SelectField } from "./select-field";
 import { cn } from "@/lib/utils";
-import { ExpressionHighlighter } from "../utils/expression-highlighter";
+import { ExpressionHighlighter, VariablePickerConfig } from "../utils/expression-highlighter";
+import { pickerTarget, showsVariablePicker } from "./secret-picker";
 
 export type Condition = {
   left: string;
@@ -79,10 +80,10 @@ const TYPE_OPERATORS: Record<string, { value: string; label: string }[]> = {
   ],
 };
 
-function DroppableConditionInput({ id, value, onChange, placeholder, disabled, readOnly, isMultiline }: { id: string; value: string; onChange: (v: string) => void; placeholder?: string; disabled?: boolean; readOnly?: boolean; isMultiline: boolean }) {
+function DroppableConditionInput({ id, value, onChange, placeholder, disabled, readOnly, isMultiline, variablePicker }: { id: string; value: string; onChange: (v: string) => void; placeholder?: string; disabled?: boolean; readOnly?: boolean; isMultiline: boolean; variablePicker?: VariablePickerConfig | null }) {
   return (
     <div className={cn("relative w-full")}>
-      <ExpressionHighlighter value={value || ""} isMultiline={isMultiline}>
+      <ExpressionHighlighter value={value || ""} isMultiline={isMultiline} variablePicker={variablePicker}>
         <Input
           id={id}
           placeholder={placeholder}
@@ -106,6 +107,7 @@ export const ConditionsField = ({
   data,
   config,
   className,
+  variablePicker,
 }: FieldProps<Condition[]>) => {
   const initial: Condition[] = Array.isArray(value) ? (value as Condition[]) : [];
 
@@ -119,6 +121,16 @@ export const ConditionsField = ({
     setConditions(next);
     onChange(next);
   };
+
+  const picker = showsVariablePicker(field, readOnly, variablePicker);
+  const operandPicker = (idx: number, side: "left" | "right") =>
+    picker
+      ? {
+          target: pickerTarget(field, `condition ${idx + 1} ${side} operand`),
+          onChange: (next: string) =>
+            side === "left" ? handleLeftChange(idx, next) : handleRightChange(idx, next),
+        }
+      : null;
 
   const handleAdd = () => {
     updateAndEmit([...conditions, { left: "", operator: "equals", right: "" }]);
@@ -171,6 +183,7 @@ export const ConditionsField = ({
                   readOnly={readOnly}
                   disabled={field.disabled as boolean}
                   isMultiline={false}
+                  variablePicker={operandPicker(idx, "left")}
                 />
               </div>
               <div className="flex gap-2">
@@ -217,6 +230,7 @@ export const ConditionsField = ({
                     readOnly={readOnly}
                     disabled={field.disabled as boolean}
                     isMultiline={false}
+                    variablePicker={operandPicker(idx, "right")}
                   />
                 </div>
               )}

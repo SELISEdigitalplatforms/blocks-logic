@@ -4,8 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Input } from "@/components/ui-kits/input/input";
 import { Textarea } from "@/components/ui-kits/textarea/textarea";
 import { FieldProps } from "../form-field.types";
-import { ExpressionHighlighter } from "../utils/expression-highlighter";
+import { ExpressionHighlighter, VariablePickerConfig } from "../utils/expression-highlighter";
 import { cn } from "@/lib/utils";
+import { pickerTarget, showsVariablePicker } from "./secret-picker";
 
 const toRecord = (value: unknown): Record<string, unknown> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
@@ -32,10 +33,10 @@ const buildValueForKeys = (
     return result;
   }, {});
 
-function DroppableValueTextarea({ id, value, onChange, placeholder, disabled, readOnly, className, rows }: { id: string; value: string; onChange: (v: string) => void; placeholder: string; disabled?: boolean; readOnly?: boolean; className?: string; rows?: number }) {
+function DroppableValueTextarea({ id, value, onChange, placeholder, disabled, readOnly, className, rows, variablePicker }: { id: string; value: string; onChange: (v: string) => void; placeholder: string; disabled?: boolean; readOnly?: boolean; className?: string; rows?: number; variablePicker?: VariablePickerConfig | null }) {
   return (
     <div className={cn("relative flex-1")}>
-      <ExpressionHighlighter value={value || ""} isMultiline={true}>
+      <ExpressionHighlighter value={value || ""} isMultiline={true} variablePicker={variablePicker}>
         <Textarea
           id={id}
           placeholder={placeholder}
@@ -60,6 +61,7 @@ export const FixedKeyValuePairsField = ({
   readOnly,
   data,
   config,
+  variablePicker,
 }: FieldProps<Record<string, unknown>>) => {
   const initialKeys = useMemo(
     () => (Array.isArray(field.fixedKeys) ? field.fixedKeys : []),
@@ -141,6 +143,8 @@ export const FixedKeyValuePairsField = ({
     }
   }, [keys]);
 
+  const picker = showsVariablePicker(field, readOnly, variablePicker);
+
   const handleValueChange = (key: string, nextValue: string) => {
     onChange({
       ...buildValueForKeys(keys, currentValue),
@@ -174,16 +178,26 @@ export const FixedKeyValuePairsField = ({
               disabled={field.disabled as boolean}
               className="rounded-b-none bg-muted/40 focus-visible:ring-0 focus-visible:ring-offset-0"
             />
-          <DroppableValueTextarea
-            id={`${field.id}-val-${key}`}
-            placeholder={field.placeholder || "Value"}
-            value={String(currentValue[key] ?? "")}
-            onChange={readOnly ? () => {} : (v) => handleValueChange(key, v)}
-            readOnly={readOnly}
-            rows={1}
-            disabled={field.disabled as boolean}
-            className="min-h-9 resize-y rounded-t-none border-t-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-          />
+          <div className="flex items-start">
+            <DroppableValueTextarea
+              id={`${field.id}-val-${key}`}
+              placeholder={field.placeholder || "Value"}
+              value={String(currentValue[key] ?? "")}
+              onChange={readOnly ? () => {} : (v) => handleValueChange(key, v)}
+              readOnly={readOnly}
+              rows={1}
+              disabled={field.disabled as boolean}
+              className="min-h-9 resize-y rounded-t-none border-t-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+              variablePicker={
+                picker
+                  ? {
+                      target: pickerTarget(field, `${key} value`),
+                      onChange: (next) => handleValueChange(key, next),
+                    }
+                  : null
+              }
+            />
+          </div>
         </div>
       ))}
     </div>

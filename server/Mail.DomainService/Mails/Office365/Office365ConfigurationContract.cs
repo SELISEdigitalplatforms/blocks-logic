@@ -65,11 +65,20 @@ namespace Mail.DomainService.Mails.Office365
         }
 
         /// <summary>
-        /// Returns the reason an inbound (IMAP) record cannot be used, or null when it is valid.
+        /// Returns the reason an inbound record cannot be used, or null when it is valid.
         /// </summary>
         /// <remarks>
-        /// OAuth only: Exchange Online has retired basic authentication for IMAP, so a password
-        /// record is refused here rather than failing at the server on every poll.
+        /// <para>
+        /// OAuth only: inbound reads through Graph with a client-credentials token, so a password
+        /// record is refused here rather than failing on every poll.
+        /// </para>
+        /// <para>
+        /// The IMAP host, port and security mode are still required although Graph uses none of
+        /// them — the same arrangement as an outbound OAuth record, which keeps its SMTP endpoint.
+        /// blocks-os normalizes every inbound record to exactly these values, so they are the
+        /// stored shape of a well-formed record, and anything else is one that did not come
+        /// through the configuration API.
+        /// </para>
         /// </remarks>
         public static string? ValidateInbound(MailServerConfiguration configuration, string? blocksTenantId)
         {

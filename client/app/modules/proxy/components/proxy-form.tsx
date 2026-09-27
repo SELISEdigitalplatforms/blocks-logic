@@ -14,7 +14,8 @@ import {
 import { Input } from "@/components/ui-kits/input/input";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { getProxyClientUrl } from "../constants";
-import { useCreateProxy, useSecrets, useSendProxyTestRequest, useUpdateProxy } from "../hooks";
+import { useSecrets } from "@/hooks/use-secrets";
+import { useCreateProxy, useSendProxyTestRequest, useUpdateProxy } from "../hooks";
 import { Proxy, ProxyFormValues, ProxyRoute, ProxyTestResponse } from "../types";
 import {
   defaultProxyAccess,

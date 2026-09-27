@@ -4,13 +4,13 @@ import { Button } from "@/components/ui-kits/button/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui-kits/popover/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
 import { VariablePicker } from "@/components/variable-picker";
-import { SecretListItem } from "../types";
+import { SecretListItem } from "@/models/secret";
 
 type Props = {
   variables?: SecretListItem[];
   variablesLoading?: boolean;
   variablesError?: boolean;
-  /** Called with the chosen variable NAME (not the token) so the caller can insert at its caret. */
+  /** Called with the chosen variable NAME (not the token) so the caller can set its value. */
   onPick: (name: string) => void;
   ariaLabel: string;
 };

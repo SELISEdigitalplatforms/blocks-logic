@@ -1,6 +1,7 @@
 ﻿using Blocks.Genesis;
 using Blocks.Secrets;
 using Workflow.DomainService.Utils;
+using Mail.DomainService.Mails.Office365;
 using Mail.DomainService.Mails.Strategies;
 using Mail.DomainService.Shared.Utilities;
 using MailBoxSyncService.Services;
@@ -31,12 +32,14 @@ builder.Services.AddSingleton<IImapClientFactory, MailKitImapClientFactory>();
 builder.Services.AddSingleton<IInboundMailPoller, AmazonSesImapPoller>();
 builder.Services.AddSingleton<IInboundMailPoller, ZohoImapPoller>();
 builder.Services.AddSingleton<IInboundMailPoller, GmailImapPoller>();
-builder.Services.AddSingleton<IInboundMailPoller, Office365ImapPoller>();
+builder.Services.AddSingleton<IInboundMailPoller, Office365GraphInboxPoller>();
 
-// Office 365 inbound signs in with a client-credentials token, whose secret lives in Blocks
-// Secrets. The token provider opens its own scope for the scoped ISecretService.
+// Office 365 inbound reads through Graph with a client-credentials token, whose secret lives in
+// Blocks Secrets. The token provider opens its own scope for the scoped ISecretService.
 builder.Services.AddBlocksSecrets();
 builder.Services.RegisterOffice365TokenServices();
+builder.Services.AddHttpClient(Office365GraphInboxSessionFactory.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(100));
+builder.Services.AddSingleton<IOffice365GraphInboxSessionFactory, Office365GraphInboxSessionFactory>();
 builder.Services.AddSingleton<IInboundMailPollerRegistry, InboundMailPollerRegistry>();
 builder.Services.AddSingleton<ISnsEventProcessor, SnsEventProcessor>();
 builder.Services.AddHostedService<global::MailBoxSyncService.Worker>();

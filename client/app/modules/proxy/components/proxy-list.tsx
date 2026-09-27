@@ -175,8 +175,11 @@ export const ProxyList = ({ proxies, isLoading, onProxyDeleted, isFiltered }: Pr
                 </div>
               </TableCell>
               <TableCell className="border-y border-border bg-background px-6 py-5 text-base transition-colors group-hover:bg-muted/50">
-                <p className="w-[220px] truncate text-sm text-muted-foreground">
-                  {proxy.upstreamMasked}
+                <p
+                  className="max-w-[280px] truncate text-sm text-muted-foreground"
+                  title={proxy.upstreamUrl || proxy.upstreamMasked}
+                >
+                  {proxy.upstreamUrl || proxy.upstreamMasked}
                 </p>
               </TableCell>
               <TableCell className="border-y border-border bg-background px-6 py-5 text-base transition-colors group-hover:bg-muted/50">
