@@ -126,7 +126,10 @@ namespace Blocks.FunctionRunner.Tests
             Skip.If(Unavailable, "no Redis available");
 
             var held = new List<FunctionConcurrency>();
-            for (var i = 0; i < 10; i++)
+            // Ask for more than the ceiling, not a fixed count: the loop bound was 10 and stopped
+            // being able to reach the ceiling the moment it was raised from 5 to 25, which made the
+            // assertion unreachable rather than false.
+            for (var i = 0; i < Ceilings.MaxFunctionConcurrency + 5; i++)
             {
                 var slot = await FunctionConcurrency.TryEnterAsync(_db!, _functionId, $"run_{i}", limit: 1000);
                 if (slot is null) break;
