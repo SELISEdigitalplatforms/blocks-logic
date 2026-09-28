@@ -33,7 +33,7 @@ return {
   __id: $items[0].json.__id,
 };`;
 
-const ALL_EARLIER_NODE = `const settings = $node["Get Settings"].first().json;
+const ALL_EARLIER_NODE = `const settings = $node["Get Setting"].first().json;
 
 return $items.map(item => ({
   ...item.json,
