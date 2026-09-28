@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Blocks.Genesis;
 using Workflow.DomainService.Dtos;
 using Workflow.DomainService.Services;
+using Workflow.DomainService.Logging;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 
@@ -21,18 +22,21 @@ namespace Utilities.Api.Controllers
         private readonly IWorkflowVersionService _workflowVersionService;
         private readonly IWorkflowExecutionService _workflowExecutionService;
         private readonly IWorkflowImportService _workflowImportService;
+        private readonly IExecutionLogService _executionLogService;
 
-        /// <summary>Takes the workflow, version, execution and import services.</summary>
+        /// <summary>Takes the workflow, version, execution, import and execution log services.</summary>
         public WorkflowController(
             IWorkflowService workflowService,
             IWorkflowVersionService workflowVersionService,
             IWorkflowExecutionService workflowExecutionService,
-            IWorkflowImportService workflowImportService)
+            IWorkflowImportService workflowImportService,
+            IExecutionLogService executionLogService)
         {
             _workflowService = workflowService;
             _workflowVersionService = workflowVersionService;
             _workflowExecutionService = workflowExecutionService;
             _workflowImportService = workflowImportService;
+            _executionLogService = executionLogService;
         }
 
         /// <summary><c>POST</c> — the tenant's workflows, filtered and paged by the request body.</summary>
@@ -353,6 +357,16 @@ namespace Utilities.Api.Controllers
             var tenantId = GetTenantId();
             var execution = await _workflowExecutionService.GetExecutionByIdAsync(tenantId, dto);
             return Ok(execution);
+        }
+
+        /// <summary><c>GET</c> — the stage log lines of one execution (stages and counts only, never data values),
+        /// with whether they are available, expired or still arriving.</summary>
+        [Authorize]
+        [HttpGet]
+        public async Task<IActionResult> GetExecutionLogs([FromQuery] WorkflowExecutionLogsGetRequestDto dto)
+        {
+            var tenantId = GetTenantId();
+            return Ok(await _executionLogService.GetAsync(tenantId, dto, HttpContext?.RequestAborted ?? default));
         }
 
         /// <summary><c>GET</c> — the most recent successful execution, used to prefill node inputs from real data.</summary>

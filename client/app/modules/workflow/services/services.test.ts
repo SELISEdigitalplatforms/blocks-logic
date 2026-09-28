@@ -83,6 +83,13 @@ describe("workflowService", () => {
     );
   });
 
+  it("reads an execution's logs", async () => {
+    await workflowService.getWorkflowExecutionLogs({ executionId: "e 1" });
+    expect(http.logicService.get).toHaveBeenCalledWith(
+      expect.stringMatching(/\/Workflow\/GetExecutionLogs\?ExecutionId=e\+1$/),
+    );
+  });
+
   it("covers version, publish, restore and listener endpoints", async () => {
     await workflowService.createWorkflowVersion({} as never);
     await workflowService.getWorkflowVersions({} as never);

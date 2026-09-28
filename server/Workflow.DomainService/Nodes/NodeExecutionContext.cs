@@ -1,5 +1,6 @@
 using MongoDB.Bson;
 using Workflow.DomainService.Entities;
+using Workflow.DomainService.Logging;
 
 namespace Workflow.DomainService.Nodes
 {
@@ -45,5 +46,9 @@ namespace Workflow.DomainService.Nodes
         /// </summary>
         public IReadOnlyDictionary<string, string> ResolvedVariables { get; set; } =
             new Dictionary<string, string>();
+
+        /// <summary>Stage logger bound to this node run. Lines are stamped with the execution's trace id and shown
+        /// in the execution logs panel: stages and counts only, never parameter or item values.</summary>
+        public NodeExecutionLog Log { get; set; } = NodeExecutionLog.Null;
     }
 }

@@ -114,6 +114,49 @@ export interface IGetWorkflowExecutionById {
   id: string;
 }
 
+export type ExecutionLogLevel = "Information" | "Warning" | "Error";
+
+/** Mirrors the backend enum, which serialises as a number (like WorkflowExecutionStatus). */
+export enum ExecutionLogsAvailability {
+  Available = 0,
+  Expired = 1,
+  NotRecorded = 2,
+  SourceUnavailable = 3,
+}
+
+export interface ExecutionLogEntry {
+  timestamp: string;
+  level: ExecutionLogLevel;
+  stage: string;
+  nodeId?: string | null;
+  runIndex?: number | null;
+  nodeName?: string | null;
+  nodeType?: string | null;
+  message: string;
+  source: "api" | "worker";
+}
+
+export interface IGetWorkflowExecutionLogsPayload {
+  executionId: string;
+}
+
+export interface IWorkflowExecutionLogs {
+  executionId: string;
+  traceId?: string | null;
+  availability: ExecutionLogsAvailability;
+  expiresAt?: string | null;
+  retentionDays: number;
+  mayStillArrive: boolean;
+  isTruncated: boolean;
+  logs: ExecutionLogEntry[];
+}
+
+export interface IGetWorkflowExecutionLogsResponse {
+  data: IWorkflowExecutionLogs;
+  isSuccess: boolean;
+  errors: unknown;
+}
+
 export interface ICreateWorkflowVersionPayload {
   workflowId: string;
   name: string;

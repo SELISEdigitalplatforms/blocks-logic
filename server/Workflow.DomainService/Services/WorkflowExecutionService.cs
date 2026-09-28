@@ -7,10 +7,12 @@ using Workflow.DomainService.Dtos;
 using Workflow.DomainService.Events;
 using Workflow.DomainService.Enums;
 using Workflow.DomainService.Utils;
+using Workflow.DomainService.Logging;
 using Microsoft.Extensions.Logging;
 using Workflow.DomainService.Nodes.TriggerDataV1;
 using Workflow.DomainService.Nodes.TriggerScheduleV1;
 using MongoDB.Bson;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using DotLiquid.Util;
 using Microsoft.AspNetCore.Http;
@@ -36,6 +38,7 @@ namespace Workflow.DomainService.Services
         private readonly IWorkflowAuthService _workflowAuthService;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IDelegationGrantFactory _delegationGrantFactory;
+        private readonly IWorkflowExecutionLogger _executionLogger;
 
         public WorkflowExecutionService(
             IWorkflowRepository workflowRepository,
@@ -47,9 +50,11 @@ namespace Workflow.DomainService.Services
             IWorkflowNotificationService workflowNotificationService,
             IWorkflowAuthService workflowAuthService,
             IHttpContextAccessor httpContextAccessor,
-            IDelegationGrantFactory delegationGrantFactory
+            IDelegationGrantFactory delegationGrantFactory,
+            IWorkflowExecutionLogger executionLogger
             )
         {
+            _executionLogger = executionLogger;
             _workflowRepository = workflowRepository;
             _executionRepository = executionRepository;
             _messageClient = messageClient;
@@ -74,6 +79,22 @@ namespace Workflow.DomainService.Services
                 message: $"Workflow '{execution.WorkflowSnapshot.Name}' started.");
         }
 
+        private void LogTriggerQueued(WorkflowExecutionEntity execution, NodeEntity triggerNode)
+            => _executionLogger.For(execution).Info(
+                ExecutionLogStages.ExecutionQueued, "Trigger node '{NodeName:l}' queued.", triggerNode.Name);
+
+        private void LogStepExecution(WorkflowExecutionEntity execution, NodeEntity targetNode)
+            => _executionLogger.For(execution).Info(
+                ExecutionLogStages.ExecutionStep, "Step execution up to node '{TargetName:l}'.", targetNode.Name);
+
+        /// <summary>Only when the execution already exists; the exception type, never its message.</summary>
+        private void LogStartFailed(WorkflowExecutionEntity? execution, Exception ex)
+        {
+            if (execution is null) return;
+            _executionLogger.For(execution).Error(
+                ExecutionLogStages.ExecutionStartFailed, "Execution could not be started ({ErrorKind:l}).", ex.GetType().Name);
+        }
+
 
         public async Task<WorkflowExecutionEntity> CreateExecutionAsync(WorkflowEntity workflowSnapshot, TriggerMetadata triggerMetadata, WorkflowExecutionMode executionMode = WorkflowExecutionMode.Test)
         {
@@ -89,8 +110,14 @@ namespace Workflow.DomainService.Services
                 TriggerMetadata = triggerMetadata,
                 NodeExecutions = new List<NodeExecutionEntity>(),
                 StartedAt = DateTime.UtcNow,
+                TraceId = ActivityTraceId.CreateRandom().ToHexString(),
             };
-            return await _executionRepository.CreateAsync(execution);
+            var created = await _executionRepository.CreateAsync(execution);
+            _executionLogger.For(created).Info(
+                ExecutionLogStages.ExecutionCreated, "Execution created. Mode {Mode:l}, trigger {TriggerType:l}.",
+                executionMode.ToString(),
+                string.IsNullOrWhiteSpace(triggerMetadata.TriggerType) ? "none" : triggerMetadata.TriggerType);
+            return created;
         }
 
         public async Task<WorkflowWebhookResponseDto> TriggerWebhookAsync(string workflowId, string triggerId, string tenantId, JsonElement input)
@@ -244,6 +271,8 @@ namespace Workflow.DomainService.Services
                 {
                     await AttachDelegationGrantAsync();
 
+                    _executionLogger.For(execution).Info(
+                        ExecutionLogStages.ExecutionInProcess, "Running in-process; the webhook waits for the last node.");
                     var response = await _workflowEngineService.RunNodeInProcessAsync(payload);
                     var responseModeData = triggerNode.Parameters.GetValue("httpResponseData");
                     if (responseModeData == null)
@@ -284,6 +313,7 @@ namespace Workflow.DomainService.Services
                     ConsumerName = LogicConstants.NodeExecutionQueue,
                     Payload = payload
                 });
+                LogTriggerQueued(execution, triggerNode);
                 return new WorkflowWebhookResponseDto
                 {
                     ExecutionId = execution.Id,
@@ -412,12 +442,13 @@ namespace Workflow.DomainService.Services
             EmailTriggerEvent emailEvent,
             string tenantId)
         {
+            WorkflowExecutionEntity? execution = null;
             try
             {
                 _logger.LogInformation("Creating {ExecutionMode} execution for WorkflowId: {WorkflowId}", executionMode, workflow.ItemId);
                 var emailJson = JsonSerializer.Serialize(emailEvent.Mail);
                 var emailBsonDoc = BsonDocument.Parse(emailJson);
-                var execution = await CreateExecutionAsync(workflow, new TriggerMetadata
+                execution = await CreateExecutionAsync(workflow, new TriggerMetadata
                 {
                     TriggerNodeId = triggerNode.Id,
                     TriggerType = triggerNode.Type,
@@ -441,11 +472,13 @@ namespace Workflow.DomainService.Services
                         NodeId = triggerNode.Id,
                     }
                 });
+                LogTriggerQueued(execution, triggerNode);
                 _logger.LogInformation("Queued execution {ExecutionId} for WorkflowId: {WorkflowId}", execution.Id, workflow.ItemId);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to create execution for WorkflowId: {WorkflowId}", workflow.ItemId);
+                LogStartFailed(execution, ex);
             }
         }
 
@@ -798,6 +831,7 @@ namespace Workflow.DomainService.Services
             WorkflowEntity workflow, WorkflowExecutionMode executionMode, DataChangeEvent dataEvent, string operationStr,
             BsonArray triggerData, string tenantId)
         {
+            WorkflowExecutionEntity? execution = null;
             try
             {
                 var triggerNode = workflow.Nodes.FirstOrDefault(n =>
@@ -823,7 +857,7 @@ namespace Workflow.DomainService.Services
                     TriggerType = triggerNode.Type,
                     TriggerData = triggerData
                 };
-                var execution = await CreateExecutionAsync(workflow, triggerMetadata, executionMode);
+                execution = await CreateExecutionAsync(workflow, triggerMetadata, executionMode);
                 execution.Context["Input"] = triggerData;
                 execution.Status = WorkflowExecutionStatus.Queued;
                 execution.ActiveNodeIds.Add(triggerNode.Id);
@@ -842,6 +876,7 @@ namespace Workflow.DomainService.Services
                     }
                 });
 
+                LogTriggerQueued(execution, triggerNode);
                 _logger.LogInformation("Queued execution {ExecutionId} for WorkflowId: {WorkflowId} (Data Trigger)",
                     execution.Id, workflow.ItemId);
             }
@@ -849,6 +884,7 @@ namespace Workflow.DomainService.Services
             {
                 _logger.LogError(ex, "Failed to create execution for WorkflowId: {WorkflowId} (Data Trigger)",
                     workflow.ItemId);
+                LogStartFailed(execution, ex);
             }
         }
 
@@ -910,6 +946,7 @@ namespace Workflow.DomainService.Services
                 }
             };
 
+            WorkflowExecutionEntity? execution = null;
             try
             {
                 var triggerMetadata = new TriggerMetadata
@@ -918,7 +955,7 @@ namespace Workflow.DomainService.Services
                     TriggerType = triggerNode.Type,
                     TriggerData = triggerData
                 };
-                var execution = await CreateExecutionAsync(workflowSnapshot, triggerMetadata, WorkflowExecutionMode.Production);
+                execution = await CreateExecutionAsync(workflowSnapshot, triggerMetadata, WorkflowExecutionMode.Production);
                 execution.Context["Input"] = triggerData;
                 execution.Status = WorkflowExecutionStatus.Queued;
                 execution.ActiveNodeIds.Add(triggerNode.Id);
@@ -937,6 +974,7 @@ namespace Workflow.DomainService.Services
                     }
                 });
 
+                LogTriggerQueued(execution, triggerNode);
                 _logger.LogInformation("Queued execution {ExecutionId} for WorkflowId: {WorkflowId} (Scheduler Trigger)",
                     execution.Id, workflowSnapshot.ItemId);
             }
@@ -944,6 +982,7 @@ namespace Workflow.DomainService.Services
             {
                 _logger.LogError(ex, "Failed to create execution for WorkflowId: {WorkflowId} (Scheduler Trigger)",
                     workflowSnapshot.ItemId);
+                LogStartFailed(execution, ex);
             }
         }
 
@@ -1123,6 +1162,7 @@ namespace Workflow.DomainService.Services
                 triggerlessExecution.Context["Input"] = new BsonArray();
                 triggerlessExecution.Status = WorkflowExecutionStatus.Queued;
                 await NotifyWorkflowStartedAsync(triggerlessExecution);
+                LogStepExecution(triggerlessExecution, targetNode);
 
                 var triggerlessResult = await _workflowEngineService.ExecuteStepNodeAsync(
                     tenantId, triggerlessExecution.Id, string.Empty, dto.NodeId, dto.SourceExecutionId);
@@ -1233,6 +1273,7 @@ namespace Workflow.DomainService.Services
             execution.Status = WorkflowExecutionStatus.Queued;
             execution.ActiveNodeIds.Add(triggerNode.Id);
             await NotifyWorkflowStartedAsync(execution);
+            LogStepExecution(execution, targetNode);
             var result = await _workflowEngineService.ExecuteStepNodeAsync(tenantId, execution.Id, triggerNode.Id, dto.NodeId, dto.SourceExecutionId);
             return new StepExecuteResponseDto
             {

@@ -4,6 +4,7 @@ using MongoDB.Bson;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Workflow.DomainService.Entities;
+using Workflow.DomainService.Logging;
 
 namespace Workflow.DomainService.Nodes.TransformSetFieldV1
 {
@@ -58,6 +59,8 @@ namespace Workflow.DomainService.Nodes.TransformSetFieldV1
                     AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
                 }
             }
+            context.Log.Info(ExecutionLogStages.SetFieldApplied, "Set fields on {Count} item(s).",
+                outputItems.Count(o => !IsErrorItem(o)));
             return NodeExecutionResult.Successful(outputItems);
         }
 
