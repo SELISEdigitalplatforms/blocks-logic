@@ -259,11 +259,27 @@ namespace Workflow.DomainService.Services
 
                         return null;
                     }
-                    var lastExecutationNode = response.NodeExecutions.MaxBy(ne => ne.RunIndex);
-                    var lastNodeOutput = await _executionRepository.GetAllItemsByNodeExecutionIdAsync(lastExecutationNode.Id, workflow.TenantId);
+                    var responseDataMode = responseModeData.ToString().ToLower();
+                    var edges = response?.WorkflowSnapshot?.Edges ?? workflow.Edges;
+                    var executions = response?.NodeExecutions ?? new List<NodeExecutionEntity>();
+                    var lastExecutionNode = WebhookLastNodeSelector.Select(triggerId, executions, edges);
+
+                    if (lastExecutionNode == null)
+                    {
+                        return new WorkflowWebhookResponseDto
+                        {
+                            ExecutionId = execution.Id,
+                            Status = "Completed",
+                            Data = responseDataMode == "all"
+                                ? JsonDocument.Parse("[]").RootElement
+                                : null
+                        };
+                    }
+
+                    var lastNodeOutput = await _executionRepository.GetAllItemsByNodeExecutionIdAsync(lastExecutionNode.Id, workflow.TenantId);
                     var data = JsonDocument.Parse(new BsonArray(lastNodeOutput.Select(item => item.Data.Output)).ToJson()).RootElement;
 
-                    if (responseModeData.ToString().ToLower() == "all")
+                    if (responseDataMode == "all")
                     {
                         return new WorkflowWebhookResponseDto
                         {
@@ -276,7 +292,9 @@ namespace Workflow.DomainService.Services
                     {
                         ExecutionId = execution.Id,
                         Status = "Completed",
-                        Data = data[0]
+                        Data = data.ValueKind == JsonValueKind.Array && data.GetArrayLength() > 0
+                            ? data[0]
+                            : null
                     };
                 }
                 await _messageClient.SendToConsumerAsync(new ConsumerMessage<AddExcuationNodeEvent>
