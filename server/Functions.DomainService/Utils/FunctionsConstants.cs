@@ -44,6 +44,8 @@ namespace Functions.DomainService.Utils
             public const string Created = "FunctionCreated";
             public const string Updated = "FunctionUpdated";
             public const string Deleted = "FunctionDeleted";
+            /// <summary>The background purge after a delete has finished; carries what it removed.</summary>
+            public const string Purged = "FunctionPurged";
             public const string Saved = "FunctionSaved";
             public const string Tested = "FunctionTested";
             public const string Deployed = "FunctionDeployed";

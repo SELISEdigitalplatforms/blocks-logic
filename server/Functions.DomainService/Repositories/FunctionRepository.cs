@@ -29,6 +29,21 @@ namespace Functions.DomainService.Repositories
         private IMongoCollection<FunctionEntity> Collection(string tenantId)
             => _dbContextProvider.GetCollection<FunctionEntity>(tenantId, FunctionsConstants.FunctionsCollection);
 
+        /// <summary>
+        /// A live function: no tombstone. Eq-null also matches documents written before the field
+        /// existed. Every read and write below goes through this, so a function whose delete has
+        /// been accepted is invisible — to the list, the editor, deploys, the workflow step and
+        /// the public route alike — while the background purge is still working through it.
+        /// </summary>
+        private static FilterDefinition<FunctionEntity> Live(string functionId) =>
+            Builders<FunctionEntity>.Filter.Eq(f => f.ItemId, functionId) & NotDeleted;
+
+        private static readonly FilterDefinition<FunctionEntity> NotDeleted =
+            Builders<FunctionEntity>.Filter.Eq(f => f.Deletion, null);
+
+        private static readonly FilterDefinition<FunctionEntity> IsDeleted =
+            Builders<FunctionEntity>.Filter.Ne(f => f.Deletion, null);
+
         private async Task EnsureIndexesAsync(string tenantId, CancellationToken cancellationToken)
         {
             lock (_indexGate)
@@ -48,6 +63,11 @@ namespace Functions.DomainService.Repositories
                     // sort limit for a tenant with many.
                     new CreateIndexModel<FunctionEntity>(keys.Descending(f => f.LastUpdatedDate)),
                     new CreateIndexModel<FunctionEntity>(keys.Ascending(f => f.Name)),
+                    // The backstop sweep's "tombstones, oldest first". Sparse: live functions,
+                    // which are nearly all of them, carry no entry.
+                    new CreateIndexModel<FunctionEntity>(
+                        keys.Ascending("Deletion.RequestedAt"),
+                        new CreateIndexOptions { Sparse = true }),
                 ],
                 cancellationToken);
         }
@@ -69,7 +89,7 @@ namespace Functions.DomainService.Repositories
             await EnsureIndexesAsync(tenantId, cancellationToken);
 
             var builder = Builders<FunctionEntity>.Filter;
-            var filter = builder.Empty;
+            var filter = NotDeleted;
 
             if (!string.IsNullOrWhiteSpace(searchKey))
             {
@@ -102,7 +122,7 @@ namespace Functions.DomainService.Repositories
         {
             if (string.IsNullOrWhiteSpace(functionId)) return null;
             return await Collection(tenantId)
-                .Find(f => f.ItemId == functionId)
+                .Find(Live(functionId))
                 .FirstOrDefaultAsync(cancellationToken);
         }
 
@@ -178,21 +198,72 @@ namespace Functions.DomainService.Repositories
                 Builders<FunctionEntity>.Update.Set(f => f.LastUpdatedBy, actorId ?? string.Empty));
 
             return Collection(tenantId).UpdateOneAsync(
-                f => f.ItemId == functionId, update, cancellationToken: cancellationToken);
+                Live(functionId), update, cancellationToken: cancellationToken);
         }
 
-        public async Task<bool> DeleteAsync(string tenantId, string functionId, CancellationToken cancellationToken = default)
+        public async Task<bool> MarkDeletedAsync(
+            string tenantId, string functionId, FunctionDeletion deletion, CancellationToken cancellationToken = default)
         {
-            try
-            {
-                var result = await Collection(tenantId).DeleteOneAsync(f => f.ItemId == functionId, cancellationToken);
-                return result.DeletedCount > 0;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to delete function {FunctionId} for tenant {TenantId}", functionId, tenantId);
-                return false;
-            }
+            if (string.IsNullOrWhiteSpace(functionId)) return false;
+            await EnsureIndexesAsync(tenantId, cancellationToken);
+
+            // Conditional on there being no tombstone yet: the second of two concurrent deletes
+            // matches nothing and reports "not found" instead of stamping a second request.
+            var update = Builders<FunctionEntity>.Update
+                .Set(f => f.Deletion, deletion)
+                .Set(f => f.LastUpdatedDate, deletion.RequestedAt)
+                .Set(f => f.LastUpdatedBy, deletion.RequestedBy ?? string.Empty);
+            var result = await Collection(tenantId).UpdateOneAsync(
+                Live(functionId), update, cancellationToken: cancellationToken);
+            return result.ModifiedCount > 0;
+        }
+
+        public async Task<FunctionEntity?> GetDeletedAsync(
+            string tenantId, string functionId, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(functionId)) return null;
+            return await Collection(tenantId)
+                .Find(Builders<FunctionEntity>.Filter.Eq(f => f.ItemId, functionId) & IsDeleted)
+                .Project<FunctionEntity>(Builders<FunctionEntity>.Projection.Exclude(f => f.Source))
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        public async Task<IReadOnlyList<string>> GetDeletedIdsAsync(
+            string tenantId, int limit, CancellationToken cancellationToken = default)
+        {
+            return await Collection(tenantId)
+                .Find(IsDeleted)
+                .Sort(Builders<FunctionEntity>.Sort.Ascending("Deletion.RequestedAt"))
+                .Limit(Math.Max(1, limit))
+                .Project(f => f.ItemId)
+                .ToListAsync(cancellationToken);
+        }
+
+        public Task RecordPurgePassAsync(
+            string tenantId, string functionId, Services.FunctionPurgeReport report, DateTime at,
+            CancellationToken cancellationToken = default)
+        {
+            var update = Builders<FunctionEntity>.Update
+                .Inc(f => f.Deletion!.Passes, 1)
+                .Inc(f => f.Deletion!.Versions, report.Versions)
+                .Inc(f => f.Deletion!.Builds, report.Builds)
+                .Inc(f => f.Deletion!.Runs, report.Runs)
+                .Inc(f => f.Deletion!.RunLogs, report.RunLogs)
+                .Inc(f => f.Deletion!.ImagesReleased, (long)report.ImagesReleased)
+                .Inc(f => f.Deletion!.RunsCancelled, (long)report.RunsCancelled)
+                .Set(f => f.Deletion!.LastPassAt, at);
+            return Collection(tenantId).UpdateOneAsync(
+                Builders<FunctionEntity>.Filter.Eq(f => f.ItemId, functionId) & IsDeleted,
+                update, cancellationToken: cancellationToken);
+        }
+
+        public async Task<bool> DeleteTombstoneAsync(
+            string tenantId, string functionId, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(functionId)) return false;
+            var result = await Collection(tenantId).DeleteOneAsync(
+                Builders<FunctionEntity>.Filter.Eq(f => f.ItemId, functionId) & IsDeleted, cancellationToken);
+            return result.DeletedCount > 0;
         }
     }
 }

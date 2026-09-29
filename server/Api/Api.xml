@@ -747,13 +747,6 @@
             as <see cref="M:Utilities.Api.Controllers.WorkflowController.WebhookByHeader(System.String,System.String,System.Text.Json.JsonElement)"/>.
             </summary>
         </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.WebhookResult(Workflow.DomainService.Dtos.WorkflowWebhookResponseDto)">
-            <summary>
-            Maps a webhook run to its HTTP answer. A waiting run whose execution failed (a node errored and
-            the workflow stopped there) is a 500 carrying <c>{ executionId, status: "Failed", error: { nodeId,
-            nodeName, message } }</c>; everything else keeps the 200 it always had.
-            </summary>
-        </member>
         <member name="M:Utilities.Api.Controllers.WorkflowController.StepExecute(Workflow.DomainService.Dtos.StepExecuteRequestDto)">
             <summary><c>POST</c> — executes a single node in isolation and returns its output, for the node inspector.</summary>
         </member>

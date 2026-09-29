@@ -12,9 +12,10 @@ using Moq;
 namespace XUnitTest.Functions
 {
     /// <summary>
-    /// Deleting a function is the one operation with nothing left to retry against once it is
-    /// half done: after the document goes, nothing names the versions, builds, runs and images it
-    /// owned. So the order matters as much as the steps, and it is pinned here.
+    /// The request half of a delete: check nothing depends on the function, tombstone it, audit
+    /// it, queue the background purge — and nothing else. The purge itself belongs to
+    /// <c>FunctionDeletionWorker</c> (see <see cref="FunctionDeletionWorkerTests"/>), off the
+    /// request, because it has to outlast work that was already in flight when the delete came.
     /// </summary>
     public class FunctionServiceDeleteTests
     {
@@ -22,14 +23,15 @@ namespace XUnitTest.Functions
         private const string FunctionId = "fn_1";
 
         private readonly Mock<IFunctionRepository> _functions = new(MockBehavior.Loose);
-        private readonly Mock<IFunctionPurgeService> _purge = new(MockBehavior.Loose);
+        private readonly Mock<IFunctionDeletionQueue> _queue = new(MockBehavior.Loose);
         private readonly Mock<IFunctionAuditService> _audit = new(MockBehavior.Loose);
         private readonly Mock<IFunctionUsageService> _usage = new(MockBehavior.Loose);
         private readonly List<string> _order = [];
+        private FunctionDeletion? _tombstone;
 
         private FunctionService Service(
             FunctionEntity? existing = null,
-            bool deleteSucceeds = true,
+            bool markSucceeds = true,
             IReadOnlyList<FunctionWorkflowReference>? references = null)
         {
             _usage.Setup(u => u.GetWorkflowReferencesAsync(Tenant, FunctionId, It.IsAny<CancellationToken>()))
@@ -38,13 +40,17 @@ namespace XUnitTest.Functions
 
             _functions.Setup(f => f.GetByIdAsync(Tenant, FunctionId, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(existing);
-            _functions.Setup(f => f.DeleteAsync(Tenant, FunctionId, It.IsAny<CancellationToken>()))
-                .Callback(() => _order.Add("delete-document"))
-                .ReturnsAsync(deleteSucceeds);
+            _functions.Setup(f => f.MarkDeletedAsync(Tenant, FunctionId, It.IsAny<FunctionDeletion>(), It.IsAny<CancellationToken>()))
+                .Callback((string _, string __, FunctionDeletion d, CancellationToken ___) =>
+                {
+                    _tombstone = d;
+                    _order.Add("tombstone");
+                })
+                .ReturnsAsync(markSucceeds);
 
-            _purge.Setup(p => p.PurgeAsync(Tenant, FunctionId, It.IsAny<CancellationToken>()))
-                .Callback(() => _order.Add("purge"))
-                .ReturnsAsync(new FunctionPurgeReport(2, 3, 4, 5, 6, 1));
+            _queue.Setup(q => q.EnqueueAsync(Tenant, FunctionId, It.IsAny<CancellationToken>()))
+                .Callback(() => _order.Add("enqueue"))
+                .Returns(Task.CompletedTask);
 
             _audit.Setup(a => a.RecordAsync(
                     It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
@@ -58,7 +64,7 @@ namespace XUnitTest.Functions
                 Mock.Of<IFunctionRunStatsRepository>(),
                 Mock.Of<IFunctionRunRepository>(),
                 _audit.Object,
-                _purge.Object,
+                _queue.Object,
                 _usage.Object,
                 Mock.Of<IValidator<CreateFunctionRequestDto>>(),
                 Mock.Of<IValidator<UpdateFunctionRequestDto>>(),
@@ -70,56 +76,65 @@ namespace XUnitTest.Functions
         private static FunctionEntity Function() => new() { ItemId = FunctionId, Name = "converter" };
 
         [Fact]
-        public async Task Everything_the_function_owns_goes_before_the_function_itself()
+        public async Task A_delete_tombstones_audits_and_queues_the_purge_and_nothing_more()
         {
-            // The other way round strands versions, builds, runs and pinned images with nothing
-            // left to look them up by.
             var deleted = await Service(Function()).DeleteAsync(Tenant, FunctionId, "u1", "u@example.com");
 
             deleted.Should().BeTrue();
-            _order.Should().Equal("usage-check", "purge", "delete-document", "audit");
+            _order.Should().Equal("usage-check", "tombstone", "audit", "enqueue");
+            // Nothing is removed on the request: the document stays as the tombstone.
+            _functions.Verify(f => f.DeleteTombstoneAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         }
 
         [Fact]
-        public async Task A_function_that_is_not_there_is_not_purged()
+        public async Task The_tombstone_says_who_asked_when_and_whether_it_was_forced()
+        {
+            var before = DateTime.UtcNow;
+            await Service(Function()).DeleteAsync(Tenant, FunctionId, "u1", "u@example.com", force: true);
+
+            _tombstone.Should().NotBeNull();
+            _tombstone!.RequestedBy.Should().Be("u1");
+            _tombstone.RequestedByEmail.Should().Be("u@example.com");
+            _tombstone.Forced.Should().BeTrue();
+            _tombstone.RequestedAt.Should().BeOnOrAfter(before);
+            _tombstone.Passes.Should().Be(0);
+        }
+
+        [Fact]
+        public async Task A_function_that_is_not_there_is_not_tombstoned()
         {
             var deleted = await Service(existing: null).DeleteAsync(Tenant, FunctionId, "u1", "u@example.com");
 
             deleted.Should().BeFalse();
-            _purge.Verify(p => p.PurgeAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
             _order.Should().BeEmpty();
         }
 
         [Fact]
-        public async Task A_document_delete_that_does_nothing_is_not_reported_as_a_delete()
+        public async Task Losing_the_race_to_another_delete_is_not_reported_as_a_delete()
         {
-            // Someone else deleted it first. Saying "deleted" and writing an audit record for work
-            // this call did not do would put two deletions in the trail for one function.
-            var deleted = await Service(Function(), deleteSucceeds: false)
+            // Two deletes at once: one tombstone, one audit record, one "deleted".
+            var deleted = await Service(Function(), markSucceeds: false)
                 .DeleteAsync(Tenant, FunctionId, "u1", "u@example.com");
 
             deleted.Should().BeFalse();
-            _order.Should().NotContain("audit");
+            _order.Should().NotContain("audit").And.NotContain("enqueue");
         }
 
         [Fact]
-        public async Task The_audit_record_says_what_was_removed()
+        public async Task The_audit_record_is_the_delete_itself()
         {
             var service = Service(Function());
-
-            object? details = null;
+            string? action = null;
             _audit.Setup(a => a.RecordAsync(
-                    Tenant, FunctionId, FunctionsConstants.AuditActions.Deleted, It.IsAny<string?>(),
-                    It.IsAny<string?>(), It.IsAny<object?>(), It.IsAny<CancellationToken>()))
-                .Callback((string _, string __, string ___, string? ____, string? _____, object? d, CancellationToken ______) => details = d)
+                    Tenant, FunctionId, It.IsAny<string>(), "u1", "u@example.com",
+                    It.IsAny<object?>(), It.IsAny<CancellationToken>()))
+                .Callback((string _, string __, string a, string? ___, string? ____, object? _____, CancellationToken ______) => action = a)
                 .Returns(Task.CompletedTask);
 
             await service.DeleteAsync(Tenant, FunctionId, "u1", "u@example.com");
 
-            // The audit trail outlives the function and is the only record it ever existed, so the
-            // counts belong in it rather than only in a log line on one host.
-            details.Should().NotBeNull();
-            details!.ToString().Should().Contain("2").And.Contain("6");
+            action.Should().Be(FunctionsConstants.AuditActions.Deleted);
         }
 
         [Fact]
@@ -133,7 +148,7 @@ namespace XUnitTest.Functions
 
             (await act.Should().ThrowAsync<FunctionValidationException>())
                 .Which.Message.Should().Contain("Nightly payouts").And.Contain("published");
-            _order.Should().NotContain("purge").And.NotContain("delete-document");
+            _order.Should().NotContain("tombstone").And.NotContain("enqueue");
         }
 
         [Fact]
@@ -144,7 +159,7 @@ namespace XUnitTest.Functions
             var deleted = await service.DeleteAsync(Tenant, FunctionId, "u1", "u@example.com", force: true);
 
             deleted.Should().BeTrue();
-            _order.Should().Equal("purge", "delete-document", "audit");
+            _order.Should().Equal("tombstone", "audit", "enqueue");
             _usage.Verify(u => u.GetWorkflowReferencesAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         }
@@ -174,21 +189,20 @@ namespace XUnitTest.Functions
             var act = async () => await service.DeleteAsync(Tenant, FunctionId, "u1", "u@example.com");
 
             await act.Should().ThrowAsync<TimeoutException>();
-            _order.Should().NotContain("delete-document");
+            _order.Should().NotContain("tombstone");
         }
 
         [Fact]
-        public async Task A_purge_that_throws_leaves_the_function_in_place()
+        public async Task A_tombstone_write_that_fails_leaves_the_function_live_and_unqueued()
         {
-            // Visible and deletable again beats invisible with its footprint stranded.
             var service = Service(Function());
-            _purge.Setup(p => p.PurgeAsync(Tenant, FunctionId, It.IsAny<CancellationToken>()))
+            _functions.Setup(f => f.MarkDeletedAsync(Tenant, FunctionId, It.IsAny<FunctionDeletion>(), It.IsAny<CancellationToken>()))
                 .ThrowsAsync(new TimeoutException("mongo"));
 
             var act = async () => await service.DeleteAsync(Tenant, FunctionId, "u1", "u@example.com");
 
             await act.Should().ThrowAsync<TimeoutException>();
-            _order.Should().NotContain("delete-document");
+            _order.Should().NotContain("enqueue").And.NotContain("audit");
         }
     }
 }

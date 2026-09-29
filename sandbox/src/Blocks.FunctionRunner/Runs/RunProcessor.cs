@@ -391,12 +391,19 @@ namespace Blocks.FunctionRunner.Runs
                 job.RunId, status, durationMs, exitCode);
         }
 
-        private Task SetStatusAsync(string runKey, string status)
-            => _db.HashSetAsync(runKey,
-            [
-                new HashEntry("status", status),
-                new HashEntry("statusAt", DateTimeOffset.UtcNow.ToString("O")),
-            ]);
+        /// <summary>
+        /// Updates the status on the run's payload — only while the payload exists. A plain HSET
+        /// on a key that has gone (expired, or withdrawn by the control plane because the function
+        /// was deleted) would create a two-field hash with no TTL, which nothing ever removes.
+        /// </summary>
+        private Task<RedisResult> SetStatusAsync(string runKey, string status)
+            => _db.ScriptEvaluateAsync(SetStatusIfExistsScript, [runKey],
+                [status, DateTimeOffset.UtcNow.ToString("O")]);
+
+        private const string SetStatusIfExistsScript =
+            "if redis.call('EXISTS', KEYS[1]) == 1 then " +
+            "return redis.call('HSET', KEYS[1], 'status', ARGV[1], 'statusAt', ARGV[2]) end " +
+            "return 0";
 
         private static RunLimits ReadLimits(IReadOnlyDictionary<string, string> fields)
         {
