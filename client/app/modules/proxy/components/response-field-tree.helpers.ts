@@ -33,9 +33,7 @@ export const duplicateKeys = (nodes: ResponseFieldNode[]): Set<string> => {
     const key = node.key.trim();
     if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
   }
-  return new Set(
-    [...counts.entries()].filter(([, count]) => count > 1).map(([key]) => key),
-  );
+  return new Set([...counts.entries()].filter(([, count]) => count > 1).map(([key]) => key));
 };
 
 let uidSeq = 0;
@@ -65,10 +63,7 @@ export const mapTree = (
     })
     .filter((node): node is ResponseFieldNode => node !== null);
 
-export const findNode = (
-  nodes: ResponseFieldNode[],
-  id: string,
-): ResponseFieldNode | null => {
+export const findNode = (nodes: ResponseFieldNode[], id: string): ResponseFieldNode | null => {
   for (const node of nodes) {
     if (node.id === id) return node;
     const inChild = findNode(node.children, id);
@@ -113,13 +108,8 @@ export const expandCoverage = (
   }
 };
 
-export const hasCheckedDescendant = (
-  node: ResponseFieldNode,
-  checked: Set<string>,
-): boolean =>
-  node.children.some(
-    (child) => checked.has(child.id) || hasCheckedDescendant(child, checked),
-  );
+export const hasCheckedDescendant = (node: ResponseFieldNode, checked: Set<string>): boolean =>
+  node.children.some((child) => checked.has(child.id) || hasCheckedDescendant(child, checked));
 
 /**
  * Whether the checkbox for `node` reads as selected. A checked ancestor covers its whole
@@ -130,5 +120,4 @@ export const isNodeSelected = (
   node: ResponseFieldNode,
   checked: Set<string>,
   inherited: boolean,
-): boolean =>
-  inherited || checked.has(node.id) || hasCheckedDescendant(node, checked);
+): boolean => inherited || checked.has(node.id) || hasCheckedDescendant(node, checked);

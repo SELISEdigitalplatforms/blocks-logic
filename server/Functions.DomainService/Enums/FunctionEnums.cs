@@ -1,0 +1,210 @@
+using System.Text.Json.Serialization;
+
+namespace Functions.DomainService.Enums
+{
+    /// <summary>Lifecycle of a function as the tenant sees it.</summary>
+    public enum FunctionStatus
+    {
+        /// <summary>Created and editable, never deployed.</summary>
+        Draft = 0,
+
+        /// <summary>Has an active version and serves traffic.</summary>
+        Live = 1,
+
+        /// <summary>Deployed once but currently disabled; invocations are refused.</summary>
+        Paused = 2,
+    }
+
+    /// <summary>
+    /// Run lifecycle. The wire forms live in <see cref="Queue.FunctionQueueKeys"/>; these
+    /// values are what is persisted and returned to the client.
+    /// </summary>
+    public enum RunStatus
+    {
+        Queued = 0,
+        Claimed = 1,
+        Starting = 2,
+        Running = 3,
+        OutputProcessing = 4,
+        Succeeded = 5,
+        Failed = 6,
+        TimedOut = 7,
+        Cancelled = 8,
+        ResourceExceeded = 9,
+        OutputFailed = 10,
+    }
+
+    /// <summary>Why a run failed, as reported by the runner or determined here.</summary>
+    public enum RunErrorCode
+    {
+        None = 0,
+        MemoryLimit = 1,
+        PidLimit = 2,
+        UserRuntimeError = 3,
+        RuntimeStartFailed = 4,
+        ResultTooLarge = 5,
+        ResultNotSerializable = 6,
+        ImagePullFailed = 7,
+        TimedOut = 8,
+        SandboxStartFailed = 9,
+
+        /// <summary>An output action failed after the function itself had succeeded.</summary>
+        OutputActionFailed = 10,
+
+        /// <summary>
+        /// The job never reached a runner. It exhausted its delivery budget, or no runner would
+        /// accept it, and the runner moved the entry to <c>functions:dead</c>. Nothing executed,
+        /// so a replay is safe — but retrying automatically is not, because the delivery budget
+        /// is already spent.
+        /// </summary>
+        Undeliverable = 11,
+
+        /// <summary>
+        /// The run record was written but the run could not be put on the queue (Redis refused or
+        /// timed out). Its queued payload is withdrawn on a best-effort basis, so nothing is
+        /// expected to have executed and the caller was answered 503 — retrying is safe. Set by
+        /// <c>FunctionInvocationService</c> and <c>FunctionRetryScheduler</c>, never by the runner.
+        /// </summary>
+        EnqueueFailed = 12,
+
+        /// <summary>
+        /// No outcome was ever reported for the run within its deadline — the queued payload
+        /// expired or was lost, or a runner took it and never answered. Closed by
+        /// <c>FunctionStaleRunSweeper</c> so the record does not stay QUEUED/RUNNING for ever. Like
+        /// <see cref="Undeliverable"/> and <see cref="EnqueueFailed"/> it is a platform-determined
+        /// outcome, so a real result for the same attempt arriving later is still allowed to
+        /// replace it.
+        /// </summary>
+        Abandoned = 13,
+
+        /// <summary>
+        /// A variable references a secret the runner could not resolve for the run's tenant — it
+        /// does not exist, is locked or deleted, has no value, or is not readable in the run's
+        /// context. The sandbox was never started. Not retryable: the message names the variable
+        /// and the secret id (never a value), and the author has to fix the reference.
+        /// </summary>
+        SecretUnresolved = 14,
+
+        /// <summary>
+        /// The secret store (Key Vault, the tenant registry or the tenant's database) could not be
+        /// reached while the runner resolved the run's secret references. Nothing ran, so it is
+        /// retryable.
+        /// </summary>
+        SecretStoreUnavailable = 15,
+    }
+
+    /// <summary>What caused a run. Carried into <c>ctx.run.invokedBy</c>.</summary>
+    public enum InvokedByType
+    {
+        Http = 0,
+        Workflow = 1,
+        Test = 2,
+        Replay = 3,
+        Schedule = 4,
+        Event = 5,
+    }
+
+    /// <summary>How an HTTP trigger authenticates its caller.</summary>
+    /// <summary>
+    /// Serialised by name. These four reach the wire inside <c>SaveFunctionRequestDto</c>, which
+    /// embeds the domain models, and the client's types declare them as string unions — without
+    /// this, System.Text.Json wants a number and Save fails with
+    /// "The JSON value could not be converted … Path: $.outputActions[0]". Reading still accepts a
+    /// number, so nothing that already sent one breaks.
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public enum AuthMode
+    {
+        /// <summary>No authentication. The sandbox gets an anonymous, unauthenticated context.</summary>
+        Public = 0,
+
+        /// <summary>A tenant bearer token, optionally narrowed by roles and permissions.</summary>
+        Token = 1,
+    }
+
+    /// <summary>Whether every listed role/permission is required, or any one of them.</summary>
+    /// <summary>
+    /// Serialised by name. These four reach the wire inside <c>SaveFunctionRequestDto</c>, which
+    /// embeds the domain models, and the client's types declare them as string unions — without
+    /// this, System.Text.Json wants a number and Save fails with
+    /// "The JSON value could not be converted … Path: $.outputActions[0]". Reading still accepts a
+    /// number, so nothing that already sent one breaks.
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public enum MatchMode
+    {
+        Any = 0,
+        All = 1,
+    }
+
+    /// <summary>
+    /// The one HTTP method a function's endpoint answers. Post is 0 so a stored trigger from before
+    /// the field existed keeps behaving as it did — every function was POST-only then.
+    /// </summary>
+    public enum HttpTriggerMethod
+    {
+        Post = 0,
+        Get = 1,
+    }
+
+    /// <summary>
+    /// How the roles rule and the permissions rule combine when <i>both</i> are configured on a
+    /// token trigger. Mirrors <c>EndpointAccessCombine</c> in Common, which is what the shared
+    /// authorizer evaluates on the public route; a rule with no values is not configured and
+    /// never takes part, so this only matters once both lists carry an entry.
+    /// </summary>
+    public enum AccessCombine
+    {
+        /// <summary>The caller passes if either configured rule passes.</summary>
+        Or = 0,
+
+        /// <summary>The caller must pass every configured rule.</summary>
+        And = 1,
+    }
+
+    /// <summary>Shape of the delay between run attempts.</summary>
+    /// <summary>
+    /// Serialised by name. These four reach the wire inside <c>SaveFunctionRequestDto</c>, which
+    /// embeds the domain models, and the client's types declare them as string unions — without
+    /// this, System.Text.Json wants a number and Save fails with
+    /// "The JSON value could not be converted … Path: $.outputActions[0]". Reading still accepts a
+    /// number, so nothing that already sent one breaks.
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public enum BackoffKind
+    {
+        None = 0,
+        Fixed = 1,
+        Exponential = 2,
+    }
+
+    /// <summary>What to do with a successful run's result.</summary>
+    /// <summary>
+    /// Serialised by name. These four reach the wire inside <c>SaveFunctionRequestDto</c>, which
+    /// embeds the domain models, and the client's types declare them as string unions — without
+    /// this, System.Text.Json wants a number and Save fails with
+    /// "The JSON value could not be converted … Path: $.outputActions[0]". Reading still accepts a
+    /// number, so nothing that already sent one breaks.
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public enum OutputActionKind
+    {
+        /// <summary>POST/PUT the result to an external endpoint.</summary>
+        ExternalHttp = 0,
+
+        /// <summary>
+        /// Reserved. Visible but disabled in the interface: no platform proxy service was
+        /// found (see the open questions in DECISIONS.md).
+        /// </summary>
+        BlocksProxy = 1,
+    }
+
+    /// <summary>Lifecycle of an image build.</summary>
+    public enum BuildStatus
+    {
+        Queued = 0,
+        Building = 1,
+        Succeeded = 2,
+        Failed = 3,
+    }
+}

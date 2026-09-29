@@ -57,8 +57,14 @@ namespace Proxy.DomainService.Services
     /// <see cref="IProxyVariableResolver"/> over the in-process <see cref="ISecretService"/>. Name &rarr; id and
     /// id &rarr; value are both done at forward time behind a per-tenant <see cref="IMemoryCache"/>; the stored
     /// config row only ever holds the verbatim token. See <c>PROXY-PLAN-config-variables.md</c> &sect;3.2.
-    /// <see cref="ISecretService"/> is resolved from a new DI scope per <see cref="ResolveAsync"/> because
-    /// <c>AddBlocksSecrets()</c> registers it (and <c>SecretStoreContext</c>) as scoped.
+    /// <para>
+    /// This resolver is a singleton (it sits behind the singleton Proxy/Workflow engine — gateway, node
+    /// executors, Worker consumers), but <c>AddBlocksSecrets()</c> registers <see cref="ISecretService"/>
+    /// (and <c>SecretStoreContext</c>) as scoped, reading the request-scoped <c>BlocksContext</c>. So it
+    /// takes <see cref="IServiceScopeFactory"/> instead and opens a fresh DI scope per
+    /// <see cref="ResolveAsync"/> call to resolve <see cref="ISecretService"/>, the same pattern
+    /// <c>NugetSecretResolver</c> uses for the same singleton/scoped mismatch.
+    /// </para>
     /// </summary>
     public sealed class ProxyVariableResolver : IProxyVariableResolver
     {

@@ -12,6 +12,7 @@ using Workflow.DomainService.Utils;
 using Mail.DomainService.Dtos;
 using Mail.DomainService.Mails;
 using Mail.DomainService.Shared.Utilities;
+using Functions.DomainService.Utils;
 using Scheduler.DomainService.Models;
 using Scheduler.DomainService.Utils;
 using SeliseBlocks.ConfigurationDriver;
@@ -84,6 +85,9 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             services.AddApplicationServices();
             services.AddSchedulerServices();
             services.AddSchedulerWorkerServices();
+            services.AddFunctionsServices();
+            services.AddFunctionsWorkerServices();
+            services.AddSingleton<Workflow.DomainService.Nodes.INodeExecutor, Functions.DomainService.Nodes.ActionFunctionNode>();
             services.AddStorageDomainServices();
             services.RegisterBlocksStorageServices();
             //services.RegisterSharedServices();

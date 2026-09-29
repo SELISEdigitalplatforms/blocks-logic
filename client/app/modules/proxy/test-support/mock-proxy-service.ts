@@ -54,8 +54,7 @@ const buildProxy = (values: ProxyFormValues, existing?: Proxy): Proxy => {
     headers: compactKeyValues(values.headers),
     query: compactKeyValues(values.query),
     // Mirror the mapper's tab gate: a "passthrough" save persists [] regardless of typed rows.
-    bodyMerge:
-      values.bodyMode === "passthrough" ? [] : compactKeyValues(values.bodyMerge ?? []),
+    bodyMerge: values.bodyMode === "passthrough" ? [] : compactKeyValues(values.bodyMerge ?? []),
     methodConfigs: (values.methodConfigs ?? [])
       .filter((entry) => values.methods.includes(entry.method))
       .map((entry) => {
@@ -152,8 +151,7 @@ const applyProxyField = (proxy: Proxy, field: string, value: string | null): Pro
   }
 
   const [prefix, key] = [field.slice(0, field.indexOf(":")), field.slice(field.indexOf(":") + 1)];
-  const listKey =
-    prefix === "header" ? "headers" : prefix === "body" ? "bodyMerge" : "query";
+  const listKey = prefix === "header" ? "headers" : prefix === "body" ? "bodyMerge" : "query";
   const rows = proxy[listKey].filter((row) => row.key !== key);
   if (value !== null) rows.push({ key, value });
   return { ...proxy, [listKey]: rows };
@@ -265,14 +263,9 @@ export const mockProxyService = {
     };
   },
 
-  getExecution: async (
-    proxyId: string,
-    executionId: string,
-  ): Promise<ProxyExecutionLog | null> => {
+  getExecution: async (proxyId: string, executionId: string): Promise<ProxyExecutionLog | null> => {
     await waitForMock();
-    return (
-      proxyLogs.find((log) => log.proxyId === proxyId && log.id === executionId) ?? null
-    );
+    return proxyLogs.find((log) => log.proxyId === proxyId && log.id === executionId) ?? null;
   },
 
   getOverview: async (proxyId: string): Promise<ProxyOverview | null> => {

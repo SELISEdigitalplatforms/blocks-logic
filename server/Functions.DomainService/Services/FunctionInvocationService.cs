@@ -1,0 +1,722 @@
+using Blocks.Genesis;
+using Common.InternalService.Access;
+using Functions.DomainService.Dtos.Requests;
+using Functions.DomainService.Dtos.Responses;
+using Functions.DomainService.Entities;
+using Functions.DomainService.Enums;
+using Functions.DomainService.Models;
+using Functions.DomainService.Queue;
+using Functions.DomainService.Repositories;
+using Functions.DomainService.Utils;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using StackExchange.Redis;
+
+namespace Functions.DomainService.Services
+{
+    public interface IFunctionInvocationService
+    {
+        /// <summary>
+        /// The public entry point behind <c>{METHOD} /api/fn/{functionId}/{**path}</c>. Resolves
+        /// the function's <b>active, deployed</b> version, enforces that version's own "Who can
+        /// call it" (never the editable draft's — the deployed rules are authoritative) through the
+        /// shared <see cref="IEndpointAccessAuthorizer"/>, shapes the call into the handler's
+        /// <c>input</c> with <see cref="FunctionHttpInputBuilder"/>, and queues a run.
+        /// <para>
+        /// Refusals are typed so the controller can answer like the proxy gateway does: no usable
+        /// credentials → <see cref="FunctionAuthorizationException"/> (401); authenticated but
+        /// failing the rules, or HTTP switched off → <see cref="FunctionForbiddenException"/> (403);
+        /// unknown or undeployed function → <see cref="FunctionNotFoundException"/> (404), but
+        /// only to a caller who could have reached it — an anonymous caller gets 401 first, so the
+        /// route cannot be used to discover which ids exist; the other method →
+        /// <see cref="FunctionMethodNotAllowedException"/> (405); body over the ceiling →
+        /// <see cref="FunctionRequestTooLargeException"/> (413).
+        /// </para>
+        /// </summary>
+        Task<InvokeResultDto> InvokeHttpAsync(
+            string tenantId, string functionId, InvokeFunctionRequestDto request, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Runs the function's <b>current editor source</b> (not a deployed version), building
+        /// it first if needed. Uses the ambient, already-authenticated caller's own identity in
+        /// <c>ctx.context</c> — Test simulates "does my code work", not "what would an anonymous
+        /// caller see", which is what hitting the real HTTP endpoint is for.
+        /// </summary>
+        Task<InvokeResultDto> TestAsync(
+            string tenantId, string functionId, TestFunctionRequestDto request, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Re-runs a finished run's input as a brand-new run, against the function's
+        /// <b>current live version</b> — DECISIONS.md's Replay note says "same input", and that
+        /// is all this reproduces. Pinning the original run's version would make the same button
+        /// behave differently depending on the age of the run, and break outright once that
+        /// version fell outside the retained history.
+        /// <para>
+        /// The new run gets its own id and therefore its own freshly computed
+        /// <c>{runId}-{attempt}</c> idempotency key: reusing the original key verbatim would let
+        /// a receiving endpoint's own dedup logic silently no-op the very redelivery Replay
+        /// exists to trigger. A function that was never deployed rebuilds its current source,
+        /// which is what Test does anyway.
+        /// </para>
+        /// </summary>
+        Task<InvokeResultDto> ReplayAsync(
+            string tenantId, FunctionRunEntity originalRun, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Invocation from a workflow action step (<c>ActionFunctionNode</c>). The caller's
+        /// own context is already established by the workflow engine — there is no bearer
+        /// token here to validate, only the function's own roles/permissions requirement to
+        /// check against whatever identity the workflow execution is already running as, via
+        /// <see cref="IFunctionAuthorizationService.AuthorizeForWorkflow"/> rather than
+        /// <see cref="IWorkflowAuthService"/>'s JWT path.
+        /// <para>
+        /// <paramref name="workflowExecutionId"/> is recorded as the run's <c>InvokedById</c> and
+        /// reaches the sandbox as <c>ctx.run.invokedBy.id</c> (spec §41), so a function run can be
+        /// traced back to the workflow execution that caused it — without it, "Triggered by
+        /// workflow" names no workflow at all.
+        /// </para>
+        /// </summary>
+        Task<InvokeResultDto> InvokeFromWorkflowAsync(
+            string tenantId, string functionId, string? inputJson, BlocksContext? callerContext,
+            int? waitTimeoutSeconds, string? workflowExecutionId, CancellationToken cancellationToken = default);
+    }
+
+    /// <summary>
+    /// Builds the envelope, admits and authorizes the caller, and queues a run — the write
+    /// side of the runner contract (plan/PROTOCOL.md).
+    /// <para>
+    /// <b>Enqueue is compensated.</b> The run record is written before the run is queued, so a
+    /// Redis failure in between used to leave a record QUEUED for ever with nothing behind it.
+    /// Now the payload is withdrawn, the record is closed FAILED / <see cref="RunErrorCode.EnqueueFailed"/>
+    /// and the caller gets <see cref="FunctionUnavailableException"/> (503). Once the record
+    /// exists, nothing — not even the caller disconnecting — can abandon the enqueue half-way.
+    /// </para>
+    /// <para>
+    /// <b>The synchronous "wait" mode</b> (DECISIONS D5) is woken by <c>function:sync:{runId}</c>
+    /// and re-reads the record then; because that notification is fire-and-forget, the record is
+    /// also re-read on a backing-off timer, so a missed message costs latency, never
+    /// correctness. HTTP-facing waits (the public route and Test) are capped by
+    /// <c>Functions:HttpSyncWaitMaxSeconds</c> (default <see cref="DefaultHttpSyncWaitMaxSeconds"/> s,
+    /// under typical 60 s ingress timeouts); the workflow step, which runs in the Worker and has
+    /// no ingress in front of it, keeps <c>Functions:SyncWaitMaxSeconds</c>. After the cap the
+    /// caller gets the 202 shape with the run id to poll.
+    /// </para>
+    /// </summary>
+    public class FunctionInvocationService : IFunctionInvocationService
+    {
+        private const int SyncGraceSeconds = 5;
+
+        /// <summary>
+        /// First re-read of the record while waiting, and the backoff ceiling. Without a working
+        /// subscription the poll is all there is, so it starts fast and caps at 1 s; with one, the
+        /// notification carries the latency and the timer is only the net for a missed message.
+        /// </summary>
+        internal static readonly TimeSpan PollInitial = TimeSpan.FromMilliseconds(200);
+        internal static readonly TimeSpan PollCap = TimeSpan.FromSeconds(1);
+        internal static readonly TimeSpan SubscribedPollInitial = TimeSpan.FromSeconds(1);
+        internal static readonly TimeSpan SubscribedPollCap = TimeSpan.FromSeconds(3);
+
+        /// <summary>Below this much time left, the wait ends instead of sleeping once more.</summary>
+        internal static readonly TimeSpan MinWaitSlice = TimeSpan.FromMilliseconds(10);
+
+        /// <summary>
+        /// Ceiling on a wait that a public HTTP caller (or the editor's Test) holds open, when
+        /// <c>Functions:HttpSyncWaitMaxSeconds</c> is not configured. Well under the 60 s idle
+        /// timeout typical of ingress controllers and load balancers, so the caller gets a clean
+        /// 202 with a run id instead of a gateway 504 that hides whether the run was accepted.
+        /// </summary>
+        internal const int DefaultHttpSyncWaitMaxSeconds = 30;
+
+        /// <summary>
+        /// Ceiling on a synchronous wait when <c>Functions:SyncWaitMaxSeconds</c> is not configured.
+        /// Sized above the largest function timeout (<see cref="FunctionLimits.Ceiling.TimeoutSeconds"/>
+        /// + <see cref="SyncGraceSeconds"/>) so a function allowed to run for its full limit can still
+        /// be awaited to completion rather than reported as "still running". Mirrored by the workflow
+        /// Function step's editor maximum (client: FUNCTION_STEP_MAX_WAIT_SECONDS).
+        /// </summary>
+        private const int DefaultSyncWaitMaxSeconds = 180;
+
+        private readonly IFunctionRepository _functionRepository;
+        private readonly IFunctionVersionRepository _versionRepository;
+        private readonly IFunctionRunRepository _runRepository;
+        private readonly IFunctionRunStatsRepository _runStatsRepository;
+        private readonly IFunctionAdmissionService _admissionService;
+        private readonly IFunctionAuthorizationService _authorizationService;
+        private readonly IFunctionBuildService _buildService;
+        private readonly IEndpointAccessAuthorizer _accessAuthorizer;
+        private readonly IHttpContextAccessor _httpContextAccessor;
+        private readonly ICacheClient _cache;
+        private readonly IConfiguration _configuration;
+        private readonly ILogger<FunctionInvocationService> _logger;
+
+        public FunctionInvocationService(
+            IFunctionRepository functionRepository,
+            IFunctionVersionRepository versionRepository,
+            IFunctionRunRepository runRepository,
+            IFunctionRunStatsRepository runStatsRepository,
+            IFunctionAdmissionService admissionService,
+            IFunctionAuthorizationService authorizationService,
+            IFunctionBuildService buildService,
+            IEndpointAccessAuthorizer accessAuthorizer,
+            IHttpContextAccessor httpContextAccessor,
+            ICacheClient cache,
+            IConfiguration configuration,
+            ILogger<FunctionInvocationService> logger)
+        {
+            _functionRepository = functionRepository;
+            _versionRepository = versionRepository;
+            _runRepository = runRepository;
+            _runStatsRepository = runStatsRepository;
+            _admissionService = admissionService;
+            _authorizationService = authorizationService;
+            _buildService = buildService;
+            _accessAuthorizer = accessAuthorizer;
+            _httpContextAccessor = httpContextAccessor;
+            _cache = cache;
+            _configuration = configuration;
+            _logger = logger;
+        }
+
+        public async Task<InvokeResultDto> InvokeHttpAsync(
+            string tenantId, string functionId, InvokeFunctionRequestDto request, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(request);
+
+            var httpRequest = _httpContextAccessor.HttpContext?.Request
+                ?? throw new InvalidOperationException("InvokeHttpAsync requires an active HTTP request");
+
+            var function = await _functionRepository.GetByIdAsync(tenantId, functionId, cancellationToken);
+            FunctionVersionEntity? version = null;
+            if (function is { Status: FunctionStatus.Live } && !string.IsNullOrEmpty(function.ActiveVersionId))
+            {
+                version = await _versionRepository.GetByIdAsync(tenantId, function.ActiveVersionId, cancellationToken);
+            }
+
+            if (function is null || version is null)
+            {
+                // 401 before 404, as the proxy gateway does for an unknown slug: an anonymous
+                // caller is checked against the default (token required) policy and refused
+                // there, so the route cannot be walked to learn which ids exist or are deployed.
+                await RequireAuthenticatedCallerAsync(httpRequest, tenantId, cancellationToken);
+                throw new FunctionNotFoundException(function is null
+                    ? $"function '{functionId}' was not found"
+                    : $"function '{functionId}' is not deployed");
+            }
+
+            if (!version.Trigger.HttpEnabled)
+            {
+                // Same reasoning: only a caller who could have invoked it learns that HTTP is off.
+                await RequireAuthenticatedCallerAsync(httpRequest, tenantId, cancellationToken);
+                throw new FunctionForbiddenException("this function does not accept HTTP invocations");
+            }
+
+            // The deployed version's own policy, enforced by the same authorizer that guards every
+            // proxy gateway route: public passes without looking at credentials; otherwise the
+            // bearer token is validated against the tenant's certificate and the rules evaluated.
+            // The Genesis bearer handler never ran on this [AllowAnonymous] action, so this is the
+            // one place the token is checked, and the resulting BlocksContext is the identity the
+            // sandbox sees (null for public — the envelope builder strips it regardless).
+            var policy = TriggerAccessPolicy.From(version.Trigger);
+            var decision = await _accessAuthorizer.AuthorizeAsync(httpRequest, tenantId, policy, cancellationToken);
+            switch (decision.Status)
+            {
+                case EndpointAccessStatus.Unauthenticated:
+                    throw new FunctionAuthorizationException(decision.Reason ?? "a valid Blocks token is required");
+                case EndpointAccessStatus.Forbidden:
+                    throw new FunctionForbiddenException(
+                        decision.Reason ?? "the caller does not hold the required roles or permissions");
+                default:
+                    break;
+            }
+
+            // The trigger answers one method. Checked after authorization, as the gateway checks
+            // a route's methods, so which verb a function takes is not learnable anonymously.
+            var verb = FunctionHttpInputBuilder.Verb(version.Trigger.HttpMethod);
+            if (!string.Equals(request.Method, verb, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new FunctionMethodNotAllowedException(verb);
+            }
+
+            // After authorization, like the gateway's own body cap, so the ceiling is not a probe
+            // an unauthorized caller can use. The controller has already stopped reading.
+            if (request.BodyTooLarge)
+            {
+                throw new FunctionRequestTooLargeException(
+                    $"the request body exceeds the {FunctionHttpInputBuilder.MaxBodyBytes} byte limit");
+            }
+
+            var inputJson = FunctionHttpInputBuilder.Build(request);
+
+            return await InvokeCoreAsync(
+                tenantId, function, version, version.ImageDigest, decision.Context,
+                InvokedByType.Http, invokedById: null, inputJson, request.Wait, waitTimeoutSeconds: null,
+                cancellationToken);
+        }
+
+        /// <summary>
+        /// Refuses with 401 unless the request carries a token that validates for
+        /// <paramref name="tenantId"/>. Used on the paths that would otherwise leak whether a
+        /// function exists, is deployed or accepts HTTP.
+        /// </summary>
+        private async Task RequireAuthenticatedCallerAsync(
+            HttpRequest httpRequest, string tenantId, CancellationToken cancellationToken)
+        {
+            var decision = await _accessAuthorizer.AuthorizeAsync(
+                httpRequest, tenantId, EndpointAccessPolicy.RequireToken(), cancellationToken);
+            if (decision.Status == EndpointAccessStatus.Unauthenticated)
+            {
+                throw new FunctionAuthorizationException(decision.Reason ?? "a valid Blocks token is required");
+            }
+        }
+
+        public async Task<InvokeResultDto> TestAsync(
+            string tenantId, string functionId, TestFunctionRequestDto request, CancellationToken cancellationToken = default)
+        {
+            var function = await _functionRepository.GetByIdAsync(tenantId, functionId, cancellationToken)
+                ?? throw new FunctionNotFoundException($"function '{functionId}' was not found");
+
+            // A short wait, not the deploy-length one: a first build takes minutes, and holding the
+            // editor's request open for all of it only to answer "not finished" is worse than
+            // handing back the build id — the client polls it and shows the build's own progress.
+            var testWaitSeconds = _configuration.GetValue("Functions:TestBuildWaitSeconds", 5);
+            var build = await _buildService.EnsureImageAsync(
+                tenantId, function, cancellationToken, testWaitSeconds, request.Rebuild);
+
+            if (build.Status is BuildStatus.Queued or BuildStatus.Building)
+            {
+                // Status is what a caller reads first, so it says what is actually happening rather
+                // than coming back empty: "Building"/"Queued" is the build's own state, and there
+                // is no run to report one for yet.
+                return new InvokeResultDto
+                {
+                    RunId = string.Empty,
+                    Status = build.Status.ToString(),
+                    BuildId = build.ItemId,
+                    BuildStatus = build.Status.ToString(),
+                };
+            }
+
+            if (build.Status != BuildStatus.Succeeded || string.IsNullOrEmpty(build.ImageDigest))
+            {
+                throw new FunctionValidationException(
+                    $"the build failed: {build.ErrorMessage ?? "unknown error"}");
+            }
+
+            var context = BlocksContext.GetContext();
+
+            // The editor's payload becomes input.body of a POST to the root, so the handler code a
+            // tenant tests is the code that runs behind the public route — no "works in Test,
+            // input is undefined in production" surprise.
+            var inputJson = FunctionHttpInputBuilder.ForTest(request.InputJson, function.Trigger.HttpMethod);
+
+            return await InvokeCoreAsync(
+                tenantId, function, version: null, build.ImageDigest, context,
+                InvokedByType.Test, invokedById: null, inputJson, wait: true, request.WaitTimeoutSeconds,
+                cancellationToken);
+        }
+
+        public async Task<InvokeResultDto> ReplayAsync(
+            string tenantId, FunctionRunEntity originalRun, CancellationToken cancellationToken = default)
+        {
+            var function = await _functionRepository.GetByIdAsync(tenantId, originalRun.FunctionId, cancellationToken)
+                ?? throw new FunctionNotFoundException($"function '{originalRun.FunctionId}' was not found");
+
+            // The live version, exactly as a fresh invocation would use — not the version the
+            // original run happened to execute. Replay means "send this input again", so it runs
+            // the code that is deployed now; pinning the old version would make the button behave
+            // differently depending on how old the run was, and fail outright once that version
+            // fell outside the retained history.
+            FunctionVersionEntity? version = null;
+            string image;
+            if (!string.IsNullOrEmpty(function.ActiveVersionId))
+            {
+                version = await _versionRepository.GetByIdAsync(tenantId, function.ActiveVersionId, cancellationToken);
+            }
+
+            if (version is not null)
+            {
+                image = version.ImageDigest;
+            }
+            else
+            {
+                // Never deployed — the original was a Test run, so rebuild the current source,
+                // which is what testing does anyway.
+                var build = await _buildService.EnsureImageAsync(tenantId, function, cancellationToken);
+                if (build.Status != BuildStatus.Succeeded || string.IsNullOrEmpty(build.ImageDigest))
+                {
+                    throw new FunctionValidationException("could not rebuild the function's current source for replay");
+                }
+                image = build.ImageDigest;
+            }
+
+            var context = BlocksContext.GetContext();
+
+            return await InvokeCoreAsync(
+                tenantId, function, version, image, context,
+                InvokedByType.Replay, invokedById: originalRun.ItemId, originalRun.Input,
+                wait: false, waitTimeoutSeconds: null, cancellationToken);
+        }
+
+        public async Task<InvokeResultDto> InvokeFromWorkflowAsync(
+            string tenantId, string functionId, string? inputJson, BlocksContext? callerContext,
+            int? waitTimeoutSeconds, string? workflowExecutionId, CancellationToken cancellationToken = default)
+        {
+            var function = await _functionRepository.GetByIdAsync(tenantId, functionId, cancellationToken)
+                ?? throw new FunctionNotFoundException($"function '{functionId}' was not found");
+
+            if (function.Status != FunctionStatus.Live || string.IsNullOrEmpty(function.ActiveVersionId))
+            {
+                throw new FunctionValidationException($"function '{functionId}' is not deployed");
+            }
+
+            var version = await _versionRepository.GetByIdAsync(tenantId, function.ActiveVersionId, cancellationToken)
+                ?? throw new FunctionNotFoundException($"function '{functionId}' has no active version");
+
+            var authResult = _authorizationService.AuthorizeForWorkflow(function, version, callerContext);
+            if (!authResult.Allowed)
+            {
+                throw new FunctionAuthorizationException(authResult.Reason ?? "not authorized");
+            }
+
+            return await InvokeCoreAsync(
+                tenantId, function, version, version.ImageDigest, callerContext,
+                InvokedByType.Workflow, invokedById: workflowExecutionId, inputJson, wait: true,
+                waitTimeoutSeconds, cancellationToken);
+        }
+
+        private async Task<InvokeResultDto> InvokeCoreAsync(
+            string tenantId,
+            FunctionEntity function,
+            FunctionVersionEntity? version,
+            string image,
+            BlocksContext? context,
+            InvokedByType invokedBy,
+            string? invokedById,
+            string? inputJson,
+            bool wait,
+            int? waitTimeoutSeconds,
+            CancellationToken cancellationToken)
+        {
+            var admission = await _admissionService.AdmitAsync(function, tenantId, inputJson, cancellationToken);
+            if (!admission.IsAdmitted)
+            {
+                throw new FunctionValidationException(admission.Message ?? "the request was not admitted");
+            }
+
+            var limits = (version?.Limits ?? function.Limits).Clamp();
+            var run = new FunctionRunEntity
+            {
+                ItemId = Guid.NewGuid().ToString(),
+                CreatedDate = DateTime.UtcNow,
+                LastUpdatedDate = DateTime.UtcNow,
+                FunctionId = function.ItemId,
+                VersionId = version?.ItemId,
+                VersionNumber = version?.Number ?? 0,
+                ImageDigest = image,
+                TenantId = tenantId,
+                Status = RunStatus.Queued,
+                InvokedBy = invokedBy,
+                InvokedById = invokedById,
+                Input = inputJson,
+                Attempt = 1,
+                MaxAttempts = Math.Max(1, (version?.Retry ?? function.Retry).Attempts),
+            };
+            run.IdempotencyKey = $"{run.ItemId}-{run.Attempt}";
+
+            // Secret-bound variables are NOT resolved here. The envelope keeps each one as its
+            // `{{secret.<id>}}` reference because it is written to the Redis run record (and reused
+            // verbatim by a retry), and plaintext must never sit in the queue. The runner resolves
+            // the references for this tenant immediately before it starts the sandbox, fails the
+            // run as SecretUnresolved (naming the variable) when one cannot be read, and as the
+            // retryable SecretStoreUnavailable when the store itself is down. A version snapshot
+            // keeps the reference too, so rotating a secret takes effect on the next run.
+            var envelopeJson = FunctionEnvelopeBuilder.Build(run, version, function, context, inputJson);
+
+            // Last point at which the caller going away may stop anything. From the insert on, the
+            // record exists, and a cancelled enqueue would strand it QUEUED with nothing queued —
+            // so the insert, the counter and the enqueue all run to completion regardless.
+            cancellationToken.ThrowIfCancellationRequested();
+            await _runRepository.CreateAsync(tenantId, run, CancellationToken.None);
+
+            // Counted whether or not the enqueue succeeds: the record exists either way and shows
+            // in the runs list, so the counter and the list agree.
+            await _runStatsRepository.RecordRunStartedAsync(tenantId, function.ItemId, run.CreatedDate, CancellationToken.None);
+
+            try
+            {
+                await EnqueueAsync(tenantId, function, run, image, envelopeJson, limits);
+            }
+            catch (Exception ex)
+            {
+                await CompensateFailedEnqueueAsync(tenantId, run, ex);
+                throw new FunctionUnavailableException(
+                    "the function could not be queued right now; nothing was executed — retry shortly", run.ItemId);
+            }
+
+            if (!wait)
+            {
+                return new InvokeResultDto { RunId = run.ItemId, Status = FunctionQueueKeys.Wire.Queued };
+            }
+
+            var maxSyncWaitSeconds = Math.Max(1, _configuration.GetValue("Functions:SyncWaitMaxSeconds", DefaultSyncWaitMaxSeconds));
+            if (invokedBy != InvokedByType.Workflow)
+            {
+                // Behind an ingress: the lower HTTP cap applies, and never more than the absolute one.
+                var httpCap = Math.Max(1, _configuration.GetValue("Functions:HttpSyncWaitMaxSeconds", DefaultHttpSyncWaitMaxSeconds));
+                maxSyncWaitSeconds = Math.Min(maxSyncWaitSeconds, httpCap);
+            }
+            var executionWaitSeconds = Math.Min(
+                maxSyncWaitSeconds, (waitTimeoutSeconds ?? limits.TimeoutSeconds) + SyncGraceSeconds);
+            return await WaitForResultAsync(
+                tenantId, run.ItemId, executionWaitSeconds, maxSyncWaitSeconds, cancellationToken);
+        }
+
+        /// <summary>
+        /// Undoes a run whose enqueue failed: withdraws its payload, so a stream entry that did
+        /// land despite the error (a timeout after the write) finds nothing to run, then closes the
+        /// record. Each step is best-effort and logged — if Mongo is down too, the stale-run
+        /// sweeper closes the record once it finds the payload missing.
+        /// </summary>
+        private async Task CompensateFailedEnqueueAsync(string tenantId, FunctionRunEntity run, Exception enqueueError)
+        {
+            _logger.LogError(enqueueError,
+                "Could not enqueue run {RunId} of {FunctionId}; closing it as {Code}",
+                run.ItemId, run.FunctionId, nameof(RunErrorCode.EnqueueFailed));
+
+            try
+            {
+                await _cache.CacheDatabase().KeyDeleteAsync(FunctionQueueKeys.Run(run.ItemId));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Could not withdraw the payload of run {RunId}: {Message}", run.ItemId, ex.Message);
+            }
+
+            try
+            {
+                await _runRepository.FailIfNotTerminalAsync(
+                    tenantId, run.ItemId, RunErrorCode.EnqueueFailed,
+                    $"the platform could not queue this run ({enqueueError.GetType().Name}); nothing was executed and it is safe to retry",
+                    DateTime.UtcNow, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Could not close run {RunId} after its enqueue failed; the stale-run sweeper will", run.ItemId);
+            }
+        }
+
+        private async Task EnqueueAsync(
+            string tenantId, FunctionEntity function, FunctionRunEntity run, string image, string envelopeJson,
+            FunctionLimits limits)
+        {
+            var database = _cache.CacheDatabase();
+            var runKey = FunctionQueueKeys.Run(run.ItemId);
+
+            await database.HashSetAsync(runKey,
+            [
+                new HashEntry("envelope", envelopeJson),
+                new HashEntry("status", FunctionQueueKeys.Wire.Queued),
+                new HashEntry("cpuMillicores", limits.CpuMillicores),
+                new HashEntry("memoryBytes", (long)limits.MemoryMb * 1024 * 1024),
+                new HashEntry("timeoutSeconds", limits.TimeoutSeconds),
+                new HashEntry("concurrency", limits.Concurrency),
+                new HashEntry("queuedAt", DateTimeOffset.UtcNow.ToString("O")),
+            ]);
+            await database.KeyExpireAsync(runKey, FunctionQueueKeys.RunTtl);
+
+            await database.StreamAddAsync(FunctionQueueKeys.RunsStream,
+            [
+                new NameValueEntry("runId", run.ItemId),
+                new NameValueEntry("functionId", function.ItemId),
+                new NameValueEntry("versionId", run.VersionId ?? string.Empty),
+                new NameValueEntry("tenantId", tenantId),
+                new NameValueEntry("image", image),
+                new NameValueEntry("attempt", run.Attempt),
+                // The run entry's own version: 2 = env carries secret references for the runner
+                // to resolve. An older runner dead-letters it instead of running it.
+                new NameValueEntry("protocol", FunctionQueueKeys.RunProtocolVersion),
+            ]);
+        }
+
+        /// <summary>
+        /// Waits for a run to finish, giving it <paramref name="executionWaitSeconds"/> of actually
+        /// running before giving up, and never more than <paramref name="absoluteMaxSeconds"/> in total.
+        /// <para>
+        /// The two budgets exist because a run does not start when it is enqueued. Concurrency and
+        /// host admission both queue rather than reject (by design — nothing is ever refused for
+        /// volume), so under load a run can sit <c>QUEUED</c> for a while. Spending the caller's
+        /// whole allowance on that wait meant a synchronous caller was handed an unfinished answer
+        /// for a run that then went on to succeed, and the busier the platform the more often it
+        /// happened — exactly when a caller can least afford to re-poll. So queued time does not
+        /// consume the execution budget; it is bounded by the absolute cap instead, which is what
+        /// stops a caller being held forever behind a long queue. Whether the run has left the
+        /// queue is read from the runner's own status on the Redis payload — the Mongo record
+        /// stays QUEUED until the result is applied.
+        /// </para>
+        /// <para>
+        /// The record is re-read when <c>function:sync:{runId}</c> fires (the runner publishes on
+        /// completion, the Worker again once the result is written) and otherwise on a timer that
+        /// backs off, so a long wait costs a few reads rather than five a second. Cancellation
+        /// (the caller disconnecting) ends the wait at once.
+        /// </para>
+        /// </summary>
+        private async Task<InvokeResultDto> WaitForResultAsync(
+            string tenantId,
+            string runId,
+            int executionWaitSeconds,
+            int absoluteMaxSeconds,
+            CancellationToken cancellationToken)
+        {
+            var hardDeadline = DateTime.UtcNow.AddSeconds(absoluteMaxSeconds);
+            var deadline = DateTime.UtcNow.AddSeconds(executionWaitSeconds);
+            if (deadline > hardDeadline) deadline = hardDeadline;
+
+            var lastStatus = RunStatus.Queued;
+            var hasLeftTheQueue = false;
+
+            // Capacity 1: any number of notifications between two reads mean one re-read.
+            using var signal = new SemaphoreSlim(0, 1);
+            var channel = RedisChannel.Literal(FunctionQueueKeys.SyncChannel(runId));
+            Action<RedisChannel, RedisValue> onNotified = (_, _) =>
+            {
+                try { signal.Release(); }
+                catch (SemaphoreFullException) { /* a re-read is already due */ }
+                catch (ObjectDisposedException) { /* the wait already ended */ }
+            };
+
+            // Subscribed before the first read, so a completion between the read and the
+            // subscription cannot be missed.
+            var subscriber = await TrySubscribeAsync(channel, onNotified);
+            var delay = subscriber is null ? PollInitial : SubscribedPollInitial;
+            var cap = subscriber is null ? PollCap : SubscribedPollCap;
+
+            try
+            {
+                while (true)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    var run = await _runRepository.GetByIdAsync(tenantId, runId, cancellationToken);
+                    if (run is not null)
+                    {
+                        lastStatus = run.Status;
+
+                        if (FunctionWireMapping.IsTerminal(run.Status))
+                        {
+                            return new InvokeResultDto
+                            {
+                                RunId = runId,
+                                Status = FunctionWireMapping.ToWire(run.Status),
+                                Result = run.Result,
+                                ErrorCode = run.ErrorCode == RunErrorCode.None ? null : run.ErrorCode.ToString(),
+                                ErrorMessage = run.ErrorMessage,
+                            };
+                        }
+
+                        if (!hasLeftTheQueue && run.Status == RunStatus.Queued)
+                        {
+                            var runnerStatus = await TryReadRunnerStatusAsync(runId);
+                            if (runnerStatus is { } started)
+                            {
+                                // Anchored once, on the first observation that it has started.
+                                // After this the deadline stops moving, so the budget measures
+                                // execution only.
+                                hasLeftTheQueue = true;
+                                lastStatus = started;
+                            }
+                            else
+                            {
+                                // Still queued: the run has not begun spending its own timeout, so
+                                // neither should the caller. Slide the execution budget forward,
+                                // but only ever up to the absolute cap.
+                                deadline = DateTime.UtcNow.AddSeconds(executionWaitSeconds);
+                                if (deadline > hardDeadline) deadline = hardDeadline;
+                            }
+                        }
+                        else
+                        {
+                            hasLeftTheQueue = true;
+                            if (run.Status == RunStatus.Queued) lastStatus = RunStatus.Running;
+                        }
+                    }
+
+                    var remaining = deadline - DateTime.UtcNow;
+                    // Not `<= Zero`: WaitAsync truncates a sub-millisecond timeout to 0 ms and
+                    // returns at once, so the last millisecond before the deadline turned into a
+                    // tight loop of record reads. The record was just read; stopping this close
+                    // to the deadline loses nothing.
+                    if (remaining < MinWaitSlice) break;
+
+                    var notified = await signal.WaitAsync(remaining < delay ? remaining : delay, cancellationToken);
+                    delay = notified ? delay : TimeSpan.FromTicks(Math.Min(delay.Ticks * 2, cap.Ticks));
+                }
+            }
+            finally
+            {
+                if (subscriber is not null)
+                {
+                    try
+                    {
+                        await subscriber.UnsubscribeAsync(channel, onNotified);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug("Could not unsubscribe from {Channel}: {Message}", channel, ex.Message);
+                    }
+                }
+            }
+
+            // Not finished inside the window: the same 202 shape a non-waiting caller gets, so a
+            // client that gives up on Wait can fall back to polling GetRun exactly the way a
+            // fire-and-forget caller would. The status is the one last actually observed —
+            // reporting RUNNING for a run still sitting in the queue would misdescribe it.
+            return new InvokeResultDto
+            {
+                RunId = runId,
+                Status = FunctionWireMapping.ToWire(lastStatus),
+            };
+        }
+
+        /// <summary>The subscriber, or null when pub/sub is unavailable — the wait then polls alone.</summary>
+        private async Task<ISubscriber?> TrySubscribeAsync(RedisChannel channel, Action<RedisChannel, RedisValue> handler)
+        {
+            try
+            {
+                var subscriber = _cache.CacheDatabase().Multiplexer.GetSubscriber();
+                await subscriber.SubscribeAsync(channel, handler);
+                return subscriber;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug("Could not subscribe to {Channel}; waiting by polling only: {Message}", channel, ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// The runner's own view, from the payload hash: <c>Starting</c>/<c>Running</c> once a
+        /// runner has taken it, otherwise null (still queued, or unknown).
+        /// </summary>
+        private async Task<RunStatus?> TryReadRunnerStatusAsync(string runId)
+        {
+            try
+            {
+                var value = await _cache.CacheDatabase().HashGetAsync(FunctionQueueKeys.Run(runId), "status");
+                if (value.IsNullOrEmpty) return null;
+                var status = FunctionWireMapping.ToRunStatus(value.ToString(), out var recognised);
+                if (!recognised) return null;
+                return status is RunStatus.Claimed or RunStatus.Starting or RunStatus.Running
+                    ? status
+                    // Terminal on the runner but not yet in Mongo: it certainly left the queue.
+                    : FunctionWireMapping.IsTerminal(status) ? RunStatus.Running : null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug("Could not read the runner status of {RunId}: {Message}", runId, ex.Message);
+                return null;
+            }
+        }
+    }
+}

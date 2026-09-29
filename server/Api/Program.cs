@@ -14,6 +14,7 @@ using Proxy.DomainService;
 using Mail.DomainService.Shared.Utilities;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
+using Functions.DomainService.Utils;
 using Scheduler.DomainService.Utils;
 using SeliseBlocks.ConfigurationDriver;
 using Storage.DomainService.Utilities;
@@ -51,6 +52,9 @@ ApplicationConfigurations.ConfigureApi(services, serviceName);
 builder.Services.Configure<MvcOptions>(options =>
 {
     options.Conventions.Insert(0, new GlobalApiRoutePrefixConvention("api"));
+    // Translates the Secrets SDK's own exceptions (DECISIONS D6) into the HTTP codes its
+    // README documents, so a Functions call that touches a secret does not need its own
+    // try/catch for SecretNotFoundException et al. Registered once — Proxy relies on it too.
     options.Filters.Add<SecretExceptionFilter>();
 });
 
@@ -67,6 +71,11 @@ services.AddWorkflowExecutionEngine();
 services.AddProxyServices();
 services.AddCloudConfigurationServices();
 services.AddSchedulerServices();
+services.AddFunctionsServices();
+// The function-invoke workflow action step. Registered here (not from inside
+// Workflow.DomainService's own AddWorkflowExecutionEngine()) to avoid a circular project
+// reference: Functions.DomainService already depends on DomainService for IWorkflowAuthService.
+services.AddSingleton<Workflow.DomainService.Nodes.INodeExecutor, Functions.DomainService.Nodes.ActionFunctionNode>();
 services.AddStorageDomainServices();
 services.AddBlocksSecrets();
 services.RegisterBlocksStorageServices();

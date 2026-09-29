@@ -181,8 +181,7 @@ const splitSegment = (raw: string): { key: string; isList: boolean } => {
   return { key: isList ? raw.slice(0, -2) : raw, isList };
 };
 
-const encodeSegment = (node: ResponseFieldNode) =>
-  `${node.key.trim()}${node.isList ? "[]" : ""}`;
+const encodeSegment = (node: ResponseFieldNode) => `${node.key.trim()}${node.isList ? "[]" : ""}`;
 
 /**
  * Minimal-encode a tree + checked-id set to a deduped path list: emit the path of every checked node
@@ -254,9 +253,7 @@ const schemaNodesFromObject = (
 ): ResponseFieldNode[] => {
   if (depth > MAX_RESPONSE_PATH_SEGMENTS) return [];
   return unionObjectKeys(objects).map((key) => {
-    const values = objects
-      .map((object) => object[key])
-      .filter((value) => value !== undefined);
+    const values = objects.map((object) => object[key]).filter((value) => value !== undefined);
     const objectValues = values.filter(isPlainObject);
     const arrayValues = values.filter((value): value is unknown[] => Array.isArray(value));
 
@@ -266,9 +263,7 @@ const schemaNodesFromObject = (
         id: responseNodeUid(),
         key,
         isList: true,
-        children: elementObjects.length
-          ? schemaNodesFromObject(elementObjects, depth + 1)
-          : [],
+        children: elementObjects.length ? schemaNodesFromObject(elementObjects, depth + 1) : [],
       };
     }
 
@@ -305,10 +300,7 @@ export const deriveResponseSchema = (
   return { rootKind: "primitive", tree: [] };
 };
 
-const cloneSchemaSubtree = (
-  node: ResponseFieldNode,
-  checked: Set<string>,
-): ResponseFieldNode => {
+const cloneSchemaSubtree = (node: ResponseFieldNode, checked: Set<string>): ResponseFieldNode => {
   const copy: ResponseFieldNode = {
     id: responseNodeUid(),
     key: node.key,
@@ -368,21 +360,14 @@ const hasCheckedInSubtree = (node: ResponseFieldNode, checked: Set<string>): boo
  * Checked subtree → JSON skeleton value: object → `{}`, list → `[oneElement]` (or `[null]`),
  * leaf → `null`. Shape only — every value is `null` / `{}`.
  */
-export const treeToSkeleton = (
-  nodes: ResponseFieldNode[],
-  checked: Set<string>,
-): unknown => {
+export const treeToSkeleton = (nodes: ResponseFieldNode[], checked: Set<string>): unknown => {
   const buildObject = (list: ResponseFieldNode[]): Record<string, unknown> => {
     const object: Record<string, unknown> = {};
     for (const node of list) {
       const key = node.key.trim();
       if (!key || !hasCheckedInSubtree(node, checked)) continue;
       const childObject = buildObject(node.children);
-      const base = Object.keys(childObject).length
-        ? childObject
-        : checked.has(node.id)
-          ? null
-          : {};
+      const base = Object.keys(childObject).length ? childObject : checked.has(node.id) ? null : {};
       object[key] = node.isList ? [base] : base;
     }
     return object;
@@ -430,12 +415,13 @@ export const skeletonToPaths = (json: unknown): string[] => {
  * pane. An empty / all-invalid path list yields `{}` / `[]` (or the primitive itself).
  */
 export const projectSample = (sample: unknown, paths: string[]): unknown => {
-  const cursors = paths
-    .filter(isResponsePath)
-    .map((path) => ({
-      path: path.trim().split(".").map((segment) => splitSegment(segment).key),
-      pos: 0,
-    }));
+  const cursors = paths.filter(isResponsePath).map((path) => ({
+    path: path
+      .trim()
+      .split(".")
+      .map((segment) => splitSegment(segment).key),
+    pos: 0,
+  }));
 
   if (!cursors.length) {
     if (Array.isArray(sample)) return [];
@@ -500,7 +486,8 @@ export const parseRouteTemplate = (
 
   const params: string[] = [];
   for (const segment of segments) {
-    if (segment.length === 0) return { ok: false, reason: "Path must not contain an empty segment." };
+    if (segment.length === 0)
+      return { ok: false, reason: "Path must not contain an empty segment." };
     if (segment === "." || segment === "..")
       return { ok: false, reason: "Path must not contain a '.' or '..' segment." };
     if (!segment.includes("{") && !segment.includes("}")) continue;
@@ -510,7 +497,8 @@ export const parseRouteTemplate = (
         reason: `'${segment}' is not a valid parameter. Use {name} as a whole segment.`,
       };
     const name = segment.slice(1, -1);
-    if (params.includes(name)) return { ok: false, reason: `Parameter '${name}' is declared twice.` };
+    if (params.includes(name))
+      return { ok: false, reason: `Parameter '${name}' is declared twice.` };
     params.push(name);
   }
 
@@ -582,7 +570,11 @@ export const proxyFormSchema = z
     values.routes?.forEach((route, index) => {
       const parsed = parseRouteTemplate(route.path);
       if (!parsed.ok) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["routes", index, "path"], message: parsed.reason });
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["routes", index, "path"],
+          message: parsed.reason,
+        });
         return;
       }
 
@@ -744,7 +736,9 @@ export const splitCredentialRows = (rows: ProxyCredentialRow[] | undefined) => {
     .map((row) => ({ ...row, key: row.key.trim(), value: row.value.trim() }))
     .filter((row) => row.key || row.value);
   return {
-    headers: kept.filter((row) => row.sendAs === "header").map(({ key, value }) => ({ key, value })),
+    headers: kept
+      .filter((row) => row.sendAs === "header")
+      .map(({ key, value }) => ({ key, value })),
     query: kept.filter((row) => row.sendAs === "query").map(({ key, value }) => ({ key, value })),
   };
 };
@@ -782,7 +776,7 @@ export const buildProxyCurl = (
 
   const lines = [
     `curl -X ${log.method} ${shellQuote(url)}`,
-    `  -H ${shellQuote("x-blocks-key: <your tenant id>")}`,
+    `  -H ${shellQuote("x-blocks-key: <your x-blocks-key>")}`,
     `  -H ${shellQuote("Authorization: Bearer <token issued for that tenant>")}`,
   ];
 

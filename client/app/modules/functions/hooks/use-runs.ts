@@ -1,0 +1,98 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { functionService } from "../services/function.service";
+import { IGetRunsPayload, ITestFunctionPayload, TERMINAL_RUN_STATUSES } from "../types/run.types";
+import { FUNCTIONS_QUERY_KEY } from "./use-functions";
+import { runPollInterval } from "../utils/run-polling";
+
+const RUNS_QUERY_KEY = [FUNCTIONS_QUERY_KEY, "runs"];
+
+export const useTestFunction = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: [...RUNS_QUERY_KEY, "test"],
+    mutationFn: (payload: ITestFunctionPayload) => functionService.testFunction(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: RUNS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: [FUNCTIONS_QUERY_KEY] });
+    },
+  });
+};
+
+/**
+ * Runs list. Polls every 5 s while the page holds any non-terminal run, so in-flight runs settle
+ * without a manual refresh, backing off as the youngest of them ages (see `runPollInterval`);
+ * `autoRefresh: false` is the runs tab's toggle turned off.
+ */
+export const useGetRuns = (
+  payload: IGetRunsPayload,
+  options?: { autoRefresh?: boolean; enabled?: boolean },
+) => {
+  const autoRefresh = options?.autoRefresh ?? true;
+  return useQuery({
+    queryKey: [...RUNS_QUERY_KEY, payload],
+    queryFn: () => functionService.getRuns(payload),
+    // Lets the caller hold the query until every part of the key is settled, so a window that is
+    // computed in an effect does not cost a first fetch with the wrong bound.
+    enabled: options?.enabled ?? true,
+    refetchInterval: (query) => {
+      if (!autoRefresh) return false;
+      const runs = query.state.data?.data ?? [];
+      // The most eager interval wins: one fresh run keeps the list responsive even when an old
+      // stuck one alone would have stopped it.
+      const intervals = runs
+        .filter((run) => !TERMINAL_RUN_STATUSES.includes(run.status))
+        .map((run) => runPollInterval(run.createdDate, 5000))
+        .filter((interval): interval is number => interval !== false);
+      return intervals.length > 0 ? Math.min(...intervals) : false;
+    },
+  });
+};
+
+export interface IGetRunOptions {
+  runId?: string;
+  enabled?: boolean;
+}
+
+/** A single run's detail. Polls every 2 s until it reaches a terminal status, backing off with age. */
+export const useGetRun = ({ runId, enabled = true }: IGetRunOptions) => {
+  return useQuery({
+    queryKey: [...RUNS_QUERY_KEY, "detail", runId],
+    queryFn: () => functionService.getRun(runId!),
+    enabled: enabled && !!runId,
+    refetchInterval: (query) => {
+      const run = query.state.data;
+      if (!run?.status || TERMINAL_RUN_STATUSES.includes(run.status)) return false;
+      return runPollInterval(run.createdDate, 2000);
+    },
+  });
+};
+
+export const useGetRunLogs = (runId: string | undefined, pageNumber = 0, pageSize = 200) => {
+  return useQuery({
+    queryKey: [...RUNS_QUERY_KEY, "logs", runId, pageNumber, pageSize],
+    queryFn: () => functionService.getRunLogs(runId!, pageNumber, pageSize),
+    enabled: !!runId,
+  });
+};
+
+export const useReplayRun = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: [...RUNS_QUERY_KEY, "replay"],
+    mutationFn: (runId: string) => functionService.replayRun(runId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: RUNS_QUERY_KEY });
+    },
+  });
+};
+
+export const useCancelRun = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: [...RUNS_QUERY_KEY, "cancel"],
+    mutationFn: (runId: string) => functionService.cancelRun(runId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: RUNS_QUERY_KEY });
+    },
+  });
+};

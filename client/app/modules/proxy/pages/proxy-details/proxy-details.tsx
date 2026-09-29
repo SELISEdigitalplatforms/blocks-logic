@@ -31,8 +31,8 @@ import { ProxyMethodBadge } from "../../components/proxy-method-badge";
 import { ProxyMethodChips } from "../../components/proxy-method-chips";
 import { ProxyStatusBadge } from "../../components/proxy-status-badge";
 import { ProxyLogsTab } from "../../components/proxy-logs-tab";
-import { ProxyHistoryTab } from "../../components/proxy-history-tab";
 import { ProxyTestTab } from "../../components/proxy-test-tab";
+import { ProxyHistoryTab } from "../../components/proxy-history-tab";
 import { DeleteProxyDialog } from "../../components/delete-proxy-dialog";
 
 const pluralize = (count: number, singular: string, plural = `${singular}s`) =>

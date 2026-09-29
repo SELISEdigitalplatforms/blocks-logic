@@ -1,0 +1,57 @@
+# function.Dockerfile.tmpl — rendered by Blocks.FunctionRunner's BuildProcessor for each
+# tenant build. Placeholders are substituted before the build; nothing here is evaluated by
+# the runner itself.
+#
+#   {{BASE_IMAGE}}            pinned runtime, e.g. 127.0.0.1:5000/blocks/functions-node:24-v1@sha256:…
+#   {{DEPS_ARCHIVE}}          the dependency tarball the install sandbox produced
+#   {{MAX_OLD_SPACE_MB}}      ~75 % of the run's memory ceiling, so V8 throws a catchable
+#                             heap error before the cgroup OOM killer where it can
+#
+# THERE IS NO `npm install` HERE, AND THERE MUST NOT BE ONE.
+#
+# `docker build` has no runtime selector: every RUN instruction executes on the Engine's
+# default runtime, which is deliberately runc. That is fine for the instructions below,
+# which run commands this repository wrote — but `npm install` fetches and, when a function
+# opts in, executes code the tenant chose, and running that under runc put tenant code on
+# the host kernel. It was the one place in the pipeline that escaped gVisor.
+#
+# So the install happens first, in a gVisor sandbox of its own (BuildSandboxProfile /
+# DependencyInstaller), and hands back node_modules as a tarball. This file only copies.
+# Re-introducing a RUN that touches tenant-chosen code would silently undo that.
+#
+# Dependencies are resolved fresh from package.json on every build. No lockfile is accepted
+# from the tenant and none is carried between builds. What was actually resolved is recorded
+# on the build from the install sandbox's own output, not from anything asserted here.
+
+FROM {{BASE_IMAGE}}
+
+USER root
+WORKDIR /function
+
+# Manifest first, then dependencies, then source — cheapest-to-change last, so a source-only
+# edit reuses the dependency layer. The archive is built with a fixed sort order and zeroed
+# timestamps, so an unchanged dependency tree is byte-identical and this layer caches
+# (DECISIONS D3).
+COPY manifest/ /function/
+
+# ADD, not COPY: Docker extracts a local tar archive in place, which preserves the modes and
+# the .bin symlinks npm creates. Copying the unpacked tree through the build context would
+# dereference those into duplicate files.
+ADD {{DEPS_ARCHIVE}} /function/
+
+# Tenant source. Copied after the dependencies so it never invalidates their layer.
+COPY src/ /function/
+
+# Everything the function needs is readable and nothing is writable, by anyone. The rootfs
+# is read-only at run time too; this makes the image correct on its own terms. The chown also
+# normalises ownership of the extracted archive, whose entries were written by the sandbox.
+RUN set -eux; \
+    chown -R root:root /function; \
+    chmod -R a-w,a+rX /function; \
+    test -f /function/index.js || { echo "index.js is missing from the function source" >&2; exit 1; }; \
+    test -d /function/node_modules || { echo "node_modules is missing from the build" >&2; exit 1; }
+
+ENV NODE_OPTIONS=--max-old-space-size={{MAX_OLD_SPACE_MB}}
+
+USER 10001:10001
+ENTRYPOINT ["node", "/runtime/bootstrap.mjs"]

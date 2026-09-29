@@ -87,7 +87,7 @@ namespace Common.InternalService.Storage
         {
             if (tenantId == null)
             {
-                Console.WriteLine("Project key is null.");
+                Console.WriteLine("x-blocks-key is null.");
                 return null;
             }
 

@@ -26,9 +26,13 @@ namespace XUnitTest.Proxy
 
         public ProxyVariableResolverTests()
         {
+            // ProxyVariableResolver takes IServiceScopeFactory (it's a singleton resolving the scoped
+            // ISecretService per call) — a tiny DI container stands in for the app's, same as production
+            // wires ISecretService. Held in a field so the provider outlives the constructor.
             _services = new ServiceCollection()
                 .AddSingleton<ISecretService>(_secrets)
                 .BuildServiceProvider();
+
             _resolver = new ProxyVariableResolver(
                 _services.GetRequiredService<IServiceScopeFactory>(),
                 _cache,

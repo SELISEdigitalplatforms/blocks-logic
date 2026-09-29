@@ -74,10 +74,29 @@ describe("ProxyDetails page", () => {
 
     expect(await screen.findByRole("heading", { name: "Stripe Payments" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Overview" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Test" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Logs" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "History" })).toBeTruthy();
     expect(screen.queryByRole("tab", { name: /Logs\s+\d+/i })).toBeNull();
     expect(screen.queryByRole("tab", { name: /History\s+\d+/i })).toBeNull();
+  });
+
+  it("runs a test request from the Test tab", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <MemoryRouter initialEntries={["/proxy/p1"]}>
+        <Routes>
+          <Route path="/proxy/:proxyId" element={<ProxyDetails />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await user.click(await screen.findByRole("tab", { name: "Test" }));
+    expect(await screen.findByLabelText("Test method")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: /send test request/i }));
+    expect(await screen.findByText("200")).toBeTruthy();
   });
 
   it("shows selected response fields as a nested tree", async () => {

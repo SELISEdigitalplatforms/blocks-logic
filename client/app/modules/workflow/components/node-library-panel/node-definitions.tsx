@@ -11,6 +11,7 @@ import {
 	Clock,
 	DatabaseZap,
 	Code2,
+	FunctionSquare,
 	Waypoints,
 } from "lucide-react";
 
@@ -141,6 +142,21 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		type: "dataAction",
 		version: "v1",
 		defaultName: "Data Action",
+		handleSpec: {
+			source: ["source"],
+			target: ["target"],
+		},
+	},
+	{
+		id: "action-function-v1",
+		icon: <FunctionSquare className="h-5 w-5 text-primary" />,
+		title: "Function",
+		description:
+			"Run a deployed function and pass its result to the next node.",
+		category: "action",
+		type: "function",
+		version: "v1",
+		defaultName: "Function",
 		handleSpec: {
 			source: ["source"],
 			target: ["target"],
