@@ -81,7 +81,8 @@ jobs:
 
   deploy:
     needs: [test, target]
-    runs-on: [self-hosted, function-sandbox, "${{ needs.target.outputs.environment }}"]
+    runs-on:
+      [self-hosted, function-sandbox, "${{ needs.target.outputs.environment }}"]
     environment: ${{ needs.target.outputs.environment }}
     timeout-minutes: 60
     # One deploy at a time per environment; never cancel one half-way through a host change.
@@ -89,6 +90,14 @@ jobs:
       group: sandbox-deploy-${{ needs.target.outputs.environment }}
       cancel-in-progress: false
     steps:
+      # deploy.sh runs under sudo, so its build output (bin/, obj/) is root-owned; the next run's
+      # checkout, which runs as the runner user, cannot delete it and fails with EACCES.
+      - name: Reclaim workspace ownership from the previous deploy
+        run: |
+          if [ -d "$GITHUB_WORKSPACE" ]; then
+            sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
+          fi
+
       - uses: actions/checkout@v4
 
       # Optional: the runner VM reaches Key Vault with its Azure Arc identity, so the secret is only
