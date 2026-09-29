@@ -387,6 +387,31 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
+        public async Task RunAsync_PerItem_ScriptErrorOnOneItem_FailsTheNodeAndSkipsTheRest()
+        {
+            var items = new List<WorkflowItemExecutionEntity>
+            {
+                Item("a", new BsonDocument { { "n", 1 } }),
+                Item("b", new BsonDocument { { "n", 2 } }),
+                Item("c", new BsonDocument { { "n", 3 } }),
+            };
+            var ctx = Context(items, EachMode,
+                "if ($json.n === 2) throw new Error('bad item'); return { n: $json.n };");
+
+            var result = await new TransformCodeV1Node().RunAsync(ctx);
+
+            // Fail fast: item b fails the node, item c never runs; the record keeps a's output and
+            // an error item for b.
+            result.IsSuccess.Should().BeFalse();
+            result.ErrorMessage.Should().Contain("bad item");
+            result.OutputItems.Should().HaveCount(2);
+            result.OutputItems[0].Data.Output["n"].ToDouble().Should().Be(1);
+            result.OutputItems[1].Data.Output["error"].AsBoolean.Should().BeTrue();
+            result.OutputItems[1].Data.Output["message"].AsString.Should().Be(result.ErrorMessage);
+            result.OutputItems[1].ParentItemIds.Should().Equal("b");
+        }
+
+        [Fact]
         public async Task RunAsync_PerItem_DirectFieldAccess()
         {
             var items = new List<WorkflowItemExecutionEntity>

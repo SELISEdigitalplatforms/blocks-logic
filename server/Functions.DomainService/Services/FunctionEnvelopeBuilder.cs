@@ -26,19 +26,26 @@ namespace Functions.DomainService.Services
     /// independent checks, not the only one.
     /// </para>
     /// <para>
-    /// <b>One deliberate exception</b>: a variable's value may be a <c>{{secret.&lt;id&gt;}}</c>
-    /// reference, resolved here so the function reads the real value as <c>ctx.env.NAME</c>.
-    /// Those are the tenant's <i>own</i> secrets, chosen explicitly in the editor — spec §17 is
-    /// about the platform's credentials, which still never appear. Because the value genuinely
-    /// is a credential, it is resolved as late as possible (at invoke, not at deploy) and is
-    /// never written to the version snapshot: the snapshot keeps the reference.
+    /// <b>Secret-bound variables stay references here.</b> A variable's value may be a
+    /// <c>{{secret.&lt;id&gt;}}</c> reference (whole, or embedded as in <c>Bearer {{secret.x}}</c>),
+    /// and this builder leaves it exactly as written: the envelope goes into the Redis run record
+    /// and its retry copy, and plaintext must never be in either. The <b>runner</b> resolves the
+    /// references for the run's tenant right before it starts the sandbox
+    /// (<c>sandbox/src/Blocks.FunctionRunner/Runs/EnvSecretReferences.cs</c>), so the function
+    /// still reads the real value as <c>ctx.env.NAME</c>. Those are the tenant's <i>own</i>
+    /// secrets, chosen explicitly in the editor — spec §17 is about the platform's credentials,
+    /// which never appear at all. The run entry carries
+    /// <see cref="Queue.FunctionQueueKeys.RunProtocolVersion"/>, so a runner that predates this
+    /// refuses the run rather than handing a function the reference text.
     /// </para>
     /// </summary>
     public static class FunctionEnvelopeBuilder
     {
         /// <summary>
-        /// Property-name fragments that must never appear in an envelope outside <c>env</c>, at
-        /// any depth. Matched case-insensitively. Mirrors the runner's own screen.
+        /// Property-name fragments that must never appear, at any depth, in the parts of an
+        /// envelope the control plane builds — everything but <c>env</c> and the caller's
+        /// <c>input</c> (whose <c>headers</c> are still screened); see <see cref="Screen"/>.
+        /// Matched case-insensitively. Mirrors the runner's own screen.
         /// </summary>
         private static readonly string[] ForbiddenKeyFragments =
         [
@@ -62,14 +69,6 @@ namespace Functions.DomainService.Services
         public sealed class ForbiddenContentException(string message) : Exception(message);
 
         /// <summary>
-        /// Thrown when a variable references a secret this tenant cannot resolve — deleted,
-        /// renamed away, or never readable. The run fails instead of starting, because the
-        /// alternative is handing the sandbox the literal <c>{{secret.id}}</c> text and letting
-        /// the function present it to a payment provider as if it were a key.
-        /// </summary>
-        public sealed class UnresolvedSecretException(string message) : Exception(message);
-
-        /// <summary>
         /// Builds the envelope for one run.
         /// </summary>
         /// <param name="run">The run being started.</param>
@@ -83,18 +82,12 @@ namespace Functions.DomainService.Services
         /// notably <c>OAuthToken</c> is not, and must never be.
         /// </param>
         /// <param name="inputJson">The caller's input as raw JSON, or null.</param>
-        /// <param name="secrets">
-        /// Secret id &rarr; plaintext, for the ids <see cref="CollectSecretIds"/> reported. Every
-        /// referenced id must be present: a missing one fails the run rather than reaching the
-        /// sandbox as literal placeholder text.
-        /// </param>
         public static string Build(
             FunctionRunEntity run,
             FunctionVersionEntity? version,
             FunctionEntity function,
             BlocksContext? context,
-            string? inputJson,
-            IReadOnlyDictionary<string, string>? secrets = null)
+            string? inputJson)
         {
             ArgumentNullException.ThrowIfNull(run);
             ArgumentNullException.ThrowIfNull(function);
@@ -118,10 +111,10 @@ namespace Functions.DomainService.Services
                     },
                 },
                 ["context"] = BuildIdentity(context, authMode),
-                ["env"] = BuildEnv(variables, secrets, out var maskedEnvKeys),
-                // The keys whose values came from a secret, so the sandbox can mask those values
-                // out of every log line it writes. Keys only — the values are already in `env`,
-                // and naming them twice would be one more place a secret can be read from.
+                ["env"] = BuildEnv(variables, out var maskedEnvKeys),
+                // The keys whose values carry a secret reference: the runner resolves exactly
+                // these, and the sandbox masks the resolved values out of every log line it
+                // writes. Keys only — never ids alongside, never values.
                 //
                 // Not "envSecrets": the envelope screen on both sides rejects any property whose
                 // name contains "secret", and it is right to, so the marker is named for what it
@@ -149,10 +142,10 @@ namespace Functions.DomainService.Services
         }
 
         /// <summary>
-        /// The secret ids referenced by the variables this run will use, deduplicated. The
-        /// caller resolves them and hands the values back to <see cref="Build"/> — the lookup
-        /// is I/O and this type stays synchronous and pure, which is what makes the screening
-        /// guarantees here testable without a secret store.
+        /// The secret ids referenced by the variables this run will use, deduplicated. Nothing in
+        /// the invoke path resolves them — the runner does, from the references left in
+        /// <c>env</c> — but the set is what an author's variables depend on, for tests and
+        /// diagnostics.
         /// </summary>
         public static IReadOnlyCollection<string> CollectSecretIds(
             FunctionVersionEntity? version, FunctionEntity function)
@@ -211,20 +204,20 @@ namespace Functions.DomainService.Services
         }
 
         /// <summary>
-        /// <c>ctx.env</c> from the version's variable snapshot, with every
-        /// <c>{{secret.&lt;id&gt;}}</c> reference replaced by its value.
+        /// <c>ctx.env</c> from the version's variable snapshot, <b>unresolved</b>: a
+        /// <c>{{secret.&lt;id&gt;}}</c> reference — whole or embedded — is copied through as the
+        /// reference text, and its key is reported in <paramref name="maskedEnvKeys"/> so the
+        /// runner knows what to resolve and the sandbox what to mask.
         /// <para>
-        /// A reference can be embedded rather than whole (<c>Bearer {{secret.abc}}</c>), so this
-        /// substitutes in place rather than swapping the value wholesale. An id with no resolved
-        /// value throws: the function would otherwise receive the placeholder text and send it
-        /// upstream as though it were a key, which fails far away from the cause and can look
-        /// like a provider outage rather than a deleted secret.
+        /// A reference whose secret was deleted or can no longer be read is not caught here: the
+        /// runner fails that run as <c>SECRET_UNRESOLVED</c> before the sandbox starts, naming
+        /// the variable. Checking here as well would mean reading the secret's value into this
+        /// process just to throw it away — the SDK's only lookups either return the value or
+        /// return metadata under a different authorisation rule — and would still not settle it,
+        /// because a secret can be deleted between the invoke and the run.
         /// </para>
         /// </summary>
-        private static JsonObject BuildEnv(
-            IEnumerable<VariableBinding>? variables,
-            IReadOnlyDictionary<string, string>? secrets,
-            out List<string> maskedEnvKeys)
+        private static JsonObject BuildEnv(IEnumerable<VariableBinding>? variables, out List<string> maskedEnvKeys)
         {
             var env = new JsonObject();
             maskedEnvKeys = [];
@@ -234,42 +227,14 @@ namespace Functions.DomainService.Services
             {
                 if (string.IsNullOrWhiteSpace(variable.Key)) continue;
 
-                // A binding is secret-backed when its stored value carries a reference, whether
-                // the whole value is one or it is spliced into a larger string. Either way the
-                // resolved value is a credential and must not appear in the run's logs.
                 if (!string.IsNullOrEmpty(variable.Value) && SecretPlaceholder.IsMatch(variable.Value))
                 {
                     maskedEnvKeys.Add(variable.Key);
                 }
 
-                env[variable.Key] = Substitute(variable.Key, variable.Value, secrets);
+                env[variable.Key] = variable.Value;
             }
             return env;
-        }
-
-        private static string? Substitute(
-            string key, string? value, IReadOnlyDictionary<string, string>? secrets)
-        {
-            if (string.IsNullOrEmpty(value)) return value;
-
-            var unresolved = new List<string>();
-            var substituted = SecretPlaceholder.Replace(value, match =>
-            {
-                var id = match.Groups[1].Value;
-                if (secrets is not null && secrets.TryGetValue(id, out var secret)) return secret;
-                unresolved.Add(id);
-                return match.Value;
-            });
-
-            if (unresolved.Count > 0)
-            {
-                // Ids only. The whole point of the failure is that there was no value to leak.
-                throw new UnresolvedSecretException(
-                    $"variable '{key}' references {(unresolved.Count == 1 ? "a secret" : "secrets")} " +
-                    $"that could not be resolved: {string.Join(", ", unresolved)}");
-            }
-
-            return substituted;
         }
 
         private static JsonNode? ParseInput(string? inputJson)
@@ -310,13 +275,31 @@ namespace Functions.DomainService.Services
         /// Rejects an envelope carrying anything credential-shaped. Keys only: screening values
         /// would reject legitimate input such as a note that happens to mention a password.
         /// <para>
-        /// <c>env</c> is exempt, and only <c>env</c>. Its keys are variable names the tenant
-        /// authored, already constrained to an identifier by <c>VariableBindingValidator</c>,
-        /// and <see cref="BuildEnv"/> copies nothing else into it — so no platform credential
-        /// can ever surface as an <c>env</c> key, and screening there blocked only the honest
-        /// names (<c>STRIPE_API_KEY</c>, <c>DB_PASSWORD</c>) that a bound secret is for. The
-        /// screen still covers <c>run</c>, <c>context</c>, <c>input</c> and <c>limits</c>,
-        /// which is where a control-plane mistake would actually put a token.
+        /// The screen exists to catch <b>control-plane</b> mistakes — a token copied out of
+        /// <c>BlocksContext</c>, a credential added to <c>run</c> or <c>limits</c> — so it covers
+        /// everything this file builds: <c>run</c>, <c>context</c>, <c>maskedEnv</c>, <c>limits</c>
+        /// and any top-level key added later.
+        /// </para>
+        /// <para>
+        /// Two subtrees are exempt, because their keys are not the control plane's:
+        /// <list type="bullet">
+        /// <item><c>env</c> — variable names the tenant authored, already constrained to an
+        /// identifier by <c>VariableBindingValidator</c>. Screening there blocked only the honest
+        /// names (<c>STRIPE_API_KEY</c>, <c>DB_PASSWORD</c>) that a bound secret is for.</item>
+        /// <item><c>input</c> — the caller's own payload (for HTTP: its query and body). A signup
+        /// form has a <c>password</c> field and a GitHub webhook a <c>secret</c>; refusing them
+        /// broke real callers and protected nothing, since the caller chose to send that data to
+        /// this function. <b>Except <c>input.headers</c></b>, which the control plane shapes from
+        /// an allow-list (<see cref="FunctionHttpInputBuilder.ForwardedHeaders"/>): an
+        /// <c>authorization</c> or cookie key there means the allow-list regressed, and that
+        /// stays a refusal.</item>
+        /// </list>
+        /// Both exemptions are the envelope's own top-level keys only; an object called
+        /// <c>env</c> or <c>input</c> nested inside <c>run</c> or <c>context</c> is still screened.
+        /// </para>
+        /// <para>
+        /// The runner's <c>ExecutionEnvelope.Screen</c> must apply the same exemptions, or a
+        /// payload this side admits is refused on arrival.
         /// </para>
         /// </summary>
         public static void Screen(string envelopeJson)
@@ -344,10 +327,15 @@ namespace Functions.DomainService.Services
                 case JsonValueKind.Object:
                     foreach (var property in element.EnumerateObject())
                     {
-                        // Only the envelope's own top-level `env` — a nested object that merely
-                        // happens to be called "env" inside `input` is still screened.
-                        var childScreens = screenKeys
-                            && !(path.Length == 0 && property.Name == "env");
+                        // Only the envelope's own top-level `env` and `input` are exempt (see
+                        // Screen) — and within `input`, its `headers` are screened again, since
+                        // that object is built by the control plane from an allow-list.
+                        var isRoot = path.Length == 0;
+                        var childScreens = screenKeys switch
+                        {
+                            true => !(isRoot && (property.Name == "env" || property.Name == "input")),
+                            false => path == "input." && property.Name == "headers",
+                        };
 
                         if (screenKeys)
                         {

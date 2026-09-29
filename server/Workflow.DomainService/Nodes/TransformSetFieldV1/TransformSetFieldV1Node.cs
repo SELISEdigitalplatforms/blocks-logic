@@ -55,7 +55,7 @@ namespace Workflow.DomainService.Nodes.TransformSetFieldV1
                 }
                 catch (Exception ex)
                 {
-                    AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
+                    return FailOnItem(context, outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
                 }
             }
             return NodeExecutionResult.Successful(outputItems);

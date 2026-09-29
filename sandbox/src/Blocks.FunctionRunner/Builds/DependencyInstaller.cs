@@ -1,6 +1,7 @@
 using System.Text;
 using Blocks.FunctionRunner.Contracts;
 using Blocks.FunctionRunner.Options;
+using Blocks.FunctionRunner.Sandbox;
 using Docker.DotNet;
 using Docker.DotNet.Models;
 using Microsoft.Extensions.Logging;
@@ -235,37 +236,8 @@ namespace Blocks.FunctionRunner.Builds
         /// run's. stdout and stderr are interleaved deliberately: npm reports progress on one and
         /// warnings on the other, and a build log is only useful with both in order.
         /// </summary>
-        private static async Task<string> ReadStreamAsync(MultiplexedStream stream, CancellationToken token)
-        {
-            var builder = new StringBuilder();
-            var buffer = new byte[16 * 1024];
-            long total = 0;
-
-            try
-            {
-                while (!token.IsCancellationRequested)
-                {
-                    var read = await stream.ReadOutputAsync(buffer, 0, buffer.Length, token).ConfigureAwait(false);
-                    if (read.EOF) break;
-                    if (read.Count == 0) continue;
-
-                    builder.Append(Encoding.UTF8.GetString(buffer, 0, read.Count));
-
-                    total += read.Count;
-                    if (total > LogCeilingBytes) break;
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                // Expected when the deadline or the drain timer fires.
-            }
-            catch (IOException)
-            {
-                // The container went away mid-read; whatever arrived is what we have.
-            }
-
-            return builder.ToString();
-        }
+        private static Task<string> ReadStreamAsync(MultiplexedStream stream, CancellationToken token)
+            => CappedOutputReader.ReadAsync(stream, LogCeilingBytes, token);
 
         /// <summary>
         /// Removes a container this build left behind on an earlier attempt. The name is

@@ -6,6 +6,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="SeliseBlocks.Genesis.OS" />
+    <PackageReference Include="SeliseBlocks.Secrets.OS" />
     <PackageReference Include="Docker.DotNet" />
     <PackageReference Include="SharpZipLib" />
     <PackageReference Include="StackExchange.Redis" />

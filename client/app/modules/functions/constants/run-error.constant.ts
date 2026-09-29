@@ -22,6 +22,14 @@ export const RUN_ERROR_EXPLANATIONS: Record<RunErrorCode, string> = {
   OutputActionFailed: "The function returned successfully, but an output action did not deliver.",
   Undeliverable:
     "No runner ever picked this up, so nothing ran. It is safe to run again — but check the runners are healthy first, because the platform already gave up on delivering it once.",
+  EnqueueFailed:
+    "The run could not be queued, so nothing ran. The platform's queue was unavailable for a moment — running it again is safe.",
+  Abandoned:
+    "The run never reported back and the platform closed it. It may or may not have finished its work, so check for side effects before running it again.",
+  SecretUnresolved:
+    "A variable is bound to a secret that could not be read — it was deleted, locked, has no value, or is not readable by this run. Nothing ran. Rebind the variable named above to an existing secret, then run again.",
+  SecretStoreUnavailable:
+    "The secret store could not be reached while the run was starting, so nothing ran. This is on the platform's side; the run is retried automatically if its retry policy allows, and running it again is safe.",
 };
 
 /**

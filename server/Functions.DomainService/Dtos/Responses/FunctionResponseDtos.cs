@@ -222,6 +222,14 @@ namespace Functions.DomainService.Dtos.Responses
 
         /// <summary>The build's status at the moment the request gave up waiting.</summary>
         public string? BuildStatus { get; set; }
+
+        /// <summary>
+        /// Set only on a 202 from the public <c>/api/fn</c> route: the one-time capability for
+        /// <c>GET /api/fn/runs/{runId}/result</c> (header <c>x-poll-token</c>), so an anonymous
+        /// caller can collect its result. Shown once; only its hash is kept. Omitted otherwise.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? PollToken { get; set; }
     }
 
     /// <summary>Static platform ceilings and defaults, for the editor's limits form.</summary>

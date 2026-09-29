@@ -33,9 +33,11 @@ namespace Functions.DomainService.Services
     /// Headers are an allow-list, never the request's full set. The envelope screen refuses any
     /// credential-shaped key (<c>authorization</c>, <c>cookie</c>, <c>x-blocks-key</c> …) and the
     /// spec forbids a token from ever entering a sandbox, so the only headers that travel are the
-    /// content-negotiation and provenance ones a handler can legitimately act on. Query keys are
-    /// the caller's own and pass through as-is; a credential-shaped one still fails the screen,
-    /// which is the right outcome — the request is refused with a 400 rather than delivered.
+    /// content-negotiation and provenance ones a handler can legitimately act on — and the screen
+    /// keeps checking <c>input.headers</c>, so a regression in this list fails the run rather than
+    /// leaking. Query and body keys are the caller's own and pass through as-is, credential-shaped
+    /// or not (<c>?token=</c>, a signup form's <c>password</c>): the screen exempts them, because
+    /// the caller chose to send that data to this function.
     /// </para>
     /// </summary>
     public static class FunctionHttpInputBuilder

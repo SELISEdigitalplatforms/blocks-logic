@@ -65,6 +65,8 @@ namespace Functions.DomainService.Queue
             FunctionQueueKeys.Wire.ImagePullFailed => RunErrorCode.ImagePullFailed,
             FunctionQueueKeys.Wire.TimedOutCode => RunErrorCode.TimedOut,
             FunctionQueueKeys.Wire.SandboxStartFailed => RunErrorCode.SandboxStartFailed,
+            FunctionQueueKeys.Wire.SecretUnresolved => RunErrorCode.SecretUnresolved,
+            FunctionQueueKeys.Wire.SecretStoreUnavailable => RunErrorCode.SecretStoreUnavailable,
             FunctionQueueKeys.Wire.Undeliverable => RunErrorCode.Undeliverable,
             _ => RunErrorCode.UserRuntimeError,
         };
@@ -92,6 +94,10 @@ namespace Functions.DomainService.Queue
                 // already spent. Scheduling another attempt would re-enqueue work that the
                 // runners have collectively refused, and it would do so on a timer.
                 RunErrorCode.Undeliverable => false,
+                // A reference to a secret that does not exist or cannot be read fails the same way
+                // every time until the author fixes the variable. (SecretStoreUnavailable — the
+                // store itself was down — falls through to retryable.)
+                RunErrorCode.SecretUnresolved => false,
                 _ => true,
             };
         }

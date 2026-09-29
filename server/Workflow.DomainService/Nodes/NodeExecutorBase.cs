@@ -69,24 +69,51 @@ namespace Workflow.DomainService.Nodes
             WorkflowItemExecutionEntity? inputItem, BsonValue parameters, string message, string branch = "source")
             => TryBuildErrorOutputItem(inputItem, parameters, new Exception(message), branch);
 
-        protected static void AppendErrorOutputItem(
+        /// <summary>
+        /// Fail-fast for a per-item error: the first item that fails fails the whole node. The items
+        /// already produced plus a synthetic <c>{ error: true, message }</c> item for the failing input are
+        /// kept on the result so the execution record shows what failed, but because the result is
+        /// <see cref="NodeExecutionResult.Failed"/> the engine persists them against a Failed node and
+        /// never dispatches downstream nodes: the workflow stops here.
+        /// <para>
+        /// Cancellation is not a node failure: an <see cref="OperationCanceledException"/> is rethrown
+        /// (stack preserved) instead of being turned into an error result, and the engine records the
+        /// cancellation. The one exception is a timeout — HttpClient reports its own timeout as a
+        /// <see cref="TaskCanceledException"/> wrapping a <see cref="TimeoutException"/> while the node's
+        /// token is untouched — which is an ordinary failure of the call and fails the node.
+        /// </para>
+        /// Call as <c>return FailOnItem(...)</c> from inside a <c>catch</c>.
+        /// </summary>
+        protected static NodeExecutionResult FailOnItem(
+            NodeExecutionContext context,
             List<NodeOutputItem> outputItems,
             WorkflowItemExecutionEntity? inputItem,
             BsonValue parameters,
             Exception ex)
         {
-            var item = TryBuildErrorOutputItem(inputItem, parameters, ex);
-            if (item != null) outputItems.Add(item);
+            if (ex is OperationCanceledException
+                && (context.CancellationToken.IsCancellationRequested || ex.InnerException is not TimeoutException))
+            {
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex).Throw();
+            }
+
+            return FailOnItem(outputItems, inputItem, parameters, ex.Message ?? ex.GetType().Name);
         }
 
-        protected static void AppendErrorOutputItem(
+        /// <summary>
+        /// Fail-fast for a per-item error described by a message (validation / refused request /
+        /// unparseable response). See the <see cref="Exception"/> overload.
+        /// </summary>
+        protected static NodeExecutionResult FailOnItem(
             List<NodeOutputItem> outputItems,
             WorkflowItemExecutionEntity? inputItem,
             BsonValue parameters,
             string message)
         {
-            var item = TryBuildErrorOutputItem(inputItem, parameters, message);
+            var safeMessage = string.IsNullOrWhiteSpace(message) ? "The node failed." : message;
+            var item = TryBuildErrorOutputItem(inputItem, parameters, safeMessage);
             if (item != null) outputItems.Add(item);
+            return NodeExecutionResult.Failed(safeMessage, outputItems);
         }
 
         public async Task<NodeExecutionResult> RunAsync(NodeExecutionContext context)

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Blocks.FunctionRunner.Admission;
 using Blocks.FunctionRunner.Contracts;
 using Blocks.FunctionRunner.Health;
@@ -123,12 +124,11 @@ namespace Blocks.FunctionRunner.Runs
                 return;
             }
 
-            var protocol = entry.GetInt("protocol", RedisKeys.ProtocolVersion);
-            if (protocol != RedisKeys.ProtocolVersion)
+            if (ReadProtocol(entry) is not { } protocol)
             {
                 await consumer.DeadLetterAsync(entry,
-                    $"protocol version {protocol} is not supported by this runner " +
-                    $"(expected {RedisKeys.ProtocolVersion})").ConfigureAwait(false);
+                    $"protocol version '{entry.Get("protocol")}' is not supported by this runner " +
+                    $"(expected {RedisKeys.MinRunProtocolVersion}-{RedisKeys.RunProtocolVersion})").ConfigureAwait(false);
                 return;
             }
 
@@ -149,9 +149,20 @@ namespace Blocks.FunctionRunner.Runs
                 VersionId = entry.Get("versionId"),
                 TenantId = entry.Get("tenantId"),
                 Image = entry.Get("image") ?? string.Empty,
-                Attempt = deliveries,
+                Attempt = ReadAttempt(entry),
+                Deliveries = deliveries,
                 Protocol = protocol,
             };
+
+            if (deliveries > 1)
+            {
+                // The same attempt handed out again — a runner died or stalled holding it. Not a
+                // new attempt: the attempt number is the control plane's, and it keys output-action
+                // idempotency, so a redelivery must report the attempt it is redelivering.
+                _logger.LogWarning(
+                    "Run {RunId} attempt {Attempt} is being redelivered (delivery {Deliveries})",
+                    runId, job.Attempt, deliveries);
+            }
 
             if (string.IsNullOrWhiteSpace(job.Image))
             {
@@ -180,6 +191,43 @@ namespace Blocks.FunctionRunner.Runs
                 default:
                     break;
             }
+        }
+
+        /// <summary>
+        /// The run entry's protocol version, or null when this runner must not execute it. An
+        /// entry without the field predates versioning and is version 1. Anything outside the
+        /// supported window — or unparseable — is refused whole: executing an envelope whose
+        /// meaning this runner does not know is how a function ends up holding the wrong thing in
+        /// <c>ctx.env</c> (see <see cref="RedisKeys.RunProtocolVersion"/>).
+        /// </summary>
+        internal static int? ReadProtocol(ClaimedEntry entry)
+        {
+            ArgumentNullException.ThrowIfNull(entry);
+
+            var raw = entry.Get("protocol");
+            if (string.IsNullOrEmpty(raw)) return RedisKeys.MinRunProtocolVersion;
+            return int.TryParse(raw, NumberStyles.None, CultureInfo.InvariantCulture, out var protocol)
+                && protocol >= RedisKeys.MinRunProtocolVersion
+                && protocol <= RedisKeys.RunProtocolVersion
+                ? protocol
+                : null;
+        }
+
+        /// <summary>
+        /// The attempt number the control plane assigned to this entry (1 for the first run, N
+        /// for its Nth retry). It is the control plane's number, not the stream's delivery count:
+        /// a retry is a new entry whose own delivery count starts at 1 again, and a redelivered
+        /// entry is the same attempt however many times it is handed out. Anything absent,
+        /// unparseable or below 1 reads as 1, the value a producer that predates the field meant.
+        /// </summary>
+        internal static int ReadAttempt(ClaimedEntry entry)
+        {
+            ArgumentNullException.ThrowIfNull(entry);
+
+            return int.TryParse(entry.Get("attempt"), NumberStyles.None, CultureInfo.InvariantCulture, out var attempt)
+                && attempt >= 1
+                ? attempt
+                : 1;
         }
     }
 }

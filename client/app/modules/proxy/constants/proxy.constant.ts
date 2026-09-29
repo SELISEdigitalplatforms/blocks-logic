@@ -1,4 +1,4 @@
-import { getProjectBlocksApiUrl, getRuntimeEnv, type IProject } from "@seliseblocks/genesis-os";
+import { getRuntimeEnv, type IProject } from "@seliseblocks/genesis-os";
 
 import { ProxyMethod } from "../types";
 
@@ -71,25 +71,37 @@ export const getProxyClientPath = (slug: string, routePath?: string) => {
 };
 
 /**
+ * The registrable domain of a project's custom domain (`app.acme.com` → `acme.com`), whether it is
+ * stored bare or as a URL. `""` for anything that is not a dotted hostname.
+ */
+const customDomainRoot = (customDomain?: string | null): string => {
+  const raw = customDomain?.trim();
+  if (!raw) return "";
+  let hostname: string;
+  try {
+    hostname = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`).hostname;
+  } catch {
+    return "";
+  }
+  if (!/^([a-z0-9-]+\.)+[a-z]{2,}$/i.test(hostname)) return "";
+  return hostname.split(".").slice(-2).join(".");
+};
+
+/**
  * The host a tenant's own client calls, which is per app rather than per environment:
  * `blocksapi.<custom domain>` once the project has one, else the shared public API host. Never the
  * console's own `BLOCKS_LOGIC_BASE_URL`, which is identical for every tenant in an environment and so
  * is wrong to publish as a customer-facing address.
  *
- * `getProjectBlocksApiUrl` reads `window.process.env` directly rather than going through
- * `getRuntimeEnv`, so it returns `""` in any app that only populates `window.__BLOCKS_ENV__`. The
- * `getRuntimeEnv` fallback covers that; both read the same key.
+ * Built here rather than with genesis-os `getProjectBlocksApiUrl`, which returns `""` whenever
+ * `BLOCKS_PUBLIC_API_BASE_URL` is unset (even for a project with a custom domain) and yields the
+ * unusable `"blocksapi."` for a domain stored without a scheme.
  */
 export const getProxyPublicHost = (project?: IProject | null): string => {
-  // `getProjectBlocksApiUrl` builds `"blocksapi." + getDomain(customDomain)`, and `getDomain` only
-  // accepts a URL carrying a scheme: a bare `acme.com` yields `""`, leaving the truthy but unusable
-  // host `"blocksapi."`. Require a real dotted hostname before trusting it, so that case falls back
-  // to the shared public host instead of publishing a broken address.
-  const fromProject = getProjectBlocksApiUrl(project ?? undefined);
-  const usable = /\.[a-z]{2,}$/i.test(fromProject.replace(/\/+$/, "")) ? fromProject : "";
-  const host = usable || getRuntimeEnv("BLOCKS_PUBLIC_API_BASE_URL");
+  const root = customDomainRoot(project?.customDomain);
+  const host = root ? `blocksapi.${root}` : getRuntimeEnv("BLOCKS_PUBLIC_API_BASE_URL")?.trim();
   if (!host) return "";
-  return /^https?:\/\//i.test(host) ? host : `https://${host}`;
+  return (/^https?:\/\//i.test(host) ? host : `https://${host}`).replace(/\/+$/, "");
 };
 
 /** Full customer-facing URL for one proxy, or just the path when no public host is configured yet. */

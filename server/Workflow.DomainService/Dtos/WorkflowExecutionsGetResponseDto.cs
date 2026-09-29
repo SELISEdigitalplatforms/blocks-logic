@@ -17,6 +17,8 @@ namespace Workflow.DomainService.Dtos
         public required DateTime StartedAt { get; set; }
         public DateTime? FinishedAt { get; set; }
         public string? ErrorMessage { get; set; }
+        public string? FailedNodeId { get; set; }
+        public string? FailedNodeName { get; set; }
         public int AttemptNumber { get; set; }
     }
 }

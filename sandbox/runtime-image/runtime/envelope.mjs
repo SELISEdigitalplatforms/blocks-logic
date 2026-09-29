@@ -110,19 +110,26 @@ export function parseEnvelope(raw) {
     fail('limits.timeoutMs must be a positive number');
   }
 
-  // --- maskedEnv -------------------------------------------------------------
-  // The env keys whose values came from a secret. The bootstrap turns these into the redaction
-  // list before any tenant code is imported. An envelope without the field simply masks nothing,
-  // so an older control plane keeps working — it just has no secrets to mask.
+  // --- maskedEnv / maskedValues ---------------------------------------------
+  // `maskedEnv`: the env keys whose values came from a secret. `maskedValues`: the individual
+  // secret values the runner substituted into them — which matters when a reference was embedded
+  // (`Bearer {{secret.x}}`): masking the whole "Bearer sk_…" does nothing for a line that logs only
+  // "sk_…". The runner resolves the references just before the sandbox starts and writes both
+  // fields; the bootstrap turns their union into the redaction list before any tenant code is
+  // imported. An envelope without either simply masks nothing, so an older envelope still parses.
   const env = envMap(doc.env);
   const maskedEnv = stringArray(doc.maskedEnv, 'maskedEnv');
+  const extraMasked = stringArray(doc.maskedValues, 'maskedValues');
 
   return _freeze({
     run: frozenRun,
     context: ctxContext,
     env,
     /** The values to mask, resolved here so the bootstrap never has to look them up itself. */
-    maskedValues: _freeze(maskedEnv.map((key) => env[key]).filter((v) => typeof v === 'string')),
+    maskedValues: _freeze([
+      ...maskedEnv.map((key) => env[key]).filter((v) => typeof v === 'string'),
+      ...extraMasked,
+    ]),
     input: doc.input === undefined ? null : doc.input,
     limits: _freeze({ timeoutMs }),
   });

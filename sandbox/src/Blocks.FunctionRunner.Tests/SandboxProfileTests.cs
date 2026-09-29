@@ -214,7 +214,31 @@ namespace Blocks.FunctionRunner.Tests
             { "the host network", i => i.HostConfig.NetworkMode = "host" },
             { "an extra mount", i => i.HostConfig.Binds = [.. i.HostConfig.Binds, "/:/host:ro"] },
             { "a writable mount", i => i.HostConfig.Binds = ["/a:/b:rw", "/c:/d:ro"] },
+            { "a shareable IPC namespace", i => i.HostConfig.IpcMode = "shareable" },
+            { "the host IPC namespace", i => i.HostConfig.IpcMode = "host" },
+            { "no IPC mode", i => i.HostConfig.IpcMode = null },
+            { "an executable tmpfs", i => i.HostConfig.Tmpfs = Tmpfs($"rw,nosuid,nodev,size={RunLimits.Default.TmpfsBytes}") },
+            { "noexec overridden by a later exec", i => i.HostConfig.Tmpfs = Tmpfs($"rw,noexec,nosuid,nodev,exec,size={RunLimits.Default.TmpfsBytes}") },
+            { "a suid tmpfs", i => i.HostConfig.Tmpfs = Tmpfs($"rw,noexec,nodev,size={RunLimits.Default.TmpfsBytes}") },
+            { "a device tmpfs", i => i.HostConfig.Tmpfs = Tmpfs($"rw,noexec,nosuid,dev,size={RunLimits.Default.TmpfsBytes}") },
+            { "a larger tmpfs", i => i.HostConfig.Tmpfs = Tmpfs("rw,noexec,nosuid,nodev,size=1073741824") },
+            { "an unsized tmpfs", i => i.HostConfig.Tmpfs = Tmpfs("rw,noexec,nosuid,nodev") },
+            { "no tmpfs", i => i.HostConfig.Tmpfs = null },
+            { "a second tmpfs", i => i.HostConfig.Tmpfs = new Dictionary<string, string>(i.HostConfig.Tmpfs) { ["/var/x"] = "rw,exec" } },
+            { "a tmpfs somewhere else", i => i.HostConfig.Tmpfs = new Dictionary<string, string> { ["/app"] = $"rw,noexec,nosuid,nodev,size={RunLimits.Default.TmpfsBytes}" } },
         };
+
+        private static Dictionary<string, string> Tmpfs(string options) => new() { ["/tmp"] = options };
+
+        [Fact]
+        public void The_tmpfs_the_profile_creates_passes_its_own_validation_at_any_clamped_size()
+        {
+            // The size check compares against the run's limits, so a smaller request must still
+            // validate — otherwise every modest function would be refused at start.
+            var limits = RunLimits.Clamp(null, null, null, 16L * 1024 * 1024, null, null);
+
+            SandboxProfile.Validate(InspectFrom(Create(limits)), limits, Options).Should().BeNull();
+        }
 
         private static ContainerInspectResponse InspectFrom(CreateContainerParameters p) => new()
         {

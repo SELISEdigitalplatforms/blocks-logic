@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Copy, Check } from "lucide-react";
 import { useProjectStore, type IProject } from "@seliseblocks/genesis-os";
 import { Button } from "@/components/ui-kits/button/button";
+import { showErrorToast } from "@/hooks/use-toast";
 import { ProxyMethodBadge } from "@/modules/proxy/components/proxy-method-badge";
 import {
   getFunctionClientPath,
@@ -45,17 +46,20 @@ export const EndpointBadge = ({
   const url = buildInvokeUrl(functionId, project);
   const header = `x-blocks-key: ${snippetBlocksKey(project?.tenantId)}`;
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  // The clipboard API rejects without a secure context or permission; say so instead of
+  // showing "Copied" for text that never reached the clipboard.
+  const copyText = async (text: string, setDone: (done: boolean) => void) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setDone(true);
+      setTimeout(() => setDone(false), 2000);
+    } catch {
+      showErrorToast({ title: "Could not copy", errors: ["Select the text and copy it by hand."] });
+    }
   };
 
-  const handleCopyHeader = () => {
-    navigator.clipboard.writeText(header);
-    setKeyCopied(true);
-    setTimeout(() => setKeyCopied(false), 2000);
-  };
+  const handleCopy = () => void copyText(url, setCopied);
+  const handleCopyHeader = () => void copyText(header, setKeyCopied);
 
   return (
     <div className="flex flex-col gap-2 rounded-lg border bg-muted/20 px-3 py-2.5">
@@ -83,7 +87,10 @@ export const EndpointBadge = ({
         <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           Header
         </span>
-        <code className="break-all font-mono text-sm text-foreground" data-testid="blocks-key-header">
+        <code
+          className="break-all font-mono text-sm text-foreground"
+          data-testid="blocks-key-header"
+        >
           {header}
         </code>
         <Button

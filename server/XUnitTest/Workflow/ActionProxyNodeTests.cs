@@ -112,6 +112,32 @@ namespace XUnitTest.Workflow
                 { "body", body },
             };
 
+        /// <summary>
+        /// Per-item failures no longer fail the node: since "Refactor error handling" (c2986972) every
+        /// executor records the failure as an error output item on the item's own lineage and moves on,
+        /// so one bad item does not abort the rest. The node still succeeds; the refusal lives in the item.
+        /// Returns the error message so each test can assert what the user is told.
+        /// </summary>
+        /// <summary>
+        /// Fail fast: an item error fails the node (so the engine stops the workflow there) and the
+        /// result keeps a single error item for the execution record. Returns the failure message.
+        /// </summary>
+        private static string SingleErrorItem(NodeExecutionResult result, string? expectedParentId = "item-1")
+        {
+            result.IsSuccess.Should().BeFalse();
+            result.ErrorMessage.Should().NotBeNullOrWhiteSpace();
+            result.OutputItems.Should().ContainSingle();
+            var item = result.OutputItems[0];
+            item.Branch.Should().Be("source");
+            item.Data.Output["error"].AsBoolean.Should().BeTrue();
+            if (expectedParentId == null)
+                item.ParentItemIds.Should().BeEmpty();
+            else
+                item.ParentItemIds.Should().Equal(expectedParentId);
+            item.Data.Output["message"].AsString.Should().Be(result.ErrorMessage);
+            return result.ErrorMessage!;
+        }
+
         // ----- Metadata ------------------------------------------------------------
 
         [Fact]
@@ -191,9 +217,75 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(parameters));
 
+            // Security: the widened path must never reach the gateway; the node fails instead.
+            _sent.Should().BeEmpty();
+            SingleErrorItem(result).Should().Contain("cannot contain");
+        }
+
+        [Fact]
+        public async Task RunAsync_OneItemWideningThePath_FailsTheNodeAndStopsForwarding()
+        {
+            var parameters = Parameters(
+                routePath: "orders/{id}",
+                pathParams: new BsonDocument { { "id", "{{$json.output.orderId}}" } });
+            var items = new List<WorkflowItemExecutionEntity>
+            {
+                Item("item-1", new BsonDocument { { "orderId", "A1" } }),
+                Item("item-2", new BsonDocument { { "orderId", "1/refunds" } }),
+                Item("item-3", new BsonDocument { { "orderId", ".." } }),
+            };
+
+            var result = await Node().RunAsync(Context(parameters, items));
+
+            // Fail fast: item-2 fails the node, item-3 is never even evaluated, and only the valid item
+            // that came before the failure was forwarded. The widened/dot paths never reach the gateway.
             result.IsSuccess.Should().BeFalse();
             result.ErrorMessage.Should().Contain("cannot contain");
+            _sent.Select(r => r.PathSuffix).Should().Equal("orders/A1");
+            result.OutputItems.Should().HaveCount(2);
+            result.OutputItems[0].Data.Output.AsBsonDocument.Contains("error").Should().BeFalse();
+            result.OutputItems[1].Data.Output["error"].AsBoolean.Should().BeTrue();
+            result.OutputItems[1].ParentItemIds.Should().Equal("item-2");
+        }
+
+        [Fact]
+        public async Task RunAsync_FirstItemFails_NoLaterItemIsForwarded()
+        {
+            var parameters = Parameters(
+                routePath: "orders/{id}",
+                pathParams: new BsonDocument { { "id", "{{$json.output.orderId}}" } });
+            var items = new List<WorkflowItemExecutionEntity>
+            {
+                Item("item-1", new BsonDocument { { "orderId", ".." } }),
+                Item("item-2", new BsonDocument { { "orderId", "A2" } }),
+            };
+
+            var result = await Node().RunAsync(Context(parameters, items));
+
             _sent.Should().BeEmpty();
+            SingleErrorItem(result).Should().Contain("not valid");
+        }
+
+        [Fact]
+        public async Task RunAsync_UpstreamFailureOnOneItem_StopsBeforeTheNextItem()
+        {
+            Setup(new ProxyForwardResult
+            {
+                StatusCode = 502,
+                Outcome = ProxyExecutionOutcome.UpstreamUnreachable,
+                UpstreamStatusCode = 503,
+                ErrorMessage = "Could not connect to the upstream endpoint",
+            });
+            var items = new List<WorkflowItemExecutionEntity>
+            {
+                Item("item-1", new BsonDocument()),
+                Item("item-2", new BsonDocument()),
+            };
+
+            var result = await Node().RunAsync(Context(Parameters(), items));
+
+            _sent.Should().ContainSingle();
+            SingleErrorItem(result).Should().Contain("503");
         }
 
         [Fact]
@@ -205,9 +297,9 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(parameters));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("not valid");
+            // Security: a dot segment would be normalized away by Uri and escape the route.
             _sent.Should().BeEmpty();
+            SingleErrorItem(result).Should().Contain("not valid");
         }
 
         [Fact]
@@ -215,9 +307,8 @@ namespace XUnitTest.Workflow
         {
             var result = await Node().RunAsync(Context(Parameters(routePath: "orders/{id}")));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("id");
             _sent.Should().BeEmpty();
+            SingleErrorItem(result).Should().Contain("'id'");
         }
 
         // ----- Query parameters -----------------------------------------------------
@@ -272,9 +363,8 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(parameters));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().StartWith("Invalid JSON body:");
             _sent.Should().BeEmpty();
+            SingleErrorItem(result).Should().StartWith("Invalid JSON body:");
         }
 
         [Fact]
@@ -375,8 +465,8 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(Parameters()));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("text/html");
+            _sent.Should().ContainSingle();
+            SingleErrorItem(result).Should().Contain("text/html");
         }
 
         // ----- Gateway refusals -----------------------------------------------------
@@ -392,9 +482,9 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(Parameters(routePath: "orders")));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("does not declare the endpoint GET orders");
-            result.ErrorMessage.Should().Contain("re-select the endpoint");
+            var message = SingleErrorItem(result);
+            message.Should().Contain("does not declare the endpoint GET orders");
+            message.Should().Contain("re-select the endpoint");
         }
 
         [Fact]
@@ -409,9 +499,9 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(Parameters(method: "DELETE")));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("does not allow DELETE");
-            result.ErrorMessage.Should().Contain("GET, POST");
+            var message = SingleErrorItem(result);
+            message.Should().Contain("does not allow DELETE");
+            message.Should().Contain("GET, POST");
         }
 
         [Fact]
@@ -427,9 +517,81 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(Parameters()));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("503");
-            result.ErrorMessage.Should().Contain("Could not connect to the upstream endpoint");
+            var message = SingleErrorItem(result);
+            message.Should().Contain("503");
+            message.Should().Contain("Could not connect to the upstream endpoint");
+        }
+
+        [Fact]
+        public async Task RunAsync_StandaloneFailure_ErrorItemClaimsNoParent()
+        {
+            // Standalone runs synthesize an input item that is never persisted, so the error item must not
+            // point at it - the engine resolves parent ids against InputItems to build the ancestor map.
+            var parameters = Parameters(routePath: "orders/{id}", pathParams: new BsonDocument { { "id", "a/b" } });
+            var context = Context(parameters, new List<WorkflowItemExecutionEntity>(), hasUpstream: false);
+
+            var result = await Node().RunAsync(context);
+
+            _sent.Should().BeEmpty();
+            SingleErrorItem(result, expectedParentId: null).Should().Contain("cannot contain");
+        }
+
+        [Fact]
+        public async Task RunAsync_GatewayThrows_FailsTheNodeWithItsMessage()
+        {
+            _gateway.Reset();
+            _gateway
+                .Setup(g => g.ForwardAsync(It.IsAny<ProxyForwardRequest>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new InvalidOperationException("boom"));
+
+            var result = await Node().RunAsync(Context(Parameters()));
+
+            SingleErrorItem(result).Should().Be("boom");
+        }
+
+        [Fact]
+        public async Task RunAsync_Cancellation_IsNotSwallowedIntoAnErrorItem()
+        {
+            _gateway.Reset();
+            _gateway
+                .Setup(g => g.ForwardAsync(It.IsAny<ProxyForwardRequest>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new OperationCanceledException());
+
+            var act = () => Node().RunAsync(Context(Parameters()));
+
+            await act.Should().ThrowAsync<OperationCanceledException>();
+        }
+
+        [Fact]
+        public async Task RunAsync_CancelledToken_PropagatesRatherThanFailingTheNode()
+        {
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+            _gateway.Reset();
+            _gateway
+                .Setup(g => g.ForwardAsync(It.IsAny<ProxyForwardRequest>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new TaskCanceledException("cancelled", new TimeoutException()));
+            var context = Context(Parameters());
+            context.CancellationToken = cts.Token;
+
+            var act = () => Node().RunAsync(context);
+
+            await act.Should().ThrowAsync<OperationCanceledException>();
+        }
+
+        [Fact]
+        public async Task RunAsync_GatewayTimeout_FailsTheNodeInsteadOfLookingLikeCancellation()
+        {
+            // HttpClient reports its own timeout as TaskCanceledException(TimeoutException) with the
+            // caller's token untouched: that is a failed call, not a cancelled execution.
+            _gateway.Reset();
+            _gateway
+                .Setup(g => g.ForwardAsync(It.IsAny<ProxyForwardRequest>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new TaskCanceledException("The request timed out.", new TimeoutException()));
+
+            var result = await Node().RunAsync(Context(Parameters()));
+
+            SingleErrorItem(result).Should().Be("The request timed out.");
         }
     }
 }

@@ -45,7 +45,7 @@ namespace Workflow.DomainService.Nodes.ActionAIAgentV1
                 }
                 catch (Exception ex)
                 {
-                    AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
+                    return FailOnItem(context, outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
                 }
             }
 

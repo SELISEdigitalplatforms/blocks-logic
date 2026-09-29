@@ -19,6 +19,23 @@ namespace Blocks.FunctionRunner.Contracts
 
         public const long MemoryBytes = 200L * 1024 * 1024;
         public const int PidLimit = 64;
+
+        /// <summary>
+        /// The least memory a sandbox may be given. Docker refuses a container under ~6 MB, so a
+        /// request of a few bytes used to clamp "successfully" and then fail at create as a
+        /// SANDBOX_START_FAILED the tenant could do nothing about; 32 MB is where Node boots and
+        /// runs a small function under gVisor with headroom. Mirrored by the control plane's
+        /// minimum for <c>FunctionLimits.MemoryMb</c>; the two move together.
+        /// </summary>
+        public const long MinMemoryBytes = 32L * 1024 * 1024;
+
+        /// <summary>
+        /// The least PIDs a sandbox may be given. Under runsc the limit also counts gVisor's own
+        /// host-side processes (the sentry and its sidecars), so a small value does not constrain
+        /// the function — it stops the sandbox from being created at all ("resource temporarily
+        /// unavailable"). 32 is the measured floor at which Node starts and runs async work.
+        /// </summary>
+        public const int MinPidLimit = 32;
         public const long TmpfsBytes = 64L * 1024 * 1024;
         /// <summary>
         /// The hard ceiling on one run's wall clock. Raised from 60s to 90s for orchestration
@@ -114,7 +131,9 @@ namespace Blocks.FunctionRunner.Contracts
         /// <summary>
         /// Clamps a requested profile to the ceilings. Every argument is optional; a null, zero
         /// or negative value falls back to the ceiling (or, for timeout, to the 10 s default).
-        /// A value above a ceiling is silently reduced — the caller does not get to argue.
+        /// A value above a ceiling is silently reduced — the caller does not get to argue — and
+        /// memory and PIDs below the floor a sandbox can start with are raised to that floor
+        /// (<see cref="Ceilings.MinMemoryBytes"/>, <see cref="Ceilings.MinPidLimit"/>).
         /// <para>
         /// <paramref name="cpuMillicores"/> is the exception: it is ignored entirely and every
         /// sandbox receives <see cref="Ceilings.CpuMillicores"/>. See that constant for why.
@@ -134,8 +153,8 @@ namespace Blocks.FunctionRunner.Contracts
                 // control plane's copy of it keep working, and then ignored: CPU is the one
                 // dimension a function does not get to choose.
                 CpuMillicores = Ceilings.CpuMillicores,
-                MemoryBytes = ClampLong(memoryBytes, 1, Ceilings.MemoryBytes, Ceilings.MemoryBytes),
-                PidLimit = ClampInt(pidLimit, 1, Ceilings.PidLimit, Ceilings.PidLimit),
+                MemoryBytes = ClampLong(memoryBytes, Ceilings.MinMemoryBytes, Ceilings.MemoryBytes, Ceilings.MemoryBytes),
+                PidLimit = ClampInt(pidLimit, Ceilings.MinPidLimit, Ceilings.PidLimit, Ceilings.PidLimit),
                 TmpfsBytes = ClampLong(tmpfsBytes, 1, Ceilings.TmpfsBytes, Ceilings.TmpfsBytes),
                 TimeoutSeconds = ClampInt(timeoutSeconds, 1, Ceilings.TimeoutSeconds, Ceilings.DefaultTimeoutSeconds),
                 FunctionConcurrency = ClampInt(

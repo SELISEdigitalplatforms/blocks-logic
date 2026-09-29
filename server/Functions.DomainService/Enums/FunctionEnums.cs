@@ -58,6 +58,39 @@ namespace Functions.DomainService.Enums
         /// is already spent.
         /// </summary>
         Undeliverable = 11,
+
+        /// <summary>
+        /// The run record was written but the run could not be put on the queue (Redis refused or
+        /// timed out). Its queued payload is withdrawn on a best-effort basis, so nothing is
+        /// expected to have executed and the caller was answered 503 — retrying is safe. Set by
+        /// <c>FunctionInvocationService</c> and <c>FunctionRetryScheduler</c>, never by the runner.
+        /// </summary>
+        EnqueueFailed = 12,
+
+        /// <summary>
+        /// No outcome was ever reported for the run within its deadline — the queued payload
+        /// expired or was lost, or a runner took it and never answered. Closed by
+        /// <c>FunctionStaleRunSweeper</c> so the record does not stay QUEUED/RUNNING for ever. Like
+        /// <see cref="Undeliverable"/> and <see cref="EnqueueFailed"/> it is a platform-determined
+        /// outcome, so a real result for the same attempt arriving later is still allowed to
+        /// replace it.
+        /// </summary>
+        Abandoned = 13,
+
+        /// <summary>
+        /// A variable references a secret the runner could not resolve for the run's tenant — it
+        /// does not exist, is locked or deleted, has no value, or is not readable in the run's
+        /// context. The sandbox was never started. Not retryable: the message names the variable
+        /// and the secret id (never a value), and the author has to fix the reference.
+        /// </summary>
+        SecretUnresolved = 14,
+
+        /// <summary>
+        /// The secret store (Key Vault, the tenant registry or the tenant's database) could not be
+        /// reached while the runner resolved the run's secret references. Nothing ran, so it is
+        /// retryable.
+        /// </summary>
+        SecretStoreUnavailable = 15,
     }
 
     /// <summary>What caused a run. Carried into <c>ctx.run.invokedBy</c>.</summary>

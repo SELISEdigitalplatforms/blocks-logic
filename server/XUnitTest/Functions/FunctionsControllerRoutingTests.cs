@@ -132,7 +132,8 @@ namespace XUnitTest.Functions
         [Fact]
         public void EveryManagementActionIsPermissionGated()
         {
-            var publicSurface = new[] { nameof(FunctionsController.Invoke), nameof(FunctionsController.PollRun) };
+            // PollRun is on the /api/fn path but is permission-gated, so it is checked here too.
+            var publicSurface = new[] { nameof(FunctionsController.Invoke), nameof(FunctionsController.PollRunResult) };
 
             var ungated = AllActions()
                 .Where(m => !publicSurface.Contains(m.Name))
@@ -147,8 +148,35 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
-        public void PollRunRequiresASignedInCaller()
-            => Action(nameof(FunctionsController.PollRun))
-                .GetCustomAttribute<AuthorizeAttribute>().Should().NotBeNull();
+        public void PollRunRequiresTheSameReadPermissionAsGetRun()
+        {
+            // It returns the full run record, input included. Signed-in alone let any Blocks user
+            // read any run's input and result; it must be gated exactly like GetRun.
+            static string? PermissionOf(MethodInfo m)
+            {
+                var attribute = m.GetCustomAttributes().Single(a => a.GetType().Name == "ProtectedEndPointAttribute");
+                return attribute.GetType().GetProperties()
+                    .Where(p => p.PropertyType == typeof(string))
+                    .Select(p => p.GetValue(attribute) as string)
+                    .FirstOrDefault(v => v is not null && v.Contains("::"));
+            }
+
+            var poll = Action(nameof(FunctionsController.PollRun));
+            HasProtectedEndPoint(poll).Should().BeTrue();
+            PermissionOf(poll).Should().Be("blocks-logic::function::read");
+            PermissionOf(poll).Should().Be(PermissionOf(Action(nameof(FunctionsController.GetRun))));
+            poll.GetCustomAttribute<AllowAnonymousAttribute>().Should().BeNull();
+        }
+
+        [Fact]
+        public void TheAnonymousPollIsAnonymousAndOffTheCatchAll()
+        {
+            // Its authorization is the per-run poll token, checked inside the action.
+            var action = Action(nameof(FunctionsController.PollRunResult));
+            action.GetCustomAttribute<AllowAnonymousAttribute>().Should().NotBeNull();
+            HasProtectedEndPoint(action).Should().BeFalse();
+            RouteOf(action, PrefixedControllerTemplate).Should().Be("api/fn/runs/{runId}/result");
+            action.GetCustomAttribute<HttpGetAttribute>()!.Template.Should().StartWith("~/api/fn/runs/");
+        }
     }
 }

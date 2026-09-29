@@ -61,38 +61,41 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                     _logger.LogWarning("ActionDataV1Node: ApiBaseUrl is empty. Set it in node parameters or configure 'ApiBaseUrl' in appsettings.");
             }
 
+            // Each action returns null on success, or the node's Failed result for the first item that
+            // failed (fail fast: the workflow stops at this node).
             if (parameters.RawQueryMode)
             {
-                await ExecuteRawQueryAsync(context, parameters, outputItems);
-                return NodeExecutionResult.Successful(outputItems);
+                return await ExecuteRawQueryAsync(context, parameters, outputItems)
+                    ?? NodeExecutionResult.Successful(outputItems);
             }
 
+            NodeExecutionResult? failure;
             switch (parameters.ActionType.ToLower())
             {
                 case "getdata":
-                    await ExecuteGetDataAsync(context, parameters, outputItems);
+                    failure = await ExecuteGetDataAsync(context, parameters, outputItems);
                     break;
                 case "insertdata":
-                    await ExecuteInsertDataAsync(context, parameters, outputItems);
+                    failure = await ExecuteInsertDataAsync(context, parameters, outputItems);
                     break;
                 case "updatedata":
-                    await ExecuteUpdateDataAsync(context, parameters, outputItems);
+                    failure = await ExecuteUpdateDataAsync(context, parameters, outputItems);
                     break;
                 case "deletedata":
-                    await ExecuteDeleteDataAsync(context, parameters, outputItems);
+                    failure = await ExecuteDeleteDataAsync(context, parameters, outputItems);
                     break;
                 default:
                     return NodeExecutionResult.Failed($"Unknown action type: {parameters.ActionType}", outputItems);
             }
 
-            return NodeExecutionResult.Successful(outputItems);
+            return failure ?? NodeExecutionResult.Successful(outputItems);
         }
 
 
         /// <summary>
         /// Get Data: HTTP query to UDS GraphQL gateway
         /// </summary>
-        private async Task ExecuteGetDataAsync(
+        private async Task<NodeExecutionResult?> ExecuteGetDataAsync(
             NodeExecutionContext context, ActionDataV1Parameters parameters, List<NodeOutputItem> outputItems)
         {
             try
@@ -157,14 +160,16 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
             catch (Exception ex)
             {
                 _logger.LogError(ex, "ActionDataV1Node GetData failed on {CollectionName}", parameters.CollectionName);
-                AppendErrorOutputItem(outputItems, context.InputItems.FirstOrDefault(), parameters.ToBsonDocument(), ex);
+                return FailOnItem(context, outputItems, context.InputItems.FirstOrDefault(), parameters.ToBsonDocument(), ex);
             }
+
+            return null;
         }
 
         /// <summary>
         /// Insert Data: HTTP mutation to UDS GraphQL gateway
         /// </summary>
-        private async Task ExecuteInsertDataAsync(
+        private async Task<NodeExecutionResult?> ExecuteInsertDataAsync(
             NodeExecutionContext context, ActionDataV1Parameters parameters, List<NodeOutputItem> outputItems)
         {
 
@@ -203,15 +208,17 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "ActionDataV1Node InsertData failed on {CollectionName}", parameters.CollectionName);
-                    AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
+                    return FailOnItem(context, outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
                 }
             }
+
+            return null;
         }
 
         /// <summary>
         /// Update Data: HTTP mutation to UDS GraphQL gateway
         /// </summary>
-        private async Task ExecuteUpdateDataAsync(
+        private async Task<NodeExecutionResult?> ExecuteUpdateDataAsync(
             NodeExecutionContext context, ActionDataV1Parameters parameters, List<NodeOutputItem> outputItems)
         {
 
@@ -252,15 +259,17 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "ActionDataV1Node UpdateData failed on {CollectionName}", parameters.CollectionName);
-                    AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
+                    return FailOnItem(context, outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
                 }
             }
+
+            return null;
         }
 
         /// <summary>
         /// Delete Data: HTTP mutation to UDS GraphQL gateway
         /// </summary>
-        private async Task ExecuteDeleteDataAsync(
+        private async Task<NodeExecutionResult?> ExecuteDeleteDataAsync(
             NodeExecutionContext context, ActionDataV1Parameters parameters, List<NodeOutputItem> outputItems)
         {
 
@@ -298,9 +307,11 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "ActionDataV1Node DeleteData failed on {CollectionName}", parameters.CollectionName);
-                    AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
+                    return FailOnItem(context, outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
                 }
             }
+
+            return null;
         }
 
         /// <summary>
@@ -308,7 +319,7 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
         /// Runs once per input item, resolving {{$json...}}/{{$node...}}/{{$context...}} placeholders
         /// embedded in RawQuery against that item before sending.
         /// </summary>
-        private async Task ExecuteRawQueryAsync(
+        private async Task<NodeExecutionResult?> ExecuteRawQueryAsync(
             NodeExecutionContext context, ActionDataV1Parameters parameters, List<NodeOutputItem> outputItems)
         {
 
@@ -352,9 +363,11 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "ActionDataV1Node RawQuery failed on {CollectionName}", parameters.CollectionName);
-                    AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
+                    return FailOnItem(context, outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
                 }
             }
+
+            return null;
         }
 
         #region Helpers

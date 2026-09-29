@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Functions.DomainService.Entities;
 using Functions.DomainService.Models;
+using Functions.DomainService.Utils;
 using Microsoft.Extensions.Logging;
 
 namespace Functions.DomainService.Services
@@ -50,6 +51,13 @@ namespace Functions.DomainService.Services
     /// confirmed to exist; if one is ever saved anyway, it is skipped here rather than
     /// attempted, silently, because there is nothing to call.
     /// </para>
+    /// <para>
+    /// The URL is tenant-typed and the request is sent from inside the platform, so every send is
+    /// vetted by <see cref="IFunctionOutboundGuard"/> (private / loopback / metadata addresses,
+    /// DNS rebinding, no redirects), and a failure is reported as a status code or a generic
+    /// "connection failed" / "timed out" — never the raw exception text, which would tell the
+    /// tenant what is listening on which internal port.
+    /// </para>
     /// </summary>
     public class OutputActionProcessor : IOutputActionProcessor
     {
@@ -60,13 +68,18 @@ namespace Functions.DomainService.Services
 
         private readonly ISecretResolver _secretResolver;
         private readonly IHttpClientFactory _httpClientFactory;
+        private readonly IFunctionOutboundGuard _outboundGuard;
         private readonly ILogger<OutputActionProcessor> _logger;
 
         public OutputActionProcessor(
-            ISecretResolver secretResolver, IHttpClientFactory httpClientFactory, ILogger<OutputActionProcessor> logger)
+            ISecretResolver secretResolver,
+            IHttpClientFactory httpClientFactory,
+            IFunctionOutboundGuard outboundGuard,
+            ILogger<OutputActionProcessor> logger)
         {
             _secretResolver = secretResolver;
             _httpClientFactory = httpClientFactory;
+            _outboundGuard = outboundGuard;
             _logger = logger;
         }
 
@@ -109,7 +122,10 @@ namespace Functions.DomainService.Services
         {
             var stopwatch = Stopwatch.StartNew();
             var maxAttempts = Math.Max(1, retryPolicy.Attempts);
-            var idempotencyKey = $"{run.ItemId}-{run.Attempt}";
+            // Per action as well as per run attempt: one run's actions share a run id and attempt,
+            // so a receiver deduplicating on the key would otherwise drop every action after the
+            // first. The same action retried within this attempt keeps its key, as it should.
+            var idempotencyKey = $"{run.ItemId}-{run.Attempt}-{action.Id}";
 
             string url;
             IReadOnlyDictionary<string, string> headers;
@@ -118,10 +134,20 @@ namespace Functions.DomainService.Services
             {
                 (url, headers, body) = await SubstituteAsync(tenantId, action, run.Result, cancellationToken);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
+                // The detail (which may name the secret store's own address) stays in the log.
                 _logger.LogWarning(ex, "Could not prepare output action {ActionId} for run {RunId}", action.Id, run.ItemId);
-                return Failure(action, stopwatch, attempts: 0, error: $"could not prepare the request: {ex.Message}");
+                return Failure(action, stopwatch, attempts: 0, error: "could not prepare the request (secret resolution failed)");
+            }
+
+            // Re-validated here, on the substituted URL, not only at save: stored versions predate
+            // any save-time rule, and a {{secret.x}} in the URL can supply a host the validator
+            // never saw. Neither changes between attempts, so this refusal is not retried.
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var target)
+                || (target.Scheme != Uri.UriSchemeHttp && target.Scheme != Uri.UriSchemeHttps))
+            {
+                return Failure(action, stopwatch, attempts: 0, error: "the output action URL is not an absolute http(s) address");
             }
 
             for (var attempt = 1; attempt <= maxAttempts; attempt++)
@@ -130,10 +156,15 @@ namespace Functions.DomainService.Services
 
                 try
                 {
+                    // Resolve-and-vet before every attempt (DNS can change between them). The
+                    // client's connect callback vets again at the socket, which is what closes
+                    // rebinding between this check and the connection itself.
+                    await _outboundGuard.EnsureAllowedAsync(target, cancellationToken);
+
                     using var client = _httpClientFactory.CreateClient(nameof(OutputActionProcessor));
                     client.Timeout = TimeSpan.FromSeconds(Math.Max(1, action.TimeoutSeconds));
 
-                    using var request = new HttpRequestMessage(new HttpMethod(action.Method), url);
+                    using var request = new HttpRequestMessage(new HttpMethod(action.Method), target);
                     foreach (var (name, value) in headers)
                     {
                         request.Headers.TryAddWithoutValidation(name, value);
@@ -165,7 +196,11 @@ namespace Functions.DomainService.Services
                         };
                     }
 
-                    if (attempt == maxAttempts)
+                    // Redirects are never followed (the client has auto-redirect off): a 3xx is
+                    // the endpoint's answer, and the same answer every time, so it is not retried
+                    // either. Following it would be a second request to a URL nobody vetted.
+                    var isRedirect = (int)response.StatusCode is >= 300 and < 400;
+                    if (attempt == maxAttempts || isRedirect)
                     {
                         stopwatch.Stop();
                         return new OutputActionResult
@@ -174,17 +209,40 @@ namespace Functions.DomainService.Services
                             Kind = action.Kind,
                             Ok = false,
                             StatusCode = (int)response.StatusCode,
-                            Error = $"received HTTP {(int)response.StatusCode} after {attempt} attempt(s)",
+                            Error = isRedirect
+                                ? $"received HTTP {(int)response.StatusCode}; redirects are not followed"
+                                : $"received HTTP {(int)response.StatusCode} after {attempt} attempt(s)",
                             DurationMs = stopwatch.ElapsedMilliseconds,
                             Attempts = attempt,
                         };
                     }
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
+                catch (Exception ex) when (IsBlocked(ex))
                 {
+                    // Host only in the log, never the address it resolved to in the result.
+                    _logger.LogWarning(
+                        "Output action {ActionId} for run {RunId} refused: destination {Host} is not allowed",
+                        action.Id, run.ItemId, target.Host);
+                    return Failure(action, stopwatch, attempt, FunctionOutboundGuard.BlockedMessage);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+                {
+                    // An HttpClient timeout surfaces as TaskCanceledException, which is an
+                    // OperationCanceledException: only the caller's own token means "stop".
+                    //
+                    // The raw exception text stays server-side. Handed back verbatim ("Connection
+                    // refused (10.0.0.5:6379)", "Name or service not known") it turns the action's
+                    // error field into a port scanner for anyone who can save an output action.
+                    var error = ex is OperationCanceledException
+                        ? $"timed out ({Math.Max(1, action.TimeoutSeconds)}s limit)"
+                        : "connection failed";
+
                     if (attempt == maxAttempts)
                     {
-                        return Failure(action, stopwatch, attempt, ex.Message);
+                        _logger.LogWarning(ex,
+                            "Output action {ActionId} for run {RunId} failed after {Attempt} attempt(s)",
+                            action.Id, run.ItemId, attempt);
+                        return Failure(action, stopwatch, attempt, $"{error} after {attempt} attempt(s)");
                     }
                     _logger.LogInformation(
                         "Output action {ActionId} for run {RunId} failed on attempt {Attempt}: {Message}",
@@ -196,6 +254,19 @@ namespace Functions.DomainService.Services
 
             // Unreachable: the loop above always returns on its last iteration.
             return Failure(action, stopwatch, maxAttempts, "exhausted retries");
+        }
+
+        /// <summary>
+        /// A refusal from the guard, whether thrown by the pre-flight check directly or by the
+        /// client's connect callback, which the handler wraps in an <see cref="HttpRequestException"/>.
+        /// </summary>
+        private static bool IsBlocked(Exception ex)
+        {
+            for (var current = ex; current is not null; current = current.InnerException)
+            {
+                if (current is OutboundTargetBlockedException) return true;
+            }
+            return false;
         }
 
         private static OutputActionResult Failure(OutputAction action, Stopwatch stopwatch, int attempts, string error)

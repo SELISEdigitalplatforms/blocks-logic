@@ -92,7 +92,7 @@ namespace Functions.DomainService.Validation
         public FunctionLimitsValidator()
         {
             RuleFor(x => x.CpuMillicores).InclusiveBetween(1, FunctionLimits.Ceiling.CpuMillicores);
-            RuleFor(x => x.MemoryMb).InclusiveBetween(1, FunctionLimits.Ceiling.MemoryMb);
+            RuleFor(x => x.MemoryMb).InclusiveBetween(FunctionLimits.Ceiling.MinMemoryMb, FunctionLimits.Ceiling.MemoryMb);
             RuleFor(x => x.TimeoutSeconds).InclusiveBetween(1, FunctionLimits.Ceiling.TimeoutSeconds);
             RuleFor(x => x.Concurrency).InclusiveBetween(
                 FunctionLimits.Ceiling.MinConcurrency, FunctionLimits.Ceiling.MaxConcurrency);
@@ -150,6 +150,19 @@ namespace Functions.DomainService.Validation
                 RuleFor(x => x.Url)
                     .Must(FunctionValidationRules.IsValidAbsoluteHttpUrl)
                     .WithMessage("The output action URL must be an absolute http:// or https:// address.");
+
+                // SSRF, save-time half: a literal private / loopback / link-local / metadata
+                // address (in any spelling Uri canonicalises), localhost-style and single-label
+                // hosts. DNS is not asked here — the processor resolves and vets again at send,
+                // which is the half that catches a public name pointing inward.
+                RuleFor(x => x.Url)
+                    .Must(url => !Utils.FunctionOutboundGuard.IsDisallowedUrl(url, out _))
+                    .When(x => FunctionValidationRules.IsValidAbsoluteHttpUrl(x.Url))
+                    .WithMessage(x =>
+                    {
+                        Utils.FunctionOutboundGuard.IsDisallowedUrl(x.Url, out var reason);
+                        return reason;
+                    });
 
                 RuleFor(x => x.Method)
                     .Must(m => FunctionValidationRules.AllowedHttpMethods.Contains(m, StringComparer.OrdinalIgnoreCase))

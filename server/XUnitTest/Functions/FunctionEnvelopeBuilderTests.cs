@@ -192,15 +192,51 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
-        public void The_exemption_is_the_envelopes_own_env_and_nothing_else()
+        public void The_exemptions_are_the_envelopes_own_env_and_input_and_nothing_else()
         {
-            // An object called "env" that the caller sent as input is not the env the exemption
-            // is about, and must still be screened.
-            var act = () => FunctionEnvelopeBuilder.Build(
-                Run(), null, Function(), Context(), "{\"env\":{\"accessToken\":\"x\"}}");
+            // A control-plane-built subtree that happens to contain an object called "env" or
+            // "input" does not inherit the exemption: only the envelope's own top-level keys do.
+            var envelope = """
+                {"run":{"id":"r","input":{"accessToken":"x"}},"env":{},"input":null}
+                """;
+            var act = () => FunctionEnvelopeBuilder.Screen(envelope);
+            act.Should().Throw<FunctionEnvelopeBuilder.ForbiddenContentException>()
+                .WithMessage("*run.input.accessToken*");
+
+            var nestedEnv = """
+                {"context":{"env":{"password":"x"}},"env":{},"input":null}
+                """;
+            var actEnv = () => FunctionEnvelopeBuilder.Screen(nestedEnv);
+            actEnv.Should().Throw<FunctionEnvelopeBuilder.ForbiddenContentException>()
+                .WithMessage("*context.env.password*");
+        }
+
+        [Theory]
+        [InlineData("run")]
+        [InlineData("context")]
+        [InlineData("limits")]
+        [InlineData("maskedEnv")]
+        [InlineData("somethingAddedLater")]
+        public void A_credential_key_in_a_control_plane_field_is_still_refused(string field)
+        {
+            // What the screen is for: a mistake in this file (or a future field) that copies a
+            // token into the envelope. accessToken is the canonical one — BlocksContext has it.
+            var envelope = $$$"""
+                {"{{{field}}}":{"nested":{"accessToken":"t"}},"env":{},"input":{"password":"ok"}}
+                """;
+
+            var act = () => FunctionEnvelopeBuilder.Screen(envelope);
 
             act.Should().Throw<FunctionEnvelopeBuilder.ForbiddenContentException>()
-                .WithMessage("*input.env.accessToken*");
+                .WithMessage($"*{field}.nested.accessToken*");
+        }
+
+        [Fact]
+        public void A_top_level_control_plane_key_named_like_a_credential_is_refused()
+        {
+            var act = () => FunctionEnvelopeBuilder.Screen("""{"accessToken":"t","input":{}}""");
+
+            act.Should().Throw<FunctionEnvelopeBuilder.ForbiddenContentException>().WithMessage("*'accessToken'*");
         }
 
         // ---------- {{secret.<id>}} in a variable value ----------
@@ -215,55 +251,34 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
-        public void A_bound_variable_reaches_ctx_env_as_its_resolved_value()
+        public void A_bound_variable_is_left_as_its_reference_for_the_runner_to_resolve()
         {
             var function = WithVariables(("STRIPE_API_KEY", "{{secret.sec_1}}"));
-            var secrets = new Dictionary<string, string> { ["sec_1"] = "sk_live_9" };
 
-            var json = FunctionEnvelopeBuilder.Build(Run(), null, function, Context(), null, secrets);
+            var json = FunctionEnvelopeBuilder.Build(Run(), null, function, Context(), null);
 
             using var doc = Parse(json);
             doc.RootElement.GetProperty("env").GetProperty("STRIPE_API_KEY").GetString()
-                .Should().Be("sk_live_9");
+                .Should().Be("{{secret.sec_1}}");
         }
 
         [Fact]
-        public void A_reference_embedded_in_a_longer_value_is_substituted_in_place()
+        public void Embedded_and_repeated_references_are_all_left_exactly_as_written()
         {
-            var function = WithVariables(("AUTH", "Bearer {{secret.sec_1}} v2"));
-            var secrets = new Dictionary<string, string> { ["sec_1"] = "tok" };
+            var function = WithVariables(
+                ("AUTH", "Bearer {{secret.sec_1}} v2"),
+                ("PAIR", "{{secret.sec_1}}:{{secret.sec_2}}"),
+                ("PLAIN", "https://api.example.com"));
 
-            var json = FunctionEnvelopeBuilder.Build(Run(), null, function, Context(), null, secrets);
+            var json = FunctionEnvelopeBuilder.Build(Run(), null, function, Context(), null);
 
             using var doc = Parse(json);
-            doc.RootElement.GetProperty("env").GetProperty("AUTH").GetString()
-                .Should().Be("Bearer tok v2");
-        }
-
-        [Fact]
-        public void An_unresolved_reference_fails_the_run_rather_than_shipping_the_placeholder()
-        {
-            // Delivering "{{secret.sec_gone}}" would have the function present that text to a
-            // provider as if it were a key — a 401 far away from the real cause.
-            var function = WithVariables(("STRIPE_API_KEY", "{{secret.sec_gone}}"));
-
-            var act = () => FunctionEnvelopeBuilder.Build(
-                Run(), null, function, Context(), null, new Dictionary<string, string>());
-
-            act.Should().Throw<FunctionEnvelopeBuilder.UnresolvedSecretException>()
-                .WithMessage("*sec_gone*");
-        }
-
-        [Fact]
-        public void An_unresolved_reference_names_the_id_and_never_a_value()
-        {
-            var function = WithVariables(("A", "{{secret.sec_1}}"), ("B", "{{secret.sec_2}}"));
-            var secrets = new Dictionary<string, string> { ["sec_1"] = "sk_live_9" };
-
-            var act = () => FunctionEnvelopeBuilder.Build(Run(), null, function, Context(), null, secrets);
-
-            act.Should().Throw<FunctionEnvelopeBuilder.UnresolvedSecretException>()
-                .Which.Message.Should().Contain("sec_2").And.NotContain("sk_live_9");
+            var env = doc.RootElement.GetProperty("env");
+            env.GetProperty("AUTH").GetString().Should().Be("Bearer {{secret.sec_1}} v2");
+            env.GetProperty("PAIR").GetString().Should().Be("{{secret.sec_1}}:{{secret.sec_2}}");
+            env.GetProperty("PLAIN").GetString().Should().Be("https://api.example.com");
+            doc.RootElement.GetProperty("maskedEnv").EnumerateArray().Select(e => e.GetString())
+                .Should().Equal("AUTH", "PAIR");
         }
 
         [Fact]
@@ -312,14 +327,64 @@ namespace XUnitTest.Functions
             FunctionEnvelopeBuilder.CollectSecretIds(null, Function()).Should().BeEmpty();
         }
 
-        [Fact]
-        public void A_credential_shaped_key_deep_inside_the_input_is_refused()
+        [Theory]
+        [InlineData("{\"email\":\"a@b.c\",\"password\":\"hunter2\",\"password_confirmation\":\"hunter2\"}")]
+        [InlineData("{\"hook\":{\"config\":{\"secret\":\"gh-webhook-secret\",\"url\":\"https://x\"}}}")]
+        [InlineData("{\"a\":{\"b\":[{\"c\":{\"refreshToken\":\"x\",\"client_secret\":\"y\"}}]}}")]
+        [InlineData("{\"env\":{\"accessToken\":\"x\"},\"authorization\":\"Bearer t\"}")]
+        [InlineData("[{\"apiKey\":\"k\"}]")]
+        public void The_callers_own_input_may_carry_credential_shaped_keys_at_any_depth(string input)
         {
-            var act = () => FunctionEnvelopeBuilder.Build(
-                Run(), null, Function(), Context(),
-                "{\"a\":{\"b\":[{\"c\":{\"refreshToken\":\"x\"}}]}}");
+            // Signup forms send "password"; GitHub webhooks send "secret". The caller chose to
+            // send that to this function — the screen is for control-plane mistakes, not for them.
+            var json = FunctionEnvelopeBuilder.Build(Run(), null, Function(), Context(), input);
 
-            act.Should().Throw<FunctionEnvelopeBuilder.ForbiddenContentException>();
+            using var doc = Parse(json);
+            doc.RootElement.GetProperty("input").GetRawText().Should().Be(JsonDocument.Parse(input).RootElement.GetRawText());
+        }
+
+        [Fact]
+        public void Http_query_and_body_keys_are_the_callers_and_pass()
+        {
+            var input = FunctionHttpInputBuilder.Build(new global::Functions.DomainService.Dtos.Requests.InvokeFunctionRequestDto
+            {
+                Method = "POST",
+                Path = "signup",
+                Query = new Dictionary<string, string[]> { ["token"] = ["invite-1"], ["api_key"] = ["k"] },
+                Headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["Content-Type"] = "application/json" },
+                ContentType = "application/json",
+                Body = System.Text.Encoding.UTF8.GetBytes("{\"user\":{\"password\":\"p\",\"secret_answer\":\"s\"}}"),
+            });
+
+            var act = () => FunctionEnvelopeBuilder.Build(Run(), null, Function(), Context(), input);
+
+            act.Should().NotThrow();
+        }
+
+        [Theory]
+        [InlineData("authorization")]
+        [InlineData("x-apikey")]
+        [InlineData("x-client-secret")]
+        public void A_credential_key_in_input_headers_is_still_refused(string header)
+        {
+            // input.headers is the control plane's allow-listed projection, not the caller's
+            // payload: a credential-shaped key there means the allow-list regressed.
+            var input = $$$"""{"method":"POST","headers":{"{{{header}}}":"v"},"body":{"password":"ok"}}""";
+
+            var act = () => FunctionEnvelopeBuilder.Build(Run(), null, Function(), Context(), input);
+
+            act.Should().Throw<FunctionEnvelopeBuilder.ForbiddenContentException>()
+                .WithMessage($"*input.headers.{header}*");
+        }
+
+        [Fact]
+        public void Only_the_top_level_input_headers_are_screened_not_a_headers_object_in_the_body()
+        {
+            var input = """{"body":{"headers":{"authorization":"Bearer mine"}}}""";
+
+            var act = () => FunctionEnvelopeBuilder.Build(Run(), null, Function(), Context(), input);
+
+            act.Should().NotThrow();
         }
 
         [Fact]

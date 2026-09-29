@@ -5,6 +5,7 @@ using Blocks.FunctionRunner.Options;
 using Blocks.FunctionRunner.Protocol;
 using Blocks.FunctionRunner.Redis;
 using Blocks.FunctionRunner.Sandbox;
+using Blocks.FunctionRunner.SecretStore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using StackExchange.Redis;
@@ -28,6 +29,7 @@ namespace Blocks.FunctionRunner.Runs
         private readonly ISandbox _sandbox;
         private readonly IImageResolver _images;
         private readonly HostBudget _budget;
+        private readonly IRunSecretResolver _secrets;
         private readonly RunnerOptions _options;
         private readonly ILogger<RunProcessor> _logger;
 
@@ -36,6 +38,7 @@ namespace Blocks.FunctionRunner.Runs
             ISandbox sandbox,
             IImageResolver images,
             HostBudget budget,
+            IRunSecretResolver secrets,
             IOptions<RunnerOptions> options,
             ILogger<RunProcessor> logger)
         {
@@ -43,9 +46,17 @@ namespace Blocks.FunctionRunner.Runs
             _sandbox = sandbox;
             _images = images;
             _budget = budget;
+            _secrets = secrets;
             _options = options.Value;
             _logger = logger;
         }
+
+        /// <summary>
+        /// Replaces the envelope's group handoff (a chown to the sandbox gid) so tests can run
+        /// without root and can make it fail. Null — the only value in production — uses the
+        /// real one.
+        /// </summary>
+        internal Action<string, int>? EnvelopeGroupHandoff { get; set; }
 
         /// <summary>Outcome of trying to process one stream entry.</summary>
         public enum Disposition
@@ -120,17 +131,56 @@ namespace Blocks.FunctionRunner.Runs
                 }
 
                 // --- envelope ---------------------------------------------------------
+                // What comes off the queue carries secret-bound variables as references; the
+                // plaintext is fetched here, as late as possible, and exists only in this
+                // method's memory and in the 0440 envelope file removed by CleanUp below. It is
+                // never written back to the run record: a retry re-reads the references and
+                // resolves them afresh, which is also what makes a rotated secret take effect on
+                // the very next attempt.
                 string envelopePath;
+                IReadOnlyList<string> resolvedValues = [];
                 try
                 {
                     var envelope = fields.TryGetValue("envelope", out var e) ? e : "{}";
-                    envelopePath = ExecutionEnvelope.Write(runDir, envelope);
+
+                    // Screened before anything is resolved, so an envelope the platform would
+                    // refuse anyway never causes a secret to be read.
+                    ExecutionEnvelope.Screen(envelope);
+
+                    if (job.Protocol >= RedisKeys.RunProtocolVersion)
+                    {
+                        var prepared = await ResolveSecretsAsync(job, envelope, token).ConfigureAwait(false);
+                        if (prepared.Failure is { } failure)
+                        {
+                            await CompleteAsync(job, runKey, startedAt, RunStatuses.Failed, failure.Code,
+                                failure.Message, null, 0, null, null, null, null, false).ConfigureAwait(false);
+                            return Disposition.Complete;
+                        }
+                        envelope = prepared.Envelope!;
+                        resolvedValues = prepared.Values;
+                    }
+
+                    envelopePath = EnvelopeGroupHandoff is null
+                        ? ExecutionEnvelope.Write(runDir, envelope)
+                        : ExecutionEnvelope.Write(runDir, envelope, EnvelopeGroupHandoff);
                 }
                 catch (ExecutionEnvelope.ForbiddenContentException ex)
                 {
+                    // The message names a key path or a size, never a value.
                     _logger.LogError("Refusing to run {RunId}: {Message}", job.RunId, ex.Message);
                     await CompleteAsync(job, runKey, startedAt, RunStatuses.Failed, ErrorCodes.RuntimeStartFailed,
                         ex.Message, null, 0, null, null, null, null, false).ConfigureAwait(false);
+                    return Disposition.Complete;
+                }
+                catch (ExecutionEnvelope.HandoffException ex)
+                {
+                    // The host's fault, not the function's — reported as such. The startup guard
+                    // normally stops a host like this claiming work at all; this is the run that
+                    // raced it.
+                    _logger.LogError("Refusing to run {RunId}: {Message}", job.RunId, ex.Message);
+                    await CompleteAsync(job, runKey, startedAt, RunStatuses.Failed, ErrorCodes.SandboxStartFailed,
+                        "the sandbox host could not deliver the execution envelope securely",
+                        null, 0, null, null, null, null, false).ConfigureAwait(false);
                     return Disposition.Complete;
                 }
 
@@ -150,13 +200,19 @@ namespace Blocks.FunctionRunner.Runs
                 if (result.HostFailure is not null)
                 {
                     await CompleteAsync(job, runKey, startedAt, RunStatuses.Failed, ErrorCodes.SandboxStartFailed,
-                        result.HostFailure, result.ExitCode, result.DurationMs, null, null, null, null, false)
+                        Redact(result.HostFailure, resolvedValues), result.ExitCode, result.DurationMs, null, null, null, null, false)
                         .ConfigureAwait(false);
                     return Disposition.Complete;
                 }
 
                 var (status, errorCode, errorMessage) = RunOutcome.Map(
                     result.OomKilled, result.ExitCode, result.TimedOut, lease.CancelRequested, result.Output);
+
+                // The bootstrap already masks these values in everything it writes; this is the
+                // runner's own copy of that rule for the one string it forwards verbatim, so a
+                // message that reached it unmasked (a crash before redaction was armed, a line
+                // the bootstrap did not write) is still not stored with a value in it.
+                errorMessage = Redact(errorMessage, resolvedValues);
 
                 // What this run actually cost, fed back into admission. Reserving a run's whole
                 // limit is safe and wasteful; the budget narrows that to the observed p95 only
@@ -175,6 +231,94 @@ namespace Blocks.FunctionRunner.Runs
             {
                 CleanUp(runDir);
             }
+        }
+
+        private readonly record struct Prepared(
+            string? Envelope, (string Code, string Message)? Failure, IReadOnlyList<string> Values);
+
+        /// <summary>The bootstrap's marker and threshold (runtime/protocol.mjs), mirrored.</summary>
+        private const string Redacted = "[redacted]";
+
+        private const int MinRedactChars = 4;
+
+        /// <summary>
+        /// Masks each resolved value in <paramref name="text"/>, longest first so a value that
+        /// contains another is masked whole. The same rule the bootstrap applies.
+        /// </summary>
+        internal static string? Redact(string? text, IReadOnlyList<string> values)
+        {
+            if (string.IsNullOrEmpty(text) || values.Count == 0) return text;
+            foreach (var value in values.Where(v => v.Length >= MinRedactChars).OrderByDescending(v => v.Length))
+            {
+                text = text.Replace(value, Redacted, StringComparison.Ordinal);
+            }
+            return text;
+        }
+
+        /// <summary>
+        /// Resolves every <c>{{secret.&lt;id&gt;}}</c> in the envelope's <c>env</c> in one lookup
+        /// and returns the envelope with the values substituted — or the failure to report
+        /// instead, in which case the sandbox is never started.
+        /// <para>
+        /// Two failures, deliberately distinct: a reference that cannot be satisfied is
+        /// <see cref="ErrorCodes.SecretUnresolved"/> (not retryable — the author has to fix it)
+        /// and names every broken variable by key and secret id; a store that could not be
+        /// reached is <see cref="ErrorCodes.SecretStoreUnavailable"/>, which the control plane
+        /// retries. Neither message, nor anything logged here, carries a value.
+        /// </para>
+        /// </summary>
+        private async Task<Prepared> ResolveSecretsAsync(RunJob job, string envelope, CancellationToken token)
+        {
+            var plan = EnvSecretReferences.Collect(envelope);
+            if (plan.IsEmpty) return new Prepared(envelope, null, []);
+
+            if (string.IsNullOrWhiteSpace(job.TenantId) ||
+                (plan.Caller.TenantId is { } envelopeTenant && !string.Equals(envelopeTenant, job.TenantId, StringComparison.Ordinal)))
+            {
+                // The entry and the envelope must agree on whose secrets these are. They always do
+                // unless something upstream is broken, and then resolving would read one tenant's
+                // secrets into another tenant's run.
+                _logger.LogError(
+                    "Refusing to resolve secrets for run {RunId}: the entry's tenant '{EntryTenant}' does not match the envelope's",
+                    job.RunId, job.TenantId);
+                return new Prepared(null, (ErrorCodes.SecretUnresolved,
+                    "the run's secret references could not be resolved: the run carries no consistent tenant"), []);
+            }
+
+            SecretLookup lookup;
+            try
+            {
+                lookup = await _secrets.ResolveAsync(job.TenantId!, plan.Caller, plan.Ids, token).ConfigureAwait(false);
+            }
+            catch (SecretStoreUnavailableException ex)
+            {
+                // ex.Message is the resolver's own wording; the inner exception is not logged.
+                _logger.LogWarning("Run {RunId} not started: {Message}", job.RunId, ex.Message);
+                return new Prepared(null, (ErrorCodes.SecretStoreUnavailable,
+                    $"the secrets this function's variables reference could not be fetched ({ex.Message}); " +
+                    "nothing ran, and the run is retried if its policy allows"), []);
+            }
+
+            var broken = new List<string>();
+            foreach (var (key, ids) in plan.IdsByKey)
+            {
+                foreach (var id in ids.Distinct(StringComparer.Ordinal))
+                {
+                    if (lookup.Values.ContainsKey(id)) continue;
+                    var reason = lookup.Unresolved.TryGetValue(id, out var r) ? r : SecretUnresolvedReasons.NotFound;
+                    broken.Add($"variable {key} references secret '{id}', but {reason}");
+                }
+            }
+
+            if (broken.Count > 0)
+            {
+                var message = string.Join("; ", broken);
+                _logger.LogWarning("Run {RunId} not started: {Message}", job.RunId, message);
+                return new Prepared(null, (ErrorCodes.SecretUnresolved, message), []);
+            }
+
+            var values = plan.Ids.Select(id => lookup.Values[id]).Distinct(StringComparer.Ordinal).ToArray();
+            return new Prepared(EnvSecretReferences.Apply(envelope, plan, lookup.Values), null, values);
         }
 
         /// <summary>

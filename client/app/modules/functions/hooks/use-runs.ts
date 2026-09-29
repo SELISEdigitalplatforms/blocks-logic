@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { functionService } from "../services/function.service";
 import { IGetRunsPayload, ITestFunctionPayload, TERMINAL_RUN_STATUSES } from "../types/run.types";
 import { FUNCTIONS_QUERY_KEY } from "./use-functions";
+import { runPollInterval } from "../utils/run-polling";
 
 const RUNS_QUERY_KEY = [FUNCTIONS_QUERY_KEY, "runs"];
 
@@ -19,7 +20,8 @@ export const useTestFunction = () => {
 
 /**
  * Runs list. Polls every 5 s while the page holds any non-terminal run, so in-flight runs settle
- * without a manual refresh; `autoRefresh: false` is the runs tab's toggle turned off.
+ * without a manual refresh, backing off as the youngest of them ages (see `runPollInterval`);
+ * `autoRefresh: false` is the runs tab's toggle turned off.
  */
 export const useGetRuns = (
   payload: IGetRunsPayload,
@@ -35,8 +37,13 @@ export const useGetRuns = (
     refetchInterval: (query) => {
       if (!autoRefresh) return false;
       const runs = query.state.data?.data ?? [];
-      const hasActiveRun = runs.some((run) => !TERMINAL_RUN_STATUSES.includes(run.status));
-      return hasActiveRun ? 5000 : false;
+      // The most eager interval wins: one fresh run keeps the list responsive even when an old
+      // stuck one alone would have stopped it.
+      const intervals = runs
+        .filter((run) => !TERMINAL_RUN_STATUSES.includes(run.status))
+        .map((run) => runPollInterval(run.createdDate, 5000))
+        .filter((interval): interval is number => interval !== false);
+      return intervals.length > 0 ? Math.min(...intervals) : false;
     },
   });
 };
@@ -46,15 +53,16 @@ export interface IGetRunOptions {
   enabled?: boolean;
 }
 
-/** A single run's detail. Polls every 2s until it reaches a terminal status. */
+/** A single run's detail. Polls every 2 s until it reaches a terminal status, backing off with age. */
 export const useGetRun = ({ runId, enabled = true }: IGetRunOptions) => {
   return useQuery({
     queryKey: [...RUNS_QUERY_KEY, "detail", runId],
     queryFn: () => functionService.getRun(runId!),
     enabled: enabled && !!runId,
     refetchInterval: (query) => {
-      const status = query.state.data?.status;
-      return status && !TERMINAL_RUN_STATUSES.includes(status) ? 2000 : false;
+      const run = query.state.data;
+      if (!run?.status || TERMINAL_RUN_STATUSES.includes(run.status)) return false;
+      return runPollInterval(run.createdDate, 2000);
     },
   });
 };

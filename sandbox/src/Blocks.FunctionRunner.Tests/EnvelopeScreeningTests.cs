@@ -1,4 +1,7 @@
+using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
+using Blocks.FunctionRunner.Contracts;
 using Blocks.FunctionRunner.Runs;
 using FluentAssertions;
 using Xunit;
@@ -70,24 +73,53 @@ namespace Blocks.FunctionRunner.Tests
             act.Should().NotThrow();
         }
 
-        [Fact]
-        public void An_env_object_nested_in_the_input_is_still_screened()
+        [Theory]
+        [InlineData("""{"run":{"id":"r"},"input":{"password":"hunter2"}}""")]
+        [InlineData("""{"run":{"id":"r"},"input":{"user":{"credentials":{"password":"p","apiKey":"k"}}}}""")]
+        [InlineData("""{"run":{"id":"r"},"input":{"body":{"client_secret":"s"},"query":{"access_token":"t"}}}""")]
+        [InlineData("""{"run":{"id":"r"},"input":[{"refreshToken":"x"},{"a":[{"Authorization":"Bearer y"}]}]}""")]
+        [InlineData("""{"run":{"id":"r"},"input":{"env":{"accessToken":"x"}}}""")]
+        public void Credential_shaped_keys_anywhere_in_the_callers_input_are_allowed(string json)
         {
-            // Only the envelope's own top-level env is exempt. Caller input that happens to
-            // contain an "env" object is not the same thing.
-            const string json = """{"run":{"id":"r"},"input":{"env":{"accessToken":"x"}}}""";
+            // input is the caller's own payload — for an HTTP trigger its body and query. A
+            // sign-up form posting a password is ordinary input; the caller already holds what
+            // it sent. Mirrors FunctionEnvelopeBuilder.Screen's exemption on the control plane.
+            var act = () => ExecutionEnvelope.Screen(json);
 
+            act.Should().NotThrow();
+        }
+
+        [Theory]
+        [InlineData("""{"run":{"id":"r","accessToken":"x"},"input":{"password":"ok"}}""", "run.accessToken")]
+        [InlineData("""{"context":{"caller":{"password":"x"}},"input":{"password":"ok"}}""", "context.caller.password")]
+        [InlineData("""{"limits":{"vault_token":"x"},"input":{"password":"ok"}}""", "limits.vault_token")]
+        [InlineData("""{"run":{"id":"r"},"input":{"body":{"password":"ok"},"headers":{"authorization":"Bearer x"}}}""", "input.headers.authorization")]
+        [InlineData("""{"run":{"id":"r"},"serviceKey":"x"}""", "serviceKey")]
+        public void The_input_exemption_does_not_extend_to_what_the_platform_writes(string json, string where)
+        {
             var act = () => ExecutionEnvelope.Screen(json);
 
             act.Should().Throw<ExecutionEnvelope.ForbiddenContentException>()
-                .WithMessage("*input.env.accessToken*");
+                .WithMessage($"*'{where}'*");
+        }
+
+        [Theory]
+        [InlineData("""{"context":{"input":{"password":"x"}}}""", "context.input.password")]
+        [InlineData("""{"context":{"env":{"apiKey":"x"}}}""", "context.env.apiKey")]
+        [InlineData("""{"run":{"input":[{"secret":"x"}]}}""", "run.input.[0].secret")]
+        public void Only_the_top_level_input_and_env_are_exempt_not_objects_that_share_the_name(string json, string where)
+        {
+            var act = () => ExecutionEnvelope.Screen(json);
+
+            act.Should().Throw<ExecutionEnvelope.ForbiddenContentException>()
+                .WithMessage($"*'{where}'*");
         }
 
         [Fact]
         public void Screening_reaches_arbitrary_depth()
         {
             const string json = """
-                {"run":{"id":"r"},"input":{"a":{"b":[{"c":{"clientSecret":"leaked"}}]}}}
+                {"run":{"id":"r"},"context":{"a":{"b":[{"c":{"clientSecret":"leaked"}}]}}}
                 """;
 
             var act = () => ExecutionEnvelope.Screen(json);
@@ -145,26 +177,179 @@ namespace Blocks.FunctionRunner.Tests
             }
         }
 
-        [Fact]
-        public void The_written_envelope_is_readable_by_the_sandbox_uid()
+        private static string NewDir() => Path.Combine(Path.GetTempPath(), $"fn-envelope-{Guid.NewGuid():N}");
+
+        private const UnixFileMode OwnerOnlyDirectory =
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+
+        private const UnixFileMode OwnerAndGroupRead = UnixFileMode.UserRead | UnixFileMode.GroupRead;
+
+        /// <summary>The file's numeric group, which .NET has no managed API for.</summary>
+        private static int GroupOf(string path)
         {
-            var dir = Path.Combine(Path.GetTempPath(), $"fn-envelope-{Guid.NewGuid():N}");
+            using var stat = Process.Start(new ProcessStartInfo("stat", ["-c", "%g", path])
+            {
+                RedirectStandardOutput = true,
+            })!;
+            var output = stat.StandardOutput.ReadToEnd();
+            stat.WaitForExit();
+            return int.Parse(output.Trim(), CultureInfo.InvariantCulture);
+        }
+
+        [Fact]
+        public void The_written_envelope_is_readable_by_the_sandbox_group_and_nobody_else()
+        {
+            // The envelope carries resolved secret variables. It used to be 0644 in a 0751
+            // directory — readable by any account on the host that could name a run id.
+            var dir = NewDir();
+            var handedTo = new List<(string Path, int Gid)>();
+            try
+            {
+                var path = ExecutionEnvelope.Write(dir, Valid, (p, gid) => handedTo.Add((p, gid)));
+
+                File.ReadAllText(path).Should().Be(Valid);
+                handedTo.Should().ContainSingle().Which.Should().Be((path, Ceilings.SandboxUid));
+
+                File.GetUnixFileMode(path).Should().Be(OwnerAndGroupRead,
+                    "0440: the runner and the sandbox's group, no one else, and nobody may write it");
+                File.GetUnixFileMode(dir).Should().Be(OwnerOnlyDirectory,
+                    "0700: the Engine resolves the bind source as root, so the sandbox needs no traversal");
+            }
+            finally
+            {
+                if (Directory.Exists(dir)) Directory.Delete(dir, true);
+            }
+        }
+
+        [SkippableFact]
+        public void The_real_handoff_gives_the_file_to_the_sandbox_gid()
+        {
+            // Only root can give a file to a group it is not in, so this proves the syscall, not
+            // the provisioning; provision/40-runner-user.sh checks the runner's membership itself.
+            Skip.IfNot(Environment.UserName == "root", "needs root, or membership of gid 10001");
+
+            var dir = NewDir();
             try
             {
                 var path = ExecutionEnvelope.Write(dir, Valid);
 
-                File.Exists(path).Should().BeTrue();
-                File.ReadAllText(path).Should().Contain("run_1");
+                GroupOf(path).Should().Be(Ceilings.SandboxUid);
+                File.GetUnixFileMode(path).Should().Be(OwnerAndGroupRead);
+                ExecutionEnvelope.ProbeHandoff(dir).Should().BeNull();
+                Directory.EnumerateFileSystemEntries(dir).Should().ContainSingle("the probe cleans up after itself");
+            }
+            finally
+            {
+                if (Directory.Exists(dir)) Directory.Delete(dir, true);
+            }
+        }
 
-                // uid 10001 is not the runner's uid, so it needs "other" read on the file and
-                // "other" execute on the directory to reach it — and nothing more.
-                var fileMode = File.GetUnixFileMode(path);
-                fileMode.Should().HaveFlag(UnixFileMode.OtherRead);
-                fileMode.Should().NotHaveFlag(UnixFileMode.OtherWrite);
+        [Fact]
+        public void A_failed_handoff_deletes_the_envelope_rather_than_leaving_it_behind()
+        {
+            var dir = NewDir();
+            try
+            {
+                var act = () => ExecutionEnvelope.Write(dir, Valid,
+                    (_, _) => throw new ExecutionEnvelope.HandoffException("EPERM"));
 
-                var dirMode = File.GetUnixFileMode(dir);
-                dirMode.Should().HaveFlag(UnixFileMode.OtherExecute);
-                dirMode.Should().NotHaveFlag(UnixFileMode.OtherRead);
+                act.Should().Throw<ExecutionEnvelope.HandoffException>();
+                File.Exists(Path.Combine(dir, ExecutionEnvelope.FileName)).Should().BeFalse(
+                    "an envelope the sandbox cannot read must not linger with the tenant's secrets in it");
+            }
+            finally
+            {
+                if (Directory.Exists(dir)) Directory.Delete(dir, true);
+            }
+        }
+
+        [Fact]
+        public void The_file_is_owner_only_until_the_group_is_the_sandboxes()
+        {
+            var dir = NewDir();
+            UnixFileMode? modeAtHandoff = null;
+            try
+            {
+                ExecutionEnvelope.Write(dir, Valid, (p, _) => modeAtHandoff = File.GetUnixFileMode(p));
+
+                modeAtHandoff.Should().Be(UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+            finally
+            {
+                if (Directory.Exists(dir)) Directory.Delete(dir, true);
+            }
+        }
+
+        [Fact]
+        public void A_world_readable_leftover_from_an_earlier_attempt_is_replaced_not_reused()
+        {
+            // A crashed attempt (or an older runner) leaves a 0644 file in a 0751 directory;
+            // writing over it in place would keep that mode.
+            var dir = NewDir();
+            try
+            {
+                Directory.CreateDirectory(dir);
+                File.SetUnixFileMode(dir, OwnerOnlyDirectory | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute);
+                var leftover = Path.Combine(dir, ExecutionEnvelope.FileName);
+                File.WriteAllText(leftover, """{"stale":true}""");
+                File.SetUnixFileMode(leftover,
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+
+                var path = ExecutionEnvelope.Write(dir, Valid, (_, _) => { });
+
+                File.ReadAllText(path).Should().Be(Valid);
+                File.GetUnixFileMode(path).Should().Be(OwnerAndGroupRead);
+                File.GetUnixFileMode(dir).Should().Be(OwnerOnlyDirectory);
+            }
+            finally
+            {
+                if (Directory.Exists(dir)) Directory.Delete(dir, true);
+            }
+        }
+
+        [Fact]
+        public void A_refused_envelope_writes_nothing()
+        {
+            var dir = NewDir();
+            try
+            {
+                var act = () => ExecutionEnvelope.Write(dir, """{"context":{"accessToken":"x"}}""", (_, _) => { });
+
+                act.Should().Throw<ExecutionEnvelope.ForbiddenContentException>();
+                Directory.Exists(dir).Should().BeFalse("screening happens before anything touches the disk");
+            }
+            finally
+            {
+                if (Directory.Exists(dir)) Directory.Delete(dir, true);
+            }
+        }
+
+        [Fact]
+        public void The_probe_reports_a_host_that_cannot_hand_off_and_leaves_nothing_behind()
+        {
+            var dir = NewDir();
+            try
+            {
+                var problem = ExecutionEnvelope.ProbeHandoff(dir,
+                    (_, _) => throw new ExecutionEnvelope.HandoffException("not a member of gid 10001"));
+
+                problem.Should().Contain("gid 10001");
+                Directory.EnumerateFileSystemEntries(dir).Should().BeEmpty();
+            }
+            finally
+            {
+                if (Directory.Exists(dir)) Directory.Delete(dir, true);
+            }
+        }
+
+        [Fact]
+        public void The_probe_passes_when_the_handoff_works_and_leaves_nothing_behind()
+        {
+            var dir = NewDir();
+            try
+            {
+                ExecutionEnvelope.ProbeHandoff(dir, (_, _) => { }).Should().BeNull();
+                Directory.EnumerateFileSystemEntries(dir).Should().BeEmpty();
             }
             finally
             {

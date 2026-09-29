@@ -35,6 +35,23 @@ if [[ " $(id -nG "$RUNNER_USER") " == *" docker "* ]]; then
 else
   usermod -aG docker "$RUNNER_USER"; ok "$RUNNER_USER added to group docker"
 fi
+# The execution envelope carries a tenant's resolved secret variables, so it is 0440 and
+# group-owned by the sandbox's gid (10001, Ceilings.SandboxUid) rather than world-readable.
+# The runner is unprivileged: it can only give its own file to a group it is a member of.
+# The group is matched by number, not name — a host that already has gid 10001 keeps its name.
+SANDBOX_GID=10001
+SANDBOX_GROUP="$(getent group "$SANDBOX_GID" | cut -d: -f1 || true)"
+if [ -z "$SANDBOX_GROUP" ]; then
+  SANDBOX_GROUP=blocks-sandbox
+  getent group "$SANDBOX_GROUP" >/dev/null && die "group $SANDBOX_GROUP exists with a gid other than $SANDBOX_GID"
+  groupadd --system --gid "$SANDBOX_GID" "$SANDBOX_GROUP"; ok "created group $SANDBOX_GROUP (gid $SANDBOX_GID)"
+else info "sandbox gid $SANDBOX_GID exists as group $SANDBOX_GROUP"; fi
+if [[ " $(id -nG "$RUNNER_USER") " == *" $SANDBOX_GROUP "* ]]; then
+  info "$RUNNER_USER already in group $SANDBOX_GROUP"
+else
+  usermod -aG "$SANDBOX_GROUP" "$RUNNER_USER"
+  ok "$RUNNER_USER added to group $SANDBOX_GROUP (restart the runner for it to take effect)"
+fi
 UID_N="$(id -u "$RUNNER_USER")"; GID_N="$(id -g "$RUNNER_USER")"
 fact RUNNER_USER "$RUNNER_USER"; fact RUNNER_UID "$UID_N"; fact RUNNER_GID "$GID_N"
 ok "$RUNNER_USER uid=$UID_N gid=$GID_N groups=$(id -nG "$RUNNER_USER" | tr ' ' ',')"
@@ -47,9 +64,10 @@ ok "$APP_DIR (root:root 0755)"
 
 install -d -m 0750 -o "$RUNNER_USER" -g "$RUNNER_GROUP" "$STATE_DIR"
 # runs/ and builds/ are 0751 so uid 10001 inside a sandbox can traverse into its own
-# directory — to read the execution envelope for a run, and to write the dependency tree for
-# a build — without being able to list the others. The per-build work directory inside is
-# opened to that uid by the runner; this is only the traversal that makes it reachable.
+# directory — to write the dependency tree for a build — without being able to list the
+# others. The per-build work directory inside is opened to that uid by the runner; this is
+# only the traversal that makes it reachable. A run's envelope does not rely on it: each run
+# directory is 0700 and the file 0440 to the sandbox gid (see ExecutionEnvelope.Write).
 install -d -m 0751 -o "$RUNNER_USER" -g "$RUNNER_GROUP" "$STATE_DIR/runs"
 install -d -m 0751 -o "$RUNNER_USER" -g "$RUNNER_GROUP" "$STATE_DIR/builds"
 ok "$STATE_DIR/{runs,builds}"
@@ -86,6 +104,16 @@ DOTNET_ENVIRONMENT=Production
 # Point this at IAM's internal address, never the public host. deploy.sh warns when it is
 # unset, because a runner that cannot reach IAM fails in a way that reads like a Redis fault.
 # BLOCKS_IAM_BASE_URL=http://blocks-iam.internal
+
+# --- Tenant secrets ---------------------------------------------------------
+# Secret-bound variables arrive as {{secret.<id>}} references and are resolved here, at run
+# start. Must name the same value store as the control plane — see deploy/runner.env.example;
+# without KeyVault__KeyVaultUrl every secret-bound run fails as SECRET_UNRESOLVED.
+# KeyVault__KeyVaultUrl=
+# KeyVault__ClientId=
+# KeyVault__ClientSecret=
+# KeyVault__TenantId=
+# Secrets__ValueStore=
 
 # --- Runner identity and paths ----------------------------------------------
 RUNNER__RunnerId=$(hostname -s)
@@ -141,6 +169,12 @@ step "Verification"
 sudo -u "$RUNNER_USER" -g "$RUNNER_GROUP" test -r "$ENV_FILE" || die "$RUNNER_USER cannot read $ENV_FILE"
 if sudo -u "$RUNNER_USER" test -w "$APP_DIR"; then die "$RUNNER_USER can write $APP_DIR — it must not"; fi
 ok "$RUNNER_USER reads its env file and cannot write $APP_DIR"
+PROBE="$STATE_DIR/runs/.provision-probe-$$"
+if sudo -u "$RUNNER_USER" sh -c 'umask 077 && : > "$1" && chgrp "$2" "$1"' _ "$PROBE" "$SANDBOX_GID"; then
+  rm -f "$PROBE"; ok "$RUNNER_USER can hand an execution envelope to gid $SANDBOX_GID"
+else
+  rm -f "$PROBE"; die "$RUNNER_USER cannot chgrp to gid $SANDBOX_GID — every run would fail"
+fi
 sudo -u "$RUNNER_USER" docker version --format '{{.Server.Version}}' >/dev/null 2>&1 \
   || die "$RUNNER_USER cannot reach the Docker Engine API"
 ok "$RUNNER_USER can drive the Docker Engine API"

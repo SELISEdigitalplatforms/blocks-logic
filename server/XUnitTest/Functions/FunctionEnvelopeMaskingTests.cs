@@ -30,24 +30,26 @@ namespace XUnitTest.Functions
             Variables = [.. variables],
         };
 
-        private static JsonElement Build(FunctionEntity function, IReadOnlyDictionary<string, string>? secrets)
-            => JsonDocument.Parse(FunctionEnvelopeBuilder.Build(Run(), null, function, null, null, secrets))
+        private static JsonElement Build(FunctionEntity function)
+            => JsonDocument.Parse(FunctionEnvelopeBuilder.Build(Run(), null, function, null, null))
                 .RootElement.Clone();
 
         private static string[] Masked(JsonElement root) =>
             [.. root.GetProperty("maskedEnv").EnumerateArray().Select(e => e.GetString()!)];
 
         [Fact]
-        public void A_secret_backed_variable_is_named_for_masking_and_its_value_is_the_resolved_one()
+        public void A_secret_backed_variable_is_named_for_masking_and_stays_a_reference()
         {
+            // The runner resolves the reference right before the sandbox starts; the envelope the
+            // control plane writes to Redis holds the reference and nothing else.
             var function = Function(
                 new VariableBinding { Key = "TOKEN", Value = "{{secret.abc123}}" },
                 new VariableBinding { Key = "API_BASE", Value = "https://api.example.com" });
 
-            var root = Build(function, new Dictionary<string, string> { ["abc123"] = "sk_live_9" });
+            var root = Build(function);
 
             Masked(root).Should().Equal("TOKEN");
-            root.GetProperty("env").GetProperty("TOKEN").GetString().Should().Be("sk_live_9");
+            root.GetProperty("env").GetProperty("TOKEN").GetString().Should().Be("{{secret.abc123}}");
             root.GetProperty("env").GetProperty("API_BASE").GetString().Should().Be("https://api.example.com");
         }
 
@@ -57,43 +59,44 @@ namespace XUnitTest.Functions
             // Masking every variable would hide the ordinary configuration people log on purpose.
             var function = Function(new VariableBinding { Key = "API_BASE", Value = "https://api.example.com" });
 
-            Masked(Build(function, null)).Should().BeEmpty();
+            Masked(Build(function)).Should().BeEmpty();
         }
 
         [Fact]
-        public void A_reference_spliced_into_a_larger_value_still_marks_the_key()
+        public void A_reference_spliced_into_a_larger_value_still_marks_the_key_and_is_left_in_place()
         {
-            // The resolved value is a credential whether or not it is the whole string.
             var function = Function(new VariableBinding { Key = "AUTH", Value = "Bearer {{secret.abc123}}" });
 
-            var root = Build(function, new Dictionary<string, string> { ["abc123"] = "sk_live_9" });
+            var root = Build(function);
 
             Masked(root).Should().Equal("AUTH");
-            root.GetProperty("env").GetProperty("AUTH").GetString().Should().Be("Bearer sk_live_9");
+            root.GetProperty("env").GetProperty("AUTH").GetString().Should().Be("Bearer {{secret.abc123}}");
         }
 
         [Fact]
-        public void The_marker_carries_keys_and_never_the_values()
+        public void The_marker_carries_keys_only()
         {
             var function = Function(new VariableBinding { Key = "TOKEN", Value = "{{secret.abc123}}" });
 
-            var json = FunctionEnvelopeBuilder.Build(
-                Run(), null, function, null, null, new Dictionary<string, string> { ["abc123"] = "sk_live_9" });
+            var json = FunctionEnvelopeBuilder.Build(Run(), null, function, null, null);
 
             using var doc = JsonDocument.Parse(json);
             var marker = doc.RootElement.GetProperty("maskedEnv").GetRawText();
-            marker.Should().NotContain("sk_live_9", "the value is already in env; naming it twice is one more place to read it from");
-            marker.Should().NotContain("abc123", "the secret's id is not needed to mask its value");
+            marker.Should().NotContain("abc123", "the runner reads the id from env; the marker only says which keys");
+            doc.RootElement.TryGetProperty("maskedValues", out _).Should().BeFalse(
+                "maskedValues is the runner's to write, once it holds the values");
         }
 
         [Fact]
-        public void The_marker_survives_the_envelope_screen()
+        public void The_marker_and_the_references_survive_the_envelope_screen()
         {
             // "envSecrets" would have been the obvious name and the screen rejects any property
-            // whose name contains "secret" — on both sides. This asserts the name stayed legal.
-            var function = Function(new VariableBinding { Key = "TOKEN", Value = "{{secret.abc123}}" });
-            var json = FunctionEnvelopeBuilder.Build(
-                Run(), null, function, null, null, new Dictionary<string, string> { ["abc123"] = "sk_live_9" });
+            // whose name contains "secret" — on both sides. And the reference text itself lives
+            // in env values, which are never screened. This asserts both stayed legal.
+            var function = Function(
+                new VariableBinding { Key = "TOKEN", Value = "{{secret.abc123}}" },
+                new VariableBinding { Key = "STRIPE_SECRET_KEY", Value = "Bearer {{secret.abc123}} {{secret.def456}}" });
+            var json = FunctionEnvelopeBuilder.Build(Run(), null, function, null, null);
 
             var act = () => FunctionEnvelopeBuilder.Screen(json);
 
@@ -101,14 +104,15 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
-        public void An_unresolved_reference_fails_the_run_rather_than_shipping_the_placeholder()
+        public void A_reference_to_a_missing_secret_is_not_refused_at_invoke()
         {
-            var function = Function(new VariableBinding { Key = "TOKEN", Value = "{{secret.abc123}}" });
+            // Nothing is resolved here, so nothing can be missing here: the runner fails the run
+            // as SecretUnresolved, naming the variable, before any sandbox starts.
+            var function = Function(new VariableBinding { Key = "TOKEN", Value = "{{secret.gone}}" });
 
-            var act = () => FunctionEnvelopeBuilder.Build(Run(), null, function, null, null, secrets: null);
+            var act = () => FunctionEnvelopeBuilder.Build(Run(), null, function, null, null);
 
-            act.Should().Throw<FunctionEnvelopeBuilder.UnresolvedSecretException>()
-                .WithMessage("*abc123*").And.Message.Should().NotContain("sk_live");
+            act.Should().NotThrow();
         }
     }
 }

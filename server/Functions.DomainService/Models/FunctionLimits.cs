@@ -41,6 +41,12 @@ namespace Functions.DomainService.Models
             public const int CpuMillicores = 100;
 
             public const int MemoryMb = 200;
+
+            /// <summary>
+            /// Mirrors the runner's <c>Ceilings.MinMemoryBytes</c>: below it Node cannot start and
+            /// Docker refuses the container, so a smaller value is a guaranteed start failure.
+            /// </summary>
+            public const int MinMemoryMb = 32;
             public const int TimeoutSeconds = 90;
             public const int PidLimit = 64;
             public const int TmpfsMb = 64;
@@ -86,7 +92,7 @@ namespace Functions.DomainService.Models
             // honouring a different number here would only mislead the editor.
             CpuMillicores = Ceiling.CpuMillicores,
             MemoryMb = Math.Clamp(
-                MemoryMb <= 0 ? Ceiling.DefaultMemoryMb : MemoryMb, 1, Ceiling.MemoryMb),
+                MemoryMb <= 0 ? Ceiling.DefaultMemoryMb : MemoryMb, Ceiling.MinMemoryMb, Ceiling.MemoryMb),
             TimeoutSeconds = Math.Clamp(
                 TimeoutSeconds <= 0 ? Ceiling.DefaultTimeoutSeconds : TimeoutSeconds, 1, Ceiling.TimeoutSeconds),
             Concurrency = Math.Clamp(

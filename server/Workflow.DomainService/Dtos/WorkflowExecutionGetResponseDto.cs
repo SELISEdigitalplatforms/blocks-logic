@@ -22,6 +22,8 @@ namespace Workflow.DomainService.Dtos
         public DateTime? FinishedAt { get; set; }
         public TimeSpan? Duration { get; set; }
         public string? ErrorMessage { get; set; }
+        public string? FailedNodeId { get; set; }
+        public string? FailedNodeName { get; set; }
         public int AttemptNumber { get; set; }
         public JsonElement Context { get; set; } = new();
         public List<string> ActiveNodeIds { get; set; } = new();

@@ -17,7 +17,9 @@ namespace Functions.DomainService.Consumers
     /// failure with attempts remaining.
     /// <para>
     /// A retry reruns the <b>exact envelope</b> the original attempt built — same input, same
-    /// caller identity, same non-secret configuration — with only <c>run.attempt</c> patched to
+    /// caller identity, same configuration, secret-bound variables still as their
+    /// <c>{{secret.&lt;id&gt;}}</c> references (the runner resolves them again for this attempt,
+    /// so no plaintext is ever copied here) — with only <c>run.attempt</c> patched to
     /// the new number, read back from <c>function:run:{runId}</c> (which is still inside its
     /// 24 h TTL for any retry delay this short). This is why retries only apply to a run with a
     /// deployed version behind it: a Test run's envelope has nowhere durable to be reproduced
@@ -32,6 +34,14 @@ namespace Functions.DomainService.Consumers
     {
         private static readonly TimeSpan SweepInterval = TimeSpan.FromSeconds(5);
         private const int BatchSize = 50;
+
+        /// <summary>
+        /// The entry is written by <see cref="FunctionResultConsumer"/> from an anonymous object,
+        /// so its names are camelCase (<c>runId</c>, <c>tenantId</c>…). Read case-sensitively into
+        /// <see cref="RetryEntry"/>'s PascalCase properties, every field came back null and every
+        /// retry was discarded as "missing required fields" — web defaults match them.
+        /// </summary>
+        private static readonly JsonSerializerOptions EntryJson = new(JsonSerializerDefaults.Web);
 
         private readonly IDatabase _db;
         private readonly IFunctionRunRepository _runRepository;
@@ -97,7 +107,7 @@ namespace Functions.DomainService.Consumers
             RetryEntry? entry;
             try
             {
-                entry = JsonSerializer.Deserialize<RetryEntry>(member);
+                entry = JsonSerializer.Deserialize<RetryEntry>(member, EntryJson);
             }
             catch (JsonException ex)
             {
@@ -160,25 +170,70 @@ namespace Functions.DomainService.Consumers
                 return;
             }
 
-            await _runRepository.ResetForRetryAsync(entry.TenantId, entry.RunId, entry.Attempt, cancellationToken);
+            // Conditional: only from the attempt before, and only once it has finished. False means
+            // another Worker already advanced it (or something else moved it on) — enqueueing now
+            // would run the same attempt twice.
+            if (!await _runRepository.ResetForRetryAsync(entry.TenantId, entry.RunId, entry.Attempt, cancellationToken))
+            {
+                _logger.LogInformation(
+                    "Retry for run {RunId} skipped: attempt {Attempt} was already started, or the run moved on",
+                    entry.RunId, entry.Attempt);
+                return;
+            }
 
-            await _db.HashSetAsync(runKey,
-            [
-                new HashEntry("envelope", patchedEnvelope),
-                new HashEntry("status", FunctionQueueKeys.Wire.Queued),
-            ]);
-            await _db.KeyExpireAsync(runKey, FunctionQueueKeys.RunTtl);
+            // From here the record says QUEUED, so the enqueue must either land or be undone —
+            // never abandoned half-way by a shutdown.
+            try
+            {
+                await _db.HashSetAsync(runKey,
+                [
+                    new HashEntry("envelope", patchedEnvelope),
+                    new HashEntry("status", FunctionQueueKeys.Wire.Queued),
+                ]);
+                await _db.KeyExpireAsync(runKey, FunctionQueueKeys.RunTtl);
 
-            await _db.StreamAddAsync(FunctionQueueKeys.RunsStream,
-            [
-                new NameValueEntry("runId", entry.RunId),
-                new NameValueEntry("functionId", entry.FunctionId),
-                new NameValueEntry("versionId", entry.VersionId ?? string.Empty),
-                new NameValueEntry("tenantId", entry.TenantId),
-                new NameValueEntry("image", version.ImageDigest),
-                new NameValueEntry("attempt", entry.Attempt),
-                new NameValueEntry("protocol", FunctionQueueKeys.ProtocolVersion),
-            ]);
+                await _db.StreamAddAsync(FunctionQueueKeys.RunsStream,
+                [
+                    new NameValueEntry("runId", entry.RunId),
+                    new NameValueEntry("functionId", entry.FunctionId),
+                    new NameValueEntry("versionId", entry.VersionId ?? string.Empty),
+                    new NameValueEntry("tenantId", entry.TenantId),
+                    new NameValueEntry("image", version.ImageDigest),
+                    new NameValueEntry("attempt", entry.Attempt),
+                    // The reused envelope still holds references only, so the runner resolves
+                    // them afresh for this attempt — a secret rotated since is picked up.
+                    new NameValueEntry("protocol", FunctionQueueKeys.RunProtocolVersion),
+                ]);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Could not re-enqueue run {RunId} for attempt {Attempt}", entry.RunId, entry.Attempt);
+                try
+                {
+                    // Withdraw the payload so a stream entry that did land despite the error
+                    // finds nothing to run (the runner discards an entry with no run record).
+                    await _db.KeyDeleteAsync(runKey);
+                }
+                catch (Exception deleteEx)
+                {
+                    _logger.LogWarning("Could not withdraw the payload of run {RunId}: {Message}", entry.RunId, deleteEx.Message);
+                }
+                try
+                {
+                    // Closed rather than left QUEUED with nothing on the queue behind it.
+                    await _runRepository.FailIfNotTerminalAsync(
+                        entry.TenantId, entry.RunId, RunErrorCode.EnqueueFailed,
+                        $"retry attempt {entry.Attempt} could not be queued ({ex.GetType().Name}); nothing was executed",
+                        DateTime.UtcNow, CancellationToken.None);
+                }
+                catch (Exception compensationEx)
+                {
+                    // The stale-run sweeper closes it later instead.
+                    _logger.LogError(compensationEx,
+                        "Could not close run {RunId} after its retry failed to enqueue; the stale-run sweeper will", entry.RunId);
+                }
+                return;
+            }
 
             _logger.LogInformation("Re-enqueued run {RunId} for attempt {Attempt}", entry.RunId, entry.Attempt);
         }

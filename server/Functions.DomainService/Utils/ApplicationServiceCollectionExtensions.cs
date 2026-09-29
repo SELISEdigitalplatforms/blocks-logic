@@ -49,6 +49,7 @@ namespace Functions.DomainService.Utils
             services.AddSingleton<IFunctionVersionRetentionService, FunctionVersionRetentionService>();
             services.AddSingleton<IFunctionDeploymentService, FunctionDeploymentService>();
             services.AddSingleton<IFunctionRunService, FunctionRunService>();
+            services.AddSingleton<IFunctionPollTokenService, FunctionPollTokenService>();
             // The shared data-plane authorizer (Common): validates a bearer token on the anonymous
             // /api/fn route exactly as it does on the proxy gateway. TryAdd inside, so this is
             // harmless alongside Proxy's and Workflow's own registration.
@@ -58,7 +59,12 @@ namespace Functions.DomainService.Utils
             services.AddSingleton<IOutputActionProcessor, OutputActionProcessor>();
             services.AddSingleton<ISecretResolver>(sp => SelectSecretResolver(sp));
             services.AddHttpClient(nameof(BlocksOsHttpSecretResolver));
-            services.AddHttpClient(nameof(OutputActionProcessor));
+            // The output-action client connects only through the SSRF guard's connect callback,
+            // with auto-redirect and the ambient proxy off (FunctionOutboundGuard.CreatePrimaryHandler).
+            services.AddSingleton<IFunctionOutboundGuard>(_ => new FunctionOutboundGuard());
+            services.AddHttpClient(nameof(OutputActionProcessor))
+                .ConfigurePrimaryHttpMessageHandler(sp =>
+                    FunctionOutboundGuard.CreatePrimaryHandler(sp.GetRequiredService<IFunctionOutboundGuard>()));
 
             services.AddValidator<CreateFunctionRequestDto, CreateFunctionRequestValidator>();
             services.AddValidator<UpdateFunctionRequestDto, UpdateFunctionRequestValidator>();
@@ -74,7 +80,14 @@ namespace Functions.DomainService.Utils
         public static IServiceCollection AddFunctionsWorkerServices(this IServiceCollection services)
         {
             services.AddHostedService<FunctionResultConsumer>();
+            // Output actions, decoupled from result processing so a slow endpoint never holds a
+            // result entry long enough to be reclaimed and delivered twice.
+            services.AddHostedService<FunctionOutputActionConsumer>();
             services.AddHostedService<FunctionBuildResultConsumer>();
+            // Closes runs that will never hear back (payload expired or lost, runner died,
+            // output job lost), per tenant, with conditional writes only.
+            services.TryAddSingleton<IFunctionTenantSource, FunctionTenantSource>();
+            services.AddHostedService<FunctionStaleRunSweeper>();
             // The other end of the runner's dead letter. Without it a job the runner could never
             // deliver leaves its record QUEUED for ever and nothing in the product says why.
             services.AddHostedService<FunctionDeadLetterConsumer>();

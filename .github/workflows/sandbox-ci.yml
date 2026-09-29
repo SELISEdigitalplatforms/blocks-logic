@@ -1,26 +1,99 @@
 name: sandbox-ci
 
+# The Functions runner VM, one per environment. A push to an environment's branch tests the
+# runner and then deploys it to that environment's own VM, and only that one:
+#
+#   dev  -> environment "dev"    stg -> environment "stg"    main -> environment "prod"
+#
+# Each VM carries a self-hosted Actions runner labelled `function-sandbox` plus its environment
+# name (e.g. `function-sandbox, prod`), so a job can only ever land on its own environment's VM.
+# Each GitHub Environment may hold its own `SANDBOX_ENV` secret to (re)seed that VM's runner.env;
+# without it the VM's existing /etc/blocks-runner/runner.env is used. Protect `prod` with
+# required reviewers in the repository settings.
+#
+# Pull requests only build and test, on a GitHub-hosted runner: nothing from an unmerged branch
+# ever runs on a sandbox VM.
+
 on:
   push:
-    branches: [feat/functions]
+    branches: [dev, stg, main]
     paths: [sandbox/**, .github/workflows/sandbox-ci.yml]
-  workflow_dispatch: {}
+  pull_request:
+    branches: [dev, stg, main]
+    paths: [sandbox/**, .github/workflows/sandbox-ci.yml]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment whose runner VM to deploy
+        required: true
+        type: choice
+        options: [dev, stg, prod]
 
-concurrency:
-  group: sandbox-ci
-  cancel-in-progress: false
+permissions:
+  contents: read
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Runner test suite
+        run: dotnet test sandbox/src/Blocks.FunctionRunner.slnx -c Release --nologo
+
+      - name: Runtime bootstrap suite
+        working-directory: sandbox/runtime-image
+        run: node --test runtime/*.test.mjs
+
+  target:
+    # Resolves which environment this run deploys, or none (pull requests).
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.pick.outputs.environment }}
+    steps:
+      - id: pick
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_ENV: ${{ inputs.environment }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            env_name="$INPUT_ENV"
+          else
+            case "$BRANCH" in
+              dev) env_name=dev ;;
+              stg) env_name=stg ;;
+              main) env_name=prod ;;
+              *) echo "::error::No environment for branch $BRANCH"; exit 1 ;;
+            esac
+          fi
+          echo "environment=$env_name" >> "$GITHUB_OUTPUT"
+
   deploy:
-    runs-on: [self-hosted, function-sandbox]
-    environment: dev   # SANDBOX_ENV lives in the dev environment; without this it resolves empty
+    needs: [test, target]
+    runs-on: [self-hosted, function-sandbox, "${{ needs.target.outputs.environment }}"]
+    environment: ${{ needs.target.outputs.environment }}
     timeout-minutes: 60
+    # One deploy at a time per environment; never cancel one half-way through a host change.
+    concurrency:
+      group: sandbox-deploy-${{ needs.target.outputs.environment }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
 
       # Optional: the runner VM reaches Key Vault with its Azure Arc identity, so the secret is only
       # needed to (re)seed /etc/blocks-runner/runner.env. Without it, deploy uses the file already there.
-      - name: Write runner.env from secret (if provided)
+      - name: Write runner.env from the environment's secret (if provided)
         env:
           SANDBOX_ENV: ${{ secrets.SANDBOX_ENV }}
         run: |

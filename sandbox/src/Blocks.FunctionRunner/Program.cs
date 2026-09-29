@@ -10,9 +10,12 @@ using Microsoft.Extensions.Hosting;
 // reports health and resolves configuration the same way: vault type, IBlocksSecret,
 // ICacheClient for Redis, Genesis Serilog and OpenTelemetry.
 //
-// Note it never asks for a tenant database. The runner returns results over Redis and the
-// control-plane Worker is the single Mongo writer (D1), so no tenant credential is ever
-// resident on this host.
+// The runner returns results over Redis and the control-plane Worker is the single Mongo
+// writer (D1). It does read one tenant-scoped thing itself: the values behind a run's
+// {{secret.<id>}} references, resolved right before the sandbox starts so the queue never holds
+// plaintext (SecretStore/BlocksSecretsRunResolver). That goes through SeliseBlocks.Secrets.OS —
+// secret metadata on the tenant's own Mongo connection, found through ITenants, and values in
+// Key Vault (KeyVault__* in runner.env) — read-only, and nothing is ever written back.
 
 const string serviceName = "blocks-function-runner";
 

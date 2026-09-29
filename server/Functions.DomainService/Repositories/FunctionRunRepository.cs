@@ -37,6 +37,9 @@ namespace Functions.DomainService.Repositories
                     new CreateIndexModel<FunctionRunEntity>(
                         keys.Ascending(r => r.FunctionId).Descending(r => r.CreatedDate)),
                     new CreateIndexModel<FunctionRunEntity>(keys.Ascending(r => r.Status)),
+                    // FunctionStaleRunSweeper: "non-terminal and not touched since...", oldest first.
+                    new CreateIndexModel<FunctionRunEntity>(
+                        keys.Ascending(r => r.Status).Ascending(r => r.LastUpdatedDate)),
                     // Covers the versions tab's per-version run counts: the group reads the
                     // index rather than every run document of the function.
                     new CreateIndexModel<FunctionRunEntity>(
@@ -196,7 +199,37 @@ namespace Functions.DomainService.Repositories
         }
 
 
-        public async Task<bool> ApplyResultAsync(
+        /// <summary>
+        /// Statuses in which a run is still waiting for the runner's outcome of its current
+        /// attempt. <c>OUTPUT_PROCESSING</c> is deliberately absent: a run there has already had
+        /// its result applied, so a runner result arriving then is a redelivery.
+        /// </summary>
+        internal static readonly RunStatus[] AwaitingResultStatuses =
+        [
+            RunStatus.Queued, RunStatus.Claimed, RunStatus.Starting, RunStatus.Running,
+        ];
+
+        /// <summary>
+        /// Terminal outcomes this platform decided on its own, without hearing from a runner. A
+        /// real result for the same attempt is better information than any of them and may
+        /// replace them; a runner-reported outcome may never be replaced.
+        /// </summary>
+        internal static readonly RunErrorCode[] PlatformDeterminedErrorCodes =
+        [
+            RunErrorCode.Undeliverable, RunErrorCode.EnqueueFailed, RunErrorCode.Abandoned,
+        ];
+
+        /// <summary>The filter a result must pass to be written — see <see cref="IFunctionRunRepository.ApplyResultAsync"/>.</summary>
+        internal static FilterDefinition<FunctionRunEntity> AcceptsResultFilter(string runId, int attempt)
+        {
+            var f = Builders<FunctionRunEntity>.Filter;
+            return f.Eq(r => r.ItemId, runId)
+                & f.Eq(r => r.Attempt, attempt)
+                & (f.In(r => r.Status, AwaitingResultStatuses)
+                   | (f.In(r => r.Status, TerminalStatuses) & f.In(r => r.ErrorCode, PlatformDeterminedErrorCodes)));
+        }
+
+        public async Task<ApplyResultOutcome> ApplyResultAsync(
             string tenantId,
             string runId,
             int attempt,
@@ -214,6 +247,9 @@ namespace Functions.DomainService.Repositories
             bool logsTruncated,
             CancellationToken cancellationToken = default)
         {
+            if (string.IsNullOrWhiteSpace(runId)) return ApplyResultOutcome.NotFound;
+            if (attempt < 1) return ApplyResultOutcome.UnknownAttempt;
+
             var update = Builders<FunctionRunEntity>.Update
                 .Set(r => r.Status, status)
                 .Set(r => r.ErrorCode, errorCode)
@@ -243,9 +279,24 @@ namespace Functions.DomainService.Repositories
                 update = update.Set(r => r.StartedAt, startedAt.Value);
             }
 
+            // One conditional update: the attempt and status are both what is checked and what
+            // is written, so a read-then-write would let two deliveries of the same result both
+            // pass the check and push the attempt twice.
             var writeResult = await Collection(tenantId).UpdateOneAsync(
-                r => r.ItemId == runId, update, cancellationToken: cancellationToken);
-            return writeResult.MatchedCount > 0;
+                AcceptsResultFilter(runId, attempt), update, cancellationToken: cancellationToken);
+            if (writeResult.ModifiedCount > 0) return ApplyResultOutcome.Applied;
+
+            // Refused. Only now read the record — on the miss path alone — to say why, which the
+            // consumer needs to tell a harmless redelivery from a result that should never exist.
+            var current = await Collection(tenantId)
+                .Find(r => r.ItemId == runId)
+                .Project(r => new { r.Attempt })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (current is null) return ApplyResultOutcome.NotFound;
+            if (attempt < current.Attempt) return ApplyResultOutcome.StaleAttempt;
+            if (attempt > current.Attempt) return ApplyResultOutcome.UnknownAttempt;
+            return ApplyResultOutcome.Duplicate;
         }
 
         public async Task<bool> ResetForRetryAsync(
@@ -265,12 +316,20 @@ namespace Functions.DomainService.Repositories
                 .Set(r => r.StartedAt, (DateTime?)null)
                 .Set(r => r.CompletedAt, (DateTime?)null)
                 .Set(r => r.LogsTruncated, false)
+                .Set(r => r.OutputResults, new List<Models.OutputActionResult>())
                 .Set(r => r.IdempotencyKey, $"{runId}-{attempt}")
                 .Set(r => r.LastUpdatedDate, DateTime.UtcNow);
 
+            // Only from the attempt before, and only once that attempt has finished: two Worker
+            // instances racing the same due entry, or a stale entry, then advance it at most once.
+            var f = Builders<FunctionRunEntity>.Filter;
+            var filter = f.Eq(r => r.ItemId, runId)
+                & f.Eq(r => r.Attempt, attempt - 1)
+                & f.In(r => r.Status, TerminalStatuses);
+
             var result = await Collection(tenantId).UpdateOneAsync(
-                r => r.ItemId == runId, update, cancellationToken: cancellationToken);
-            return result.MatchedCount > 0;
+                filter, update, cancellationToken: cancellationToken);
+            return result.ModifiedCount > 0;
         }
 
         /// <summary>
@@ -325,17 +384,88 @@ namespace Functions.DomainService.Repositories
             return Collection(tenantId).UpdateOneAsync(r => r.ItemId == runId, update, cancellationToken: cancellationToken);
         }
 
-        public Task ApplyOutputResultAsync(
-            string tenantId, string runId, IReadOnlyList<Models.OutputActionResult> results,
+        public async Task<bool> TryBeginOutputProcessingAsync(
+            string tenantId, string runId, int attempt, CancellationToken cancellationToken = default)
+        {
+            var f = Builders<FunctionRunEntity>.Filter;
+            var filter = f.Eq(r => r.ItemId, runId)
+                & f.Eq(r => r.Attempt, attempt)
+                & f.Eq(r => r.Status, RunStatus.Succeeded)
+                & f.Size(r => r.OutputResults, 0);
+
+            var update = Builders<FunctionRunEntity>.Update
+                .Set(r => r.Status, RunStatus.OutputProcessing)
+                .Set(r => r.LastUpdatedDate, DateTime.UtcNow);
+
+            var result = await Collection(tenantId).UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
+            return result.ModifiedCount > 0;
+        }
+
+        public async Task<bool> ApplyOutputResultAsync(
+            string tenantId, string runId, int attempt, IReadOnlyList<Models.OutputActionResult> results,
             RunStatus finalStatus, string? errorMessage, CancellationToken cancellationToken = default)
         {
+            var f = Builders<FunctionRunEntity>.Filter;
+            var filter = f.Eq(r => r.ItemId, runId)
+                & f.Eq(r => r.Attempt, attempt)
+                & f.Eq(r => r.Status, RunStatus.OutputProcessing);
+
             var update = Builders<FunctionRunEntity>.Update
                 .Set(r => r.OutputResults, results.ToList())
                 .Set(r => r.Status, finalStatus)
                 .Set(r => r.ErrorCode, finalStatus == RunStatus.OutputFailed ? RunErrorCode.OutputActionFailed : RunErrorCode.None)
                 .Set(r => r.ErrorMessage, errorMessage)
                 .Set(r => r.LastUpdatedDate, DateTime.UtcNow);
-            return Collection(tenantId).UpdateOneAsync(r => r.ItemId == runId, update, cancellationToken: cancellationToken);
+
+            var result = await Collection(tenantId).UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
+            return result.ModifiedCount > 0;
+        }
+
+        public async Task<IReadOnlyList<FunctionRunEntity>> FindStaleCandidatesAsync(
+            string tenantId, IReadOnlyCollection<RunStatus> statuses, DateTime updatedBefore,
+            DateTime? updatedNotBefore, int limit, CancellationToken cancellationToken = default)
+        {
+            if (statuses.Count == 0 || limit <= 0) return [];
+
+            var f = Builders<FunctionRunEntity>.Filter;
+            var filter = f.In(r => r.Status, statuses) & f.Lt(r => r.LastUpdatedDate, updatedBefore);
+            if (updatedNotBefore.HasValue)
+            {
+                filter &= f.Gte(r => r.LastUpdatedDate, updatedNotBefore.Value);
+            }
+
+            return await Collection(tenantId).Find(filter)
+                .Project<FunctionRunEntity>(Builders<FunctionRunEntity>.Projection
+                    .Exclude(r => r.Input)
+                    .Exclude(r => r.Result))
+                .SortBy(r => r.LastUpdatedDate)
+                .Limit(limit)
+                .ToListAsync(cancellationToken);
+        }
+
+        public async Task<bool> CloseStaleAsync(
+            string tenantId, string runId, RunStatus expectedStatus, int expectedAttempt, DateTime expectedLastUpdated,
+            RunStatus newStatus, RunErrorCode errorCode, string errorMessage, DateTime completedAt,
+            CancellationToken cancellationToken = default)
+        {
+            // A compare-and-set on everything the sweeper read. LastUpdatedDate is part of it
+            // because status and attempt alone cannot see a run that was reset for a retry and
+            // re-queued at the same attempt number in between — the date moves on every write.
+            var f = Builders<FunctionRunEntity>.Filter;
+            var filter = f.Eq(r => r.ItemId, runId)
+                & f.Eq(r => r.Status, expectedStatus)
+                & f.Eq(r => r.Attempt, expectedAttempt)
+                & f.Eq(r => r.LastUpdatedDate, expectedLastUpdated);
+
+            var update = Builders<FunctionRunEntity>.Update
+                .Set(r => r.Status, newStatus)
+                .Set(r => r.ErrorCode, errorCode)
+                .Set(r => r.ErrorMessage, errorMessage)
+                .Set(r => r.CompletedAt, completedAt)
+                .Set(r => r.LastUpdatedDate, DateTime.UtcNow);
+
+            var result = await Collection(tenantId).UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
+            return result.ModifiedCount > 0;
         }
     }
 }

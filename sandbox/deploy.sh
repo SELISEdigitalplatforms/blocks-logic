@@ -275,6 +275,12 @@ ok "runner id: $(env_val RUNNER__RunnerId)"
   || warn "BLOCKS_IAM_BASE_URL is unset — Genesis validates delegated access at startup, and a host without it fails in a way that reads like something else"
 
 
+# Secret-bound variables are resolved on this host at run start, through the same value store the
+# control plane writes to. Without a vault URL the secrets SDK falls back to its Database store,
+# which holds none of those values — the runner starts fine and every secret-bound run fails.
+[ -n "$(env_val KeyVault__KeyVaultUrl)" ] || [ "$(env_val Secrets__ValueStore)" = "Database" ] \
+  || warn "KeyVault__KeyVaultUrl is unset — runs whose variables are bound to secrets will fail as SECRET_UNRESOLVED"
+
 # A base image that is not digest-pinned is not an error — a shared-registry host may legitimately
 # track a tag — but it is worth saying out loud, because it is the difference between a tenant
 # image built today and one built last month being FROM the same thing.

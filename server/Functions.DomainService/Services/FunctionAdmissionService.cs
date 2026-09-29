@@ -3,6 +3,7 @@ using Blocks.Genesis;
 using Functions.DomainService.Entities;
 using Functions.DomainService.Models;
 using Functions.DomainService.Queue;
+using Functions.DomainService.Utils;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -17,10 +18,10 @@ namespace Functions.DomainService.Services
         /// <summary>The input exceeded the 1 MB ceiling.</summary>
         InputTooLarge = 1,
 
-        /// <summary>Requests-per-minute exceeded. Only reachable with rate limiting switched on.</summary>
+        /// <summary>Requests-per-minute exceeded. Only reachable with rate limiting switched on; thrown as <see cref="Utils.FunctionRateLimitedException"/>, never returned.</summary>
         RateLimited = 2,
 
-        /// <summary>Requests-per-day exceeded. Only reachable with rate limiting switched on.</summary>
+        /// <summary>Requests-per-day exceeded (per function). Only reachable with rate limiting switched on; thrown, never returned.</summary>
         QuotaExceeded = 3,
     }
 
@@ -35,6 +36,15 @@ namespace Functions.DomainService.Services
     /// <summary>Decides whether an invocation may create a run.</summary>
     public interface IFunctionAdmissionService
     {
+        /// <summary>
+        /// Returns the verdict for a request that is <i>not</i> a volume refusal (admitted, or
+        /// input too large). A volume refusal — <see cref="AdmissionOutcome.RateLimited"/> or
+        /// <see cref="AdmissionOutcome.QuotaExceeded"/> — is thrown as
+        /// <see cref="FunctionRateLimitedException"/> instead, carrying the Retry-After, so it
+        /// reaches every entry point (HTTP, Test, Replay, workflow) as a 429-shaped error rather
+        /// than being rewrapped by the caller as a 400 validation failure.
+        /// </summary>
+        /// <exception cref="FunctionRateLimitedException">A per-minute or per-day limit refused the call.</exception>
         Task<AdmissionResult> AdmitAsync(FunctionEntity function, string tenantId, string? inputJson, CancellationToken cancellationToken = default);
     }
 
@@ -65,14 +75,26 @@ namespace Functions.DomainService.Services
         private readonly ICacheClient _cache;
         private readonly ILogger<FunctionAdmissionService> _logger;
         private readonly bool _rateLimitsEnabled;
+        private readonly Func<DateTime> _clock;
 
         public FunctionAdmissionService(
             ICacheClient cache,
             IConfiguration configuration,
             ILogger<FunctionAdmissionService> logger)
+            : this(cache, configuration, logger, () => DateTime.UtcNow)
+        {
+        }
+
+        /// <summary>Test seam: a fixed UTC clock, so window keys and Retry-After are assertable.</summary>
+        internal FunctionAdmissionService(
+            ICacheClient cache,
+            IConfiguration configuration,
+            ILogger<FunctionAdmissionService> logger,
+            Func<DateTime> clock)
         {
             _cache = cache;
             _logger = logger;
+            _clock = clock;
             _rateLimitsEnabled = configuration.GetValue("Functions:RateLimits:Enabled", false);
 
             if (_rateLimitsEnabled)
@@ -107,39 +129,63 @@ namespace Functions.DomainService.Services
 
             var limits = function.Limits ?? new FunctionLimits();
 
+            // One clock reading for both the window key and its Retry-After, so a request that
+            // lands on a minute boundary cannot be counted in one window and told to wait for
+            // the end of the next.
+            var now = _clock();
+
             if (limits.RequestsPerMinute is > 0)
             {
                 var refused = await ExceedsAsync(
-                    FunctionQueueKeys.RateMinute(function.ItemId, DateTime.UtcNow),
+                    FunctionQueueKeys.RateMinute(function.ItemId, now),
                     limits.RequestsPerMinute.Value,
                     TimeSpan.FromMinutes(2));
 
                 if (refused)
                 {
-                    return new AdmissionResult(
-                        AdmissionOutcome.RateLimited,
-                        $"this function allows {limits.RequestsPerMinute} requests per minute",
-                        RetryAfterSeconds: 60 - DateTime.UtcNow.Second);
+                    throw Refusal(
+                        new AdmissionResult(
+                            AdmissionOutcome.RateLimited,
+                            $"this function allows {limits.RequestsPerMinute} requests per minute",
+                            RetryAfterSeconds: SecondsUntil(now, now.Date.AddHours(now.Hour).AddMinutes(now.Minute + 1))),
+                        function);
                 }
             }
 
             if (limits.RequestsPerDay is > 0)
             {
+                // Per function per day, like the per-minute window. The limit is a per-function
+                // setting, so a per-tenant counter would have let one function's traffic spend
+                // another's allowance (and the smallest limit in the tenant win for everyone).
                 var refused = await ExceedsAsync(
-                    FunctionQueueKeys.QuotaDay(tenantId, DateTime.UtcNow),
+                    FunctionQueueKeys.QuotaDay(tenantId, function.ItemId, now),
                     limits.RequestsPerDay.Value,
                     TimeSpan.FromDays(2));
 
                 if (refused)
                 {
-                    return new AdmissionResult(
-                        AdmissionOutcome.QuotaExceeded,
-                        $"this tenant allows {limits.RequestsPerDay} function requests per day");
+                    throw Refusal(
+                        new AdmissionResult(
+                            AdmissionOutcome.QuotaExceeded,
+                            $"this function allows {limits.RequestsPerDay} requests per day",
+                            RetryAfterSeconds: SecondsUntil(now, now.Date.AddDays(1))),
+                        function);
                 }
             }
 
             return AdmissionResult.Admit();
         }
+
+        private FunctionRateLimitedException Refusal(AdmissionResult result, FunctionEntity function)
+        {
+            _logger.LogInformation(
+                "Refusing an invocation of {FunctionId}: {Outcome}, retry after {RetryAfter}s",
+                function.ItemId, result.Outcome, result.RetryAfterSeconds);
+            return new FunctionRateLimitedException(result.Message!, result.RetryAfterSeconds ?? 1);
+        }
+
+        private static int SecondsUntil(DateTime now, DateTime rollover) =>
+            Math.Max(1, (int)Math.Ceiling((rollover - now).TotalSeconds));
 
         /// <summary>
         /// Increments a window counter and reports whether it has gone past the limit. The TTL

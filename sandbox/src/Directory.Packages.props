@@ -1,6 +1,6 @@
 <Project>
   <!-- Central package versions for the runner. Every package shared with server/ is pinned to
-       the same version server/Directory.Packages.props pins (Genesis 4.1.5, xunit 2.9.3,
+       the same version server/Directory.Packages.props pins (Genesis 4.2.2, Secrets 4.0.3, xunit 2.9.3,
        FluentAssertions 8.8.0, Microsoft.NET.Test.Sdk 18.0.1, xunit.runner.visualstudio 3.1.4), so
        the two files agree wherever they overlap and a shared package can be bumped in both
        without thought. Keep it that way: a shared version changed here is changed there too.
@@ -19,11 +19,16 @@
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="SeliseBlocks.Genesis.OS" Version="4.1.5" />
+    <PackageVersion Include="SeliseBlocks.Genesis.OS" Version="4.2.2" />
+    <!-- The runner resolves a run's {{secret.<id>}} references itself, right before the sandbox
+         starts (Runs/BlocksSecretsRunResolver.cs), so the plaintext never enters the queue.
+         Same version as server/Directory.Packages.props; it depends on Genesis 4.2.2, which is
+         why Genesis moved with it. -->
+    <PackageVersion Include="SeliseBlocks.Secrets.OS" Version="4.0.3" />
     <PackageVersion Include="Docker.DotNet" Version="3.125.15" />
     <!-- Tar packing for the Engine's build API, which takes the context as a tar stream. -->
     <PackageVersion Include="SharpZipLib" Version="1.4.2" />
-    <!-- Must not be below what Genesis 4.1.5 was compiled against (>= 2.12.14).
+    <!-- Must not be below what Genesis 4.2.2 was compiled against (>= 2.12.14).
          Central transitive pinning would otherwise downgrade it silently and Genesis
          would fail at runtime rather than at build time. -->
     <PackageVersion Include="StackExchange.Redis" Version="2.12.14" />

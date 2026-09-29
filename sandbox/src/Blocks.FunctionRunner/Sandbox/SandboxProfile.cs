@@ -196,6 +196,35 @@ namespace Blocks.FunctionRunner.Sandbox
                 if (!bind.EndsWith(":ro", StringComparison.Ordinal))
                     return $"bind '{bind}' is not read-only";
             }
+            if (!string.Equals(host.IpcMode, "private", StringComparison.Ordinal))
+                return $"IPC mode is '{host.IpcMode}', expected 'private'";
+
+            return ValidateTmpfs(host.Tmpfs, limits.TmpfsBytes);
+        }
+
+        /// <summary>
+        /// The only writable path must be exactly one tmpfs at /tmp that nothing can be executed
+        /// from, at the run's size. Checked option by option rather than as a string, and with
+        /// the last occurrence of each flag winning, because that is how mount(8) reads them:
+        /// <c>noexec,exec</c> is an executable mount.
+        /// </summary>
+        private static string? ValidateTmpfs(IDictionary<string, string>? tmpfs, long expectedBytes)
+        {
+            if (tmpfs is null || tmpfs.Count != 1 || !tmpfs.TryGetValue("/tmp", out var raw))
+                return $"expected exactly one tmpfs at /tmp, found {(tmpfs is null ? "none" : string.Join(",", tmpfs.Keys))}";
+
+            var options = (raw ?? string.Empty).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+            foreach (var (on, off) in new[] { ("noexec", "exec"), ("nosuid", "suid"), ("nodev", "dev") })
+            {
+                var last = Array.FindLastIndex(options, o => o == on || o == off);
+                if (last < 0 || options[last] != on)
+                    return $"the /tmp tmpfs is not {on} ('{raw}')";
+            }
+
+            var size = Array.FindLast(options, o => o.StartsWith("size=", StringComparison.Ordinal));
+            if (!string.Equals(size, $"size={expectedBytes}", StringComparison.Ordinal))
+                return $"the /tmp tmpfs size is '{size}', expected size={expectedBytes}";
 
             return null;
         }

@@ -5,6 +5,8 @@ using Blocks.FunctionRunner.Maintenance;
 using Blocks.FunctionRunner.Options;
 using Blocks.FunctionRunner.Runs;
 using Blocks.FunctionRunner.Sandbox;
+using Blocks.FunctionRunner.SecretStore;
+using Blocks.Secrets;
 using Docker.DotNet;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -66,6 +68,13 @@ namespace Blocks.FunctionRunner.Utils
             // A build's dependency install is a sandbox too — the same gVisor boundary a run
             // gets, because `docker build` cannot be given one.
             services.AddSingleton<IDependencyInstaller, DependencyInstaller>();
+            // Secret references in a run's env are resolved here, on the runner, right before the
+            // sandbox starts — so the queue only ever carries {{secret.<id>}} references. The
+            // store is the same SeliseBlocks.Secrets.OS domain the control plane uses: metadata on
+            // the tenant's own Mongo connection (via ITenants), values in Key Vault when
+            // KeyVault__KeyVaultUrl is set. Registration touches neither; the first lookup does.
+            services.AddBlocksSecrets();
+            services.AddSingleton<IRunSecretResolver, BlocksSecretsRunResolver>();
             services.AddSingleton<RunProcessor>();
             services.AddSingleton<BuildProcessor>();
 

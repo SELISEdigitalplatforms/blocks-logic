@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Blocks.Genesis;
 using Workflow.DomainService.Dtos;
@@ -217,7 +218,7 @@ namespace Utilities.Api.Controllers
                     input
                 );
 
-                return Ok(response);
+                return WebhookResult(response);
             }
             catch (UnauthorizedAccessException)
             {
@@ -243,7 +244,7 @@ namespace Utilities.Api.Controllers
                     input
                 );
 
-                return Ok(response);
+                return WebhookResult(response);
             }
             catch (UnauthorizedAccessException)
             {
@@ -275,7 +276,7 @@ namespace Utilities.Api.Controllers
                     input
                 );
 
-                return Ok(response);
+                return WebhookResult(response);
             }
             catch (UnauthorizedAccessException)
             {
@@ -306,12 +307,27 @@ namespace Utilities.Api.Controllers
                     input
                 );
 
-                return Ok(response);
+                return WebhookResult(response);
             }
             catch (UnauthorizedAccessException)
             {
                 return StatusCode(401, new { message = "Unauthorized" });
             }
+        }
+
+        /// <summary>
+        /// Maps a webhook run to its HTTP answer. A waiting run whose execution failed (a node errored and
+        /// the workflow stopped there) is a 500 carrying <c>{ executionId, status: "Failed", error: { nodeId,
+        /// nodeName, message } }</c>; everything else keeps the 200 it always had.
+        /// </summary>
+        private IActionResult WebhookResult(WorkflowWebhookResponseDto? response)
+        {
+            if (response != null && response.Status == WorkflowWebhookResponseDto.FailedStatus)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, response);
+            }
+
+            return Ok(response);
         }
 
         /// <summary><c>POST</c> — executes a single node in isolation and returns its output, for the node inspector.</summary>

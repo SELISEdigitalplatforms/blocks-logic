@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { useProjectStore, useScopedPath } from "@seliseblocks/genesis-os";
 import { parseAsInteger, parseAsString, useQueryStates } from "nuqs";
@@ -35,6 +35,7 @@ import { CodeEditor, type CodeEditorActions } from "../../components/code-editor
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
 import { SandboxHelpCard } from "../../components/sandbox-help-card";
 import { EnvironmentCard } from "../../components/environment-card";
+import { ConnectionsCard } from "../../components/connections-card";
 import { TestPanel } from "../../components/test-panel";
 import { LimitsForm } from "../../components/limits-form";
 import { RetryForm } from "../../components/retry-form";
@@ -51,7 +52,9 @@ import { VersionsTable } from "../../components/versions-table";
 import { DeleteFunctionDialog } from "../../components/delete-function-dialog";
 import { buildInvokeUrl } from "../../components/endpoint-badge";
 import { ProxyMethodBadge } from "@/modules/proxy/components/proxy-method-badge";
+import { getProxyPublicHost } from "@/modules/proxy/constants/proxy.constant";
 import { toHttpVerb } from "../../constants/endpoint.constant";
+import { checkSetup } from "../../utils/connections";
 
 const RUNS_PAGE_SIZE = 20;
 
@@ -81,6 +84,14 @@ const rangeStart = (range: string, now: number): string => {
  * why the reserve only has to account for what sits above the card and never for its insides.
  */
 const CODE_CARD_HEIGHT = "max(400px, calc(100dvh - 264px))";
+
+/** The cards beside the editor, one at a time so none of them sits below the fold. */
+const SIDE_PANELS = [
+  { value: "test", label: "Test" },
+  { value: "environment", label: "Environment" },
+  { value: "connections", label: "Connections" },
+] as const;
+type SidePanel = (typeof SIDE_PANELS)[number]["value"];
 
 /**
  * One editor tool. Icon-only to fit the file-tab row, so the accessible name and the tooltip
@@ -155,6 +166,7 @@ export const FunctionDetailPage = () => {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [renameDraft, setRenameDraft] = useState<string | null>(null);
   const [isEndpointCopied, setIsEndpointCopied] = useState(false);
+  const [sidePanel, setSidePanel] = useState<SidePanel>("test");
   const renameInputRef = useRef<HTMLInputElement>(null);
   const isRenameSubmitting = useRef(false);
 
@@ -183,6 +195,16 @@ export const FunctionDetailPage = () => {
   const outputActions = useFunctionEditorStore((s) => s.outputActions);
   const setOutputActions = useFunctionEditorStore((s) => s.setOutputActions);
   const variables = useFunctionEditorStore((s) => s.variables);
+  // What the Connections panel warns about, so its tab can flag it while another panel is open.
+  const setupIssueCount = useMemo(() => {
+    const setup = checkSetup(indexJs, packageJson, variables);
+    return (
+      Number(!setup.manifestValid) +
+      setup.missingPackages.length +
+      Number(setup.missingVariables.length > 0) +
+      Number(setup.emptyVariables.length > 0)
+    );
+  }, [indexJs, packageJson, variables]);
   const requestTestRun = useFunctionEditorStore((s) => s.requestTestRun);
   const setTestInput = useFunctionEditorStore((s) => s.setTestInput);
   const setVariables = useFunctionEditorStore((s) => s.setVariables);
@@ -560,19 +582,66 @@ export const FunctionDetailPage = () => {
               </p>
             </Card>
 
-            <div className="flex min-w-0 flex-col gap-3">
-              <TestPanel
-                functionId={functionId}
-                lastRunId={runsData?.data?.[0]?.id}
-                onOpenRun={(runId) => setQueryParams({ tab: "runs", runId })}
-                onBeforeRun={isDirty ? save : undefined}
-              />
-              <EnvironmentCard
-                variables={variables}
-                onEditVariables={() => setQueryParams({ tab: "configuration" })}
-              />
-              <SandboxHelpCard limits={limits} />
-            </div>
+            {/* Same height as the editor on wide screens, scrolling inside, so switching panels
+                never moves the page. Panels stay mounted (`forceMount`) so a half-typed test input
+                survives a look at Connections. */}
+            <Tabs
+              value={sidePanel}
+              onValueChange={(value) => setSidePanel(value as SidePanel)}
+              className="flex min-w-0 flex-col gap-3 xl:h-[max(400px,calc(100dvh_-_264px))]"
+            >
+              <TabsList className="grid h-10 w-full shrink-0 grid-cols-3">
+                {SIDE_PANELS.map((panel) => (
+                  <TabsTrigger key={panel.value} value={panel.value} className="gap-1.5 text-xs">
+                    {panel.label}
+                    {panel.value === "connections" && setupIssueCount > 0 && (
+                      <span
+                        className="h-1.5 w-1.5 rounded-full bg-warning-700"
+                        aria-label={`${setupIssueCount} setup ${setupIssueCount === 1 ? "issue" : "issues"}`}
+                      />
+                    )}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+              <TabsContent
+                value="test"
+                forceMount
+                className="mt-0 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto"
+              >
+                <TestPanel
+                  functionId={functionId}
+                  lastRunId={runsData?.data?.[0]?.id}
+                  onOpenRun={(runId) => setQueryParams({ tab: "runs", runId })}
+                  onBeforeRun={isDirty ? save : undefined}
+                />
+              </TabsContent>
+              <TabsContent
+                value="environment"
+                forceMount
+                className="mt-0 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto"
+              >
+                <EnvironmentCard
+                  variables={variables}
+                  onEditVariables={() => setQueryParams({ tab: "configuration" })}
+                />
+                <SandboxHelpCard limits={limits} />
+              </TabsContent>
+              <TabsContent
+                value="connections"
+                forceMount
+                className="mt-0 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto"
+              >
+                <ConnectionsCard
+                  indexJs={indexJs}
+                  packageJson={packageJson}
+                  variables={variables}
+                  onPackageJsonChange={setPackageJson}
+                  onVariablesChange={setVariables}
+                  onEditVariables={() => setQueryParams({ tab: "configuration" })}
+                  blocksApiHost={getProxyPublicHost(selectedProject)}
+                />
+              </TabsContent>
+            </Tabs>
           </TabsContent>
 
           {/* Full width with the supporting cards in columns, like proxy-details' overview. */}

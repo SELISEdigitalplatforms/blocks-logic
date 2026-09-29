@@ -48,10 +48,13 @@ namespace BlocksTemplate.Api.Controllers
         private readonly IFunctionBuildService _buildService;
         private readonly IFunctionAuditService _auditService;
         private readonly IEndpointAccessAuthorizer _accessAuthorizer;
+        private readonly IFunctionPollTokenService _pollTokens;
+        private readonly ILogger<FunctionsController> _logger;
 
         /// <summary>
         /// The management services, plus the shared access authorizer that resolves the tenant on
-        /// the anonymous <see cref="Invoke"/> route — the same one the proxy gateway uses.
+        /// the anonymous <see cref="Invoke"/> route — the same one the proxy gateway uses — and the
+        /// poll-token service behind the anonymous <see cref="PollRunResult"/>.
         /// </summary>
         public FunctionsController(
             IFunctionService functionService,
@@ -60,7 +63,9 @@ namespace BlocksTemplate.Api.Controllers
             IFunctionRunService runService,
             IFunctionBuildService buildService,
             IFunctionAuditService auditService,
-            IEndpointAccessAuthorizer accessAuthorizer)
+            IEndpointAccessAuthorizer accessAuthorizer,
+            IFunctionPollTokenService pollTokens,
+            ILogger<FunctionsController> logger)
         {
             _functionService = functionService;
             _deploymentService = deploymentService;
@@ -69,6 +74,8 @@ namespace BlocksTemplate.Api.Controllers
             _buildService = buildService;
             _auditService = auditService;
             _accessAuthorizer = accessAuthorizer;
+            _pollTokens = pollTokens;
+            _logger = logger;
         }
 
         // --------------------------------------------------------------- functions ----
@@ -120,8 +127,8 @@ namespace BlocksTemplate.Api.Controllers
 
         [HttpPost]
         [ProtectedEndPoint("blocks-logic::function::manage")]
-        public async Task<InvokeResultDto> Test([FromBody] TestFunctionRequestDto request)
-            => await _invocationService.TestAsync(GetTenantId(), request.FunctionId, request);
+        public async Task<ActionResult<InvokeResultDto>> Test([FromBody] TestFunctionRequestDto request)
+            => await MapInvokeRefusalsAsync(() => _invocationService.TestAsync(GetTenantId(), request.FunctionId, request));
 
         [HttpPost]
         [ProtectedEndPoint("blocks-logic::function::manage")]
@@ -181,8 +188,36 @@ namespace BlocksTemplate.Api.Controllers
 
         [HttpPost]
         [ProtectedEndPoint("blocks-logic::function::manage")]
-        public async Task<InvokeResultDto> ReplayRun([FromBody] RunIdRequestDto request)
-            => await _runService.ReplayAsync(GetTenantId(), request.RunId, GetUserId(), GetEmail());
+        public async Task<ActionResult<InvokeResultDto>> ReplayRun([FromBody] RunIdRequestDto request)
+            => await MapInvokeRefusalsAsync(() => _runService.ReplayAsync(GetTenantId(), request.RunId, GetUserId(), GetEmail()));
+
+        /// <summary>
+        /// The two refusals a Studio-side invocation (Test, Replay) can hit that are the caller's
+        /// to act on, answered as such instead of escaping as a 500: a credential-shaped key the
+        /// control plane refused to put in an envelope (400), the function's own rate limit
+        /// (429 with <c>Retry-After</c>), and a run queue that refused the run (503 with <c>Retry-After</c>). Everything else keeps the pipeline's existing handling.
+        /// </summary>
+        private async Task<ActionResult<InvokeResultDto>> MapInvokeRefusalsAsync(Func<Task<InvokeResultDto>> invoke)
+        {
+            try
+            {
+                return await invoke();
+            }
+            catch (FunctionEnvelopeBuilder.ForbiddenContentException ex)
+            {
+                return StatusCode(400, new { code = "FUNCTION_FORBIDDEN_CONTENT", message = ex.Message });
+            }
+            catch (FunctionRateLimitedException ex)
+            {
+                Response.Headers.RetryAfter = ex.RetryAfterSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                return StatusCode(429, new { code = "FUNCTION_RATE_LIMITED", message = ex.Message });
+            }
+            catch (FunctionUnavailableException ex)
+            {
+                Response.Headers.RetryAfter = ex.RetryAfterSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                return StatusCode(503, new { code = "FUNCTION_UNAVAILABLE", message = ex.Message, runId = ex.RunId });
+            }
+        }
 
         [HttpPost]
         [ProtectedEndPoint("blocks-logic::function::manage")]
@@ -258,9 +293,11 @@ namespace BlocksTemplate.Api.Controllers
         /// validates but the rules refuse it (or HTTP is switched off), 404 for an unknown or
         /// undeployed function — but only to a caller who could have reached it, so 401 comes
         /// first — 405 with an <c>Allow</c> header for the method the trigger does not take, 413
-        /// over the body ceiling, 400 for input the sandbox cannot be given. 202 with a
-        /// run id is the fire-and-forget shape; 200 carries the result once <c>?wait=true</c> saw a
-        /// terminal outcome.
+        /// over the body ceiling, 400 for input the sandbox cannot be given, 429 with
+        /// <c>Retry-After</c> when the function's own rate limit refuses the call (only with
+        /// <c>Functions:RateLimits:Enabled</c>). 202 with a run id and a <c>pollToken</c> is the
+        /// fire-and-forget shape (see <see cref="PollRunResult"/>); 200 carries the result once
+        /// <c>?wait=true</c> saw a terminal outcome.
         /// </para>
         /// </summary>
         [AllowAnonymous]
@@ -301,11 +338,32 @@ namespace BlocksTemplate.Api.Controllers
             {
                 var result = await _invocationService.InvokeHttpAsync(tenantId, functionId, request, aborted);
 
-                // 202 for the fire-and-forget shape (queued, or still running after Wait's
-                // window lapsed); 200 once a terminal outcome is known.
-                return FunctionQueueKeys.Wire.Queued == result.Status || FunctionQueueKeys.Wire.Running == result.Status
-                    ? Accepted(result)
-                    : Ok(result);
+                // 202 for any run not yet finished — queued, or claimed/starting/running/processing
+                // outputs when Wait's window lapsed; 200 once a terminal outcome is known. Only a
+                // recognised run status counts as in flight: a build status (BuildId set) keeps
+                // its existing 200 shape.
+                var runStatus = FunctionWireMapping.ToRunStatus(result.Status, out var isRunStatus);
+                if (!isRunStatus || FunctionWireMapping.IsTerminal(runStatus))
+                {
+                    return Ok(result);
+                }
+
+                // Not finished: the caller gets a poll token, because a caller of a Public
+                // function has no Blocks identity to read the run with (see PollRunResult).
+                result.PollToken = await TryIssuePollTokenAsync(tenantId, result.RunId, aborted);
+                return Accepted(result);
+            }
+            catch (FunctionRateLimitedException ex)
+            {
+                Response.Headers.RetryAfter = ex.RetryAfterSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                return InvokeError(429, "RATE_LIMITED", ex.Message, instance);
+            }
+            catch (FunctionUnavailableException ex)
+            {
+                // The run queue refused; nothing ran and the run record (if any) is closed as
+                // EnqueueFailed. The same request is expected to work shortly.
+                Response.Headers.RetryAfter = ex.RetryAfterSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                return InvokeError(503, "UNAVAILABLE", ex.Message, instance);
             }
             catch (FunctionAuthorizationException ex)
             {
@@ -395,15 +453,97 @@ namespace BlocksTemplate.Api.Controllers
             StatusCode(statusCode, new { code = "FUNCTION_INVOKE_" + outcome, message, instance });
 
         /// <summary>
-        /// The poll half of Fire/Poll: <c>GET /api/fn/runs/{runId}</c>, for a caller that took a
-        /// 202 from <see cref="Invoke"/>. Distinct from <see cref="GetRun"/> — same service call,
-        /// but a path parameter on the public route and a signed-in Blocks user rather than a
-        /// permission-gated Studio request.
+        /// Mints the 202's poll token. A failure here (Redis unavailable) must not fail the call:
+        /// the run is already queued, and a 5xx would only invite a retry that queues it twice.
+        /// The caller then gets a 202 without a token — the same as before tokens existed.
         /// </summary>
-        [Authorize]
+        private async Task<string?> TryIssuePollTokenAsync(string tenantId, string runId, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(runId)) return null;
+            try
+            {
+                return await _pollTokens.IssueAsync(tenantId, runId, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Could not issue a poll token for run {RunId}; returning 202 without one", runId);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// The poll half of Fire/Poll for a Blocks user: <c>GET /api/fn/runs/{runId}</c>. The full
+        /// run record — input included — so it takes the same <c>function::read</c> permission as
+        /// <see cref="GetRun"/>, and reads only within the caller's own tenant. A signed-in user
+        /// without that permission polls with the run's token instead (<see cref="PollRunResult"/>).
+        /// </summary>
         [HttpGet("~/api/fn/runs/{runId}")]
+        [ProtectedEndPoint("blocks-logic::function::read")]
         public async Task<RunDetailDto> PollRun(string runId)
             => await _runService.GetAsync(GetTenantId(), runId);
+
+        /// <summary>
+        /// The anonymous poll: <c>GET /api/fn/runs/{runId}/result</c> with the <c>x-poll-token</c>
+        /// header from the 202, and the same <c>x-blocks-key</c> the invoke used. Answers status,
+        /// result and error only — never the input or headers.
+        /// <para>
+        /// The token rides in a header, not the query, so it does not land in access logs. Every
+        /// refusal after the tenant check — missing, malformed, wrong or expired token, a token for
+        /// another tenant's run, a run that no longer exists — is the same 404, so the route says
+        /// nothing about which run ids exist. Anonymous at the framework level for the same reason
+        /// <see cref="Invoke"/> is.
+        /// </para>
+        /// </summary>
+        [AllowAnonymous]
+        [HttpGet("~/api/fn/runs/{runId}/result")]
+        public async Task<IActionResult> PollRunResult(string runId)
+        {
+            var instance = Request.Path.Value ?? $"/api/fn/runs/{runId}/result";
+            var aborted = HttpContext.RequestAborted;
+
+            var tenantId = await _accessAuthorizer.ResolveTenantIdAsync(Request);
+            if (string.IsNullOrEmpty(tenantId))
+            {
+                return InvokeError(401, "UNAUTHORIZED", "Missing or invalid credentials for this tenant.", instance);
+            }
+
+            var token = Request.Headers.TryGetValue(PollTokenHeader, out var values) ? values.ToString() : null;
+            const string notFound = "No run with that id and poll token.";
+
+            // Run ids are GUIDs. Anything else is refused before it becomes a Redis key.
+            if (!Guid.TryParse(runId, out _))
+            {
+                return InvokeError(404, "NOT_FOUND", notFound, instance);
+            }
+
+            bool verified;
+            try
+            {
+                verified = await _pollTokens.VerifyAsync(tenantId, runId, token, aborted);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Could not verify the poll token for run {RunId}", runId);
+                return InvokeError(503, "UNAVAILABLE", "The run status is temporarily unavailable; try again.", instance);
+            }
+
+            if (!verified)
+            {
+                return InvokeError(404, "NOT_FOUND", notFound, instance);
+            }
+
+            try
+            {
+                return Ok(await _runService.GetPollResultAsync(tenantId, runId, aborted));
+            }
+            catch (FunctionNotFoundException)
+            {
+                return InvokeError(404, "NOT_FOUND", notFound, instance);
+            }
+        }
+
+        /// <summary>The request header that carries the 202's poll token.</summary>
+        public const string PollTokenHeader = "x-poll-token";
 
         // ----------------------------------------------------------------- helpers ----
 

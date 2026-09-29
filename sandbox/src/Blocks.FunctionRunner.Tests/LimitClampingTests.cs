@@ -95,6 +95,46 @@ namespace Blocks.FunctionRunner.Tests
             (limits.MaxOldSpaceMb * 1024L * 1024).Should().BeLessThan(limits.MemoryBytes);
         }
 
+        [Theory]
+        [InlineData(1L)]
+        [InlineData(4L * 1024 * 1024)]           // under Docker's own ~6 MB minimum
+        [InlineData((32L * 1024 * 1024) - 1)]
+        public void Memory_below_the_floor_is_raised_to_it_so_the_sandbox_can_start(long requested)
+        {
+            // A few bytes used to clamp "successfully" and then fail at container create.
+            var limits = RunLimits.Clamp(null, requested, null, null, null, null);
+
+            limits.MemoryBytes.Should().Be(Ceilings.MinMemoryBytes);
+            limits.MemorySwapBytes.Should().Be(Ceilings.MinMemoryBytes);
+            limits.MaxOldSpaceMb.Should().BePositive("V8 must still get a heap to start with");
+        }
+
+        [Fact]
+        public void Memory_at_the_floor_is_honoured()
+        {
+            RunLimits.Clamp(null, Ceilings.MinMemoryBytes, null, null, null, null)
+                .MemoryBytes.Should().Be(Ceilings.MinMemoryBytes);
+        }
+
+        [Theory]
+        [InlineData(1)]
+        [InlineData(8)]
+        [InlineData(31)]
+        public void Pids_below_the_floor_are_raised_to_it(int requested)
+        {
+            // Under runsc the limit counts gVisor's own host processes; below the floor the
+            // sandbox is never created at all.
+            RunLimits.Clamp(null, null, requested, null, null, null)
+                .PidLimit.Should().Be(Ceilings.MinPidLimit);
+        }
+
+        [Fact]
+        public void The_floors_sit_below_the_ceilings()
+        {
+            Ceilings.MinMemoryBytes.Should().BeLessThan(Ceilings.MemoryBytes);
+            Ceilings.MinPidLimit.Should().BeLessThanOrEqualTo(Ceilings.PidLimit);
+        }
+
         [Fact]
         public void Concurrency_below_the_floor_is_raised_not_zeroed()
         {

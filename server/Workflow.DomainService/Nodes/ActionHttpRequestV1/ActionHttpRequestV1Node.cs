@@ -48,8 +48,7 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
                     var (url, httpMethod, headers, bodyContent, contentType) = PrepareRequest(parameters, context.InputItems[i], context);
                     if (url == null)
                     {
-                        AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), bodyContent);
-                        continue;
+                        return FailOnItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), bodyContent);
                     }
 
                     await ApplyAuthenticationAsync(parameters, headers, context.TenantId);
@@ -59,7 +58,7 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
                 }
                 catch (Exception ex)
                 {
-                    AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
+                    return FailOnItem(context, outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
                 }
             }
             return NodeExecutionResult.Successful(outputItems);

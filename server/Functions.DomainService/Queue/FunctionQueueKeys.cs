@@ -15,6 +15,18 @@ namespace Functions.DomainService.Queue
         /// <summary>Carried on every message. Bump only with both halves.</summary>
         public const int ProtocolVersion = 1;
 
+        /// <summary>
+        /// Version of a <see cref="RunsStream"/> entry, the one message that has moved on: 2 means
+        /// the envelope's <c>env</c> carries secret-bound variables as <c>{{secret.&lt;id&gt;}}</c>
+        /// references that the runner resolves right before the sandbox starts. A runner that
+        /// predates it only accepts 1 and dead-letters anything else, so this control plane in
+        /// front of an old runner fails runs as <see cref="Enums.RunErrorCode.Undeliverable"/>
+        /// instead of executing a function with reference text where its key should be. Mirrors
+        /// <c>RedisKeys.RunProtocolVersion</c> in the runner. Results and builds stay on
+        /// <see cref="ProtocolVersion"/>.
+        /// </summary>
+        public const int RunProtocolVersion = 2;
+
         // ---- streams ------------------------------------------------------------
         public const string RunsStream = "functions:runs";
         public const string ResultsStream = "functions:results";
@@ -55,8 +67,19 @@ namespace Functions.DomainService.Queue
         public static string RateMinute(string functionId, DateTime utc)
             => $"function:rate:{functionId}:{utc:yyyyMMddHHmm}";
 
-        public static string QuotaDay(string tenantId, DateTime utc)
-            => $"function:quota:{tenantId}:{utc:yyyyMMdd}";
+        /// <summary>
+        /// Hash of the anonymous poll token for one run (<c>tenant</c>, <c>hash</c>), expiring
+        /// with <see cref="RunTtl"/>. The plaintext token is never stored.
+        /// </summary>
+        public static string PollToken(string runId) => $"function:poll:{runId}";
+
+        /// <summary>
+        /// Per function per UTC day — the limit it enforces is the function's own
+        /// <c>RequestsPerDay</c>. The tenant stays in the key so a day's counters for one tenant
+        /// can be found (and cleared) together.
+        /// </summary>
+        public static string QuotaDay(string tenantId, string functionId, DateTime utc)
+            => $"function:quota:{tenantId}:{functionId}:{utc:yyyyMMdd}";
 
         /// <summary>Sorted set of runs awaiting a retry, scored by the epoch second they are due.</summary>
         public const string RetryQueue = "functions:retries";
@@ -74,7 +97,7 @@ namespace Functions.DomainService.Queue
         // Redis holds the payload; Mongo holds the record. If the payload expires before a
         // consumer reaches it, the stream entry survives but there is nothing left to apply, so
         // the run is lost. Everything the payload is actually needed for finishes in minutes —
-        // the sync wait caps at 180 s (Functions:SyncWaitMaxSeconds), a retry's backoff at MaxDelaySeconds (300 s by default),
+        // the sync wait caps at 180 s (Functions:SyncWaitMaxSeconds; 30 s over HTTP, Functions:HttpSyncWaitMaxSeconds), a retry's backoff at MaxDelaySeconds (300 s by default),
         // reclaim triggers at 90 s idle — so the remainder is purely outage headroom.
         // Mirrored in the runner's RedisKeys and in plan/PROTOCOL.md; change all three together.
         public static readonly TimeSpan RunTtl = TimeSpan.FromHours(6);
@@ -117,6 +140,8 @@ namespace Functions.DomainService.Queue
             public const string ImagePullFailed = "IMAGE_PULL_FAILED";
             public const string TimedOutCode = "TIMED_OUT";
             public const string SandboxStartFailed = "SANDBOX_START_FAILED";
+            public const string SecretUnresolved = "SECRET_UNRESOLVED";
+            public const string SecretStoreUnavailable = "SECRET_STORE_UNAVAILABLE";
 
             /// <summary>
             /// Not sent by the runner — determined here, by

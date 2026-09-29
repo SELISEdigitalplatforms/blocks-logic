@@ -85,5 +85,20 @@ namespace Blocks.FunctionRunner.Contracts
 
         /// <summary>The sandbox could not be created — the host, not the tenant, is at fault.</summary>
         public const string SandboxStartFailed = "SANDBOX_START_FAILED";
+
+        /// <summary>
+        /// A variable references a secret that does not exist, is locked or deleted, has no
+        /// value, or cannot be read in this run's context. The sandbox was never started. Not
+        /// retryable: the same reference fails the same way until the author fixes it. The
+        /// message names the variable key and the secret id, never a value.
+        /// </summary>
+        public const string SecretUnresolved = "SECRET_UNRESOLVED";
+
+        /// <summary>
+        /// The secret store could not be reached (Key Vault, the tenant registry or the tenant's
+        /// database failed, or timed out) while resolving the run's references. The sandbox was
+        /// never started and nothing ran, so the control plane retries it.
+        /// </summary>
+        public const string SecretStoreUnavailable = "SECRET_STORE_UNAVAILABLE";
     }
 }

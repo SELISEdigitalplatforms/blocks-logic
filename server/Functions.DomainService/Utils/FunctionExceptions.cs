@@ -34,4 +34,16 @@ namespace Functions.DomainService.Utils
 
     /// <summary>The request body is over the sandbox input ceiling. Maps to 413.</summary>
     public class FunctionRequestTooLargeException(string message) : Exception(message);
+
+    /// <summary>
+    /// The function's own requests-per-minute or requests-per-day limit refused the call (only
+    /// reachable with <c>Functions:RateLimits:Enabled</c>). Maps to 429, with
+    /// <see cref="RetryAfterSeconds"/> as the <c>Retry-After</c> header — the seconds until the
+    /// window that refused it rolls over. Deliberately not a <see cref="FunctionValidationException"/>:
+    /// the request was valid, and a client that sees 400 does not retry.
+    /// </summary>
+    public class FunctionRateLimitedException(string message, int retryAfterSeconds) : Exception(message)
+    {
+        public int RetryAfterSeconds { get; } = Math.Max(1, retryAfterSeconds);
+    }
 }

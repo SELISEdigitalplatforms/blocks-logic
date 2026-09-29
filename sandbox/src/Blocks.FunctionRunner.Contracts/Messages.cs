@@ -13,10 +13,23 @@ namespace Blocks.FunctionRunner.Contracts
         /// <summary>The image to execute, pinned by digest.</summary>
         public required string Image { get; init; }
 
-        /// <summary>Delivery attempt, starting at 1. Part of the output-action idempotency key.</summary>
+        /// <summary>
+        /// The control plane's attempt number, starting at 1 and carried on the run entry. Part
+        /// of the output-action idempotency key, so it is never derived from delivery count.
+        /// </summary>
         public int Attempt { get; init; } = 1;
 
-        public int Protocol { get; init; } = RedisKeys.ProtocolVersion;
+        /// <summary>
+        /// How many times the stream has handed out this entry, starting at 1. Diagnostic only:
+        /// more than one means the same attempt is being redelivered after a runner lost it.
+        /// </summary>
+        public int Deliveries { get; init; } = 1;
+
+        /// <summary>
+        /// The entry's protocol version. 2 and up means <c>env</c> carries secret references the
+        /// runner resolves; 1 means the plaintext is already there (see <see cref="RedisKeys.RunProtocolVersion"/>).
+        /// </summary>
+        public int Protocol { get; init; } = RedisKeys.RunProtocolVersion;
     }
 
     /// <summary>A result written to <see cref="RedisKeys.ResultsStream"/> for the logic Worker.</summary>

@@ -481,5 +481,57 @@ describe('secret redaction', () => {
     // A key that names nothing contributes nothing rather than an undefined entry.
     assert.deepEqual(env.maskedValues, ['sk_live_9']);
   });
+
+  test('maskedValues from the runner are added to the maskedEnv values', () => {
+    // The runner substitutes an embedded reference ("Bearer {{secret.x}}") and hands over the
+    // bare secret as well, so a line that logs only the token is masked too.
+    const env = parseEnvelope(JSON.stringify({
+      run: { id: 'r1' },
+      env: { AUTH: 'Bearer sk_live_embedded_42', PLAIN: 'https://x' },
+      maskedEnv: ['AUTH'],
+      maskedValues: ['sk_live_embedded_42'],
+    }));
+    assert.deepEqual(env.maskedValues, ['Bearer sk_live_embedded_42', 'sk_live_embedded_42']);
+
+    const sink = newSink();
+    const writer = new ProtocolWriter(sink);
+    writer.useRedaction(env.maskedValues);
+    writer.log('info', `token=${env.env.AUTH.slice('Bearer '.length)}`);
+    writer.log('info', `header=${env.env.AUTH}`);
+    const out = lines(sink);
+    assert.equal(out[0].msg, 'token=[redacted]');
+    assert.equal(out[1].msg, 'header=[redacted]');
+    assert.ok(!sink.written.join('').includes('sk_live_embedded_42'));
+  });
+
+  test('a maskedValues that is not an array of strings is refused, not ignored', () => {
+    // Silently dropping a malformed redaction list would start the function with its secrets
+    // unmasked; failing the start is the safe side.
+    for (const maskedValues of ['sk_live_x', [42], { a: 'b' }]) {
+      assert.throws(
+        () => parseEnvelope(JSON.stringify({ run: { id: 'r1' }, env: {}, maskedValues })),
+        EnvelopeError);
+    }
+  });
+
+  test('end to end: a runner-substituted secret is masked in console output, ctx.log and a thrown error', async () => {
+    const secret = 'sk_live_end_to_end_77';
+    const r = await runBootstrap(`export default async (i, ctx) => {
+      console.log('tail', ctx.env.AUTH.split(' ')[1]);
+      ctx.log.info('whole ' + ctx.env.AUTH);
+      throw new Error('upstream refused ' + ctx.env.AUTH.split(' ')[1]);
+    };`, {
+      ...BASE_ENVELOPE,
+      env: { ...BASE_ENVELOPE.env, AUTH: 'Bearer ' + secret },
+      maskedEnv: ['AUTH'],
+      maskedValues: [secret],
+    });
+    const everything = JSON.stringify(r.events) + r.stderr;
+    assert.ok(!everything.includes(secret), everything);
+    assert.ok(r.logs.length >= 2);
+    assert.ok(r.logs.every((l) => l.msg.includes('[redacted]')), JSON.stringify(r.logs));
+    assert.equal(r.result.ok, false);
+    assert.match(r.result.message, /\[redacted\]/);
+  });
 });
 

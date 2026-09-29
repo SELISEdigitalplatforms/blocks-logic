@@ -100,6 +100,16 @@ namespace XUnitTest.Functions
             clamped.RequestsPerDay.Should().BeNull();
         }
 
+        [Theory]
+        [InlineData(1)]
+        [InlineData(31)]
+        public void Memory_below_the_floor_is_raised_to_it(int memoryMb)
+        {
+            // Docker refuses a container under ~6 MB and Node needs more: a 1 MB request used to
+            // pass validation and fail every run at sandbox start instead.
+            new FunctionLimits { MemoryMb = memoryMb }.Clamp().MemoryMb.Should().Be(FunctionLimits.Ceiling.MinMemoryMb);
+        }
+
         [Fact]
         public void Concurrency_below_the_floor_is_raised_not_zeroed()
         {
@@ -125,6 +135,7 @@ namespace XUnitTest.Functions
             // Stated in different units on each side, so these are converted rather than compared.
             (FunctionLimits.Ceiling.MemoryMb * 1024L * 1024L).Should().Be(RunnerCeilings.MemoryBytes);
             (FunctionLimits.Ceiling.TmpfsMb * 1024L * 1024L).Should().Be(RunnerCeilings.TmpfsBytes);
+            (FunctionLimits.Ceiling.MinMemoryMb * 1024L * 1024L).Should().Be(RunnerCeilings.MinMemoryBytes);
 
             // Concurrency is scheduled by the control plane and clamped again by the runner, so
             // the two do have to agree — comparing the constants is what keeps them agreeing.
@@ -214,6 +225,8 @@ namespace XUnitTest.Functions
         [InlineData("USER_RUNTIME_ERROR", RunErrorCode.UserRuntimeError)]
         [InlineData("RESULT_TOO_LARGE", RunErrorCode.ResultTooLarge)]
         [InlineData("TIMED_OUT", RunErrorCode.TimedOut)]
+        [InlineData("SECRET_UNRESOLVED", RunErrorCode.SecretUnresolved)]
+        [InlineData("SECRET_STORE_UNAVAILABLE", RunErrorCode.SecretStoreUnavailable)]
         [InlineData("", RunErrorCode.None)]
         public void Wire_error_codes_map(string wire, RunErrorCode expected)
         {
@@ -241,6 +254,17 @@ namespace XUnitTest.Functions
             FunctionWireMapping.IsRetryable(RunStatus.Failed, RunErrorCode.SandboxStartFailed)
                 .Should().BeTrue();
             FunctionWireMapping.IsRetryable(RunStatus.ResourceExceeded, RunErrorCode.MemoryLimit)
+                .Should().BeTrue();
+        }
+
+        [Fact]
+        public void A_broken_secret_reference_is_not_retried_but_a_secret_store_outage_is()
+        {
+            // The same reference to a deleted secret fails the same way every time; a Key Vault
+            // blip is gone by the next attempt, and nothing ran either way.
+            FunctionWireMapping.IsRetryable(RunStatus.Failed, RunErrorCode.SecretUnresolved)
+                .Should().BeFalse();
+            FunctionWireMapping.IsRetryable(RunStatus.Failed, RunErrorCode.SecretStoreUnavailable)
                 .Should().BeTrue();
         }
 

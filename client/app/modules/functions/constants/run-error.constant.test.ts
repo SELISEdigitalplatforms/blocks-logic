@@ -44,4 +44,18 @@ describe("explainRunError", () => {
   it("leaves a genuine handler throw with the code's own sentence", () => {
     expect(explainRunError("UserRuntimeError", "ctx is not defined")).toMatch(/handler threw/);
   });
+  it("explains a broken secret reference as the author's to fix and a store outage as safe to rerun", () => {
+    // The runner's message names the variable; the hint must not contradict it by promising a retry.
+    const unresolved = explainRunError(
+      "SecretUnresolved",
+      "variable STRIPE_KEY references secret 'sec_1', but it has been deleted",
+    );
+    expect(unresolved).toMatch(/Nothing ran/);
+    expect(unresolved).toMatch(/Rebind the variable/);
+    expect(unresolved).not.toMatch(/retried automatically/);
+
+    const outage = explainRunError("SecretStoreUnavailable", "the key vault could not be read");
+    expect(outage).toMatch(/nothing ran/);
+    expect(outage).toMatch(/retried automatically/);
+  });
 });

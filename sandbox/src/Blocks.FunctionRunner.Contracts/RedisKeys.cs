@@ -14,6 +14,30 @@ namespace Blocks.FunctionRunner.Contracts
         /// <summary>Protocol version carried on every message. Bump only with both halves.</summary>
         public const int ProtocolVersion = 1;
 
+        /// <summary>
+        /// Protocol version of a <see cref="RunsStream"/> entry — the one message whose version
+        /// has moved on. Version 2 means the envelope's <c>env</c> carries secret-bound variables
+        /// as <c>{{secret.&lt;id&gt;}}</c> references, and the runner resolves them itself right
+        /// before the sandbox starts (<c>Runs/EnvSecretReferences</c>); version 1 meant the
+        /// control plane had already put the plaintext there.
+        /// <para>
+        /// The bump is the deploy guard. A runner that predates it dead-letters anything but 1,
+        /// so a new control plane in front of an old runner fails its runs as
+        /// <c>UNDELIVERABLE</c> — nothing executes — instead of handing a function the literal
+        /// reference text as though it were a key. The other messages (results, builds) are
+        /// unchanged and stay on <see cref="ProtocolVersion"/>.
+        /// </para>
+        /// </summary>
+        public const int RunProtocolVersion = 2;
+
+        /// <summary>
+        /// The oldest run entry this runner still executes. Version 1 entries — plaintext already
+        /// in <c>env</c>, from a control plane not yet upgraded — run exactly as they always did,
+        /// with no resolution, so the runner can be deployed first. Raise to
+        /// <see cref="RunProtocolVersion"/> once every control plane sends 2.
+        /// </summary>
+        public const int MinRunProtocolVersion = 1;
+
         // ---- streams -----------------------------------------------------------------
         /// <summary>Run jobs, written by the control plane, consumed by runners.</summary>
         public const string RunsStream = "functions:runs";

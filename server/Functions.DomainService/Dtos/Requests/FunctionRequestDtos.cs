@@ -114,7 +114,7 @@ namespace Functions.DomainService.Dtos.Requests
         /// <summary>The controller hit its cap while reading; the service refuses with 413.</summary>
         public bool BodyTooLarge { get; set; }
 
-        /// <summary>Sync up to min(timeout+5s, Functions:SyncWaitMaxSeconds — 180s by default); otherwise 202 immediately (DECISIONS D5).</summary>
+        /// <summary>Sync up to min(timeout+5s, Functions:HttpSyncWaitMaxSeconds — 30s by default, under typical ingress idle timeouts); otherwise 202 immediately (DECISIONS D5).</summary>
         public bool Wait { get; set; }
     }
 }

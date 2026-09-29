@@ -1,5 +1,6 @@
 using Blocks.FunctionRunner.Contracts;
 using Blocks.FunctionRunner.Options;
+using Blocks.FunctionRunner.Runs;
 using Docker.DotNet;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -129,6 +130,15 @@ namespace Blocks.FunctionRunner.Health
                 {
                     problems.Add($"'{dir}' is not writable: {ex.Message}");
                 }
+            }
+
+            // --- the envelope handoff -----------------------------------------------------
+            // The envelope holds the tenant's resolved secrets and is readable only by the
+            // sandbox's group. A runner that cannot give a file to that group would fail every
+            // run it claims, so it claims none and says why instead.
+            if (_options.ProcessRuns && ExecutionEnvelope.ProbeHandoff(_options.RunsDir) is { } handoff)
+            {
+                problems.Add($"the execution envelope cannot be handed to the sandbox: {handoff}");
             }
 
             // --- Redis --------------------------------------------------------------------

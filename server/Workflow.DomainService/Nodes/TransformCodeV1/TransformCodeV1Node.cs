@@ -89,8 +89,9 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
                 }
                 catch (Exception ex)
                 {
-                    AppendErrorOutputItem(outputItems, current, parameters.ToBsonDocument(), FormatScriptError(ex));
-                    continue;
+                    // Fail fast: a script error on one item fails the node (and stops the workflow),
+                    // keeping the items already produced plus an error item for this one.
+                    return FailOnItem(outputItems, current, parameters.ToBsonDocument(), FormatScriptError(ex));
                 }
 
                 var normalized = NormalizeResult(result);

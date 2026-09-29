@@ -63,6 +63,8 @@ namespace Functions.DomainService.Consumers
             FunctionQueueKeys.ResultsStream,
             FunctionQueueKeys.BuildsStream,
             FunctionQueueKeys.BuildResultsStream,
+            // Worker-internal, but just as unbounded without a net.
+            FunctionWorkerQueueKeys.OutputsStream,
         ];
 
         private static readonly string[] DeadStreams =

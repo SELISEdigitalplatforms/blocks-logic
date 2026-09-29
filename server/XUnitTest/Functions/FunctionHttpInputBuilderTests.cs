@@ -85,14 +85,16 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
-        public void A_credential_shaped_query_key_is_left_for_the_screen_to_refuse()
+        public void A_credential_shaped_query_key_is_the_callers_own_and_reaches_the_handler()
         {
-            // Query keys are the caller's own and pass through; the envelope screen then refuses
-            // the run, which the controller answers as 400 rather than delivering a token.
-            var json = FunctionHttpInputBuilder.Build(Request(query: new() { ["api_key"] = ["abc"] }));
+            // Query keys are the caller's own and pass through; once wrapped as the envelope's
+            // `input` the screen exempts them (?token=, ?api_key= are how real webhooks sign).
+            var input = FunctionHttpInputBuilder.Build(Request(query: new() { ["api_key"] = ["abc"] }));
+            var envelope = $$"""{"run":{},"env":{},"input":{{input}}}""";
 
-            var act = () => FunctionEnvelopeBuilder.Screen(json);
-            act.Should().Throw<FunctionEnvelopeBuilder.ForbiddenContentException>().WithMessage("*api_key*");
+            var act = () => FunctionEnvelopeBuilder.Screen(envelope);
+            act.Should().NotThrow();
+            JsonDocument.Parse(input).RootElement.GetProperty("query").GetProperty("api_key").GetString().Should().Be("abc");
         }
 
         [Theory]

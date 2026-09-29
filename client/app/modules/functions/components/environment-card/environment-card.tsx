@@ -40,8 +40,10 @@ export const EnvironmentCard = ({ variables, onEditVariables }: EnvironmentCardP
       )}
 
       <p className="text-xs leading-relaxed text-low-emphasis">
-        Snapshotted at deploy. Secrets are never placed on{" "}
-        <code className="font-mono">ctx.env</code> — use them in an output action.
+        Snapshotted at deploy. A variable bound to a secret is resolved by the runner as each run
+        starts — never stored with the queued run — and reaches{" "}
+        <code className="font-mono">ctx.env</code> as its real value, masked in logs. A secret that
+        cannot be read fails the run before it starts.
       </p>
     </CardContent>
   </Card>

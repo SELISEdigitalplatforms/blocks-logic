@@ -87,7 +87,13 @@ namespace Workflow.DomainService.Services
             // much as the executor itself throwing — must go through FailNodeExecutionAsync. Otherwise the
             // row is left "Running" forever with nothing to ever mark it Failed (this used to be the case
             // for everything built in the old PrepareNodeForExecutionAsync, which ran outside this try).
+            //
+            // A failed node is terminal for the whole execution: FailNodeExecutionAsync marks the node AND
+            // the execution Failed and nothing is dispatched downstream. Nodes report a per-item error by
+            // returning NodeExecutionResult.Failed (NodeExecutorBase.FailOnItem), so the first bad item
+            // stops the workflow at that node.
             NodeExecutionContext? nodeExecutionContext = null;
+            List<AddExcuationNodeEvent> nextEvents;
             try
             {
                 nodeExecutionContext = await BuildNodeExecutionContextAsync(dto, execution, node);
@@ -101,19 +107,43 @@ namespace Workflow.DomainService.Services
                 }
                 if (!result.IsSuccess)
                 {
-                    await FailNodeExecutionAsync(execution, node, nodeExecutionContext, nodeExecution, new Exception(result.ErrorMessage), result.OutputItems);
+                    // The node's own message is written for the workflow author and is what the
+                    // execution record and a waiting webhook caller get; no exception, no stack trace.
+                    var message = string.IsNullOrWhiteSpace(result.ErrorMessage)
+                        ? $"Node '{node.Name}' failed."
+                        : result.ErrorMessage!;
+                    await FailNodeExecutionAsync(execution, node, nodeExecutionContext, nodeExecution,
+                        nodeError: message, executionError: message, result.OutputItems);
+                    return;
                 }
-                else
-                {
-                    var nextEvents = await CompleteNodeExecutionAsync(nodeExecutionContext, execution, node, nodeExecution, result, completionNodeId);
-                    await dispatchNextNodes(nextEvents);
 
-                }
+                nextEvents = await CompleteNodeExecutionAsync(nodeExecutionContext, execution, node, nodeExecution, result, completionNodeId);
+            }
+            catch (OperationCanceledException ex)
+            {
+                // Cancellation is not the node's fault, but the row must not be left at Running: record
+                // it as failed, then let the cancellation propagate to whoever cancelled.
+                _logger.LogWarning(ex, "Node {NodeId} was cancelled.", node.Id);
+                await FailNodeExecutionAsync(execution, node, nodeExecutionContext, nodeExecution,
+                    nodeError: "The execution was cancelled.", executionError: "The execution was cancelled.", outputItems: null);
+                throw;
             }
             catch (Exception ex)
             {
-                await FailNodeExecutionAsync(execution, node, nodeExecutionContext, nodeExecution, ex, outputItems: null);
+                // Unexpected (the node did not report it itself). Full detail goes to the log only; the
+                // node row keeps the exception message for the author, and the execution-level message
+                // (what a webhook caller may see) stays generic so internals never leak.
+                _logger.LogError(ex, "Node {NodeId} of execution {ExecutionId} threw.", node.Id, execution.Id);
+                await FailNodeExecutionAsync(execution, node, nodeExecutionContext, nodeExecution,
+                    nodeError: string.IsNullOrWhiteSpace(ex.Message) ? ex.GetType().Name : ex.Message,
+                    executionError: $"Node '{node.Name}' failed unexpectedly.",
+                    outputItems: null);
+                return;
             }
+
+            // Outside the try: this node is already Completed, so a failure further down the chain
+            // (immediate mode runs the children in-process) must not be charged back to it.
+            await dispatchNextNodes(nextEvents);
         }
 
         /// <summary>
@@ -178,11 +208,16 @@ namespace Workflow.DomainService.Services
                 RunIndex = execution.NodeExecutions.Count + 1
             };
 
+            // Atomically push NodeExecution to DB (avoids ReplaceOneAsync race). Refused when the execution
+            // Failed after it was read above (a sibling branch failed in the meantime): the node is skipped.
+            if (!await _workflowExecutionRepository.AtomicAddNodeExecutionAsync(execution.Id, execution.TenantId, nodeExecution))
+            {
+                _logger.LogInformation("Node {NodeId} skipped: execution {ExecutionId} has already failed.", node.Id, execution.Id);
+                return null;
+            }
+
             execution.NodeExecutions.Add(nodeExecution);
             execution.Status = WorkflowExecutionStatus.Running;
-
-            // Atomically push NodeExecution to DB (avoids ReplaceOneAsync race)
-            await _workflowExecutionRepository.AtomicAddNodeExecutionAsync(execution.Id, execution.TenantId, nodeExecution);
             _logger.LogInformation("Node {NodeId} Updated to Running status.", node.Id);
 
             return (execution, node, nodeExecution);
@@ -577,7 +612,8 @@ namespace Workflow.DomainService.Services
             NodeEntity node,
             NodeExecutionContext? context,
             NodeExecutionEntity nodeExecution,
-            Exception ex,
+            string nodeError,
+            string executionError,
             List<NodeOutputItem>? outputItems)
         {
             var persistedItems = new List<WorkflowItemExecutionEntity>();
@@ -619,19 +655,22 @@ namespace Workflow.DomainService.Services
 
             nodeExecution.Status = NodeExecutionStatus.Failed;
             nodeExecution.EndedAt = DateTime.UtcNow;
-            nodeExecution.Error = ex.ToString();
+            nodeExecution.Error = nodeError;
             nodeExecution.OutputItemCount = persistedItems.Count;
             nodeExecution.OutputCountsByBranch = persistedItems
                 .GroupBy(o => o.Branch)
                 .ToDictionary(g => g.Key, g => g.Count());
 
             execution.Status = WorkflowExecutionStatus.Failed;
-            execution.ErrorMessage = ex.ToString();
+            execution.ErrorMessage = executionError;
+            execution.FailedNodeId = node.Id;
+            execution.FailedNodeName = node.Name;
             execution.FinishedAt = DateTime.UtcNow;
 
             await _workflowExecutionRepository.AtomicUpdateNodeExecutionFailedAsync(
-                execution.Id, execution.TenantId, nodeExecution.Id, ex.ToString(),
-                nodeExecution.OutputItemCount, nodeExecution.OutputCountsByBranch);
+                execution.Id, execution.TenantId, nodeExecution.Id, nodeError,
+                nodeExecution.OutputItemCount, nodeExecution.OutputCountsByBranch,
+                node.Id, node.Name, executionError);
 
             await _workflowNotificationService.NotifyExecutionEventAsync(
                 execution,
@@ -640,7 +679,7 @@ namespace Workflow.DomainService.Services
                 code: ExecutionEventCodes.NodeExecutionCode(NodeExecutionStatus.Failed),
                 status: nameof(NodeExecutionStatus.Failed),
                 data: nodeExecution.Id,
-                message: $"Node '{nodeExecution.NodeName}' failed: {ex.Message}");
+                message: $"Node '{nodeExecution.NodeName}' failed: {nodeError}");
 
             await _workflowNotificationService.NotifyExecutionEventAsync(
                 execution,
@@ -649,8 +688,10 @@ namespace Workflow.DomainService.Services
                 code: ExecutionEventCodes.WorkflowExecutionCode(WorkflowExecutionStatus.Failed),
                 status: nameof(WorkflowExecutionStatus.Failed),
                 data: execution.Id!,
-                message: $"Workflow '{execution.WorkflowSnapshot.Name}' failed: {ex.Message}");
+                message: $"Workflow '{execution.WorkflowSnapshot.Name}' failed: {nodeError}");
 
+            // Drops the failed node from ActiveNodeIds and adds nothing: no downstream node is scheduled.
+            // The repository never flips a Failed execution to Completed when this empties the set.
             await _workflowExecutionRepository.AtomicCompleteNodeAsync(
                 execution.Id, execution.TenantId, nodeExecution.NodeId, new List<string>());
         }

@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text;
 using Blocks.FunctionRunner.Contracts;
 using Blocks.FunctionRunner.Options;
 using Blocks.FunctionRunner.Protocol;
@@ -215,44 +214,14 @@ namespace Blocks.FunctionRunner.Sandbox
         /// interleaved deliberately: the bootstrap writes protocol lines to stdout, and anything
         /// on stderr is a package misbehaving, which is worth capturing next to it.
         /// </summary>
-        private static async Task<string> ReadStreamAsync(MultiplexedStream stream, CancellationToken token)
+        private static Task<string> ReadStreamAsync(MultiplexedStream stream, CancellationToken token)
         {
             // Twice the log ceiling plus the result ceiling: enough for a legitimate run, far
-            // short of what a flooding sandbox would like to send.
+            // short of what a flooding sandbox would like to send. Enforced on bytes, and
+            // decoded statefully so a character split across two reads survives intact.
             const long ceiling = (2 * Ceilings.LogBytes) + Ceilings.ResultBytes;
 
-            var builder = new StringBuilder();
-            var buffer = new byte[16 * 1024];
-            long total = 0;
-
-            try
-            {
-                while (!token.IsCancellationRequested)
-                {
-                    var read = await stream.ReadOutputAsync(buffer, 0, buffer.Length, token).ConfigureAwait(false);
-                    if (read.EOF) break;
-                    if (read.Count == 0) continue;
-
-                    total += read.Count;
-                    if (total > ceiling)
-                    {
-                        builder.Append(Encoding.UTF8.GetString(buffer, 0, read.Count));
-                        break;
-                    }
-
-                    builder.Append(Encoding.UTF8.GetString(buffer, 0, read.Count));
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                // Expected when the deadline or the drain timer fires.
-            }
-            catch (IOException)
-            {
-                // The container went away mid-read; whatever arrived is what we have.
-            }
-
-            return builder.ToString();
+            return CappedOutputReader.ReadAsync(stream, ceiling, token);
         }
 
         /// <summary>

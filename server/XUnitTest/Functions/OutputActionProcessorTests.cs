@@ -4,7 +4,9 @@ using Functions.DomainService.Entities;
 using Functions.DomainService.Enums;
 using Functions.DomainService.Models;
 using Functions.DomainService.Services;
+using Functions.DomainService.Utils;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 
 namespace XUnitTest.Functions
 {
@@ -74,10 +76,15 @@ namespace XUnitTest.Functions
             TimeoutSeconds = timeoutSeconds,
         };
 
+        /// <summary>Every host resolves to a documentation-range public address unless a test says otherwise.</summary>
+        private static readonly IPAddress PublicAddress = IPAddress.Parse("93.184.216.34");
+
         private static OutputActionProcessor Processor(
-            HttpMessageHandler handler, ISecretResolver? resolver = null) => new(
+            HttpMessageHandler handler, ISecretResolver? resolver = null,
+            Func<string, IPAddress[]>? dns = null) => new(
                 resolver ?? new FakeSecretResolver([]),
                 new FakeHttpClientFactory(handler),
+                new FunctionOutboundGuard((host, _) => Task.FromResult(dns?.Invoke(host) ?? [PublicAddress])),
                 NullLogger<OutputActionProcessor>.Instance);
 
         [Fact]
@@ -122,7 +129,7 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
-        public async Task Every_request_carries_an_idempotency_key_of_runid_dash_attempt()
+        public async Task Every_request_carries_an_idempotency_key_of_runid_attempt_and_action()
         {
             var seen = new List<CapturedRequest>();
             var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK), seen);
@@ -130,7 +137,22 @@ namespace XUnitTest.Functions
 
             await processor.ProcessAsync("tenant_1", Run(attempt: 3), [HttpAction()], new RetryPolicy());
 
-            seen[0].Headers.Should().Contain(h => h.Name == "Idempotency-Key" && h.Value == "run_1-3");
+            seen[0].Headers.Should().Contain(h => h.Name == "Idempotency-Key" && h.Value == "run_1-3-action_1");
+        }
+
+        [Fact]
+        public async Task Two_actions_of_one_run_get_different_keys_so_a_receiver_keeps_both()
+        {
+            var seen = new List<CapturedRequest>();
+            var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK), seen);
+            var processor = Processor(handler);
+            var second = HttpAction();
+            second.Id = "action_2";
+
+            await processor.ProcessAsync("tenant_1", Run(attempt: 1), [HttpAction(), second], new RetryPolicy());
+
+            seen.Select(r => r.Headers.Single(h => h.Name == "Idempotency-Key").Value)
+                .Should().Equal("run_1-1-action_1", "run_1-1-action_2");
         }
 
         [Fact]
@@ -226,15 +248,206 @@ namespace XUnitTest.Functions
         public async Task A_network_exception_is_retried_the_same_way_as_a_bad_status()
         {
             var seen = new List<CapturedRequest>();
-            var handler = new StubHandler(_ => throw new HttpRequestException("connection refused"), seen);
+            var handler = new StubHandler(_ => throw new HttpRequestException("Connection refused (10.0.0.5:6379)"), seen);
             var processor = Processor(handler);
             var policy = new RetryPolicy { Attempts = 2, Backoff = BackoffKind.Fixed, InitialDelaySeconds = 0 };
 
             var chain = await processor.ProcessAsync("tenant_1", Run(), [HttpAction()], policy);
 
             chain.AllSucceeded.Should().BeFalse();
-            chain.Results[0].Error.Should().Contain("connection refused");
+            chain.Results[0].Error.Should().Be("connection failed after 2 attempt(s)");
             seen.Should().HaveCount(2);
+        }
+
+        // ---------------------------------------------------------------- SSRF ----
+
+        [Theory]
+        [InlineData("Connection refused (10.0.0.5:6379)")]
+        [InlineData("No such host is known. (internal-redis.svc.cluster.local:6379)")]
+        [InlineData("The SSL connection could not be established, see inner exception.")]
+        public async Task A_network_error_never_echoes_the_exception_text(string message)
+        {
+            // The raw text is a port scanner: open vs closed vs filtered vs TLS answer each read
+            // differently. The tenant sees one generic phrase; the detail is logged server-side.
+            var handler = new StubHandler(_ => throw new HttpRequestException(message), []);
+            var chain = await Processor(handler).ProcessAsync("tenant_1", Run(), [HttpAction()], new RetryPolicy { Attempts = 1 });
+
+            chain.Results[0].Error.Should().Be("connection failed after 1 attempt(s)");
+            chain.Results[0].Error.Should().NotContain("10.0.0.5").And.NotContain("6379").And.NotContain("SSL");
+        }
+
+        [Fact]
+        public async Task A_timeout_is_a_reported_retryable_failure_not_an_escaping_cancellation()
+        {
+            // HttpClient's own timeout is a TaskCanceledException. Only the caller's token means "stop".
+            var seen = new List<CapturedRequest>();
+            var handler = new StubHandler(_ => throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout of 5 seconds elapsing.", new TimeoutException()), seen);
+            var policy = new RetryPolicy { Attempts = 2, Backoff = BackoffKind.Fixed, InitialDelaySeconds = 0 };
+
+            var chain = await Processor(handler).ProcessAsync("tenant_1", Run(), [HttpAction(timeoutSeconds: 5)], policy);
+
+            chain.AllSucceeded.Should().BeFalse();
+            chain.Results[0].Error.Should().Be("timed out (5s limit) after 2 attempt(s)");
+            seen.Should().HaveCount(2);
+        }
+
+        [Fact]
+        public async Task The_callers_own_cancellation_still_stops_the_chain()
+        {
+            using var cts = new CancellationTokenSource();
+            var handler = new StubHandler(_ => { cts.Cancel(); throw new OperationCanceledException(cts.Token); }, []);
+
+            var act = () => Processor(handler).ProcessAsync("tenant_1", Run(), [HttpAction()], new RetryPolicy(), cts.Token);
+
+            await act.Should().ThrowAsync<OperationCanceledException>();
+        }
+
+        [Fact]
+        public async Task A_secret_resolution_failure_is_reported_without_its_detail()
+        {
+            var resolver = new Mock<ISecretResolver>();
+            resolver.Setup(r => r.ResolveAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new HttpRequestException("POST https://blocks-os.internal:5001/secrets failed"));
+            var seen = new List<CapturedRequest>();
+            var action = HttpAction(bodyTemplate: "{\"k\":\"{{secret.a}}\"}");
+
+            var chain = await Processor(new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK), seen), resolver.Object)
+                .ProcessAsync("tenant_1", Run(), [action], new RetryPolicy());
+
+            chain.Results[0].Error.Should().Be("could not prepare the request (secret resolution failed)");
+            seen.Should().BeEmpty();
+        }
+
+        [Theory]
+        [InlineData("http://127.0.0.1/hook")]
+        [InlineData("http://10.1.2.3/hook")]
+        [InlineData("http://172.16.0.1/hook")]
+        [InlineData("http://192.168.1.1/hook")]
+        [InlineData("http://169.254.169.254/latest/meta-data/")]
+        [InlineData("http://[::1]/hook")]
+        [InlineData("http://[fd00:ec2::254]/hook")]
+        [InlineData("http://[fe80::1]/hook")]
+        [InlineData("http://[::ffff:10.0.0.1]/hook")]
+        [InlineData("http://2130706433/hook")]
+        [InlineData("http://0177.0.0.1/hook")]
+        [InlineData("http://0x7f.0.0.1/hook")]
+        [InlineData("http://localhost:6379/")]
+        [InlineData("http://metadata.google.internal/computeMetadata/v1/")]
+        public async Task A_stored_action_pointing_inward_is_refused_at_send_and_never_sent(string url)
+        {
+            // Save-time validation is not enough on its own: versions saved before it existed are
+            // still deployed, so the send path re-checks every time.
+            var seen = new List<CapturedRequest>();
+            var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK), seen);
+            var policy = new RetryPolicy { Attempts = 3, Backoff = BackoffKind.Fixed, InitialDelaySeconds = 0 };
+
+            var chain = await Processor(handler).ProcessAsync("tenant_1", Run(), [HttpAction(url: url)], policy);
+
+            chain.AllSucceeded.Should().BeFalse();
+            chain.Results[0].Error.Should().Be(FunctionOutboundGuard.BlockedMessage);
+            chain.Results[0].Attempts.Should().Be(1, "a refusal is permanent and is not retried");
+            seen.Should().BeEmpty();
+        }
+
+        [Theory]
+        [InlineData("10.0.0.7")]
+        [InlineData("127.0.0.1")]
+        [InlineData("169.254.169.254")]
+        [InlineData("::1")]
+        [InlineData("::ffff:192.168.0.10")]
+        [InlineData("100.100.100.200")]
+        [InlineData("168.63.129.16")]
+        public async Task A_public_name_that_resolves_inward_is_refused(string resolved)
+        {
+            var seen = new List<CapturedRequest>();
+            var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK), seen);
+
+            var chain = await Processor(handler, dns: _ => [IPAddress.Parse(resolved)])
+                .ProcessAsync("tenant_1", Run(), [HttpAction(url: "https://hooks.example.com/x")], new RetryPolicy());
+
+            chain.Results[0].Error.Should().Be(FunctionOutboundGuard.BlockedMessage);
+            seen.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task A_name_with_one_public_and_one_private_record_is_refused()
+        {
+            // The classic rebinding setup: whichever record the connection picks is not ours to bet on.
+            var seen = new List<CapturedRequest>();
+            var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK), seen);
+
+            var chain = await Processor(handler, dns: _ => [PublicAddress, IPAddress.Parse("10.0.0.1")])
+                .ProcessAsync("tenant_1", Run(), [HttpAction(url: "https://hooks.example.com/x")], new RetryPolicy());
+
+            chain.Results[0].Error.Should().Be(FunctionOutboundGuard.BlockedMessage);
+            seen.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task A_host_supplied_by_a_secret_is_vetted_after_substitution()
+        {
+            var seen = new List<CapturedRequest>();
+            var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK), seen);
+            var resolver = new FakeSecretResolver(new Dictionary<string, string> { ["target"] = "169.254.169.254" });
+            var action = HttpAction(url: "http://placeholder.example.com/x");
+            action.Url = "http://{{secret.target}}/latest/meta-data/";
+
+            var chain = await Processor(handler, resolver).ProcessAsync("tenant_1", Run(), [action], new RetryPolicy());
+
+            chain.Results[0].Ok.Should().BeFalse();
+            chain.Results[0].Error.Should().Be(FunctionOutboundGuard.BlockedMessage);
+            seen.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task A_non_http_url_after_substitution_is_refused_without_sending()
+        {
+            var seen = new List<CapturedRequest>();
+            var action = HttpAction();
+            action.Url = "file:///etc/passwd";
+
+            var chain = await Processor(new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK), seen))
+                .ProcessAsync("tenant_1", Run(), [action], new RetryPolicy());
+
+            chain.Results[0].Ok.Should().BeFalse();
+            chain.Results[0].Attempts.Should().Be(0);
+            seen.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task A_redirect_is_reported_not_followed_and_not_retried()
+        {
+            var seen = new List<CapturedRequest>();
+            var handler = new StubHandler(_ =>
+            {
+                var response = new HttpResponseMessage(HttpStatusCode.Found);
+                response.Headers.Location = new Uri("http://169.254.169.254/latest/meta-data/");
+                return response;
+            }, seen);
+            var policy = new RetryPolicy { Attempts = 3, Backoff = BackoffKind.Fixed, InitialDelaySeconds = 0 };
+
+            var chain = await Processor(handler).ProcessAsync("tenant_1", Run(), [HttpAction()], policy);
+
+            chain.AllSucceeded.Should().BeFalse();
+            chain.Results[0].StatusCode.Should().Be(302);
+            chain.Results[0].Error.Should().Contain("redirects are not followed");
+            seen.Should().ContainSingle("the redirect target is never requested, and the same 302 is not retried");
+        }
+
+        [Fact]
+        public async Task A_block_raised_by_the_connect_callback_is_reported_as_a_refusal()
+        {
+            // What SocketsHttpHandler surfaces when the ConnectCallback refuses: the guard's
+            // exception wrapped in an HttpRequestException.
+            var seen = new List<CapturedRequest>();
+            var handler = new StubHandler(_ => throw new HttpRequestException(
+                "wrapped", new OutboundTargetBlockedException(FunctionOutboundGuard.BlockedMessage)), seen);
+            var policy = new RetryPolicy { Attempts = 3, Backoff = BackoffKind.Fixed, InitialDelaySeconds = 0 };
+
+            var chain = await Processor(handler).ProcessAsync("tenant_1", Run(), [HttpAction()], policy);
+
+            chain.Results[0].Error.Should().Be(FunctionOutboundGuard.BlockedMessage);
+            seen.Should().ContainSingle();
         }
 
         [Fact]

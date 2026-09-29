@@ -23,7 +23,11 @@ export type RunErrorCode =
   | "TimedOut"
   | "SandboxStartFailed"
   | "OutputActionFailed"
-  | "Undeliverable";
+  | "Undeliverable"
+  | "EnqueueFailed"
+  | "Abandoned"
+  | "SecretUnresolved"
+  | "SecretStoreUnavailable";
 
 export type InvokedByType = "Http" | "Workflow" | "Test" | "Replay" | "Schedule" | "Event";
 

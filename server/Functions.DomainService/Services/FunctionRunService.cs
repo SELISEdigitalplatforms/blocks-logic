@@ -17,6 +17,14 @@ namespace Functions.DomainService.Services
 
         Task<RunDetailDto> GetAsync(string tenantId, string runId, CancellationToken cancellationToken = default);
 
+        /// <summary>
+        /// What an anonymous poller may see of a run: the same shape as the 200 from a waiting
+        /// invoke — status, result and error — and nothing else. Never the input, the headers it
+        /// carried, logs, output-action results or who invoked it. The caller has already proved
+        /// its poll token; this only reads.
+        /// </summary>
+        Task<InvokeResultDto> GetPollResultAsync(string tenantId, string runId, CancellationToken cancellationToken = default);
+
         Task<(IReadOnlyList<RunLogLineDto> Items, long TotalCount)> GetLogsAsync(
             string tenantId, string runId, int pageNumber, int pageSize, CancellationToken cancellationToken = default);
 
@@ -97,6 +105,22 @@ namespace Functions.DomainService.Services
         {
             var run = await GetEntityAsync(tenantId, runId, cancellationToken);
             return RunDetailDto.From(run);
+        }
+
+        public async Task<InvokeResultDto> GetPollResultAsync(
+            string tenantId, string runId, CancellationToken cancellationToken = default)
+        {
+            var run = await GetEntityAsync(tenantId, runId, cancellationToken);
+            var terminal = FunctionWireMapping.IsTerminal(run.Status);
+            return new InvokeResultDto
+            {
+                RunId = run.ItemId,
+                Status = FunctionWireMapping.ToWire(run.Status),
+                // Only once there is an outcome, exactly like WaitForResultAsync's 200 shape.
+                Result = terminal ? run.Result : null,
+                ErrorCode = terminal && run.ErrorCode != RunErrorCode.None ? run.ErrorCode.ToString() : null,
+                ErrorMessage = terminal ? run.ErrorMessage : null,
+            };
         }
 
         public async Task<(IReadOnlyList<RunLogLineDto> Items, long TotalCount)> GetLogsAsync(

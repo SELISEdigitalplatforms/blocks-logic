@@ -227,9 +227,9 @@ export const NodeGuideTransformCodeV1 = () => (
       "Code runs in a sandbox for data transformation, so external API calls, file access, package imports, and system commands are not available.",
       "If the script returns nothing or an empty array, the node produces no output items.",
       <>
-        In each-item mode, an error in one item does not stop the node. That item&apos;s output
-        becomes <C>{"{ error: true, message }"}</C> and the remaining items still run. In all-items
-        mode, an error fails the node.
+        An error fails the node and stops the workflow: no later items run and no downstream node
+        runs. In each-item mode the failing item is recorded as <C>{"{ error: true, message }"}</C>{" "}
+        in the execution.
       </>,
     ]}
   />
