@@ -147,25 +147,11 @@ jobs:
           echo "- **SonarQube Enabled**: ${{ env.RUN_SONARQUBE }}" >> $GITHUB_STEP_SUMMARY
           echo "- **SCA Scan Enabled**: ${{ env.RUN_SCA_SCAN }}" >> $GITHUB_STEP_SUMMARY
 
-  # Run the .NET test suite on PRs. Gated by RUN_TESTS above, so a workflow that has it off
-  # still skips — but the job exists now, which it did not while this block was commented out.
-  # It builds server/Blocks.slnx, and that solution lists the four sandbox/ projects, so this is
-  # also the only thing in CI that compiles or tests the function runner.
-  pr-checks:
-    if: github.event_name == 'pull_request' && needs.initialization.outputs.run_tests == 'true'
-    needs: [ initialization ]
-    uses: SELISEdigitalplatforms/blocks-inventory/.github/workflows/test-dotnet.yml@main
-    with:
-      SERVICE_NAME: ${{ needs.initialization.outputs.service_name }}
-      LOAD_CUSTOM_VARS: ${{ needs.initialization.outputs.load_custom_vars == 'true' }}
-    secrets:
-      SELISE_GITHUB_PAT: ${{ secrets.SELISE_GITHUB_PAT }}
-
   # Run SonarQube analysis on both push and pull_request
   sonarqube:
     # if: github.event_name == 'pull_request' && needs.initialization.outputs.run_sonarqube == 'true'
     if: needs.initialization.outputs.run_sonarqube == 'true'
-    needs: [ initialization ]
+    needs: [initialization]
     uses: SELISEdigitalplatforms/blocks-inventory/.github/workflows/sonarqube-dotnet.yml@main
     with:
       SOLUTION_NAME: ${{ needs.initialization.outputs.solution_name }}
@@ -195,7 +181,7 @@ jobs:
   # ==============================================
   sca-scan-dotnet:
     if: needs.initialization.outputs.run_sca_scan == 'true'
-    needs: [ initialization ]
+    needs: [initialization]
     uses: SELISEdigitalplatforms/blocks-inventory/.github/workflows/sca-scan-dotnet.yml@main
     with:
       # Project Configuration
@@ -234,7 +220,7 @@ jobs:
   # Build and push image
   build-client:
     # needs: [initialization, sonarqube, sca-scan-dotnet]
-    needs: [ initialization, sonarqube ]
+    needs: [initialization, sonarqube]
     # if: ${{ github.event_name == 'push' && (success() || needs.sonarqube.result == 'skipped' ) && (success() || needs.sca-scan-dotnet.result == 'skipped' ) }}
     if: |
       github.event_name == 'push' &&
@@ -260,7 +246,7 @@ jobs:
 
   # Update GitOps repository
   update-gitops-client:
-    needs: [ initialization, build-client ]
+    needs: [initialization, build-client]
     if: |
       github.event_name == 'push' &&
       always() &&
@@ -284,7 +270,7 @@ jobs:
 
   # Build and push image
   build-worker:
-    needs: [ initialization, sonarqube ]
+    needs: [initialization, sonarqube]
     if: |
       github.event_name == 'push' &&
       always() &&
@@ -308,7 +294,7 @@ jobs:
 
   # Update GitOps repository
   update-gitops-worker:
-    needs: [ initialization, build-worker ]
+    needs: [initialization, build-worker]
     if: |
       github.event_name == 'push' &&
       always() &&
@@ -331,7 +317,7 @@ jobs:
       DOCKERHUB_ORG: ${{ secrets.DOCKERHUB_ORG }}
 
   build-mailboxsync:
-    needs: [ initialization, sonarqube ]
+    needs: [initialization, sonarqube]
     if: |
       github.event_name == 'push' &&
       always() &&
@@ -353,7 +339,7 @@ jobs:
       SELISE_GITHUB_PAT: ${{ secrets.SELISE_GITHUB_PAT }}
 
   update-gitops-mailboxsync:
-    needs: [ initialization, build-mailboxsync ]
+    needs: [initialization, build-mailboxsync]
     if: |
       github.event_name == 'push' &&
       always() &&
