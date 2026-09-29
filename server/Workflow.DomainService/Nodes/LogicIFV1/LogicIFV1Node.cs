@@ -60,7 +60,7 @@ namespace Workflow.DomainService.Nodes.LogicIFV1
                 }
                 catch (Exception ex)
                 {
-                    return Task.FromResult(FailOnItem(context, outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex));
+                    AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
                 }
             }
             return Task.FromResult(NodeExecutionResult.Successful(outputItems));

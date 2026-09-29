@@ -295,7 +295,7 @@ describe("send mail v1", () => {
   it("template options return [] when there are no templates", async () => {
     fetchEmailTemplates.mockResolvedValue({ templates: [], totalCount: 0 });
     const opts = field(NodeSchemaActionSendMailV1, "EmailTemplate").options;
-    // fresh x-blocks-key to bypass the module-level cache
+    // fresh project key to bypass the module-level cache
     expect(await opts({}, { tenantId: "empty-pk" })).toEqual([]);
   });
 
@@ -356,27 +356,27 @@ describe("webhook trigger v1", () => {
     );
   });
 
-  it("displayValue builds the production URL without x-blocks-key", () => {
+  it("displayValue builds the production URL without project key", () => {
     const f = fieldById(NodeSchemaTriggerWebhookV1, "webhook-url");
     const url = f.displayValue({ executionMode: 1 }, urlConfig);
     expect(url).toContain("/Workflow/webhook/wf/nd");
     expect(url).not.toContain("/pk/");
   });
 
-  it("displayValue builds the test URL without x-blocks-key and falls back to config mode", () => {
+  it("displayValue builds the test URL without project key and falls back to config mode", () => {
     const f = fieldById(NodeSchemaTriggerWebhookV1, "webhook-url");
     const url = f.displayValue({}, urlConfig);
     expect(url).toContain("/Workflow/webhook-test/wf/nd");
     expect(url).not.toContain("/pk/");
   });
 
-  it("deprecated displayValue builds the production URL with x-blocks-key", () => {
+  it("deprecated displayValue builds the production URL with project key", () => {
     const f = fieldById(NodeSchemaTriggerWebhookV1, "webhook-url-deprecated");
     const url = f.displayValue({ executionMode: 1 }, urlConfig);
     expect(url).toContain("/Workflow/webhook/pk/wf/nd");
   });
 
-  it("deprecated displayValue builds the test URL with x-blocks-key and falls back to config mode", () => {
+  it("deprecated displayValue builds the test URL with project key and falls back to config mode", () => {
     const f = fieldById(NodeSchemaTriggerWebhookV1, "webhook-url-deprecated");
     const url = f.displayValue({}, urlConfig);
     expect(url).toContain("/Workflow/webhook-test/pk/wf/nd");

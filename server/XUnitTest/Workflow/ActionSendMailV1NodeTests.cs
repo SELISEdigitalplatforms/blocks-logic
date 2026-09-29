@@ -297,33 +297,7 @@ namespace XUnitTest.Workflow
             output["AttachmentsSent"].AsBsonArray.Select(v => v.AsString).Should().BeEquivalentTo("file_does_not_exist");
         }
 
-        // ----- Fail fast: an iteration that throws fails the node -----------------------
-
-        [Fact]
-        public async Task RunAsync_SendThrows_FailsTheNodeAndSendsNothingMore()
-        {
-            var items = new List<WorkflowItemExecutionEntity>
-            {
-                Item("a", new BsonDocument()),
-                Item("b", new BsonDocument()),
-            };
-            var ctx = Context(items);
-            var mailService = new Mock<IMailService>();
-            mailService.Setup(m => m.ProcessMailToAnyAsync(It.IsAny<SendMailToAny>()))
-                .ThrowsAsync(new InvalidOperationException("mail server unavailable"));
-
-            var result = await new ActionSendMailV1Node(mailService.Object).RunAsync(ctx);
-
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Be("mail server unavailable");
-            result.OutputItems.Should().ContainSingle();
-            result.OutputItems[0].Data.Output["error"].AsBoolean.Should().BeTrue();
-            result.OutputItems[0].ParentItemIds.Should().Equal("a");
-            mailService.Verify(m => m.ProcessMailToAnyAsync(It.IsAny<SendMailToAny>()), Times.Once);
-        }
-
-        // ----- C6: a send the mail service reports as unsuccessful is data, not a node error ----
-        // (Success=false / Errors are the documented output for later nodes; only a thrown error fails.)
+        // ----- C6: one bad iteration does not abort the others -----------------------
 
         [Fact]
         public async Task RunAsync_MultiIteration_OneFailureDoesNotAbortOthers()

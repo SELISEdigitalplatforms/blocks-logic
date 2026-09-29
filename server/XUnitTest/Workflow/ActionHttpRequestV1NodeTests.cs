@@ -149,90 +149,14 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
-        public async Task RunAsync_NonJsonBody_FailsTheNodeKeepingAnErrorItem()
+        public async Task RunAsync_NonJsonBody_ProducesErrorItem()
         {
             var result = await RunWithResponse("not-json");
 
-            // Fail fast: the node fails (the engine stops the workflow here); the error item stays on
-            // the result so the execution record shows what failed.
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().NotBeNullOrWhiteSpace();
             result.OutputItems.Should().ContainSingle();
             var output = result.OutputItems[0].Data.Output.AsBsonDocument;
             output["error"].AsBoolean.Should().BeTrue();
-            output["message"].AsString.Should().Be(result.ErrorMessage);
-        }
-
-        private sealed class CountingHandler : HttpMessageHandler
-        {
-            private readonly Func<int, HttpResponseMessage> _respond;
-            public int Calls { get; private set; }
-
-            public CountingHandler(Func<int, HttpResponseMessage> respond) => _respond = respond;
-
-            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-            {
-                Calls++;
-                return Task.FromResult(_respond(Calls));
-            }
-        }
-
-        private static (ActionHttpRequestV1Node node, NodeExecutionContext context) MultiItemRun(HttpMessageHandler handler, int items)
-        {
-            var input = Enumerable.Range(1, items).Select(i =>
-            {
-                var item = Item();
-                item.Id = $"item-{i}";
-                return item;
-            }).ToList();
-            var context = new NodeExecutionContext
-            {
-                WorkflowExecutionId = "exec-1",
-                TenantId = "tenant-1",
-                Parameters = new BsonDocument { { "httpMethod", "GET" }, { "url", "https://example.test/items" } },
-                InputItems = input,
-                IterationCount = input.Count,
-                WorkflowContext = new BsonDocument(),
-            };
-            var node = new ActionHttpRequestV1Node(
-                new TestHttpClientFactory(handler),
-                Mock.Of<IWorkflowAuthService>(),
-                Mock.Of<IClientCredentialTokenService>(),
-                NullLogger<ActionHttpRequestV1Node>.Instance);
-            return (node, context);
-        }
-
-        [Fact]
-        public async Task RunAsync_ItemFails_LaterItemsAreNotRequested()
-        {
-            var handler = new CountingHandler(call => call == 2
-                ? new HttpResponseMessage(HttpStatusCode.InternalServerError) { Content = new StringContent("{}") }
-                : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"ok\":true}") });
-            var (node, context) = MultiItemRun(handler, items: 3);
-
-            var result = await node.RunAsync(context);
-
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().NotBeNullOrWhiteSpace();
-            handler.Calls.Should().Be(2, "item 3 must never be requested once item 2 failed");
-            result.OutputItems.Should().HaveCount(2);
-            result.OutputItems[0].Data.Output.AsBsonDocument.Contains("error").Should().BeFalse();
-            result.OutputItems[1].Data.Output["error"].AsBoolean.Should().BeTrue();
-            result.OutputItems[1].ParentItemIds.Should().Equal("item-2");
-        }
-
-        [Fact]
-        public async Task RunAsync_CancelledToken_PropagatesInsteadOfFailingTheNode()
-        {
-            using var cts = new CancellationTokenSource();
-            cts.Cancel();
-            var handler = new CountingHandler(_ => throw new OperationCanceledException(cts.Token));
-            var (node, context) = MultiItemRun(handler, items: 1);
-            context.CancellationToken = cts.Token;
-
-            var act = () => node.RunAsync(context);
-
-            await act.Should().ThrowAsync<OperationCanceledException>();
+            output.Contains("message").Should().BeTrue();
         }
 
         private static async Task<NodeExecutionResult> RunWithResponse(string responseBody)

@@ -77,13 +77,10 @@ namespace Workflow.DomainService.Repositories
                 await collection.UpdateOneAsync(filter, addUpdate);
             }
 
-            // Step 3: Check if ActiveNodeIds is now empty and mark complete atomically. A Failed execution
-            // is terminal: draining its last active node (the failed node itself, or a sibling branch
-            // that was already running when another node failed) must never flip it to Completed.
+            // Step 3: Check if ActiveNodeIds is now empty and mark complete atomically
             var completeFilter = Builders<WorkflowExecutionEntity>.Filter.And(
                 Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, executionId),
-                Builders<WorkflowExecutionEntity>.Filter.Size(e => e.ActiveNodeIds, 0),
-                Builders<WorkflowExecutionEntity>.Filter.Ne(e => e.Status, WorkflowExecutionStatus.Failed)
+                Builders<WorkflowExecutionEntity>.Filter.Size(e => e.ActiveNodeIds, 0)
             );
             var completeUpdate = Builders<WorkflowExecutionEntity>.Update
                 .Set(e => e.Status, WorkflowExecutionStatus.Completed)
@@ -98,14 +95,11 @@ namespace Workflow.DomainService.Repositories
         /// Used by step-mode execution to guarantee a clean end state after the target node runs,
         /// regardless of whether step-mode left downstream node IDs in ActiveNodeIds (non-leaf targets).
         /// Idempotent: safe to call when the execution has already been auto-finalized by AtomicCompleteNodeAsync.
-        /// Never touches a Failed execution: failure is terminal.
         /// </summary>
         public async Task AtomicFinalizeExecutionAsync(string executionId, string tenantId)
         {
             var collection = GetCollection(tenantId);
-            var filter = Builders<WorkflowExecutionEntity>.Filter.And(
-                Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, executionId),
-                Builders<WorkflowExecutionEntity>.Filter.Ne(e => e.Status, WorkflowExecutionStatus.Failed));
+            var filter = Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, executionId);
             var update = Builders<WorkflowExecutionEntity>.Update
                 .Set(e => e.ActiveNodeIds, new List<string>())
                 .Set(e => e.Status, WorkflowExecutionStatus.Completed)
@@ -117,22 +111,17 @@ namespace Workflow.DomainService.Repositories
         /// <summary>
         /// Atomically pushes a new NodeExecution to the NodeExecutions array and sets Status=Running.
         /// Prevents concurrent ReplaceOneAsync from overwriting other nodes' executions.
-        /// Refuses (returns false) once the execution has Failed, so a node that was dispatched before a
-        /// sibling failed can neither start nor reset the execution back to Running.
         /// </summary>
-        public async Task<bool> AtomicAddNodeExecutionAsync(string executionId, string tenantId, NodeExecutionEntity nodeExecution)
+        public async Task AtomicAddNodeExecutionAsync(string executionId, string tenantId, NodeExecutionEntity nodeExecution)
         {
             var collection = GetCollection(tenantId);
-            var filter = Builders<WorkflowExecutionEntity>.Filter.And(
-                Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, executionId),
-                Builders<WorkflowExecutionEntity>.Filter.Ne(e => e.Status, WorkflowExecutionStatus.Failed));
+            var filter = Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, executionId);
 
             var update = Builders<WorkflowExecutionEntity>.Update
                 .Push(e => e.NodeExecutions, nodeExecution)
                 .Set(e => e.Status, WorkflowExecutionStatus.Running);
 
-            var result = await collection.UpdateOneAsync(filter, update);
-            return result.ModifiedCount > 0;
+            await collection.UpdateOneAsync(filter, update);
         }
 
         /// <summary>
@@ -167,9 +156,9 @@ namespace Workflow.DomainService.Repositories
 
         /// <summary>
         /// Atomically updates a specific NodeExecution entry to Failed status.
-        /// Also marks the workflow execution as Failed, recording which node failed and why.
+        /// Also marks the workflow execution as Failed.
         /// </summary>
-        public async Task AtomicUpdateNodeExecutionFailedAsync(string executionId, string tenantId, string nodeExecutionId, string nodeError, int outputItemCount, Dictionary<string, int> outputCountsByBranch, string failedNodeId, string failedNodeName, string executionErrorMessage)
+        public async Task AtomicUpdateNodeExecutionFailedAsync(string executionId, string tenantId, string nodeExecutionId, string error, int outputItemCount, Dictionary<string, int> outputCountsByBranch)
         {
             var collection = GetCollection(tenantId);
             var filter = Builders<WorkflowExecutionEntity>.Filter.And(
@@ -180,13 +169,11 @@ namespace Workflow.DomainService.Repositories
             var update = Builders<WorkflowExecutionEntity>.Update
                 .Set("NodeExecutions.$.Status", NodeExecutionStatus.Failed)
                 .Set("NodeExecutions.$.EndedAt", DateTime.UtcNow)
-                .Set("NodeExecutions.$.Error", nodeError)
+                .Set("NodeExecutions.$.Error", error)
                 .Set("NodeExecutions.$.OutputItemCount", outputItemCount)
                 .Set("NodeExecutions.$.OutputCountsByBranch", outputCountsByBranch)
                 .Set(e => e.Status, WorkflowExecutionStatus.Failed)
-                .Set(e => e.ErrorMessage, executionErrorMessage)
-                .Set(e => e.FailedNodeId, failedNodeId)
-                .Set(e => e.FailedNodeName, failedNodeName)
+                .Set(e => e.ErrorMessage, error)
                 .Set(e => e.FinishedAt, DateTime.UtcNow);
 
             await collection.UpdateOneAsync(filter, update);

@@ -92,16 +92,13 @@ namespace Functions.DomainService.Nodes
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Function step failed to invoke function {FunctionId}", parameters.FunctionId);
-                    // Fail fast like every other node: the items already produced plus an error item for
-                    // this one stay on the Failed result for the execution record, and nothing downstream runs.
-                    return FailOnItem(outputItems, standalone ? null : inputItem, parameters.ToBsonDocument(), ex.Message);
+                    return NodeExecutionResult.Failed(ex.Message);
                 }
 
                 if (!string.Equals(result.Status, FunctionQueueKeys.Wire.Succeeded, StringComparison.Ordinal))
                 {
                     var reason = result.ErrorMessage ?? result.ErrorCode ?? result.Status;
-                    return FailOnItem(outputItems, standalone ? null : inputItem, parameters.ToBsonDocument(),
-                        $"function run {result.RunId} did not succeed: {reason}");
+                    return NodeExecutionResult.Failed($"function run {result.RunId} did not succeed: {reason}");
                 }
 
                 outputItems.Add(new NodeOutputItem

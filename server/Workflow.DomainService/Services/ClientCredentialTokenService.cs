@@ -26,7 +26,7 @@ namespace Workflow.DomainService.Services
         /// Gets an access token using client credentials
         /// </summary>
         /// <param name="clientCredentials">The client credentials entity</param>
-        /// <param name="tenantId">The x-blocks-key (sent as the X-Blocks-Key header)</param>
+        /// <param name="tenantId">The project key (used as X-Blocks-Key header)</param>
         /// <returns>The access token or null if failed</returns>
         Task<string?> GetTokenAsync(ClientCredential clientCredentials, string tenantId);
     }

@@ -84,13 +84,15 @@ namespace Workflow.DomainService.Nodes.ActionProxy
                     var (pathSuffix, pathError) = BuildPathSuffix(parameters, inputItem, context);
                     if (pathError != null)
                     {
-                        return FailOnItem(outputItems, errorParent, parameters.ToBsonDocument(), pathError);
+                        AppendErrorOutputItem(outputItems, errorParent, parameters.ToBsonDocument(), pathError);
+                        continue;
                     }
 
                     var (body, contentType, bodyError) = PrepareBody(parameters, method, inputItem, context);
                     if (bodyError != null)
                     {
-                        return FailOnItem(outputItems, errorParent, parameters.ToBsonDocument(), bodyError);
+                        AppendErrorOutputItem(outputItems, errorParent, parameters.ToBsonDocument(), bodyError);
+                        continue;
                     }
 
                     var query = BuildQuery(parameters, inputItem, context);
@@ -118,22 +120,26 @@ namespace Workflow.DomainService.Nodes.ActionProxy
 
                     if (!result.Ok)
                     {
-                        return FailOnItem(outputItems, errorParent, parameters.ToBsonDocument(), DescribeFailure(parameters, method, result));
+                        AppendErrorOutputItem(outputItems, errorParent, parameters.ToBsonDocument(), DescribeFailure(parameters, method, result));
+                        continue;
                     }
 
                     var (responseBody, parseError) = ParseResponse(result);
                     if (parseError != null)
                     {
-                        return FailOnItem(outputItems, errorParent, parameters.ToBsonDocument(), parseError);
+                        AppendErrorOutputItem(outputItems, errorParent, parameters.ToBsonDocument(), parseError);
+                        continue;
                     }
 
                     BuildOutputItems(outputItems, responseBody, inputItem, parameters, standalone);
                 }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
                 catch (Exception ex)
                 {
-                    // Rethrows when the node's token is cancelled; anything else fails the node here, so
-                    // no later item is ever forwarded after one has failed.
-                    return FailOnItem(context, outputItems, errorParent, parameters.ToBsonDocument(), ex);
+                    AppendErrorOutputItem(outputItems, errorParent, parameters.ToBsonDocument(), ex);
                 }
             }
 

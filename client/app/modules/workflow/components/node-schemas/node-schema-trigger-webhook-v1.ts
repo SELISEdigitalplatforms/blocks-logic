@@ -47,7 +47,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         id: "webhook-url",
         type: "tab-with-text",
         label: "Webhook URL",
-        info: "Copy this URL to trigger the workflow. Send the x-blocks-key header.",
+        info: "Copy this URL to trigger the workflow. Send your project key in the x-blocks-key header.",
         key: "executionMode",
         transient: true,
         options: [
@@ -68,7 +68,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         id: "webhook-url-deprecated",
         type: "tab-with-text",
         label: "Deprecated Webhook URL",
-        info: "Legacy URL with the x-blocks-key in the path. Prefer Webhook URL above.",
+        info: "Legacy URL with the project key in the path. Prefer Webhook URL above.",
         key: "executionMode",
         transient: true,
         options: [

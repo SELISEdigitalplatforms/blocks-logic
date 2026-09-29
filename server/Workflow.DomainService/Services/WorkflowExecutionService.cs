@@ -245,15 +245,6 @@ namespace Workflow.DomainService.Services
                     await AttachDelegationGrantAsync();
 
                     var response = await _workflowEngineService.RunNodeInProcessAsync(payload);
-
-                    // A node failed: the execution stopped there, so there is no "last node" output to
-                    // hand back. The caller gets an explicit failure instead (whatever httpResponseData
-                    // says, including "none"), naming the node and carrying its message.
-                    if (response == null || response.Status == WorkflowExecutionStatus.Failed)
-                    {
-                        return BuildFailedWebhookResponse(execution.Id, response);
-                    }
-
                     var responseModeData = triggerNode.Parameters.GetValue("httpResponseData");
                     if (responseModeData == null)
                     {
@@ -303,48 +294,10 @@ namespace Workflow.DomainService.Services
             {
                 throw; // preserve 401
             }
-            catch (OperationCanceledException)
-            {
-                throw; // cancellation is not a failure to create the execution
-            }
             catch (Exception ex)
             {
                 throw new InvalidOperationException("Failed to create execution for webhook", ex);
             }
-        }
-
-        // Upper bound on the node message echoed back to a webhook caller.
-        public const int MaxWebhookErrorMessageLength = 1000;
-
-        /// <summary>
-        /// The response a waiting (<c>httpResponseMode = last</c>) webhook caller gets when the execution
-        /// failed. Only the execution-level <see cref="WorkflowExecutionEntity.ErrorMessage"/> is used: the
-        /// engine sets it to the failing node's own message for a reported failure and to a generic line
-        /// for an unexpected exception, so no exception text or stack trace reaches the caller.
-        /// </summary>
-        public static WorkflowWebhookResponseDto BuildFailedWebhookResponse(string executionId, WorkflowExecutionEntity? execution)
-        {
-            var message = execution?.ErrorMessage;
-            if (string.IsNullOrWhiteSpace(message))
-            {
-                message = "The workflow execution failed.";
-            }
-            else if (message.Length > MaxWebhookErrorMessageLength)
-            {
-                message = message[..MaxWebhookErrorMessageLength] + "…";
-            }
-
-            return new WorkflowWebhookResponseDto
-            {
-                ExecutionId = executionId,
-                Status = WorkflowWebhookResponseDto.FailedStatus,
-                Error = new WorkflowWebhookErrorDto
-                {
-                    NodeId = execution?.FailedNodeId,
-                    NodeName = execution?.FailedNodeName,
-                    Message = message,
-                },
-            };
         }
 
 
@@ -509,8 +462,6 @@ namespace Workflow.DomainService.Services
                 StartedAt = e.StartedAt,
                 FinishedAt = e.FinishedAt,
                 ErrorMessage = e.ErrorMessage,
-                FailedNodeId = e.FailedNodeId,
-                FailedNodeName = e.FailedNodeName,
                 AttemptNumber = e.AttemptNumber,
                 ExecutionMode = e.ExecutionMode,
                 // TriggerMetadata = e.TriggerMetadata
@@ -572,8 +523,6 @@ namespace Workflow.DomainService.Services
                     StartedAt = execution.StartedAt,
                     FinishedAt = execution.FinishedAt,
                     ErrorMessage = execution.ErrorMessage,
-                    FailedNodeId = execution.FailedNodeId,
-                    FailedNodeName = execution.FailedNodeName,
                     AttemptNumber = execution.AttemptNumber,
                     Context = BsonJsonConverter.ToJsonElement(execution.Context),
                     ActiveNodeIds = execution.ActiveNodeIds,
@@ -679,8 +628,6 @@ namespace Workflow.DomainService.Services
                     StartedAt = execution.StartedAt,
                     FinishedAt = execution.FinishedAt,
                     ErrorMessage = execution.ErrorMessage,
-                    FailedNodeId = execution.FailedNodeId,
-                    FailedNodeName = execution.FailedNodeName,
                     // TriggerMetadata = execution.TriggerMetadata,
                     AttemptNumber = execution.AttemptNumber,
                     Context = BsonJsonConverter.ToJsonElement(execution.Context),

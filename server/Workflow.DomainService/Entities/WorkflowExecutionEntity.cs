@@ -25,10 +25,6 @@ namespace Workflow.DomainService.Entities
         public DateTime StartedAt { get; set; } = DateTime.UtcNow;
         public DateTime? FinishedAt { get; set; }
         public string? ErrorMessage { get; set; }
-        // Set when Status is Failed: the node whose failure stopped the execution. ErrorMessage then
-        // holds that node's caller-safe error message (never a stack trace).
-        public string? FailedNodeId { get; set; }
-        public string? FailedNodeName { get; set; }
     }
 
     public class TriggerMetadata
