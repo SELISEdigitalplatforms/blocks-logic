@@ -17,16 +17,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Write runner.env from secret
+      # Optional: the runner VM reaches Key Vault with its Azure Arc identity, so the secret is only
+      # needed to (re)seed /etc/blocks-runner/runner.env. Without it, deploy uses the file already there.
+      - name: Write runner.env from secret (if provided)
         env:
           SANDBOX_ENV: ${{ secrets.SANDBOX_ENV }}
         run: |
+          if [ -z "$SANDBOX_ENV" ]; then
+            echo "SANDBOX_ENV not set - using existing /etc/blocks-runner/runner.env on the VM"
+            exit 0
+          fi
           umask 077
           printf '%s\n' "$SANDBOX_ENV" > "$RUNNER_TEMP/runner.env"
           chmod 600 "$RUNNER_TEMP/runner.env"
 
       - name: Provision, build, test, install, verify
-        run: sudo ./sandbox/deploy.sh --env-file "$RUNNER_TEMP/runner.env"
+        run: |
+          if [ -f "$RUNNER_TEMP/runner.env" ]; then
+            sudo ./sandbox/deploy.sh --env-file "$RUNNER_TEMP/runner.env"
+          else
+            sudo ./sandbox/deploy.sh
+          fi
 
       - name: Clean up secret file
         if: always()
