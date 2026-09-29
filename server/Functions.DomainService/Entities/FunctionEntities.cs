@@ -45,10 +45,39 @@ namespace Functions.DomainService.Entities
         public int LastVersionNumber { get; set; }
         public DateTime? LastDeployedAt { get; set; }
 
+        /// <summary>
+        /// Set when a delete is accepted. From then on the function is gone to every reader —
+        /// the repository filters it out — while <c>FunctionDeletionWorker</c> purges what it
+        /// owned in the background and finally removes this document. Null on a live function.
+        /// </summary>
+        [BsonIgnoreIfNull]
+        public FunctionDeletion? Deletion { get; set; }
 
         /// <summary>True when the editor's source differs from what is deployed.</summary>
         [BsonIgnore]
         public bool IsDirty { get; set; }
+    }
+
+    /// <summary>
+    /// The tombstone of a deleted function: who asked, when, and what the background purge has
+    /// removed so far. The counts are accumulated across purge passes so the final audit record
+    /// can say what the delete took with it, whichever Worker finished it.
+    /// </summary>
+    public class FunctionDeletion
+    {
+        public DateTime RequestedAt { get; set; }
+        public string? RequestedBy { get; set; }
+        public string? RequestedByEmail { get; set; }
+        public bool Forced { get; set; }
+
+        public int Passes { get; set; }
+        public DateTime? LastPassAt { get; set; }
+        public long Versions { get; set; }
+        public long Builds { get; set; }
+        public long Runs { get; set; }
+        public long RunLogs { get; set; }
+        public long ImagesReleased { get; set; }
+        public long RunsCancelled { get; set; }
     }
 
     /// <summary>

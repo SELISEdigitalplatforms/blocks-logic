@@ -69,6 +69,11 @@ namespace Blocks.FunctionRunner.Builds
         /// is what lets the image build below it hit its layer cache instead of rebuilding a
         /// dependency layer on every build.
         /// </para>
+        /// <para>
+        /// A function with no dependencies is ordinary — the starter template has none — and
+        /// npm then reports "up to date" without creating <c>node_modules</c> at all. The
+        /// <c>mkdir -p</c> makes that an empty archive rather than a failed build.
+        /// </para>
         /// </summary>
         public static string InstallScript(string npmFlags, string beginMarker, string endMarker)
         {
@@ -84,6 +89,7 @@ namespace Blocks.FunctionRunner.Builds
                 echo "{beginMarker}"
                 npm ls --omit=dev --depth=0 --json 2>/dev/null || true
                 echo "{endMarker}"
+                mkdir -p node_modules
                 tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
                     -cf {WorkPath}/{DepsArchiveName} node_modules
                 """;

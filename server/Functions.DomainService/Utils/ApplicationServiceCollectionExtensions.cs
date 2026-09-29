@@ -40,6 +40,7 @@ namespace Functions.DomainService.Utils
             services.AddSingleton<IFunctionAuditService, FunctionAuditService>();
             services.AddSingleton<IFunctionImagePinService, FunctionImagePinService>();
             services.AddSingleton<IFunctionPurgeService, FunctionPurgeService>();
+            services.AddSingleton<IFunctionDeletionQueue, FunctionDeletionQueue>();
             services.AddSingleton<IFunctionUsageService, FunctionUsageService>();
             services.AddSingleton<IFunctionImageRecoveryService, FunctionImageRecoveryService>();
             services.AddSingleton<IFunctionAdmissionService, FunctionAdmissionService>();
@@ -88,6 +89,9 @@ namespace Functions.DomainService.Utils
             // output job lost), per tenant, with conditional writes only.
             services.TryAddSingleton<IFunctionTenantSource, FunctionTenantSource>();
             services.AddHostedService<FunctionStaleRunSweeper>();
+            // The background half of a delete: repeated purge passes over a tombstoned function
+            // until nothing in flight can still add to it, then the document itself.
+            services.AddHostedService<FunctionDeletionWorker>();
             // The other end of the runner's dead letter. Without it a job the runner could never
             // deliver leaves its record QUEUED for ever and nothing in the product says why.
             services.AddHostedService<FunctionDeadLetterConsumer>();

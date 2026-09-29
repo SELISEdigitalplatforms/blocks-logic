@@ -46,5 +46,35 @@ namespace Functions.DomainService.Queue
         /// never depends on it — every write the sweep makes is conditional.
         /// </summary>
         public const string StaleSweepLock = "functions:stale-sweep:lock";
+
+        /// <summary>
+        /// Set of deletes the Api has accepted and the Worker has not finished, one member per
+        /// function (<see cref="PendingDeletionMember"/>). Only a fast path: the tombstone in Mongo
+        /// is the record, and the Worker's backstop sweep re-adds any member this set loses.
+        /// </summary>
+        public const string PendingDeletions = "functions:deletions";
+
+        public static string PendingDeletionMember(string tenantId, string functionId) => $"{tenantId}|{functionId}";
+
+        /// <summary>
+        /// Parses a <see cref="PendingDeletions"/> member. Refuses anything that is not exactly two
+        /// non-empty parts, so a malformed member is dropped rather than purging a guessed id.
+        /// </summary>
+        public static bool TryParsePendingDeletion(string? member, out string tenantId, out string functionId)
+        {
+            tenantId = string.Empty;
+            functionId = string.Empty;
+            var parts = (member ?? string.Empty).Split('|');
+            if (parts.Length != 2 || string.IsNullOrWhiteSpace(parts[0]) || string.IsNullOrWhiteSpace(parts[1])) return false;
+            tenantId = parts[0];
+            functionId = parts[1];
+            return true;
+        }
+
+        /// <summary>Held while one Worker runs a purge pass for one function.</summary>
+        public static string DeletionLock(string tenantId, string functionId) => $"functions:deletion-lock:{tenantId}:{functionId}";
+
+        /// <summary>Held by whichever Worker runs the tombstone backstop sweep over every tenant.</summary>
+        public const string DeletionSweepLock = "functions:deletion-sweep:lock";
     }
 }

@@ -52,9 +52,15 @@ namespace Functions.DomainService.Services
         private readonly ICacheClient _cache;
         private readonly ILogger<FunctionPurgeService> _logger;
 
-        /// <summary>Runs are cancelled a page at a time; a function with more in flight than this
-        /// has bigger problems than a slow delete.</summary>
+        /// <summary>Runs are cancelled a page at a time.</summary>
         private const int ActiveRunPageSize = 200;
+
+        /// <summary>
+        /// A bound on the paging loop: 200 000 runs in flight is far past any queue this platform
+        /// admits. Were it ever reached, the runs past it would still have their results dropped,
+        /// since their records go with the rest.
+        /// </summary>
+        private const int MaxActiveRunPages = 1000;
 
         public FunctionPurgeService(
             IFunctionVersionRepository versionRepository,
@@ -115,8 +121,18 @@ namespace Functions.DomainService.Services
         }
 
         /// <summary>
-        /// Signals every run that has not reached a terminal status. A sandbox that is mid-run
-        /// would otherwise keep going and write its result against a function that is gone.
+        /// Stops every run that has not reached a terminal status — every page of them, not just
+        /// the first: a run left out here would go on to execute code that has been deleted.
+        /// <list type="bullet">
+        /// <item>A run still <b>queued</b> has its payload (<c>function:run:{runId}</c>) withdrawn.
+        /// The runner discards a stream entry whose payload is gone, so it never starts — however
+        /// long it waits behind the host's capacity or the function's concurrency limit. A cancel
+        /// signal alone would not do: it lives for <see cref="FunctionQueueKeys.CancelTtl"/> and
+        /// is only looked at once a sandbox is already running.</item>
+        /// <item>A run already <b>executing</b> keeps its payload (the runner is mid-way through
+        /// it) and is signalled to stop; the runner checks the signal on every lease renewal.</item>
+        /// </list>
+        /// Queued runs get both, since the runner may have claimed one a moment ago.
         /// </summary>
         private async Task<int> CancelActiveRunsAsync(
             string tenantId, string functionId, CancellationToken cancellationToken)
@@ -125,21 +141,32 @@ namespace Functions.DomainService.Services
             try
             {
                 var filter = new FunctionRunFilter(functionId, null, null, null, ActiveOnly: true);
-                var (runs, _) = await _runRepository.GetAllAsync(
-                    tenantId, filter, pageNumber: 0, pageSize: ActiveRunPageSize, cancellationToken);
-
                 var database = _cache.CacheDatabase();
-                foreach (var run in runs)
+
+                for (var page = 0; page < MaxActiveRunPages; page++)
                 {
-                    await database.StringSetAsync(
-                        FunctionQueueKeys.Cancel(run.ItemId), "1", FunctionQueueKeys.CancelTtl);
-                    cancelled++;
+                    var (runs, _) = await _runRepository.GetAllAsync(
+                        tenantId, filter, pageNumber: page, pageSize: ActiveRunPageSize, cancellationToken);
+
+                    foreach (var run in runs)
+                    {
+                        await database.StringSetAsync(
+                            FunctionQueueKeys.Cancel(run.ItemId), "1", FunctionQueueKeys.CancelTtl);
+                        if (run.Status == RunStatus.Queued)
+                        {
+                            await database.KeyDeleteAsync(FunctionQueueKeys.Run(run.ItemId));
+                        }
+                        cancelled++;
+                    }
+
+                    if (runs.Count < ActiveRunPageSize) break;
                 }
             }
             catch (Exception ex)
             {
                 // A run that keeps going is wasted work, not corruption: its result lands on a run
-                // record that no longer exists and is dropped. Not a reason to abandon the delete.
+                // record that no longer exists and is dropped. Not a reason to abandon the pass —
+                // and the background delete runs further passes, which try again.
                 _logger.LogWarning(ex, "Could not cancel in-flight runs of function {FunctionId}", functionId);
             }
 

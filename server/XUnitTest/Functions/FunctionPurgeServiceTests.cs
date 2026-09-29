@@ -187,6 +187,44 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
+        public async Task A_queued_run_has_its_payload_withdrawn_so_no_runner_ever_starts_it()
+        {
+            // The cancel signal lives two minutes and is only read once a sandbox is running; a
+            // run queued behind a busy host would outlive it and execute deleted code.
+            var queued = new FunctionRunEntity { ItemId = "r_q", FunctionId = FunctionId, Status = RunStatus.Queued };
+            var service = Service(activeRuns: [queued, Run("r_x")]);
+
+            await service.PurgeAsync(Tenant, FunctionId);
+
+            _keysDeleted.Should().Contain(FunctionQueueKeys.Run("r_q"));
+            // Mid-execution, the runner still needs its payload; that one is only signalled.
+            _keysDeleted.Should().NotContain(FunctionQueueKeys.Run("r_x"));
+            _cancelled.Should().Contain([FunctionQueueKeys.Cancel("r_q"), FunctionQueueKeys.Cancel("r_x")]);
+        }
+
+        [Fact]
+        public async Task Every_page_of_in_flight_runs_is_cancelled_not_just_the_first()
+        {
+            var service = Service();
+            var firstPage = Enumerable.Range(0, 200).Select(i => Run($"p0_{i}")).ToList();
+            var secondPage = new List<FunctionRunEntity> { Run("p1_0") };
+            var pagesAsked = new List<int>();
+            _runs.Setup(r => r.GetAllAsync(Tenant, It.IsAny<FunctionRunFilter>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                .Returns((string _, FunctionRunFilter __, int page, int ___, CancellationToken ____) =>
+                {
+                    pagesAsked.Add(page);
+                    IReadOnlyList<FunctionRunEntity> runs = page == 0 ? firstPage : page == 1 ? secondPage : [];
+                    return Task.FromResult((runs, 201L));
+                });
+
+            var report = await service.PurgeAsync(Tenant, FunctionId);
+
+            report.RunsCancelled.Should().Be(201);
+            _cancelled.Should().Contain(FunctionQueueKeys.Cancel("p1_0"));
+            pagesAsked.Should().Equal(0, 1);
+        }
+
+        [Fact]
         public async Task Only_non_terminal_runs_are_asked_for()
         {
             var service = Service();

@@ -25,8 +25,11 @@ namespace Functions.DomainService.Services
             CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// Deletes a function and everything it owns. Refuses while a workflow still has a step
-        /// pointing at it, unless <paramref name="force"/> says to delete it anyway.
+        /// Deletes a function. Refuses while a workflow still has a step pointing at it, unless
+        /// <paramref name="force"/> says to delete it anyway. Returns once the delete is accepted:
+        /// the function is gone to every reader from that moment, and everything it owned —
+        /// versions, builds, runs, logs, stats, in-flight work, pinned images — is purged in the
+        /// background by <c>FunctionDeletionWorker</c>.
         /// </summary>
         Task<bool> DeleteAsync(
             string tenantId, string functionId, string? actorId, string? actorEmail,
@@ -68,7 +71,7 @@ namespace Functions.DomainService.Services
         private readonly IFunctionRunStatsRepository _runStatsRepository;
         private readonly IFunctionRunRepository _runRepository;
         private readonly IFunctionAuditService _auditService;
-        private readonly IFunctionPurgeService _purgeService;
+        private readonly IFunctionDeletionQueue _deletionQueue;
         private readonly IFunctionUsageService _usageService;
         private readonly IValidator<CreateFunctionRequestDto> _createValidator;
         private readonly IValidator<UpdateFunctionRequestDto> _updateValidator;
@@ -82,7 +85,7 @@ namespace Functions.DomainService.Services
             IFunctionRunStatsRepository runStatsRepository,
             IFunctionRunRepository runRepository,
             IFunctionAuditService auditService,
-            IFunctionPurgeService purgeService,
+            IFunctionDeletionQueue deletionQueue,
             IFunctionUsageService usageService,
             IValidator<CreateFunctionRequestDto> createValidator,
             IValidator<UpdateFunctionRequestDto> updateValidator,
@@ -96,7 +99,7 @@ namespace Functions.DomainService.Services
             _runStatsRepository = runStatsRepository;
             _runRepository = runRepository;
             _auditService = auditService;
-            _purgeService = purgeService;
+            _deletionQueue = deletionQueue;
             _usageService = usageService;
             _createValidator = createValidator;
             _updateValidator = updateValidator;
@@ -212,31 +215,29 @@ namespace Functions.DomainService.Services
                     "Remove those steps first, or delete it anyway with force.");
             }
 
-            // Everything the function owns goes first, while the records naming it still exist:
-            // versions, builds, runs, run logs, stats, the images those builds pinned on every
-            // runner, and any work still in flight. A failure here leaves the function visible and
-            // the delete repeatable, which is the recoverable way round — deleting the document
-            // first would strand the rest with nothing left to find it by.
-            var report = await _purgeService.PurgeAsync(tenantId, functionId, cancellationToken);
+            // The tombstone is the delete. From here the function is invisible to every read and
+            // write in the repository, so no new run, build, deploy or save can start against it,
+            // and the purge — which can take a while for a function with a long history, and must
+            // outlast anything already in flight — happens in the Worker, off this request.
+            var accepted = await _repository.MarkDeletedAsync(tenantId, functionId, new FunctionDeletion
+            {
+                RequestedAt = DateTime.UtcNow,
+                RequestedBy = actorId,
+                RequestedByEmail = actorEmail,
+                Forced = force,
+            }, cancellationToken);
+            // Someone else's delete got there first: theirs is the one in the trail.
+            if (!accepted) return false;
 
-            var deleted = await _repository.DeleteAsync(tenantId, functionId, cancellationToken);
-            if (!deleted) return false;
-
-            // The audit trail is deliberately not purged: it is the only remaining record that
-            // this function existed at all, and it expires on its own after AuditRetention.
+            // The audit trail is deliberately never purged: it is the only remaining record that
+            // this function existed at all, and it expires on its own after AuditRetention. The
+            // Worker adds a second record, with what was removed, once the purge is finished.
             await _auditService.RecordAsync(
                 tenantId, functionId, FunctionsConstants.AuditActions.Deleted, actorId, actorEmail,
-                new
-                {
-                    report.Versions,
-                    report.Builds,
-                    report.Runs,
-                    report.RunLogs,
-                    report.ImagesReleased,
-                    report.RunsCancelled,
-                    Forced = force,
-                },
-                cancellationToken);
+                new { Forced = force }, cancellationToken);
+
+            // Only the fast path. Should it fail, the Worker's backstop sweep finds the tombstone.
+            await _deletionQueue.EnqueueAsync(tenantId, functionId, cancellationToken);
             return true;
         }
 

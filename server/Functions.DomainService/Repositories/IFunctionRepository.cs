@@ -46,7 +46,30 @@ namespace Functions.DomainService.Repositories
             string tenantId, string functionId, string versionId, string? actorId,
             CancellationToken cancellationToken = default);
 
-        Task<bool> DeleteAsync(string tenantId, string functionId, CancellationToken cancellationToken = default);
+        /// <summary>
+        /// Accepts a delete: stamps the tombstone, after which every read and write here treats
+        /// the function as gone. False when it is already gone or already being deleted, so two
+        /// concurrent deletes produce one tombstone and one audit record.
+        /// </summary>
+        Task<bool> MarkDeletedAsync(
+            string tenantId, string functionId, FunctionDeletion deletion, CancellationToken cancellationToken = default);
+
+        /// <summary>A tombstoned function (without its source), or null when there is none.</summary>
+        Task<FunctionEntity?> GetDeletedAsync(string tenantId, string functionId, CancellationToken cancellationToken = default);
+
+        /// <summary>Ids of tombstoned functions, oldest delete first — the backstop sweep's input.</summary>
+        Task<IReadOnlyList<string>> GetDeletedIdsAsync(string tenantId, int limit, CancellationToken cancellationToken = default);
+
+        /// <summary>Adds one purge pass's counts to the tombstone.</summary>
+        Task RecordPurgePassAsync(
+            string tenantId, string functionId, Services.FunctionPurgeReport report, DateTime at,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Removes the document for good — only ever a tombstoned one, so no code path can remove
+        /// a live function without the purge having run first.
+        /// </summary>
+        Task<bool> DeleteTombstoneAsync(string tenantId, string functionId, CancellationToken cancellationToken = default);
 
     }
 }
