@@ -35,6 +35,18 @@ namespace Blocks.FunctionRunner.Tests
                 Options);
 
         [Fact]
+        public void A_function_with_no_dependencies_still_produces_an_archive()
+        {
+            // npm creates no node_modules when there is nothing to install, and tar then failed
+            // the build of every function with an empty dependency list.
+            var script = BuildSandboxProfile.InstallScript("--omit=dev --ignore-scripts", "b", "e");
+
+            script.IndexOf("mkdir -p node_modules", StringComparison.Ordinal).Should()
+                .BeGreaterThan(script.IndexOf("npm install", StringComparison.Ordinal))
+                .And.BeLessThan(script.IndexOf("tar ", StringComparison.Ordinal));
+        }
+
+        [Fact]
         public void Installs_under_gvisor_and_never_the_default_runtime()
         {
             Create().HostConfig.Runtime.Should().Be("runsc");
