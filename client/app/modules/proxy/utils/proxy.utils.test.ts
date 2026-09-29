@@ -285,7 +285,7 @@ describe("buildProxyCurl", () => {
     expect(buildProxyCurl(base, "https://dev-logic.blocksdevelopers.com")).toBe(
       [
         "curl -X GET 'https://dev-logic.blocksdevelopers.com/api/proxy/gateway/search-tickets' \\",
-        "  -H 'x-blocks-key: <your tenant id>' \\",
+        "  -H 'x-blocks-key: <your x-blocks-key>' \\",
         "  -H 'Authorization: Bearer <token issued for that tenant>'",
       ].join("\n"),
     );

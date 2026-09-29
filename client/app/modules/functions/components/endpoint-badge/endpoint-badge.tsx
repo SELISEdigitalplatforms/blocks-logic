@@ -6,6 +6,7 @@ import { ProxyMethodBadge } from "@/modules/proxy/components/proxy-method-badge"
 import {
   getFunctionClientPath,
   getFunctionClientUrl,
+  snippetBlocksKey,
   toHttpVerb,
 } from "../../constants/endpoint.constant";
 import { HttpTriggerMethod } from "../../types/function.types";
@@ -28,6 +29,8 @@ export const buildInvokePath = (functionId: string) => getFunctionClientPath(fun
  * "Your client calls" for one function: the method the trigger answers, the URL, and a copy
  * button — the same block the proxy details page leads its Configuration card with. Anything the
  * caller appends after the id reaches the handler as `input.path`, which the trailing hint says.
+ * Below the URL, the one header every call must carry: `x-blocks-key`, without which the platform
+ * cannot resolve the tenant and the call never reaches the function.
  */
 export const EndpointBadge = ({
   functionId,
@@ -37,13 +40,21 @@ export const EndpointBadge = ({
   method: HttpTriggerMethod;
 }) => {
   const [copied, setCopied] = useState(false);
+  const [keyCopied, setKeyCopied] = useState(false);
   const project = useProjectStore().selectedProject;
   const url = buildInvokeUrl(functionId, project);
+  const header = `x-blocks-key: ${snippetBlocksKey(project?.tenantId)}`;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleCopyHeader = () => {
+    navigator.clipboard.writeText(header);
+    setKeyCopied(true);
+    setTimeout(() => setKeyCopied(false), 2000);
   };
 
   return (
@@ -68,6 +79,27 @@ export const EndpointBadge = ({
         {url}
         <span className="text-muted-foreground">/{"{path}"}</span>
       </p>
+      <div className="flex items-center gap-2 border-t pt-2">
+        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Header
+        </span>
+        <code className="break-all font-mono text-sm text-foreground" data-testid="blocks-key-header">
+          {header}
+        </code>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={keyCopied ? "Header copied" : "Copy header"}
+          className="ml-auto h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+          onClick={handleCopyHeader}
+        >
+          {keyCopied ? (
+            <Check className="h-3.5 w-3.5 text-green-500" />
+          ) : (
+            <Copy className="h-3.5 w-3.5" />
+          )}
+        </Button>
+      </div>
       <p className="text-xs text-muted-foreground">
         Whatever follows the id is yours to route on — it arrives as{" "}
         <code className="font-mono">input.path</code>, with the query, headers and body beside it.

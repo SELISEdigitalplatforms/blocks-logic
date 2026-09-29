@@ -64,3 +64,14 @@ export const getFunctionClientUrl = (
   functionId: string,
   routePath?: string,
 ) => `${getProxyPublicHost(project)}${getFunctionClientPath(functionId, routePath)}`;
+
+/**
+ * The value a caller sends as `x-blocks-key`: the selected environment's tenant id, which is
+ * what the platform resolves the tenant from. Only an id-shaped value is inlined — anything else
+ * (no environment selected yet, or a value that would break out of the quoted header) falls back
+ * to the placeholder rather than producing a command that silently targets the wrong tenant.
+ */
+export const snippetBlocksKey = (tenantId?: string | null) => {
+  const key = tenantId?.trim() ?? "";
+  return /^[A-Za-z0-9_-]+$/.test(key) ? key : "<your x-blocks-key>";
+};

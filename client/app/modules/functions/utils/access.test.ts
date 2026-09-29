@@ -15,8 +15,8 @@ const token: ITriggerConfig = {
 };
 
 describe("describeTriggerAccess", () => {
-  it("says what public actually requires — the URL and the project key", () => {
-    expect(describeTriggerAccess({ ...token, authMode: "Public" })).toMatch(/project key/);
+  it("says what public actually requires — the URL and the x-blocks-key", () => {
+    expect(describeTriggerAccess({ ...token, authMode: "Public" })).toMatch(/x-blocks-key/);
   });
 
   it("says so when a token trigger has no rules", () => {

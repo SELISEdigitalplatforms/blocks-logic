@@ -776,7 +776,7 @@ export const buildProxyCurl = (
 
   const lines = [
     `curl -X ${log.method} ${shellQuote(url)}`,
-    `  -H ${shellQuote("x-blocks-key: <your tenant id>")}`,
+    `  -H ${shellQuote("x-blocks-key: <your x-blocks-key>")}`,
     `  -H ${shellQuote("Authorization: Bearer <token issued for that tenant>")}`,
   ];
 

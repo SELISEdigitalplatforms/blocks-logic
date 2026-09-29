@@ -34,7 +34,7 @@ const KIND_OPTIONS: Array<{
     value: "Public",
     title: "Public",
     description:
-      "Anyone with the URL and your project key can call it. No identity, no token-scoped work.",
+      "Anyone with the URL and your x-blocks-key can call it. No identity, no token-scoped work.",
     icon: Globe,
   },
 ];

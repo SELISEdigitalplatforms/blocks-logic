@@ -71,7 +71,7 @@ describe("TriggerHttpCard", () => {
 
   it("says what public actually needs when the trigger is already public", () => {
     render({ ...tokenTrigger, authMode: "Public", roles: [] });
-    expect(screen.getByTestId("access-summary").textContent).toMatch(/project key/);
+    expect(screen.getByTestId("access-summary").textContent).toMatch(/x-blocks-key/);
     expect(screen.queryByTestId("access-restrictions")).toBeNull();
   });
 

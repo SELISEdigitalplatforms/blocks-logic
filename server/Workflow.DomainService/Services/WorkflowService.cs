@@ -32,7 +32,7 @@ namespace Workflow.DomainService.Services
         }
 
         /// <summary>
-        /// Creates an error response for project key not found exception
+        /// Creates an error response for x-blocks-key not found exception
         /// </summary>
         private BaseMutationResponse CreateTenantNotFoundError(string tenantId, string context, string stackTrace)
         {
@@ -41,7 +41,7 @@ namespace Workflow.DomainService.Services
             {
                 IsSuccess = false,
                 ItemId = null,
-                Errors = new Dictionary<string, string> { { "Message", $"Project key is not found {tenantId}" } }
+                Errors = new Dictionary<string, string> { { "Message", $"x-blocks-key is not found {tenantId}" } }
             };
         }
 
@@ -351,7 +351,7 @@ namespace Workflow.DomainService.Services
                 {
                     IsSuccess = false,
                     data = null,
-                    Errors = new Dictionary<string, string> { { "Message", $"Project key is not found {tenantId}" } }
+                    Errors = new Dictionary<string, string> { { "Message", $"x-blocks-key is not found {tenantId}" } }
                 };
             }
             catch (Exception ex)

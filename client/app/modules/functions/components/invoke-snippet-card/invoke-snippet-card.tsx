@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useProjectStore } from "@seliseblocks/genesis-os";
 import { Card } from "@/components/ui-kits/card/card";
-import { toHttpVerb } from "../../constants/endpoint.constant";
+import { snippetBlocksKey, toHttpVerb } from "../../constants/endpoint.constant";
 import { buildInvokeUrl } from "../endpoint-badge";
 import { ITriggerConfig } from "../../types/function.types";
 
@@ -18,6 +18,7 @@ export const InvokeSnippetCard = ({ functionId, trigger }: InvokeSnippetCardProp
   const [copied, setCopied] = useState(false);
   const project = useProjectStore().selectedProject;
   const url = buildInvokeUrl(functionId, project);
+  const blocksKey = snippetBlocksKey(project?.tenantId);
   // x-blocks-key is not optional: it is how the platform resolves the tenant for anything under
   // the gateway, so a caller without it never reaches the function. It identifies the project, it
   // does not authenticate a user — that is what the Authorization header below is for on a
@@ -29,8 +30,8 @@ export const InvokeSnippetCard = ({ functionId, trigger }: InvokeSnippetCardProp
   // trigger actually answers, so what the handler receives below is what this call produces.
   const snippet =
     verb === "GET"
-      ? `curl "${url}/orders/42?notify=true" \\\n  -H "x-blocks-key: <your project key>"${authHeader}`
-      : `curl -X POST "${url}/orders/42?notify=true" \\\n  -H "x-blocks-key: <your project key>"${authHeader} \\\n  -H "Content-Type: application/json" \\\n  -d '{"qty":2}'`;
+      ? `curl "${url}/orders/42?notify=true" \\\n  -H "x-blocks-key: ${blocksKey}"${authHeader}`
+      : `curl -X POST "${url}/orders/42?notify=true" \\\n  -H "x-blocks-key: ${blocksKey}"${authHeader} \\\n  -H "Content-Type: application/json" \\\n  -d '{"qty":2}'`;
   const receives =
     verb === "GET"
       ? '{ "method": "GET", "path": "orders/42",\n  "query": { "notify": "true" },\n  "headers": { "accept": "*/*", … },\n  "body": null }'

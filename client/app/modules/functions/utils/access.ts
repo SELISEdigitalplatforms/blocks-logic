@@ -13,7 +13,7 @@ const listClause = (noun: string, values: string[], match: MatchMode) => {
  */
 export const describeTriggerAccess = (trigger: ITriggerConfig): string => {
   if (trigger.authMode === "Public") {
-    return "Anyone with the URL and your project key can call it. No identity, no token-scoped work.";
+    return "Anyone with the URL and your x-blocks-key can call it. No identity, no token-scoped work.";
   }
 
   const hasRoles = trigger.roles.length > 0;
