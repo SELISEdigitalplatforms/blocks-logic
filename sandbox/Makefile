@@ -20,6 +20,12 @@ STAGE_DIR := /opt/blocks-function-runner.stage
 SERVICE := blocks-function-runner.service
 export DOTNET_CLI_TELEMETRY_OPTOUT := 1
 export DOTNET_NOLOGO := 1
+# install depends on build, so a deploy runs dotnet build/test/publish back-to-back within
+# seconds. A persistent MSBuild/Roslyn build server surviving between those invocations has
+# been observed to come back from the test run corrupted and crash the next one instantly with
+# "Fatal error. Internal CLR error." — disable node/server reuse so every invocation is clean.
+export MSBUILDDISABLENODEREUSE := 1
+export DOTNET_CLI_USE_MSBUILD_SERVER := 0
 
 .PHONY: help deploy provision image build test install uninstall logs status redis-status clean
 
