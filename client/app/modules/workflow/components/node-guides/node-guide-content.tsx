@@ -1,13 +1,29 @@
 import type { ReactNode } from "react";
 
+type GuideSection = {
+  title: string;
+  content: ReactNode;
+};
+
 type GuideContentProps = {
   title: string;
   description: ReactNode;
   steps: ReactNode[];
+  sections?: GuideSection[];
   notes?: ReactNode[];
 };
 
-export const GuideContent = ({ title, description, steps, notes }: GuideContentProps) => (
+export const GuideInlineCode = ({ children }: { children: ReactNode }) => (
+  <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">{children}</code>
+);
+
+export const GuideCode = ({ children }: { children: string }) => (
+  <pre className="overflow-x-auto rounded-md border border-border bg-muted/40 p-3 font-mono text-xs leading-5 text-foreground">
+    <code>{children}</code>
+  </pre>
+);
+
+export const GuideContent = ({ title, description, steps, sections, notes }: GuideContentProps) => (
   <div className="space-y-5 text-sm leading-6 text-muted-foreground">
     <section className="space-y-2">
       <h4 className="text-sm font-semibold text-foreground">{title}</h4>
@@ -22,6 +38,15 @@ export const GuideContent = ({ title, description, steps, notes }: GuideContentP
         ))}
       </ol>
     </section>
+
+    {sections?.map((section) => (
+      <section key={section.title} className="space-y-2">
+        <h5 className="text-xs font-semibold uppercase tracking-wide text-foreground">
+          {section.title}
+        </h5>
+        {section.content}
+      </section>
+    ))}
 
     {notes?.length ? (
       <section className="space-y-2 rounded-md border border-border bg-muted/30 p-3">
