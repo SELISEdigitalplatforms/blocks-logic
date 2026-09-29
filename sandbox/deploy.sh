@@ -6,6 +6,10 @@
 #   sudo ./deploy.sh --env-file F    merge F into runner.env first, for an unattended deploy
 #   sudo ./deploy.sh --help
 #
+# Key Vault hosts (BLOCKS_VAULT_TYPE=2) authenticate with the VM's Azure Arc managed identity when
+# it has one, so runner.env then needs only KeyVault__KeyVaultUrl. Without one, it needs
+# KeyVault__ClientId, KeyVault__ClientSecret and KeyVault__TenantId as well.
+#
 # Safe to re-run: every phase is idempotent, so this is also the way to reconcile a host
 # after editing deny-cidrs, dns-servers, logging.conf or .versions. The service is only
 # restarted in phase 5, after the configuration gate and the tests have passed, so a bad
@@ -25,7 +29,7 @@ while [ $# -gt 0 ]; do
       SEED_ENV_FILE="$1"
       ;;
     --env-file=*) SEED_ENV_FILE="${1#--env-file=}" ;;
-    -h|--help) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "unknown option '$1' (try --help)" ;;
   esac
   shift
@@ -83,6 +87,46 @@ load_facts
 
 ENV_FILE=/etc/blocks-runner/runner.env
 env_val() { sed -n "s/^[[:space:]]*$1=//p" "$ENV_FILE" | tail -1 | tr -d '"'"'"'' | tr -d '[:space:]'; }
+
+# arc_identity_ok — can this host mint a Key Vault token from its Azure Arc managed identity?
+#
+# The Arc agent (himds) answers the first request with 401 and the path of a key file in the
+# WWW-Authenticate header; proving you can read that file (root, or group himds) is the second
+# half of the handshake. Any failure — no agent, agent down, wrong group, identity not granted
+# — is "no", never an error: the caller falls back to client credentials. The token is matched,
+# not printed. Responses are captured before matching: piping into `grep -q` would SIGPIPE curl
+# and pipefail would misreport it.
+arc_identity_ok() {
+  local url hdr keyfile resp
+  url="http://localhost:40342/metadata/identity/oauth2/token?api-version=2020-06-01&resource=https://vault.azure.net"
+  hdr="$(curl -s -m 5 -D - -o /dev/null -H Metadata:true "$url" 2>/dev/null || true)"
+  keyfile="$(printf '%s' "$hdr" | sed -n 's/^www-authenticate:.*realm=//Ip' | tr -d '\r' || true)"
+  case "$keyfile" in /var/opt/azcmagent/tokens/*.key) ;; *) return 1 ;; esac
+  [ -r "$keyfile" ] || return 1
+  resp="$(curl -s -m 10 -H Metadata:true -H "Authorization: Basic $(cat "$keyfile")" "$url" 2>/dev/null || true)"
+  grep -q '"access_token"' <<<"$resp"
+}
+
+# use_managed_identity — make the runner service able to use that identity itself.
+#
+# Azure.Identity recognises an Arc host by IDENTITY_ENDPOINT and IMDS_ENDPOINT. The agent exports
+# them only to its own extensions, so a plain systemd service never sees them; they go in
+# runner.env. The service user also needs group himds to read the agent's key file. Either change
+# is invisible to a running unit, so both mark ENV_CHANGED and phase 5 restarts it.
+use_managed_identity() {
+  if set_env_val IDENTITY_ENDPOINT "http://localhost:40342/metadata/identity/oauth2/token" \
+       "Azure Arc managed identity. Written by deploy.sh."; then
+    ENV_CHANGED=yes; info "set IDENTITY_ENDPOINT"
+  fi
+  if set_env_val IMDS_ENDPOINT "http://localhost:40342" "Azure Arc managed identity. Written by deploy.sh."; then
+    ENV_CHANGED=yes; info "set IMDS_ENDPOINT"
+  fi
+  local svc="${RUNNER_USER:-blocks-runner}"
+  if getent group himds >/dev/null && ! id -nG "$svc" | tr ' ' '\n' | grep -qx himds; then
+    usermod -aG himds "$svc"
+    ENV_CHANGED=yes; info "added $svc to group himds"
+  fi
+}
 
 # set_env_val <key> <value> [note] — set a key in runner.env, in place.
 #
@@ -206,10 +250,18 @@ case "$VAULT" in
     require_val BlocksSecret__DatabaseConnectionString
     ;;
   2)
-    info "vault: Azure Key Vault"
-    for k in KeyVault__ClientId KeyVault__ClientSecret KeyVault__KeyVaultUrl KeyVault__TenantId; do
-      require_val "$k"
-    done
+    # The vault URL is needed either way. Credentials are only needed when this host has no Azure
+    # Arc managed identity to authenticate with — which is preferred whenever it works.
+    require_val KeyVault__KeyVaultUrl
+    if arc_identity_ok; then
+      ok "vault: Azure Key Vault via managed identity (Azure Arc) — no client secret needed"
+      use_managed_identity
+    else
+      info "vault: Azure Key Vault — no Azure Arc managed identity on this host, using client credentials"
+      for k in KeyVault__ClientId KeyVault__ClientSecret KeyVault__TenantId; do
+        require_val "$k"
+      done
+    fi
     ;;
   *) die "$ENV_FILE: BLOCKS_VAULT_TYPE is '${VAULT:-unset}', expected 1 (OnPrem) or 2 (Key Vault)" ;;
 esac

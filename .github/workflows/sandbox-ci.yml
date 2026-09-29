@@ -13,6 +13,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: [self-hosted, function-sandbox]
+    environment: dev   # SANDBOX_ENV lives in the dev environment; without this it resolves empty
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
