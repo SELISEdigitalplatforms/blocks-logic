@@ -93,10 +93,19 @@
             </para>
             </summary>
         </member>
-        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.#ctor(Functions.DomainService.Services.IFunctionService,Functions.DomainService.Services.IFunctionDeploymentService,Functions.DomainService.Services.IFunctionInvocationService,Functions.DomainService.Services.IFunctionRunService,Functions.DomainService.Services.IFunctionBuildService,Functions.DomainService.Services.IFunctionAuditService,Common.InternalService.Access.IEndpointAccessAuthorizer)">
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.#ctor(Functions.DomainService.Services.IFunctionService,Functions.DomainService.Services.IFunctionDeploymentService,Functions.DomainService.Services.IFunctionInvocationService,Functions.DomainService.Services.IFunctionRunService,Functions.DomainService.Services.IFunctionBuildService,Functions.DomainService.Services.IFunctionAuditService,Common.InternalService.Access.IEndpointAccessAuthorizer,Functions.DomainService.Services.IFunctionPollTokenService,Microsoft.Extensions.Logging.ILogger{BlocksTemplate.Api.Controllers.FunctionsController})">
             <summary>
             The management services, plus the shared access authorizer that resolves the tenant on
-            the anonymous <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.Invoke(System.String,System.String,System.Boolean)"/> route — the same one the proxy gateway uses.
+            the anonymous <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.Invoke(System.String,System.String,System.Boolean)"/> route — the same one the proxy gateway uses — and the
+            poll-token service behind the anonymous <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.PollRunResult(System.String)"/>.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.MapInvokeRefusalsAsync(System.Func{System.Threading.Tasks.Task{Functions.DomainService.Dtos.Responses.InvokeResultDto}})">
+            <summary>
+            The two refusals a Studio-side invocation (Test, Replay) can hit that are the caller's
+            to act on, answered as such instead of escaping as a 500: a credential-shaped key the
+            control plane refused to put in an envelope (400), the function's own rate limit
+            (429 with <c>Retry-After</c>), and a run queue that refused the run (503 with <c>Retry-After</c>). Everything else keeps the pipeline's existing handling.
             </summary>
         </member>
         <member name="F:BlocksTemplate.Api.Controllers.FunctionsController.InvokeHardBodyLimitBytes">
@@ -144,9 +153,11 @@
             validates but the rules refuse it (or HTTP is switched off), 404 for an unknown or
             undeployed function — but only to a caller who could have reached it, so 401 comes
             first — 405 with an <c>Allow</c> header for the method the trigger does not take, 413
-            over the body ceiling, 400 for input the sandbox cannot be given. 202 with a
-            run id is the fire-and-forget shape; 200 carries the result once <c>?wait=true</c> saw a
-            terminal outcome.
+            over the body ceiling, 400 for input the sandbox cannot be given, 429 with
+            <c>Retry-After</c> when the function's own rate limit refuses the call (only with
+            <c>Functions:RateLimits:Enabled</c>). 202 with a run id and a <c>pollToken</c> is the
+            fire-and-forget shape (see <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.PollRunResult(System.String)"/>); 200 carries the result once
+            <c>?wait=true</c> saw a terminal outcome.
             </para>
             </summary>
         </member>
@@ -168,13 +179,37 @@
         <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.InvokeError(System.Int32,System.String,System.String,System.String)">
             <summary>Blocks-generated error body, the gateway's shape: <c>{ code: "FUNCTION_INVOKE_&lt;OUTCOME&gt;", message, instance }</c>.</summary>
         </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.TryIssuePollTokenAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Mints the 202's poll token. A failure here (Redis unavailable) must not fail the call:
+            the run is already queued, and a 5xx would only invite a retry that queues it twice.
+            The caller then gets a 202 without a token — the same as before tokens existed.
+            </summary>
+        </member>
         <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.PollRun(System.String)">
             <summary>
-            The poll half of Fire/Poll: <c>GET /api/fn/runs/{runId}</c>, for a caller that took a
-            202 from <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.Invoke(System.String,System.String,System.Boolean)"/>. Distinct from <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.GetRun(System.String)"/> — same service call,
-            but a path parameter on the public route and a signed-in Blocks user rather than a
-            permission-gated Studio request.
+            The poll half of Fire/Poll for a Blocks user: <c>GET /api/fn/runs/{runId}</c>. The full
+            run record — input included — so it takes the same <c>function::read</c> permission as
+            <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.GetRun(System.String)"/>, and reads only within the caller's own tenant. A signed-in user
+            without that permission polls with the run's token instead (<see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.PollRunResult(System.String)"/>).
             </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.PollRunResult(System.String)">
+            <summary>
+            The anonymous poll: <c>GET /api/fn/runs/{runId}/result</c> with the <c>x-poll-token</c>
+            header from the 202, and the same <c>x-blocks-key</c> the invoke used. Answers status,
+            result and error only — never the input or headers.
+            <para>
+            The token rides in a header, not the query, so it does not land in access logs. Every
+            refusal after the tenant check — missing, malformed, wrong or expired token, a token for
+            another tenant's run, a run that no longer exists — is the same 404, so the route says
+            nothing about which run ids exist. Anonymous at the framework level for the same reason
+            <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.Invoke(System.String,System.String,System.Boolean)"/> is.
+            </para>
+            </summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Controllers.FunctionsController.PollTokenHeader">
+            <summary>The request header that carries the 202's poll token.</summary>
         </member>
         <member name="T:BlocksTemplate.Api.Controllers.HealthController">
             <summary>
@@ -710,6 +745,13 @@
             Header-based twin of <see cref="M:Utilities.Api.Controllers.WorkflowController.TestWebhook(System.String,System.String,System.String,System.Text.Json.JsonElement)"/>: tenant comes from <c>x-blocks-key</c> rather than
             the path. <c>POST /api/Workflow/webhook-test/{workflowId}/{webhookId}</c>. Same 400/401 behaviour
             as <see cref="M:Utilities.Api.Controllers.WorkflowController.WebhookByHeader(System.String,System.String,System.Text.Json.JsonElement)"/>.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.WebhookResult(Workflow.DomainService.Dtos.WorkflowWebhookResponseDto)">
+            <summary>
+            Maps a webhook run to its HTTP answer. A waiting run whose execution failed (a node errored and
+            the workflow stopped there) is a 500 carrying <c>{ executionId, status: "Failed", error: { nodeId,
+            nodeName, message } }</c>; everything else keeps the 200 it always had.
             </summary>
         </member>
         <member name="M:Utilities.Api.Controllers.WorkflowController.StepExecute(Workflow.DomainService.Dtos.StepExecuteRequestDto)">
