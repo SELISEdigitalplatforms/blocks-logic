@@ -33,63 +33,8 @@ namespace DomainService.Notification
             return _dbContextProvider.GetDatabase(blocksContext.TenantId);
         }
 
-        private IMongoDatabase ResolveDatabase(Func<IMongoDatabase> resolve, string source)
-        {
-            try
-            {
-                return resolve();
-            }
-            catch (Exception)
-            {
-                _logger.LogError("Notifications: the {Source} database could not be resolved", source);
-                throw;
-            }
-        }
-
-        /// <summary>
-        /// Every database a notification for the current user could live in.
-        ///
-        /// <see cref="ResolvedClientDb"/> picks a single database for writes, so a notification lands in
-        /// the root database when its producer was impersonating and in the tenant database otherwise.
-        /// One user's notifications are therefore split across both, and reads have to look in both.
-        ///
-        /// Deduplication collapses the list back to one entry when the tenant already is the root
-        /// database, so a single-database tenant behaves exactly as it did before.
-        /// </summary>
-        private List<IMongoDatabase> ResolvedClientDbs()
-        {
-            var tenantId = BlocksContext.GetContext()?.TenantId;
-            if (string.IsNullOrWhiteSpace(tenantId))
-                throw new InvalidOperationException("Tenant context is required to read notifications.");
-
-            var candidates = new List<IMongoDatabase>
-            {
-                ResolveDatabase(() => _dbContextProvider.GetDatabase(tenantId), "tenant"),
-                ResolveDatabase(() => _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, _blocksSecret.RootDatabaseName), "root"),
-            };
-
-            var seenDatabases = new HashSet<IMongoDatabase>();
-            var seenTargets = new HashSet<(IMongoClient Client, string Name)>();
-            var databases = new List<IMongoDatabase>();
-
-            foreach (var database in candidates)
-            {
-                if (!seenDatabases.Add(database)) continue;
-
-                var name = database.DatabaseNamespace?.DatabaseName;
-                if (name is not null && !seenTargets.Add((database.Client, name))) continue;
-
-                databases.Add(database);
-            }
-
-            if (databases.Count == 0)
-                throw new InvalidOperationException("No notification database could be resolved for the current context.");
-
-            return databases;
-        }
-
-        private List<IMongoCollection<OfflineNotification>> NotificationCollections() =>
-            [.. ResolvedClientDbs().Select(database => database.GetCollection<OfflineNotification>(_notificationCollection))];
+        private IMongoCollection<OfflineNotification> NotificationCollection() =>
+            ResolvedClientDb().GetCollection<OfflineNotification>(_notificationCollection);
 
         public void Save<T>(T data, string collectionName = "")
         {
@@ -118,15 +63,6 @@ namespace DomainService.Notification
 
             var items = await collection.FindAsync(filter);
             return await items.ToListAsync();
-        }
-
-        public async Task<List<OfflineNotification>> GetNotificationItemsAcrossPlacementsAsync(
-            Expression<Func<OfflineNotification, bool>> filterExpression)
-        {
-            var filter = Builders<OfflineNotification>.Filter.Where(filterExpression);
-            var results = await Task.WhenAll(NotificationCollections().Select(async collection =>
-                await (await collection.FindAsync(filter)).ToListAsync()));
-            return results.SelectMany(items => items).ToList();
         }
 
         public async Task SaveAsync<T>(T data, string collectionName = "")
@@ -174,13 +110,11 @@ namespace DomainService.Notification
             // First, initialize null ReadByUserIds to empty list (required for $addToSet)
             var nullReadByUserIdsFilter = unreadFilter & builder.Eq(q => q.ReadByUserIds, null);
             var updateDefinition = new UpdateDefinitionBuilder<OfflineNotification>().AddToSet(p => p.ReadByUserIds, userId);
-            foreach (var collection in NotificationCollections())
-            {
-                await collection.UpdateManyAsync(nullReadByUserIdsFilter,
-                    new UpdateDefinitionBuilder<OfflineNotification>().Set(p => p.ReadByUserIds, new List<string>()));
-                // Then add userId to ReadByUserIds for all unread notifications.
-                await collection.UpdateManyAsync(unreadFilter, updateDefinition);
-            }
+            var collection = NotificationCollection();
+            await collection.UpdateManyAsync(nullReadByUserIdsFilter,
+                new UpdateDefinitionBuilder<OfflineNotification>().Set(p => p.ReadByUserIds, new List<string>()));
+            // Then add userId to ReadByUserIds for all unread notifications.
+            await collection.UpdateManyAsync(unreadFilter, updateDefinition);
         }
 
         public async Task UpdateNotificationAsReadByUserIdAsync(string userId, string notificationId)
@@ -191,22 +125,9 @@ namespace DomainService.Notification
             var updateDefinition = new UpdateDefinitionBuilder<OfflineNotification>().AddToSet(p => p.ReadByUserIds,
                 userId.ToString());
 
-            foreach (var collection in NotificationCollections())
-                await collection.UpdateOneAsync(filter, updateDefinition);
+            await NotificationCollection().UpdateOneAsync(filter, updateDefinition);
         }
 
-        private static async Task<(List<OfflineNotification> Items, long Unread, long Total)> ReadNotificationPageAsync(
-            IMongoCollection<OfflineNotification> collection,
-            FilterDefinition<OfflineNotification> filter,
-            FilterDefinition<OfflineNotification> unreadFilter,
-            FindOptions<OfflineNotification> options)
-        {
-            var items = await (await collection.FindAsync(filter, options)).ToListAsync();
-            var unread = await collection.CountDocumentsAsync(unreadFilter);
-            var total = await collection.CountDocumentsAsync(filter);
-
-            return (items, unread, total);
-        }
         public async Task<GetNotificationsResponse> GetNotificationsAsync(GetNotificationsRequest request)
         {
             var userId = BlocksContext.GetContext()?.UserId;
@@ -217,22 +138,18 @@ namespace DomainService.Notification
             var userFilter = builder.Where(n => !string.IsNullOrWhiteSpace(n.Payload.UserId) && n.Payload.UserId == userId);
             var unreadFilter = userFilter & builder.Where(n => !n.ReadByUserIds.Contains(userId));
             var pageFilter = request.IsUnreadOnly ? unreadFilter : userFilter;
-            var skip = checked(request.PageSize * request.Page);
 
             var options = new FindOptions<OfflineNotification>
             {
-                Skip = 0,
-                Limit = checked(skip + request.PageSize),
+                Skip = checked(request.PageSize * request.Page),
+                Limit = request.PageSize,
                 Sort = Builders<OfflineNotification>.Sort.Descending(n => n.CreatedTime)
             };
 
-            var sources = await Task.WhenAll(NotificationCollections()
-                .Select(collection => ReadNotificationPageAsync(collection, pageFilter, unreadFilter, options)));
-            var notifications = sources.SelectMany(source => source.Items)
-                .OrderByDescending(notification => notification.CreatedTime)
-                .Skip(skip)
-                .Take(request.PageSize)
-                .ToList();
+            var collection = NotificationCollection();
+            var notifications = await (await collection.FindAsync(pageFilter, options)).ToListAsync();
+            var unreadCount = await collection.CountDocumentsAsync(unreadFilter);
+            var totalCount = await collection.CountDocumentsAsync(pageFilter);
 
             if (!request.IsUnreadOnly)
             {
@@ -245,8 +162,8 @@ namespace DomainService.Notification
             return new GetNotificationsResponse
             {
                 Notifications = notifications,
-                UnReadNotificationsCount = sources.Sum(source => source.Unread),
-                TotalNotificationsCount = sources.Sum(source => source.Total)
+                UnReadNotificationsCount = unreadCount,
+                TotalNotificationsCount = totalCount
             };
         }
     }
