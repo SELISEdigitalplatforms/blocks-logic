@@ -70,7 +70,7 @@ namespace Workflow.DomainService.Services
 
                 foreach (var edge in outgoing)
                 {
-                    if (!BranchCarriedItems(execution, edge.SourceHandle))
+                    if (!WorkflowBranchRouting.CarriedItems(execution.OutputCountsByBranch, edge.SourceHandle))
                     {
                         continue;
                     }
@@ -92,25 +92,5 @@ namespace Workflow.DomainService.Services
                 .FirstOrDefault();
         }
 
-        /// <summary>
-        /// Same branch key as <c>WorkflowEngineService.ResolveEdgeBranch</c>: a blank handle is
-        /// the main output (<c>source</c>); otherwise the handle string is the branch name
-        /// (<c>source</c>, <c>if-true</c>, <c>if-false</c>).
-        /// </summary>
-        private static string BranchKey(string? sourceHandle)
-        {
-            return string.IsNullOrWhiteSpace(sourceHandle) ? "source" : sourceHandle;
-        }
-
-        private static bool BranchCarriedItems(NodeExecutionEntity execution, string? sourceHandle)
-        {
-            var counts = execution.OutputCountsByBranch;
-            if (counts == null)
-            {
-                return false;
-            }
-
-            return counts.TryGetValue(BranchKey(sourceHandle), out var count) && count > 0;
-        }
     }
 }
