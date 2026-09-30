@@ -147,6 +147,14 @@ namespace Functions.DomainService.Enums
     /// The one HTTP method a function's endpoint answers. Post is 0 so a stored trigger from before
     /// the field existed keeps behaving as it did — every function was POST-only then.
     /// </summary>
+    /// <summary>
+    /// Serialised by name, for the same reason as the four above: this rides the wire inside
+    /// <c>SaveFunctionRequestDto</c> on <see cref="Models.TriggerConfig"/>, and the client declares
+    /// it as a string union. Without this, Save fails with "The JSON value could not be converted
+    /// … Path: $.trigger.httpMethod" and no trigger change can ever be persisted. Reading still
+    /// accepts a number, so a stored document written before this breaks nothing.
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum HttpTriggerMethod
     {
         Post = 0,
@@ -159,6 +167,12 @@ namespace Functions.DomainService.Enums
     /// authorizer evaluates on the public route; a rule with no values is not configured and
     /// never takes part, so this only matters once both lists carry an entry.
     /// </summary>
+    /// <summary>
+    /// Serialised by name, like <see cref="HttpTriggerMethod"/> beside it and for the same reason:
+    /// it sits on <see cref="Models.TriggerConfig"/>, reaches the wire inside
+    /// <c>SaveFunctionRequestDto</c>, and the client sends "Or" / "And".
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum AccessCombine
     {
         /// <summary>The caller passes if either configured rule passes.</summary>

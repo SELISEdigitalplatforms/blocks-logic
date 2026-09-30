@@ -15,6 +15,14 @@ namespace Blocks.FunctionRunner.Maintenance
         /// including when it never did, since the goal is absence rather than an event.
         /// </summary>
         Task<bool> DeleteManifestAsync(string repoDigest, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Whether the registry can serve the manifest a repo digest names — the exact question a
+        /// sandbox's pull will ask later. Null when the answer could not be obtained (the registry
+        /// was unreachable, or the reference does not belong to this runner's registry), which is
+        /// deliberately distinct from a confident "no".
+        /// </summary>
+        Task<bool?> ManifestExistsAsync(string repoDigest, CancellationToken cancellationToken = default);
     }
 
     /// <summary>
@@ -112,6 +120,54 @@ namespace Blocks.FunctionRunner.Maintenance
                 return false;
             }
         }
+
+        public async Task<bool?> ManifestExistsAsync(
+            string repoDigest, CancellationToken cancellationToken = default)
+        {
+            if (!TryParse(repoDigest, _options.Registry, out var name, out var digest))
+            {
+                return null;
+            }
+
+            var scheme = _options.UseRegistryTls ? "https" : "http";
+            var url = $"{scheme}://{_options.Registry}/v2/{name}/manifests/{digest}";
+
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Head, url);
+
+                // Without these the registry answers 404 for a manifest it holds in a media type
+                // the request did not ask for, which would read here as "the push did not land".
+                foreach (var mediaType in ManifestMediaTypes)
+                {
+                    request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(mediaType));
+                }
+
+                using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+
+                if (response.StatusCode == HttpStatusCode.NotFound) return false;
+                if (response.IsSuccessStatusCode) return true;
+
+                _logger.LogWarning(
+                    "Registry HEAD of {Name}@{Digest} returned {Status}; treating the check as inconclusive",
+                    name, Short(digest), (int)response.StatusCode);
+                return null;
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+            {
+                _logger.LogWarning("Registry HEAD of {Name} failed: {Message}", name, ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>Every manifest media type a build here can produce.</summary>
+        private static readonly string[] ManifestMediaTypes =
+        [
+            "application/vnd.oci.image.index.v1+json",
+            "application/vnd.oci.image.manifest.v1+json",
+            "application/vnd.docker.distribution.manifest.list.v2+json",
+            "application/vnd.docker.distribution.manifest.v2+json",
+        ];
 
         /// <summary>
         /// Splits <c>127.0.0.1:5000/fn/abc@sha256:…</c> into the repository name and the digest.

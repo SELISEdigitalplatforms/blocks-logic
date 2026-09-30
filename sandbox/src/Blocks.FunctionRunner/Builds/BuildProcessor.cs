@@ -62,6 +62,7 @@ namespace Blocks.FunctionRunner.Builds
         private readonly IDatabase _db;
         private readonly IDockerClient _docker;
         private readonly IDependencyInstaller _installer;
+        private readonly Maintenance.IRegistryClient _registry;
         private readonly RunnerOptions _options;
         private readonly ILogger<BuildProcessor> _logger;
         private readonly string _template;
@@ -70,12 +71,16 @@ namespace Blocks.FunctionRunner.Builds
             IDatabase db,
             IDockerClient docker,
             IDependencyInstaller installer,
+            Maintenance.IRegistryClient registry,
             IOptions<RunnerOptions> options,
             ILogger<BuildProcessor> logger)
         {
             _db = db;
             _docker = docker;
             _installer = installer;
+            // Used to confirm a push actually landed: the daemon reporting a digest is not the
+            // same question as the registry being able to serve it. See PushAsync.
+            _registry = registry;
             _options = options.Value;
             _logger = logger;
             _template = LoadTemplate();
@@ -417,9 +422,37 @@ namespace Blocks.FunctionRunner.Builds
             }
         }
 
+        /// <summary>
+        /// Pushes the built tag and returns the digest-pinned reference a later run can pull, or
+        /// null when it could not be established — in which case the build is published FAILED.
+        /// <para>
+        /// Three things here are load-bearing, and each replaces something that produced a
+        /// deployed version pointing at an image nothing could ever pull:
+        /// <list type="number">
+        /// <item>A push failure arrives as an <c>ErrorMessage</c> on the progress stream, not as
+        /// an exception. It used to be appended to the log and otherwise ignored, so a push that
+        /// failed still returned a digest and the build was published SUCCEEDED.</item>
+        /// <item>The digest is taken from the repository that was pushed to, not
+        /// <c>RepoDigests.FirstOrDefault()</c> — an image that is also tagged into another
+        /// function's repository carries that one's reference too, and picking it silently pinned
+        /// a version to a digest served under a different name.</item>
+        /// <item>There is no fallback to the image id. With the containerd image store the daemon
+        /// assigns a manifest digest locally, before and independently of any push, so
+        /// <c>?? inspect.ID</c> produced a plausible-looking <c>sha256:…</c> that the registry had
+        /// never heard of. Every run of that version then failed IMAGE_PULL_FAILED with "manifest
+        /// unknown", on every attempt, until someone redeployed.</item>
+        /// </list>
+        /// Finally the digest is confirmed against the registry itself, because that is the
+        /// question a pull actually asks. An inconclusive check (registry unreachable) is not
+        /// treated as failure: the push reported success, and refusing the build on a flaky
+        /// admin call would trade a rare silent failure for a common loud one.
+        /// </para>
+        /// </summary>
         private async Task<string?> PushAsync(string tag, StringBuilder log, CancellationToken token)
         {
             var (name, imageTag) = Sandbox.ImageResolver.SplitReference(tag);
+            string? pushError = null;
+
             try
             {
                 await _docker.Images.PushImageAsync(
@@ -428,18 +461,74 @@ namespace Blocks.FunctionRunner.Builds
                     authConfig: null,
                     new Progress<JSONMessage>(m =>
                     {
-                        if (!string.IsNullOrEmpty(m.ErrorMessage)) log.Append(m.ErrorMessage);
+                        if (string.IsNullOrEmpty(m.ErrorMessage)) return;
+                        pushError ??= m.ErrorMessage;
+                        log.Append(m.ErrorMessage);
                     }),
                     token).ConfigureAwait(false);
-
-                var inspect = await _docker.Images.InspectImageAsync(tag, token).ConfigureAwait(false);
-                return inspect.RepoDigests?.FirstOrDefault() ?? inspect.ID;
             }
             catch (DockerApiException ex)
             {
                 log.Append(ex.Message);
                 return null;
             }
+
+            if (pushError is not null)
+            {
+                _logger.LogError("Push of {Tag} failed: {Message}", tag, pushError);
+                return null;
+            }
+
+            ImageInspectResponse inspect;
+            try
+            {
+                inspect = await _docker.Images.InspectImageAsync(tag, token).ConfigureAwait(false);
+            }
+            catch (DockerApiException ex)
+            {
+                log.Append(ex.Message);
+                return null;
+            }
+
+            var digest = SelectPushedDigest(inspect.RepoDigests, name);
+            if (digest is null)
+            {
+                var message =
+                    $"the push of {tag} reported success but the daemon lists no digest for {name}";
+                log.Append(message);
+                _logger.LogError("{Message}", message);
+                return null;
+            }
+
+            var exists = await _registry.ManifestExistsAsync(digest, token).ConfigureAwait(false);
+            if (exists == false)
+            {
+                var message =
+                    $"{digest} is not in the registry after pushing {tag}; refusing to publish a " +
+                    "reference no run could pull";
+                log.Append(message);
+                _logger.LogError("{Message}", message);
+                return null;
+            }
+
+            return digest;
+        }
+
+        /// <summary>
+        /// The repo digest belonging to <paramref name="repository"/>, out of every repository the
+        /// image happens to be tagged into.
+        /// </summary>
+        internal static string? SelectPushedDigest(IList<string>? repoDigests, string repository)
+        {
+            if (repoDigests is null || repository.Length == 0) return null;
+
+            var prefix = repository + "@";
+            foreach (var candidate in repoDigests)
+            {
+                if (candidate.StartsWith(prefix, StringComparison.Ordinal)) return candidate;
+            }
+
+            return null;
         }
 
         /// <summary>

@@ -81,6 +81,14 @@ namespace Blocks.FunctionRunner.Builds
         /// and its workspace leak. Anything else the install wrote is opened up for the runner to
         /// remove; the workspace is deleted as soon as the archive has been moved out of it.
         /// </para>
+        /// <para>
+        /// That cleanup runs from a <c>trap … EXIT</c> rather than as the script's last statements,
+        /// because <c>set -e</c> means a failed <c>npm install</c> never reaches them — and a
+        /// failed install is exactly when npm writes <c>.npm-cache/_logs/*-debug-0.log</c>, under
+        /// directories the runner's uid cannot delete from. The workspace was then undeletable for
+        /// good: the reaper retried it every five minutes, logged the same denial every time, and
+        /// never reclaimed the disk.
+        /// </para>
         /// </summary>
         public static string InstallScript(string npmFlags, string beginMarker, string endMarker)
         {
@@ -90,6 +98,7 @@ namespace Blocks.FunctionRunner.Builds
 
             return $"""
                 set -eu
+                trap 'rm -rf {WorkPath}/node_modules {WorkPath}/.npm-cache 2>/dev/null || true; chmod -R a+rwX {WorkPath} 2>/dev/null || true' EXIT
                 cd {WorkPath}
                 rm -f package-lock.json npm-shrinkwrap.json yarn.lock pnpm-lock.yaml
                 npm install {npmFlags} --no-audit --no-fund
@@ -97,10 +106,8 @@ namespace Blocks.FunctionRunner.Builds
                 npm ls --omit=dev --depth=0 --json 2>/dev/null || true
                 echo "{endMarker}"
                 mkdir -p node_modules
-                tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
+                tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \\
                     -cf {WorkPath}/{DepsArchiveName} node_modules
-                rm -rf node_modules .npm-cache
-                chmod -R a+rwX {WorkPath} 2>/dev/null || true
                 """;
         }
 

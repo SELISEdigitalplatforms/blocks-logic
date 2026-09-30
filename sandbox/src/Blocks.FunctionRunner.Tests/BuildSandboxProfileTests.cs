@@ -52,9 +52,24 @@ namespace Blocks.FunctionRunner.Tests
             // The runner's uid cannot delete it, which failed every build's cleanup.
             var script = BuildSandboxProfile.InstallScript("--omit=dev --ignore-scripts", "b", "e");
 
-            script.IndexOf("rm -rf node_modules .npm-cache", StringComparison.Ordinal).Should()
-                .BeGreaterThan(script.IndexOf("tar ", StringComparison.Ordinal));
+            script.Should().Contain("rm -rf /work/node_modules /work/.npm-cache");
             script.Should().Contain("chmod -R a+rwX");
+        }
+
+        [Fact]
+        public void The_cleanup_also_runs_when_the_install_fails()
+        {
+            // `set -e` means a failed npm install never reaches a trailing cleanup — and a failed
+            // install is precisely when npm writes .npm-cache/_logs/*-debug-0.log, under a
+            // directory the runner's uid cannot delete from. One such workspace was retried by
+            // the reaper every five minutes for hours and never reclaimed. A trap covers every
+            // exit path, so it has to be installed before the command that can fail.
+            var script = BuildSandboxProfile.InstallScript("--omit=dev --ignore-scripts", "b", "e");
+
+            var trap = script.IndexOf("trap ", StringComparison.Ordinal);
+            trap.Should().BeGreaterThan(-1);
+            trap.Should().BeLessThan(script.IndexOf("npm install", StringComparison.Ordinal));
+            script.Should().Contain("' EXIT");
         }
 
         [Fact]

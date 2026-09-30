@@ -3,14 +3,27 @@ using Functions.DomainService.Models;
 namespace Functions.DomainService.Utils
 {
     /// <summary>
-    /// The three starters the create dialog offers (FEATURES-AND-UI §4.2). An unknown or missing
-    /// name gives the minimal handler, so a client that sends nothing keeps working.
+    /// The three starters the create dialog offers (FEATURES-AND-UI §4.2). A missing name gives
+    /// the minimal handler, so a client that sends nothing keeps working; an unknown one is
+    /// rejected at validation rather than silently becoming Minimal — a caller who asked for
+    /// "FetchTransfrom" and got an empty echo handler has no way to tell that it was a typo.
     /// </summary>
     public static class FunctionStarterTemplates
     {
         public const string Minimal = "Minimal";
         public const string HttpEcho = "HttpEcho";
         public const string FetchTransform = "FetchTransform";
+
+        /// <summary>Every accepted template name, for validation and for the error message.</summary>
+        public static readonly IReadOnlyList<string> Names = [Minimal, HttpEcho, FetchTransform];
+
+        /// <summary>
+        /// True for a name <see cref="For"/> can honour. Null or blank is accepted — it means
+        /// "no preference", which is Minimal.
+        /// </summary>
+        public static bool IsKnown(string? template) =>
+            string.IsNullOrWhiteSpace(template)
+            || Names.Contains(template, StringComparer.Ordinal);
 
         public static FunctionSource For(string? template) => new()
         {
@@ -66,7 +79,7 @@ namespace Functions.DomainService.Utils
              */
             export default async function handler(input, ctx) {
               // Variables arrive as plain strings on ctx.env; set them under Configuration.
-              const base = ctx.env.API_BASE ?? "https://api.exchangerate.host";
+              const base = ctx.env.API_BASE ?? "https://api.frankfurter.dev/v1";
 
               const response = await fetch(`${base}/latest?base=USD`);
               if (!response.ok) {
@@ -74,9 +87,18 @@ namespace Functions.DomainService.Utils
               }
 
               const payload = await response.json();
-              ctx.log.info("fetched rates", { count: Object.keys(payload.rates ?? {}).length });
 
-              return { base: payload.base, eur: payload.rates?.EUR ?? null, requested: input.body };
+              // Checked rather than defaulted to null. Plenty of APIs answer 200 with an error
+              // body — a missing key, a quota — and `?? null` turns that into a run that looks
+              // like it worked and quietly reports nothing.
+              const eur = payload.rates?.EUR;
+              if (typeof eur !== "number") {
+                throw new Error(`no USD->EUR rate in the response: ${JSON.stringify(payload).slice(0, 200)}`);
+              }
+
+              ctx.log.info("fetched rates", { count: Object.keys(payload.rates).length });
+
+              return { base: payload.base, eur, requested: input.body };
             }
             """;
 

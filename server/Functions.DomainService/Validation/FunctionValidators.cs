@@ -4,6 +4,7 @@ using FluentValidation;
 using Functions.DomainService.Dtos.Requests;
 using Functions.DomainService.Models;
 using Functions.DomainService.Repositories;
+using Functions.DomainService.Utils;
 
 namespace Functions.DomainService.Validation
 {
@@ -19,6 +20,28 @@ namespace Functions.DomainService.Validation
         /// <summary>2 MB, matching the runner's own build-time source cap (spec, mirrored in HANDOFF.md).</summary>
         internal const int MaxSourceBytes = 2 * 1024 * 1024;
 
+        /// <summary>
+        /// Name and description bounds, kept identical to the create dialog's zod schema
+        /// (function-create-dialog.tsx). Two places state them, so they are named here rather
+        /// than written inline in each validator.
+        /// </summary>
+        internal const int MinNameLength = 2;
+
+        /// <inheritdoc cref="MinNameLength"/>
+        internal const int MaxNameLength = 64;
+
+        /// <inheritdoc cref="MinNameLength"/>
+        internal const int MaxDescriptionLength = 200;
+
+        /// <summary>
+        /// What the description was allowed to be before the bound above matched the dialog.
+        /// Update keeps it: the detail page has no description field, so a rename sends the
+        /// stored value back unchanged — and holding that pass-through to the new, shorter bound
+        /// would make a function created through the API with a long description impossible to
+        /// rename. Create is where the bound has to bite.
+        /// </summary>
+        internal const int LegacyMaxDescriptionLength = 1000;
+
         internal static bool IsValidAbsoluteHttpUrl(string? url) =>
             !string.IsNullOrWhiteSpace(url)
             && Uri.TryCreate(url, UriKind.Absolute, out var parsed)
@@ -30,9 +53,22 @@ namespace Functions.DomainService.Validation
         public CreateFunctionRequestValidator()
         {
             // Name is a label, not an address — a function is addressed by its ItemId — so
-            // nothing here has to be unique.
-            RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
-            RuleFor(x => x.Description).MaximumLength(1000);
+            // nothing here has to be unique. The bounds are the ones the create dialog already
+            // enforces in zod; they were 1..200 / 0..1000 here, so anything not typed into that
+            // dialog (the API directly, a script, a workflow import) was held to a different
+            // contract from everything the product shows.
+            RuleFor(x => x.Name)
+                .NotEmpty()
+                // ApplyConditionTo.CurrentValidator, or the condition would also suppress the
+                // NotEmpty above it — a chained When in FluentValidation covers the whole chain.
+                .Length(FunctionValidationRules.MinNameLength, FunctionValidationRules.MaxNameLength)
+                    .When(x => !string.IsNullOrEmpty(x.Name), ApplyConditionTo.CurrentValidator);
+            RuleFor(x => x.Description).MaximumLength(FunctionValidationRules.MaxDescriptionLength);
+
+            RuleFor(x => x.Template)
+                .Must(FunctionStarterTemplates.IsKnown)
+                .WithMessage(_ =>
+                    $"Template must be one of: {string.Join(", ", FunctionStarterTemplates.Names)}.");
         }
     }
 
@@ -41,8 +77,14 @@ namespace Functions.DomainService.Validation
         public UpdateFunctionRequestValidator()
         {
             RuleFor(x => x.FunctionId).NotEmpty();
-            RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
-            RuleFor(x => x.Description).MaximumLength(1000);
+            RuleFor(x => x.Name)
+                .NotEmpty()
+                // ApplyConditionTo.CurrentValidator, or the condition would also suppress the
+                // NotEmpty above it — a chained When in FluentValidation covers the whole chain.
+                .Length(FunctionValidationRules.MinNameLength, FunctionValidationRules.MaxNameLength)
+                    .When(x => !string.IsNullOrEmpty(x.Name), ApplyConditionTo.CurrentValidator);
+            RuleFor(x => x.Description)
+                .MaximumLength(FunctionValidationRules.LegacyMaxDescriptionLength);
         }
     }
 

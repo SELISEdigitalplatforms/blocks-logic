@@ -114,6 +114,9 @@ namespace Blocks.FunctionRunner.Tests
         {
             public Task<bool> DeleteManifestAsync(string repoDigest, CancellationToken cancellationToken = default)
                 => throw new InvalidOperationException("the registry must not be touched by a refused sweep");
+
+            public Task<bool?> ManifestExistsAsync(string repoDigest, CancellationToken cancellationToken = default)
+                => throw new InvalidOperationException("the registry must not be touched by a refused sweep");
         }
     }
 }

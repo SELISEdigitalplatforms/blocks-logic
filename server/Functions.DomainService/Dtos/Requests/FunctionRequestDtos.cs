@@ -7,7 +7,10 @@ namespace Functions.DomainService.Dtos.Requests
         public string Name { get; set; } = string.Empty;
         public string? Description { get; set; }
 
-        /// <summary>Which starter source to seed. Unknown or missing falls back to the minimal handler.</summary>
+        /// <summary>
+        /// Which starter source to seed. Missing means the minimal handler; an unknown name is
+        /// rejected — see <see cref="Utils.FunctionStarterTemplates"/>.
+        /// </summary>
         public string? Template { get; set; }
     }
 

@@ -410,6 +410,29 @@
         <member name="M:BlocksTemplate.Api.Controllers.StorageController.DeleteFile(DomainService.Storage.DeleteFileRequest)">
             <summary><c>DELETE</c> via <c>POST</c> — removes a file from the provider.</summary>
         </member>
+        <member name="T:BlocksTemplate.Api.FunctionExceptionFilter">
+            <summary>
+            Maps the function domain's exceptions onto HTTP status codes for the <b>management</b>
+            surface — everything the Studio calls at <c>/api/functions/…</c>.
+            </summary>
+            <remarks>
+            The public invocation surface does its own mapping inline, because it answers in the
+            invoke error envelope (<c>{ error: { code, message } }</c>) that non-Blocks callers see, not
+            in <see cref="T:Blocks.Genesis.BaseResponse"/>. That path catches every one of these before they reach a
+            filter, so this only ever fires for the management actions.
+            <para>
+            Those actions return their DTO directly rather than an <see cref="T:Microsoft.AspNetCore.Mvc.ActionResult"/>, so
+            before this existed a validation failure — an empty name, a note over its length, a rollback
+            to a version that is not there — left the domain exception unhandled and the caller got a
+            bare 500. A 500 tells a client to retry something that will fail identically every time.
+            </para>
+            <para>
+            Modelled on <c>SecretExceptionFilter</c>, and deliberately the same response shape: the
+            client's error handling reads <c>errors</c> off the body and shows it, whichever endpoint
+            produced it.
+            </para>
+            </remarks>
+        </member>
         <member name="T:BlocksTemplate.Api.GlobalApiRoutePrefixConvention">
             <summary>Prepends a segment (e.g. <c>api</c>) to every controller’s attribute route template.</summary>
         </member>
