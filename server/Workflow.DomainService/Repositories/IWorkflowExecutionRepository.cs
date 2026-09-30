@@ -16,6 +16,16 @@ namespace Workflow.DomainService.Repositories
         Task AtomicUpdateNodeExecutionFailedAsync(string executionId, string tenantId, string nodeExecutionId, string error, int outputItemCount, Dictionary<string, int> outputCountsByBranch);
         Task<List<WorkflowExecutionEntity>> GetByWorkflowIdAsync(string workflowId, string tenantId);
 
+        Task<List<WorkflowExecutionListRow>> GetPageAsync(string workflowId, string tenantId, int pageSize);
+
+        Task<List<WorkflowExecutionListRow>> GetOlderThanAsync(string workflowId, string tenantId, DateTime startedAt, string id, int pageSize);
+
+        Task<List<WorkflowExecutionListRow>> GetNewerThanAsync(string workflowId, string tenantId, DateTime startedAt, string id, int pageSize);
+
+        Task<long> CountByWorkflowIdAsync(string workflowId, string tenantId);
+
+        Task<List<WorkflowExecutionListRow>> GetListItemsByIdsAsync(string workflowId, string tenantId, IReadOnlyCollection<string> ids);
+
         // Item-based execution methods
         Task AddItemsAsync(string tenantId, List<WorkflowItemExecutionEntity> items);
         Task<List<WorkflowItemExecutionEntity>> GetItemsByNodeIdsAsync(
