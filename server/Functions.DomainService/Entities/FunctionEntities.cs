@@ -46,6 +46,16 @@ namespace Functions.DomainService.Entities
         public DateTime? LastDeployedAt { get; set; }
 
         /// <summary>
+        /// Every run ever started, including runs past their retention. Written only by
+        /// <c>IFunctionRepository.RecordRunStartedAsync</c> as an atomic <c>$inc</c>; no other
+        /// write touches it, since every write to this document is field-level.
+        /// </summary>
+        public long TotalRuns { get; set; }
+
+        /// <summary>When the newest run started (<c>$max</c>, so a late write cannot move it back).</summary>
+        public DateTime? LastRunAt { get; set; }
+
+        /// <summary>
         /// Set when a delete is accepted. From then on the function is gone to every reader —
         /// the repository filters it out — while <c>FunctionDeletionWorker</c> purges what it
         /// owned in the background and finally removes this document. Null on a live function.
@@ -182,19 +192,6 @@ namespace Functions.DomainService.Entities
         /// the side effect twice. Format <c>{runId}-{attempt}</c>.
         /// </summary>
         public string IdempotencyKey { get; set; } = string.Empty;
-    }
-
-    /// <summary>
-    /// Run counters for one function, kept out of <see cref="FunctionEntity"/> on purpose: that
-    /// document is replaced wholesale by Save and Update, which would overwrite counters written
-    /// by runs in the meantime. <c>ItemId</c> is the function id, so the increment is a single
-    /// upsert with no read first.
-    /// </summary>
-    [BsonIgnoreExtraElements]
-    public class FunctionRunStatsEntity : BaseEntity
-    {
-        public long TotalRuns { get; set; }
-        public DateTime? LastRunAt { get; set; }
     }
 
     /// <summary>One log line from a run, in the order the sandbox emitted it.</summary>

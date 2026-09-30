@@ -8,13 +8,13 @@ namespace Functions.DomainService.Utils
         public const string FunctionRunsCollection = "FunctionRuns";
 
         /// <summary>
-        /// Per-function run counters, one small document per function. Deliberately not fields on
-        /// the function itself: Save and Update replace that whole document from a copy loaded
-        /// earlier, so a counter living there is silently overwritten by any run that happened in
-        /// between — and run traffic would be rewriting the configuration document on every
-        /// invocation for no reason.
+        /// Retired. Run counters used to live here, one document per function, because Save and
+        /// Update once replaced the whole function document and would have overwritten them. Every
+        /// write to it is field-level now, so the counters are fields of the function
+        /// (<c>TotalRuns</c>, <c>LastRunAt</c>). Only <c>FunctionRunStatsMigration</c> reads this
+        /// name, to carry old counts over and drop the collection.
         /// </summary>
-        public const string FunctionRunStatsCollection = "FunctionRunStats";
+        public const string LegacyRunStatsCollection = "FunctionRunStats";
         public const string FunctionRunLogsCollection = "FunctionRunLogs";
         public const string FunctionAuditEventsCollection = "FunctionAuditEvents";
 

@@ -47,7 +47,6 @@ namespace Functions.DomainService.Services
         private readonly IFunctionBuildRepository _buildRepository;
         private readonly IFunctionRunRepository _runRepository;
         private readonly IFunctionRunLogRepository _runLogRepository;
-        private readonly IFunctionRunStatsRepository _runStatsRepository;
         private readonly IFunctionImagePinService _imagePins;
         private readonly ICacheClient _cache;
         private readonly ILogger<FunctionPurgeService> _logger;
@@ -67,7 +66,6 @@ namespace Functions.DomainService.Services
             IFunctionBuildRepository buildRepository,
             IFunctionRunRepository runRepository,
             IFunctionRunLogRepository runLogRepository,
-            IFunctionRunStatsRepository runStatsRepository,
             IFunctionImagePinService imagePins,
             ICacheClient cache,
             ILogger<FunctionPurgeService> logger)
@@ -76,7 +74,6 @@ namespace Functions.DomainService.Services
             _buildRepository = buildRepository;
             _runRepository = runRepository;
             _runLogRepository = runLogRepository;
-            _runStatsRepository = runStatsRepository;
             _imagePins = imagePins;
             _cache = cache;
             _logger = logger;
@@ -104,7 +101,6 @@ namespace Functions.DomainService.Services
             var deletedBuilds = await _buildRepository.DeleteAllForFunctionAsync(tenantId, functionId, cancellationToken);
             var deletedLogs = await _runLogRepository.DeleteAllForFunctionAsync(tenantId, functionId, cancellationToken);
             var deletedRuns = await _runRepository.DeleteAllForFunctionAsync(tenantId, functionId, cancellationToken);
-            await _runStatsRepository.DeleteAsync(tenantId, functionId, cancellationToken);
 
             await DeleteRuntimeKeysAsync(functionId);
 

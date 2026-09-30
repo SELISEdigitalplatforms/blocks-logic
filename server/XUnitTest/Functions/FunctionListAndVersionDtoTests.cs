@@ -29,11 +29,10 @@ namespace XUnitTest.Functions
                 ItemId = "fn_1",
                 Name = "Reconcile Payouts",
                 Trigger = new TriggerConfig { HttpEnabled = true, WorkflowEnabled = true },
+                TotalRuns = 9_000,
             };
 
-            var dto = FunctionSummaryDto.From(
-                function, activeVersionNumber: 17,
-                stats: new FunctionRunStatsEntity { TotalRuns = 9_000 }, runs24h: 1_204);
+            var dto = FunctionSummaryDto.From(function, activeVersionNumber: 17, runs24h: 1_204);
 
             dto.HttpEnabled.Should().BeTrue();
             dto.WorkflowEnabled.Should().BeTrue();
@@ -45,7 +44,7 @@ namespace XUnitTest.Functions
         [Fact]
         public void Runs_24h_defaults_to_zero_when_nothing_ran()
         {
-            var dto = FunctionSummaryDto.From(new FunctionEntity { ItemId = "fn_1" }, null, null);
+            var dto = FunctionSummaryDto.From(new FunctionEntity { ItemId = "fn_1" }, null);
 
             dto.Runs24h.Should().Be(0);
             dto.TotalRuns.Should().Be(0);

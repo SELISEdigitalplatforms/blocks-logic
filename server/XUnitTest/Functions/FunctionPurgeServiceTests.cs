@@ -26,7 +26,6 @@ namespace XUnitTest.Functions
         private readonly Mock<IFunctionBuildRepository> _builds = new(MockBehavior.Loose);
         private readonly Mock<IFunctionRunRepository> _runs = new(MockBehavior.Loose);
         private readonly Mock<IFunctionRunLogRepository> _logs = new(MockBehavior.Loose);
-        private readonly Mock<IFunctionRunStatsRepository> _stats = new(MockBehavior.Loose);
         private readonly Mock<IDatabase> _database = new(MockBehavior.Loose);
 
         private readonly List<string> _released = [];
@@ -110,7 +109,7 @@ namespace XUnitTest.Functions
             var pins = new FunctionImagePinService(cache.Object, NullLogger<FunctionImagePinService>.Instance);
 
             return new FunctionPurgeService(
-                _versions.Object, _builds.Object, _runs.Object, _logs.Object, _stats.Object,
+                _versions.Object, _builds.Object, _runs.Object, _logs.Object,
                 pins, cache.Object, new CapturingLogger<FunctionPurgeService>(Failures));
         }
 
@@ -132,7 +131,6 @@ namespace XUnitTest.Functions
             _builds.Verify(b => b.DeleteAllForFunctionAsync(Tenant, FunctionId, It.IsAny<CancellationToken>()), Times.Once);
             _runs.Verify(r => r.DeleteAllForFunctionAsync(Tenant, FunctionId, It.IsAny<CancellationToken>()), Times.Once);
             _logs.Verify(l => l.DeleteAllForFunctionAsync(Tenant, FunctionId, It.IsAny<CancellationToken>()), Times.Once);
-            _stats.Verify(s => s.DeleteAsync(Tenant, FunctionId, It.IsAny<CancellationToken>()), Times.Once);
         }
 
         [Fact]

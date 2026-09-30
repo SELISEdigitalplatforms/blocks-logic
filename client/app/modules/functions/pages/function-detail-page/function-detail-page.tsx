@@ -240,7 +240,9 @@ export const FunctionDetailPage = () => {
       pageNumber: queryParams.runPage,
       pageSize: RUNS_PAGE_SIZE,
     },
-    { autoRefresh: isRunsAutoRefresh, enabled: !!runsFromUtc },
+    // Live-polled only where it is on screen. Elsewhere it feeds the tab's count and the test
+    // panel's last run, which a test refreshes itself when it starts and when its run settles.
+    { autoRefresh: isRunsAutoRefresh && queryParams.tab === "runs", enabled: !!runsFromUtc },
   );
   const { data: versionsData, isLoading: isVersionsLoading } = useGetVersions(functionId);
 

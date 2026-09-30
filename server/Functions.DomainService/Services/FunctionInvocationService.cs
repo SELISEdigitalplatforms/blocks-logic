@@ -140,7 +140,6 @@ namespace Functions.DomainService.Services
         private readonly IFunctionRepository _functionRepository;
         private readonly IFunctionVersionRepository _versionRepository;
         private readonly IFunctionRunRepository _runRepository;
-        private readonly IFunctionRunStatsRepository _runStatsRepository;
         private readonly IFunctionAdmissionService _admissionService;
         private readonly IFunctionAuthorizationService _authorizationService;
         private readonly IFunctionBuildService _buildService;
@@ -154,7 +153,6 @@ namespace Functions.DomainService.Services
             IFunctionRepository functionRepository,
             IFunctionVersionRepository versionRepository,
             IFunctionRunRepository runRepository,
-            IFunctionRunStatsRepository runStatsRepository,
             IFunctionAdmissionService admissionService,
             IFunctionAuthorizationService authorizationService,
             IFunctionBuildService buildService,
@@ -167,7 +165,6 @@ namespace Functions.DomainService.Services
             _functionRepository = functionRepository;
             _versionRepository = versionRepository;
             _runRepository = runRepository;
-            _runStatsRepository = runStatsRepository;
             _admissionService = admissionService;
             _authorizationService = authorizationService;
             _buildService = buildService;
@@ -441,7 +438,7 @@ namespace Functions.DomainService.Services
 
             // Counted whether or not the enqueue succeeds: the record exists either way and shows
             // in the runs list, so the counter and the list agree.
-            await _runStatsRepository.RecordRunStartedAsync(tenantId, function.ItemId, run.CreatedDate, CancellationToken.None);
+            await _functionRepository.RecordRunStartedAsync(tenantId, function.ItemId, run.CreatedDate, CancellationToken.None);
 
             try
             {

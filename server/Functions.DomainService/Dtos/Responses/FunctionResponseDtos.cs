@@ -24,19 +24,18 @@ namespace Functions.DomainService.Dtos.Responses
         public DateTime LastUpdatedDate { get; set; }
 
         public static FunctionSummaryDto From(
-            FunctionEntity function, int? activeVersionNumber, FunctionRunStatsEntity? stats,
-            long runs24h = 0) => new()
+            FunctionEntity function, int? activeVersionNumber, long runs24h = 0) => new()
         {
             Id = function.ItemId,
             Name = function.Name,
             Status = function.Status.ToString(),
             IsDirty = function.IsDirty,
             ActiveVersionNumber = activeVersionNumber,
-            TotalRuns = stats?.TotalRuns ?? 0,
+            TotalRuns = function.TotalRuns,
             Runs24h = runs24h,
             HttpEnabled = function.Trigger.HttpEnabled,
             WorkflowEnabled = function.Trigger.WorkflowEnabled,
-            LastRunAt = stats?.LastRunAt,
+            LastRunAt = function.LastRunAt,
             LastDeployedAt = function.LastDeployedAt,
             LastUpdatedDate = function.LastUpdatedDate,
         };

@@ -31,7 +31,6 @@ namespace Functions.DomainService.Utils
             services.AddSingleton<IFunctionRepository, FunctionRepository>();
             services.AddSingleton<IFunctionVersionRepository, FunctionVersionRepository>();
             services.AddSingleton<IFunctionRunRepository, FunctionRunRepository>();
-            services.AddSingleton<IFunctionRunStatsRepository, FunctionRunStatsRepository>();
             services.AddSingleton<IFunctionRunLogRepository, FunctionRunLogRepository>();
             services.AddSingleton<IFunctionBuildRepository, FunctionBuildRepository>();
             services.AddSingleton<IFunctionAuditRepository, FunctionAuditRepository>();
@@ -92,6 +91,9 @@ namespace Functions.DomainService.Utils
             // The background half of a delete: repeated purge passes over a tombstoned function
             // until nothing in flight can still add to it, then the document itself.
             services.AddHostedService<FunctionDeletionWorker>();
+            // One-time: moves the retired FunctionRunStats counters onto the functions and drops
+            // the collection. A no-op once a tenant has been through it.
+            services.AddHostedService<FunctionRunStatsMigration>();
             // The other end of the runner's dead letter. Without it a job the runner could never
             // deliver leaves its record QUEUED for ever and nothing in the product says why.
             services.AddHostedService<FunctionDeadLetterConsumer>();
