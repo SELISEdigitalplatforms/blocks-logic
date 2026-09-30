@@ -52,8 +52,9 @@ namespace Blocks.FunctionRunner.Tests
             // The runner's uid cannot delete it, which failed every build's cleanup.
             var script = BuildSandboxProfile.InstallScript("--omit=dev --ignore-scripts", "b", "e");
 
-            script.IndexOf("rm -rf node_modules", StringComparison.Ordinal).Should()
+            script.IndexOf("rm -rf node_modules .npm-cache", StringComparison.Ordinal).Should()
                 .BeGreaterThan(script.IndexOf("tar ", StringComparison.Ordinal));
+            script.Should().Contain("chmod -R a+rwX");
         }
 
         [Fact]

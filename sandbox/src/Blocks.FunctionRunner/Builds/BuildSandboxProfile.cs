@@ -75,9 +75,11 @@ namespace Blocks.FunctionRunner.Builds
         /// <c>mkdir -p</c> makes that an empty archive rather than a failed build.
         /// </para>
         /// <para>
-        /// The tree is removed here, by the sandbox user that wrote it, once it is in the archive.
-        /// The runner runs as a different uid and cannot delete files inside directories the
-        /// sandbox created, so leaving it made every build's cleanup fail and its workspace leak.
+        /// The tree is removed here, by the sandbox user that wrote it, once it is in the archive —
+        /// and npm's cache with it. The runner runs as a different uid and cannot delete files
+        /// inside directories the sandbox created, so leaving them made every build's cleanup fail
+        /// and its workspace leak. Anything else the install wrote is opened up for the runner to
+        /// remove; the workspace is deleted as soon as the archive has been moved out of it.
         /// </para>
         /// </summary>
         public static string InstallScript(string npmFlags, string beginMarker, string endMarker)
@@ -97,7 +99,8 @@ namespace Blocks.FunctionRunner.Builds
                 mkdir -p node_modules
                 tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
                     -cf {WorkPath}/{DepsArchiveName} node_modules
-                rm -rf node_modules
+                rm -rf node_modules .npm-cache
+                chmod -R a+rwX {WorkPath} 2>/dev/null || true
                 """;
         }
 
