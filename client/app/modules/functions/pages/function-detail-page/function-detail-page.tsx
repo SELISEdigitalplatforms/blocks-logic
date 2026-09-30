@@ -55,6 +55,7 @@ import { ProxyMethodBadge } from "@/modules/proxy/components/proxy-method-badge"
 import { getProxyPublicHost } from "@/modules/proxy/constants/proxy.constant";
 import { toHttpVerb } from "../../constants/endpoint.constant";
 import { checkSetup } from "../../utils/connections";
+import { payloadOf } from "../../utils/test-input";
 
 const RUNS_PAGE_SIZE = 20;
 
@@ -705,7 +706,10 @@ export const FunctionDetailPage = () => {
                 cpuLimitMillicores={limits.cpuMillicores}
                 onBack={() => setQueryParams({ runId: "" })}
                 onUseAsTestInput={(input) => {
-                  setTestInput(input);
+                  // The stored input is the whole request; the test box holds only its body (or
+                  // query), which Test wraps again. Pasting the request in whole made the handler
+                  // receive it nested inside input.body.
+                  setTestInput(payloadOf(input));
                   setQueryParams({ tab: "code", runId: "" });
                 }}
               />
