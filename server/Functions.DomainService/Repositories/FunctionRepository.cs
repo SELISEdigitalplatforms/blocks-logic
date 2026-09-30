@@ -201,6 +201,34 @@ namespace Functions.DomainService.Repositories
                 Live(functionId), update, cancellationToken: cancellationToken);
         }
 
+        public async Task RecordRunStartedAsync(
+            string tenantId, string functionId, DateTime startedAt, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var update = Builders<FunctionEntity>.Update
+                    .Inc(f => f.TotalRuns, 1)
+                    .Max(f => f.LastRunAt, startedAt);
+                await Collection(tenantId).UpdateOneAsync(Live(functionId), update, cancellationToken: cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to count a run for function {FunctionId}", functionId);
+            }
+        }
+
+        public Task ImportRunCountersAsync(
+            string tenantId, string functionId, long totalRuns, DateTime? lastRunAt,
+            CancellationToken cancellationToken = default)
+        {
+            var update = Builders<FunctionEntity>.Update.Inc(f => f.TotalRuns, Math.Max(0, totalRuns));
+            if (lastRunAt is { } last) update = update.Max(f => f.LastRunAt, last);
+            // Tombstoned functions included: harmless, and the document goes with the purge.
+            return Collection(tenantId).UpdateOneAsync(
+                Builders<FunctionEntity>.Filter.Eq(f => f.ItemId, functionId), update,
+                cancellationToken: cancellationToken);
+        }
+
         public async Task<bool> MarkDeletedAsync(
             string tenantId, string functionId, FunctionDeletion deletion, CancellationToken cancellationToken = default)
         {

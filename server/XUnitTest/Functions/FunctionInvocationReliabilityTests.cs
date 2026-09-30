@@ -31,7 +31,6 @@ namespace XUnitTest.Functions
         private readonly Mock<IFunctionRepository> _functions = new();
         private readonly Mock<IFunctionVersionRepository> _versions = new();
         private readonly Mock<IFunctionRunRepository> _runs = new();
-        private readonly Mock<IFunctionRunStatsRepository> _stats = new();
         private readonly Mock<IFunctionAdmissionService> _admission = new();
         private readonly Mock<IFunctionAuthorizationService> _authorization = new();
         private readonly Mock<IFunctionBuildService> _builds = new();
@@ -95,7 +94,7 @@ namespace XUnitTest.Functions
                 .Build();
 
             return new FunctionInvocationService(
-                _functions.Object, _versions.Object, _runs.Object, _stats.Object, _admission.Object,
+                _functions.Object, _versions.Object, _runs.Object, _admission.Object,
                 _authorization.Object, _builds.Object, new Mock<IEndpointAccessAuthorizer>().Object,
                 new HttpContextAccessor(), cache.Object, configuration, NullLogger<FunctionInvocationService>.Instance);
         }
@@ -217,7 +216,7 @@ namespace XUnitTest.Functions
                 .Should().ContainSingle(a => a[0]!.ToString() == FunctionQueueKeys.Run(_created.ItemId));
 
             // Counted like every other run that has a record.
-            _stats.Verify(s => s.RecordRunStartedAsync(Tenant, "fn-1", It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+            _functions.Verify(s => s.RecordRunStartedAsync(Tenant, "fn-1", It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
 
             // No waiting on a run that was never queued.
             _runs.Verify(r => r.GetByIdAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);

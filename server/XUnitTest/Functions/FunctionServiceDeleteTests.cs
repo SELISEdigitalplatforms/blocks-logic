@@ -61,7 +61,6 @@ namespace XUnitTest.Functions
             return new FunctionService(
                 _functions.Object,
                 Mock.Of<IFunctionVersionRepository>(),
-                Mock.Of<IFunctionRunStatsRepository>(),
                 Mock.Of<IFunctionRunRepository>(),
                 _audit.Object,
                 _queue.Object,

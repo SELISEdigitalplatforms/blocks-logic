@@ -51,6 +51,23 @@ namespace Functions.DomainService.Repositories
         /// the function as gone. False when it is already gone or already being deleted, so two
         /// concurrent deletes produce one tombstone and one audit record.
         /// </summary>
+        /// <summary>
+        /// Counts one started run: <c>$inc TotalRuns</c>, <c>$max LastRunAt</c>, in one write with
+        /// no read first, so concurrent runs cannot lose each other's increments. Leaves
+        /// <c>LastUpdatedDate</c> alone — a run is not an edit, and the list sorts by it. Never
+        /// throws: a counter is not worth failing an invocation over.
+        /// </summary>
+        Task RecordRunStartedAsync(
+            string tenantId, string functionId, DateTime startedAt, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Adds counts carried over from the retired <c>FunctionRunStats</c> collection. Additive,
+        /// so runs counted on the function while the carry-over runs are kept.
+        /// </summary>
+        Task ImportRunCountersAsync(
+            string tenantId, string functionId, long totalRuns, DateTime? lastRunAt,
+            CancellationToken cancellationToken = default);
+
         Task<bool> MarkDeletedAsync(
             string tenantId, string functionId, FunctionDeletion deletion, CancellationToken cancellationToken = default);
 

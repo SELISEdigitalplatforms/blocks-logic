@@ -91,7 +91,8 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
   const { mutateAsync, isPending } = useTestFunction();
   const { data: run } = useGetRun({ runId: runId ?? undefined });
   const { data: logs } = useGetRunLogs(runId ?? undefined, 0, 8);
-  const { data: lastRun } = useGetRun({ runId: lastRunId, enabled: !!lastRunId });
+  // Read once for "Use last run input" — the input never changes, so there is nothing to follow.
+  const { data: lastRun } = useGetRun({ runId: lastRunId, enabled: !!lastRunId, poll: false });
   // Already polls itself every 2 s while queued or building.
   const { data: build } = useGetBuild(buildId ?? undefined);
 

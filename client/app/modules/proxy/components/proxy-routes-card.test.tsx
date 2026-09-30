@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
 import { Form } from "@/components/ui-kits/form/form";
 import { ProxyCredentialRow, ProxyFormValues, ProxyRoute } from "../types";
-import { proxyFormDefaultValues } from "../utils";
+import { proxyFormDefaultValues, proxyFormSchema } from "../utils";
 import { ProxyRoutesCard, blankRoute } from "./proxy-routes-card";
 
 const Harness = ({
@@ -119,5 +120,63 @@ describe("ProxyRoutesCard same-name warnings", () => {
     expect(screen.queryByText(/replaces \d connection/)).toBeNull();
     await openOverrides(user);
     expect(warnings(/Replaces the connection's/)).toHaveLength(0);
+  });
+});
+
+const ValidatingHarness = () => {
+  const form = useForm<ProxyFormValues>({
+    defaultValues: {
+      ...proxyFormDefaultValues,
+      name: "orders",
+      upstreamUrl: "https://api.vendor.test",
+    },
+    resolver: zodResolver(proxyFormSchema),
+  });
+  const methods = form.watch("methods");
+
+  return (
+    <Form {...form}>
+      <output data-testid="methods">{methods.join(",")}</output>
+      <ProxyRoutesCard
+        upstreamUrl="https://api.vendor.test"
+        clientUrlFor={(path) => `/gateway/p/${path}`}
+        onTest={vi.fn()}
+        variables={[]}
+      />
+    </Form>
+  );
+};
+
+const pickMethod = async (user: ReturnType<typeof userEvent.setup>, row: number, to: string) => {
+  await user.click(screen.getAllByRole("combobox")[row]);
+  await user.click(screen.getByRole("option", { name: to }));
+};
+
+describe("ProxyRoutesCard method changes", () => {
+  it("keeps the proxy's methods in step, so switching method never shows a stale error", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ValidatingHarness />);
+
+    await pickMethod(user, 0, "POST");
+    expect(screen.getByTestId("methods").textContent).toBe("POST");
+    expect(screen.queryByText(/does not allow/)).toBeNull();
+
+    await pickMethod(user, 0, "GET");
+    expect(screen.getByTestId("methods").textContent).toBe("GET");
+    expect(screen.queryByText(/does not allow/)).toBeNull();
+  });
+
+  it("tracks every method when endpoints are added and removed", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ValidatingHarness />);
+
+    await user.click(screen.getByRole("button", { name: /add endpoint/i }));
+    await pickMethod(user, 1, "DELETE");
+    expect(screen.getByTestId("methods").textContent).toBe("GET,DELETE");
+    expect(screen.queryByText(/does not allow/)).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Remove endpoint 1" }));
+    expect(screen.getByTestId("methods").textContent).toBe("DELETE");
+    expect(screen.queryByText(/does not allow/)).toBeNull();
   });
 });

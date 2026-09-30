@@ -68,7 +68,6 @@ namespace Functions.DomainService.Services
     {
         private readonly IFunctionRepository _repository;
         private readonly IFunctionVersionRepository _versionRepository;
-        private readonly IFunctionRunStatsRepository _runStatsRepository;
         private readonly IFunctionRunRepository _runRepository;
         private readonly IFunctionAuditService _auditService;
         private readonly IFunctionDeletionQueue _deletionQueue;
@@ -82,7 +81,6 @@ namespace Functions.DomainService.Services
         public FunctionService(
             IFunctionRepository repository,
             IFunctionVersionRepository versionRepository,
-            IFunctionRunStatsRepository runStatsRepository,
             IFunctionRunRepository runRepository,
             IFunctionAuditService auditService,
             IFunctionDeletionQueue deletionQueue,
@@ -96,7 +94,6 @@ namespace Functions.DomainService.Services
             _configuration = configuration;
             _repository = repository;
             _versionRepository = versionRepository;
-            _runStatsRepository = runStatsRepository;
             _runRepository = runRepository;
             _auditService = auditService;
             _deletionQueue = deletionQueue;
@@ -250,8 +247,8 @@ namespace Functions.DomainService.Services
 
             var functionIds = items.Select(f => f.ItemId).ToList();
 
-            // Two queries for the whole page's counters rather than two per row.
-            var stats = await _runStatsRepository.GetManyAsync(tenantId, functionIds, cancellationToken);
+            // One query for the whole page's 24 h counts rather than one per row; the all-time
+            // counters are fields of the function itself.
             var runs24h = await _runRepository.CountSinceByFunctionAsync(
                 tenantId, functionIds, DateTime.UtcNow.AddHours(-24), cancellationToken);
 
@@ -262,10 +259,9 @@ namespace Functions.DomainService.Services
                 // Derived, exactly as the detail view does it. Without this the list read the
                 // unset default and never showed "unpublished changes" for anything.
                 function.IsDirty = IsDirty(function, activeVersion);
-                stats.TryGetValue(function.ItemId, out var functionStats);
                 runs24h.TryGetValue(function.ItemId, out var recentRuns);
                 summaries.Add(FunctionSummaryDto.From(
-                    function, activeVersion?.Number, functionStats, recentRuns));
+                    function, activeVersion?.Number, recentRuns));
             }
 
             return (summaries, totalCount);

@@ -9,16 +9,21 @@ describe("runPollInterval", () => {
     expect(runPollInterval(ago(30_000), 2000, NOW)).toBe(2000);
   });
 
-  it("backs off to 15 s, then a minute, as the run ages", () => {
+  it("backs off to 15 s once the run is past two minutes", () => {
     expect(runPollInterval(ago(5 * 60_000), 2000, NOW)).toBe(15_000);
-    expect(runPollInterval(ago(60 * 60_000), 2000, NOW)).toBe(60_000);
+    expect(runPollInterval(ago(14 * 60_000), 2000, NOW)).toBe(15_000);
+  });
+
+  it("stops at 15 minutes instead of polling a stuck run for hours", () => {
+    expect(RUN_POLL_CUTOFF_MS).toBe(15 * 60_000);
+    expect(runPollInterval(ago(60 * 60_000), 2000, NOW)).toBe(false);
   });
 
   it("never polls faster than the caller's base", () => {
     expect(runPollInterval(ago(5 * 60_000), 30_000, NOW)).toBe(30_000);
   });
 
-  it("stops once the run is past the server's run TTL", () => {
+  it("stops once the run is past the cutoff", () => {
     expect(runPollInterval(ago(RUN_POLL_CUTOFF_MS), 2000, NOW)).toBe(false);
     expect(runPollInterval(ago(RUN_POLL_CUTOFF_MS + 1), 2000, NOW)).toBe(false);
   });

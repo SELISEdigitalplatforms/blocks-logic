@@ -29,6 +29,7 @@ import {
   SecretListItem,
 } from "../types";
 import {
+  deriveProxyMethods,
   keyCollisions,
   KeyCollision,
   parseRouteTemplate,
@@ -158,8 +159,13 @@ export const ProxyRoutesCard = ({
   const [testResponse, setTestResponse] = useState<ProxyTestResponse | null>(null);
   const [testSending, setTestSending] = useState(false);
 
-  const commit = (next: ProxyRoute[]) =>
+  // `methods` is derived from the endpoints and the schema checks each endpoint against it, so it
+  // has to land first: validating the new endpoints against the old list shows a stale
+  // "does not allow" error that nothing clears.
+  const commit = (next: ProxyRoute[]) => {
+    setValue("methods", deriveProxyMethods(next), { shouldDirty: true });
     setValue("routes", next, { shouldDirty: true, shouldValidate: true });
+  };
 
   const patch = (index: number, changes: Partial<ProxyRoute>) => {
     const list = [...(getValues("routes") ?? [])];

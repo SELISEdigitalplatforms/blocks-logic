@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { functionService } from "../services/function.service";
 import { IGetRunsPayload, ITestFunctionPayload, TERMINAL_RUN_STATUSES } from "../types/run.types";
@@ -19,7 +20,7 @@ export const useTestFunction = () => {
 };
 
 /**
- * Runs list. Polls every 5 s while the page holds any non-terminal run, so in-flight runs settle
+ * Runs list. Polls every 5 s while it holds a non-terminal run younger than the cutoff, so in-flight runs settle
  * without a manual refresh, backing off as the youngest of them ages (see `runPollInterval`);
  * `autoRefresh: false` is the runs tab's toggle turned off.
  */
@@ -34,6 +35,8 @@ export const useGetRuns = (
     // Lets the caller hold the query until every part of the key is settled, so a window that is
     // computed in an effect does not cost a first fetch with the wrong bound.
     enabled: options?.enabled ?? true,
+    // Coming back to the tab refreshes the list only where it is live on screen.
+    refetchOnWindowFocus: autoRefresh,
     refetchInterval: (query) => {
       if (!autoRefresh) return false;
       const runs = query.state.data?.data ?? [];
@@ -51,20 +54,51 @@ export const useGetRuns = (
 export interface IGetRunOptions {
   runId?: string;
   enabled?: boolean;
+  /**
+   * Whether to follow the run until it settles. Off for a caller that only reads what the run
+   * was given (its input), which never changes — polling it only multiplied requests.
+   */
+  poll?: boolean;
 }
 
-/** A single run's detail. Polls every 2 s until it reaches a terminal status, backing off with age. */
-export const useGetRun = ({ runId, enabled = true }: IGetRunOptions) => {
-  return useQuery({
+/**
+ * A single run's detail. Polls every 2 s until it reaches a terminal status, backing off with age.
+ * When a followed run settles, the runs list is refreshed once — so the list does not have to
+ * poll alongside it to notice.
+ */
+export const useGetRun = ({ runId, enabled = true, poll = true }: IGetRunOptions) => {
+  const queryClient = useQueryClient();
+  const query = useQuery({
     queryKey: [...RUNS_QUERY_KEY, "detail", runId],
     queryFn: () => functionService.getRun(runId!),
     enabled: enabled && !!runId,
-    refetchInterval: (query) => {
-      const run = query.state.data;
+    // A settled run never changes again, so refocusing the tab has nothing to fetch.
+    refetchOnWindowFocus: (q) =>
+      poll && !!q.state.data?.status && !TERMINAL_RUN_STATUSES.includes(q.state.data.status),
+    refetchInterval: (q) => {
+      if (!poll) return false;
+      const run = q.state.data;
       if (!run?.status || TERMINAL_RUN_STATUSES.includes(run.status)) return false;
       return runPollInterval(run.createdDate, 2000);
     },
   });
+
+  const status = query.data?.status;
+  const previous = useRef(status);
+  useEffect(() => {
+    const was = previous.current;
+    previous.current = status;
+    if (!poll || !status || !was || was === status) return;
+    if (!TERMINAL_RUN_STATUSES.includes(was) && TERMINAL_RUN_STATUSES.includes(status)) {
+      // Only the lists — the keys whose third part is the list payload, not "detail"/"logs".
+      queryClient.invalidateQueries({
+        queryKey: RUNS_QUERY_KEY,
+        predicate: (q) => typeof q.queryKey[2] === "object" && q.queryKey[2] !== null,
+      });
+    }
+  }, [poll, status, queryClient]);
+
+  return query;
 };
 
 export const useGetRunLogs = (runId: string | undefined, pageNumber = 0, pageSize = 200) => {
