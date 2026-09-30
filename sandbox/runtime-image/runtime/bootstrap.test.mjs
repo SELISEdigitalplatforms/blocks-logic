@@ -277,6 +277,44 @@ describe('bootstrap end to end', () => {
     assert.match(r.result.stack, /kaboom/);
   });
 
+  test('an error names its type and code, and the stack carries its details', async () => {
+    const r = await runBootstrap("export default async () => { new URL('not a url'); };");
+    assert.equal(r.code, EXIT.USER_ERROR);
+    assert.equal(r.result.message, 'TypeError [ERR_INVALID_URL]: Invalid URL');
+    assert.match(r.result.stack, /code: "?ERR_INVALID_URL/);
+    assert.match(r.result.stack, /input: not a url/);
+  });
+
+  test('the whole cause chain is reported, not just the outer error', async () => {
+    const r = await runBootstrap(`export default async () => {
+      const low = Object.assign(new Error('connect ECONNREFUSED 1.2.3.4:6380'), { code: 'ECONNREFUSED', port: 6380 });
+      throw new Error('could not reach the cache', { cause: low });
+    };`);
+    assert.equal(r.result.message, 'could not reach the cache');
+    assert.match(r.result.stack, /Caused by: Error: connect ECONNREFUSED/);
+    assert.match(r.result.stack, /port: 6380/);
+  });
+
+  test('an AggregateError lists what it aggregates', async () => {
+    const r = await runBootstrap(`export default async () => {
+      throw new AggregateError([new Error('first'), new TypeError('second')], 'all failed');
+    };`);
+    assert.equal(r.result.message, 'AggregateError: all failed');
+    assert.match(r.result.stack, /errors \(2\):/);
+    assert.match(r.result.stack, /- TypeError: second/);
+  });
+
+  test('an error with hostile getters is still reported', async () => {
+    const r = await runBootstrap(`export default async () => {
+      const e = new Error('odd');
+      Object.defineProperty(e, 'code', { get() { throw new Error('nope'); } });
+      Object.defineProperty(e, 'cause', { get() { throw new Error('nope'); } });
+      throw e;
+    };`);
+    assert.equal(r.code, EXIT.USER_ERROR);
+    assert.equal(r.result.message, 'odd');
+  });
+
   test('a non-Error throw is still reported cleanly', async () => {
     const r = await runBootstrap('export default async () => { throw "just a string"; };');
     assert.equal(r.code, EXIT.USER_ERROR);

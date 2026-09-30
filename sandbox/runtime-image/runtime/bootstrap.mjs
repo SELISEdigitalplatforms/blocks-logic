@@ -41,9 +41,70 @@ function finish(exitCode, failure) {
   _setTimeout(() => _exit(exitCode), 250).unref?.();
 }
 
+// Properties Node and common clients put on an error that say what actually went wrong — the
+// invalid URL, the host that refused, the syscall that failed. Read defensively: tenant code
+// can throw objects with hostile getters.
+const DETAIL_KEYS = ['code', 'errno', 'syscall', 'hostname', 'host', 'address', 'port', 'path',
+  'input', 'status', 'statusCode', 'reason', 'type', 'errorLabels', 'codeName'];
+const MAX_CAUSE_DEPTH = 5;
+const MAX_AGGREGATE = 5;
+
+function safeGet(obj, key) {
+  try { return obj[key]; } catch { return undefined; }
+}
+
+function safeText(value) {
+  try {
+    if (typeof value === 'string') return value;
+    const json = JSON.stringify(value);
+    return json === undefined ? String(value) : json;
+  } catch {
+    try { return String(value); } catch { return '<unrepresentable>'; }
+  }
+}
+
+/** `TypeError [ERR_INVALID_URL]: Invalid URL` — a bare `Error` with no code stays just its message. */
+function headline(err) {
+  const name = safeText(safeGet(err, 'name') ?? 'Error');
+  const code = safeGet(err, 'code');
+  const message = safeText(safeGet(err, 'message') ?? '') || name;
+  if ((name === 'Error' || name === '') && (code === undefined || code === null)) return message;
+  return `${name}${code !== undefined && code !== null ? ` [${safeText(code)}]` : ''}: ${message}`;
+}
+
+/** The stack plus every detail worth having: own diagnostic properties, causes, inner errors. */
+function detail(err, depth, seen) {
+  const lines = [];
+  const stack = safeGet(err, 'stack');
+  lines.push(typeof stack === 'string' && stack ? stack : headline(err));
+
+  for (const key of DETAIL_KEYS) {
+    const value = safeGet(err, key);
+    if (value === undefined || value === null || value === '') continue;
+    lines.push(`  ${key}: ${safeText(value)}`);
+  }
+
+  const inner = safeGet(err, 'errors');
+  if (Array.isArray(inner) && inner.length > 0) {
+    lines.push(`  errors (${inner.length}):`);
+    for (const e of inner.slice(0, MAX_AGGREGATE)) {
+      lines.push('    - ' + (e instanceof Error ? headline(e) : safeText(e)));
+    }
+  }
+
+  const cause = safeGet(err, 'cause');
+  if (cause !== undefined && cause !== null && depth < MAX_CAUSE_DEPTH && !seen.has(cause)) {
+    seen.add(cause);
+    lines.push('Caused by: ' + (cause instanceof Error ? detail(cause, depth + 1, seen) : safeText(cause)));
+  }
+  return lines.join('\n');
+}
+
 function describe(err) {
   if (err instanceof Error) {
-    return { message: err.message || String(err), stack: err.stack };
+    let stack;
+    try { stack = detail(err, 0, new Set([err])); } catch { stack = safeGet(err, 'stack'); }
+    return { message: headline(err), stack };
   }
   // Tenant code may throw anything at all, including objects with hostile getters.
   let message;

@@ -246,7 +246,8 @@ namespace Blocks.FunctionRunner.Runs
 
                 await CompleteAsync(
                     job, runKey, startedAt, status, errorCode, errorMessage, result.ExitCode, result.DurationMs,
-                    result.PeakMemoryBytes, result.CpuUsageMs, result.Output.ResultJson, result.Output.Logs,
+                    result.PeakMemoryBytes, result.CpuUsageMs, result.Output.ResultJson,
+                    WithFailureLine(result.Output, errorCode, errorMessage, resolvedValues),
                     result.Output.Truncated)
                     .ConfigureAwait(false);
 
@@ -256,6 +257,38 @@ namespace Blocks.FunctionRunner.Runs
             {
                 CleanUp(runDir);
             }
+        }
+
+        /// <summary>
+        /// The run's logs, plus — for a failed run — one closing <c>error</c> line with everything
+        /// the sandbox said about the failure: the error's type and code, its stack, its diagnostic
+        /// properties and its whole cause chain. The run record keeps only a one-line message, and
+        /// the stack used to be parsed and then dropped, so the Logs panel said "no logs" for the
+        /// very run that most needed them. Masked like every other forwarded string, and added
+        /// even past the log budget: it is one line, and it is the one that explains the rest.
+        /// </summary>
+        internal static List<string> WithFailureLine(
+            SandboxOutput output, string? errorCode, string? errorMessage, IReadOnlyList<string> secrets)
+        {
+            if (output.Ok != false || (string.IsNullOrEmpty(output.ErrorStack) && string.IsNullOrEmpty(errorMessage)))
+            {
+                return output.Logs;
+            }
+
+            var text = Redact(string.IsNullOrEmpty(output.ErrorStack) ? errorMessage : output.ErrorStack, secrets);
+            var line = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object?>
+            {
+                ["t"] = "log",
+                ["ts"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+                ["level"] = "error",
+                ["msg"] = text,
+                ["data"] = new Dictionary<string, string?>
+                {
+                    ["errorCode"] = errorCode,
+                    ["message"] = errorMessage,
+                },
+            });
+            return [.. output.Logs, line];
         }
 
         private readonly record struct Prepared(
