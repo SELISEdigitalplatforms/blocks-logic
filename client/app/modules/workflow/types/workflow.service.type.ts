@@ -76,6 +76,10 @@ export interface IDeleteWorkflowResponse {
 
 export interface IGetWorkflowExecutionsPayload {
   workflowId: string;
+  pageSize?: number;
+  beforeId?: string;
+  afterId?: string;
+  refreshIds?: string[];
 }
 
 export interface WorkflowExecution {
@@ -88,12 +92,14 @@ export interface WorkflowExecution {
   duration: number;
   triggeredBy: string;
   errorMessage: string;
+  attemptNumber?: number;
 }
 
 export interface IGetWorkflowExecutionsResponse {
   data: WorkflowExecution[];
   totalCount: number;
   errors: unknown;
+  refreshed?: WorkflowExecution[] | null;
 }
 
 export interface IGetWorkflowExecutionByIdPayload {
@@ -112,6 +118,9 @@ export interface IGetWorkflowExecutionById {
   items: ExecutedItem[];
   executionMode: WorkflowExecutionMode;
   id: string;
+  status?: number;
+  finishedAt?: string | null;
+  errorMessage?: string | null;
 }
 
 export interface ICreateWorkflowVersionPayload {
