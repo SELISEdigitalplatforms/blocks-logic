@@ -33,6 +33,7 @@ export const WorkflowExecutionEditor = ({
   });
 
   const data = responseData?.data;
+  const status = data?.status ?? execution?.status;
 
   useEffect(() => {
     setEditorMode("execution");
@@ -145,16 +146,16 @@ export const WorkflowExecutionEditor = ({
               <div
                 className={cn(
                   "h-2 w-2 rounded-full",
-                  getStatusConfig(execution.status).color,
+                  getStatusConfig(status ?? execution.status).color,
                 )}
               ></div>
               <span
                 className={cn(
                   "text-sm font-medium",
-                  getStatusConfig(execution.status).textClass,
+                  getStatusConfig(status ?? execution.status).textClass,
                 )}
               >
-                {getStatusConfig(execution.status).label}
+                {getStatusConfig(status ?? execution.status).label}
               </span>
             </div>
           </div>

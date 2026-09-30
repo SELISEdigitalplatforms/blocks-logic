@@ -57,6 +57,18 @@ describe("WorkflowExecutionList", () => {
     fireEvent.click(screen.getAllByText(/2023/)[0]);
     expect(onSelect).toHaveBeenCalled();
   });
+
+  it("shows a footer while an older page is loading", () => {
+    render(
+      <WorkflowExecutionList
+        executions={[execution("e1")]}
+        hasMore
+        isLoadingMore
+        onLoadMore={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Loading…")).toBeTruthy();
+  });
 });
 
 describe("WorkflowExecutionEditor", () => {
@@ -98,6 +110,29 @@ describe("WorkflowExecutionEditor", () => {
     );
     await waitFor(() => expect(screen.getByText("Status:")).toBeTruthy());
   });
+
+  it("reads the status chip from the execution detail when the list row is still running", async () => {
+    svc.getWorkflowExecutionById.mockResolvedValue({
+      data: {
+        id: "e1",
+        status: WorkflowExecutionStatus.Completed,
+        workflowSnapshot: { nodes: [], edges: [] },
+        nodeExecutions: [],
+        items: [],
+      },
+    });
+    renderWithProviders(
+      <WorkflowExecutionEditor
+        execution={{
+          id: "e1",
+          status: WorkflowExecutionStatus.Running,
+          executionMode: 1,
+        } as never}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText("Completed")).toBeTruthy());
+    expect(screen.queryByText("Running")).toBeNull();
+  });
 });
 
 describe("WorkflowExecutions", () => {
@@ -116,7 +151,10 @@ describe("WorkflowExecutions", () => {
       </QueryClientProvider>,
     );
     await waitFor(() =>
-      expect(svc.getWorkflowExecutions).toHaveBeenCalledWith({ workflowId: "w1" }),
+      expect(svc.getWorkflowExecutions.mock.calls[0]?.[0]).toEqual({
+        workflowId: "w1",
+        pageSize: 20,
+      }),
     );
     await waitFor(() =>
       expect(screen.getByText("Select an execution to view details")).toBeTruthy(),

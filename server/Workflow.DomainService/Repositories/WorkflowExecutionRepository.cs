@@ -13,6 +13,31 @@ namespace Workflow.DomainService.Repositories
     {
         private readonly IDbContextProvider _dbContextProvider;
         private const string _collectionName = "WorkflowExecutions";
+        private const string ListIndexName = "ix_workflowexec_workflow_started_id";
+        private readonly HashSet<string> _indexedTenants = new(StringComparer.Ordinal);
+        private readonly Lock _indexGate = new();
+
+        private static readonly ProjectionDefinition<WorkflowExecutionEntity> ListProjection =
+            Builders<WorkflowExecutionEntity>.Projection
+                .Include(e => e.Id)
+                .Include(e => e.WorkflowId)
+                .Include(e => e.WorkflowName)
+                .Include(e => e.Status)
+                .Include(e => e.ExecutionMode)
+                .Include(e => e.StartedAt)
+                .Include(e => e.FinishedAt)
+                .Include(e => e.ErrorMessage)
+                .Include(e => e.AttemptNumber);
+
+        private static readonly SortDefinition<WorkflowExecutionEntity> NewestFirst =
+            Builders<WorkflowExecutionEntity>.Sort
+                .Descending(e => e.StartedAt)
+                .Descending(e => e.Id);
+
+        private static readonly SortDefinition<WorkflowExecutionEntity> OldestFirst =
+            Builders<WorkflowExecutionEntity>.Sort
+                .Ascending(e => e.StartedAt)
+                .Ascending(e => e.Id);
 
         public WorkflowExecutionRepository(IDbContextProvider dbContextProvider)
         {
@@ -35,6 +60,7 @@ namespace Workflow.DomainService.Repositories
                 throw new InvalidOperationException("TenantId is required for execution");
 
             var collection = GetCollection(execution.TenantId);
+            await EnsureIndexesAsync(execution.TenantId);
             await collection.InsertOneAsync(execution);
             return execution;
         }
@@ -186,6 +212,111 @@ namespace Workflow.DomainService.Repositories
             return await collection.Find(filter)
                 .SortByDescending(e => e.StartedAt)
                 .ToListAsync();
+        }
+
+        public Task<List<WorkflowExecutionListRow>> GetPageAsync(string workflowId, string tenantId, int pageSize)
+        {
+            return QueryListAsync(tenantId, WorkflowFilter(workflowId), NewestFirst, pageSize);
+        }
+
+        public Task<List<WorkflowExecutionListRow>> GetOlderThanAsync(
+            string workflowId, string tenantId, DateTime startedAt, string id, int pageSize)
+        {
+            // Mirrors WorkflowExecutionListCursor.IsStrictlyOlder.
+            var builder = Builders<WorkflowExecutionEntity>.Filter;
+            var older = builder.Or(
+                builder.Lt(e => e.StartedAt, startedAt),
+                builder.And(
+                    builder.Eq(e => e.StartedAt, startedAt),
+                    builder.Lt(e => e.Id, id)));
+            return QueryListAsync(tenantId, WorkflowFilter(workflowId) & older, NewestFirst, pageSize);
+        }
+
+        public Task<List<WorkflowExecutionListRow>> GetNewerThanAsync(
+            string workflowId, string tenantId, DateTime startedAt, string id, int pageSize)
+        {
+            // Mirrors WorkflowExecutionListCursor.IsStrictlyNewer.
+            // Ascending + limit returns the contiguous next chunk, not the newest PageSize
+            // (which would skip runs when a burst is larger than the page).
+            var builder = Builders<WorkflowExecutionEntity>.Filter;
+            var newer = builder.Or(
+                builder.Gt(e => e.StartedAt, startedAt),
+                builder.And(
+                    builder.Eq(e => e.StartedAt, startedAt),
+                    builder.Gt(e => e.Id, id)));
+            return QueryListAsync(tenantId, WorkflowFilter(workflowId) & newer, OldestFirst, pageSize);
+        }
+
+        public async Task<long> CountByWorkflowIdAsync(string workflowId, string tenantId)
+        {
+            await EnsureIndexesAsync(tenantId);
+            return await GetCollection(tenantId).CountDocumentsAsync(WorkflowFilter(workflowId));
+        }
+
+        public async Task<List<WorkflowExecutionListRow>> GetListItemsByIdsAsync(
+            string workflowId, string tenantId, IReadOnlyCollection<string> ids)
+        {
+            if (ids.Count == 0)
+            {
+                return [];
+            }
+
+            await EnsureIndexesAsync(tenantId);
+            var builder = Builders<WorkflowExecutionEntity>.Filter;
+            var filter = WorkflowFilter(workflowId) & builder.In(e => e.Id, ids);
+            return await GetCollection(tenantId)
+                .Find(filter)
+                .Project<WorkflowExecutionListRow>(ListProjection)
+                .ToListAsync();
+        }
+
+        private async Task<List<WorkflowExecutionListRow>> QueryListAsync(
+            string tenantId,
+            FilterDefinition<WorkflowExecutionEntity> filter,
+            SortDefinition<WorkflowExecutionEntity> sort,
+            int pageSize)
+        {
+            await EnsureIndexesAsync(tenantId);
+            return await GetCollection(tenantId)
+                .Find(filter)
+                .Sort(sort)
+                .Limit(pageSize)
+                .Project<WorkflowExecutionListRow>(ListProjection)
+                .ToListAsync();
+        }
+
+        private static FilterDefinition<WorkflowExecutionEntity> WorkflowFilter(string workflowId) =>
+            Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.WorkflowId, workflowId);
+
+        private async Task EnsureIndexesAsync(string tenantId)
+        {
+            lock (_indexGate)
+            {
+                if (!_indexedTenants.Add(tenantId))
+                {
+                    return;
+                }
+            }
+
+            try
+            {
+                var keys = Builders<WorkflowExecutionEntity>.IndexKeys;
+                await GetCollection(tenantId).Indexes.CreateOneAsync(
+                    new CreateIndexModel<WorkflowExecutionEntity>(
+                        keys.Ascending(e => e.WorkflowId)
+                            .Descending(e => e.StartedAt)
+                            .Descending(e => e.Id),
+                        new CreateIndexOptions { Name = ListIndexName }));
+            }
+            catch
+            {
+                lock (_indexGate)
+                {
+                    _indexedTenants.Remove(tenantId);
+                }
+
+                throw;
+            }
         }
 
         /// <summary>

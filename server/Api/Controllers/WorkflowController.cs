@@ -342,6 +342,11 @@ namespace Utilities.Api.Controllers
         {
             var tenantId = GetTenantId();
             var executions = await _workflowExecutionService.GetExecutionsByWorkflowIdAsync(tenantId, dto);
+            if (executions.HttpStatus != StatusCodes.Status200OK)
+            {
+                return StatusCode(executions.HttpStatus, executions);
+            }
+
             return Ok(executions);
         }
 
