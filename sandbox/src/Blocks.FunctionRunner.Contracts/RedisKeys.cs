@@ -51,6 +51,14 @@ namespace Blocks.FunctionRunner.Contracts
         /// <summary>Build results, written by runners, consumed by the logic Worker.</summary>
         public const string BuildResultsStream = "functions:build-results";
 
+        /// <summary>
+        /// Test runs: each entry is one job that builds the function's current source into a
+        /// local image, runs it once on the same host, and deletes the image. Separate from
+        /// <see cref="RunsStream"/> so that a runner which predates it never sees one — an old
+        /// runner would try to pull an image that exists on no registry.
+        /// </summary>
+        public const string TestsStream = "functions:tests";
+
         /// <summary>Entries that exhausted their retry budget.</summary>
         public const string DeadStream = "functions:dead";
 

@@ -87,38 +87,25 @@ describe("TestPanel", () => {
     expect(screen.getByText("UserRuntimeError")).toBeTruthy();
   });
 
-  it("asks for a rebuild only when Rebuild image is used", async () => {
-    testFunction.mockResolvedValue({ runId: "run_1", status: "Queued" });
+  it("follows a test's run and its own build together and never starts it twice", async () => {
+    // One job builds, runs and deletes the image on the same runner; the build is shown for its
+    // progress, and landing must not queue a second run.
+    testFunction.mockResolvedValue({ runId: "run_1", status: "Queued", buildId: "build_1" });
+    getBuild.mockResolvedValue({ itemId: "build_1", status: "Succeeded" });
+    getRun.mockResolvedValue({ id: "run_1", status: "Succeeded", attempts: [] });
 
     renderPanel();
     await userEvent.click(screen.getByRole("button", { name: /run test/i }));
 
-    // A plain test reuses the cached image; that is what makes Test then Deploy cheap.
-    expect(testFunction).toHaveBeenLastCalledWith(
-      expect.objectContaining({ functionId: "fn_1", rebuild: false }),
-    );
-
-    await userEvent.click(screen.getByRole("button", { name: /rebuild image/i }));
-
-    expect(testFunction).toHaveBeenLastCalledWith(
-      expect.objectContaining({ functionId: "fn_1", rebuild: true }),
-    );
+    await waitFor(() => expect(getBuild).toHaveBeenCalled());
+    await waitFor(() => expect(getRun).toHaveBeenCalled());
+    expect(testFunction).toHaveBeenCalledTimes(1);
   });
 
-  it("does not keep rebuilding when it re-runs itself after a build", async () => {
-    // The rebuild is the request, not a mode: repeating it on the automatic re-run would build
-    // the same source twice for one click, and again after that one.
-    testFunction
-      .mockResolvedValueOnce({ runId: "", status: "", buildId: "build_1" })
-      .mockResolvedValueOnce({ runId: "run_1", status: "Queued" });
-    getBuild.mockResolvedValue({ itemId: "build_1", status: "Succeeded" });
-
+  it("offers no rebuild: every test already builds fresh", () => {
     renderPanel();
-    await userEvent.click(screen.getByRole("button", { name: /rebuild image/i }));
 
-    await waitFor(() => expect(testFunction).toHaveBeenCalledTimes(2));
-    expect(testFunction).toHaveBeenNthCalledWith(1, expect.objectContaining({ rebuild: true }));
-    expect(testFunction).toHaveBeenNthCalledWith(2, expect.objectContaining({ rebuild: false }));
+    expect(screen.queryByRole("button", { name: /rebuild image/i })).toBeNull();
   });
 
   it("runs the test again by itself once the build succeeds", async () => {

@@ -56,7 +56,8 @@ namespace Functions.DomainService.Repositories
 
             var filter = Builders<FunctionBuildEntity>.Filter.Eq(b => b.FunctionId, functionId)
                        & Builders<FunctionBuildEntity>.Filter.Eq(b => b.SourceHash, sourceHash)
-                       & Builders<FunctionBuildEntity>.Filter.Eq(b => b.Status, BuildStatus.Succeeded);
+                       & Builders<FunctionBuildEntity>.Filter.Eq(b => b.Status, BuildStatus.Succeeded)
+                       & Builders<FunctionBuildEntity>.Filter.Ne(b => b.Ephemeral, true);
 
             return await Collection(tenantId).Find(filter)
                 .SortByDescending(b => b.CreatedDate)
@@ -72,7 +73,8 @@ namespace Functions.DomainService.Repositories
             var inProgress = new[] { BuildStatus.Queued, BuildStatus.Building };
             var filter = Builders<FunctionBuildEntity>.Filter.Eq(b => b.FunctionId, functionId)
                        & Builders<FunctionBuildEntity>.Filter.Eq(b => b.SourceHash, sourceHash)
-                       & Builders<FunctionBuildEntity>.Filter.In(b => b.Status, inProgress);
+                       & Builders<FunctionBuildEntity>.Filter.In(b => b.Status, inProgress)
+                       & Builders<FunctionBuildEntity>.Filter.Ne(b => b.Ephemeral, true);
 
             return await Collection(tenantId).Find(filter)
                 .SortByDescending(b => b.CreatedDate)

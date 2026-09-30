@@ -87,6 +87,12 @@ namespace Blocks.FunctionRunner.Contracts
         public const string SandboxStartFailed = "SANDBOX_START_FAILED";
 
         /// <summary>
+        /// A test run's own image could not be built (bad package.json, a package that does not
+        /// exist, a failed install). Nothing ran. The build record carries the log.
+        /// </summary>
+        public const string BuildFailed = "BUILD_FAILED";
+
+        /// <summary>
         /// A variable references a secret that does not exist, is locked or deleted, has no
         /// value, or cannot be read in this run's context. The sandbox was never started. Not
         /// retryable: the same reference fails the same way until the author fixes it. The

@@ -27,7 +27,8 @@ export type RunErrorCode =
   | "EnqueueFailed"
   | "Abandoned"
   | "SecretUnresolved"
-  | "SecretStoreUnavailable";
+  | "SecretStoreUnavailable"
+  | "BuildFailed";
 
 export type InvokedByType = "Http" | "Workflow" | "Test" | "Replay" | "Schedule" | "Event";
 

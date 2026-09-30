@@ -273,32 +273,10 @@ namespace Functions.DomainService.Services
             var function = await _functionRepository.GetByIdAsync(tenantId, functionId, cancellationToken)
                 ?? throw new FunctionNotFoundException($"function '{functionId}' was not found");
 
-            // A short wait, not the deploy-length one: a first build takes minutes, and holding the
-            // editor's request open for all of it only to answer "not finished" is worse than
-            // handing back the build id — the client polls it and shows the build's own progress.
-            var testWaitSeconds = _configuration.GetValue("Functions:TestBuildWaitSeconds", 5);
-            var build = await _buildService.EnsureImageAsync(
-                tenantId, function, cancellationToken, testWaitSeconds, request.Rebuild);
-
-            if (build.Status is BuildStatus.Queued or BuildStatus.Building)
-            {
-                // Status is what a caller reads first, so it says what is actually happening rather
-                // than coming back empty: "Building"/"Queued" is the build's own state, and there
-                // is no run to report one for yet.
-                return new InvokeResultDto
-                {
-                    RunId = string.Empty,
-                    Status = build.Status.ToString(),
-                    BuildId = build.ItemId,
-                    BuildStatus = build.Status.ToString(),
-                };
-            }
-
-            if (build.Status != BuildStatus.Succeeded || string.IsNullOrEmpty(build.ImageDigest))
-            {
-                throw new FunctionValidationException(
-                    $"the build failed: {build.ErrorMessage ?? "unknown error"}");
-            }
+            // Every test builds its own image, on the runner that then runs it, and that image is
+            // deleted when the run ends. Nothing is cached or reused: a cached image lived in one
+            // host's registry, so a run claimed by any other host could not find it.
+            var (build, sourceKey) = await _buildService.CreateTestBuildAsync(tenantId, function, cancellationToken);
 
             var context = BlocksContext.GetContext();
 
@@ -307,11 +285,22 @@ namespace Functions.DomainService.Services
             // input is undefined in production" surprise.
             var inputJson = FunctionHttpInputBuilder.ForTest(request.InputJson, function.Trigger.HttpMethod);
 
-            return await InvokeCoreAsync(
-                tenantId, function, version: null, build.ImageDigest, context,
+            var result = await InvokeCoreAsync(
+                tenantId, function, version: null, TestImageRef(build.ItemId), context,
                 InvokedByType.Test, invokedById: null, inputJson, wait: true, request.WaitTimeoutSeconds,
-                cancellationToken);
+                cancellationToken, new TestBuild(build.ItemId, sourceKey));
+            result.BuildId ??= build.ItemId;
+            return result;
         }
+
+        /// <summary>A test run's own build, carried on its entry in <see cref="FunctionQueueKeys.TestsStream"/>.</summary>
+        private sealed record TestBuild(string BuildId, string SourceKey);
+
+        /// <summary>
+        /// The local name the runner gives a test build's image. Mirrors
+        /// <c>TestConsumerService.TestImageRef</c>; recorded on the run for display only.
+        /// </summary>
+        internal static string TestImageRef(string buildId) => $"blocks-test/{buildId.ToLowerInvariant()}:local";
 
         public async Task<InvokeResultDto> ReplayAsync(
             string tenantId, FunctionRunEntity originalRun, CancellationToken cancellationToken = default)
@@ -331,28 +320,28 @@ namespace Functions.DomainService.Services
                 version = await _versionRepository.GetByIdAsync(tenantId, function.ActiveVersionId, cancellationToken);
             }
 
+            TestBuild? test = null;
             if (version is not null)
             {
                 image = version.ImageDigest;
             }
             else
             {
-                // Never deployed — the original was a Test run, so rebuild the current source,
-                // which is what testing does anyway.
-                var build = await _buildService.EnsureImageAsync(tenantId, function, cancellationToken);
-                if (build.Status != BuildStatus.Succeeded || string.IsNullOrEmpty(build.ImageDigest))
-                {
-                    throw new FunctionValidationException("could not rebuild the function's current source for replay");
-                }
-                image = build.ImageDigest;
+                // Never deployed — the original was a Test run. It is replayed the way a test runs:
+                // a fresh build of the current source, run and deleted on one runner.
+                var (build, sourceKey) = await _buildService.CreateTestBuildAsync(tenantId, function, cancellationToken);
+                test = new TestBuild(build.ItemId, sourceKey);
+                image = TestImageRef(build.ItemId);
             }
 
             var context = BlocksContext.GetContext();
 
-            return await InvokeCoreAsync(
+            var result = await InvokeCoreAsync(
                 tenantId, function, version, image, context,
                 InvokedByType.Replay, invokedById: originalRun.ItemId, originalRun.Input,
-                wait: false, waitTimeoutSeconds: null, cancellationToken);
+                wait: false, waitTimeoutSeconds: null, cancellationToken, test);
+            if (test is not null) result.BuildId ??= test.BuildId;
+            return result;
         }
 
         public async Task<InvokeResultDto> InvokeFromWorkflowAsync(
@@ -393,7 +382,8 @@ namespace Functions.DomainService.Services
             string? inputJson,
             bool wait,
             int? waitTimeoutSeconds,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            TestBuild? test = null)
         {
             var admission = await _admissionService.AdmitAsync(function, tenantId, inputJson, cancellationToken);
             if (!admission.IsAdmitted)
@@ -417,7 +407,9 @@ namespace Functions.DomainService.Services
                 InvokedById = invokedById,
                 Input = inputJson,
                 Attempt = 1,
-                MaxAttempts = Math.Max(1, (version?.Retry ?? function.Retry).Attempts),
+                // A test is one build and one run; its image is gone afterwards, so there is
+                // nothing a retry could run.
+                MaxAttempts = test is not null ? 1 : Math.Max(1, (version?.Retry ?? function.Retry).Attempts),
             };
             run.IdempotencyKey = $"{run.ItemId}-{run.Attempt}";
 
@@ -442,7 +434,7 @@ namespace Functions.DomainService.Services
 
             try
             {
-                await EnqueueAsync(tenantId, function, run, image, envelopeJson, limits);
+                await EnqueueAsync(tenantId, function, run, image, envelopeJson, limits, test);
             }
             catch (Exception ex)
             {
@@ -506,7 +498,7 @@ namespace Functions.DomainService.Services
 
         private async Task EnqueueAsync(
             string tenantId, FunctionEntity function, FunctionRunEntity run, string image, string envelopeJson,
-            FunctionLimits limits)
+            FunctionLimits limits, TestBuild? test = null)
         {
             var database = _cache.CacheDatabase();
             var runKey = FunctionQueueKeys.Run(run.ItemId);
@@ -522,6 +514,24 @@ namespace Functions.DomainService.Services
                 new HashEntry("queuedAt", DateTimeOffset.UtcNow.ToString("O")),
             ]);
             await database.KeyExpireAsync(runKey, FunctionQueueKeys.RunTtl);
+
+            if (test is not null)
+            {
+                // One job, one host: the runner that claims this builds the source, runs it and
+                // deletes the image. No image reference crosses hosts, so no host can miss it.
+                await database.StreamAddAsync(FunctionQueueKeys.TestsStream,
+                [
+                    new NameValueEntry("runId", run.ItemId),
+                    new NameValueEntry("buildId", test.BuildId),
+                    new NameValueEntry("functionId", function.ItemId),
+                    new NameValueEntry("tenantId", tenantId),
+                    new NameValueEntry("sourceKey", test.SourceKey),
+                    new NameValueEntry("allowScripts", "false"),
+                    new NameValueEntry("attempt", run.Attempt),
+                    new NameValueEntry("protocol", FunctionQueueKeys.RunProtocolVersion),
+                ]);
+                return;
+            }
 
             await database.StreamAddAsync(FunctionQueueKeys.RunsStream,
             [

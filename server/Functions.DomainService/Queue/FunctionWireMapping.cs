@@ -65,6 +65,7 @@ namespace Functions.DomainService.Queue
             FunctionQueueKeys.Wire.ImagePullFailed => RunErrorCode.ImagePullFailed,
             FunctionQueueKeys.Wire.TimedOutCode => RunErrorCode.TimedOut,
             FunctionQueueKeys.Wire.SandboxStartFailed => RunErrorCode.SandboxStartFailed,
+            FunctionQueueKeys.Wire.BuildFailedCode => RunErrorCode.BuildFailed,
             FunctionQueueKeys.Wire.SecretUnresolved => RunErrorCode.SecretUnresolved,
             FunctionQueueKeys.Wire.SecretStoreUnavailable => RunErrorCode.SecretStoreUnavailable,
             FunctionQueueKeys.Wire.Undeliverable => RunErrorCode.Undeliverable,
@@ -98,6 +99,7 @@ namespace Functions.DomainService.Queue
                 // every time until the author fixes the variable. (SecretStoreUnavailable — the
                 // store itself was down — falls through to retryable.)
                 RunErrorCode.SecretUnresolved => false,
+                RunErrorCode.BuildFailed => false,
                 _ => true,
             };
         }

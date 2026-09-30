@@ -28,6 +28,8 @@ export const RUN_ERROR_EXPLANATIONS: Record<RunErrorCode, string> = {
     "The run never reported back and the platform closed it. It may or may not have finished its work, so check for side effects before running it again.",
   SecretUnresolved:
     "A variable is bound to a secret that could not be read — it was deleted, locked, has no value, or is not readable by this run. Nothing ran. Rebind the variable named above to an existing secret, then run again.",
+  BuildFailed:
+    "The test's image could not be built, so nothing ran. The build log above says why — usually a package name or version in package.json that does not exist.",
   SecretStoreUnavailable:
     "The secret store could not be reached while the run was starting, so nothing ran. This is on the platform's side; the run is retried automatically if its retry policy allows, and running it again is safe.",
 };

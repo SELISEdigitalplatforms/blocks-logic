@@ -91,6 +91,12 @@ namespace Functions.DomainService.Enums
         /// retryable.
         /// </summary>
         SecretStoreUnavailable = 15,
+
+        /// <summary>
+        /// A test run builds its own image first; that build failed, so nothing ran. Not
+        /// retryable — the same source fails the same way; the build log says why.
+        /// </summary>
+        BuildFailed = 16,
     }
 
     /// <summary>What caused a run. Carried into <c>ctx.run.invokedBy</c>.</summary>

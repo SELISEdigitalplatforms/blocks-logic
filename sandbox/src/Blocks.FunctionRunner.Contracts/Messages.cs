@@ -78,6 +78,13 @@ namespace Blocks.FunctionRunner.Contracts
         public required string SourceKey { get; init; }
         public required string ImageRef { get; init; }
         public bool AllowScripts { get; init; }
+
+        /// <summary>
+        /// A test run's build: tagged <see cref="ImageRef"/> in the local Engine only, never
+        /// pushed, and labelled so Image GC can reclaim it if the run that owns it never cleans up.
+        /// </summary>
+        public bool LocalOnly { get; init; }
+
         public int Protocol { get; init; } = RedisKeys.ProtocolVersion;
     }
 

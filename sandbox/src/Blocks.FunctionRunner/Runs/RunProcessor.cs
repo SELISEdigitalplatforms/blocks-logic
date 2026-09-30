@@ -71,6 +71,31 @@ namespace Blocks.FunctionRunner.Runs
             NotOurs,
         }
 
+        /// <summary>
+        /// Reports a run that never reached a sandbox — a test whose build failed, or that found
+        /// no capacity — through the same result path as an executed one. Does nothing when the
+        /// run's payload is gone (expired, or its function was deleted): there is no record left
+        /// to report to, and writing the status would recreate the key.
+        /// </summary>
+        public async Task ReportUnexecutedAsync(
+            RunJob job, string status, string errorCode, string errorMessage, CancellationToken token)
+        {
+            ArgumentNullException.ThrowIfNull(job);
+            var runKey = RedisKeys.Run(job.RunId);
+            if (!await _db.KeyExistsAsync(runKey).ConfigureAwait(false)) return;
+
+            await CompleteAsync(job, runKey, DateTimeOffset.UtcNow, status, errorCode, errorMessage,
+                null, 0, null, null, null, null, false).ConfigureAwait(false);
+        }
+
+        /// <summary>True while the run's payload exists, i.e. it has not expired or been withdrawn.</summary>
+        public async Task<bool> IsLiveAsync(string runId)
+            => await _db.KeyExistsAsync(RedisKeys.Run(runId)).ConfigureAwait(false);
+
+        /// <summary>True when the control plane has asked for the run to stop.</summary>
+        public async Task<bool> IsCancelRequestedAsync(string runId)
+            => await _db.KeyExistsAsync(RedisKeys.Cancel(runId)).ConfigureAwait(false);
+
         public async Task<Disposition> ProcessAsync(RunJob job, CancellationToken token)
         {
             ArgumentNullException.ThrowIfNull(job);
