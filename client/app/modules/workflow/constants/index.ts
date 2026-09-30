@@ -13,3 +13,6 @@ export const EXECUTION_STATUS_COMPLETED = "WF004"
 export const EXECUTION_STATUS_FAILED = "WF005"
 
 export const TRIGGER_NODE_LISTENING_CODE = "101"
+
+/** Newest executions loaded on the first screen of the executions sidebar. */
+export const WORKFLOW_EXECUTION_PAGE_SIZE = 20;

@@ -121,7 +121,7 @@ Each node type has a JSON schema in `components/node-schemas/`. The schema descr
 
 ### Execution Polling
 
-Both execution query hooks pass `refetchInterval: 5000`, providing near-real-time UI updates without a WebSocket connection.
+Both execution screens poll every 5 seconds. The open execution refetches its graph. The executions list loads the newest page first, appends older runs as the sidebar scrolls, and the poll only prepends newer runs and patches in-flight statuses instead of replacing the list.
 
 ---
 

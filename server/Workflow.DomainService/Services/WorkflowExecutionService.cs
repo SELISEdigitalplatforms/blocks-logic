@@ -469,6 +469,45 @@ namespace Workflow.DomainService.Services
 
         public async Task<WorkflowExecutionsGetResponseDto> GetExecutionsByWorkflowIdAsync(string tenantId, WorkflowExecutionsGetRequestDto dto)
         {
+            var beforeId = string.IsNullOrWhiteSpace(dto.BeforeId) ? null : dto.BeforeId.Trim();
+            var afterId = string.IsNullOrWhiteSpace(dto.AfterId) ? null : dto.AfterId.Trim();
+
+            // RefreshIds alone does not turn paging on. Callers that send only WorkflowId
+            // keep the historical full list.
+            if (dto.PageSize is null && beforeId is null && afterId is null)
+            {
+                return await GetLegacyExecutionsAsync(tenantId, dto);
+            }
+
+            var validation = WorkflowExecutionListCursor.ValidatePaging(dto.PageSize, beforeId, afterId);
+            if (validation != null)
+            {
+                return InvalidExecutionsRequest(validation);
+            }
+
+            var pageSize = dto.PageSize!.Value;
+            if (afterId != null)
+            {
+                return await GetNewerExecutionsAsync(tenantId, dto, afterId, pageSize);
+            }
+
+            if (beforeId != null)
+            {
+                return await GetOlderExecutionsAsync(tenantId, dto, beforeId, pageSize);
+            }
+
+            var page = await _executionRepository.GetPageAsync(dto.WorkflowId, tenantId, pageSize);
+            var total = await _executionRepository.CountByWorkflowIdAsync(dto.WorkflowId, tenantId);
+            return new WorkflowExecutionsGetResponseDto
+            {
+                TotalCount = total,
+                Data = page.Select(ToItem).ToList(),
+                Errors = null,
+            };
+        }
+
+        private async Task<WorkflowExecutionsGetResponseDto> GetLegacyExecutionsAsync(string tenantId, WorkflowExecutionsGetRequestDto dto)
+        {
             var executions = await _executionRepository.GetByWorkflowIdAsync(dto.WorkflowId, tenantId);
 
             var executionItems = executions.Select(e => new WorkflowExecutionItemDto
@@ -482,7 +521,6 @@ namespace Workflow.DomainService.Services
                 ErrorMessage = e.ErrorMessage,
                 AttemptNumber = e.AttemptNumber,
                 ExecutionMode = e.ExecutionMode,
-                // TriggerMetadata = e.TriggerMetadata
             }).ToList();
 
             return new WorkflowExecutionsGetResponseDto
@@ -492,6 +530,103 @@ namespace Workflow.DomainService.Services
                 Errors = null
             };
         }
+
+        private async Task<WorkflowExecutionsGetResponseDto> GetOlderExecutionsAsync(
+            string tenantId, WorkflowExecutionsGetRequestDto dto, string beforeId, int pageSize)
+        {
+            var cursor = await _executionRepository.GetByIdAsync(beforeId, tenantId);
+            if (cursor == null || cursor.WorkflowId != dto.WorkflowId)
+            {
+                return EmptyExecutionsPage();
+            }
+
+            var page = await _executionRepository.GetOlderThanAsync(
+                dto.WorkflowId, tenantId, cursor.StartedAt, cursor.Id, pageSize);
+            var total = await _executionRepository.CountByWorkflowIdAsync(dto.WorkflowId, tenantId);
+            return new WorkflowExecutionsGetResponseDto
+            {
+                TotalCount = total,
+                Data = page.Select(ToItem).ToList(),
+                Errors = null,
+            };
+        }
+
+        private async Task<WorkflowExecutionsGetResponseDto> GetNewerExecutionsAsync(
+            string tenantId, WorkflowExecutionsGetRequestDto dto, string afterId, int pageSize)
+        {
+            var cursor = await _executionRepository.GetByIdAsync(afterId, tenantId);
+            List<WorkflowExecutionListRow> newer;
+            long total;
+            if (cursor == null || cursor.WorkflowId != dto.WorkflowId)
+            {
+                newer = [];
+                total = 0;
+            }
+            else
+            {
+                newer = await _executionRepository.GetNewerThanAsync(
+                    dto.WorkflowId, tenantId, cursor.StartedAt, cursor.Id, pageSize);
+                total = await _executionRepository.CountByWorkflowIdAsync(dto.WorkflowId, tenantId);
+            }
+
+            var refreshed = await LoadRefreshedItemsAsync(tenantId, dto);
+            return new WorkflowExecutionsGetResponseDto
+            {
+                TotalCount = total,
+                Data = newer.Select(ToItem).ToList(),
+                Refreshed = refreshed,
+                Errors = null,
+            };
+        }
+
+        private async Task<List<WorkflowExecutionItemDto>?> LoadRefreshedItemsAsync(
+            string tenantId, WorkflowExecutionsGetRequestDto dto)
+        {
+            var refreshIds = (dto.RefreshIds ?? [])
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Select(id => id.Trim())
+                .Distinct(StringComparer.Ordinal)
+                .Take(WorkflowExecutionListCursor.MaxRefreshIds)
+                .ToList();
+            if (refreshIds.Count == 0)
+            {
+                return null;
+            }
+
+            var rows = await _executionRepository.GetListItemsByIdsAsync(dto.WorkflowId, tenantId, refreshIds);
+            return rows
+                .Where(row => row.WorkflowId == dto.WorkflowId)
+                .Select(ToItem)
+                .ToList();
+        }
+
+        private static WorkflowExecutionsGetResponseDto EmptyExecutionsPage() => new()
+        {
+            TotalCount = 0,
+            Data = [],
+            Errors = null,
+        };
+
+        private static WorkflowExecutionsGetResponseDto InvalidExecutionsRequest(string message) => new()
+        {
+            HttpStatus = 400,
+            TotalCount = 0,
+            Data = [],
+            Errors = new Dictionary<string, string> { { "Message", message } },
+        };
+
+        private static WorkflowExecutionItemDto ToItem(WorkflowExecutionListRow row) => new()
+        {
+            Id = row.Id,
+            WorkflowId = row.WorkflowId,
+            WorkflowName = row.WorkflowName,
+            Status = row.Status,
+            StartedAt = row.StartedAt,
+            FinishedAt = row.FinishedAt,
+            ErrorMessage = row.ErrorMessage,
+            AttemptNumber = row.AttemptNumber,
+            ExecutionMode = row.ExecutionMode,
+        };
 
         public async Task<WorkflowExecutionGetResponseDto> GetExecutionByIdAsync(string tenantId, WorkflowExecutionGetRequestDto dto)
         {
