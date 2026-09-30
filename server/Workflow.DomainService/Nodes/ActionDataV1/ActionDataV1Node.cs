@@ -95,6 +95,11 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
         private async Task ExecuteGetDataAsync(
             NodeExecutionContext context, ActionDataV1Parameters parameters, List<NodeOutputItem> outputItems)
         {
+            if (context.InputItems == null || context.InputItems.Count == 0)
+            {
+                return;
+            }
+
             try
             {
                 // Build GraphQL query with field selection
