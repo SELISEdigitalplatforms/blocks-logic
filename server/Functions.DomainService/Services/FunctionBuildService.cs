@@ -39,6 +39,14 @@ namespace Functions.DomainService.Services
 
         /// <summary>A single build's current state — for the editor's build-progress indicator to poll.</summary>
         Task<FunctionBuildEntity> GetAsync(string tenantId, string buildId, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Records a fresh, never-reused build for one test run and stores its source bundle. It is
+        /// not queued on its own: the test entry that carries it is, and the runner that claims
+        /// that entry builds it locally, runs it and deletes it.
+        /// </summary>
+        Task<(FunctionBuildEntity Build, string SourceKey)> CreateTestBuildAsync(
+            string tenantId, FunctionEntity function, CancellationToken cancellationToken = default);
     }
 
     /// <summary>
@@ -138,6 +146,30 @@ namespace Functions.DomainService.Services
             var build = inProgress ?? await QueueBuildAsync(tenantId, function, sourceHash, cancellationToken);
 
             return await WaitForCompletionAsync(tenantId, build, cancellationToken, waitSecondsOverride);
+        }
+
+        public async Task<(FunctionBuildEntity Build, string SourceKey)> CreateTestBuildAsync(
+            string tenantId, FunctionEntity function, CancellationToken cancellationToken = default)
+        {
+            var build = new FunctionBuildEntity
+            {
+                ItemId = Guid.NewGuid().ToString(),
+                CreatedDate = DateTime.UtcNow,
+                LastUpdatedDate = DateTime.UtcNow,
+                FunctionId = function.ItemId,
+                SourceHash = function.SourceHash,
+                Status = BuildStatus.Queued,
+                Ephemeral = true,
+            };
+            await _buildRepository.CreateAsync(tenantId, build, cancellationToken);
+
+            var sourceKey = FunctionQueueKeys.Source(build.ItemId);
+            await _cache.CacheDatabase().StringSetAsync(
+                sourceKey,
+                JsonSerializer.Serialize(new { files = BuildFileMap(function.Source) }),
+                FunctionQueueKeys.SourceTtl);
+
+            return (build, sourceKey);
         }
 
         private async Task<FunctionBuildEntity> QueueBuildAsync(

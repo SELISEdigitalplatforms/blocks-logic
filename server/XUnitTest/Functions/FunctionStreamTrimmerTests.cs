@@ -66,6 +66,7 @@ namespace XUnitTest.Functions
                 FunctionQueueKeys.ResultsStream,
                 FunctionQueueKeys.BuildsStream,
                 FunctionQueueKeys.BuildResultsStream,
+                FunctionQueueKeys.TestsStream,
                 FunctionWorkerQueueKeys.OutputsStream,
                 FunctionQueueKeys.DeadStream,
                 FunctionQueueKeys.DeadResultsStream,

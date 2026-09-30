@@ -93,6 +93,8 @@ namespace Blocks.FunctionRunner.Utils
             services.AddHostedService(sp => sp.GetRequiredService<HeartbeatService>());
             services.AddHostedService<RunConsumerService>();
             services.AddHostedService<BuildConsumerService>();
+            // Test runs: build, run and delete on one host (Runs/TestConsumerService).
+            services.AddHostedService<TestConsumerService>();
             services.AddHostedService<SandboxReaper>();
             services.AddHostedService<ImageGc>();
 

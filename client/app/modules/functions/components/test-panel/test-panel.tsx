@@ -104,13 +104,11 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
     (!!run && !TERMINAL_RUN_STATUSES.includes(run.status));
 
   /**
-   * `rebuild` builds the image again instead of reusing the one cached for this source. Needed
-   * because a successful build is reused for ever for the same source hash: with no lockfile, a
-   * dependency's newer patch is only picked up by a build, and a cached image that is broken
-   * rather than missing has no other way out than editing the source until its hash changes.
+   * Every test builds its own image on the runner that runs it, and the image is deleted when the
+   * run ends — so there is nothing cached to reuse and no "rebuild" to ask for.
    */
   const handleRun = useCallback(
-    async ({ rebuild = false }: { rebuild?: boolean } = {}) => {
+    async () => {
       try {
         JSON.parse(testInput || "{}");
       } catch {
@@ -123,9 +121,13 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
           const saved = await onBeforeRun();
           if (!saved) return;
         }
-        const response = await mutateAsync({ functionId, inputJson: testInput, rebuild });
+        const response = await mutateAsync({ functionId, inputJson: testInput });
         if (response.runId) {
-          setBuildId(null);
+          // A test is one job: its run and the build that feeds it come back together. The build
+          // is followed for its progress and log only — the run is already queued, so it must not
+          // be started a second time when the build lands.
+          if (response.buildId) autoRanForBuild.current = response.buildId;
+          setBuildId(response.buildId ?? null);
           setRunId(response.runId);
         } else if (response.buildId) {
           // No run yet — the image is still building. Follow the build and start the run when it lands.
@@ -222,16 +224,6 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
               Use last run input
             </Button>
           </div>
-          <Button
-            variant="ghost"
-            size="xs"
-            className="px-2 text-xs"
-            disabled={isActive}
-            title="Resolve dependencies and build the image again instead of reusing the cached one"
-            onClick={() => void handleRun({ rebuild: true })}
-          >
-            Rebuild image
-          </Button>
         </div>
         <div className="border-t px-4 py-3">
           <Button className="w-full gap-1.5" disabled={isActive} onClick={() => void handleRun()}>

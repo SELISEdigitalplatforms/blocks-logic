@@ -75,6 +75,9 @@ namespace XUnitTest.Functions
             _builds
                 .Setup(b => b.EnsureImageAsync(Tenant, It.IsAny<FunctionEntity>(), It.IsAny<CancellationToken>(), It.IsAny<int?>(), It.IsAny<bool>()))
                 .ReturnsAsync(new FunctionBuildEntity { ItemId = "b-1", Status = BuildStatus.Succeeded, ImageDigest = "sha256:test" });
+            _builds
+                .Setup(b => b.CreateTestBuildAsync(Tenant, It.IsAny<FunctionEntity>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((new FunctionBuildEntity { ItemId = "tb-1", Status = BuildStatus.Queued, Ephemeral = true }, "function:source:tb-1"));
 
             var multiplexer = new Mock<IConnectionMultiplexer>();
             multiplexer.Setup(m => m.GetSubscriber(It.IsAny<object?>())).Returns(_subscriber.Object);
@@ -313,6 +316,50 @@ namespace XUnitTest.Functions
             result.Status.Should().Be(FunctionQueueKeys.Wire.Queued);
             result.RunId.Should().Be(_created!.ItemId);
             stopwatch.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(4));
+        }
+
+        [Fact]
+        public async Task A_test_is_one_job_on_the_tests_stream_with_its_own_build()
+        {
+            // Build and run on the same runner, so no other host is ever asked for the image.
+            RunIs(() => Run(RunStatus.Queued));
+
+            var result = await Service(("Functions:HttpSyncWaitMaxSeconds", "1"))
+                .TestAsync(Tenant, "fn-1", new TestFunctionRequestDto { FunctionId = "fn-1", InputJson = "{}" });
+
+            var call = _redis.Fake.Calls("StreamAddAsync").Single();
+            call[0].ToString().Should().Be(FunctionQueueKeys.TestsStream);
+            var entry = (NameValueEntry[])call[1]!;
+            entry.Single(e => e.Name == "buildId").Value.ToString().Should().Be("tb-1");
+            entry.Single(e => e.Name == "sourceKey").Value.ToString().Should().Be("function:source:tb-1");
+            entry.Single(e => e.Name == "runId").Value.ToString().Should().Be(_created!.ItemId);
+            result.BuildId.Should().Be("tb-1");
+        }
+
+        [Fact]
+        public async Task A_test_never_reuses_a_cached_build()
+        {
+            RunIs(() => Run(RunStatus.Queued));
+
+            await Service(("Functions:HttpSyncWaitMaxSeconds", "1"))
+                .TestAsync(Tenant, "fn-1", new TestFunctionRequestDto { FunctionId = "fn-1", InputJson = "{}", Rebuild = false });
+
+            _builds.Verify(b => b.EnsureImageAsync(
+                It.IsAny<string>(), It.IsAny<FunctionEntity>(), It.IsAny<CancellationToken>(), It.IsAny<int?>(), It.IsAny<bool>()),
+                Times.Never);
+            _builds.Verify(b => b.CreateTestBuildAsync(Tenant, It.IsAny<FunctionEntity>(), It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task A_test_is_never_retried_because_its_image_is_gone_afterwards()
+        {
+            RunIs(() => Run(RunStatus.Queued));
+
+            await Service(("Functions:HttpSyncWaitMaxSeconds", "1"))
+                .TestAsync(Tenant, "fn-1", new TestFunctionRequestDto { FunctionId = "fn-1", InputJson = "{}" });
+
+            _created!.MaxAttempts.Should().Be(1);
+            _created.ImageDigest.Should().Be("blocks-test/tb-1:local");
         }
 
         [Fact]

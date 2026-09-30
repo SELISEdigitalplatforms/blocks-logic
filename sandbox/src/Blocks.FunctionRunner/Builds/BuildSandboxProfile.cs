@@ -74,6 +74,11 @@ namespace Blocks.FunctionRunner.Builds
         /// npm then reports "up to date" without creating <c>node_modules</c> at all. The
         /// <c>mkdir -p</c> makes that an empty archive rather than a failed build.
         /// </para>
+        /// <para>
+        /// The tree is removed here, by the sandbox user that wrote it, once it is in the archive.
+        /// The runner runs as a different uid and cannot delete files inside directories the
+        /// sandbox created, so leaving it made every build's cleanup fail and its workspace leak.
+        /// </para>
         /// </summary>
         public static string InstallScript(string npmFlags, string beginMarker, string endMarker)
         {
@@ -92,6 +97,7 @@ namespace Blocks.FunctionRunner.Builds
                 mkdir -p node_modules
                 tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
                     -cf {WorkPath}/{DepsArchiveName} node_modules
+                rm -rf node_modules
                 """;
         }
 

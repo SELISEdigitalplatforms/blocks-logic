@@ -47,6 +47,16 @@ namespace Blocks.FunctionRunner.Tests
         }
 
         [Fact]
+        public void The_sandbox_removes_the_tree_it_wrote_once_it_is_archived()
+        {
+            // The runner's uid cannot delete it, which failed every build's cleanup.
+            var script = BuildSandboxProfile.InstallScript("--omit=dev --ignore-scripts", "b", "e");
+
+            script.IndexOf("rm -rf node_modules", StringComparison.Ordinal).Should()
+                .BeGreaterThan(script.IndexOf("tar ", StringComparison.Ordinal));
+        }
+
+        [Fact]
         public void Installs_under_gvisor_and_never_the_default_runtime()
         {
             Create().HostConfig.Runtime.Should().Be("runsc");

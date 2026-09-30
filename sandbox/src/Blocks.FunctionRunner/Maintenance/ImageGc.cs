@@ -47,7 +47,14 @@ namespace Blocks.FunctionRunner.Maintenance
         private static readonly TimeSpan Interval = TimeSpan.FromHours(1);
 
         /// <summary>Label the builder puts on every tenant image.</summary>
-        private const string FunctionImageLabel = "dev.selise.blocks.function";
+        private const string FunctionImageLabel = Builds.BuildProcessor.FunctionImageLabel;
+
+        /// <summary>
+        /// A test image lives for one run and is deleted by it. One still here after this long was
+        /// left by a runner that died mid-test; it is removed whatever the keep set says, since no
+        /// version can ever point at a test image.
+        /// </summary>
+        public static readonly TimeSpan TestImageMaxAge = TimeSpan.FromMinutes(30);
 
         private readonly IDockerClient _docker;
         private readonly IDatabase _db;
@@ -152,14 +159,21 @@ namespace Blocks.FunctionRunner.Maintenance
                     continue;
                 }
 
-                if (image.Created > cutoff)
+                if (IsTestImage(image.Labels))
                 {
-                    continue;
+                    if (!IsStaleTestImage(image.Labels, image.Created, DateTime.UtcNow)) continue;
                 }
-
-                if (IsReferenced(image, keep) || IsBaseImage(image))
+                else
                 {
-                    continue;
+                    if (image.Created > cutoff)
+                    {
+                        continue;
+                    }
+
+                    if (IsReferenced(image, keep) || IsBaseImage(image))
+                    {
+                        continue;
+                    }
                 }
 
                 var name = image.RepoTags?.FirstOrDefault()
@@ -246,6 +260,19 @@ namespace Blocks.FunctionRunner.Maintenance
 
             return inUse;
         }
+
+        /// <summary>True for an image a test run built for itself.</summary>
+        internal static bool IsTestImage(IDictionary<string, string>? labels) =>
+            labels is not null
+            && labels.TryGetValue(Builds.BuildProcessor.TestImageLabel, out var value)
+            && string.Equals(value, "true", StringComparison.Ordinal);
+
+        /// <summary>
+        /// A test image past <see cref="TestImageMaxAge"/>: its run has long ended, so a runner died
+        /// before deleting it. Pruned whatever the keep set says — no version points at a test image.
+        /// </summary>
+        internal static bool IsStaleTestImage(IDictionary<string, string>? labels, DateTime created, DateTime now) =>
+            IsTestImage(labels) && created <= now - TestImageMaxAge;
 
         private static bool IsReferenced(ImagesListResponse image, HashSet<string> keep)
         {

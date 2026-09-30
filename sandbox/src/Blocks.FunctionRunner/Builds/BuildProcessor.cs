@@ -35,6 +35,18 @@ namespace Blocks.FunctionRunner.Builds
     /// ranges — a range is a request, and only the resolved list says what shipped.
     /// </para>
     /// </summary>
+    /// <summary>What a build published: success and the image, or the reason it failed.</summary>
+    public sealed class BuildOutcome
+    {
+        public bool Succeeded { get; set; }
+
+        /// <summary>The pushed digest, or for a local-only build the image id.</summary>
+        public string? Image { get; set; }
+
+        public string? Error { get; set; }
+        public string? Log { get; set; }
+    }
+
     public sealed class BuildProcessor
     {
         /// <summary>
@@ -69,9 +81,14 @@ namespace Blocks.FunctionRunner.Builds
             _template = LoadTemplate();
         }
 
-        public async Task ProcessAsync(BuildJob job, CancellationToken token)
+        /// <summary>
+        /// Builds one job and publishes its result. Returns what was published, so a caller that
+        /// builds for itself (a test run) can go straight on to use the image.
+        /// </summary>
+        public async Task<BuildOutcome> ProcessAsync(BuildJob job, CancellationToken token)
         {
             ArgumentNullException.ThrowIfNull(job);
+            var outcome = new BuildOutcome();
 
             var workspace = Path.Combine(_options.BuildsDir, job.BuildId);
             var log = new StringBuilder();
@@ -93,9 +110,9 @@ namespace Blocks.FunctionRunner.Builds
                 var bundle = await _db.StringGetAsync(job.SourceKey).ConfigureAwait(false);
                 if (!bundle.HasValue)
                 {
-                    await PublishAsync(job, "FAILED", null, null, log.ToString(),
+                    await PublishAsync(job, outcome, "FAILED", null, null, log.ToString(),
                         $"the source bundle at '{job.SourceKey}' has expired or was never written").ConfigureAwait(false);
-                    return;
+                    return outcome;
                 }
 
                 List<SourceFile> files;
@@ -105,9 +122,9 @@ namespace Blocks.FunctionRunner.Builds
                 }
                 catch (JsonException ex)
                 {
-                    await PublishAsync(job, "FAILED", null, null, log.ToString(),
+                    await PublishAsync(job, outcome, "FAILED", null, null, log.ToString(),
                         $"the source bundle is not valid JSON: {ex.Message}").ConfigureAwait(false);
-                    return;
+                    return outcome;
                 }
 
                 // --- the host's veto over allowScripts -----------------------------------
@@ -118,19 +135,19 @@ namespace Blocks.FunctionRunner.Builds
                     _logger.LogWarning(
                         "Build {BuildId} asked to run npm lifecycle scripts; this host denies them",
                         job.BuildId);
-                    await PublishAsync(job, "FAILED", null, null, log.ToString(),
+                    await PublishAsync(job, outcome, "FAILED", null, null, log.ToString(),
                         "this runner does not permit npm lifecycle scripts (DenyPrivateScriptsOnBuild)")
                         .ConfigureAwait(false);
-                    return;
+                    return outcome;
                 }
 
                 var validation = SourceValidator.Validate(files, job.AllowScripts);
                 if (!validation.Ok)
                 {
                     _logger.LogWarning("Build {BuildId} rejected: {Reason}", job.BuildId, validation.Reason);
-                    await PublishAsync(job, "FAILED", null, null, log.ToString(), validation.Reason)
+                    await PublishAsync(job, outcome, "FAILED", null, null, log.ToString(), validation.Reason)
                         .ConfigureAwait(false);
-                    return;
+                    return outcome;
                 }
 
                 // --- lay out the build context -----------------------------------------
@@ -159,9 +176,9 @@ namespace Blocks.FunctionRunner.Builds
 
                 if (!install.Ok)
                 {
-                    await PublishAsync(job, "FAILED", null, null, PublishableLog(), install.Failure)
+                    await PublishAsync(job, outcome, "FAILED", null, null, PublishableLog(), install.Failure)
                         .ConfigureAwait(false);
-                    return;
+                    return outcome;
                 }
 
                 // The archive moves into the context now rather than being written there, so the
@@ -180,21 +197,26 @@ namespace Blocks.FunctionRunner.Builds
 
                 // --- build ---------------------------------------------------------------
                 var tag = job.ImageRef;
-                var built = await BuildImageAsync(dirs.Context, tag, log, timeout.Token).ConfigureAwait(false);
+                var built = await BuildImageAsync(dirs.Context, tag, job.LocalOnly, log, timeout.Token).ConfigureAwait(false);
                 if (!built)
                 {
-                    await PublishAsync(job, "FAILED", null, null, PublishableLog(), "the image build failed")
+                    await PublishAsync(job, outcome, "FAILED", null, null, PublishableLog(), "the image build failed")
                         .ConfigureAwait(false);
-                    return;
+                    return outcome;
                 }
 
                 // --- publish and pin by digest -------------------------------------------
-                var digest = await PushAsync(tag, log, token).ConfigureAwait(false);
+                // A test build is for this host alone: it runs here, in the same job, and is
+                // deleted straight after. It never goes near a registry, so no other host can be
+                // asked for it and no registry copy is left behind.
+                var digest = job.LocalOnly
+                    ? await LocalImageIdAsync(tag, log, token).ConfigureAwait(false)
+                    : await PushAsync(tag, log, token).ConfigureAwait(false);
                 if (digest is null)
                 {
-                    await PublishAsync(job, "FAILED", null, null, PublishableLog(), "the image could not be pushed")
+                    await PublishAsync(job, outcome, "FAILED", null, null, PublishableLog(), "the image could not be pushed")
                         .ConfigureAwait(false);
-                    return;
+                    return outcome;
                 }
 
                 var installed = ExtractResolvedPackages(log.ToString(), beginMarker, endMarker);
@@ -214,24 +236,26 @@ namespace Blocks.FunctionRunner.Builds
                 // digest when it becomes a deployed version and unpins it when that version goes.
                 // Until then the image is protected by Image GC's grace window, and a Test whose
                 // image has been reclaimed rebuilds rather than failing (DECISIONS D3).
-                await PublishAsync(job, "SUCCEEDED", digest, packages, PublishableLog(), null).ConfigureAwait(false);
+                await PublishAsync(job, outcome, "SUCCEEDED", digest, packages, PublishableLog(), null).ConfigureAwait(false);
 
                 _logger.LogInformation("Build {BuildId} produced {Digest}", job.BuildId, digest);
             }
             catch (OperationCanceledException)
             {
-                await PublishAsync(job, "FAILED", null, null, PublishableLog(),
+                await PublishAsync(job, outcome, "FAILED", null, null, PublishableLog(),
                     $"the build exceeded its {_options.BuildTimeoutSeconds}s time limit").ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Build {BuildId} failed unexpectedly", job.BuildId);
-                await PublishAsync(job, "FAILED", null, null, PublishableLog(), ex.Message).ConfigureAwait(false);
+                await PublishAsync(job, outcome, "FAILED", null, null, PublishableLog(), ex.Message).ConfigureAwait(false);
             }
             finally
             {
                 CleanUp(workspace);
             }
+
+            return outcome;
         }
 
         /// <summary>The two directories one build works in, and the root that holds both.</summary>
@@ -321,7 +345,7 @@ namespace Blocks.FunctionRunner.Builds
         internal static bool IsLockfile(string path) =>
             LockfileNames.Contains(Path.GetFileName(path), StringComparer.OrdinalIgnoreCase);
 
-        private async Task<bool> BuildImageAsync(string contextDir, string tag, StringBuilder log, CancellationToken token)
+        private async Task<bool> BuildImageAsync(string contextDir, string tag, bool test, StringBuilder log, CancellationToken token)
         {
             using var context = CreateTarContext(contextDir);
 
@@ -339,7 +363,9 @@ namespace Blocks.FunctionRunner.Builds
                 MemorySwap = (long)_options.BuildMemoryMb * 1024 * 1024,
                 CPUQuota = _options.BuildCpus * 100_000L,
                 CPUPeriod = 100_000L,
-                Labels = new Dictionary<string, string> { ["dev.selise.blocks.function"] = "true" },
+                Labels = test
+                    ? new Dictionary<string, string> { [FunctionImageLabel] = "true", [TestImageLabel] = "true" }
+                    : new Dictionary<string, string> { [FunctionImageLabel] = "true" },
             };
 
             var failed = false;
@@ -365,6 +391,30 @@ namespace Blocks.FunctionRunner.Builds
             }
 
             return !failed;
+        }
+
+        /// <summary>Label on every tenant image; Image GC only ever looks at these.</summary>
+        public const string FunctionImageLabel = "dev.selise.blocks.function";
+
+        /// <summary>
+        /// Label on a test build's image: local to one host, used by one run, deleted after it.
+        /// Image GC removes any that a crashed runner left behind, without waiting for the keep set.
+        /// </summary>
+        public const string TestImageLabel = "dev.selise.blocks.test";
+
+        /// <summary>The image id of a local-only build — what the run then executes.</summary>
+        private async Task<string?> LocalImageIdAsync(string tag, StringBuilder log, CancellationToken token)
+        {
+            try
+            {
+                var inspect = await _docker.Images.InspectImageAsync(tag, token).ConfigureAwait(false);
+                return inspect.ID;
+            }
+            catch (DockerApiException ex)
+            {
+                log.Append(ex.Message);
+                return null;
+            }
         }
 
         private async Task<string?> PushAsync(string tag, StringBuilder log, CancellationToken token)
@@ -586,8 +636,14 @@ namespace Blocks.FunctionRunner.Builds
             }
         }
 
-        private Task<RedisValue> PublishAsync(BuildJob job, string status, string? digest, string? packages, string? log, string? error)
-            => _db.StreamAddAsync(RedisKeys.BuildResultsStream,
+        private Task<RedisValue> PublishAsync(
+            BuildJob job, BuildOutcome outcome, string status, string? digest, string? packages, string? log, string? error)
+        {
+            outcome.Succeeded = status == "SUCCEEDED";
+            outcome.Image = digest;
+            outcome.Error = error;
+            outcome.Log = log;
+            return _db.StreamAddAsync(RedisKeys.BuildResultsStream,
             [
                 new NameValueEntry("buildId", job.BuildId),
                 new NameValueEntry("functionId", job.FunctionId),
@@ -599,6 +655,7 @@ namespace Blocks.FunctionRunner.Builds
                 new NameValueEntry("errorMessage", error ?? string.Empty),
                 new NameValueEntry("protocol", RedisKeys.ProtocolVersion),
             ]);
+        }
 
         /// <summary>Build logs are shown to tenants; keep the tail, which is where failures are.</summary>
         private static string Tail(StringBuilder log, int max = 16 * 1024) => Tail(log.ToString(), max);
@@ -650,8 +707,11 @@ namespace Blocks.FunctionRunner.Builds
             {
                 if (Directory.Exists(workspace)) Directory.Delete(workspace, recursive: true);
             }
-            catch (IOException ex)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
+                // Never fatal: it runs after the result is published, and escaping from here used
+                // to skip acknowledging the build, so the entry was reclaimed and built again.
+                // The reaper retries the directory later.
                 _logger.LogWarning("Could not remove build workspace {Dir}: {Message}", workspace, ex.Message);
             }
         }

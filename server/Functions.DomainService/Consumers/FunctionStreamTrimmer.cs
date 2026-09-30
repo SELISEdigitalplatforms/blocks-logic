@@ -63,6 +63,7 @@ namespace Functions.DomainService.Consumers
             FunctionQueueKeys.ResultsStream,
             FunctionQueueKeys.BuildsStream,
             FunctionQueueKeys.BuildResultsStream,
+            FunctionQueueKeys.TestsStream,
             // Worker-internal, but just as unbounded without a net.
             FunctionWorkerQueueKeys.OutputsStream,
         ];

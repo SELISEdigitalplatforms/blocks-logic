@@ -32,6 +32,13 @@ namespace Functions.DomainService.Queue
         public const string ResultsStream = "functions:results";
         public const string BuildsStream = "functions:builds";
         public const string BuildResultsStream = "functions:build-results";
+
+        /// <summary>
+        /// Test runs: one entry builds the current source on the runner that claims it, runs it
+        /// there once and deletes the image. Mirrors <c>RedisKeys.TestsStream</c>. Separate from
+        /// <see cref="RunsStream"/> so a runner that predates it never takes one.
+        /// </summary>
+        public const string TestsStream = "functions:tests";
         public const string DeadStream = "functions:dead";
 
         /// <summary>
@@ -140,6 +147,7 @@ namespace Functions.DomainService.Queue
             public const string ImagePullFailed = "IMAGE_PULL_FAILED";
             public const string TimedOutCode = "TIMED_OUT";
             public const string SandboxStartFailed = "SANDBOX_START_FAILED";
+            public const string BuildFailedCode = "BUILD_FAILED";
             public const string SecretUnresolved = "SECRET_UNRESOLVED";
             public const string SecretStoreUnavailable = "SECRET_STORE_UNAVAILABLE";
 

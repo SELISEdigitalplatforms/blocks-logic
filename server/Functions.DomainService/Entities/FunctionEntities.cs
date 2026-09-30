@@ -228,6 +228,13 @@ namespace Functions.DomainService.Entities
         public string? ErrorMessage { get; set; }
         public DateTime? CompletedAt { get; set; }
         public long? DurationMs { get; set; }
+
+        /// <summary>
+        /// A test run's own build: made on the runner that runs the test, local to that host,
+        /// deleted with the run. Kept only as the record of its log and packages — never reused,
+        /// for another test or for a deploy, since its image no longer exists anywhere.
+        /// </summary>
+        public bool Ephemeral { get; set; }
     }
 
     /// <summary>An audit trail entry. Retained a year.</summary>
