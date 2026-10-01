@@ -4,7 +4,80 @@ import { RecursiveSchemaViewer } from "./recursive-schema-viewer";
 import { formatCellValue } from "../utils/format.util";
 import { isPlainObject, type FieldReferenceTarget } from "../utils/field-reference.util";
 
-export function TableTab({ rows, nodeName, isDirectParent, target, isDraggable = true }: { rows: unknown[]; nodeName: string; isDirectParent: boolean; target?: FieldReferenceTarget; isDraggable?: boolean }) {
+type TableTabProps = Readonly<{
+  rows: unknown[];
+  nodeName: string;
+  isDirectParent: boolean;
+  target?: FieldReferenceTarget;
+  isDraggable?: boolean;
+}>;
+
+type TableCellContext = Readonly<{
+  column: string;
+  row: unknown;
+  rowIndex: number;
+  primitiveColumn: string;
+  nodeName: string;
+  isDirectParent: boolean;
+  target?: FieldReferenceTarget;
+  isDraggable: boolean;
+}>;
+
+const getRowKey = (row: unknown) => {
+  try {
+    return typeof row === "object" && row !== null ? JSON.stringify(row) : String(row);
+  } catch {
+    return Object.prototype.toString.call(row);
+  }
+};
+
+function renderTableCell({
+  column,
+  row,
+  rowIndex,
+  primitiveColumn,
+  nodeName,
+  isDirectParent,
+  target,
+  isDraggable,
+}: TableCellContext) {
+  const isRowObject = typeof row === "object" && row !== null;
+
+  if (column === primitiveColumn) {
+    return isRowObject ? "" : formatCellValue(row);
+  }
+
+  if (!isRowObject) {
+    return "";
+  }
+
+  const value = (row as Record<string, unknown>)[column];
+  if (typeof value !== "object" || value === null) {
+    return formatCellValue(value);
+  }
+
+  return (
+    <RecursiveSchemaViewer
+      data={value}
+      depth={0}
+      segments={[column]}
+      nodeName={nodeName}
+      isDirectParent={isDirectParent}
+      itemIndex={rowIndex}
+      itemIsObject={isPlainObject(row)}
+      target={target}
+      isDraggable={isDraggable}
+    />
+  );
+}
+
+export function TableTab({
+  rows,
+  nodeName,
+  isDirectParent,
+  target,
+  isDraggable = true,
+}: TableTabProps) {
   if (rows.length === 0) {
     return <p className="text-xs text-low-emphasis">No runtime input data available.</p>;
   }
@@ -40,7 +113,6 @@ export function TableTab({ rows, nodeName, isDirectParent, target, isDraggable =
                     itemIsObject={false}
                     target={target}
                     label={column}
-                    isRoot={true}
                     isDraggable={isDraggable}
                     showColon={true}
                   />
@@ -63,30 +135,23 @@ export function TableTab({ rows, nodeName, isDirectParent, target, isDraggable =
         </thead>
         <tbody>
           {rows.map((row, index) => {
-            const isRowObj = typeof row === "object" && row !== null;
             return (
-              <tr key={index}>
+              <tr key={`table-row-${getRowKey(row)}`}>
                 {columns.map((column) => (
-                  <td key={column} className="border-b border-border/50 px-2 py-1 text-high-emphasis align-top">
-                    {column === primitiveColumn
-                      ? !isRowObj
-                        ? formatCellValue(row)
-                        : ""
-                      : isRowObj
-                        ? (typeof (row as Record<string, unknown>)[column] === "object" && (row as Record<string, unknown>)[column] !== null) ? (
-                            <RecursiveSchemaViewer 
-                              data={(row as Record<string, unknown>)[column]} 
-                              depth={0}
-                              segments={[column]}
-                              nodeName={nodeName}
-                              isDirectParent={isDirectParent}
-                              itemIndex={index}
-                              itemIsObject={isPlainObject(row)}
-                              target={target}
-                              isDraggable={isDraggable}
-                            />
-                          ) : formatCellValue((row as Record<string, unknown>)[column])
-                        : ""}
+                  <td
+                    key={column}
+                    className="border-b border-border/50 px-2 py-1 text-high-emphasis align-top"
+                  >
+                    {renderTableCell({
+                      column,
+                      row,
+                      rowIndex: index,
+                      primitiveColumn,
+                      nodeName,
+                      isDirectParent,
+                      target,
+                      isDraggable,
+                    })}
                   </td>
                 ))}
               </tr>

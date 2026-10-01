@@ -2,7 +2,7 @@ import { DraggableArrayIndex, DraggableProperty } from "./draggable-property";
 import { formatCellValue } from "../utils/format.util";
 import type { FieldReferenceTarget, PathSegment } from "../utils/field-reference.util";
 
-type RecursiveSchemaViewerProps = {
+type RecursiveSchemaViewerProps = Readonly<{
   data: unknown;
   depth?: number;
   segments?: PathSegment[];
@@ -14,20 +14,31 @@ type RecursiveSchemaViewerProps = {
   showValues?: boolean;
   isDraggable?: boolean;
   showColon?: boolean;
-};
+}>;
 
-export function RecursiveSchemaViewer({ data, depth = 0, segments = [], nodeName, isDirectParent, itemIndex = 0, itemIsObject = true, target, showValues = true, isDraggable = true, showColon = true }: RecursiveSchemaViewerProps) {
+export function RecursiveSchemaViewer({
+  data,
+  depth = 0,
+  segments = [],
+  nodeName,
+  isDirectParent,
+  itemIndex = 0,
+  itemIsObject = true,
+  target,
+  showValues = true,
+  isDraggable = true,
+  showColon = true,
+}: RecursiveSchemaViewerProps) {
   const referenceProps = { nodeName, isDirectParent, itemIndex, itemIsObject, target };
 
   if (typeof data !== "object" || data === null) {
     if (segments.length === 0) {
       return (
         <div className="flex items-center gap-2">
-           <DraggableProperty
+          <DraggableProperty
             segments={[]}
             {...referenceProps}
             label="(value)"
-            isRoot={true}
             isDraggable={isDraggable}
             showColon={showColon}
           />
@@ -35,7 +46,9 @@ export function RecursiveSchemaViewer({ data, depth = 0, segments = [], nodeName
         </div>
       );
     }
-    return showValues ? <span className="text-low-emphasis text-xs px-2 py-1">{formatCellValue(data)}</span> : null;
+    return showValues ? (
+      <span className="text-low-emphasis text-xs px-2 py-1">{formatCellValue(data)}</span>
+    ) : null;
   }
 
   const isArray = Array.isArray(data);
@@ -50,16 +63,7 @@ export function RecursiveSchemaViewer({ data, depth = 0, segments = [], nodeName
         return (
           <div key={key} className="flex flex-col">
             <div className="flex items-center gap-2">
-              {!isArray ? (
-                <DraggableProperty
-                  segments={currentSegments}
-                  depth={depth}
-                  {...referenceProps}
-                  label={key}
-                  isDraggable={isDraggable}
-                  showColon={showColon}
-                />
-              ) : (
+              {isArray ? (
                 <DraggableArrayIndex
                   segments={currentSegments}
                   label={`[${key}]`}
@@ -68,8 +72,19 @@ export function RecursiveSchemaViewer({ data, depth = 0, segments = [], nodeName
                   isDraggable={isDraggable}
                   showColon={showColon}
                 />
+              ) : (
+                <DraggableProperty
+                  segments={currentSegments}
+                  depth={depth}
+                  {...referenceProps}
+                  label={key}
+                  isDraggable={isDraggable}
+                  showColon={showColon}
+                />
               )}
-              {(!childIsObj && showValues) && <span className="text-low-emphasis text-xs">{formatCellValue(val)}</span>}
+              {!childIsObj && showValues && (
+                <span className="text-low-emphasis text-xs">{formatCellValue(val)}</span>
+              )}
             </div>
             {childIsObj && (
               <RecursiveSchemaViewer
