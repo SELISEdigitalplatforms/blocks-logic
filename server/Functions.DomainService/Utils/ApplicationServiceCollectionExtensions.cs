@@ -7,6 +7,7 @@ using Functions.DomainService.Repositories;
 using Functions.DomainService.Services;
 using Functions.DomainService.Validation;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -15,8 +16,23 @@ namespace Functions.DomainService.Utils
     public static class ApplicationServiceCollectionExtensions
     {
         /// <summary>Called by both Api and Worker: repositories and the services either side needs.</summary>
-        public static IServiceCollection AddFunctionsServices(this IServiceCollection services)
+        /// <param name="configuration">
+        /// Optional, and only read for <c>Functions:QueuePrefix</c> — the Redis namespace this
+        /// control plane shares with its runners. Left out, the prefix stays empty and every key
+        /// is exactly what it was before the setting existed, so an unconfigured deployment is
+        /// unaffected. Pass it wherever two environments share one Redis.
+        /// </param>
+        public static IServiceCollection AddFunctionsServices(
+            this IServiceCollection services, IConfiguration? configuration = null)
         {
+            // Set before anything resolves a key: the queue names are read at use, but a consumer
+            // group is created from them at startup, and creating it under the wrong name is the
+            // one mistake here that is invisible afterwards.
+            if (configuration is not null)
+            {
+                Queue.FunctionQueueKeys.Prefix = configuration["Functions:QueuePrefix"] ?? string.Empty;
+            }
+
             // IHttpContextAccessor backs FunctionInvocationService's anonymous HTTP auth path
             // (mirroring WorkflowExecutionService's own use of it for webhooks) and is a no-op
             // to add twice, so TryAdd rather than assuming the host already registered it.

@@ -76,7 +76,7 @@ services.AddWorkflowExecutionEngine();
 services.AddProxyServices();
 services.AddCloudConfigurationServices();
 services.AddSchedulerServices();
-services.AddFunctionsServices();
+services.AddFunctionsServices(builder.Configuration);
 // The function-invoke workflow action step. Registered here (not from inside
 // Workflow.DomainService's own AddWorkflowExecutionEngine()) to avoid a circular project
 // reference: Functions.DomainService already depends on DomainService for IWorkflowAuthService.

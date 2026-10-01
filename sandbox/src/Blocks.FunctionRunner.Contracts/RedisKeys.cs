@@ -15,6 +15,39 @@ namespace Blocks.FunctionRunner.Contracts
         public const int ProtocolVersion = 1;
 
         /// <summary>
+        /// Namespace for every key and stream below, so two environments can share one Redis
+        /// without sharing work. Mirrors <c>FunctionQueueKeys.Prefix</c> in blocks-logic.
+        /// <para>
+        /// Empty by default, which produces exactly the names this protocol has always used.
+        /// Set it from <c>RUNNER__QueuePrefix</c>, and set <c>Functions:QueuePrefix</c> to the
+        /// same value on the control plane that this runner serves. The two must agree: a
+        /// mismatch does not fail loudly, the runner simply never sees any work.
+        /// </para>
+        /// <para>
+        /// Without it the streams are fixed literals, so every runner pointed at a Redis joins
+        /// the same consumer group and competes for the same entries — one developer's test gets
+        /// built on another's host, against that host's private registry and its own build of
+        /// this runner.
+        /// </para>
+        /// </summary>
+        public static string Prefix
+        {
+            get => _prefix;
+            set => _prefix = Normalize(value);
+        }
+
+        private static string _prefix = string.Empty;
+
+        /// <summary>Blank stays blank; anything else gets exactly one trailing colon.</summary>
+        public static string Normalize(string? prefix)
+        {
+            var trimmed = prefix?.Trim();
+            if (string.IsNullOrEmpty(trimmed)) return string.Empty;
+
+            return trimmed.TrimEnd(':') + ":";
+        }
+
+        /// <summary>
         /// Protocol version of a <see cref="RunsStream"/> entry — the one message whose version
         /// has moved on. Version 2 means the envelope's <c>env</c> carries secret-bound variables
         /// as <c>{{secret.&lt;id&gt;}}</c> references, and the runner resolves them itself right
@@ -40,16 +73,16 @@ namespace Blocks.FunctionRunner.Contracts
 
         // ---- streams -----------------------------------------------------------------
         /// <summary>Run jobs, written by the control plane, consumed by runners.</summary>
-        public const string RunsStream = "functions:runs";
+        public static string RunsStream => _prefix + "functions:runs";
 
         /// <summary>Run results, written by runners, consumed by the logic Worker.</summary>
-        public const string ResultsStream = "functions:results";
+        public static string ResultsStream => _prefix + "functions:results";
 
         /// <summary>Build jobs, written by the control plane, consumed by runners.</summary>
-        public const string BuildsStream = "functions:builds";
+        public static string BuildsStream => _prefix + "functions:builds";
 
         /// <summary>Build results, written by runners, consumed by the logic Worker.</summary>
-        public const string BuildResultsStream = "functions:build-results";
+        public static string BuildResultsStream => _prefix + "functions:build-results";
 
         /// <summary>
         /// Test runs: each entry is one job that builds the function's current source into a
@@ -57,10 +90,10 @@ namespace Blocks.FunctionRunner.Contracts
         /// <see cref="RunsStream"/> so that a runner which predates it never sees one — an old
         /// runner would try to pull an image that exists on no registry.
         /// </summary>
-        public const string TestsStream = "functions:tests";
+        public static string TestsStream => _prefix + "functions:tests";
 
         /// <summary>Entries that exhausted their retry budget.</summary>
-        public const string DeadStream = "functions:dead";
+        public static string DeadStream => _prefix + "functions:dead";
 
         // ---- consumer groups ---------------------------------------------------------
         /// <summary>The group runners join on <see cref="RunsStream"/> and <see cref="BuildsStream"/>.</summary>
@@ -71,34 +104,34 @@ namespace Blocks.FunctionRunner.Contracts
 
         // ---- per-entity keys ---------------------------------------------------------
         /// <summary>Hash holding the execution envelope and limits for a run. TTL 24 h.</summary>
-        public static string Run(string runId) => $"function:run:{runId}";
+        public static string Run(string runId) => $"{_prefix}function:run:{runId}";
 
         /// <summary>The serialized result of a run. TTL 24 h.</summary>
-        public static string Result(string runId) => $"function:result:{runId}";
+        public static string Result(string runId) => $"{_prefix}function:result:{runId}";
 
         /// <summary>NDJSON log lines for a run, as a list. TTL 24 h.</summary>
-        public static string Logs(string runId) => $"function:logs:{runId}";
+        public static string Logs(string runId) => $"{_prefix}function:logs:{runId}";
 
         /// <summary>The execution lease, taken with SET NX PX and renewed at a third of its TTL.</summary>
-        public static string Lease(string runId) => $"function:lease:{runId}";
+        public static string Lease(string runId) => $"{_prefix}function:lease:{runId}";
 
         /// <summary>Set by the control plane to ask the runner to kill a sandbox. TTL 120 s.</summary>
-        public static string Cancel(string runId) => $"function:cancel:{runId}";
+        public static string Cancel(string runId) => $"{_prefix}function:cancel:{runId}";
 
         /// <summary>Channel that wakes an API request waiting synchronously on a run.</summary>
-        public static string SyncChannel(string runId) => $"function:sync:{runId}";
+        public static string SyncChannel(string runId) => $"{_prefix}function:sync:{runId}";
 
         /// <summary>Per-function concurrency counter; overflow queues and never rejects.</summary>
-        public static string Concurrency(string functionId) => $"function:concurrency:{functionId}";
+        public static string Concurrency(string functionId) => $"{_prefix}function:concurrency:{functionId}";
 
         /// <summary>Runner heartbeat hash. TTL 15 s, so a dead runner disappears quickly.</summary>
-        public static string Runner(string runnerId) => $"function:runner:{runnerId}";
+        public static string Runner(string runnerId) => $"{_prefix}function:runner:{runnerId}";
 
         /// <summary>Source bundle for a build. TTL 1 h.</summary>
-        public static string Source(string buildId) => $"function:source:{buildId}";
+        public static string Source(string buildId) => $"{_prefix}function:source:{buildId}";
 
         /// <summary>Set of image references that image GC must not prune.</summary>
-        public const string ImagesKeep = "functions:images:keep";
+        public static string ImagesKeep => _prefix + "functions:images:keep";
 
         // ---- time to live ------------------------------------------------------------
         // These three are effectively "how long a Worker or runner may be down without losing

@@ -119,6 +119,17 @@ DOTNET_ENVIRONMENT=Production
 RUNNER__RunnerId=$(hostname -s)
 RUNNER__RunsDir=$STATE_DIR/runs
 RUNNER__BuildsDir=$STATE_DIR/builds
+#
+# Redis namespace for the queues this runner serves. Empty is the default and is exactly how
+# this runner has always behaved. Set it only where more than one environment shares a Redis,
+# and set Functions:QueuePrefix to the same value on the control plane this runner serves —
+# the two halves name the same streams, and a mismatch is silent: the runner joins streams
+# nobody writes to and simply never receives work.
+#
+# Unset on a shared Redis, every runner joins one consumer group and competes for the same
+# entries, so one developer's test can be built on another developer's host, against that
+# host's private registry and whatever build of the runner it happens to be running.
+RUNNER__QueuePrefix=
 RUNNER__Registry=127.0.0.1:5000
 RUNNER__Network=${FN_NETWORK:-blocks-fn-egress}
 RUNNER__ResolvConf=${FN_RESOLV_CONF:-$CONF_DIR/resolv.conf}

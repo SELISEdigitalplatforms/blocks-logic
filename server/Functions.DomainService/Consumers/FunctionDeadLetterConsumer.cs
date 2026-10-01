@@ -180,12 +180,21 @@ namespace Functions.DomainService.Consumers
                 return;
             }
 
-            var handled = sourceStream switch
+            // if/else rather than a switch on the stream names: those are no longer compile-time
+            // constants — they carry the configurable queue prefix — and a pattern needs one.
+            bool handled;
+            if (string.Equals(sourceStream, FunctionQueueKeys.RunsStream, StringComparison.Ordinal))
             {
-                FunctionQueueKeys.RunsStream => await ApplyRunAsync(tenantId, entry, reason, cancellationToken),
-                FunctionQueueKeys.BuildsStream => await ApplyBuildAsync(tenantId, entry, reason, cancellationToken),
-                _ => await ApplyByShapeAsync(tenantId, entry, reason, sourceStream, cancellationToken),
-            };
+                handled = await ApplyRunAsync(tenantId, entry, reason, cancellationToken);
+            }
+            else if (string.Equals(sourceStream, FunctionQueueKeys.BuildsStream, StringComparison.Ordinal))
+            {
+                handled = await ApplyBuildAsync(tenantId, entry, reason, cancellationToken);
+            }
+            else
+            {
+                handled = await ApplyByShapeAsync(tenantId, entry, reason, sourceStream, cancellationToken);
+            }
 
             if (handled)
             {

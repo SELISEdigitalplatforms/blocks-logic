@@ -43,7 +43,7 @@ IHostBuilder CreateHostBuilder(string[] args) =>
                 options.SecretKey = "blocks-secret-logic";
             });
         })
-        .ConfigureServices((services) =>
+        .ConfigureServices((hostContext, services) =>
         {
             services.AddHttpClient();
 
@@ -85,7 +85,7 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             services.AddApplicationServices();
             services.AddSchedulerServices();
             services.AddSchedulerWorkerServices();
-            services.AddFunctionsServices();
+            services.AddFunctionsServices(hostContext.Configuration);
             services.AddFunctionsWorkerServices();
             services.AddSingleton<Workflow.DomainService.Nodes.INodeExecutor, Functions.DomainService.Nodes.ActionFunctionNode>();
             services.AddStorageDomainServices();

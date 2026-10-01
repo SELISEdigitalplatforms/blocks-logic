@@ -16,6 +16,43 @@ namespace Functions.DomainService.Queue
         public const int ProtocolVersion = 1;
 
         /// <summary>
+        /// Namespace for every key and stream below, so two environments can share one Redis
+        /// without sharing work.
+        /// <para>
+        /// Empty by default, which produces exactly the names this protocol has always used — an
+        /// unset deployment is byte-identical to the one before this existed. Set it from
+        /// <c>Functions:QueuePrefix</c> (env <c>Functions__QueuePrefix</c>) and the matching
+        /// <c>RUNNER__QueuePrefix</c> on every runner that serves it; the two halves must agree,
+        /// because a mismatch does not fail loudly — the work is simply never delivered.
+        /// </para>
+        /// <para>
+        /// This exists because the streams were fixed literals, so every runner pointed at a
+        /// Redis joined the same consumer group and competed for the same entries. A developer's
+        /// test could be claimed and built by someone else's host, which has its own private
+        /// image registry and possibly its own build of the runner — and the failure surfaced on
+        /// the developer's screen with nothing in their own logs to explain it.
+        /// </para>
+        /// <para>Consumer groups are not prefixed: they live on the streams, so namespacing the
+        /// stream namespaces the group with it.</para>
+        /// </summary>
+        public static string Prefix
+        {
+            get => _prefix;
+            set => _prefix = Normalize(value);
+        }
+
+        private static string _prefix = string.Empty;
+
+        /// <summary>Blank stays blank; anything else gets exactly one trailing colon.</summary>
+        internal static string Normalize(string? prefix)
+        {
+            var trimmed = prefix?.Trim();
+            if (string.IsNullOrEmpty(trimmed)) return string.Empty;
+
+            return trimmed.TrimEnd(':') + ":";
+        }
+
+        /// <summary>
         /// Version of a <see cref="RunsStream"/> entry, the one message that has moved on: 2 means
         /// the envelope's <c>env</c> carries secret-bound variables as <c>{{secret.&lt;id&gt;}}</c>
         /// references that the runner resolves right before the sandbox starts. A runner that
@@ -28,18 +65,18 @@ namespace Functions.DomainService.Queue
         public const int RunProtocolVersion = 2;
 
         // ---- streams ------------------------------------------------------------
-        public const string RunsStream = "functions:runs";
-        public const string ResultsStream = "functions:results";
-        public const string BuildsStream = "functions:builds";
-        public const string BuildResultsStream = "functions:build-results";
+        public static string RunsStream => _prefix + "functions:runs";
+        public static string ResultsStream => _prefix + "functions:results";
+        public static string BuildsStream => _prefix + "functions:builds";
+        public static string BuildResultsStream => _prefix + "functions:build-results";
 
         /// <summary>
         /// Test runs: one entry builds the current source on the runner that claims it, runs it
         /// there once and deletes the image. Mirrors <c>RedisKeys.TestsStream</c>. Separate from
         /// <see cref="RunsStream"/> so a runner that predates it never takes one.
         /// </summary>
-        public const string TestsStream = "functions:tests";
-        public const string DeadStream = "functions:dead";
+        public static string TestsStream => _prefix + "functions:tests";
+        public static string DeadStream => _prefix + "functions:dead";
 
         /// <summary>
         /// Control-plane-side dead letters: a <c>functions:results</c> or
@@ -49,7 +86,7 @@ namespace Functions.DomainService.Queue
         /// <c>functions:runs</c>/<c>functions:builds</c> — different consumers, different sides
         /// of the same contract, so a bad entry on one side is never mistaken for the other.
         /// </summary>
-        public const string DeadResultsStream = "functions:dead-results";
+        public static string DeadResultsStream => _prefix + "functions:dead-results";
 
         // ---- consumer groups ----------------------------------------------------
         /// <summary>The group runners join. The control plane never reads these.</summary>
@@ -59,26 +96,26 @@ namespace Functions.DomainService.Queue
         public const string LogicWorkerGroup = "logic-workers";
 
         // ---- per-entity keys ----------------------------------------------------
-        public static string Run(string runId) => $"function:run:{runId}";
-        public static string Result(string runId) => $"function:result:{runId}";
-        public static string Logs(string runId) => $"function:logs:{runId}";
-        public static string Lease(string runId) => $"function:lease:{runId}";
-        public static string Cancel(string runId) => $"function:cancel:{runId}";
-        public static string SyncChannel(string runId) => $"function:sync:{runId}";
-        public static string Concurrency(string functionId) => $"function:concurrency:{functionId}";
-        public static string Runner(string runnerId) => $"function:runner:{runnerId}";
-        public static string Source(string buildId) => $"function:source:{buildId}";
-        public const string ImagesKeep = "functions:images:keep";
+        public static string Run(string runId) => $"{_prefix}function:run:{runId}";
+        public static string Result(string runId) => $"{_prefix}function:result:{runId}";
+        public static string Logs(string runId) => $"{_prefix}function:logs:{runId}";
+        public static string Lease(string runId) => $"{_prefix}function:lease:{runId}";
+        public static string Cancel(string runId) => $"{_prefix}function:cancel:{runId}";
+        public static string SyncChannel(string runId) => $"{_prefix}function:sync:{runId}";
+        public static string Concurrency(string functionId) => $"{_prefix}function:concurrency:{functionId}";
+        public static string Runner(string runnerId) => $"{_prefix}function:runner:{runnerId}";
+        public static string Source(string buildId) => $"{_prefix}function:source:{buildId}";
+        public static string ImagesKeep => _prefix + "functions:images:keep";
 
         /// <summary>Rate-limit counters. Only ever touched when rate limiting is switched on.</summary>
         public static string RateMinute(string functionId, DateTime utc)
-            => $"function:rate:{functionId}:{utc:yyyyMMddHHmm}";
+            => $"{_prefix}function:rate:{functionId}:{utc:yyyyMMddHHmm}";
 
         /// <summary>
         /// Hash of the anonymous poll token for one run (<c>tenant</c>, <c>hash</c>), expiring
         /// with <see cref="RunTtl"/>. The plaintext token is never stored.
         /// </summary>
-        public static string PollToken(string runId) => $"function:poll:{runId}";
+        public static string PollToken(string runId) => $"{_prefix}function:poll:{runId}";
 
         /// <summary>
         /// Per function per UTC day — the limit it enforces is the function's own
@@ -86,10 +123,10 @@ namespace Functions.DomainService.Queue
         /// can be found (and cleared) together.
         /// </summary>
         public static string QuotaDay(string tenantId, string functionId, DateTime utc)
-            => $"function:quota:{tenantId}:{functionId}:{utc:yyyyMMdd}";
+            => $"{_prefix}function:quota:{tenantId}:{functionId}:{utc:yyyyMMdd}";
 
         /// <summary>Sorted set of runs awaiting a retry, scored by the epoch second they are due.</summary>
-        public const string RetryQueue = "functions:retries";
+        public static string RetryQueue => _prefix + "functions:retries";
 
         /// <summary>
         /// Prefix of the marker written when a dead-lettered job has been applied to Mongo. The
@@ -97,7 +134,7 @@ namespace Functions.DomainService.Queue
         /// acknowledgement, so a reclaim or a second Worker can re-deliver one that was already
         /// applied; this makes the second pass a no-op instead of a duplicate audit record.
         /// </summary>
-        public static string DeadApplied(string entryId) => $"function:dead-applied:{entryId}";
+        public static string DeadApplied(string entryId) => $"{_prefix}function:dead-applied:{entryId}";
 
         // ---- time to live -------------------------------------------------------
         // This TTL is effectively "how long a Worker or runner may be down without losing work".

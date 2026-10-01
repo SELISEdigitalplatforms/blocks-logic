@@ -43,6 +43,13 @@ namespace Blocks.FunctionRunner.Utils
                 .ValidateDataAnnotations()
                 .ValidateOnStart();
 
+            // Read straight from configuration rather than from the bound options: the key names
+            // are needed when the consumer groups are created at startup, which happens before
+            // anything resolves IOptions<RunnerOptions>. Creating a group under the wrong name is
+            // the one mistake here that leaves no trace afterwards.
+            Contracts.RedisKeys.Prefix =
+                configuration[$"{RunnerOptions.SectionName}:{nameof(RunnerOptions.QueuePrefix)}"] ?? string.Empty;
+
             // Docker over the local socket. The runner's uid is in the docker group, which is
             // root-equivalent on this host and accepted deliberately: driving the Engine is the
             // runner's whole job and nothing else runs on the VM.

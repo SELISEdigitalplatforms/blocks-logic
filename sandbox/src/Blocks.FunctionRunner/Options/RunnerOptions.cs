@@ -55,6 +55,23 @@ namespace Blocks.FunctionRunner.Options
         public string Registry { get; set; } = "127.0.0.1:5000";
 
         /// <summary>
+        /// Redis namespace for the queues this runner serves, as <c>RUNNER__QueuePrefix</c>.
+        /// <para>
+        /// Empty by default, which is exactly the behaviour this runner has always had. It must
+        /// match <c>Functions:QueuePrefix</c> on the control plane it serves — the two halves
+        /// name the same streams, and a mismatch is silent: the runner joins streams nobody
+        /// writes to and simply never receives work.
+        /// </para>
+        /// <para>
+        /// Set it wherever more than one environment shares a Redis. Unset, every runner on that
+        /// Redis joins one consumer group and competes for the same entries, so a test enqueued
+        /// by one developer's control plane can be built on another developer's host — against
+        /// that host's private registry, and whatever build of this runner it happens to have.
+        /// </para>
+        /// </summary>
+        public string QueuePrefix { get; set; } = string.Empty;
+
+        /// <summary>
         /// Whether the registry admin API is reached over TLS. Null means "decide from
         /// <see cref="Registry"/>": plain HTTP for loopback, HTTPS for anything else, which is the
         /// only combination either is ever deployed as. Set it to override that.
