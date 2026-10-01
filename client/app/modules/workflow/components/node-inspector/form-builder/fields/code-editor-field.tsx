@@ -47,6 +47,39 @@ export const getCodeEditorSuggestionValues = (keys: string[]) => [
   "$items",
 ];
 
+type CodeEditor = Parameters<OnMount>[0];
+
+// Inserts text dragged in from the input panel verbatim at the drop point.
+// Monaco's built-in drop treats the text as a snippet (escaping `$`/`}` and
+// appending `$0`), so it is disabled and the drop is handled here instead.
+export const insertDroppedText = (
+  editor: CodeEditor,
+  monaco: Monaco,
+  event: Pick<DragEvent, "clientX" | "clientY" | "dataTransfer">,
+): boolean => {
+  if (editor.getOption(monaco.editor.EditorOption.readOnly)) return false;
+  const text = event.dataTransfer?.getData("text/plain");
+  const model = editor.getModel();
+  if (!text || !model) return false;
+
+  const position =
+    editor.getTargetAtClientPoint(event.clientX, event.clientY)?.position ??
+    editor.getPosition() ??
+    model.getPositionAt(model.getValueLength());
+  const range = new monaco.Range(
+    position.lineNumber,
+    position.column,
+    position.lineNumber,
+    position.column,
+  );
+
+  editor.executeEdits("input-panel-drop", [{ range, text, forceMoveMarkers: true }]);
+  editor.pushUndoStop();
+  editor.setPosition(model.getPositionAt(model.getOffsetAt(position) + text.length));
+  editor.focus();
+  return true;
+};
+
 const getMonacoLanguage = (value: string | undefined): string => {
   if (value === "json" || value === "javascript" || value === "html" || value === "css") {
     return value;
@@ -105,7 +138,7 @@ export const CodeEditorField = ({
     };
   }, [monaco, language, upstreamKeys]);
 
-  const handleMount: OnMount = (editor) => {
+  const handleMount: OnMount = (editor, monacoInstance) => {
     // The inspector renders inside a Radix Sheet whose FocusScope traps
     // keyboard events. Monaco's offscreen textarea is treated as focusable,
     // so Radix intercepts keydown (notably Space) before Monaco can type it.
@@ -123,11 +156,28 @@ export const CodeEditorField = ({
     container.addEventListener("keyup", stopKeyPropagation);
     container.addEventListener("keypress", stopKeyPropagation);
     container.addEventListener("pointerdown", reassertFocus);
+
+    const isReadOnly = () => editor.getOption(monacoInstance.editor.EditorOption.readOnly);
+    const handleDragOver = (event: DragEvent) => {
+      if (!event.dataTransfer?.types.includes("text/plain") || isReadOnly()) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+    };
+    const handleDrop = (event: DragEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      insertDroppedText(editor, monacoInstance, event);
+    };
+    container.addEventListener("dragover", handleDragOver, true);
+    container.addEventListener("drop", handleDrop, true);
+
     editor.onDidDispose(() => {
       container.removeEventListener("keydown", stopKeyPropagation);
       container.removeEventListener("keyup", stopKeyPropagation);
       container.removeEventListener("keypress", stopKeyPropagation);
       container.removeEventListener("pointerdown", reassertFocus);
+      container.removeEventListener("dragover", handleDragOver, true);
+      container.removeEventListener("drop", handleDrop, true);
     });
   };
 
@@ -150,6 +200,7 @@ export const CodeEditorField = ({
           scrollBeyondLastLine: false,
           automaticLayout: true,
           fixedOverflowWidgets: true,
+          dropIntoEditor: { enabled: false },
         }}
         className="overflow-hidden rounded-md border"
       />

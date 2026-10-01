@@ -2,8 +2,9 @@ import { ScrollArea, ScrollBar } from "@/components/ui-kits/scroll-area/scroll-a
 import { DraggableProperty } from "./draggable-property";
 import { RecursiveSchemaViewer } from "./recursive-schema-viewer";
 import { formatCellValue } from "../utils/format.util";
+import { isPlainObject, type FieldReferenceTarget } from "../utils/field-reference.util";
 
-export function TableTab({ rows, nodeName, hasSinglePredecessor, isDraggable = true }: { rows: unknown[]; nodeName: string; hasSinglePredecessor: boolean; isDraggable?: boolean }) {
+export function TableTab({ rows, nodeName, isDirectParent, target, isDraggable = true }: { rows: unknown[]; nodeName: string; isDirectParent: boolean; target?: FieldReferenceTarget; isDraggable?: boolean }) {
   if (rows.length === 0) {
     return <p className="text-xs text-low-emphasis">No runtime input data available.</p>;
   }
@@ -32,9 +33,12 @@ export function TableTab({ rows, nodeName, hasSinglePredecessor, isDraggable = t
               >
                 {column === primitiveColumn ? (
                   <DraggableProperty
-                    fieldKey=""
+                    segments={[]}
                     nodeName={nodeName}
-                    hasSinglePredecessor={hasSinglePredecessor}
+                    isDirectParent={isDirectParent}
+                    itemIndex={0}
+                    itemIsObject={false}
+                    target={target}
                     label={column}
                     isRoot={true}
                     isDraggable={isDraggable}
@@ -42,9 +46,12 @@ export function TableTab({ rows, nodeName, hasSinglePredecessor, isDraggable = t
                   />
                 ) : (
                   <DraggableProperty
-                    fieldKey={column}
+                    segments={[column]}
                     nodeName={nodeName}
-                    hasSinglePredecessor={hasSinglePredecessor}
+                    isDirectParent={isDirectParent}
+                    itemIndex={0}
+                    itemIsObject={true}
+                    target={target}
                     label={column}
                     isDraggable={isDraggable}
                     showColon={false}
@@ -70,9 +77,12 @@ export function TableTab({ rows, nodeName, hasSinglePredecessor, isDraggable = t
                             <RecursiveSchemaViewer 
                               data={(row as Record<string, unknown>)[column]} 
                               depth={0}
-                              prefixPath={column}
+                              segments={[column]}
                               nodeName={nodeName}
-                              hasSinglePredecessor={hasSinglePredecessor}
+                              isDirectParent={isDirectParent}
+                              itemIndex={index}
+                              itemIsObject={isPlainObject(row)}
+                              target={target}
                               isDraggable={isDraggable}
                             />
                           ) : formatCellValue((row as Record<string, unknown>)[column])

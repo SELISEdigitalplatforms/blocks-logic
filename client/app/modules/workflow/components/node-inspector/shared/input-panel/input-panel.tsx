@@ -4,6 +4,8 @@ import { useWorkflow } from "@blocks-workflow/hooks";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui-kits/select/select";
 import { getAllPredecessors } from "../../../../utils/predecessor.util";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { NodeSchemasDefinition } from "../../../node-schemas/node-schemas";
+import { EXPRESSION_TARGET } from "./utils/field-reference.util";
 
 import { SchemaTab } from "./components/schema-tab";
 import { TableTab } from "./components/table-tab";
@@ -95,6 +97,13 @@ export const InputPanel = ({
 
   if (!selectedNode) return null;
 
+  const isDirectParent = immediateParentIds.length === 1 && immediateParentIds[0] === activePredecessor?.id;
+  const nodeName = activePredecessor?.name || selectedNode.name;
+  const schemaKey =
+    `${selectedNode.category}${selectedNode.type}${selectedNode.version}` as keyof typeof NodeSchemasDefinition;
+  const target =
+    NodeSchemasDefinition[schemaKey]?.fieldReference?.(selectedNode.parameters ?? {}) ?? EXPRESSION_TARGET;
+
   return (
     <div className={`flex w-full flex-col overflow-hidden ${isCollapsed ? 'h-fit shrink-0' : 'h-full flex-1'}`}>
       <div className="flex items-center justify-between">
@@ -139,8 +148,9 @@ export const InputPanel = ({
           <SchemaTab 
             runtimeInputRows={runtimeInputRows}
             isLastExecutionEditor={isLastExecutionEditor}
-            nodeName={activePredecessor?.name || selectedNode.name}
-            hasSinglePredecessor={immediateParentIds.length === 1 && immediateParentIds[0] === activePredecessor?.id}
+            nodeName={nodeName}
+            isDirectParent={isDirectParent}
+            target={target}
             isExecutionMode={isExecutionMode}
           />
         </div>
@@ -153,8 +163,9 @@ export const InputPanel = ({
           ) : (
             <TableTab 
               rows={runtimeInputRows} 
-              nodeName={activePredecessor?.name || selectedNode.name} 
-              hasSinglePredecessor={immediateParentIds.length === 1 && immediateParentIds[0] === activePredecessor?.id}
+              nodeName={nodeName}
+              isDirectParent={isDirectParent}
+              target={target}
               isDraggable={!isExecutionMode}
             />
           )}
@@ -168,8 +179,9 @@ export const InputPanel = ({
           ) : (
             <JsonTab 
               rows={runtimeInputRows} 
-              nodeName={activePredecessor?.name || selectedNode.name} 
-              hasSinglePredecessor={immediateParentIds.length === 1 && immediateParentIds[0] === activePredecessor?.id}
+              nodeName={nodeName}
+              isDirectParent={isDirectParent}
+              target={target}
               isDraggable={!isExecutionMode}
             />
           )}

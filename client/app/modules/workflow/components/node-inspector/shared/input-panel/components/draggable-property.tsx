@@ -1,20 +1,42 @@
-type DraggablePropertyProps = {
-  fieldKey?: string,
-  prefixPath?: string,
-  label?: string,
-  depth?: number,
-  nodeName: string,
-  hasSinglePredecessor: boolean,
-  isRoot?: boolean,
+import {
+  buildFieldReference,
+  EXPRESSION_TARGET,
+  type FieldReferenceTarget,
+  type PathSegment,
+} from "../utils/field-reference.util";
+
+type DraggableReferenceProps = {
+  segments: PathSegment[];
+  label?: string;
+  depth?: number;
+  nodeName: string;
+  isDirectParent: boolean;
+  itemIndex?: number;
+  itemIsObject?: boolean;
+  target?: FieldReferenceTarget;
   isDraggable?: boolean;
   showColon?: boolean;
-}
-export function DraggableProperty({ fieldKey, prefixPath = "", label, depth = 0, nodeName, hasSinglePredecessor = true, isRoot = false, isDraggable = true, showColon = true }: DraggablePropertyProps) {
-  const expressionPath = prefixPath ? (fieldKey ? `${prefixPath}.${fieldKey}` : prefixPath) : (fieldKey || "");
+};
 
-  const expression = hasSinglePredecessor
-    ? `{{$json.output${expressionPath ? '.' + expressionPath : ''}}}`
-    : `{{$node["${nodeName}"].json.output${expressionPath ? '.' + expressionPath : ''}}}`;
+type DraggablePropertyProps = DraggableReferenceProps & {
+  isRoot?: boolean;
+};
+
+function getReference({
+  segments,
+  nodeName,
+  isDirectParent,
+  itemIndex = 0,
+  itemIsObject = true,
+  target = EXPRESSION_TARGET,
+}: DraggableReferenceProps): string {
+  return buildFieldReference({ segments, nodeName, isDirectParent, itemIndex, itemIsObject }, target);
+}
+
+export function DraggableProperty(props: DraggablePropertyProps) {
+  const { segments, label, depth = 0, isDraggable = true, showColon = true } = props;
+  const expression = getReference(props);
+  const lastSegment = segments[segments.length - 1];
 
   return (
     <div
@@ -22,7 +44,7 @@ export function DraggableProperty({ fieldKey, prefixPath = "", label, depth = 0,
       onDragStart={(e) => {
         if (!isDraggable) return;
         e.dataTransfer.setData("text/plain", expression);
-        e.dataTransfer.dropEffect = "copy";
+        e.dataTransfer.effectAllowed = "copy";
       }}
       className={`group flex items-center gap-2 rounded px-2 py-1 text-xs touch-none select-none ${isDraggable ? 'cursor-pointer hover:bg-surface-hover' : ''} `}
       style={{ marginLeft: `${depth * 1}rem` }}
@@ -30,7 +52,7 @@ export function DraggableProperty({ fieldKey, prefixPath = "", label, depth = 0,
     >
       <span className={`font-mono flex items-center ${isDraggable ? 'cursor-grab active:cursor-grabbing text-high-emphasis' : 'text-medium-emphasis'}`}>
         <span className={`rounded-md border border-border/80 px-1.5 py-0.5 mr-0.5 shadow-sm ${isDraggable && "bg-white dark:bg-gray-800"}`}>
-          {label || fieldKey || "output"}
+          {label || (lastSegment !== undefined ? String(lastSegment) : "output")}
         </span>
         {showColon && ":"}
       </span>
@@ -38,42 +60,10 @@ export function DraggableProperty({ fieldKey, prefixPath = "", label, depth = 0,
   );
 }
 
-type DraggableArrayIndexProps = {
-  expressionPath: string;
-  label?: string;
-  depth?: number;
-  nodeName: string;
-  hasSinglePredecessor: boolean;
-  isDraggable?: boolean;
-  showColon?: boolean;
-};
-
-export function buildOutputExpression(
-  expressionPath: string,
-  nodeName: string,
-  hasSinglePredecessor: boolean,
-): string {
-  const suffix = !expressionPath
-    ? ""
-    : expressionPath.startsWith("[")
-      ? expressionPath
-      : `.${expressionPath}`;
-
-  return hasSinglePredecessor
-    ? `{{$json.output${suffix}}}`
-    : `{{$node["${nodeName}"].json.output${suffix}}}`;
-}
-
-export function DraggableArrayIndex({
-  expressionPath,
-  label,
-  depth = 0,
-  nodeName,
-  hasSinglePredecessor = true,
-  isDraggable = true,
-  showColon = true,
-}: DraggableArrayIndexProps) {
-  const expression = buildOutputExpression(expressionPath, nodeName, hasSinglePredecessor);
+export function DraggableArrayIndex(props: DraggableReferenceProps) {
+  const { segments, label, depth = 0, isDraggable = true, showColon = true } = props;
+  const expression = getReference(props);
+  const lastSegment = segments[segments.length - 1];
 
   return (
     <div
@@ -81,7 +71,7 @@ export function DraggableArrayIndex({
       onDragStart={(e) => {
         if (!isDraggable) return;
         e.dataTransfer.setData("text/plain", expression);
-        e.dataTransfer.dropEffect = "copy";
+        e.dataTransfer.effectAllowed = "copy";
       }}
       className={`group flex items-center gap-2 rounded px-2 py-1 text-xs touch-none select-none ${isDraggable ? "cursor-pointer hover:bg-surface-hover" : ""} `}
       style={{ marginLeft: `${depth * 1}rem` }}
@@ -89,7 +79,7 @@ export function DraggableArrayIndex({
     >
       <span className={`font-mono flex items-center ${isDraggable ? "cursor-grab active:cursor-grabbing text-high-emphasis" : "text-medium-emphasis"}`}>
         <span className={`rounded-md border border-border/80 px-1.5 py-0.5 mr-0.5 shadow-sm ${isDraggable && "bg-white dark:bg-gray-800"}`}>
-          {label || expressionPath || "[0]"}
+          {label || `[${lastSegment ?? 0}]`}
         </span>
         {showColon && ":"}
       </span>

@@ -1,16 +1,19 @@
 import { RecursiveSchemaViewer } from "./recursive-schema-viewer";
+import { isPlainObject, type FieldReferenceTarget } from "../utils/field-reference.util";
 
 export function SchemaTab({ 
   runtimeInputRows, 
   isLastExecutionEditor, 
   nodeName, 
-  hasSinglePredecessor, 
+  isDirectParent, 
+  target,
   isExecutionMode 
 }: { 
   runtimeInputRows: unknown[];
   isLastExecutionEditor: boolean;
   nodeName: string;
-  hasSinglePredecessor: boolean;
+  isDirectParent: boolean;
+  target?: FieldReferenceTarget;
   isExecutionMode: boolean;
 }) {
   if (runtimeInputRows.length === 0) {
@@ -30,7 +33,10 @@ export function SchemaTab({
           <RecursiveSchemaViewer 
             data={row} 
             nodeName={nodeName} 
-            hasSinglePredecessor={hasSinglePredecessor}
+            isDirectParent={isDirectParent}
+            itemIndex={index}
+            itemIsObject={isPlainObject(row)}
+            target={target}
             showValues={!isLastExecutionEditor}
             isDraggable={!isExecutionMode}
             showColon={!isLastExecutionEditor}
