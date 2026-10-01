@@ -54,11 +54,41 @@ const entry = (overrides: Partial<ExecutionLogEntry>): ExecutionLogEntry => ({
 });
 
 const LOGS: ExecutionLogEntry[] = [
-  entry({ stage: "execution.created", message: "Execution created. Mode Production, trigger webhook.", source: "api" }),
-  entry({ stage: "node.started", nodeId: "n1", runIndex: 1, nodeName: "Incoming order", message: "Node 'Incoming order' started." }),
-  entry({ stage: "node.noInput", level: "Warning", nodeId: "n2", runIndex: 2, nodeName: "Call CRM", message: "No input items; this branch was not taken." }),
-  entry({ stage: "node.started", nodeId: "n2", runIndex: 3, nodeName: "Call CRM", message: "Node 'Call CRM' started." }),
-  entry({ stage: "node.failed", level: "Error", nodeId: "n2", runIndex: 3, nodeName: "Call CRM", message: "Node failed after 412 ms (HttpRequestException)." }),
+  entry({
+    stage: "execution.created",
+    message: "Execution created. Mode Production, trigger webhook.",
+    source: "api",
+  }),
+  entry({
+    stage: "node.started",
+    nodeId: "n1",
+    runIndex: 1,
+    nodeName: "Incoming order",
+    message: "Node 'Incoming order' started.",
+  }),
+  entry({
+    stage: "node.noInput",
+    level: "Warning",
+    nodeId: "n2",
+    runIndex: 2,
+    nodeName: "Call CRM",
+    message: "No input items; this branch was not taken.",
+  }),
+  entry({
+    stage: "node.started",
+    nodeId: "n2",
+    runIndex: 3,
+    nodeName: "Call CRM",
+    message: "Node 'Call CRM' started.",
+  }),
+  entry({
+    stage: "node.failed",
+    level: "Error",
+    nodeId: "n2",
+    runIndex: 3,
+    nodeName: "Call CRM",
+    message: "Node failed after 412 ms (HttpRequestException).",
+  }),
 ];
 
 const response = (data: Partial<IWorkflowExecutionLogs>) => ({
@@ -78,7 +108,12 @@ const response = (data: Partial<IWorkflowExecutionLogs>) => ({
 
 const renderPanel = (open = true) =>
   renderWithProviders(
-    <ExecutionLogsPanel execution={execution} nodeExecutions={[]} open={open} onOpenChange={vi.fn()} />,
+    <ExecutionLogsPanel
+      execution={execution}
+      nodeExecutions={[]}
+      open={open}
+      onOpenChange={vi.fn()}
+    />,
   );
 
 beforeEach(() => vi.clearAllMocks());
@@ -87,19 +122,29 @@ describe("execution logs utils", () => {
   it("filters by level, node and text, combined with AND", () => {
     const f = DEFAULT_EXECUTION_LOG_FILTERS;
     expect(filterExecutionLogs(LOGS, f)).toHaveLength(5);
-    expect(filterExecutionLogs(LOGS, { ...f, levels: ["Error"] }).map((l) => l.stage)).toEqual(["node.failed"]);
-    expect(filterExecutionLogs(LOGS, { ...f, node: NODE_FILTER_WORKFLOW }).map((l) => l.stage)).toEqual(["execution.created"]);
+    expect(filterExecutionLogs(LOGS, { ...f, levels: ["Error"] }).map((l) => l.stage)).toEqual([
+      "node.failed",
+    ]);
+    expect(
+      filterExecutionLogs(LOGS, { ...f, node: NODE_FILTER_WORKFLOW }).map((l) => l.stage),
+    ).toEqual(["execution.created"]);
     expect(filterExecutionLogs(LOGS, { ...f, node: nodeFilterValue("n2") })).toHaveLength(3);
     expect(filterExecutionLogs(LOGS, { ...f, node: nodeFilterValue("n2", 3) })).toHaveLength(2);
     expect(filterExecutionLogs(LOGS, { ...f, search: "CALL crm" })).toHaveLength(3);
     expect(filterExecutionLogs(LOGS, { ...f, search: "node.failed" })).toHaveLength(1);
     expect(
-      filterExecutionLogs(LOGS, { levels: ["Information"], node: nodeFilterValue("n2"), search: "started" }),
+      filterExecutionLogs(LOGS, {
+        levels: ["Information"],
+        node: nodeFilterValue("n2"),
+        search: "started",
+      }),
     ).toHaveLength(1);
   });
 
   it("builds node options with Workflow only and a per-run option for re-run nodes", () => {
-    const options = buildNodeFilterOptions(LOGS, [{ nodeId: "n3", nodeName: "Never logged", runIndex: 4 }]);
+    const options = buildNodeFilterOptions(LOGS, [
+      { nodeId: "n3", nodeName: "Never logged", runIndex: 4 },
+    ]);
     expect(options.map((o) => o.label)).toEqual([
       "All nodes",
       "Workflow only",
@@ -109,7 +154,9 @@ describe("execution logs utils", () => {
       "Call CRM · run 3",
       "Never logged",
     ]);
-    expect(options.find((o) => o.label === "Call CRM · run 3")!.value).toBe(nodeFilterValue("n2", 3));
+    expect(options.find((o) => o.label === "Call CRM · run 3")!.value).toBe(
+      nodeFilterValue("n2", 3),
+    );
   });
 
   it("copies lines as HH:mm:ss.SSS LEVEL [NodeName#run] message", () => {
@@ -137,9 +184,18 @@ describe("ExecutionLogsPanel", () => {
   });
 
   it.each([
-    [{ availability: ExecutionLogsAvailability.NotRecorded, logs: [] }, "It ran before execution logging was turned on."],
-    [{ availability: ExecutionLogsAvailability.SourceUnavailable, logs: [] }, "Logs can't be loaded right now. Try again later."],
-    [{ logs: [], mayStillArrive: true }, "Waiting for logs… They can take a few seconds to appear."],
+    [
+      { availability: ExecutionLogsAvailability.NotRecorded, logs: [] },
+      "It ran before execution logging was turned on.",
+    ],
+    [
+      { availability: ExecutionLogsAvailability.SourceUnavailable, logs: [] },
+      "Logs can't be loaded right now. Try again later.",
+    ],
+    [
+      { logs: [], mayStillArrive: true },
+      "Waiting for logs... They can take a few seconds to appear.",
+    ],
     [{ logs: [], mayStillArrive: false }, "No logs were recorded for this execution."],
   ])("renders the %o state", async (data, text) => {
     svc.getWorkflowExecutionLogs.mockResolvedValue(response(data));
@@ -154,7 +210,11 @@ describe("ExecutionLogsPanel", () => {
     [0, "Logs expire after 30 days."],
   ])("renders Expired with retentionDays=%s", async (retentionDays, text) => {
     svc.getWorkflowExecutionLogs.mockResolvedValue(
-      response({ availability: ExecutionLogsAvailability.Expired, logs: [], retentionDays: retentionDays as number }),
+      response({
+        availability: ExecutionLogsAvailability.Expired,
+        logs: [],
+        retentionDays: retentionDays as number,
+      }),
     );
     renderPanel();
     expect(await screen.findByText(text)).toBeTruthy();
@@ -184,7 +244,9 @@ describe("ExecutionLogsPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Warning 1$/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Error 1$/ }));
     // Error is the last one on, so it stays on.
-    expect(screen.getByRole("button", { name: /^Error 1$/ }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: /^Error 1$/ }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
     expect(screen.getAllByTestId("execution-log-row")).toHaveLength(1);
 
     fireEvent.click(screen.getByText("Clear filters"));
@@ -206,7 +268,9 @@ describe("ExecutionLogsPanel", () => {
     await waitFor(() => expect(screen.getAllByTestId("execution-log-row")).toHaveLength(5));
     fireEvent.change(screen.getByPlaceholderText("Search logs"), { target: { value: "incoming" } });
     await waitFor(() => expect(screen.getAllByTestId("execution-log-row")).toHaveLength(1));
-    fireEvent.change(screen.getByPlaceholderText("Search logs"), { target: { value: "zz-nothing" } });
+    fireEvent.change(screen.getByPlaceholderText("Search logs"), {
+      target: { value: "zz-nothing" },
+    });
     expect(await screen.findByText("No logs match these filters.")).toBeTruthy();
   });
 
@@ -216,7 +280,9 @@ describe("ExecutionLogsPanel", () => {
     );
     const { container } = renderPanel();
     expect(await screen.findByText("Node '<b>bold</b>' started.")).toBeTruthy();
-    expect(container.ownerDocument.querySelector("[data-testid=execution-logs-panel] b")).toBeNull();
+    expect(
+      container.ownerDocument.querySelector("[data-testid=execution-logs-panel] b"),
+    ).toBeNull();
   });
 
   it("copies the filtered lines", async () => {
@@ -285,7 +351,9 @@ describe("WorkflowExecutionEditor execution logs button", () => {
     fireEvent.click(button);
     expect(await screen.findByTestId("execution-logs-panel")).toBeTruthy();
     expect(button.getAttribute("aria-pressed")).toBe("true");
-    await waitFor(() => expect(svc.getWorkflowExecutionLogs).toHaveBeenCalledWith({ executionId: "e1" }));
+    await waitFor(() =>
+      expect(svc.getWorkflowExecutionLogs).toHaveBeenCalledWith({ executionId: "e1" }),
+    );
 
     fireEvent.click(button);
     await waitFor(() => expect(screen.queryByTestId("execution-logs-panel")).toBeNull());
