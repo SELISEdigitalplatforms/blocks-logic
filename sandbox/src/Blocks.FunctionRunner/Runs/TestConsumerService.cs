@@ -223,7 +223,9 @@ namespace Blocks.FunctionRunner.Runs
 
             // --- run, here, on the image just built -----------------------------------------
             // By image id, not tag: nothing between here and the sandbox can re-point it.
-            var job = run with { Image = build.Image };
+            // IsTest here, not on the wire: it is a property of how this job was claimed, and the
+            // control plane has no business asserting which budget a runner draws on.
+            var job = run with { Image = build.Image, IsTest = true };
             var deadline = DateTimeOffset.UtcNow + AdmissionWait;
             while (true)
             {

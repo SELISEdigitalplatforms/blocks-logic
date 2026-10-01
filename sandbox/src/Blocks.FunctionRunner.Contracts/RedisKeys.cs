@@ -124,6 +124,19 @@ namespace Blocks.FunctionRunner.Contracts
         /// <summary>Per-function concurrency counter; overflow queues and never rejects.</summary>
         public static string Concurrency(string functionId) => $"{_prefix}function:concurrency:{functionId}";
 
+        /// <summary>
+        /// A test run's concurrency slot, kept apart from <see cref="Concurrency"/> so testing a
+        /// function can never consume the budget its deployed version serves traffic with.
+        /// </summary>
+        public static string TestConcurrency(string functionId) => $"{_prefix}function:test-slot:{functionId}";
+
+        /// <summary>
+        /// Sandbox slots held by one tenant across the fleet. The host budget alone is
+        /// first-come-first-served, so one busy tenant could hold every slot on a runner and
+        /// every other tenant waited behind it; this is the cap that makes the share fair.
+        /// </summary>
+        public static string TenantSlots(string tenantId) => $"{_prefix}function:tenant-slots:{tenantId}";
+
         /// <summary>Runner heartbeat hash. TTL 15 s, so a dead runner disappears quickly.</summary>
         public static string Runner(string runnerId) => $"{_prefix}function:runner:{runnerId}";
 

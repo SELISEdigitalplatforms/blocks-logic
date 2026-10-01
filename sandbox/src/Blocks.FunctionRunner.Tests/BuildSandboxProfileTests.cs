@@ -73,6 +73,80 @@ namespace Blocks.FunctionRunner.Tests
         }
 
         [Fact]
+        public void The_script_the_sandbox_actually_runs_is_valid_shell()
+        {
+            // This exists because of a real regression. A `\` at the end of a line continues a
+            // shell command; `\\` is an escaped backslash and ends it. Inside a C# raw string
+            // both look almost identical, and the one that slipped through turned
+            //     tar --numeric-owner \
+            //         -cf /work/deps.tar node_modules
+            // into a tar with no operation and a separate `-cf …` command. npm had already
+            // succeeded, so the build failed with npm's exit code and a message about packages —
+            // which sent three people looking at package.json.
+            var script = BuildSandboxProfile.InstallScript("--omit=dev --ignore-scripts", "b", "e");
+
+            foreach (var line in script.Split('\n'))
+            {
+                line.TrimEnd().Should().NotEndWith(
+                    @"\\", "a doubled backslash ends the command instead of continuing it");
+            }
+
+            // tar must carry its operation on the same line as its operands.
+            var tarLine = script.Split('\n').Single(l => l.TrimStart().StartsWith("tar ", StringComparison.Ordinal));
+            tarLine.Should().Contain("-cf").And.Contain("node_modules");
+        }
+
+        [SkippableFact]
+        public async Task The_script_runs_end_to_end_in_a_real_shell()
+        {
+            // The unit tests above read the script; this one executes it, with npm stubbed, and
+            // asserts the archive appears. Verifying a retyped copy of the script is what let the
+            // tar regression through — so this runs the string the profile actually produces.
+            Skip.If(!File.Exists("/bin/sh"), "no POSIX shell");
+
+            var work = Path.Combine(Path.GetTempPath(), "blocks-install-" + Guid.NewGuid().ToString("n"));
+            var bin = Path.Combine(work, "bin");
+            Directory.CreateDirectory(Path.Combine(work, "node_modules", "pkg"));
+            Directory.CreateDirectory(bin);
+            await File.WriteAllTextAsync(Path.Combine(work, "node_modules", "pkg", "index.js"), "//");
+            await File.WriteAllTextAsync(Path.Combine(bin, "npm"), "#!/bin/sh\nexit 0\n");
+            File.SetUnixFileMode(Path.Combine(bin, "npm"),
+                UnixFileMode.UserRead | UnixFileMode.UserExecute | UnixFileMode.UserWrite);
+
+            try
+            {
+                // The profile mounts the workspace at /work; here it lives in a temp directory,
+                // so the one substitution is that path.
+                var script = BuildSandboxProfile.InstallScript("--omit=dev --ignore-scripts", "b", "e")
+                    .Replace(BuildSandboxProfile.WorkPath, work, StringComparison.Ordinal);
+
+                using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "/bin/sh",
+                    ArgumentList = { "-c", script },
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true,
+                    Environment = { ["PATH"] = bin + ":" + Environment.GetEnvironmentVariable("PATH") },
+                })!;
+
+                var stderr = await process.StandardError.ReadToEndAsync();
+                await process.WaitForExitAsync();
+
+                process.ExitCode.Should().Be(0, "the install script failed: {0}", stderr);
+                File.Exists(Path.Combine(work, BuildSandboxProfile.DepsArchiveName))
+                    .Should().BeTrue("the archive is what the build step consumes");
+
+                // The trap's work: what the sandbox wrote is gone, so the runner can delete it.
+                Directory.Exists(Path.Combine(work, "node_modules")).Should().BeFalse();
+                Directory.Exists(Path.Combine(work, ".npm-cache")).Should().BeFalse();
+            }
+            finally
+            {
+                try { Directory.Delete(work, recursive: true); } catch (IOException) { }
+            }
+        }
+
+        [Fact]
         public void Installs_under_gvisor_and_never_the_default_runtime()
         {
             Create().HostConfig.Runtime.Should().Be("runsc");

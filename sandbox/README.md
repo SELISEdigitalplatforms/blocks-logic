@@ -167,6 +167,44 @@ Redis check fails against a loopback address nothing listens on any more:
 FNCTL_REDIS='REDIS-HOST:6379,password=...' fnctl doctor
 ```
 
+### Sharing a Redis with another environment
+
+The queue names are fixed literals unless you say otherwise, so **every runner pointed at one
+Redis joins the same consumer group and competes for the same entries**. That is not a theory: a
+developer's test gets claimed and built on someone else's host, against that host's private image
+registry and whatever build of this runner it happens to be running, and the failure lands on the
+developer's screen with nothing in their own logs to explain it.
+
+Give each environment its own namespace. Both halves must agree — a mismatch is silent, the
+runner joins streams nobody writes to and simply never receives work:
+
+```
+# /etc/blocks-runner/runner.env
+RUNNER__QueuePrefix=local
+
+# the control plane this runner serves
+Functions__QueuePrefix=local
+```
+
+Unset on both sides reproduces the original names exactly, so environments can adopt it one at a
+time — as long as each one moves its runner and its control plane together. Confirm it took from
+the runner's own log, which prints the streams it joined:
+
+```
+Consuming local:functions:runs as kind-falcon (capacity 10)
+```
+
+### One tenant's share of a host
+
+`RUNNER__MaxActiveSandboxes` is the host's total; on its own it is first-come-first-served, so one
+tenant's burst can hold every slot while every other tenant waits. `RUNNER__MaxSandboxesPerTenant`
+caps what any single tenant holds at once — empty or `0` derives half the host's capacity, rounded
+up. Work over the share is *deferred*, never rejected, like every other gate here. Set it to
+`RUNNER__MaxActiveSandboxes` or higher to turn the share off.
+
+Editor test runs draw on their own per-function budget rather than the deployed function's, so
+testing a function cannot delay the traffic its live version is serving.
+
 ## Logs and disk
 
 The runner writes to the journal and nowhere else on this host; container logs go to

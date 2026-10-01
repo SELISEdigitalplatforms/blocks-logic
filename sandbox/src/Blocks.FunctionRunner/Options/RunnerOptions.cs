@@ -72,6 +72,23 @@ namespace Blocks.FunctionRunner.Options
         public string QueuePrefix { get; set; } = string.Empty;
 
         /// <summary>
+        /// The most sandbox slots one tenant may hold at once, as
+        /// <c>RUNNER__MaxSandboxesPerTenant</c>. Zero (the default) derives it as half the host's
+        /// capacity, rounded up.
+        /// <para>
+        /// The host budget on its own is first-come-first-served, so one tenant with a burst
+        /// could hold every slot on a runner while every other tenant waited behind it. Nothing
+        /// is rejected either way — a tenant over its share has its entries deferred, the same as
+        /// any other gate here. Set it to the host capacity or higher to turn the share off.
+        /// </para>
+        /// </summary>
+        public int MaxSandboxesPerTenant { get; set; }
+
+        /// <summary>The effective value of <see cref="MaxSandboxesPerTenant"/> for a given capacity.</summary>
+        public int TenantSlotLimit(int hostCapacity) =>
+            MaxSandboxesPerTenant > 0 ? MaxSandboxesPerTenant : Math.Max(1, (hostCapacity + 1) / 2);
+
+        /// <summary>
         /// Whether the registry admin API is reached over TLS. Null means "decide from
         /// <see cref="Registry"/>": plain HTTP for loopback, HTTPS for anything else, which is the
         /// only combination either is ever deployed as. Set it to override that.

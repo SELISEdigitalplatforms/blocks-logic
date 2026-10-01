@@ -105,6 +105,13 @@ namespace Functions.DomainService.Queue
         public static string Concurrency(string functionId) => $"{_prefix}function:concurrency:{functionId}";
         public static string Runner(string runnerId) => $"{_prefix}function:runner:{runnerId}";
         public static string Source(string buildId) => $"{_prefix}function:source:{buildId}";
+
+        /// <summary>
+        /// The run id of the test currently in flight for a function, so a new test can supersede
+        /// it. Expires with <see cref="RunTtl"/>; a stale value is harmless, because cancelling a
+        /// run that has already finished is ignored.
+        /// </summary>
+        public static string CurrentTest(string functionId) => $"{_prefix}function:test-current:{functionId}";
         public static string ImagesKeep => _prefix + "functions:images:keep";
 
         /// <summary>Rate-limit counters. Only ever touched when rate limiting is switched on.</summary>

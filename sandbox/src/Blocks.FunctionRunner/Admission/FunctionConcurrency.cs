@@ -87,14 +87,47 @@ namespace Blocks.FunctionRunner.Admission
         /// Takes a slot for <paramref name="runId"/>, or returns null when the function is at its
         /// limit. Taking a slot the same run already holds succeeds and refreshes it.
         /// </summary>
-        public static async Task<FunctionConcurrency?> TryEnterAsync(
+        public static Task<FunctionConcurrency?> TryEnterAsync(
             IDatabase db, string functionId, string runId, int limit)
         {
             ArgumentNullException.ThrowIfNull(db);
 
-            var effective = Math.Clamp(limit, Ceilings.MinFunctionConcurrency, Ceilings.MaxFunctionConcurrency);
-            var key = RedisKeys.Concurrency(functionId);
+            return TryTakeAsync(
+                db,
+                RedisKeys.Concurrency(functionId),
+                runId,
+                Math.Clamp(limit, Ceilings.MinFunctionConcurrency, Ceilings.MaxFunctionConcurrency));
+        }
 
+        /// <summary>
+        /// A test run's slot, under its own key. Deliberately not the function's: a tenant
+        /// clicking Test must not be able to delay the traffic their deployed version is serving.
+        /// </summary>
+        public static Task<FunctionConcurrency?> TryEnterTestAsync(IDatabase db, string functionId, string runId)
+        {
+            ArgumentNullException.ThrowIfNull(db);
+
+            // One: a new test supersedes the previous one for the same function, so a second
+            // concurrent test for one function is already not a thing that should exist.
+            return TryTakeAsync(db, RedisKeys.TestConcurrency(functionId), runId, 1);
+        }
+
+        /// <summary>
+        /// A tenant's share of this fleet's sandbox slots. Overflow defers, exactly like every
+        /// other gate here — the work waits, it is never rejected.
+        /// </summary>
+        public static Task<FunctionConcurrency?> TryEnterTenantAsync(
+            IDatabase db, string tenantId, string runId, int limit)
+        {
+            ArgumentNullException.ThrowIfNull(db);
+
+            return TryTakeAsync(db, RedisKeys.TenantSlots(tenantId), runId, Math.Max(1, limit));
+        }
+
+        /// <summary>The one implementation; every gate above is a key and a limit.</summary>
+        private static async Task<FunctionConcurrency?> TryTakeAsync(
+            IDatabase db, string key, string runId, int effective)
+        {
             var entered = (long)await db.ScriptEvaluateAsync(
                 EnterScript,
                 [key],

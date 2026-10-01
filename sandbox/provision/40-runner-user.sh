@@ -130,6 +130,13 @@ RUNNER__BuildsDir=$STATE_DIR/builds
 # entries, so one developer's test can be built on another developer's host, against that
 # host's private registry and whatever build of the runner it happens to be running.
 RUNNER__QueuePrefix=
+#
+# The most sandbox slots one tenant may hold at once on this host. Empty or 0 derives it as
+# half the host's capacity, rounded up. The host budget on its own is first-come-first-served,
+# so one tenant's burst could hold every slot while every other tenant waited behind it;
+# nothing is rejected either way, a tenant over its share has its entries deferred. Set it to
+# RUNNER__MaxActiveSandboxes or higher to turn the share off.
+RUNNER__MaxSandboxesPerTenant=
 RUNNER__Registry=127.0.0.1:5000
 RUNNER__Network=${FN_NETWORK:-blocks-fn-egress}
 RUNNER__ResolvConf=${FN_RESOLV_CONF:-$CONF_DIR/resolv.conf}

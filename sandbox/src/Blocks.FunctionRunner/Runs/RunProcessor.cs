@@ -122,12 +122,31 @@ namespace Blocks.FunctionRunner.Runs
                 return Disposition.Deferred;
             }
 
-            await using var slot = await FunctionConcurrency.TryEnterAsync(
-                _db, job.FunctionId, job.RunId, limits.FunctionConcurrency).ConfigureAwait(false);
+            // A tenant's share of the fleet, before anything function-specific. The host budget
+            // above is first-come-first-served, so without this one tenant's burst could hold
+            // every slot on a runner and every other tenant waited behind it.
+            await using var tenantSlot = string.IsNullOrEmpty(job.TenantId)
+                ? null
+                : await FunctionConcurrency.TryEnterTenantAsync(
+                    _db, job.TenantId, job.RunId, _options.TenantSlotLimit(_budget.Capacity)).ConfigureAwait(false);
+            if (tenantSlot is null && !string.IsNullOrEmpty(job.TenantId))
+            {
+                _logger.LogDebug(
+                    "Tenant {TenantId} is at its share of {Limit} sandbox slot(s); deferring run {RunId}",
+                    job.TenantId, _options.TenantSlotLimit(_budget.Capacity), job.RunId);
+                return Disposition.Deferred;
+            }
+
+            // A test draws on its own budget, never the function's: clicking Test must not be
+            // able to delay the traffic that function's deployed version is serving.
+            await using var slot = job.IsTest
+                ? await FunctionConcurrency.TryEnterTestAsync(_db, job.FunctionId, job.RunId).ConfigureAwait(false)
+                : await FunctionConcurrency.TryEnterAsync(
+                    _db, job.FunctionId, job.RunId, limits.FunctionConcurrency).ConfigureAwait(false);
             if (slot is null)
             {
-                _logger.LogDebug("Function {FunctionId} is at its concurrency limit; deferring run {RunId}",
-                    job.FunctionId, job.RunId);
+                _logger.LogDebug("Function {FunctionId} is at its {Kind} concurrency limit; deferring run {RunId}",
+                    job.FunctionId, job.IsTest ? "test" : "function", job.RunId);
                 return Disposition.Deferred;
             }
 

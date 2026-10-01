@@ -106,8 +106,7 @@ namespace Blocks.FunctionRunner.Builds
                 npm ls --omit=dev --depth=0 --json 2>/dev/null || true
                 echo "{endMarker}"
                 mkdir -p node_modules
-                tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \\
-                    -cf {WorkPath}/{DepsArchiveName} node_modules
+                tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf {WorkPath}/{DepsArchiveName} node_modules
                 """;
         }
 

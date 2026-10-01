@@ -273,6 +273,12 @@ namespace Functions.DomainService.Services
             var function = await _functionRepository.GetByIdAsync(tenantId, functionId, cancellationToken)
                 ?? throw new FunctionNotFoundException($"function '{functionId}' was not found");
 
+            // One test per function at a time. Clicking Test again used to leave the previous one
+            // building and running to completion: two sandboxes, two images and two sets of logs
+            // for a question the tenant has already moved on from, all of it drawing on the
+            // fleet's budget. The previous run is asked to stop before this one is queued.
+            await SupersedePreviousTestAsync(tenantId, functionId, cancellationToken);
+
             // Every test builds its own image, on the runner that then runs it, and that image is
             // deleted when the run ends. Nothing is cached or reused: a cached image lived in one
             // host's registry, so a run claimed by any other host could not find it.
@@ -290,11 +296,71 @@ namespace Functions.DomainService.Services
                 InvokedByType.Test, invokedById: null, inputJson, wait: true, request.WaitTimeoutSeconds,
                 cancellationToken, new TestBuild(build.ItemId, sourceKey));
             result.BuildId ??= build.ItemId;
+            await RecordCurrentTestAsync(functionId, result.RunId);
             return result;
         }
 
         /// <summary>A test run's own build, carried on its entry in <see cref="FunctionQueueKeys.TestsStream"/>.</summary>
         private sealed record TestBuild(string BuildId, string SourceKey);
+
+        /// <summary>
+        /// Asks the function's previous test run, if any, to stop.
+        /// <para>
+        /// Only the cancel flag is set: whichever runner holds that run — which need not be the
+        /// one that takes the new test — checks it before building, after building and while the
+        /// sandbox runs, and reports the run cancelled itself. A run that has already finished
+        /// never reads it, and the key expires on its own.
+        /// </para>
+        /// <para>
+        /// Never allowed to fail the new test. The worst case is a superseded run finishing
+        /// anyway, which is exactly the behaviour this replaces.
+        /// </para>
+        /// </summary>
+        private async Task SupersedePreviousTestAsync(
+            string tenantId, string functionId, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var database = _cache.CacheDatabase();
+                var previous = await database.StringGetAsync(FunctionQueueKeys.CurrentTest(functionId));
+                if (previous.IsNullOrEmpty) return;
+
+                var previousRunId = previous.ToString();
+                var run = await _runRepository.GetByIdAsync(tenantId, previousRunId, cancellationToken);
+                if (run is null || FunctionWireMapping.IsTerminal(run.Status)) return;
+
+                await database.StringSetAsync(
+                    FunctionQueueKeys.Cancel(previousRunId), "1", FunctionQueueKeys.CancelTtl);
+
+                _logger.LogInformation(
+                    "Superseding test run {RunId} of function {FunctionId}: a newer test was started",
+                    previousRunId, functionId);
+            }
+            catch (Exception ex) when (ex is StackExchange.Redis.RedisException or TimeoutException)
+            {
+                _logger.LogWarning(
+                    "Could not supersede the previous test of function {FunctionId}: {Message}",
+                    functionId, ex.Message);
+            }
+        }
+
+        /// <summary>Records which test is in flight, so the next one knows what to supersede.</summary>
+        private async Task RecordCurrentTestAsync(string functionId, string? runId)
+        {
+            if (string.IsNullOrEmpty(runId)) return;
+
+            try
+            {
+                await _cache.CacheDatabase().StringSetAsync(
+                    FunctionQueueKeys.CurrentTest(functionId), runId, FunctionQueueKeys.RunTtl);
+            }
+            catch (Exception ex) when (ex is StackExchange.Redis.RedisException or TimeoutException)
+            {
+                _logger.LogWarning(
+                    "Could not record the current test of function {FunctionId}: {Message}",
+                    functionId, ex.Message);
+            }
+        }
 
         /// <summary>
         /// The local name the runner gives a test build's image. Mirrors

@@ -732,6 +732,22 @@ namespace Blocks.FunctionRunner.Builds
             outcome.Image = digest;
             outcome.Error = error;
             outcome.Log = log;
+
+            if (!outcome.Succeeded)
+            {
+                // A failed build used to leave nothing on this host at all: the reason and the
+                // npm output went only to the result stream, and from there to a build record
+                // the operator of the machine cannot read. The one person able to see the host
+                // was the one person with no way to see why its build failed, and a test build
+                // compounds it — its record is ephemeral and the run that owns it reports only
+                // the summary line. The tail is capped at BuildLogTail so one bad build cannot
+                // flood the journal.
+                _logger.LogError(
+                    "Build {BuildId} for function {FunctionId} FAILED: {Error}\n--- build log (tail) ---\n{Log}",
+                    job.BuildId, job.FunctionId, error ?? "(no reason given)",
+                    Tail(log ?? string.Empty, BuildLogTail));
+            }
+
             return _db.StreamAddAsync(RedisKeys.BuildResultsStream,
             [
                 new NameValueEntry("buildId", job.BuildId),
@@ -745,6 +761,9 @@ namespace Blocks.FunctionRunner.Builds
                 new NameValueEntry("protocol", RedisKeys.ProtocolVersion),
             ]);
         }
+
+        /// <summary>How much of a failed build's log reaches this host's journal.</summary>
+        internal const int BuildLogTail = 4 * 1024;
 
         /// <summary>Build logs are shown to tenants; keep the tail, which is where failures are.</summary>
         private static string Tail(StringBuilder log, int max = 16 * 1024) => Tail(log.ToString(), max);

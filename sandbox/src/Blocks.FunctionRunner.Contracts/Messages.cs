@@ -30,6 +30,13 @@ namespace Blocks.FunctionRunner.Contracts
         /// runner resolves; 1 means the plaintext is already there (see <see cref="RedisKeys.RunProtocolVersion"/>).
         /// </summary>
         public int Protocol { get; init; } = RedisKeys.RunProtocolVersion;
+
+        /// <summary>
+        /// True for an editor test run. It changes which concurrency budget the run draws on:
+        /// a test must never occupy a slot the function's deployed version needs to serve
+        /// traffic. Never set from the wire — the test loop sets it on the job it builds.
+        /// </summary>
+        public bool IsTest { get; init; }
     }
 
     /// <summary>A result written to <see cref="RedisKeys.ResultsStream"/> for the logic Worker.</summary>
