@@ -1,0 +1,209 @@
+namespace Functions.DomainService.Queue
+{
+    /// <summary>
+    /// Every Redis key and stream name in the runner contract.
+    /// <para>
+    /// This is the control-plane copy of <c>plan/PROTOCOL.md</c>; the Runner VM carries its own
+    /// in <c>Blocks.FunctionRunner.Contracts.RedisKeys</c>. The two are not shared code — the
+    /// halves live in different repositories — so <b>any change here is a protocol change and
+    /// must be made on both sides at once</b>. A rename that only lands on one side does not
+    /// fail loudly; runs simply stop being delivered.
+    /// </para>
+    /// </summary>
+    public static class FunctionQueueKeys
+    {
+        /// <summary>Carried on every message. Bump only with both halves.</summary>
+        public const int ProtocolVersion = 1;
+
+        /// <summary>
+        /// Namespace for every key and stream below, so two environments can share one Redis
+        /// without sharing work.
+        /// <para>
+        /// Empty by default, which produces exactly the names this protocol has always used — an
+        /// unset deployment is byte-identical to the one before this existed. Set it from
+        /// <c>Functions:QueuePrefix</c> (env <c>Functions__QueuePrefix</c>) and the matching
+        /// <c>RUNNER__QueuePrefix</c> on every runner that serves it; the two halves must agree,
+        /// because a mismatch does not fail loudly — the work is simply never delivered.
+        /// </para>
+        /// <para>
+        /// This exists because the streams were fixed literals, so every runner pointed at a
+        /// Redis joined the same consumer group and competed for the same entries. A developer's
+        /// test could be claimed and built by someone else's host, which has its own private
+        /// image registry and possibly its own build of the runner — and the failure surfaced on
+        /// the developer's screen with nothing in their own logs to explain it.
+        /// </para>
+        /// <para>Consumer groups are not prefixed: they live on the streams, so namespacing the
+        /// stream namespaces the group with it.</para>
+        /// </summary>
+        public static string Prefix
+        {
+            get => _prefix;
+            set => _prefix = Normalize(value);
+        }
+
+        private static string _prefix = string.Empty;
+
+        /// <summary>Blank stays blank; anything else gets exactly one trailing colon.</summary>
+        internal static string Normalize(string? prefix)
+        {
+            var trimmed = prefix?.Trim();
+            if (string.IsNullOrEmpty(trimmed)) return string.Empty;
+
+            return trimmed.TrimEnd(':') + ":";
+        }
+
+        /// <summary>
+        /// Version of a <see cref="RunsStream"/> entry, the one message that has moved on: 2 means
+        /// the envelope's <c>env</c> carries secret-bound variables as <c>{{secret.&lt;id&gt;}}</c>
+        /// references that the runner resolves right before the sandbox starts. A runner that
+        /// predates it only accepts 1 and dead-letters anything else, so this control plane in
+        /// front of an old runner fails runs as <see cref="Enums.RunErrorCode.Undeliverable"/>
+        /// instead of executing a function with reference text where its key should be. Mirrors
+        /// <c>RedisKeys.RunProtocolVersion</c> in the runner. Results and builds stay on
+        /// <see cref="ProtocolVersion"/>.
+        /// </summary>
+        public const int RunProtocolVersion = 2;
+
+        // ---- streams ------------------------------------------------------------
+        public static string RunsStream => _prefix + "functions:runs";
+        public static string ResultsStream => _prefix + "functions:results";
+        public static string BuildsStream => _prefix + "functions:builds";
+        public static string BuildResultsStream => _prefix + "functions:build-results";
+
+        /// <summary>
+        /// Test runs: one entry builds the current source on the runner that claims it, runs it
+        /// there once and deletes the image. Mirrors <c>RedisKeys.TestsStream</c>. Separate from
+        /// <see cref="RunsStream"/> so a runner that predates it never takes one.
+        /// </summary>
+        public static string TestsStream => _prefix + "functions:tests";
+        public static string DeadStream => _prefix + "functions:dead";
+
+        /// <summary>
+        /// Control-plane-side dead letters: a <c>functions:results</c> or
+        /// <c>functions:build-results</c> entry that could not be applied after
+        /// <see cref="Consumers.FunctionResultConsumer"/>'s delivery-count bound. Distinct from
+        /// <see cref="DeadStream"/>, which is the runner's own dead letter for
+        /// <c>functions:runs</c>/<c>functions:builds</c> — different consumers, different sides
+        /// of the same contract, so a bad entry on one side is never mistaken for the other.
+        /// </summary>
+        public static string DeadResultsStream => _prefix + "functions:dead-results";
+
+        // ---- consumer groups ----------------------------------------------------
+        /// <summary>The group runners join. The control plane never reads these.</summary>
+        public const string RunnerGroup = "runners";
+
+        /// <summary>The group this Worker joins on the result streams.</summary>
+        public const string LogicWorkerGroup = "logic-workers";
+
+        // ---- per-entity keys ----------------------------------------------------
+        public static string Run(string runId) => $"{_prefix}function:run:{runId}";
+        public static string Result(string runId) => $"{_prefix}function:result:{runId}";
+        public static string Logs(string runId) => $"{_prefix}function:logs:{runId}";
+        public static string Lease(string runId) => $"{_prefix}function:lease:{runId}";
+        public static string Cancel(string runId) => $"{_prefix}function:cancel:{runId}";
+        public static string SyncChannel(string runId) => $"{_prefix}function:sync:{runId}";
+        public static string Concurrency(string functionId) => $"{_prefix}function:concurrency:{functionId}";
+        public static string Runner(string runnerId) => $"{_prefix}function:runner:{runnerId}";
+        public static string Source(string buildId) => $"{_prefix}function:source:{buildId}";
+
+        /// <summary>
+        /// The run id of the test currently in flight for a function, so a new test can supersede
+        /// it. Expires with <see cref="RunTtl"/>; a stale value is harmless, because cancelling a
+        /// run that has already finished is ignored.
+        /// </summary>
+        public static string CurrentTest(string functionId) => $"{_prefix}function:test-current:{functionId}";
+        public static string ImagesKeep => _prefix + "functions:images:keep";
+
+        /// <summary>Rate-limit counters. Only ever touched when rate limiting is switched on.</summary>
+        public static string RateMinute(string functionId, DateTime utc)
+            => $"{_prefix}function:rate:{functionId}:{utc:yyyyMMddHHmm}";
+
+        /// <summary>
+        /// Hash of the anonymous poll token for one run (<c>tenant</c>, <c>hash</c>), expiring
+        /// with <see cref="RunTtl"/>. The plaintext token is never stored.
+        /// </summary>
+        public static string PollToken(string runId) => $"{_prefix}function:poll:{runId}";
+
+        /// <summary>
+        /// Per function per UTC day — the limit it enforces is the function's own
+        /// <c>RequestsPerDay</c>. The tenant stays in the key so a day's counters for one tenant
+        /// can be found (and cleared) together.
+        /// </summary>
+        public static string QuotaDay(string tenantId, string functionId, DateTime utc)
+            => $"{_prefix}function:quota:{tenantId}:{functionId}:{utc:yyyyMMdd}";
+
+        /// <summary>Sorted set of runs awaiting a retry, scored by the epoch second they are due.</summary>
+        public static string RetryQueue => _prefix + "functions:retries";
+
+        /// <summary>
+        /// Prefix of the marker written when a dead-lettered job has been applied to Mongo. The
+        /// dead stream keeps its entries for forensics rather than deleting them on
+        /// acknowledgement, so a reclaim or a second Worker can re-deliver one that was already
+        /// applied; this makes the second pass a no-op instead of a duplicate audit record.
+        /// </summary>
+        public static string DeadApplied(string entryId) => $"{_prefix}function:dead-applied:{entryId}";
+
+        // ---- time to live -------------------------------------------------------
+        // This TTL is effectively "how long a Worker or runner may be down without losing work".
+        // Redis holds the payload; Mongo holds the record. If the payload expires before a
+        // consumer reaches it, the stream entry survives but there is nothing left to apply, so
+        // the run is lost. Everything the payload is actually needed for finishes in minutes —
+        // the sync wait caps at 180 s (Functions:SyncWaitMaxSeconds; 30 s over HTTP, Functions:HttpSyncWaitMaxSeconds), a retry's backoff at MaxDelaySeconds (300 s by default),
+        // reclaim triggers at 90 s idle — so the remainder is purely outage headroom.
+        // Mirrored in the runner's RedisKeys and in plan/PROTOCOL.md; change all three together.
+        public static readonly TimeSpan RunTtl = TimeSpan.FromHours(6);
+        public static readonly TimeSpan SourceTtl = TimeSpan.FromHours(1);
+        public static readonly TimeSpan CancelTtl = TimeSpan.FromSeconds(120);
+
+        /// <summary>
+        /// How long a <see cref="DeadApplied"/> marker lives. Comfortably longer than the dead
+        /// stream's own retention window is not needed — only longer than the window in which an
+        /// unacknowledged entry can still be reclaimed, which is minutes.
+        /// </summary>
+        public static readonly TimeSpan DeadAppliedTtl = TimeSpan.FromHours(24);
+
+        // ---- wire status strings ------------------------------------------------
+        /// <summary>
+        /// The runner sends these exact strings. Kept as constants rather than parsed by
+        /// enum name so a rename of <see cref="Enums.RunStatus"/> cannot silently change the
+        /// wire contract.
+        /// </summary>
+        public static class Wire
+        {
+            public const string Queued = "QUEUED";
+            public const string Claimed = "CLAIMED";
+            public const string Starting = "STARTING";
+            public const string Running = "RUNNING";
+            public const string OutputProcessing = "OUTPUT_PROCESSING";
+            public const string Succeeded = "SUCCEEDED";
+            public const string Failed = "FAILED";
+            public const string TimedOut = "TIMED_OUT";
+            public const string Cancelled = "CANCELLED";
+            public const string ResourceExceeded = "RESOURCE_EXCEEDED";
+            public const string OutputFailed = "OUTPUT_FAILED";
+
+            public const string MemoryLimit = "MEMORY_LIMIT";
+            public const string PidLimit = "PID_LIMIT";
+            public const string UserRuntimeError = "USER_RUNTIME_ERROR";
+            public const string RuntimeStartFailed = "RUNTIME_START_FAILED";
+            public const string ResultTooLarge = "RESULT_TOO_LARGE";
+            public const string ResultNotSerializable = "RESULT_NOT_SERIALIZABLE";
+            public const string ImagePullFailed = "IMAGE_PULL_FAILED";
+            public const string TimedOutCode = "TIMED_OUT";
+            public const string SandboxStartFailed = "SANDBOX_START_FAILED";
+            public const string BuildFailedCode = "BUILD_FAILED";
+            public const string SecretUnresolved = "SECRET_UNRESOLVED";
+            public const string SecretStoreUnavailable = "SECRET_STORE_UNAVAILABLE";
+
+            /// <summary>
+            /// Not sent by the runner — determined here, by
+            /// <see cref="Consumers.FunctionDeadLetterConsumer"/>, for a job the runner moved to
+            /// <see cref="DeadStream"/> without ever executing it.
+            /// </summary>
+            public const string Undeliverable = "UNDELIVERABLE";
+
+            public const string BuildSucceeded = "SUCCEEDED";
+            public const string BuildFailed = "FAILED";
+        }
+    }
+}

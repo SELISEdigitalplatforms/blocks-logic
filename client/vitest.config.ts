@@ -54,6 +54,7 @@ export default defineConfig({
       ),
       "@blocks-ai": path.resolve(__dirname, "./app/cross-modules/ai"),
       "@blocks-workflow": path.resolve(__dirname, "./app/modules/workflow"),
+      "@blocks-functions": path.resolve(__dirname, "./app/modules/functions"),
     },
   },
   test: {

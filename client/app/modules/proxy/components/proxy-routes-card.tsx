@@ -29,7 +29,7 @@ import {
   SecretListItem,
 } from "../types";
 import {
-  buildVarToken,
+  deriveProxyMethods,
   keyCollisions,
   KeyCollision,
   parseRouteTemplate,
@@ -37,7 +37,7 @@ import {
 } from "../utils";
 import { KeyCollisionWarning } from "./key-collision-warning";
 import { ProxyTestPanel } from "./proxy-test-panel";
-import { VariableInsertMenu } from "@/components/variable-insert-menu";
+import { VariableTokenField, varNameRef } from "@/components/variable-picker";
 
 type VariablePickerProps = {
   variables?: SecretListItem[];
@@ -159,8 +159,13 @@ export const ProxyRoutesCard = ({
   const [testResponse, setTestResponse] = useState<ProxyTestResponse | null>(null);
   const [testSending, setTestSending] = useState(false);
 
-  const commit = (next: ProxyRoute[]) =>
+  // `methods` is derived from the endpoints and the schema checks each endpoint against it, so it
+  // has to land first: validating the new endpoints against the old list shows a stale
+  // "does not allow" error that nothing clears.
+  const commit = (next: ProxyRoute[]) => {
+    setValue("methods", deriveProxyMethods(next), { shouldDirty: true });
     setValue("routes", next, { shouldDirty: true, shouldValidate: true });
+  };
 
   const patch = (index: number, changes: Partial<ProxyRoute>) => {
     const list = [...(getValues("routes") ?? [])];
@@ -621,33 +626,21 @@ const RouteValueCell = ({
   variables,
   variablesLoading,
   variablesError,
-}: RouteValueCellProps) => {
-  const insert = (variableName: string) => {
-    patchRow(index, name, rowIndex, {
-      value: buildVarToken(variableName),
-    });
-  };
-
-  return (
-    <div className="min-w-0 flex-1">
-      <div className="flex items-center gap-1.5">
-        <Input
-          className="h-8 font-mono text-xs"
-          placeholder="Enter value"
-          value={row.value}
-          onChange={(event) => patchRow(index, name, rowIndex, { value: event.target.value })}
-        />
-        <VariableInsertMenu
-          variables={variables}
-          variablesLoading={variablesLoading}
-          variablesError={variablesError}
-          onPick={insert}
-          ariaLabel={`Insert a configuration variable into ${label.toLowerCase()} value`}
-        />
-      </div>
-    </div>
-  );
-};
+}: RouteValueCellProps) => (
+  <div className="min-w-0 flex-1">
+    <VariableTokenField
+      value={row.value ?? ""}
+      onChange={(next) => patchRow(index, name, rowIndex, { value: next })}
+      codec={varNameRef}
+      ariaLabel={`${label} value`}
+      placeholder="Enter value"
+      className="h-8 font-mono text-xs"
+      variables={variables}
+      isLoading={variablesLoading}
+      isError={variablesError}
+    />
+  </div>
+);
 
 /** One key/value override slot: a switch that says what on and off mean, then the rows. */
 const OverrideRows = ({

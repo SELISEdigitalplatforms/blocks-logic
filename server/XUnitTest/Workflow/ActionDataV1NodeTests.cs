@@ -56,6 +56,31 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
+        public async Task GetData_with_no_input_items_does_not_call_the_gateway()
+        {
+            TestBlocksContext.Clear();
+
+            var handler = new StubHandler(HttpStatusCode.OK, """{"data":{}}""");
+            var factory = new Mock<IHttpClientFactory>();
+            factory.Setup(f => f.CreateClient(It.IsAny<string>()))
+                .Returns(() => new HttpClient(handler, disposeHandler: false));
+
+            var node = new ActionDataV1Node(
+                factory.Object,
+                new Mock<IClientCredentialTokenService>().Object,
+                new Mock<IWorkflowAuthService>().Object,
+                new ConfigurationBuilder().Build(),
+                NullLogger<ActionDataV1Node>.Instance);
+
+            var result = await node.RunAsync(Context(clientCredential: false, withInput: false));
+
+            result.IsSuccess.Should().BeTrue();
+            result.OutputItems.Should().BeEmpty();
+            handler.Request.Should().BeNull();
+            factory.Verify(f => f.CreateClient(It.IsAny<string>()), Times.Never);
+        }
+
+        [Fact]
         public async Task Gateway_request_sets_x_blocks_key_from_context_without_client_credential()
         {
             TestBlocksContext.Clear();
@@ -104,7 +129,7 @@ namespace XUnitTest.Workflow
                 handler.Request.Headers.Authorization?.ToString());
         }
 
-        private static NodeExecutionContext Context(bool clientCredential)
+        private static NodeExecutionContext Context(bool clientCredential, bool withInput = true)
         {
             var parameters = new BsonDocument
             {
@@ -138,8 +163,10 @@ namespace XUnitTest.Workflow
                 NodeId = "data-action",
                 TenantId = ContextTenantId,
                 Parameters = parameters,
-                InputItems = new List<WorkflowItemExecutionEntity> { item },
-                IterationCount = 1,
+                InputItems = withInput
+                    ? new List<WorkflowItemExecutionEntity> { item }
+                    : new List<WorkflowItemExecutionEntity>(),
+                IterationCount = withInput ? 1 : 0,
                 WorkflowContext = new BsonDocument(),
             };
         }

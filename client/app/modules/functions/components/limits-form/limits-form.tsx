@@ -1,0 +1,197 @@
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui-kits/select/select";
+import { Input } from "@/components/ui-kits/input/input";
+import { Label } from "@/components/ui-kits/label/label";
+import { cn } from "@/lib/utils";
+import { useGetLimitsOptions } from "../../hooks/use-functions";
+import {
+  DEFAULT_LIMITS_OPTIONS,
+  HARD_CAPS,
+  MEMORY_MB_OPTIONS,
+  TIMEOUT_SECONDS_OPTIONS,
+} from "../../constants/limits.constant";
+import { IFunctionLimits } from "../../types/function.types";
+
+type LimitsFormProps = {
+  value: IFunctionLimits;
+  onChange: (value: IFunctionLimits) => void;
+};
+
+/**
+ * Steps, not free numbers: the design offers the values the sandbox honours and marks the ceiling.
+ * A value already stored outside the list (an older function, or a ceiling that has since moved) is
+ * kept as an extra option so opening this tab never silently rewrites it.
+ */
+const buildOptions = (
+  steps: readonly number[],
+  ceiling: number,
+  current: number,
+  suffix: string,
+) => {
+  const values = Array.from(new Set([...steps.filter((step) => step <= ceiling), current])).sort(
+    (a, b) => a - b,
+  );
+  return values.map((option) => ({
+    value: String(option),
+    label: `${option}${suffix}${option === ceiling ? " — max" : ""}`,
+  }));
+};
+
+/**
+ * Keeps the typed value inside the platform range. An empty field reads as `NaN` here rather than
+ * `Number("")`'s 0, so clearing it falls back to the minimum instead of saving a zero concurrency.
+ */
+const clampConcurrency = (
+  raw: string,
+  ceilings: { minConcurrency: number; maxConcurrency: number },
+) => {
+  const parsed = Number.parseInt(raw, 10);
+  if (Number.isNaN(parsed)) return ceilings.minConcurrency;
+  return Math.min(Math.max(parsed, ceilings.minConcurrency), ceilings.maxConcurrency);
+};
+
+export const LimitsForm = ({ value, onChange }: LimitsFormProps) => {
+  const { data: options } = useGetLimitsOptions();
+  const ceilings = options ?? DEFAULT_LIMITS_OPTIONS;
+
+  const patch = (partial: Partial<IFunctionLimits>) => onChange({ ...value, ...partial });
+
+  const selects = [
+    {
+      key: "memoryMb",
+      label: "Memory",
+      value: String(value.memoryMb),
+      options: buildOptions(MEMORY_MB_OPTIONS, ceilings.ceilingMemoryMb, value.memoryMb, " MB"),
+      onValueChange: (next: string) => patch({ memoryMb: Number(next) }),
+    },
+    {
+      key: "timeoutSeconds",
+      label: "Timeout",
+      value: String(value.timeoutSeconds),
+      options: buildOptions(
+        TIMEOUT_SECONDS_OPTIONS,
+        ceilings.ceilingTimeoutSeconds,
+        value.timeoutSeconds,
+        " s",
+      ),
+      onValueChange: (next: string) => patch({ timeoutSeconds: Number(next) }),
+    },
+  ];
+
+  const isConcurrencyValid =
+    value.concurrency >= ceilings.minConcurrency && value.concurrency <= ceilings.maxConcurrency;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {selects.map((select) => (
+          <div key={select.key} className="flex min-w-0 flex-col gap-1.5">
+            <Label className="text-xs font-semibold">{select.label}</Label>
+            <Select value={select.value} onValueChange={select.onValueChange}>
+              <SelectTrigger className="h-9 text-sm" aria-label={select.label}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {select.options.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ))}
+
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <Label className="text-xs font-semibold" htmlFor="fn-concurrency">
+            Concurrent runs
+          </Label>
+          <Input
+            id="fn-concurrency"
+            type="number"
+            className="h-9"
+            min={ceilings.minConcurrency}
+            max={ceilings.maxConcurrency}
+            aria-invalid={!isConcurrencyValid}
+            aria-describedby="fn-concurrency-hint"
+            value={value.concurrency}
+            // `min`/`max` are only a hint to the spinner — typing 0, 99 or clearing the field
+            // (Number("") is 0) all reach the store, and nothing downstream re-checks before the
+            // deploy. Clamp on the way in so an out-of-range value is never what gets saved.
+            onChange={(e) => patch({ concurrency: clampConcurrency(e.target.value, ceilings) })}
+          />
+          <p
+            id="fn-concurrency-hint"
+            className={cn("text-xs", isConcurrencyValid ? "text-medium-emphasis" : "text-error")}
+          >
+            {isConcurrencyValid
+              ? "Extra runs wait in the queue; nothing is rejected."
+              : `Choose between ${ceilings.minConcurrency} and ${ceilings.maxConcurrency}.`}
+          </p>
+        </div>
+      </div>
+
+      {/* Every ceiling the dropdowns are capped at, named. The timeout was the one left unstated,
+          which made "90 s — max" in the list the only place it appeared. Both read from the
+          server's GetLimits, so raising a ceiling shows up here without a client change. CPU is
+          not among them any more — it is fixed, and says so in the hard caps below. */}
+      <p className="text-xs text-medium-emphasis">
+        Enforced per invocation by the sandbox. Ceiling is {ceilings.ceilingMemoryMb} MB and{" "}
+        {ceilings.ceilingTimeoutSeconds} s.
+      </p>
+
+      <div className="flex flex-wrap gap-2 border-t pt-3">
+        {HARD_CAPS.map((cap) => (
+          <span
+            key={cap.label}
+            className="flex items-center gap-1.5 rounded-md bg-surface-app px-2.5 py-1 text-xs text-medium-emphasis"
+          >
+            {cap.label} <b className="font-semibold text-foreground">{cap.value}</b>
+          </span>
+        ))}
+      </div>
+
+      {ceilings.showRateLimits && (
+        <div className="grid gap-3 border-t pt-3 sm:grid-cols-2">
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs font-semibold" htmlFor="fn-requests-per-minute">
+              Requests / minute
+            </Label>
+            <Input
+              id="fn-requests-per-minute"
+              type="number"
+              className="h-9"
+              min={0}
+              placeholder="Unlimited"
+              value={value.requestsPerMinute ?? ""}
+              onChange={(e) =>
+                patch({ requestsPerMinute: e.target.value ? Number(e.target.value) : null })
+              }
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs font-semibold" htmlFor="fn-requests-per-day">
+              Requests / day
+            </Label>
+            <Input
+              id="fn-requests-per-day"
+              type="number"
+              className="h-9"
+              min={0}
+              placeholder="Unlimited"
+              value={value.requestsPerDay ?? ""}
+              onChange={(e) =>
+                patch({ requestsPerDay: e.target.value ? Number(e.target.value) : null })
+              }
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

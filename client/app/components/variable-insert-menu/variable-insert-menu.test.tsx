@@ -21,8 +21,8 @@ describe("VariableInsertMenu", () => {
     );
 
     await user.click(trigger());
-    expect(screen.getByRole("menuitem", { name: "sendgrid-api-key" })).toBeTruthy();
-    await user.click(screen.getByRole("menuitem", { name: "stripe-api-key" }));
+    expect(screen.getByRole("option", { name: /sendgrid-api-key/ })).toBeTruthy();
+    await user.click(screen.getByRole("option", { name: /stripe-api-key/ }));
 
     expect(onPick).toHaveBeenCalledWith("stripe-api-key");
   });

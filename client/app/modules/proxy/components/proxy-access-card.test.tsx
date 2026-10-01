@@ -46,7 +46,9 @@ describe("ProxyAccessCard", () => {
   it("defaults to Blocks token with the restriction panel and the no-restriction footer", () => {
     renderWithProviders(<Harness />);
 
-    expect(screen.getByRole("radio", { name: "Blocks token" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("radio", { name: "Blocks token" }).getAttribute("aria-checked")).toBe(
+      "true",
+    );
     expect(screen.queryByTestId("access-restrictions")).not.toBeNull();
     expect(summary()).toMatch(/No extra restriction/);
   });

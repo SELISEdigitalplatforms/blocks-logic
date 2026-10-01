@@ -72,9 +72,9 @@ describe("workflowService", () => {
 
   it("reads executions and a single execution", async () => {
     await workflowService.getWorkflowExecutions({ workflowId: "w1" } as never);
-    expect(http.logicService.get).toHaveBeenCalledWith(
-      expect.stringContaining("WorkflowId=w1"),
-    );
+    const legacyUrl = http.logicService.get.mock.calls.at(-1)?.[0] as string;
+    expect(legacyUrl).toContain("WorkflowId=w1");
+    expect(legacyUrl).not.toContain("PageSize");
     await workflowService.getWorkflowExecutionById({
       executionId: "e1",
     } as never);
@@ -88,6 +88,31 @@ describe("workflowService", () => {
     expect(http.logicService.get).toHaveBeenCalledWith(
       expect.stringMatching(/\/Workflow\/GetExecutionLogs\?ExecutionId=e\+1$/),
     );
+  });
+
+  it("sends paging cursors only when they are set", async () => {
+    await workflowService.getWorkflowExecutions({
+      workflowId: "w1",
+      pageSize: 20,
+      beforeId: "old",
+    });
+    const olderUrl = http.logicService.get.mock.calls.at(-1)?.[0] as string;
+    expect(olderUrl).toContain("WorkflowId=w1");
+    expect(olderUrl).toContain("PageSize=20");
+    expect(olderUrl).toContain("BeforeId=old");
+    expect(olderUrl).not.toContain("AfterId");
+
+    await workflowService.getWorkflowExecutions({
+      workflowId: "w1",
+      pageSize: 20,
+      afterId: "head",
+      refreshIds: ["a", "b"],
+    });
+    const newerUrl = http.logicService.get.mock.calls.at(-1)?.[0] as string;
+    expect(newerUrl).toContain("AfterId=head");
+    expect(newerUrl).toContain("RefreshIds=a");
+    expect(newerUrl).toContain("RefreshIds=b");
+    expect(newerUrl).not.toContain("BeforeId");
   });
 
   it("covers version, publish, restore and listener endpoints", async () => {

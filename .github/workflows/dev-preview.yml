@@ -39,7 +39,7 @@ jobs:
       id-token: write
     steps:
       - name: Checkout PR head
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
@@ -62,7 +62,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Azure login
-        uses: azure/login@v2
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
           creds: ${{ secrets.AZURE_AKS_BLOCKS_CREDENTIALS }}
 
@@ -76,13 +76,13 @@ jobs:
             .
 
       - name: Get AKS context
-        uses: azure/aks-set-context@v4
+        uses: azure/aks-set-context@883bdc8d8d1d0fd87e66cc4ba6f0b618f9eb5281 # v5.0.1
         with:
           resource-group: ${{ secrets.ClUSTER_AKS_BLOCKS_RESOURCE_GROUP }}
           cluster-name: ${{ env.CLUSTER_NAME }}
 
       - name: Setup kubelogin
-        uses: azure/use-kubelogin@v1
+        uses: azure/use-kubelogin@0ce7c36141aa27d4934872cf00b0120804c98a29 # v1.3
         with:
           kubelogin-version: v0.0.24
 
@@ -90,10 +90,10 @@ jobs:
         run: kubelogin convert-kubeconfig -l azurecli
 
       - name: Setup Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
 
       - name: Checkout GitOps Helm repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ env.HELM_REPO }}
           token: ${{ secrets.SELISE_GITHUB_PAT }}
@@ -132,7 +132,7 @@ jobs:
           kubectl rollout status deployment "${IAM_DEPLOYMENT}" -n "${NAMESPACE}" --timeout=120s
 
       - name: Comment preview URL on PR
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -179,18 +179,18 @@ jobs:
           echo "pr=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
 
       - name: Azure login
-        uses: azure/login@v2
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
           creds: ${{ secrets.AZURE_AKS_BLOCKS_CREDENTIALS }}
 
       - name: Get AKS context
-        uses: azure/aks-set-context@v4
+        uses: azure/aks-set-context@883bdc8d8d1d0fd87e66cc4ba6f0b618f9eb5281 # v5.0.1
         with:
           resource-group: ${{ secrets.ClUSTER_AKS_BLOCKS_RESOURCE_GROUP }}
           cluster-name: ${{ env.CLUSTER_NAME }}
 
       - name: Setup kubelogin
-        uses: azure/use-kubelogin@v1
+        uses: azure/use-kubelogin@0ce7c36141aa27d4934872cf00b0120804c98a29 # v1.3
         with:
           kubelogin-version: v0.0.24
 
@@ -198,7 +198,7 @@ jobs:
         run: kubelogin convert-kubeconfig -l azurecli
 
       - name: Setup Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
 
       - name: Uninstall preview release
         run: helm uninstall "${{ steps.vars.outputs.release }}" --namespace "${NAMESPACE}" --ignore-not-found
@@ -210,7 +210,7 @@ jobs:
             -d "{\"secret\":\"${{ secrets.PREVIEW_REGISTRAR_SECRET }}\",\"repoName\":\"blocks-logic\",\"prNumber\":${{ steps.vars.outputs.pr }}}"
 
       - name: Comment teardown on PR
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |

@@ -41,9 +41,6 @@ type Props = {
   onCancel?: () => void;
 };
 
-const sameMethods = (a: readonly string[], b: readonly string[]) =>
-  a.length === b.length && a.every((method, i) => method === b[i]);
-
 /**
  * A proxy is a Connection to a vendor exposing one or more Endpoints. The Connection holds what is
  * genuinely shared — the base URL and the credential — and every per-call setting lives on the
@@ -82,19 +79,9 @@ export const ProxyForm = ({
 
   const name = useWatch({ control: form.control, name: "name" });
   const upstreamUrl = useWatch({ control: form.control, name: "upstreamUrl" }) ?? "";
-  const watchedRoutes = useWatch({ control: form.control, name: "routes" }) as
-    ProxyRoute[] | undefined;
   const selectedProject = useProjectStore().selectedProject;
   const slug = slugifyProxyName(name);
   const clientUrlFor = (routePath: string) => getProxyClientUrl(selectedProject, slug, routePath);
-
-  // Keep the derived method list in step with the endpoints, so validation and the payload agree.
-  useEffect(() => {
-    const derived = deriveProxyMethods(watchedRoutes ?? []);
-    if (!sameMethods(form.getValues("methods") ?? [], derived)) {
-      form.setValue("methods", derived, { shouldDirty: true });
-    }
-  }, [form, watchedRoutes]);
 
   /** The current form state in the shape the API and the Test endpoint expect. */
   const toApiValues = (values: ProxyFormValues): ProxyFormValues => {

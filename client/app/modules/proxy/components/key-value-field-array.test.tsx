@@ -12,6 +12,11 @@ const VARIABLES: SecretListItem[] = [
   { id: "s-2", name: "sendgrid-api-key", type: "both", tags: [] },
 ];
 
+const TAGGED: SecretListItem[] = [
+  { id: "s-1", name: "stripe-api-key", tags: ["payments"] },
+  { id: "s-2", name: "sendgrid-api-key", tags: ["mail"] },
+];
+
 type PickerProps = {
   variables?: SecretListItem[];
   variablesLoading?: boolean;
@@ -159,11 +164,11 @@ describe("KeyValueFieldArray", () => {
       await user.type(value, "Bearer ");
 
       await user.click(trigger());
-      await user.click(screen.getByRole("menuitem", { name: "stripe-api-key" }));
+      await user.click(screen.getByRole("option", { name: /stripe-api-key/ }));
 
-      expect(value.value).toBe("{{$VAR.stripe-api-key}}");
-      // no badge under the input: the token itself is the indicator
-      expect(screen.queryByText("variable")).toBeNull();
+      expect(value.value).toBe("Bearer {{$VAR.stripe-api-key}}");
+      // the value now reads as a variable
+      expect(screen.getByText(/uses a variable/i)).toBeTruthy();
     });
 
     it("offers only the variable names passed in", async () => {
@@ -172,9 +177,46 @@ describe("KeyValueFieldArray", () => {
 
       await user.click(trigger());
 
-      expect(screen.getByRole("menuitem", { name: "stripe-api-key" })).toBeTruthy();
-      expect(screen.getByRole("menuitem", { name: "sendgrid-api-key" })).toBeTruthy();
-      expect(screen.queryByRole("menuitem", { name: "internal-only" })).toBeNull();
+      expect(screen.getByRole("option", { name: /stripe-api-key/ })).toBeTruthy();
+      expect(screen.getByRole("option", { name: /sendgrid-api-key/ })).toBeTruthy();
+      expect(screen.queryByRole("option", { name: /internal-only/ })).toBeNull();
+    });
+
+    it("searches by name", async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<PickerHarness variables={VARIABLES} />);
+
+      await user.click(trigger());
+      await user.type(screen.getByLabelText("Search variables"), "sendgrid");
+
+      expect(screen.getAllByRole("option")).toHaveLength(1);
+      expect(screen.getByRole("option", { name: /sendgrid-api-key/ })).toBeTruthy();
+    });
+
+    it("filters by tag, and inserts the token for the row that survives", async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<PickerHarness variables={TAGGED} />);
+
+      const value = screen.getByPlaceholderText("Enter value") as HTMLInputElement;
+
+      await user.click(trigger());
+      await user.click(screen.getByRole("button", { name: "mail" }));
+
+      expect(screen.getAllByRole("option")).toHaveLength(1);
+
+      await user.click(screen.getByRole("option", { name: /sendgrid-api-key/ }));
+
+      // Proxy's token is built from the name, unlike Functions' id-based one.
+      expect(value.value).toBe("{{$VAR.sendgrid-api-key}}");
+    });
+
+    it("offers no tag filter when nothing is tagged", async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<PickerHarness variables={VARIABLES} />);
+
+      await user.click(trigger());
+
+      expect(screen.queryByRole("group", { name: "Filter by tag" })).toBeNull();
     });
 
     it("disables the trigger while loading", () => {

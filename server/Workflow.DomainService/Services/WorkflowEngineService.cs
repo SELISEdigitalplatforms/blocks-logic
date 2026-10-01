@@ -295,24 +295,26 @@ namespace Workflow.DomainService.Services
         }
 
         /// <summary>
-        /// Checks if all parent nodes are completed
+        /// A node is ready when every incoming parent has finished, or cannot still run.
+        /// An untaken If branch never starts, so it must not block a join.
         /// </summary>
         private bool IsReadyToExecuteNode(WorkflowExecutionEntity execution, string nodeId)
         {
-            var incomingEdges = execution.WorkflowSnapshot.Edges
-                .Where(e => e.Target == nodeId)
-                .ToList();
-
-            // No incoming edges means it's a start node or independent node
-            if (incomingEdges.Count == 0)
+            var incomingCount = execution.WorkflowSnapshot.Edges.Count(e => e.Target == nodeId);
+            if (incomingCount == 0)
             {
                 _logger.LogInformation("Node {NodeId} has no incoming edges, ready to execute.", nodeId);
-                return true;
             }
-            _logger.LogInformation("Node {NodeId} has {EdgeCount} incoming edges, checking parent node statuses.", nodeId, incomingEdges.Count);
-            return incomingEdges.All(edge =>
-                execution.NodeExecutions.Any(ne =>
-                    ne.NodeId == edge.Source && ne.Status == NodeExecutionStatus.Completed));
+            else
+            {
+                _logger.LogInformation("Node {NodeId} has {EdgeCount} incoming edges, checking parent node statuses.", nodeId, incomingCount);
+            }
+
+            return WorkflowBranchRouting.IsReady(
+                nodeId,
+                execution.WorkflowSnapshot.Edges,
+                execution.NodeExecutions,
+                execution.ActiveNodeIds);
         }
 
         /// <summary>How many of a node's incoming edges already have a completed source node, out of all of them.</summary>
@@ -451,7 +453,7 @@ namespace Workflow.DomainService.Services
 
         private static string ResolveEdgeBranch(string? sourceHandle)
         {
-            return string.IsNullOrWhiteSpace(sourceHandle) ? "source" : sourceHandle;
+            return WorkflowBranchRouting.BranchKey(sourceHandle);
         }
 
         /// <summary>
@@ -594,12 +596,10 @@ namespace Workflow.DomainService.Services
                 return [];
             }
 
-            // Determine next nodes
-            var nextNodeIds = execution.WorkflowSnapshot.Edges
-                .Where(e => e.Source == node.Id)
-                .Select(e => e.Target)
-                .Distinct()
-                .ToList();
+            // Only edges whose branch carried items. An If output of if-false does not start the if-true child.
+            var nextNodeIds = WorkflowBranchRouting.TakenTargets(
+                execution.WorkflowSnapshot.Edges.Where(e => e.Source == node.Id),
+                nodeExecution.OutputCountsByBranch);
 
             // Atomically update this NodeExecution to Completed in DB
             await _workflowExecutionRepository.AtomicUpdateNodeExecutionCompletedAsync(

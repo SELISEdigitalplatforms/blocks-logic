@@ -427,6 +427,29 @@ namespace XUnitTest.Controllers
         }
 
         [Fact]
+        public async Task GetExecutions_InvalidPageSize_ReturnsBadRequest()
+        {
+            _executionService
+                .Setup(s => s.GetExecutionsByWorkflowIdAsync("tenant-abc", It.IsAny<WorkflowExecutionsGetRequestDto>()))
+                .ReturnsAsync(new WorkflowExecutionsGetResponseDto
+                {
+                    HttpStatus = StatusCodes.Status400BadRequest,
+                    Data = [],
+                    TotalCount = 0,
+                    Errors = new Dictionary<string, string> { { "Message", "PageSize must be between 1 and 100." } },
+                });
+
+            var result = await _controller.GetExecutions(new WorkflowExecutionsGetRequestDto
+            {
+                WorkflowId = "wf",
+                PageSize = 0,
+            });
+
+            var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+            objectResult.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        }
+
+        [Fact]
         public async Task GetExecution_ReturnsOk()
         {
             _executionService.Setup(s => s.GetExecutionByIdAsync("tenant-abc", It.IsAny<WorkflowExecutionGetRequestDto>()))

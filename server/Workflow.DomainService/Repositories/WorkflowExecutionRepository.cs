@@ -1,6 +1,7 @@
 using Blocks.Genesis;
 using Workflow.DomainService.Enums;
 using Workflow.DomainService.Entities;
+using Workflow.DomainService.Services;
 using Microsoft.Extensions.Configuration;
 using MongoDB.Bson;
 using MongoDB.Driver;
@@ -13,6 +14,31 @@ namespace Workflow.DomainService.Repositories
     {
         private readonly IDbContextProvider _dbContextProvider;
         private const string _collectionName = "WorkflowExecutions";
+        private const string ListIndexName = "ix_workflowexec_workflow_started_id";
+        private readonly HashSet<string> _indexedTenants = new(StringComparer.Ordinal);
+        private readonly Lock _indexGate = new();
+
+        private static readonly ProjectionDefinition<WorkflowExecutionEntity> ListProjection =
+            Builders<WorkflowExecutionEntity>.Projection
+                .Include(e => e.Id)
+                .Include(e => e.WorkflowId)
+                .Include(e => e.WorkflowName)
+                .Include(e => e.Status)
+                .Include(e => e.ExecutionMode)
+                .Include(e => e.StartedAt)
+                .Include(e => e.FinishedAt)
+                .Include(e => e.ErrorMessage)
+                .Include(e => e.AttemptNumber);
+
+        private static readonly SortDefinition<WorkflowExecutionEntity> NewestFirst =
+            Builders<WorkflowExecutionEntity>.Sort
+                .Descending(e => e.StartedAt)
+                .Descending(e => e.Id);
+
+        private static readonly SortDefinition<WorkflowExecutionEntity> OldestFirst =
+            Builders<WorkflowExecutionEntity>.Sort
+                .Ascending(e => e.StartedAt)
+                .Ascending(e => e.Id);
 
         public WorkflowExecutionRepository(IDbContextProvider dbContextProvider)
         {
@@ -35,6 +61,7 @@ namespace Workflow.DomainService.Repositories
                 throw new InvalidOperationException("TenantId is required for execution");
 
             var collection = GetCollection(execution.TenantId);
+            await EnsureIndexesAsync(execution.TenantId);
             await collection.InsertOneAsync(execution);
             return execution;
         }
@@ -57,37 +84,89 @@ namespace Workflow.DomainService.Repositories
         }
 
         /// <summary>
-        /// Atomically removes the completed node from ActiveNodeIds and adds next nodes.
-        /// Uses MongoDB $pull and $addToSet to avoid race conditions in parallel execution.
-        /// Returns true if ActiveNodeIds is empty after the update (workflow complete).
+        /// Removes the finished node, adds its children, and marks the execution Completed
+        /// when the active set is empty. One document update, so a parallel leaf cannot
+        /// observe the empty set before the children are added.
+        /// Returns true only when this update is the one that moves a non-failed execution to Completed.
         /// </summary>
         public async Task<bool> AtomicCompleteNodeAsync(string executionId, string tenantId, string completedNodeId, List<string> nextNodeIds)
         {
             var collection = GetCollection(tenantId);
             var filter = Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, executionId);
+            var update = Builders<WorkflowExecutionEntity>.Update.Pipeline(CompletionPipeline(completedNodeId, nextNodeIds));
+            var before = await collection.FindOneAndUpdateAsync(
+                filter,
+                update,
+                new FindOneAndUpdateOptions<WorkflowExecutionEntity> { ReturnDocument = ReturnDocument.Before });
 
-            // Step 1: Pull completed node
-            var pullUpdate = Builders<WorkflowExecutionEntity>.Update.Pull(e => e.ActiveNodeIds, completedNodeId);
-            await collection.UpdateOneAsync(filter, pullUpdate);
-
-            // Step 2: Add next nodes (only if not already present)
-            if (nextNodeIds.Any())
+            if (before == null)
             {
-                var addUpdate = Builders<WorkflowExecutionEntity>.Update.AddToSetEach(e => e.ActiveNodeIds, nextNodeIds);
-                await collection.UpdateOneAsync(filter, addUpdate);
+                return false;
             }
 
-            // Step 3: Check if ActiveNodeIds is now empty and mark complete atomically
-            var completeFilter = Builders<WorkflowExecutionEntity>.Filter.And(
-                Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, executionId),
-                Builders<WorkflowExecutionEntity>.Filter.Size(e => e.ActiveNodeIds, 0)
-            );
-            var completeUpdate = Builders<WorkflowExecutionEntity>.Update
-                .Set(e => e.Status, WorkflowExecutionStatus.Completed)
-                .Set(e => e.FinishedAt, DateTime.UtcNow);
+            return ActiveNodeCompletion.Apply(
+                before.ActiveNodeIds,
+                completedNodeId,
+                nextNodeIds,
+                before.Status).BecameComplete;
+        }
 
-            var result = await collection.UpdateOneAsync(completeFilter, completeUpdate);
-            return result.ModifiedCount > 0;
+        /// <summary>
+        /// Stored form of <see cref="ActiveNodeCompletion.Apply"/>. The second stage sees the
+        /// active set written by the first. FinishedAt changes only on the transition to Completed.
+        /// </summary>
+        private static PipelineDefinition<WorkflowExecutionEntity, WorkflowExecutionEntity> CompletionPipeline(
+            string completedNodeId,
+            IReadOnlyCollection<string>? nextNodeIds)
+        {
+            var nextIds = new BsonArray();
+            if (nextNodeIds != null)
+            {
+                foreach (var id in nextNodeIds)
+                {
+                    if (!string.IsNullOrWhiteSpace(id))
+                    {
+                        nextIds.Add(id);
+                    }
+                }
+            }
+
+            var stillActive = new BsonDocument("$setUnion", new BsonArray
+            {
+                new BsonDocument("$filter", new BsonDocument
+                {
+                    { "input", new BsonDocument("$ifNull", new BsonArray { "$ActiveNodeIds", new BsonArray() }) },
+                    { "as", "id" },
+                    { "cond", new BsonDocument("$and", new BsonArray
+                        {
+                            new BsonDocument("$ne", new BsonArray { "$$id", completedNodeId ?? "" }),
+                            new BsonDocument("$gt", new BsonArray
+                            {
+                                new BsonDocument("$strLenCP", new BsonDocument("$trim", new BsonDocument("input", new BsonDocument("$ifNull", new BsonArray { "$$id", "" })))),
+                                0
+                            })
+                        })
+                    }
+                }),
+                nextIds
+            });
+
+            var becomesComplete = new BsonDocument("$and", new BsonArray
+            {
+                new BsonDocument("$eq", new BsonArray { new BsonDocument("$size", "$ActiveNodeIds"), 0 }),
+                new BsonDocument("$ne", new BsonArray { "$Status", (int)WorkflowExecutionStatus.Failed }),
+                new BsonDocument("$ne", new BsonArray { "$Status", (int)WorkflowExecutionStatus.Completed })
+            });
+
+            return new EmptyPipelineDefinition<WorkflowExecutionEntity>()
+                .AppendStage<WorkflowExecutionEntity, WorkflowExecutionEntity, WorkflowExecutionEntity>(
+                    new BsonDocument("$set", new BsonDocument("ActiveNodeIds", stillActive)))
+                .AppendStage<WorkflowExecutionEntity, WorkflowExecutionEntity, WorkflowExecutionEntity>(
+                    new BsonDocument("$set", new BsonDocument
+                    {
+                        { "Status", new BsonDocument("$cond", new BsonArray { becomesComplete, (int)WorkflowExecutionStatus.Completed, "$Status" }) },
+                        { "FinishedAt", new BsonDocument("$cond", new BsonArray { becomesComplete, new BsonDateTime(DateTime.UtcNow), "$FinishedAt" }) }
+                    }));
         }
 
         /// <summary>
@@ -186,6 +265,111 @@ namespace Workflow.DomainService.Repositories
             return await collection.Find(filter)
                 .SortByDescending(e => e.StartedAt)
                 .ToListAsync();
+        }
+
+        public Task<List<WorkflowExecutionListRow>> GetPageAsync(string workflowId, string tenantId, int pageSize)
+        {
+            return QueryListAsync(tenantId, WorkflowFilter(workflowId), NewestFirst, pageSize);
+        }
+
+        public Task<List<WorkflowExecutionListRow>> GetOlderThanAsync(
+            string workflowId, string tenantId, DateTime startedAt, string id, int pageSize)
+        {
+            // Mirrors WorkflowExecutionListCursor.IsStrictlyOlder.
+            var builder = Builders<WorkflowExecutionEntity>.Filter;
+            var older = builder.Or(
+                builder.Lt(e => e.StartedAt, startedAt),
+                builder.And(
+                    builder.Eq(e => e.StartedAt, startedAt),
+                    builder.Lt(e => e.Id, id)));
+            return QueryListAsync(tenantId, WorkflowFilter(workflowId) & older, NewestFirst, pageSize);
+        }
+
+        public Task<List<WorkflowExecutionListRow>> GetNewerThanAsync(
+            string workflowId, string tenantId, DateTime startedAt, string id, int pageSize)
+        {
+            // Mirrors WorkflowExecutionListCursor.IsStrictlyNewer.
+            // Ascending + limit returns the contiguous next chunk, not the newest PageSize
+            // (which would skip runs when a burst is larger than the page).
+            var builder = Builders<WorkflowExecutionEntity>.Filter;
+            var newer = builder.Or(
+                builder.Gt(e => e.StartedAt, startedAt),
+                builder.And(
+                    builder.Eq(e => e.StartedAt, startedAt),
+                    builder.Gt(e => e.Id, id)));
+            return QueryListAsync(tenantId, WorkflowFilter(workflowId) & newer, OldestFirst, pageSize);
+        }
+
+        public async Task<long> CountByWorkflowIdAsync(string workflowId, string tenantId)
+        {
+            await EnsureIndexesAsync(tenantId);
+            return await GetCollection(tenantId).CountDocumentsAsync(WorkflowFilter(workflowId));
+        }
+
+        public async Task<List<WorkflowExecutionListRow>> GetListItemsByIdsAsync(
+            string workflowId, string tenantId, IReadOnlyCollection<string> ids)
+        {
+            if (ids.Count == 0)
+            {
+                return [];
+            }
+
+            await EnsureIndexesAsync(tenantId);
+            var builder = Builders<WorkflowExecutionEntity>.Filter;
+            var filter = WorkflowFilter(workflowId) & builder.In(e => e.Id, ids);
+            return await GetCollection(tenantId)
+                .Find(filter)
+                .Project<WorkflowExecutionListRow>(ListProjection)
+                .ToListAsync();
+        }
+
+        private async Task<List<WorkflowExecutionListRow>> QueryListAsync(
+            string tenantId,
+            FilterDefinition<WorkflowExecutionEntity> filter,
+            SortDefinition<WorkflowExecutionEntity> sort,
+            int pageSize)
+        {
+            await EnsureIndexesAsync(tenantId);
+            return await GetCollection(tenantId)
+                .Find(filter)
+                .Sort(sort)
+                .Limit(pageSize)
+                .Project<WorkflowExecutionListRow>(ListProjection)
+                .ToListAsync();
+        }
+
+        private static FilterDefinition<WorkflowExecutionEntity> WorkflowFilter(string workflowId) =>
+            Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.WorkflowId, workflowId);
+
+        private async Task EnsureIndexesAsync(string tenantId)
+        {
+            lock (_indexGate)
+            {
+                if (!_indexedTenants.Add(tenantId))
+                {
+                    return;
+                }
+            }
+
+            try
+            {
+                var keys = Builders<WorkflowExecutionEntity>.IndexKeys;
+                await GetCollection(tenantId).Indexes.CreateOneAsync(
+                    new CreateIndexModel<WorkflowExecutionEntity>(
+                        keys.Ascending(e => e.WorkflowId)
+                            .Descending(e => e.StartedAt)
+                            .Descending(e => e.Id),
+                        new CreateIndexOptions { Name = ListIndexName }));
+            }
+            catch
+            {
+                lock (_indexGate)
+                {
+                    _indexedTenants.Remove(tenantId);
+                }
+
+                throw;
+            }
         }
 
         /// <summary>

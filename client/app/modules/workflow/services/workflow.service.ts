@@ -83,9 +83,21 @@ export class WorkflowService {
   getWorkflowExecutions = (
     payload: IGetWorkflowExecutionsPayload,
   ): Promise<IGetWorkflowExecutionsResponse> => {
-    const params = new URLSearchParams({ 
-      WorkflowId: payload.workflowId 
+    const params = new URLSearchParams({
+      WorkflowId: payload.workflowId,
     });
+    if (payload.pageSize != null) {
+      params.set("PageSize", String(payload.pageSize));
+    }
+    if (payload.beforeId) {
+      params.set("BeforeId", payload.beforeId);
+    }
+    if (payload.afterId) {
+      params.set("AfterId", payload.afterId);
+    }
+    for (const id of payload.refreshIds ?? []) {
+      if (id) params.append("RefreshIds", id);
+    }
     return this.LogicHttpClient.get(`${WORKFLOW_ENDPOINTS.GET_EXECUTIONS}?${params.toString()}`);
   }
 

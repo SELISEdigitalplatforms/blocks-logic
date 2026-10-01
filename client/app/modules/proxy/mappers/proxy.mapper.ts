@@ -274,7 +274,9 @@ const trimSlashes = (value: string | null | undefined) => (value ?? "").replace(
  * that inherits it, so the distinction is preserved in both directions.
  */
 const toRouteOverride = (value: ProxyKeyValueDto[] | null | undefined): ProxyKeyValue[] | null =>
-  Array.isArray(value) ? value.map((row) => ({ key: row.key ?? "", value: row.value ?? "" })) : null;
+  Array.isArray(value)
+    ? value.map((row) => ({ key: row.key ?? "", value: row.value ?? "" }))
+    : null;
 
 const toRoutes = (value: ProxyRouteDto[] | null | undefined): ProxyRoute[] =>
   Array.isArray(value)
@@ -283,7 +285,8 @@ const toRoutes = (value: ProxyRouteDto[] | null | undefined): ProxyRoute[] =>
         .map((route) => ({
           method: route.method.toUpperCase() as ProxyMethod,
           path: trimSlashes(route.path),
-          upstreamPath: typeof route.upstreamPath === "string" ? trimSlashes(route.upstreamPath) : null,
+          upstreamPath:
+            typeof route.upstreamPath === "string" ? trimSlashes(route.upstreamPath) : null,
           headers: toRouteOverride(route.headers),
           query: toRouteOverride(route.query),
           bodyMerge: toRouteOverride(route.bodyMerge),
@@ -309,7 +312,8 @@ const toRouteInputs = (routes: ProxyRoute[] | undefined): ProxyRouteDto[] =>
     headers: route.headers ? compactKeyValues(route.headers) : null,
     query: route.query ? compactKeyValues(route.query) : null,
     bodyMerge: route.bodyMerge ? compactKeyValues(route.bodyMerge) : null,
-    responseMode: route.responseMode === "select" ? "Select" : route.responseMode === "all" ? "All" : null,
+    responseMode:
+      route.responseMode === "select" ? "Select" : route.responseMode === "all" ? "All" : null,
     responseInclude: route.responseInclude
       ? route.responseInclude.map((path) => path.trim()).filter((path) => path.length > 0)
       : null,

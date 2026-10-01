@@ -13,9 +13,9 @@ import {
   SelectValue,
 } from "@/components/ui-kits/select/select";
 import { ProxyCredentialRow, ProxyFormValues, ProxyKeyValue, SecretListItem } from "../types";
-import { buildVarToken, containsVarRef, KeyCollision, KeyKind, keyCollisions } from "../utils";
+import { KeyCollision, KeyKind, keyCollisions } from "../utils";
 import { KeyCollisionWarning } from "./key-collision-warning";
-import { VariableInsertMenu } from "@/components/variable-insert-menu";
+import { VariableTokenField, varNameRef } from "@/components/variable-picker";
 import { VariablesButton } from "./variables-button";
 
 type VariablePickerProps = {
@@ -42,8 +42,9 @@ type Props = VariablePickerProps & {
 };
 
 /**
- * The value cell for one key/value row: a free-text input plus a compact `{{$VAR.name}}` picker.
- * Selecting a variable replaces the value with its token; the user can also type the token by hand.
+ * The value cell for one key/value row: free text plus a `{{$VAR.name}}` picker, both from the
+ * shared variable field so Proxy, Functions and Workflow behave identically. The rows are threaded
+ * down from the form rather than fetched here, so one page load means one catalog request.
  */
 const ValueCell = ({
   control,
@@ -53,37 +54,29 @@ const ValueCell = ({
   variables,
   variablesLoading,
   variablesError,
-}: Pick<Props, "control" | "name" | "label"> & VariablePickerProps & { index: number }) => {
-  return (
-    <FormField
-      control={control}
-      name={`${name}.${index}.value`}
-      render={({ field: valueField }) => {
-        const insert = (variableName: string) => {
-          valueField.onChange(buildVarToken(variableName));
-        };
-
-        return (
-          <FormItem>
-            <div className="flex items-center gap-1.5">
-              <FormControl>
-                <Input placeholder="Enter value" className="font-mono text-xs" {...valueField} />
-              </FormControl>
-              <VariableInsertMenu
-                variables={variables}
-                variablesLoading={variablesLoading}
-                variablesError={variablesError}
-                onPick={insert}
-                ariaLabel={`Insert a configuration variable into ${label.toLowerCase()} value`}
-              />
-            </div>
-            <FormMessage />
-          </FormItem>
-        );
-      }}
-    />
-  );
-};
+}: Pick<Props, "control" | "name" | "label"> & VariablePickerProps & { index: number }) => (
+  <FormField
+    control={control}
+    name={`${name}.${index}.value`}
+    render={({ field: valueField }) => (
+      <FormItem>
+        <FormControl>
+          <VariableTokenField
+            value={valueField.value ?? ""}
+            onChange={valueField.onChange}
+            codec={varNameRef}
+            ariaLabel={`${label} value`}
+            placeholder="Enter value"
+            variables={variables}
+            isLoading={variablesLoading}
+            isError={variablesError}
+          />
+        </FormControl>
+        <FormMessage />
+      </FormItem>
+    )}
+  />
+);
 
 type Row = ProxyKeyValue & { sendAs?: ProxyCredentialRow["sendAs"] };
 
