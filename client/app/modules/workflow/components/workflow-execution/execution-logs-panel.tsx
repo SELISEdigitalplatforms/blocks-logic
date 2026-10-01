@@ -44,6 +44,7 @@ import {
 const SEARCH_DEBOUNCE_MS = 200;
 const PINNED_TO_BOTTOM_PX = 40;
 const logSkeletonClass = "bg-slate-200 dark:bg-muted";
+const logSkeletonKeys = Array.from({ length: 8 }, (_, row) => `execution-log-skeleton-${row + 1}`);
 
 /** Icons for the main stages only; every other (or unknown) stage renders without one. */
 const StageIcon = ({ stage }: { stage: string }) => {
@@ -62,6 +63,17 @@ const levelBorderClass: Record<ExecutionLogLevel, string> = {
   Error: "border-l-error",
 };
 
+const logEntryKey = (entry: ExecutionLogEntry) =>
+  [
+    entry.timestamp,
+    entry.source,
+    entry.level,
+    entry.stage,
+    entry.nodeId ?? "workflow",
+    entry.runIndex ?? "none",
+    entry.message,
+  ].join("|");
+
 export interface ExecutionLogsPanelProps {
   execution: WorkflowExecution;
   nodeExecutions: Pick<ExecutedNode, "nodeId" | "nodeName" | "runIndex">[];
@@ -70,18 +82,32 @@ export interface ExecutionLogsPanelProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const PanelMessage = ({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) => (
+const PanelMessage = ({
+  children,
+  action,
+}: {
+  children: React.ReactNode;
+  action?: React.ReactNode;
+}) => (
   <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-sm text-muted-foreground">
     {children}
     {action}
   </div>
 );
 
-export const ExecutionLogsPanel = ({ execution, nodeExecutions, open, onOpenChange }: ExecutionLogsPanelProps) => {
-  const { data: response, isLoading, isError, isFetching, refetch } = useGetWorkflowExecutionLogs(
-    { executionId: execution.id },
-    { enabled: open },
-  );
+export const ExecutionLogsPanel = ({
+  execution,
+  nodeExecutions,
+  open,
+  onOpenChange,
+}: ExecutionLogsPanelProps) => {
+  const {
+    data: response,
+    isLoading,
+    isError,
+    isFetching,
+    refetch,
+  } = useGetWorkflowExecutionLogs({ executionId: execution.id }, { enabled: open });
   const data = response?.data;
   const logs = useMemo(() => data?.logs ?? [], [data?.logs]);
   const live = !!data?.mayStillArrive;
@@ -97,9 +123,15 @@ export const ExecutionLogsPanel = ({ execution, nodeExecutions, open, onOpenChan
   }, [searchInput]);
 
   const filtersAreDefault = isDefaultExecutionLogFilters({ levels, node, search: searchInput });
-  const filtered = useMemo(() => filterExecutionLogs(logs, { levels, node, search }), [logs, levels, node, search]);
+  const filtered = useMemo(
+    () => filterExecutionLogs(logs, { levels, node, search }),
+    [logs, levels, node, search],
+  );
   const levelCounts = useMemo(() => countByLevel(logs), [logs]);
-  const nodeOptions = useMemo(() => buildNodeFilterOptions(logs, nodeExecutions), [logs, nodeExecutions]);
+  const nodeOptions = useMemo(
+    () => buildNodeFilterOptions(logs, nodeExecutions),
+    [logs, nodeExecutions],
+  );
 
   const clearFilters = () => {
     setLevels(DEFAULT_EXECUTION_LOG_FILTERS.levels);
@@ -164,7 +196,9 @@ export const ExecutionLogsPanel = ({ execution, nodeExecutions, open, onOpenChan
 
   const status = getStatusConfig(execution.status);
   const retentionDays =
-    data?.retentionDays && data.retentionDays > 0 ? data.retentionDays : EXECUTION_LOG_RETENTION_DAYS;
+    data?.retentionDays && data.retentionDays > 0
+      ? data.retentionDays
+      : EXECUTION_LOG_RETENTION_DAYS;
   const retry = (
     <Button variant="outline" size="sm" onClick={() => refetch()}>
       Retry
@@ -174,11 +208,11 @@ export const ExecutionLogsPanel = ({ execution, nodeExecutions, open, onOpenChan
   const renderBody = () => {
     if (isLoading) {
       return (
-        <div className="space-y-2 p-4" role="status" aria-label="Loading execution logs">
-          {Array.from({ length: 8 }).map((_, index) => (
-            <Skeleton key={index} className={cn("h-6 w-full", logSkeletonClass)} />
+        <output className="block space-y-2 p-4" aria-label="Loading execution logs">
+          {logSkeletonKeys.map((key) => (
+            <Skeleton key={key} className={cn("h-6 w-full", logSkeletonClass)} />
           ))}
-        </div>
+        </output>
       );
     }
     if (isError || !data) {
@@ -187,7 +221,8 @@ export const ExecutionLogsPanel = ({ execution, nodeExecutions, open, onOpenChan
     if (data.availability === ExecutionLogsAvailability.NotRecorded) {
       return (
         <PanelMessage>
-          Logs aren&apos;t available for this execution. It ran before execution logging was turned on.
+          Logs aren&apos;t available for this execution. It ran before execution logging was turned
+          on.
         </PanelMessage>
       );
     }
@@ -200,13 +235,17 @@ export const ExecutionLogsPanel = ({ execution, nodeExecutions, open, onOpenChan
       );
     }
     if (data.availability === ExecutionLogsAvailability.SourceUnavailable) {
-      return <PanelMessage action={retry}>Logs can&apos;t be loaded right now. Try again later.</PanelMessage>;
+      return (
+        <PanelMessage action={retry}>
+          Logs can&apos;t be loaded right now. Try again later.
+        </PanelMessage>
+      );
     }
     if (logs.length === 0) {
       return live ? (
         <PanelMessage>
           <Loader2 className="h-6 w-6 animate-spin text-primary" aria-hidden />
-          <p>Waiting for logs… They can take a few seconds to appear.</p>
+          <p>Waiting for logs... They can take a few seconds to appear.</p>
         </PanelMessage>
       ) : (
         <PanelMessage>No logs were recorded for this execution.</PanelMessage>
@@ -235,8 +274,8 @@ export const ExecutionLogsPanel = ({ execution, nodeExecutions, open, onOpenChan
           className="h-full overflow-y-auto"
           data-testid="execution-logs-list"
         >
-          {filtered.map((entry, index) => (
-            <LogRow key={`${entry.timestamp}-${index}`} entry={entry} onNodeClick={setNode} />
+          {filtered.map((entry) => (
+            <LogRow key={logEntryKey(entry)} entry={entry} onNodeClick={setNode} />
           ))}
         </div>
         {hasNewBelow && (
@@ -252,7 +291,11 @@ export const ExecutionLogsPanel = ({ execution, nodeExecutions, open, onOpenChan
     );
   };
 
-  const showFilters = !isLoading && !isError && data?.availability === ExecutionLogsAvailability.Available && logs.length > 0;
+  const showFilters =
+    !isLoading &&
+    !isError &&
+    data?.availability === ExecutionLogsAvailability.Available &&
+    logs.length > 0;
 
   return (
     <Sheet open={open} modal={false} onOpenChange={onOpenChange}>
@@ -274,7 +317,7 @@ export const ExecutionLogsPanel = ({ execution, nodeExecutions, open, onOpenChan
             {live && (
               <span className="flex items-center gap-1.5 text-xs font-medium text-success">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-success" />
-                Live
+                <span>Live</span>
               </span>
             )}
           </div>
@@ -313,7 +356,9 @@ export const ExecutionLogsPanel = ({ execution, nodeExecutions, open, onOpenChan
                     onClick={() => toggleLevel(level)}
                     className={cn(
                       "rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors",
-                      active ? "border-primary bg-primary/10 text-foreground" : "text-muted-foreground",
+                      active
+                        ? "border-primary bg-primary/10 text-foreground"
+                        : "text-muted-foreground",
                     )}
                   >
                     {EXECUTION_LOG_LEVEL_LABELS[level]} {levelCounts[level]}
@@ -399,31 +444,50 @@ const LogRow = ({
   onNodeClick: (value: string) => void;
 }) => {
   const level = normalizeLevel(entry.level);
+  const nodeFilter = entry.nodeId ? nodeFilterValue(entry.nodeId) : null;
   return (
     <div
-      className={cn("flex items-start gap-2 border-b border-l-[3px] px-3 py-1.5 text-xs", levelBorderClass[level])}
+      className={cn(
+        "flex items-start gap-2 border-b border-l-[3px] px-3 py-1.5 text-xs",
+        levelBorderClass[level],
+      )}
       data-testid="execution-log-row"
     >
-      <time className="shrink-0 font-mono text-muted-foreground" dateTime={entry.timestamp} title={entry.timestamp}>
+      <time
+        className="shrink-0 font-mono text-muted-foreground"
+        dateTime={entry.timestamp}
+        title={entry.timestamp}
+      >
         {formatLogTime(entry.timestamp)}
       </time>
-      <span className="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground" title={entry.stage}>
+      <span
+        className="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground"
+        title={entry.stage}
+      >
         <StageIcon stage={entry.stage} />
       </span>
       {level !== "Information" && (
-        <Badge variant={level === "Error" ? "error" : "outline"} className={cn("shrink-0 px-1.5 py-0 text-[10px]", level === "Warning" && "border-amber-500 text-amber-700")}>
+        <Badge
+          variant={level === "Error" ? "error" : "outline"}
+          className={cn(
+            "shrink-0 px-1.5 py-0 text-[10px]",
+            level === "Warning" && "border-amber-500 text-amber-700",
+          )}
+        >
           {EXECUTION_LOG_LEVEL_LABELS[level]}
         </Badge>
       )}
-      {entry.nodeId ? (
+      {nodeFilter ? (
         <button
           type="button"
           className="max-w-[140px] shrink-0 truncate rounded bg-muted px-1.5 font-medium hover:bg-muted/70"
           title={`Show only ${logEntryNodeLabel(entry)}`}
-          onClick={() => onNodeClick(nodeFilterValue(entry.nodeId!))}
+          onClick={() => onNodeClick(nodeFilter)}
         >
           {logEntryNodeLabel(entry)}
-          {entry.runIndex != null && <span className="text-muted-foreground">#{entry.runIndex}</span>}
+          {entry.runIndex != null && (
+            <span className="text-muted-foreground">#{entry.runIndex}</span>
+          )}
         </button>
       ) : (
         <span className="shrink-0 rounded bg-muted px-1.5 font-medium">Workflow</span>
