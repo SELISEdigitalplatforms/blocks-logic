@@ -53,6 +53,8 @@ export function DraggableProperty({
     target,
   });
   const lastSegment = segments.at(-1);
+  const fallbackLabel = lastSegment === undefined ? "output" : String(lastSegment);
+  const displayLabel = label ?? fallbackLabel;
 
   return (
     <button
@@ -74,7 +76,7 @@ export function DraggableProperty({
         <span
           className={`rounded-md border border-border/80 px-1.5 py-0.5 mr-0.5 shadow-sm ${isDraggable && "bg-white dark:bg-gray-800"}`}
         >
-          {label || (lastSegment !== undefined ? String(lastSegment) : "output")}
+          {displayLabel}
         </span>
         {showColon && ":"}
       </span>
