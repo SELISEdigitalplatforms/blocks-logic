@@ -48,6 +48,10 @@ namespace Workflow.DomainService.Logging
         /// <summary>Node-bound view; <paramref name="runIndex"/> null for lines written before the node's run row exists.</summary>
         public NodeExecutionLog ForNode(string nodeId, int? runIndex) => new(this, nodeId, runIndex);
 
+        /// <remarks>
+        /// <paramref name="template"/> must be a constant: user data goes in <paramref name="args"/> only, where it is
+        /// sanitised. Text built into the template (e.g. <c>$"..."</c>) bypasses that and can forge log lines.
+        /// </remarks>
         internal void Write(LogLevel level, string stage, string? nodeId, int? runIndex, string template, object?[]? args)
         {
             // Stage lines exist only to be fetched by trace id; an execution without one writes nothing.
@@ -62,21 +66,22 @@ namespace Workflow.DomainService.Logging
                 var prefixArgs = new List<object?>(2);
                 if (nodeId is not null)
                 {
+                    var safeNodeId = SanitizeNodeId(nodeId);
                     if (runIndex.HasValue)
                     {
                         prefix += "[node:{WfNodeId:l}#{WfRunIndex}] ";
-                        prefixArgs.Add(nodeId);
+                        prefixArgs.Add(safeNodeId);
                         prefixArgs.Add(runIndex.Value);
                     }
                     else
                     {
                         prefix += "[node:{WfNodeId:l}] ";
-                        prefixArgs.Add(nodeId);
+                        prefixArgs.Add(safeNodeId);
                     }
                 }
 
                 var allArgs = args is { Length: > 0 }
-                    ? prefixArgs.Concat(args).ToArray()
+                    ? prefixArgs.Concat(args.Select(SanitizeArg)).ToArray()
                     : prefixArgs.ToArray();
 
                 using (_logger.BeginScope(new Dictionary<string, object>
@@ -92,6 +97,56 @@ namespace Workflow.DomainService.Logging
             {
                 // Logging must never fail a node.
             }
+        }
+
+        public const int MaxArgLength = 500;
+
+        /// <summary>
+        /// Numbers, booleans and enums pass through so they stay structured properties; anything else is rendered to
+        /// a string with control characters (CR/LF included) replaced by spaces, so one call is always one line.
+        /// </summary>
+        public static object? SanitizeArg(object? arg)
+        {
+            if (arg is null || arg.GetType().IsPrimitive || arg is decimal || arg is Enum)
+            {
+                return arg;
+            }
+
+            var text = arg.ToString() ?? string.Empty;
+            if (text.Length > MaxArgLength)
+            {
+                text = text[..MaxArgLength] + "…";
+            }
+
+            return string.Create(text.Length, text, static (span, source) =>
+            {
+                for (var i = 0; i < source.Length; i++)
+                {
+                    span[i] = char.IsControl(source[i]) ? ' ' : source[i];
+                }
+            });
+        }
+
+        /// <summary>
+        /// Replaces the characters that would break the <c>[node:&lt;id&gt;#&lt;run&gt;]</c> prefix (<c>]</c>, <c>#</c>,
+        /// whitespace, control characters) with <c>_</c>; ordinary ids are returned unchanged.
+        /// </summary>
+        public static string SanitizeNodeId(string nodeId)
+        {
+            if (nodeId.Length == 0)
+            {
+                return "_";
+            }
+
+            var id = nodeId.Length > MaxArgLength ? nodeId[..MaxArgLength] : nodeId;
+            return string.Create(id.Length, id, static (span, source) =>
+            {
+                for (var i = 0; i < source.Length; i++)
+                {
+                    var c = source[i];
+                    span[i] = c == ']' || c == '#' || char.IsWhiteSpace(c) || char.IsControl(c) ? '_' : c;
+                }
+            });
         }
     }
 

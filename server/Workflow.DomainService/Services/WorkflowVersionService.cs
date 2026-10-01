@@ -76,12 +76,12 @@ namespace Workflow.DomainService.Services
 
         public async Task<BaseMutationResponse> UpdateVersionAsync(string tenantId, WorkflowVersionUpdateRequestDto dto)
         {
-            _logger.LogInformation($"Updating workflow version for tenantId: {tenantId}, VersionId: {dto.VersionId}");
+            _logger.LogInformation("Updating workflow version for TenantId: {TenantId}, VersionId: {VersionId}", tenantId, dto.VersionId);
             var version = await _workflowVersionRepository.GetWorkflowVersionAsync(tenantId, dto.VersionId);
 
             if (version == null)
             {
-                _logger.LogWarning($"Workflow version with Id {dto.VersionId} not found for update.");
+                _logger.LogWarning("Workflow version with Id {VersionId} not found for update.", dto.VersionId);
                 return new BaseMutationResponse
                 {
                     IsSuccess = false,
@@ -108,8 +108,7 @@ namespace Workflow.DomainService.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError($"Error updating workflow version for tenantId = {tenantId} , VersionId: {dto.VersionId}.");
-                _logger.LogError($"Error message {ex.StackTrace}");
+                _logger.LogError(ex, "Error updating workflow version for TenantId: {TenantId}, VersionId: {VersionId}", tenantId, dto.VersionId);
                 return new BaseMutationResponse
                 {
                     IsSuccess = false,
@@ -134,7 +133,7 @@ namespace Workflow.DomainService.Services
                         Errors = new Dictionary<string, string> { { "Message", "Workflow not found" } }
                     };
                 }
-                _logger.LogInformation($"Fetching workflow versions for tenantId: {tenantId}, WorkflowId: {dto.WorkflowId}");
+                _logger.LogInformation("Fetching workflow versions for TenantId: {TenantId}, WorkflowId: {WorkflowId}", tenantId, dto.WorkflowId);
                 var versions = await _workflowVersionRepository.GetWorkflowVersionsAsync(tenantId, dto.WorkflowId);
                 _logger.LogInformation("Successfully fetched {Count} workflow versions for TenantId: {TenantId}, WorkflowId: {WorkflowId}", versions.Count, tenantId, dto.WorkflowId);
 

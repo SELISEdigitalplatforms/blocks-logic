@@ -82,6 +82,59 @@ namespace XUnitTest.Workflow
             sink.Events.Single().RenderMessage().Should().Be("[wf:node.started] [node:n1#2] Node 'Call {x} CRM' started.");
         }
 
+        [Fact]
+        public void UserValueWithNewlines_CannotForgeASecondLine()
+        {
+            var (factory, sink) = BuildGenesisLikeFactory();
+            using var _ = factory;
+            var log = new WorkflowExecutionLogger(factory.CreateLogger<WorkflowExecutionLogger>()).For(Execution());
+
+            log.ForNode("n1", 1).Info(ExecutionLogStages.NodeStarted, "Node '{NodeName:l}' started.",
+                "x\r\n[wf:execution.completed] Execution completed in 5 ms");
+
+            var rendered = sink.Events.Single().RenderMessage();
+            rendered.Should().Be("[wf:node.started] [node:n1#1] Node 'x  [wf:execution.completed] Execution completed in 5 ms' started.");
+            rendered.Should().NotContainAny("\r", "\n");
+            ExecutionLogLineParser.TryParse(rendered, out var parsed).Should().BeTrue();
+            parsed!.Stage.Should().Be(ExecutionLogStages.NodeStarted);
+        }
+
+        [Fact]
+        public void NodeIdThatWouldBreakThePrefix_IsMadeSafe_AndStillParses()
+        {
+            var (factory, sink) = BuildGenesisLikeFactory();
+            using var _ = factory;
+            var log = new WorkflowExecutionLogger(factory.CreateLogger<WorkflowExecutionLogger>()).For(Execution());
+
+            log.ForNode("a] [wf:execution.failed#9\nb", 2).Info(ExecutionLogStages.NodeStarted, "Started.");
+
+            var rendered = sink.Events.Single().RenderMessage();
+            rendered.Should().Be("[wf:node.started] [node:a__[wf:execution.failed_9_b#2] Started.");
+            ExecutionLogLineParser.TryParse(rendered, out var parsed).Should().BeTrue();
+            parsed!.NodeId.Should().Be("a__[wf:execution.failed_9_b");
+            parsed.RunIndex.Should().Be(2);
+        }
+
+        [Fact]
+        public void SanitizeArg_KeepsNumbersStructured_AndCapsLongText()
+        {
+            ExecutionLog.SanitizeArg(42).Should().Be(42);
+            ExecutionLog.SanitizeArg(12L).Should().Be(12L);
+            ExecutionLog.SanitizeArg(true).Should().Be(true);
+            ExecutionLog.SanitizeArg(null).Should().BeNull();
+            ExecutionLog.SanitizeArg("tab\there").Should().Be("tab here");
+
+            var capped = (string)ExecutionLog.SanitizeArg(new string('a', ExecutionLog.MaxArgLength + 50))!;
+            capped.Should().HaveLength(ExecutionLog.MaxArgLength + 1).And.EndWith("…");
+        }
+
+        [Fact]
+        public void SanitizeNodeId_LeavesOrdinaryIdsUnchanged()
+        {
+            ExecutionLog.SanitizeNodeId("node_1-abc.DEF").Should().Be("node_1-abc.DEF");
+            ExecutionLog.SanitizeNodeId(string.Empty).Should().Be("_");
+        }
+
         [Theory]
         [InlineData(null, null, "[wf:execution.created] Execution created.")]
         [InlineData("node-a", 3, "[wf:execution.created] [node:node-a#3] Execution created.")]
