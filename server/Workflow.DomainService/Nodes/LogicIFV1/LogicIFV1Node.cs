@@ -2,6 +2,7 @@ using MongoDB.Bson;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text.Json;
+using Workflow.DomainService.Logging;
 
 namespace Workflow.DomainService.Nodes.LogicIFV1
 {
@@ -63,6 +64,10 @@ namespace Workflow.DomainService.Nodes.LogicIFV1
                     AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
                 }
             }
+            context.Log.Info(ExecutionLogStages.IfEvaluated, "Evaluated {Count} item(s): {True} true, {False} false.",
+                context.IterationCount,
+                outputItems.Count(o => o.Branch == "if-true"),
+                outputItems.Count(o => o.Branch == "if-false"));
             return Task.FromResult(NodeExecutionResult.Successful(outputItems));
         }
 

@@ -3,8 +3,10 @@ import {
   useWorkflow,
 } from "@blocks-workflow/hooks";
 import { Background, BackgroundVariant, ReactFlow } from "@xyflow/react";
-import { useEffect } from "react";
-import { Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Loader2, ScrollText } from "lucide-react";
+import { Button } from "@/components/ui-kits/button/button";
+import { ExecutionLogsPanel } from "./execution-logs-panel";
 import {
   WorkflowEditorDefaultEdgeOptions,
   WorkflowEditorNodeTypes,
@@ -27,13 +29,25 @@ export const WorkflowExecutionEditor = ({
   execution?: WorkflowExecution;
 }) => {
   const id = execution?.id || "";
-  const { setWorkflow, onNodeClick, selectedNode, setEditorMode, setExecutionMode } = useWorkflow();
+  const { setWorkflow, onNodeClick, selectedNode, deselectNode, setEditorMode, setExecutionMode } = useWorkflow();
   const { data: responseData, isFetched, isLoading } = useGetWorkflowExecutionById({
     executionId: id,
   });
 
   const data = responseData?.data;
   const status = data?.status ?? execution?.status;
+
+  // At most one right-side panel: opening the logs closes the Node Inspector, and selecting a node closes the logs.
+  const [logsOpen, setLogsOpen] = useState(false);
+  const toggleLogs = () => {
+    if (!logsOpen) deselectNode();
+    setLogsOpen(!logsOpen);
+  };
+  const [previousSelectedNode, setPreviousSelectedNode] = useState(selectedNode);
+  if (selectedNode !== previousSelectedNode) {
+    setPreviousSelectedNode(selectedNode);
+    if (selectedNode) setLogsOpen(false);
+  }
 
   useEffect(() => {
     setEditorMode("execution");
@@ -139,7 +153,7 @@ export const WorkflowExecutionEditor = ({
         <WorkflowEditorControls readonly />
       </ReactFlow>
       {execution && (
-        <div className="absolute left-4 top-4 z-50">
+        <div className="absolute left-4 top-4 z-50 flex items-center gap-2">
           <div className="flex items-center gap-2 rounded-md border bg-background/95 px-3 py-2 shadow-sm backdrop-blur-sm">
             <span className="text-sm font-medium">Status:</span>
             <div className="flex items-center gap-1.5">
@@ -159,10 +173,27 @@ export const WorkflowExecutionEditor = ({
               </span>
             </div>
           </div>
-          
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 bg-background/95"
+            onClick={toggleLogs}
+            aria-pressed={logsOpen}
+            data-testid="execution-logs-button"
+          >
+            <ScrollText className="h-4 w-4" /> Execution Logs
+          </Button>
         </div>
       )}
       {selectedNode && <NodeInspector key={selectedNode.id} />}
+      {execution && (
+        <ExecutionLogsPanel
+          execution={execution}
+          nodeExecutions={data?.nodeExecutions ?? []}
+          open={logsOpen}
+          onOpenChange={setLogsOpen}
+        />
+      )}
     </div>
   );
 };

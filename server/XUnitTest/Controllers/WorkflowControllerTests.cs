@@ -2,6 +2,8 @@ using System.Text.Json;
 using Blocks.Genesis;
 using Workflow.DomainService.Dtos;
 using Workflow.DomainService.Services;
+using Workflow.DomainService.Logging;
+using Microsoft.AspNetCore.Authorization;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -17,6 +19,7 @@ namespace XUnitTest.Controllers
         private readonly Mock<IWorkflowVersionService> _versionService = new();
         private readonly Mock<IWorkflowExecutionService> _executionService = new();
         private readonly Mock<IWorkflowImportService> _importService = new();
+        private readonly Mock<IExecutionLogService> _executionLogService = new();
         private readonly WorkflowController _controller;
 
         public WorkflowControllerTests()
@@ -26,7 +29,8 @@ namespace XUnitTest.Controllers
                 _workflowService.Object,
                 _versionService.Object,
                 _executionService.Object,
-                _importService.Object);
+                _importService.Object,
+                _executionLogService.Object);
         }
 
         public void Dispose() => TestBlocksContext.Clear();
@@ -397,6 +401,29 @@ namespace XUnitTest.Controllers
             var result = await _controller.GetExecutions(new WorkflowExecutionsGetRequestDto { WorkflowId = "wf" });
 
             result.Should().BeOfType<OkObjectResult>();
+        }
+
+        [Fact]
+        public async Task GetExecutionLogs_ReturnsOk_ForTheCallersTenant()
+        {
+            var expected = new WorkflowExecutionLogsGetResponseDto();
+            _executionLogService.Setup(s => s.GetAsync("tenant-abc", It.Is<WorkflowExecutionLogsGetRequestDto>(d => d.ExecutionId == "e"), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(expected);
+
+            var result = await _controller.GetExecutionLogs(new WorkflowExecutionLogsGetRequestDto { ExecutionId = "e" });
+
+            result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeSameAs(expected);
+        }
+
+        [Fact]
+        public void GetExecutionLogs_IsAnAuthorizedGet_RoutedAsWorkflowGetExecutionLogs()
+        {
+            var method = typeof(WorkflowController).GetMethod(nameof(WorkflowController.GetExecutionLogs))!;
+
+            method.GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true).Should().NotBeEmpty();
+            method.GetCustomAttributes(typeof(HttpGetAttribute), inherit: true).Should().NotBeEmpty();
+            var route = (RouteAttribute)typeof(WorkflowController).GetCustomAttributes(typeof(RouteAttribute), inherit: true).Single();
+            route.Template.Should().Be("[controller]/[action]");
         }
 
         [Fact]

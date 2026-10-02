@@ -83,6 +83,13 @@ describe("workflowService", () => {
     );
   });
 
+  it("reads an execution's logs", async () => {
+    await workflowService.getWorkflowExecutionLogs({ executionId: "e 1" });
+    expect(http.logicService.get).toHaveBeenCalledWith(
+      expect.stringMatching(/\/Workflow\/GetExecutionLogs\?ExecutionId=e\+1$/),
+    );
+  });
+
   it("sends paging cursors only when they are set", async () => {
     await workflowService.getWorkflowExecutions({
       workflowId: "w1",

@@ -8,6 +8,7 @@ using MongoDB.Bson;
 using Proxy.DomainService.Entities;
 using Proxy.DomainService.Services;
 using Workflow.DomainService.Entities;
+using Workflow.DomainService.Logging;
 using Workflow.DomainService.Utils;
 
 namespace Workflow.DomainService.Nodes.ActionProxy
@@ -73,6 +74,8 @@ namespace Workflow.DomainService.Nodes.ActionProxy
             // third party on a path the workflow deliberately did not choose.
             var standalone = context.IterationCount == 0 && !context.HasUpstream;
             var iterations = standalone ? 1 : context.IterationCount;
+            // Outcome codes and exception types only: never the path, query, body or response.
+            var requestLog = PerItemRequestLog.ForProxy(context.Log, iterations);
 
             for (int i = 0; i < iterations; i++)
             {
@@ -84,6 +87,7 @@ namespace Workflow.DomainService.Nodes.ActionProxy
                     var (pathSuffix, pathError) = BuildPathSuffix(parameters, inputItem, context);
                     if (pathError != null)
                     {
+                        requestLog.Failed(i, "InvalidPathParameter");
                         AppendErrorOutputItem(outputItems, errorParent, parameters.ToBsonDocument(), pathError);
                         continue;
                     }
@@ -91,11 +95,14 @@ namespace Workflow.DomainService.Nodes.ActionProxy
                     var (body, contentType, bodyError) = PrepareBody(parameters, method, inputItem, context);
                     if (bodyError != null)
                     {
+                        requestLog.Failed(i, "InvalidBody");
                         AppendErrorOutputItem(outputItems, errorParent, parameters.ToBsonDocument(), bodyError);
                         continue;
                     }
 
                     var query = BuildQuery(parameters, inputItem, context);
+
+                    requestLog.Sending(i);
 
                     var result = await _gatewayService.ForwardAsync(new ProxyForwardRequest
                     {
@@ -120,13 +127,17 @@ namespace Workflow.DomainService.Nodes.ActionProxy
 
                     if (!result.Ok)
                     {
+                        requestLog.Failed(i, result.Outcome);
                         AppendErrorOutputItem(outputItems, errorParent, parameters.ToBsonDocument(), DescribeFailure(parameters, method, result));
                         continue;
                     }
 
+                    requestLog.Response(i, result.StatusCode, result.LatencyMs);
+
                     var (responseBody, parseError) = ParseResponse(result);
                     if (parseError != null)
                     {
+                        requestLog.Failed(i, "UnparseableResponse");
                         AppendErrorOutputItem(outputItems, errorParent, parameters.ToBsonDocument(), parseError);
                         continue;
                     }
@@ -139,6 +150,7 @@ namespace Workflow.DomainService.Nodes.ActionProxy
                 }
                 catch (Exception ex)
                 {
+                    requestLog.Failed(i, ex.GetType().Name);
                     AppendErrorOutputItem(outputItems, errorParent, parameters.ToBsonDocument(), ex);
                 }
             }

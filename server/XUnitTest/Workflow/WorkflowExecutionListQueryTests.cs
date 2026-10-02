@@ -6,6 +6,7 @@ using Moq;
 using Workflow.DomainService.Dtos;
 using Workflow.DomainService.Entities;
 using Workflow.DomainService.Enums;
+using Workflow.DomainService.Logging;
 using Workflow.DomainService.Repositories;
 using Workflow.DomainService.Services;
 
@@ -28,7 +29,8 @@ namespace XUnitTest.Workflow
                 Mock.Of<IWorkflowNotificationService>(),
                 Mock.Of<IWorkflowAuthService>(),
                 Mock.Of<IHttpContextAccessor>(),
-                Mock.Of<IDelegationGrantFactory>());
+                Mock.Of<IDelegationGrantFactory>(),
+                Mock.Of<IWorkflowExecutionLogger>());
         }
 
         [Fact]

@@ -7,6 +7,8 @@ using MongoDB.Bson;
 using System.Diagnostics.CodeAnalysis;
 using Workflow.DomainService.Entities;
 using Blocks.Genesis;
+using System.Diagnostics;
+using Workflow.DomainService.Logging;
 
 namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
 {
@@ -40,6 +42,7 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
             var parameters = nodeparameters ?? new ActionHttpRequestV1Parameters();
             parameters.HaveBody = ReadHaveBody(context.Parameters, parameters.HaveBody);
             var outputItems = new List<NodeOutputItem>();
+            var requestLog = PerItemRequestLog.ForHttp(context.Log, context.IterationCount);
 
             for (int i = 0; i < context.IterationCount; i++)
             {
@@ -48,17 +51,24 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
                     var (url, httpMethod, headers, bodyContent, contentType) = PrepareRequest(parameters, context.InputItems[i], context);
                     if (url == null)
                     {
+                        requestLog.Failed(i, "InvalidJsonBody");
                         AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), bodyContent);
                         continue;
                     }
 
                     await ApplyAuthenticationAsync(parameters, headers, context.TenantId);
 
-                    var responseBody = await SendHttpRequestAsync(httpMethod, url, headers, bodyContent, contentType);
+                    requestLog.Sending(i);
+                    var stopwatch = Stopwatch.StartNew();
+                    var index = i;
+                    var responseBody = await SendHttpRequestAsync(httpMethod, url, headers, bodyContent, contentType,
+                        onStatus: status => requestLog.Response(index, status, stopwatch.ElapsedMilliseconds));
                     BuildOutputItems(outputItems, responseBody, context, parameters, i);
                 }
                 catch (Exception ex)
                 {
+                    // The type only: the message can carry the URL or the response.
+                    requestLog.Failed(i, (ex.InnerException ?? ex).GetType().Name);
                     AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
                 }
             }
@@ -173,7 +183,7 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
             }
         }
         // Send HTTP request and get response as list of items (to support array responses) like if response is an array, each element will be a separate item; if response is an object, it will be a single item
-        private async Task<JsonElement> SendHttpRequestAsync(string httpMethod, string url, Dictionary<string, string> headers, string bodyContent, string contentType = "application/json")
+        private async Task<JsonElement> SendHttpRequestAsync(string httpMethod, string url, Dictionary<string, string> headers, string bodyContent, string contentType = "application/json", Action<int>? onStatus = null)
         {
             var httpClient = _httpClientFactory.CreateClient();
             var request = new HttpRequestMessage(new HttpMethod(httpMethod), url);
@@ -192,6 +202,7 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
             {
                 HttpResponseMessage response;
                 response = await httpClient.SendAsync(request);
+                onStatus?.Invoke((int)response.StatusCode);
                 response.EnsureSuccessStatusCode();
                 var responseString = await response.Content.ReadAsStringAsync();
                 return JsonDocument.Parse(responseString).RootElement.Clone();

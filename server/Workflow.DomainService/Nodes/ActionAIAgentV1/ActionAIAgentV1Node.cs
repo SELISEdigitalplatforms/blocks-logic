@@ -3,7 +3,9 @@ using System.Net.WebSockets;
 using System.Text;
 using MongoDB.Bson;
 using Workflow.DomainService.Utils;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using Workflow.DomainService.Logging;
 
 namespace Workflow.DomainService.Nodes.ActionAIAgentV1
 {
@@ -26,10 +28,27 @@ namespace Workflow.DomainService.Nodes.ActionAIAgentV1
 
             for (int i = 0; i < context.IterationCount; i++)
             {
+                // Per-item lines are capped like the other network-bound nodes; never the prompt or reply.
+                var logThisItem = i < ExecutionLogStages.PerItemLineCap;
+                if (i == ExecutionLogStages.PerItemLineCap)
+                {
+                    context.Log.Info(ExecutionLogStages.AgentNotLogged, "… {Remaining} more request(s) not logged individually.",
+                        context.IterationCount - ExecutionLogStages.PerItemLineCap);
+                }
+
                 try
                 {
                     var input = parseExpression<string>(parameters.Input, context.InputItems[i], context) ?? "";
+                    if (logThisItem)
+                    {
+                        context.Log.Info(ExecutionLogStages.AgentCall, "Calling AI agent for item {Index} of {Total}.", i + 1, context.IterationCount);
+                    }
+                    var stopwatch = Stopwatch.StartNew();
                     var response = await CallAIAgent(parameters.ApiBaseUrl, parameters.WidgetId, context.TenantId, input);
+                    if (logThisItem)
+                    {
+                        context.Log.Info(ExecutionLogStages.AgentResponse, "Agent responded in {DurationMs} ms.", stopwatch.ElapsedMilliseconds);
+                    }
 
                     outputItems.Add(new NodeOutputItem
                     {

@@ -12,6 +12,8 @@ using Mail.DomainService.Shared.Enums;
 using Mail.DomainService.Utilities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Workflow.DomainService.Logging;
 using MongoDB.Bson;
 using Moq;
 using Worker.Consumers.Workflow;
@@ -62,7 +64,8 @@ namespace XUnitTest.Workflow
                 _notifications.Object,
                 _auth.Object,
                 Mock.Of<IHttpContextAccessor>(),
-                Mock.Of<IDelegationGrantFactory>());
+                Mock.Of<IDelegationGrantFactory>(),
+                new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance));
         }
 
         [Fact]

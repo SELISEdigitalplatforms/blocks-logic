@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.DependencyInjection;
 using Proxy.DomainService.Services;
+using Workflow.DomainService.Logging;
 
 namespace Workflow.DomainService.Nodes
 {
@@ -69,6 +70,12 @@ namespace Workflow.DomainService.Nodes
             WorkflowItemExecutionEntity? inputItem, BsonValue parameters, string message, string branch = "source")
             => TryBuildErrorOutputItem(inputItem, parameters, new Exception(message), branch);
 
+        /// <summary>Whether <paramref name="item"/> is a synthetic error item built by <see cref="TryBuildErrorOutputItem(WorkflowItemExecutionEntity?, BsonValue, Exception, string)"/>.</summary>
+        protected static bool IsErrorItem(NodeOutputItem item)
+            => item.Data?.Output is BsonDocument output
+               && output.TryGetValue("error", out var error)
+               && error.IsBoolean && error.AsBoolean;
+
         protected static void AppendErrorOutputItem(
             List<NodeOutputItem> outputItems,
             WorkflowItemExecutionEntity? inputItem,
@@ -91,15 +98,20 @@ namespace Workflow.DomainService.Nodes
 
         public async Task<NodeExecutionResult> RunAsync(NodeExecutionContext context)
         {
+            // Stage lines carry counts only: never variable names, parameter values or item data.
+            var log = context.Log;
             var json = context.Parameters.ToJson();
 
             var variableNames = CollectVariableNames(context.Parameters).ToList();
 
             if (variableNames.Count > 0)
             {
+                log.Info(ExecutionLogStages.NodeVariables, "Resolving {Count} configuration variable(s).", variableNames.Count);
+
                 var resolver = context.ServiceProvider?.GetService<IProxyVariableResolver>();
                 if (resolver is null)
                 {
+                    log.Error(ExecutionLogStages.NodeVariablesFailed, "No variable resolver is available.");
                     return NodeExecutionResult.Failed(
                         "This node references {{$VAR.name}} configuration variable(s), but no variable resolver is available in this environment.");
                 }
@@ -113,21 +125,45 @@ namespace Workflow.DomainService.Nodes
 
                     if (unresolved.Count > 0)
                     {
+                        log.Error(ExecutionLogStages.NodeVariablesFailed, "{Count} configuration variable(s) could not be resolved.", unresolved.Count);
                         return NodeExecutionResult.Failed(
                             $"Could not resolve configuration variable(s): {string.Join(", ", unresolved)}.");
                     }
 
                     context.ResolvedVariables = resolvedVariables;
+                    log.Info(ExecutionLogStages.NodeVariablesResolved, "Configuration variables resolved.");
                 }
                 catch (ProxyVariableResolutionException ex)
                 {
+                    log.Error(ExecutionLogStages.NodeVariablesFailed, "{Count} configuration variable(s) could not be resolved.", ex.Names.Count);
                     return NodeExecutionResult.Failed(
                         $"Could not resolve configuration variable(s): {string.Join(", ", ex.Names)}.");
                 }
             }
 
-            var parameters = Newtonsoft.Json.JsonConvert.DeserializeObject<TParameters>(json, ParameterDeserializationSettings);
-            return await ExecuteAsync(context, parameters);
+            TParameters? parameters;
+            try
+            {
+                parameters = Newtonsoft.Json.JsonConvert.DeserializeObject<TParameters>(json, ParameterDeserializationSettings);
+            }
+            catch (Exception ex)
+            {
+                log.Error(ExecutionLogStages.NodeParametersFailed, "Parameters could not be read ({ErrorKind:l}).", ex.GetType().Name);
+                throw;
+            }
+            log.Info(ExecutionLogStages.NodeParameters, "Parameters loaded.");
+
+            log.Info(ExecutionLogStages.NodeExecuting, "Running {NodeType:l} logic on {Count} item(s).", NodeType, context.InputItems.Count);
+            var result = await ExecuteAsync(context, parameters);
+            if (result.IsSuccess)
+            {
+                log.Info(ExecutionLogStages.NodeExecuted, "Logic finished: {Count} output item(s).", result.OutputItems?.Count ?? 0);
+            }
+            else
+            {
+                log.Error(ExecutionLogStages.NodeExecuted, "Logic reported a failure.");
+            }
+            return result;
         }
 
         private static IEnumerable<string> CollectVariableNames(BsonValue value)

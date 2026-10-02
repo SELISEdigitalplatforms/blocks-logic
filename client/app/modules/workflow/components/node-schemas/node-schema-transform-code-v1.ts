@@ -61,4 +61,5 @@ export const NodeSchemaTransformCodeV1: NodeSchemaDefinition = {
     },
   },
   transform: (node) => node,
+  fieldReference: (p) => ({ kind: "code", mode: p.mode === "each" ? "each" : "all" }),
 };
