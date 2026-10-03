@@ -144,6 +144,7 @@ namespace Functions.DomainService.Services
         private readonly IFunctionAuthorizationService _authorizationService;
         private readonly IFunctionBuildService _buildService;
         private readonly IEndpointAccessAuthorizer _accessAuthorizer;
+        private readonly IFunctionDelegationService _delegation;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly ICacheClient _cache;
         private readonly IConfiguration _configuration;
@@ -157,6 +158,7 @@ namespace Functions.DomainService.Services
             IFunctionAuthorizationService authorizationService,
             IFunctionBuildService buildService,
             IEndpointAccessAuthorizer accessAuthorizer,
+            IFunctionDelegationService delegation,
             IHttpContextAccessor httpContextAccessor,
             ICacheClient cache,
             IConfiguration configuration,
@@ -169,6 +171,7 @@ namespace Functions.DomainService.Services
             _authorizationService = authorizationService;
             _buildService = buildService;
             _accessAuthorizer = accessAuthorizer;
+            _delegation = delegation;
             _httpContextAccessor = httpContextAccessor;
             _cache = cache;
             _configuration = configuration;
@@ -488,10 +491,21 @@ namespace Functions.DomainService.Services
             // keeps the reference too, so rotating a secret takes effect on the next run.
             var envelopeJson = FunctionEnvelopeBuilder.Build(run, version, function, context, inputJson);
 
+            // The caller's identity for ctx.blocks.accessToken, as a delegation grant id the runner
+            // redeems right before the sandbox starts — never a token. Written now, while the
+            // caller's validated token is still in scope; null for a public trigger, an
+            // unauthenticated or impersonated caller, and anything without a user.
+            var delegationGrantId = await _delegation.CreateGrantAsync(
+                tenantId, context, (version?.Trigger ?? function.Trigger).AuthMode);
+
             // Last point at which the caller going away may stop anything. From the insert on, the
             // record exists, and a cancelled enqueue would strand it QUEUED with nothing queued —
             // so the insert, the counter and the enqueue all run to completion regardless.
-            cancellationToken.ThrowIfCancellationRequested();
+            if (cancellationToken.IsCancellationRequested)
+            {
+                await _delegation.DeleteGrantAsync(delegationGrantId);
+                cancellationToken.ThrowIfCancellationRequested();
+            }
             await _runRepository.CreateAsync(tenantId, run, CancellationToken.None);
 
             // Counted whether or not the enqueue succeeds: the record exists either way and shows
@@ -500,11 +514,12 @@ namespace Functions.DomainService.Services
 
             try
             {
-                await EnqueueAsync(tenantId, function, run, image, envelopeJson, limits, test);
+                await EnqueueAsync(tenantId, function, run, image, envelopeJson, delegationGrantId, limits, test);
             }
             catch (Exception ex)
             {
                 await CompensateFailedEnqueueAsync(tenantId, run, ex);
+                await _delegation.DeleteGrantAsync(delegationGrantId);
                 throw new FunctionUnavailableException(
                     "the function could not be queued right now; nothing was executed — retry shortly", run.ItemId);
             }
@@ -564,13 +579,20 @@ namespace Functions.DomainService.Services
 
         private async Task EnqueueAsync(
             string tenantId, FunctionEntity function, FunctionRunEntity run, string image, string envelopeJson,
-            FunctionLimits limits, TestBuild? test = null)
+            string? delegationGrantId, FunctionLimits limits, TestBuild? test = null)
         {
             var database = _cache.CacheDatabase();
             var runKey = FunctionQueueKeys.Run(run.ItemId);
 
+            // Beside the envelope, not in it: a retry rewrites only `envelope` and `status`, so the
+            // grant stays with the run for every attempt, and each attempt redeems it afresh.
+            HashEntry[] delegation = string.IsNullOrEmpty(delegationGrantId)
+                ? []
+                : [new HashEntry(FunctionQueueKeys.RunDelegationField, delegationGrantId)];
+
             await database.HashSetAsync(runKey,
             [
+                .. delegation,
                 new HashEntry("envelope", envelopeJson),
                 new HashEntry("status", FunctionQueueKeys.Wire.Queued),
                 new HashEntry("cpuMillicores", limits.CpuMillicores),

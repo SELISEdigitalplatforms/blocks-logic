@@ -64,6 +64,17 @@ namespace Functions.DomainService.Queue
         /// </summary>
         public const int RunProtocolVersion = 2;
 
+        /// <summary>
+        /// Optional field of the <see cref="Run"/> hash: the Genesis delegation grant id of the
+        /// caller who invoked the run, which the runner redeems with IAM right before the sandbox
+        /// starts and hands the function as <c>ctx.blocks.accessToken</c>. Written beside the
+        /// envelope, never inside it — the envelope is screened for credentials on both sides —
+        /// and never a token: the grant id is useless without the tenant's salt. Needs no protocol
+        /// bump, because a runner that predates it simply ignores the field and the function sees
+        /// no token. Mirrors <c>RedisKeys.RunDelegationField</c> in the runner.
+        /// </summary>
+        public const string RunDelegationField = "delegation";
+
         // ---- streams ------------------------------------------------------------
         public static string RunsStream => _prefix + "functions:runs";
         public static string ResultsStream => _prefix + "functions:results";
@@ -152,6 +163,16 @@ namespace Functions.DomainService.Queue
         // reclaim triggers at 90 s idle — so the remainder is purely outage headroom.
         // Mirrored in the runner's RedisKeys and in plan/PROTOCOL.md; change all three together.
         public static readonly TimeSpan RunTtl = TimeSpan.FromHours(6);
+
+        /// <summary>
+        /// Absolute lifetime of a run's delegation grant (<see cref="RunDelegationField"/>). Covers
+        /// the longest retry chain the validators allow — 5 attempts of 90 s with 4 delays of up to
+        /// 900 s, about 68 minutes — with room for queueing. It bounds how long the grant can be
+        /// redeemed, not the token: each redemption yields a token of IAM's own short lifetime, and
+        /// IAM re-checks the user every time. A run still queued past it starts without a token
+        /// rather than failing.
+        /// </summary>
+        public static readonly TimeSpan DelegationGrantTtl = TimeSpan.FromHours(2);
         public static readonly TimeSpan SourceTtl = TimeSpan.FromHours(1);
         public static readonly TimeSpan CancelTtl = TimeSpan.FromSeconds(120);
 

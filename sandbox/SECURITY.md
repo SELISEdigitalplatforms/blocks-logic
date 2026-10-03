@@ -50,12 +50,14 @@ Two limits worth stating plainly:
 
 ## What a function never receives
 
-- No bearer token. The envelope is built field by field from named properties, never by
-  serialising the caller's context, and everything the platform writes into it (`run`,
-  `context`, `limits`) is **screened for credential-shaped keys** before it is written — a run
-  fails rather than leaking one. Two subtrees are exempt: `env`, whose keys are the tenant's own
-  variable names, and `input`, which is the caller's own payload (for an HTTP trigger, its body
-  and query) — a form posting a `password` field is ordinary input.
+- Never the caller's own bearer token, and never anything credential-shaped from the queue. The
+  envelope is built field by field from named properties, never by serialising the caller's
+  context, and everything the platform writes into it (`run`, `context`, `limits`) is **screened
+  for credential-shaped keys** before it is written — a run fails rather than leaking one. Two
+  subtrees are exempt: `env`, whose keys are the tenant's own variable names, and `input`, which
+  is the caller's own payload (for an HTTP trigger, its body and query) — a form posting a
+  `password` field is ordinary input. The one token a function can receive is a fresh delegated
+  one, added by the runner after that screen; see below.
 - No platform credentials. No database, registry, IAM, Key Vault or Redis credential ever enters
   an envelope; none exist on this VM except in `runner.env`.
 - No part in output actions. Output actions are performed by the control-plane Worker after the
@@ -63,6 +65,34 @@ Two limits worth stating plainly:
   against private address space before the Worker calls them (a guard being added in the Worker).
 
 ## What a function does receive
+
+**A delegated access token for its caller, as `ctx.blocks.accessToken`.** So a function can call
+Blocks APIs (IAM, Data, Mail, Notifier) as the user who invoked it. It works like a message
+worker's delegated access, with the same Genesis grant and the same IAM exchange:
+
+- At invoke time, while the caller's validated token is in scope, the control plane writes a
+  Genesis delegation grant (`FunctionDelegationService`) — a Redis record of tenant, user,
+  organization, `token_version` and `security_stamp`, with a 2-hour absolute TTL — and the run
+  hash carries only its opaque id, in its own `delegation` field beside the envelope. Not the
+  caller's token, and not inside the envelope.
+- Right before the sandbox starts, for **every attempt**, the runner redeems the grant with IAM
+  (RFC 8693, signed with the tenant's salt — the id alone is useless) and gets a freshly minted
+  token with IAM's normal access-token lifetime. IAM re-reads the user each time and refuses a
+  deactivated user or one whose sessions were revoked since the grant was written.
+- The runner adds it as `blocks.accessToken` **after** screening the queued envelope, so a token
+  that arrived through the queue still fails the run; the write-time screen exempts exactly that
+  one top-level path, and only when the runner itself added it (`RunDelegation`). It is added to
+  `maskedValues`, so it is masked in every log line and error the bootstrap writes — though, like
+  a secret-bound variable, not in a successful return value, which is the author's own output.
+- Only an authenticated user on a non-public trigger, in the run's own tenant, and not under
+  impersonation. A public call, a schedule, a `client_credentials` caller, or a grant IAM will
+  not redeem: `ctx.blocks.accessToken` is `undefined` and the run goes on. A token is never a
+  reason a run fails.
+
+The consequence is the same as for a bound secret: during the run, the function's code holds a
+working token for its caller and can send it anywhere on the public internet. It is that caller's
+own identity — no more than the caller could do themselves — and it expires on IAM's schedule.
+
 
 **The tenant's own secrets, when the tenant binds them to a variable.** A variable whose value
 references `{{secret.<id>}}` (whole, or embedded as in `Bearer {{secret.<id>}}`) is **resolved by

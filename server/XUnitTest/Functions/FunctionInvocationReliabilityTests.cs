@@ -34,6 +34,7 @@ namespace XUnitTest.Functions
         private readonly Mock<IFunctionAdmissionService> _admission = new();
         private readonly Mock<IFunctionAuthorizationService> _authorization = new();
         private readonly Mock<IFunctionBuildService> _builds = new();
+        private readonly Mock<IFunctionDelegationService> _delegation = new();
         private readonly Mock<ISubscriber> _subscriber = new();
         private readonly (IDatabase Database, FakeRedisDatabase Fake) _redis = FakeRedisDatabase.Create();
 
@@ -99,7 +100,7 @@ namespace XUnitTest.Functions
             return new FunctionInvocationService(
                 _functions.Object, _versions.Object, _runs.Object, _admission.Object,
                 _authorization.Object, _builds.Object, new Mock<IEndpointAccessAuthorizer>().Object,
-                new HttpContextAccessor(), cache.Object, configuration, NullLogger<FunctionInvocationService>.Instance);
+                _delegation.Object, new HttpContextAccessor(), cache.Object, configuration, NullLogger<FunctionInvocationService>.Instance);
         }
 
         private void RunIs(Func<FunctionRunEntity?> current) =>
@@ -195,6 +196,92 @@ namespace XUnitTest.Functions
 
             _created.Should().NotBeNull();
             _redis.Fake.Calls("StreamAddAsync").Should().ContainSingle();
+        }
+
+        // ---- ctx.blocks.accessToken: a grant id beside the envelope ------------------
+
+        private static readonly string Grant = "dg_" + new string('c', 64);
+
+        private static readonly BlocksContext Caller = BlocksContext.Create(
+            tenantId: Tenant, roles: ["dev"], userId: "user-1", isAuthenticated: true, requestUri: string.Empty,
+            organizationId: "org-1", expireOn: DateTime.UtcNow.AddMinutes(5), email: "u@example.com", permissions: [],
+            userName: string.Empty, phoneNumber: string.Empty, displayName: string.Empty, oauthToken: "eyJ.caller.token",
+            originalTenantId: Tenant, applicationDomain: string.Empty, impersonated: false, impersonationSessionId: string.Empty);
+
+        private void GrantsAre(string? grant) =>
+            _delegation
+                .Setup(d => d.CreateGrantAsync(It.IsAny<string>(), It.IsAny<BlocksContext?>(), It.IsAny<AuthMode>()))
+                .ReturnsAsync(grant);
+
+        [Fact]
+        public async Task The_callers_grant_id_is_queued_beside_the_envelope_and_never_inside_it()
+        {
+            GrantsAre(Grant);
+            _version.Trigger.AuthMode = AuthMode.Token;
+            using var cts = new CancellationTokenSource();
+            _runs
+                .Setup(r => r.CreateAsync(Tenant, It.IsAny<FunctionRunEntity>(), It.IsAny<CancellationToken>()))
+                .Callback((string _, FunctionRunEntity run, CancellationToken _) => { _created = run; cts.Cancel(); })
+                .Returns(Task.CompletedTask);
+
+            var act = () => Service().InvokeFromWorkflowAsync(Tenant, "fn-1", "{}", Caller, null, "wf-1", cts.Token);
+            await act.Should().ThrowAsync<OperationCanceledException>();
+
+            _delegation.Verify(d => d.CreateGrantAsync(Tenant, Caller, AuthMode.Token), Times.Once);
+            var hash = _redis.Fake.Calls("HashSetAsync").SelectMany(c => (HashEntry[])c[1]!).ToList();
+            hash.Should().ContainSingle(e => e.Name == FunctionQueueKeys.RunDelegationField)
+                .Which.Value.ToString().Should().Be(Grant);
+            hash.Single(e => e.Name == "envelope").Value.ToString().Should().NotContain(Grant).And.NotContain("eyJ.caller.token");
+            var entry = (NameValueEntry[])_redis.Fake.Calls("StreamAddAsync").Single()[1]!;
+            entry.Should().NotContain(e => e.Value.ToString() == Grant, "the stream entry is not where the runner looks");
+            EverythingEnqueued().Should().NotContain("eyJ.caller.token", "the caller's own token never enters the queue");
+        }
+
+        [Fact]
+        public async Task A_run_without_a_grant_queues_no_delegation_field()
+        {
+            GrantsAre(null);
+
+            await InvokeUntilQueuedAsync();
+
+            _redis.Fake.Calls("HashSetAsync").SelectMany(c => (HashEntry[])c[1]!)
+                .Should().NotContain(e => e.Name == FunctionQueueKeys.RunDelegationField);
+        }
+
+        [Fact]
+        public async Task A_failed_enqueue_deletes_the_grant_it_will_never_use()
+        {
+            GrantsAre(Grant);
+            _redis.Fake.On("StreamAddAsync", _ => throw new RedisConnectionException(ConnectionFailureType.SocketFailure, "down"));
+
+            var act = () => Service().InvokeFromWorkflowAsync(Tenant, "fn-1", "{}", Caller, null, "wf-1");
+
+            await act.Should().ThrowAsync<FunctionUnavailableException>();
+            _delegation.Verify(d => d.DeleteGrantAsync(Grant), Times.Once);
+        }
+
+        [Fact]
+        public async Task A_caller_gone_before_the_record_leaves_no_grant_behind()
+        {
+            GrantsAre(Grant);
+            using var cts = new CancellationTokenSource();
+            await cts.CancelAsync();
+
+            var act = () => Service().InvokeFromWorkflowAsync(Tenant, "fn-1", "{}", Caller, null, "wf-1", cts.Token);
+
+            await act.Should().ThrowAsync<OperationCanceledException>();
+            _created.Should().BeNull();
+            _delegation.Verify(d => d.DeleteGrantAsync(Grant), Times.Once);
+        }
+
+        [Fact]
+        public async Task A_successful_enqueue_keeps_its_grant_for_the_runner()
+        {
+            GrantsAre(Grant);
+
+            await InvokeUntilQueuedAsync();
+
+            _delegation.Verify(d => d.DeleteGrantAsync(It.IsAny<string?>()), Times.Never);
         }
 
         // ---- enqueue compensation -------------------------------------------------

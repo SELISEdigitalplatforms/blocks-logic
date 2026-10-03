@@ -100,6 +100,18 @@ export function parseEnvelope(raw) {
     applicationDomain: stringOrNull(c?.applicationDomain, 'context.applicationDomain'),
   });
 
+  // --- blocks ----------------------------------------------------------------
+  // The caller's own Blocks access token, for calling Blocks APIs as that caller. Never in the
+  // queued envelope: the control plane records only a delegation grant id beside it, and the
+  // runner redeems that for a fresh token right before the sandbox starts
+  // (Runs/RunDelegation.cs) — which is also why this key is exempt from the runner's screen.
+  // Absent for a public trigger, a schedule, a caller with no user, or a failed redemption;
+  // `ctx.blocks.accessToken` is then `undefined`, never an empty string.
+  const b = doc.blocks;
+  if (b !== undefined && b !== null && !isPlainObject(b)) fail('envelope.blocks must be an object');
+  const accessToken = stringOrNull(b?.accessToken, 'blocks.accessToken') || undefined;
+  const blocks = _freeze({ accessToken });
+
   // --- limits ----------------------------------------------------------------
   // Advisory copies of what the runner already enforces out of process. The soft deadline
   // is the only one the bootstrap acts on.
@@ -124,11 +136,16 @@ export function parseEnvelope(raw) {
   return _freeze({
     run: frozenRun,
     context: ctxContext,
+    blocks,
     env,
-    /** The values to mask, resolved here so the bootstrap never has to look them up itself. */
+    /**
+     * The values to mask, resolved here so the bootstrap never has to look them up itself. The
+     * access token is always among them, whatever the runner sent in `maskedValues`.
+     */
     maskedValues: _freeze([
       ...maskedEnv.map((key) => env[key]).filter((v) => typeof v === 'string'),
       ...extraMasked,
+      ...(accessToken ? [accessToken] : []),
     ]),
     input: doc.input === undefined ? null : doc.input,
     limits: _freeze({ timeoutMs }),

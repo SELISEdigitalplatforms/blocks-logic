@@ -124,6 +124,7 @@ function buildContext(envelope) {
 
   return Object.freeze({
     context: envelope.context,
+    blocks: envelope.blocks,
     env: envelope.env,
     run: envelope.run,
     log,

@@ -106,6 +106,17 @@ namespace Blocks.FunctionRunner.Contracts
         /// <summary>Hash holding the execution envelope and limits for a run. TTL 24 h.</summary>
         public static string Run(string runId) => $"{_prefix}function:run:{runId}";
 
+        /// <summary>
+        /// Optional field of the <see cref="Run"/> hash: the Genesis delegation grant id
+        /// (<c>dg_</c> + 64 hex) of the caller who invoked the run. The runner redeems it with IAM
+        /// right before the sandbox starts and hands the function the resulting token as
+        /// <c>ctx.blocks.accessToken</c>. Beside the envelope, never inside it, so the envelope
+        /// screen still holds; absent means the function gets no token. Needs no protocol bump: a
+        /// runner that predates it ignores the field. Mirrors
+        /// <c>FunctionQueueKeys.RunDelegationField</c> in the control plane.
+        /// </summary>
+        public const string RunDelegationField = "delegation";
+
         /// <summary>The serialized result of a run. TTL 24 h.</summary>
         public static string Result(string runId) => $"{_prefix}function:result:{runId}";
 

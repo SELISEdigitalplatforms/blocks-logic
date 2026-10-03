@@ -1,6 +1,7 @@
 using System.Globalization;
 using Blocks.FunctionRunner.Admission;
 using Blocks.FunctionRunner.Contracts;
+using Blocks.FunctionRunner.Delegation;
 using Blocks.FunctionRunner.Options;
 using Blocks.FunctionRunner.Protocol;
 using Blocks.FunctionRunner.Redis;
@@ -30,6 +31,7 @@ namespace Blocks.FunctionRunner.Runs
         private readonly IImageResolver _images;
         private readonly HostBudget _budget;
         private readonly IRunSecretResolver _secrets;
+        private readonly IRunAccessTokenResolver _accessTokens;
         private readonly RunnerOptions _options;
         private readonly ILogger<RunProcessor> _logger;
 
@@ -39,6 +41,7 @@ namespace Blocks.FunctionRunner.Runs
             IImageResolver images,
             HostBudget budget,
             IRunSecretResolver secrets,
+            IRunAccessTokenResolver accessTokens,
             IOptions<RunnerOptions> options,
             ILogger<RunProcessor> logger)
         {
@@ -47,6 +50,7 @@ namespace Blocks.FunctionRunner.Runs
             _images = images;
             _budget = budget;
             _secrets = secrets;
+            _accessTokens = accessTokens;
             _options = options.Value;
             _logger = logger;
         }
@@ -204,9 +208,19 @@ namespace Blocks.FunctionRunner.Runs
                         resolvedValues = prepared.Values;
                     }
 
+                    // After the screen, deliberately: it refuses an `accessToken` key, and this
+                    // one is added by the runner from a grant, never carried by the queue.
+                    var accessToken = await RedeemAccessTokenAsync(job, fields, envelope, token).ConfigureAwait(false);
+                    if (accessToken is not null)
+                    {
+                        envelope = RunDelegation.Apply(envelope, accessToken);
+                        resolvedValues = [.. resolvedValues, accessToken];
+                    }
+
+                    var delegated = accessToken is not null;
                     envelopePath = EnvelopeGroupHandoff is null
-                        ? ExecutionEnvelope.Write(runDir, envelope)
-                        : ExecutionEnvelope.Write(runDir, envelope, EnvelopeGroupHandoff);
+                        ? ExecutionEnvelope.Write(runDir, envelope, delegated)
+                        : ExecutionEnvelope.Write(runDir, envelope, EnvelopeGroupHandoff, delegated);
                 }
                 catch (ExecutionEnvelope.ForbiddenContentException ex)
                 {
@@ -396,6 +410,52 @@ namespace Blocks.FunctionRunner.Runs
 
             var values = plan.Ids.Select(id => lookup.Values[id]).Distinct(StringComparer.Ordinal).ToArray();
             return new Prepared(EnvSecretReferences.Apply(envelope, plan, lookup.Values), null, values);
+        }
+
+        /// <summary>
+        /// The caller's delegated Blocks access token for this attempt, or null — in which case
+        /// the function sees <c>ctx.blocks.accessToken</c> as <c>undefined</c> and the run goes on.
+        /// A token is a convenience the function may use, not a precondition of running it, so
+        /// nothing here fails the run.
+        /// <para>
+        /// The control plane only records a grant for an authenticated caller on a non-public
+        /// trigger. That is checked again here against the envelope it actually sent, and the
+        /// entry's tenant must be the envelope's: redeeming against the wrong tenant would hand
+        /// one tenant's run a token for another.
+        /// </para>
+        /// </summary>
+        private async Task<string?> RedeemAccessTokenAsync(
+            RunJob job, Dictionary<string, string> fields, string envelope, CancellationToken token)
+        {
+            if (!fields.TryGetValue(RedisKeys.RunDelegationField, out var grantId) || string.IsNullOrWhiteSpace(grantId))
+            {
+                return null;
+            }
+
+            var caller = RunDelegation.ReadCaller(envelope);
+            if (!caller.IsAuthenticated || caller.UserId is null)
+            {
+                _logger.LogWarning(
+                    "Run {RunId} carries a delegation grant but no authenticated caller; not redeeming it", job.RunId);
+                return null;
+            }
+
+            if (string.IsNullOrWhiteSpace(job.TenantId)
+                || !string.Equals(caller.TenantId, job.TenantId, StringComparison.Ordinal))
+            {
+                _logger.LogError(
+                    "Refusing to redeem the delegation grant of run {RunId}: the entry's tenant '{EntryTenant}' does not match the envelope's",
+                    job.RunId, job.TenantId);
+                return null;
+            }
+
+            var accessToken = await _accessTokens.RedeemAsync(job.TenantId, grantId, token).ConfigureAwait(false);
+            if (accessToken is null)
+            {
+                _logger.LogWarning(
+                    "Run {RunId} starts without ctx.blocks.accessToken: its delegation grant could not be redeemed", job.RunId);
+            }
+            return accessToken;
         }
 
         /// <summary>

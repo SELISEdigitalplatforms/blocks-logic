@@ -119,7 +119,7 @@ namespace Blocks.FunctionRunner.Tests
             });
             var budget = new HostBudget(options, new RoomyHost(), new SandboxFootprint(), NullLogger<HostBudget>.Instance);
 
-            return new RunProcessor(_db!, sandbox, new ResolvesAnything(), budget, resolver, options, _logs.For<RunProcessor>())
+            return new RunProcessor(_db!, sandbox, new ResolvesAnything(), budget, resolver, new FakeRunAccessTokenResolver(), options, _logs.For<RunProcessor>())
             {
                 EnvelopeGroupHandoff = (_, _) => { },
             };

@@ -32,6 +32,8 @@ export const buildFunctionTypeDefs = (envKeys: string[] = []): string => `
 declare interface FunctionContext {
   /** Who invoked this run. Empty identity on a public call — never a privileged token. */
   readonly context: FunctionCallerContext;
+  /** Call Blocks APIs as the caller. */
+  readonly blocks: FunctionBlocksAccess;
   /** Your variables, as plain strings. Secrets are never here. */
   readonly env: FunctionEnv;
   /** This run's own metadata. */
@@ -47,6 +49,15 @@ declare interface FunctionCallerContext {
   readonly roles: string[];
   readonly permissions: string[];
   readonly isAuthenticated: boolean;
+}
+
+declare interface FunctionBlocksAccess {
+  /**
+   * A fresh, short-lived Blocks access token for the user who invoked this run — pass it as the
+   * \`Authorization: Bearer\` of a Blocks API call, with \`ctx.context.tenantId\` as \`x-blocks-key\`.
+   * \`undefined\` on a public trigger, a schedule, or when none could be issued. Masked in logs.
+   */
+  readonly accessToken: string | undefined;
 }
 
 declare interface FunctionEnv {
@@ -124,6 +135,11 @@ export const buildCtxCompletions = (envKeys: string[] = []) => {
       label: "context",
       detail: "FunctionCallerContext",
       documentation: "tenantId, userId, roles, permissions, isAuthenticated.",
+    },
+    {
+      label: "blocks",
+      detail: "FunctionBlocksAccess",
+      documentation: "accessToken — the caller's Blocks token, or undefined.",
     },
     ...keys.map((key) => ({
       label: `env.${key}`,

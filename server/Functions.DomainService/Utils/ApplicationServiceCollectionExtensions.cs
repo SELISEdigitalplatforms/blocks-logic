@@ -70,6 +70,9 @@ namespace Functions.DomainService.Utils
             // /api/fn route exactly as it does on the proxy gateway. TryAdd inside, so this is
             // harmless alongside Proxy's and Workflow's own registration.
             services.AddEndpointAccess();
+            // ctx.blocks.accessToken: a delegation grant per run, redeemed by the runner. The grant
+            // store comes from Genesis (AddBlocksDelegation, part of the API and Worker setup).
+            services.AddSingleton<IFunctionDelegationService, FunctionDelegationService>();
             services.AddSingleton<IFunctionInvocationService, FunctionInvocationService>();
 
             services.AddSingleton<IOutputActionProcessor, OutputActionProcessor>();

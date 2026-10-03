@@ -108,7 +108,7 @@ namespace Blocks.FunctionRunner.Tests
             });
             var budget = new HostBudget(options, new RoomyHost(), new SandboxFootprint(), NullLogger<HostBudget>.Instance);
 
-            return new RunProcessor(_db!, sandbox, new ResolvesAnything(), budget, new FakeRunSecretResolver(), options, NullLogger<RunProcessor>.Instance)
+            return new RunProcessor(_db!, sandbox, new ResolvesAnything(), budget, new FakeRunSecretResolver(), new FakeRunAccessTokenResolver(), options, NullLogger<RunProcessor>.Instance)
             {
                 // Root can give a file to any group; anyone else needs the provisioned
                 // membership. The real syscall is proven in EnvelopeScreeningTests.

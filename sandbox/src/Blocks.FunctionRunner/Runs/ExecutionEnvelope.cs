@@ -63,14 +63,22 @@ namespace Blocks.FunctionRunner.Runs
         /// the previous 0644 file represented is exactly what this exists to remove.
         /// </para>
         /// </remarks>
-        public static string Write(string runDir, string envelopeJson)
-            => Write(runDir, envelopeJson, GiveToSandboxGroup);
+        /// <param name="runDir">The run's own directory.</param>
+        /// <param name="envelopeJson">The envelope as the sandbox will read it.</param>
+        /// <param name="delegatedToken">
+        /// True when the runner itself added <c>blocks.accessToken</c> from the run's delegation
+        /// grant (<see cref="RunDelegation"/>). Exempts that one path from the screen and nothing
+        /// else; see <see cref="Screen"/>.
+        /// </param>
+        public static string Write(string runDir, string envelopeJson, bool delegatedToken = false)
+            => Write(runDir, envelopeJson, GiveToSandboxGroup, delegatedToken);
 
         /// <summary>
         /// <see cref="Write(string, string)"/> with the group handoff supplied, so the failure
         /// path can be exercised without a host where chown fails.
         /// </summary>
-        internal static string Write(string runDir, string envelopeJson, Action<string, int> setGroup)
+        internal static string Write(
+            string runDir, string envelopeJson, Action<string, int> setGroup, bool delegatedToken = false)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(runDir);
             ArgumentException.ThrowIfNullOrWhiteSpace(envelopeJson);
@@ -83,7 +91,7 @@ namespace Blocks.FunctionRunner.Runs
                     $"the execution envelope is {bytes} bytes, over the {Ceilings.InputBytes} byte input ceiling");
             }
 
-            Screen(envelopeJson);
+            Screen(envelopeJson, delegatedToken);
 
             // 0700 whether it is new or left over from an earlier attempt at the same run.
             Directory.CreateDirectory(runDir, OwnerOnlyDirectory);
@@ -210,7 +218,14 @@ namespace Blocks.FunctionRunner.Runs
         /// change to one belongs in the other.
         /// </para>
         /// </summary>
-        public static void Screen(string envelopeJson)
+        /// <param name="envelopeJson">The envelope to screen.</param>
+        /// <param name="delegatedToken">
+        /// Exempts exactly the top-level <c>blocks.accessToken</c> — the caller's delegated token,
+        /// which only the runner adds, after the queued envelope has been screened without this
+        /// flag. Anything else credential-shaped, including under <c>blocks</c>, is still refused,
+        /// and a queued envelope carrying that key is refused before any grant is redeemed.
+        /// </param>
+        public static void Screen(string envelopeJson, bool delegatedToken = false)
         {
             JsonDocument doc;
             try
@@ -224,11 +239,11 @@ namespace Blocks.FunctionRunner.Runs
 
             using (doc)
             {
-                Walk(doc.RootElement, string.Empty, screenKeys: true);
+                Walk(doc.RootElement, string.Empty, screenKeys: true, delegatedToken);
             }
         }
 
-        private static void Walk(JsonElement element, string path, bool screenKeys)
+        private static void Walk(JsonElement element, string path, bool screenKeys, bool delegatedToken)
         {
             switch (element.ValueKind)
             {
@@ -247,7 +262,9 @@ namespace Blocks.FunctionRunner.Runs
                             ? !(path.Length == 0 && (name == "env" || name == "input"))
                             : path == "input." && name == "headers";
 
-                        if (screenKeys)
+                        var runnerAddedToken = delegatedToken && path == "blocks." && name == "accessToken";
+
+                        if (screenKeys && !runnerAddedToken)
                         {
                             foreach (var fragment in ForbiddenKeyFragments)
                             {
@@ -259,7 +276,7 @@ namespace Blocks.FunctionRunner.Runs
                                 }
                             }
                         }
-                        Walk(property.Value, $"{path}{name}.", childScreens);
+                        Walk(property.Value, $"{path}{name}.", childScreens, delegatedToken);
                     }
                     break;
 
@@ -267,7 +284,7 @@ namespace Blocks.FunctionRunner.Runs
                     var index = 0;
                     foreach (var item in element.EnumerateArray())
                     {
-                        Walk(item, $"{path}[{index++}].", screenKeys);
+                        Walk(item, $"{path}[{index++}].", screenKeys, delegatedToken);
                     }
                     break;
 

@@ -1,5 +1,6 @@
 using Blocks.FunctionRunner.Admission;
 using Blocks.FunctionRunner.Builds;
+using Blocks.FunctionRunner.Delegation;
 using Blocks.FunctionRunner.Health;
 using Blocks.FunctionRunner.Maintenance;
 using Blocks.FunctionRunner.Options;
@@ -82,6 +83,11 @@ namespace Blocks.FunctionRunner.Utils
             // KeyVault__KeyVaultUrl is set. Registration touches neither; the first lookup does.
             services.AddBlocksSecrets();
             services.AddSingleton<IRunSecretResolver, BlocksSecretsRunResolver>();
+            // The caller's delegated access token (ctx.blocks.accessToken) is redeemed here too,
+            // right before the sandbox starts, from the grant id the control plane wrote beside the
+            // envelope. IDelegatedTokenProvider and the IAM endpoint come from Genesis's own
+            // AddBlocksDelegation (ConfigureWorker), which already requires BLOCKS_IAM_BASE_URL.
+            services.AddSingleton<IRunAccessTokenResolver, DelegatedRunAccessTokenResolver>();
             services.AddSingleton<RunProcessor>();
             services.AddSingleton<BuildProcessor>();
 

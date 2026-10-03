@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Blocks.FunctionRunner.Delegation;
 using Blocks.FunctionRunner.Runs;
 using Blocks.FunctionRunner.SecretStore;
 using Microsoft.Extensions.Logging;
@@ -35,6 +36,18 @@ namespace Blocks.FunctionRunner.Tests
                 else unresolved[id] = Reasons.TryGetValue(id, out var r) ? r : SecretUnresolvedReasons.NotFound;
             }
             return Task.FromResult(new SecretLookup(values, unresolved));
+        }
+    }
+
+    /// <summary>Redeems every grant for <paramref name="token"/> (null: none) and records what it was asked.</summary>
+    internal sealed class FakeRunAccessTokenResolver(string? token = null) : IRunAccessTokenResolver
+    {
+        public List<(string TenantId, string GrantId)> Calls { get; } = [];
+
+        public Task<string?> RedeemAsync(string tenantId, string grantId, CancellationToken cancellationToken)
+        {
+            Calls.Add((tenantId, grantId));
+            return Task.FromResult(token);
         }
     }
 

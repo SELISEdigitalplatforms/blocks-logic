@@ -53,6 +53,14 @@ describe("buildFunctionTypeDefs", () => {
   });
 });
 
+describe("ctx.blocks typing", () => {
+  it("declares the caller's access token as possibly undefined", () => {
+    const defs = buildFunctionTypeDefs();
+    expect(defs).toContain("readonly blocks: FunctionBlocksAccess;");
+    expect(defs).toContain("readonly accessToken: string | undefined;");
+  });
+});
+
 describe("buildCtxCompletions", () => {
   it("offers the ctx members even with no variables bound", () => {
     expect(buildCtxCompletions().map((item) => item.label)).toEqual([
@@ -60,6 +68,7 @@ describe("buildCtxCompletions", () => {
       "log",
       "run",
       "context",
+      "blocks",
     ]);
   });
 

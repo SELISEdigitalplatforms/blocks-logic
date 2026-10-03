@@ -120,6 +120,29 @@ describe('envelope validation', () => {
     assert.throws(() => parseEnvelope('{"run":{"id":"r"},"limits":{"timeoutMs":0}}'), EnvelopeError);
     assert.throws(() => parseEnvelope('{"run":{"id":"r"},"limits":{"timeoutMs":"soon"}}'), EnvelopeError);
   });
+
+  test('blocks.accessToken is undefined when the runner added none', () => {
+    for (const blocks of [undefined, null, {}, { accessToken: null }, { accessToken: '' }]) {
+      const e = parseEnvelope(JSON.stringify({ run: { id: 'r' }, blocks }));
+      assert.equal(e.blocks.accessToken, undefined, JSON.stringify(blocks));
+      assert.ok(Object.isFrozen(e.blocks));
+      assert.deepEqual([...e.maskedValues], []);
+    }
+  });
+
+  test('a delegated access token is exposed, frozen and always masked', () => {
+    const e = parseEnvelope(JSON.stringify({ run: { id: 'r' }, blocks: { accessToken: 'eyJ.delegated.token' } }));
+    assert.equal(e.blocks.accessToken, 'eyJ.delegated.token');
+    assert.throws(() => { 'use strict'; e.blocks.accessToken = 'other'; }, TypeError);
+    assert.deepEqual([...e.maskedValues], ['eyJ.delegated.token']);
+  });
+
+  test('a malformed blocks section is refused, not ignored', () => {
+    for (const blocks of ['eyJ.token', ['eyJ.token'], { accessToken: 42 }, { accessToken: { t: 1 } }]) {
+      assert.throws(
+        () => parseEnvelope(JSON.stringify({ run: { id: 'r' }, blocks })), EnvelopeError, JSON.stringify(blocks));
+    }
+  });
 });
 
 // --------------------------------------------------------------- protocol ----
@@ -570,6 +593,29 @@ describe('secret redaction', () => {
     assert.ok(r.logs.every((l) => l.msg.includes('[redacted]')), JSON.stringify(r.logs));
     assert.equal(r.result.ok, false);
     assert.match(r.result.message, /\[redacted\]/);
+  });
+
+  test('end to end: ctx.blocks.accessToken reaches the handler and is masked in logs and errors', async () => {
+    // A successful return value is the author's own output and is not scrubbed — the same rule
+    // as a secret-bound variable — so this run only logs the token and then fails with it.
+    const token = 'eyJhbGciOi.delegated_end_to_end.sig99';
+    const r = await runBootstrap(`export default async (i, ctx) => {
+      console.log('token is', ctx.blocks.accessToken);
+      ctx.log.info('header', { authorization: 'Bearer ' + ctx.blocks.accessToken });
+      throw new Error('Blocks API refused ' + ctx.blocks.accessToken);
+    };`, { ...BASE_ENVELOPE, blocks: { accessToken: token } });
+    const everything = JSON.stringify(r.events) + r.stderr;
+    assert.ok(!everything.includes(token), everything);
+    assert.equal(r.logs.length, 2);
+    assert.ok(r.logs.every((l) => JSON.stringify(l).includes('[redacted]')), JSON.stringify(r.logs));
+    assert.equal(r.result.ok, false);
+    assert.match(r.result.message, /\[redacted\]/);
+  });
+
+  test('end to end: without a delegated token ctx.blocks.accessToken is undefined', async () => {
+    const r = await runBootstrap(
+      'export default async (i, ctx) => ({ type: typeof ctx.blocks.accessToken, frozen: Object.isFrozen(ctx.blocks) });');
+    assert.deepEqual(r.result.value, { type: 'undefined', frozen: true });
   });
 });
 
