@@ -70,7 +70,11 @@ declare interface FunctionRun {
   readonly version: number;
   /** 1 for the first try; higher when the retry policy re-ran it. */
   readonly attempt: number;
-  readonly invokedBy: "http" | "workflow" | "test" | "replay" | "schedule" | "event";
+  readonly invokedBy: {
+    readonly type: "http" | "workflow" | "test" | "replay" | "schedule" | "event";
+    /** What started the run (e.g. the workflow), or null when there is none. */
+    readonly id: string | null;
+  };
 }
 
 declare interface FunctionLogger {

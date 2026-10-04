@@ -120,6 +120,39 @@ describe("ProxyDetails page", () => {
     expect(screen.queryByText("current.condition.text")).toBeNull();
   });
 
+  it("shows the proxy-wide filter on an endpoint that sets none, not the whole response", async () => {
+    const p3 = PROXY_MOCK_DATA.find((proxy) => proxy.id === "p3")!;
+    vi.spyOn(mockProxyService, "get").mockResolvedValue({
+      ...p3,
+      routes: p3.routes.map((route) => ({ ...route, responseMode: null, responseInclude: null })),
+    });
+
+    renderWithProviders(
+      <MemoryRouter initialEntries={["/proxy/p3"]}>
+        <Routes>
+          <Route path="/proxy/:proxyId" element={<ProxyDetails />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(/Only 3 fields/)).toBeTruthy();
+    expect(screen.getByText(/from the proxy-wide filter/)).toBeTruthy();
+    expect(screen.queryByText("The vendor’s whole response")).toBeNull();
+  });
+
+  it("shows proxy-wide body fields on an endpoint that sets none", async () => {
+    renderWithProviders(
+      <MemoryRouter initialEntries={["/proxy/p1"]}>
+        <Routes>
+          <Route path="/proxy/:proxyId" element={<ProxyDetails />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Stripe Payments" })).toBeTruthy();
+    expect((await screen.findAllByText(/from the proxy-wide settings/)).length).toBeGreaterThan(0);
+  });
+
   it("redirects unknown proxies back to the list", async () => {
     renderWithProviders(
       <MemoryRouter initialEntries={["/proxy/missing"]}>
