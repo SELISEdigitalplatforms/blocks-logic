@@ -113,7 +113,8 @@ namespace Blocks.FunctionRunner.Tests
 
             public long TotalMemoryBytes => 64L * 1024 * 1024 * 1024;
 
-            public HostSignalSample Sample() => new(0, 0, 0, 64L * 1024 * 1024 * 1024);
+            // long.MaxValue available: HostBudget's MemAvailable floor must never refuse these tests.
+            public HostSignalSample Sample() => new(0, 0, 0, long.MaxValue);
         }
 
         private RunProcessor Processor(ISandbox sandbox, IRunSecretResolver resolver)
@@ -197,6 +198,17 @@ namespace Blocks.FunctionRunner.Tests
             var disposition = RunProcessor.Disposition.Deferred;
             for (var attempt = 0; attempt < 40; attempt++)
             {
+                // Drop any leftover admission / lease state from a prior Deferred attempt so
+                // TenantSlots / concurrency / lease cannot pin this run out indefinitely.
+                await _db!.KeyDeleteAsync(
+                [
+                    RedisKeys.Lease(job.RunId),
+                    RedisKeys.Concurrency(job.FunctionId),
+                    RedisKeys.TenantSlots(job.TenantId ?? _tenant),
+                    RedisKeys.Cancel(job.RunId),
+                ]);
+                await _db.HashSetAsync(RedisKeys.Run(job.RunId), "status", RunStatuses.Queued);
+
                 disposition = await Processor(sandbox, resolver).ProcessAsync(job, CancellationToken.None);
                 if (disposition != RunProcessor.Disposition.Deferred) return disposition;
                 await Task.Delay(25);
