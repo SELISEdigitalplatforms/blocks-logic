@@ -41,16 +41,18 @@ export async function isLoginSurface(page: Page): Promise<boolean> {
 
 /** Claim this tab when another window holds the project session. */
 export async function dismissSingleSessionTakeover(page: Page) {
-  const leave = page.getByRole("button", { name: /^Leave / })
+  const leave = page
+    .getByRole("button", { name: /^Leave / })
+    .or(page.getByRole("button", { name: /Leave .+/ }))
   const heading = page.getByRole("heading", { name: /Your session is in / })
   // Dialog often paints after SPA hydrate; poll instead of a single short wait.
-  for (let i = 0; i < 8; i++) {
-    const leaveVisible = await leave.isVisible({ timeout: 750 }).catch(() => false)
-    const headingVisible = await heading.isVisible({ timeout: 250 }).catch(() => false)
+  for (let i = 0; i < 10; i++) {
+    const leaveVisible = await leave.first().isVisible({ timeout: 800 }).catch(() => false)
+    const headingVisible = await heading.isVisible({ timeout: 200 }).catch(() => false)
     if (leaveVisible || headingVisible) {
-      await leave.click({ timeout: 5_000 })
-      await leave.waitFor({ state: "hidden", timeout: 15_000 }).catch(() => {})
-      await page.waitForTimeout(400)
+      await leave.first().click({ timeout: 5_000, force: true })
+      await leave.first().waitFor({ state: "hidden", timeout: 15_000 }).catch(() => {})
+      await page.waitForTimeout(500)
       return
     }
   }
