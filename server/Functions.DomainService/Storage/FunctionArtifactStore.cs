@@ -1,82 +1,95 @@
-using Azure.Storage.Blobs;
-using Azure.Storage.Blobs.Models;
-using Azure.Storage.Sas;
+using Blocks.Genesis;
+using CloudConfiguration.DomainService.Shared.Services;
 using Common.InternalService.Storage;
+using Functions.DomainService.Utils;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Functions.DomainService.Storage
 {
     /// <summary>
     /// Where a function's build artifact lives, and the only way the runner reaches it.
+    /// <para>
+    /// Every member throws <see cref="FunctionArtifactStoreUnavailableException"/> when the tenant's
+    /// storage cannot hold artifacts — none configured, a provider that cannot sign a URL (SFTP), or
+    /// storage that failed to open. Callers treat that as "use the image path", never as a failed
+    /// build or run: the runner pushes and pulls by registry exactly as it did before artifacts.
+    /// </para>
     /// </summary>
     public interface IFunctionArtifactStore
     {
         /// <summary>
         /// A URL the builder may <c>PUT</c> the artifact to, valid for <paramref name="expiry"/>.
-        /// Write-only, and for this one blob.
+        /// Write-only, and for this one object.
         /// </summary>
-        string CreateUploadUrl(string tenantId, string artifactId, TimeSpan expiry);
+        Task<string> CreateUploadUrlAsync(
+            string tenantId, string artifactId, TimeSpan expiry, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// A URL the runner may <c>GET</c> the artifact from, valid for <paramref name="expiry"/>.
-        /// Read-only, and for this one blob. <c>null</c> when the artifact is not there — which the
-        /// caller must treat as "this function cannot run", not as an empty download.
+        /// Read-only, and for this one object. <c>null</c> when the provider can tell the artifact is
+        /// not there (Azure checks; S3 does not, and a missing object fails on the runner instead).
         /// </summary>
         Task<string?> CreateDownloadUrlAsync(
             string tenantId, string artifactId, TimeSpan expiry, CancellationToken cancellationToken = default);
-
-        Task<bool> ExistsAsync(string tenantId, string artifactId, CancellationToken cancellationToken = default);
 
         /// <summary>Removes the artifact. Safe to call when it is already gone.</summary>
         Task DeleteAsync(string tenantId, string artifactId, CancellationToken cancellationToken = default);
     }
 
     /// <summary>
-    /// The artifact store, on Azure Blob.
+    /// The artifact store, on the tenant's own storage — the same <c>IStorageService</c> every other
+    /// Blocks file goes through, chosen by the tenant's <c>Default</c> storage configuration.
     /// <para>
-    /// Deliberately <b>not</b> <c>IStorageService</c> / <c>FileManagementService</c>, for two reasons
-    /// that are both load-bearing:
+    /// <b>Tenant comes in as an argument</b>, and the store enters that tenant's context itself for
+    /// the length of one call. The storage stack reads the tenant from <c>BlocksContext</c> — the
+    /// configuration repository for which database, the provider for which container or bucket — and
+    /// builds and runs are processed off a Redis stream in the Worker, where there is no caller and
+    /// no context, or a context for some other tenant. The previous context is restored afterwards.
     /// </para>
-    /// <list type="number">
-    /// <item>
-    /// <b>Tenant comes in as an argument, never from ambient context.</b>
-    /// <c>AzureBlobStorageService</c> names its container from <c>BlocksContext.GetContext()</c>.
-    /// Builds and runs are processed off a Redis stream in the Worker, where there is no caller and
-    /// no ambient context — so that would resolve to nothing, or, worse, to whichever tenant happened
-    /// to be on the thread. Every other method in this domain already passes <c>tenantId</c>
-    /// explicitly; so does this one.
-    /// </item>
-    /// <item>
-    /// <b>Its own private container.</b> The tenant content container is created with
-    /// <see cref="PublicAccessType.Blob"/>, which makes every blob in it anonymously readable — the
-    /// <c>Private/</c> path prefix there is a naming convention, not a boundary. An artifact holds
-    /// the tenant's source and its whole dependency tree, so it goes in a container created with
-    /// <see cref="PublicAccessType.None"/> and is reachable only through a short-lived SAS scoped to
-    /// the single blob.
-    /// </item>
-    /// </list>
     /// <para>
-    /// The runner therefore holds no storage credential of any kind — the same posture that keeps it
-    /// from holding a database credential. It is handed a URL that can do one thing, to one blob, for
-    /// a few minutes.
+    /// <b>Nothing happens in the constructor, and nothing is injected but the provider.</b>
+    /// <c>ActionFunctionNode</c> depends on this through the invocation service and is one of the
+    /// <c>INodeExecutor</c>s the workflow engine takes as a set, so a constructor that throws here —
+    /// or a dependency the host forgot to register — fails every workflow, not just Functions. (It
+    /// did: it read <c>StorageProvider.ConnectionString</c>, a static that only holds a value while
+    /// <c>StorageServiceFactory.GetStorageService</c> is running.) The storage services are resolved
+    /// on use instead, where a missing one is "unavailable" like any other storage failure.
+    /// </para>
+    /// <para>
+    /// <b>Known exposure, accepted (user, 2026-10-04):</b> on Azure the tenant container is created
+    /// with public blob access by <c>AzureBlobStorageService</c>, so an artifact — the tenant's source
+    /// and its dependency tree — is readable by anyone who has its URL without the SAS. The object
+    /// name carries the build id (a GUID) so the URL is not guessable, and containers are not
+    /// listable anonymously at that access level.
     /// </para>
     /// </summary>
     public sealed class FunctionArtifactStore : IFunctionArtifactStore
     {
         /// <summary>
-        /// One container for every tenant's artifacts. Isolation is the <c>tenantId</c> path segment
-        /// plus a SAS scoped to one blob, not a container boundary — a container per tenant would add
-        /// a provisioning step to every signup and buy nothing a per-blob SAS does not already give.
+        /// The folder inside the tenant's container or bucket that holds artifacts, keeping them
+        /// apart from the tenant's own files.
         /// </summary>
-        public const string ContainerName = "blocks-fn-artifacts";
+        public const string KeyPrefix = "blocks-fn-artifacts";
 
-        private readonly BlobContainerClient _container;
+        /// <summary>The tenant storage configuration artifacts use — the same one file uploads default to.</summary>
+        public const string StorageConfigurationName = "Default";
+
+        /// <summary>
+        /// Providers whose <c>IStorageService</c> can sign a URL the runner can use directly. SFTP's
+        /// upload URL is not implemented and its download URL points at a Blocks controller, not the
+        /// object, so an SFTP tenant takes the image path.
+        /// </summary>
+        private static readonly HashSet<string> SigningProviders =
+            new(StringComparer.OrdinalIgnoreCase) { "azure", "aws", "s3compatible" };
+
+        private readonly IServiceProvider _services;
         private readonly ILogger<FunctionArtifactStore> _logger;
 
-        public FunctionArtifactStore(ILogger<FunctionArtifactStore> logger)
+        public FunctionArtifactStore(IServiceProvider services, ILogger<FunctionArtifactStore> logger)
         {
+            _services = services;
             _logger = logger;
-            _container = new BlobContainerClient(StorageProvider.ConnectionString, ContainerName);
         }
 
         /// <summary>
@@ -110,96 +123,154 @@ namespace Functions.DomainService.Storage
             return $"{tenantId.ToLowerInvariant()}/{artifactId}.tar";
         }
 
-        /// <summary>
-        /// Created on first use with public access off.
-        /// <para>
-        /// <see cref="PublicAccessType.None"/> is passed explicitly rather than left to the account
-        /// default: an account that permits public containers would otherwise decide this, and the
-        /// one thing this container must never be is readable without a SAS.
-        /// </para>
-        /// </summary>
-        private async Task EnsureContainerAsync(CancellationToken cancellationToken)
-        {
-            await _container.CreateIfNotExistsAsync(PublicAccessType.None, cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-        }
+        /// <summary>The object's key in the tenant's storage: <c>blocks-fn-artifacts/{tenantId}/{artifactId}.tar</c>.</summary>
+        internal static string ObjectKey(string tenantId, string artifactId) =>
+            $"{KeyPrefix}/{BlobPath(tenantId, artifactId)}";
 
         /// <inheritdoc />
-        public string CreateUploadUrl(string tenantId, string artifactId, TimeSpan expiry)
-        {
-            // Not awaited on the upload path: the builder is about to write, and a container that
-            // does not exist yet must exist before the SAS is used. Creating it here keeps the first
-            // ever build on a fresh environment from failing on a missing container.
-            EnsureContainerAsync(CancellationToken.None).GetAwaiter().GetResult();
-
-            var blob = _container.GetBlobClient(BlobPath(tenantId, artifactId));
-            return Sign(blob, BlobSasPermissions.Write | BlobSasPermissions.Create, expiry);
-        }
-
-        /// <inheritdoc />
-        public async Task<string?> CreateDownloadUrlAsync(
+        public Task<string> CreateUploadUrlAsync(
             string tenantId, string artifactId, TimeSpan expiry, CancellationToken cancellationToken = default)
         {
-            var blob = _container.GetBlobClient(BlobPath(tenantId, artifactId));
-
-            if (!await blob.ExistsAsync(cancellationToken).ConfigureAwait(false))
-            {
-                // A signed URL to a blob that is not there would be handed to a runner that then
-                // fails on a 404 it cannot explain. Saying so here keeps the reason where the
-                // control plane can report it.
-                _logger.LogWarning(
-                    "Artifact {Hash} for tenant {TenantId} is not in the store; no download URL issued",
-                    artifactId, tenantId);
-                return null;
-            }
-
-            return Sign(blob, BlobSasPermissions.Read, expiry);
+            var key = ObjectKey(tenantId, artifactId);
+            return WithTenantStorageAsync(
+                tenantId,
+                storage => Task.FromResult(storage.GeneratePreSignedUploadUrlAsync(key, expiry)),
+                cancellationToken);
         }
 
         /// <inheritdoc />
-        public async Task<bool> ExistsAsync(
-            string tenantId, string artifactId, CancellationToken cancellationToken = default)
+        public Task<string?> CreateDownloadUrlAsync(
+            string tenantId, string artifactId, TimeSpan expiry, CancellationToken cancellationToken = default)
         {
-            var blob = _container.GetBlobClient(BlobPath(tenantId, artifactId));
-            return await blob.ExistsAsync(cancellationToken).ConfigureAwait(false);
+            var key = ObjectKey(tenantId, artifactId);
+            return WithTenantStorageAsync(
+                tenantId,
+                storage => storage.GetDownloadUrlAsync(new DownloadUrlRequest
+                {
+                    FileName = key,
+                    ExpiryDuration = expiry,
+                    // Private keeps the SAS on the URL. Public would strip it and hand back the bare
+                    // object URL, which only works because the container is public — not something
+                    // to lean on.
+                    AccessModifier = AccessModifier.Private,
+                }),
+                cancellationToken);
         }
 
         /// <inheritdoc />
-        public async Task DeleteAsync(
-            string tenantId, string artifactId, CancellationToken cancellationToken = default)
+        public Task DeleteAsync(string tenantId, string artifactId, CancellationToken cancellationToken = default)
         {
-            var blob = _container.GetBlobClient(BlobPath(tenantId, artifactId));
-            await blob.DeleteIfExistsAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+            var key = ObjectKey(tenantId, artifactId);
+            return WithTenantStorageAsync(tenantId, storage => storage.DeleteFileAsync(key), cancellationToken);
         }
 
         /// <summary>
-        /// Signs one blob, for one set of permissions, for a short window.
-        /// <para>
-        /// <c>Resource = "b"</c> is what scopes it to the single blob rather than the container: a
-        /// container-scoped SAS handed to a runner would let it read every tenant's artifact.
-        /// </para>
+        /// Opens the tenant's storage under the tenant's own context, runs <paramref name="use"/>, and
+        /// puts the caller's context back. Anything that goes wrong reaching the storage becomes
+        /// <see cref="FunctionArtifactStoreUnavailableException"/>, which every caller turns into the
+        /// image path; cancellation is left alone.
         /// </summary>
-        private string Sign(BlobClient blob, BlobSasPermissions permissions, TimeSpan expiry)
+        private async Task<T> WithTenantStorageAsync<T>(
+            string tenantId, Func<IStorageService, Task<T>> use, CancellationToken cancellationToken)
         {
-            if (!blob.CanGenerateSasUri)
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var restore = BlocksContext.GetContext();
+            var mustSwap = restore is null
+                || !restore.IsAuthenticated
+                || !string.Equals(restore.TenantId, tenantId, StringComparison.Ordinal);
+
+            if (mustSwap)
             {
-                // Happens when the connection string carries no account key — a managed-identity
-                // style connection needs a user-delegation key instead, which is a different call.
-                // Failing loudly beats handing back a URL that is not actually signed.
-                throw new InvalidOperationException(
-                    "the storage connection string cannot sign a SAS; function artifacts need an account key");
+                EnterTenantContext(tenantId, restore);
             }
 
-            var builder = new BlobSasBuilder
+            try
             {
-                BlobContainerName = blob.BlobContainerName,
-                BlobName = blob.Name,
-                Resource = "b",
-                ExpiresOn = DateTimeOffset.UtcNow.Add(expiry),
-            };
+                var configurations = _services.GetService<IConfigurationRepository>();
+                var storageFactory = _services.GetService<IStorageServiceFactory>();
+                if (configurations is null || storageFactory is null)
+                {
+                    throw new FunctionArtifactStoreUnavailableException(
+                        "tenant storage services are not registered in this host");
+                }
 
-            builder.SetPermissions(permissions);
-            return blob.GenerateSasUri(builder).ToString();
+                var configuration = await configurations
+                    .GetStorageConfigurationByNameAsync(StorageConfigurationName)
+                    .ConfigureAwait(false);
+
+                if (configuration is null)
+                {
+                    throw new FunctionArtifactStoreUnavailableException(
+                        $"tenant '{tenantId}' has no '{StorageConfigurationName}' storage configuration");
+                }
+
+                if (string.IsNullOrWhiteSpace(configuration.StorageStrategy)
+                    || !SigningProviders.Contains(configuration.StorageStrategy))
+                {
+                    throw new FunctionArtifactStoreUnavailableException(
+                        $"tenant '{tenantId}' storage '{configuration.StorageStrategy}' cannot sign artifact URLs");
+                }
+
+                var storage = storageFactory.GetStorageService(configuration);
+                return await use(storage).ConfigureAwait(false);
+            }
+            catch (FunctionArtifactStoreUnavailableException)
+            {
+                throw;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // A provider that fails to open (bad credentials, network, a container it cannot
+                // create) or to sign. Logged with the exception for the operator; the message that
+                // travels on stays generic, because provider messages can quote account details.
+                _logger.LogError(ex, "Tenant {TenantId} storage could not serve a function artifact", tenantId);
+                throw new FunctionArtifactStoreUnavailableException(
+                    $"tenant '{tenantId}' storage could not serve the artifact ({ex.GetType().Name})");
+            }
+            finally
+            {
+                if (mustSwap)
+                {
+                    BlocksContext.SetContext(restore, restore is not null);
+                }
+            }
+        }
+
+        private static void EnterTenantContext(string tenantId, BlocksContext? current)
+        {
+            // Same shape as ProxyVariableResolver's: authenticated, scoped to this tenant, and forced
+            // (changeContext: true) so an ambient HttpContext for another identity cannot win.
+            BlocksContext.SetContext(
+                BlocksContext.Create(
+                    tenantId: tenantId,
+                    roles: [],
+                    userId: current?.UserId ?? string.Empty,
+                    isAuthenticated: true,
+                    requestUri: string.Empty,
+                    organizationId: current?.OrganizationId ?? string.Empty,
+                    expireOn: DateTime.MinValue,
+                    email: string.Empty,
+                    permissions: [],
+                    userName: current?.UserName ?? string.Empty,
+                    phoneNumber: string.Empty,
+                    displayName: current?.UserName ?? string.Empty,
+                    oauthToken: string.Empty,
+                    originalTenantId: current?.OriginalTenantId ?? tenantId,
+                    applicationDomain: string.Empty),
+                true);
         }
     }
+
+    /// <summary>
+    /// The tenant's storage cannot hold or serve function artifacts right now. Callers fall back to
+    /// the image path; it is a <see cref="FunctionUnavailableException"/> only so that, if one ever
+    /// escapes to the management API, it answers 503 rather than 500.
+    /// </summary>
+    public sealed class FunctionArtifactStoreUnavailableException(string message)
+        : FunctionUnavailableException(message);
 }

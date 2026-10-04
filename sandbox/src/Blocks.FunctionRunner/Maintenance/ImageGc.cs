@@ -244,14 +244,12 @@ namespace Blocks.FunctionRunner.Maintenance
         private async Task<int> EnforceCacheCapAsync(
             IList<ImagesListResponse> images, HashSet<string> inUse, CancellationToken token)
         {
-            var cap = _options.MaxCachedImages;
-            if (cap <= 0 || _usage is null)
-            {
-                // Zero means "derive from the disk", which is not implemented yet; until it is, no
-                // count-based eviction happens and the keep set alone decides. Said plainly rather
-                // than silently doing nothing.
-                return 0;
-            }
+            if (_usage is null) return 0;
+
+            var cap = _options.MaxCachedImages > 0
+                ? _options.MaxCachedImages
+                : DeriveCapFromDisk(images);
+            if (cap <= 0) return 0;
 
             var candidates = images
                 .Where(i => i.ID is not null && !inUse.Contains(i.ID) && !IsBaseImage(i) && !IsTestImage(i.Labels))
@@ -297,6 +295,49 @@ namespace Blocks.FunctionRunner.Maintenance
             }
 
             return evicted;
+        }
+
+        /// <summary>
+        /// How many images this host can hold, worked out from the disk rather than guessed.
+        /// <para>
+        /// A hand-set number has to be chosen for the smallest disk anyone might deploy on, and is
+        /// then wrong on every larger one — the same reason <c>HostBudget</c> measures the machine
+        /// instead of reading a constant. So: take the share of the disk images may use, divide by
+        /// what an image here actually costs, and use that.
+        /// </para>
+        /// <para>
+        /// The average is measured from the images present. With none to measure from there is also
+        /// nothing to evict, so the answer does not matter yet.
+        /// </para>
+        /// </summary>
+        private int DeriveCapFromDisk(IList<ImagesListResponse> images)
+        {
+            var functionImages = images.Where(i => !IsBaseImage(i)).ToList();
+            if (functionImages.Count == 0) return 0;
+
+            var averageBytes = (long)functionImages.Average(i => (double)Math.Max(i.Size, 1));
+            if (averageBytes <= 0) return 0;
+
+            long budgetBytes;
+            try
+            {
+                var drive = new DriveInfo(Path.GetPathRoot(_options.RunsDir) ?? "/");
+                budgetBytes = (long)(drive.TotalSize * (_options.ImageDiskPercent / 100.0));
+            }
+            catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
+            {
+                // Without a reading there is no honest number, and evicting on a guess would throw
+                // away images for no reason. Do nothing instead.
+                _logger.LogDebug("Could not read the image disk: {Message}", ex.Message);
+                return 0;
+            }
+
+            var derived = (int)Math.Max(1, budgetBytes / averageBytes);
+            _logger.LogDebug(
+                "Image cache cap derived as {Cap} ({Percent}% of disk, average image {AverageMb} MB)",
+                derived, _options.ImageDiskPercent, averageBytes / 1024 / 1024);
+
+            return derived;
         }
 
         private async Task<HashSet<string>> LoadKeepSetAsync()

@@ -77,6 +77,8 @@ namespace Blocks.FunctionRunner.Utils
                 client => client.Timeout = TimeSpan.FromMinutes(10));
             services.AddSingleton<Sandbox.IArtifactImageBuilder, Sandbox.ArtifactImageBuilder>();
             services.AddSingleton<Maintenance.IImageUsageLog, Maintenance.ImageUsageLog>();
+            services.AddSingleton<Builds.IDependencyCache, Builds.DependencyCache>();
+            services.AddSingleton<SecretStore.ISecretStoreBreaker, SecretStore.SecretStoreBreaker>();
 
             // Uploading a build artifact. Same reasoning as the download client: a large body
             // deserves a timeout that is not the default short one.

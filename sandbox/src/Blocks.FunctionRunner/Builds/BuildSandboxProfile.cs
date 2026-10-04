@@ -182,7 +182,18 @@ namespace Blocks.FunctionRunner.Builds
                     NetworkMode = options.Network,
 
                     // --- budgets --------------------------------------------------------
-                    NanoCPUs = options.BuildCpus * 1_000_000_000L,
+                    // Priority, not a partition. A build is never urgent and a run always is, so
+                    // the build is given a low share of CPU and of disk: it uses everything the
+                    // host has spare, and steps aside the instant a run wants the machine. A hard
+                    // NanoCPUs quota did the opposite — it reserved its cores whether or not
+                    // anything else needed them, which is why clicking Test cost the deployed
+                    // version its capacity. Zero leaves the ceiling off entirely.
+                    NanoCPUs = options.BuildCpus > 0 ? options.BuildCpus * 1_000_000_000L : 0,
+                    CPUShares = options.BuildCpuShares,
+                    BlkioWeight = options.BuildBlkioWeight,
+
+                    // Memory is the exception: it cannot be shared by priority. A build either has
+                    // the pages or it is killed, so this stays a reservation.
                     Memory = (long)options.BuildMemoryMb * 1024 * 1024,
                     MemorySwap = (long)options.BuildMemoryMb * 1024 * 1024,
                     MemorySwappiness = 0,
@@ -263,6 +274,12 @@ namespace Blocks.FunctionRunner.Builds
                 return $"user is '{inspect.Config?.User}', expected {Ceilings.SandboxUid}:{Ceilings.SandboxUid}";
             if (!string.Equals(host.NetworkMode, options.Network, StringComparison.Ordinal))
                 return $"network is '{host.NetworkMode}', expected '{options.Network}'";
+            if (options.BuildCpus > 0 && host.NanoCPUs != options.BuildCpus * 1_000_000_000L)
+                return $"NanoCPUs is {host.NanoCPUs}, expected {options.BuildCpus * 1_000_000_000L}";
+            if (host.CPUShares != options.BuildCpuShares)
+                return $"CPUShares is {host.CPUShares}, expected {options.BuildCpuShares}";
+            if (host.BlkioWeight != options.BuildBlkioWeight)
+                return $"BlkioWeight is {host.BlkioWeight}, expected {options.BuildBlkioWeight}";
             if (host.Memory != (long)options.BuildMemoryMb * 1024 * 1024)
                 return $"memory is {host.Memory}, expected {(long)options.BuildMemoryMb * 1024 * 1024}";
             if (host.MemorySwap != host.Memory)

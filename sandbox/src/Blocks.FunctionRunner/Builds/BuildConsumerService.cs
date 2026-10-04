@@ -21,6 +21,7 @@ namespace Blocks.FunctionRunner.Builds
     {
         private readonly IDatabase _db;
         private readonly BuildProcessor _processor;
+        private readonly Admission.HostBudget _budget;
         private readonly HeartbeatService _heartbeat;
         private readonly RunnerOptions _options;
         private readonly ILogger<BuildConsumerService> _logger;
@@ -28,12 +29,14 @@ namespace Blocks.FunctionRunner.Builds
         public BuildConsumerService(
             IDatabase db,
             BuildProcessor processor,
+            Admission.HostBudget budget,
             HeartbeatService heartbeat,
             IOptions<RunnerOptions> options,
             ILogger<BuildConsumerService> logger)
         {
             _db = db;
             _processor = processor;
+            _budget = budget;
             _heartbeat = heartbeat;
             _options = options.Value;
             _logger = logger;
@@ -125,6 +128,23 @@ namespace Blocks.FunctionRunner.Builds
             if (string.IsNullOrWhiteSpace(job.ImageRef))
             {
                 await consumer.DeadLetterAsync(entry, "the entry carries no imageRef").ConfigureAwait(false);
+                return;
+            }
+
+            // A build is as real a consumer of this host as a run is, and until now it was
+            // invisible to admission: it took its memory outside the budget, the host over-
+            // committed, and PSI only noticed once runs were already contending. Reserving makes
+            // it the other way round — while a build is in flight the host simply admits fewer
+            // runs. Planned, rather than discovered.
+            //
+            // Deferred rather than refused when there is no room, like everything else here: the
+            // entry stays pending and the next pass picks it up.
+            using var reservation = _budget.TryReserve((long)_options.BuildMemoryMb * 1024 * 1024);
+            if (reservation is null)
+            {
+                _logger.LogDebug(
+                    "Host has no room for build {BuildId} ({Active}/{Capacity} in use); leaving it queued",
+                    job.BuildId, _budget.Active, _budget.Capacity);
                 return;
             }
 

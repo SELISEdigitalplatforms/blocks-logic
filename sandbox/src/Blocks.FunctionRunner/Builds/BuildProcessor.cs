@@ -70,6 +70,7 @@ namespace Blocks.FunctionRunner.Builds
         private readonly string _template;
 
         private readonly IHttpClientFactory _httpClientFactory;
+        private readonly IDependencyCache _dependencies;
 
         public BuildProcessor(
             IDatabase db,
@@ -77,10 +78,12 @@ namespace Blocks.FunctionRunner.Builds
             IDependencyInstaller installer,
             Maintenance.IRegistryClient registry,
             IHttpClientFactory httpClientFactory,
+            IDependencyCache dependencies,
             IOptions<RunnerOptions> options,
             ILogger<BuildProcessor> logger)
         {
             _httpClientFactory = httpClientFactory;
+            _dependencies = dependencies;
             _db = db;
             _docker = docker;
             _installer = installer;
@@ -175,21 +178,43 @@ namespace Blocks.FunctionRunner.Builds
                 using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
                 timeout.CancelAfter(TimeSpan.FromSeconds(_options.BuildTimeoutSeconds));
 
-                // --- install dependencies, under gVisor ----------------------------------
-                // The only step that runs code the tenant chose, and the reason it is not a RUN
-                // instruction: docker build has no runtime selector, so a RUN would execute on
-                // the Engine default (runc) and put tenant code on the host kernel.
-                var install = await _installer.InstallAsync(
-                    job.BuildId, dirs.Work, job.AllowScripts, beginMarker, endMarker, timeout.Token)
-                    .ConfigureAwait(false);
+                // --- dependencies --------------------------------------------------------
+                // Installing is the expensive half of a build, and the manifest is the only thing
+                // that can legitimately change what it produces. So if this exact manifest was
+                // installed before, reuse that tree: editing index.js, or just testing with a
+                // different input, no longer costs a full install.
+                var manifest = files.FirstOrDefault(f => f.Path is "package.json")?.Content;
+                var archivePath = Path.Combine(dirs.Work, BuildSandboxProfile.DepsArchiveName);
+                var restored = manifest is not null
+                    && _dependencies.TryRestore(job.TenantId, manifest, archivePath);
 
-                log.Append(install.Log);
-
-                if (!install.Ok)
+                if (restored)
                 {
-                    await PublishAsync(job, outcome, "FAILED", null, null, PublishableLog(), install.Failure)
+                    log.AppendLine("dependencies reused from a previous build of this manifest");
+                }
+                else
+                {
+                    // The only step that runs code the tenant chose, and the reason it is not a RUN
+                    // instruction: docker build has no runtime selector, so a RUN would execute on
+                    // the Engine default (runc) and put tenant code on the host kernel.
+                    var install = await _installer.InstallAsync(
+                        job.BuildId, dirs.Work, job.AllowScripts, beginMarker, endMarker, timeout.Token)
                         .ConfigureAwait(false);
-                    return outcome;
+
+                    log.Append(install.Log);
+
+                    if (!install.Ok)
+                    {
+                        await PublishAsync(job, outcome, "FAILED", null, null, PublishableLog(), install.Failure)
+                            .ConfigureAwait(false);
+                        return outcome;
+                    }
+
+                    // Only a tree that installed cleanly is worth keeping.
+                    if (manifest is not null)
+                    {
+                        _dependencies.Save(job.TenantId, manifest, archivePath);
+                    }
                 }
 
                 // The archive moves into the context now rather than being written there, so the
@@ -397,8 +422,13 @@ namespace Blocks.FunctionRunner.Builds
                 NetworkMode = _options.Network,
                 Memory = (long)_options.BuildMemoryMb * 1024 * 1024,
                 MemorySwap = (long)_options.BuildMemoryMb * 1024 * 1024,
-                CPUQuota = _options.BuildCpus * 100_000L,
-                CPUPeriod = 100_000L,
+                // The image build is host work too — unpacking layers and chowning a whole
+                // dependency tree is thousands of file operations. Same reasoning as the install
+                // sandbox: a share rather than a quota, so it fills idle CPU and yields to runs.
+                // A quota is applied only when BuildCpus asks for one.
+                CPUShares = _options.BuildCpuShares,
+                CPUQuota = _options.BuildCpus > 0 ? _options.BuildCpus * 100_000L : 0,
+                CPUPeriod = _options.BuildCpus > 0 ? 100_000L : 0,
                 Labels = test
                     ? new Dictionary<string, string> { [FunctionImageLabel] = "true", [TestImageLabel] = "true" }
                     : new Dictionary<string, string> { [FunctionImageLabel] = "true" },

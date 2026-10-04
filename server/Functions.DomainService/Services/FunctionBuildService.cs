@@ -208,6 +208,31 @@ namespace Functions.DomainService.Services
                 SourceHash = sourceHash,
                 Status = BuildStatus.Queued,
             };
+
+            // Signed before the build runs, because the builder cannot sign for itself — it holds no
+            // storage credential. Keyed by the build id rather than by what the build produces, since
+            // the URL has to exist before there is anything to hash. The window covers a build that
+            // queues behind others, not just one that starts immediately.
+            //
+            // Signed before the record is written, too, so nothing is left behind if signing throws.
+            //
+            // A tenant whose storage cannot hold artifacts (none configured, SFTP, or it failed to
+            // open) is not a failed build: the field is left out and the runner pushes to the
+            // registry, as it did before the store existed.
+            string? artifactUploadUrl = null;
+            try
+            {
+                artifactUploadUrl = await _artifacts
+                    .CreateUploadUrlAsync(tenantId, build.ItemId, ArtifactUploadWindow, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (Storage.FunctionArtifactStoreUnavailableException ex)
+            {
+                _logger.LogWarning(
+                    "Build {BuildId} for function {FunctionId} will push to the registry instead of uploading an artifact: {Reason}",
+                    build.ItemId, function.ItemId, ex.Message);
+            }
+
             await _buildRepository.CreateAsync(tenantId, build, cancellationToken);
 
             if (!string.IsNullOrEmpty(function.Source.LockJson))
@@ -223,27 +248,26 @@ namespace Functions.DomainService.Services
                 files = BuildFileMap(function.Source),
             });
 
-            // Signed before the build runs, because the builder cannot sign for itself — it holds no
-            // storage credential. Keyed by the build id rather than by what the build produces, since
-            // the URL has to exist before there is anything to hash. The window covers a build that
-            // queues behind others, not just one that starts immediately.
-            var artifactUploadUrl = _artifacts.CreateUploadUrl(tenantId, build.ItemId, ArtifactUploadWindow);
-
             var database = _cache.CacheDatabase();
             var sourceKey = FunctionQueueKeys.Source(build.ItemId);
             await database.StringSetAsync(sourceKey, sourceBundle, FunctionQueueKeys.SourceTtl);
 
-            await database.StreamAddAsync(FunctionQueueKeys.BuildsStream,
-            [
-                new NameValueEntry("buildId", build.ItemId),
-                new NameValueEntry("functionId", function.ItemId),
-                new NameValueEntry("tenantId", tenantId),
-                new NameValueEntry("sourceKey", sourceKey),
-                new NameValueEntry("imageRef", imageRef),
-                new NameValueEntry("allowScripts", "false"),
-                new NameValueEntry("protocol", FunctionQueueKeys.ProtocolVersion),
-                new NameValueEntry(FunctionQueueKeys.BuildArtifactUploadField, artifactUploadUrl),
-            ]);
+            var entry = new List<NameValueEntry>
+            {
+                new("buildId", build.ItemId),
+                new("functionId", function.ItemId),
+                new("tenantId", tenantId),
+                new("sourceKey", sourceKey),
+                new("imageRef", imageRef),
+                new("allowScripts", "false"),
+                new("protocol", FunctionQueueKeys.ProtocolVersion),
+            };
+            if (artifactUploadUrl is not null)
+            {
+                entry.Add(new NameValueEntry(FunctionQueueKeys.BuildArtifactUploadField, artifactUploadUrl));
+            }
+
+            await database.StreamAddAsync(FunctionQueueKeys.BuildsStream, [.. entry]);
 
             _logger.LogInformation(
                 "Queued build {BuildId} for function {FunctionId} (source hash {SourceHash})",

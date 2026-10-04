@@ -194,12 +194,98 @@ namespace Blocks.FunctionRunner.Options
         [Range(0, 30)]
         public int KillGraceSeconds { get; set; } = 2;
 
+        /// <summary>
+        /// Time allowed for a sandbox to reach the tenant's first line of code, as
+        /// <c>RUNNER__StartupAllowanceSeconds</c>.
+        /// <para>
+        /// Booting gVisor, starting Node and importing a dependency tree is the platform's time, not
+        /// the function's. It used to have to fit inside <see cref="KillGraceSeconds"/>, which is two
+        /// seconds — so a function with a large dependency tree was killed as TIMED_OUT while its
+        /// handler was still well inside its own budget, and the failure read as the tenant's fault.
+        /// </para>
+        /// <para>
+        /// The cost of a generous value is that a sandbox wedged <em>before</em> the handler starts
+        /// holds its slot for this long. That is the right way round: a slow import is common and a
+        /// wedged boot is not.
+        /// </para>
+        /// </summary>
+        [Range(1, 300)]
+        public int StartupAllowanceSeconds { get; set; } = 30;
+
+        /// <summary>
+        /// How full this host may be before a <em>test</em> run is made to wait, as
+        /// <c>RUNNER__TestDeferAbovePercent</c>. 100 turns the rule off.
+        /// <para>
+        /// A test is a developer convenience; a deployed function is somebody's traffic. When the
+        /// host is busy the test can wait a few seconds and nobody minds — and nothing is refused,
+        /// it simply stays on the queue, which is how everything else here handles load.
+        /// </para>
+        /// </summary>
+        [Range(10, 100)]
+        public int TestDeferAbovePercent { get; set; } = 70;
+
+        /// <summary>
+        /// Keep an installed dependency tree so a build whose <c>package.json</c> has not changed
+        /// does not install it again, as <c>RUNNER__CacheDependencies</c>.
+        /// <para>
+        /// On by default. The install is the expensive half of a build, and while a function is
+        /// being written its manifest rarely changes — so most builds can skip it entirely. The
+        /// trade is that an unchanged manifest stops silently picking up newer patch versions,
+        /// which is arguably the behaviour you want anyway.
+        /// </para>
+        /// </summary>
+        public bool CacheDependencies { get; set; } = true;
+
+        /// <summary>
+        /// How many dependency trees this host keeps, as <c>RUNNER__MaxCachedDependencyTrees</c>.
+        /// <para>
+        /// Its own small budget rather than a share of the disk, on purpose: the image cache shares
+        /// that disk, and a dependency cache allowed to grow into it would evict the images that
+        /// deployed functions run from. Helping tests must not cost production.
+        /// </para>
+        /// </summary>
+        [Range(1, 10_000)]
+        public int MaxCachedDependencyTrees { get; set; } = 50;
+
         // ---- builds ------------------------------------------------------------------
         [Range(30, 1800)]
         public int BuildTimeoutSeconds { get; set; } = 300;
 
-        [Range(1, 16)]
-        public int BuildCpus { get; set; } = 2;
+        /// <summary>
+        /// A ceiling on the CPU a build may use, as <c>RUNNER__BuildCpus</c>.
+        /// <para>
+        /// Zero (the default) means <b>no ceiling</b>, which is the point: a build is held back by
+        /// <see cref="BuildCpuShares"/> instead, so it uses whatever the host has spare and yields
+        /// the moment a run wants it. A hard quota does the opposite — it takes its cores whether
+        /// production needs them or not, which is what made a developer clicking Test cost the
+        /// deployed version its capacity.
+        /// </para>
+        /// <para>Set a number only to cap a build on a host where even spare-time builds are unwelcome.</para>
+        /// </summary>
+        [Range(0, 16)]
+        public int BuildCpus { get; set; }
+
+        /// <summary>
+        /// The build's share of CPU when it is competing, as <c>RUNNER__BuildCpuShares</c>.
+        /// <para>
+        /// Relative, not absolute: the default for a container is 1024, so 128 means a build gets
+        /// roughly an eighth of the attention a run does when both want the CPU — and all of it when
+        /// nothing else does. That is the whole idea. A build is never urgent; a run always is.
+        /// </para>
+        /// </summary>
+        [Range(2, 1024)]
+        public int BuildCpuShares { get; set; } = 128;
+
+        /// <summary>
+        /// The build's share of disk I/O when it is competing, as <c>RUNNER__BuildBlkioWeight</c>.
+        /// <para>
+        /// The same idea as <see cref="BuildCpuShares"/> and it matters just as much: an install
+        /// unpacks thousands of small files, and a host starved of I/O stalls runs that are only
+        /// trying to read their own image. 10 is the floor the kernel accepts, 500 the default.
+        /// </para>
+        /// </summary>
+        [Range(10, 1000)]
+        public ushort BuildBlkioWeight { get; set; } = 100;
 
         [Range(256, 16384)]
         public int BuildMemoryMb { get; set; } = 2048;

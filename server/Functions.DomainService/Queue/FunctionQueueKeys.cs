@@ -137,6 +137,23 @@ namespace Functions.DomainService.Queue
         public static string Logs(string runId) => $"{_prefix}function:logs:{runId}";
         public static string Lease(string runId) => $"{_prefix}function:lease:{runId}";
         public static string Cancel(string runId) => $"{_prefix}function:cancel:{runId}";
+
+        /// <summary>
+        /// Holds for <see cref="TestRateWindow"/> after a test is accepted for this function, so the
+        /// next one is told to wait rather than queued. Per function, because that is what a
+        /// developer hammers.
+        /// </summary>
+        public static string TestRate(string functionId) => $"{_prefix}function:test-rate:{functionId}";
+
+        /// <summary>
+        /// How long a function must wait between tests.
+        /// <para>
+        /// A test builds and runs on a host that is also serving deployed functions, so the cost of
+        /// one is real. Two minutes is long enough that nobody can hold a host down by clicking, and
+        /// short enough that it does not get in the way of working.
+        /// </para>
+        /// </summary>
+        public static readonly TimeSpan TestRateWindow = TimeSpan.FromSeconds(120);
         public static string SyncChannel(string runId) => $"{_prefix}function:sync:{runId}";
         public static string Concurrency(string functionId) => $"{_prefix}function:concurrency:{functionId}";
         public static string Runner(string runnerId) => $"{_prefix}function:runner:{runnerId}";

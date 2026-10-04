@@ -142,5 +142,58 @@ namespace XUnitTest.Functions
 
             _created.Should().ContainSingle().Which.SourceHash.Should().Be("hash_1");
         }
+
+        // ---- the artifact upload URL --------------------------------------------------
+
+        private NameValueEntry[] QueuedBuildEntry() => (NameValueEntry[])_database.Invocations
+            .Single(i => i.Method.Name == "StreamAddAsync")
+            .Arguments[1];
+
+        [Fact]
+        public async Task Tenant_storage_that_can_sign_gives_the_build_an_upload_url()
+        {
+            _artifacts.Setup(a => a.CreateUploadUrlAsync(Tenant, It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync("https://acct.blob.core.windows.net/t1/blocks-fn-artifacts/t1/b.tar?sig=x");
+
+            await Service().EnsureImageAsync(Tenant, Function(), default, waitSecondsOverride: 0, forceRebuild: true);
+
+            QueuedBuildEntry().Single(e => e.Name == FunctionQueueKeys.BuildArtifactUploadField).Value.ToString()
+                .Should().Be("https://acct.blob.core.windows.net/t1/blocks-fn-artifacts/t1/b.tar?sig=x");
+        }
+
+        /// <summary>
+        /// Tenant storage that cannot hold artifacts (none, SFTP, failed to open) is not a failed
+        /// build: the field is left out — not sent empty — and the runner pushes to the registry,
+        /// as it did before artifacts existed.
+        /// </summary>
+        [Fact]
+        public async Task Unavailable_tenant_storage_queues_the_build_for_the_push_path()
+        {
+            _artifacts.Setup(a => a.CreateUploadUrlAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new global::Functions.DomainService.Storage.FunctionArtifactStoreUnavailableException("unavailable"));
+
+            var build = await Service().EnsureImageAsync(Tenant, Function(), default, waitSecondsOverride: 0, forceRebuild: true);
+
+            build.Status.Should().Be(BuildStatus.Queued);
+            _created.Should().ContainSingle();
+            QueuedBuildEntry().Should().NotContain(e => e.Name == FunctionQueueKeys.BuildArtifactUploadField);
+        }
+
+        /// <summary>
+        /// Anything else from signing is a real failure, and it fails before anything is written —
+        /// no QUEUED record no runner will ever pick up, and no job on the stream.
+        /// </summary>
+        [Fact]
+        public async Task An_unexpected_signing_failure_leaves_nothing_behind()
+        {
+            _artifacts.Setup(a => a.CreateUploadUrlAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new InvalidOperationException("boom"));
+
+            var act = () => Service().EnsureImageAsync(Tenant, Function(), default, waitSecondsOverride: 0, forceRebuild: true);
+
+            await act.Should().ThrowAsync<InvalidOperationException>();
+            _created.Should().BeEmpty();
+            Streamed.Should().BeEmpty();
+        }
     }
 }

@@ -243,6 +243,11 @@ async function main() {
   }
 
   // --- run it -----------------------------------------------------------------
+  // Said before the handler is called and after the import above, so the runner can tell the
+  // tenant's time from the platform's. It arms its own kill timer from this line; everything
+  // before it is boot and module loading, which the function should not be charged for.
+  writer.started();
+
   const timeoutMs = envelope.limits.timeoutMs;
   let timer = null;
   const deadline = timeoutMs

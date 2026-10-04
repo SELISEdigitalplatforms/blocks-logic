@@ -176,6 +176,12 @@ namespace Blocks.FunctionRunner.Contracts
         [JsonPropertyName("msg")] public string? Message { get; init; }
         [JsonPropertyName("data")] public object? Data { get; init; }
         [JsonPropertyName("reason")] public string? Reason { get; init; }
+
+        /// <summary>
+        /// On a <c>started</c> line: the sandbox's own clock when the handler began, in Unix
+        /// milliseconds. Absent on every other line, and on a runtime image that predates it.
+        /// </summary>
+        [JsonPropertyName("at")] public long? At { get; init; }
         [JsonPropertyName("ok")] public bool? Ok { get; init; }
         [JsonPropertyName("value")] public object? Value { get; init; }
         [JsonPropertyName("code")] public string? Code { get; init; }

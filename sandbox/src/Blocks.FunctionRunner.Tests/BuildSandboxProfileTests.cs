@@ -22,7 +22,6 @@ namespace Blocks.FunctionRunner.Tests
             Network = "blocks-fn-egress",
             ResolvConf = "/etc/blocks-runner/resolv.conf",
             BaseImage = "127.0.0.1:5000/blocks/functions-node:24-v1",
-            BuildCpus = 2,
             BuildMemoryMb = 2048,
         };
 
@@ -182,7 +181,8 @@ namespace Blocks.FunctionRunner.Tests
             var host = Create().HostConfig;
 
             host.NetworkMode.Should().Be("blocks-fn-egress");
-            host.NanoCPUs.Should().Be(2_000_000_000);
+            // CPU is a share now, not a reservation — see A_build_takes_spare_cpu_rather_than_reserving_it.
+            host.NanoCPUs.Should().Be(0);
             host.Memory.Should().Be(2048L * 1024 * 1024);
             // No swap to escape the ceiling into, exactly as for a run.
             host.MemorySwap.Should().Be(host.Memory);
@@ -356,5 +356,68 @@ namespace Blocks.FunctionRunner.Tests
             Blocks.FunctionRunner.Sandbox.SandboxProfile.ContainerName("x")
                 .Should().NotStartWith(BuildSandboxProfile.ContainerPrefix);
         }
+
+        // ---- a build must never outrank a run ---------------------------------------
+
+        /// <summary>
+        /// The reason this changed. A hard CPU quota reserved its cores whether or not anything
+        /// else wanted them, so a developer clicking Test measurably shrank the capacity serving
+        /// live traffic on that host. A share does the opposite: all the spare CPU, and none of
+        /// the contended CPU.
+        /// </summary>
+        [Fact]
+        public void A_build_takes_spare_cpu_rather_than_reserving_it()
+        {
+            var host = Create().HostConfig;
+
+            host.NanoCPUs.Should().Be(0, "no ceiling by default — priority holds the build back, not a quota");
+            host.CPUShares.Should().Be(128).And.BeLessThan(1024, "a run's default share");
+        }
+
+        /// <summary>
+        /// An install unpacks thousands of small files. A host starved of I/O stalls runs that are
+        /// only trying to read their own image, so disk gets the same treatment as CPU.
+        /// </summary>
+        [Fact]
+        public void A_build_also_yields_on_disk()
+        {
+            Create().HostConfig.BlkioWeight.Should().Be(100).And.BeLessThan(500);
+        }
+
+        /// <summary>
+        /// Memory is the one budget that cannot be shared by priority: a build either has the pages
+        /// or the kernel kills it. So this one stays a reservation.
+        /// </summary>
+        [Fact]
+        public void Memory_is_still_reserved_because_it_cannot_be_shared()
+        {
+            var host = Create().HostConfig;
+
+            host.Memory.Should().Be(2048L * 1024 * 1024);
+            host.MemorySwap.Should().Be(host.Memory, "no swap to spill into");
+        }
+
+        /// <summary>A host that wants a hard cap can still set one; it is simply not the default.</summary>
+        [Fact]
+        public void A_ceiling_is_applied_only_when_asked_for()
+        {
+            var capped = BuildSandboxProfile.Create(
+                BuildSandboxProfile.ContainerName("build_2"),
+                Options.BaseImage,
+                Work,
+                BuildSandboxProfile.InstallScript("--omit=dev --ignore-scripts", "b", "e"),
+                new RunnerOptions
+                {
+                    Runtime = Ceilings.SandboxRuntime,
+                    Network = Options.Network,
+                    ResolvConf = Options.ResolvConf,
+                    BaseImage = Options.BaseImage,
+                    BuildCpus = 2,
+                    BuildMemoryMb = 2048,
+                });
+
+            capped.HostConfig.NanoCPUs.Should().Be(2_000_000_000L);
+        }
+
     }
 }

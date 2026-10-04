@@ -279,6 +279,24 @@ namespace Functions.DomainService.Services
             var function = await _functionRepository.GetByIdAsync(tenantId, functionId, cancellationToken)
                 ?? throw new FunctionNotFoundException($"function '{functionId}' was not found");
 
+            // One test per function per window. Refused here rather than queued, because the
+            // developer is watching: being told "wait a moment" beats a run that sits on a stream
+            // and surfaces minutes later. The cost being limited is real — a test builds and runs
+            // on a host that is also serving deployed functions.
+            var rateKey = FunctionQueueKeys.TestRate(functionId);
+            var database = _cache.CacheDatabase();
+            if (!await database.StringSetAsync(
+                    rateKey, DateTimeOffset.UtcNow.ToString("O"),
+                    FunctionQueueKeys.TestRateWindow, When.NotExists).ConfigureAwait(false))
+            {
+                var remaining = await database.KeyTimeToLiveAsync(rateKey).ConfigureAwait(false);
+                var seconds = (int)Math.Ceiling((remaining ?? FunctionQueueKeys.TestRateWindow).TotalSeconds);
+                throw new FunctionRateLimitedException(
+                    $"this function was tested less than {FunctionQueueKeys.TestRateWindow.TotalSeconds:0} seconds ago; "
+                    + $"try again in {seconds}s",
+                    seconds);
+            }
+
             // One test per function at a time. Clicking Test again used to leave the previous one
             // building and running to completion: two sandboxes, two images and two sets of logs
             // for a question the tenant has already moved on from, all of it drawing on the
@@ -650,20 +668,10 @@ namespace Functions.DomainService.Services
             // ignores them and pulls the image as before, so both paths coexist during the cutover.
             if (version is not null && !string.IsNullOrEmpty(version.ArtifactId))
             {
-                var artifactUrl = await _artifacts
-                    .CreateDownloadUrlAsync(tenantId, version.ArtifactId, ArtifactDownloadWindow)
+                var artifactUrl = await ArtifactUrlOrNullAsync(tenantId, function, version, run)
                     .ConfigureAwait(false);
 
-                if (string.IsNullOrEmpty(artifactUrl))
-                {
-                    // The artifact is gone from the store. Saying so here is better than queueing a
-                    // run that fails on a host with a 404 it cannot explain.
-                    _logger.LogError(
-                        "Artifact {ArtifactId} for function {FunctionId} version {VersionId} is missing "
-                        + "from the store; the run will fall back to the image reference",
-                        version.ArtifactId, function.ItemId, run.VersionId);
-                }
-                else
+                if (artifactUrl is not null)
                 {
                     entry.Add(new NameValueEntry(FunctionQueueKeys.RunArtifactUrlField, artifactUrl));
                     entry.Add(new NameValueEntry(
@@ -672,6 +680,48 @@ namespace Functions.DomainService.Services
             }
 
             await database.StreamAddAsync(FunctionQueueKeys.RunsStream, [.. entry]);
+        }
+
+        /// <summary>
+        /// A signed download URL for the version's artifact, or <c>null</c> when the run has to go by
+        /// image reference instead — the artifact is gone, or the store is off or misconfigured.
+        /// <para>
+        /// Tenant storage that cannot serve the artifact is treated like a missing artifact, not as a
+        /// reason to refuse: a run may be a workflow step or a public call, and the image path still
+        /// exists.
+        /// </para>
+        /// </summary>
+        private async Task<string?> ArtifactUrlOrNullAsync(
+            string tenantId, FunctionEntity function, FunctionVersionEntity version, FunctionRunEntity run)
+        {
+            string? artifactUrl;
+            try
+            {
+                artifactUrl = await _artifacts
+                    // Not cancellable, like the rest of the enqueue: the run record already exists.
+                    .CreateDownloadUrlAsync(tenantId, version.ArtifactId!, ArtifactDownloadWindow, CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+            catch (Storage.FunctionArtifactStoreUnavailableException ex)
+            {
+                _logger.LogError(
+                    "Run {RunId} for function {FunctionId} falls back to the image reference: {Reason}",
+                    run.ItemId, function.ItemId, ex.Message);
+                return null;
+            }
+
+            if (string.IsNullOrEmpty(artifactUrl))
+            {
+                // The artifact is gone from the store. Saying so here is better than queueing a
+                // run that fails on a host with a 404 it cannot explain.
+                _logger.LogError(
+                    "Artifact {ArtifactId} for function {FunctionId} version {VersionId} is missing "
+                    + "from the store; the run will fall back to the image reference",
+                    version.ArtifactId, function.ItemId, run.VersionId);
+                return null;
+            }
+
+            return artifactUrl;
         }
 
         /// <summary>

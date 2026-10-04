@@ -84,6 +84,11 @@ namespace XUnitTest.Functions
             var multiplexer = new Mock<IConnectionMultiplexer>();
             multiplexer.Setup(m => m.GetSubscriber(It.IsAny<object?>())).Returns(_subscriber.Object);
             _redis.Fake.On("get_Multiplexer", _ => multiplexer.Object);
+
+            // The test rate limiter takes this key before anything else happens. True means "you
+            // are the first in the window", which is what every case here assumes; the limiter has
+            // its own tests.
+            _redis.Fake.On("StringSetAsync", _ => true);
             _subscriber
                 .Setup(s => s.SubscribeAsync(It.IsAny<RedisChannel>(), It.IsAny<Action<RedisChannel, RedisValue>>(), It.IsAny<CommandFlags>()))
                 .Callback((RedisChannel _, Action<RedisChannel, RedisValue> handler, CommandFlags _) => _notify = handler)
@@ -245,6 +250,27 @@ namespace XUnitTest.Functions
                 .Setup(a => a.CreateDownloadUrlAsync(
                     It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((string?)null);
+
+            await InvokeUntilQueuedAsync();
+
+            var entry = _redis.Fake.Calls("StreamAddAsync").Single()[1] as NameValueEntry[];
+            entry!.Should().NotContain(e => e.Name == FunctionQueueKeys.RunArtifactUrlField);
+            entry.Single(e => e.Name == "image").Value.ToString().Should().NotBeEmpty();
+        }
+
+        /// <summary>
+        /// Tenant storage that cannot serve the artifact (none, SFTP, failed to open) must not take
+        /// runs down with it — a run may be a workflow step. It goes by image reference, like a
+        /// missing artifact.
+        /// </summary>
+        [Fact]
+        public async Task Unavailable_tenant_storage_queues_the_run_by_image_reference()
+        {
+            _version.ArtifactId = "build_1";
+            _artifacts
+                .Setup(a => a.CreateDownloadUrlAsync(
+                    It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new global::Functions.DomainService.Storage.FunctionArtifactStoreUnavailableException("unavailable"));
 
             await InvokeUntilQueuedAsync();
 
@@ -471,6 +497,33 @@ namespace XUnitTest.Functions
             result.Status.Should().Be(FunctionQueueKeys.Wire.Queued);
             result.RunId.Should().Be(_created!.ItemId);
             stopwatch.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(4));
+        }
+
+        /// <summary>
+        /// A test builds and runs on a host that is also serving deployed functions, so one costs
+        /// real capacity. Refused rather than queued, because the developer is watching: "wait a
+        /// moment" is a better answer than a run that surfaces minutes later.
+        /// </summary>
+        [Fact]
+        public async Task Testing_the_same_function_twice_in_the_window_is_refused_not_queued()
+        {
+            RunIs(() => Run(RunStatus.Queued));
+            _redis.Fake.On("StringSetAsync", _ => false);          // the window is already held
+            _redis.Fake.On("KeyTimeToLiveAsync", _ => TimeSpan.FromSeconds(90));
+
+            var act = async () => await Service()
+                .TestAsync(Tenant, "fn-1", new TestFunctionRequestDto { FunctionId = "fn-1", InputJson = "{}" });
+
+            var thrown = await act.Should().ThrowAsync<FunctionRateLimitedException>();
+            thrown.Which.RetryAfterSeconds.Should().Be(90, "the caller is told when, not just no");
+            _redis.Fake.Calls("StreamAddAsync").Should().BeEmpty("nothing is queued for a refused test");
+        }
+
+        [Fact]
+        public async Task The_window_is_two_minutes()
+        {
+            FunctionQueueKeys.TestRateWindow.Should().Be(TimeSpan.FromSeconds(120));
+            await Task.CompletedTask;
         }
 
         [Fact]

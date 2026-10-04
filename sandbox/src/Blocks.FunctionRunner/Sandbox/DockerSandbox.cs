@@ -19,6 +19,19 @@ namespace Blocks.FunctionRunner.Sandbox
         public required long DurationMs { get; init; }
 
         /// <summary>
+        /// How long the sandbox took to reach the tenant's first line — gVisor booting, Node
+        /// starting, dependencies importing. Null when the runtime image did not report it, or when
+        /// the run never got that far.
+        /// </summary>
+        public long? StartupMs { get; init; }
+
+        /// <summary>
+        /// How long the tenant's own handler ran. This, not <see cref="DurationMs"/>, is what a
+        /// function author is actually trying to measure.
+        /// </summary>
+        public long? ExecutionMs { get; init; }
+
+        /// <summary>
         /// The highest memory usage observed for the container's cgroup while it ran, sampled via
         /// Docker's live stats stream (see <see cref="DockerSandbox.CollectStatsAsync"/>). Null
         /// when no sample arrived — a run that finished before the first ~1s sample, or one whose
@@ -139,8 +152,15 @@ namespace Blocks.FunctionRunner.Sandbox
                 // --- run under a hard deadline -----------------------------------------
                 // The bootstrap has its own soft deadline, but it races on the event loop and a
                 // synchronous busy loop never yields to it. This is the deadline that actually
-                // holds, which is why the grace is small and the kill is unconditional.
-                var deadlineSeconds = limits.TimeoutSeconds + _options.KillGraceSeconds;
+                // holds, which is why the kill is unconditional.
+                //
+                // It covers two different things and says so: the platform's startup — gVisor
+                // booting, Node starting, a dependency tree importing — and then the function's own
+                // budget. Folding the first into the two-second grace meant a function with many
+                // dependencies was killed as TIMED_OUT with its handler still inside its limit.
+                var startedAtWall = DateTimeOffset.UtcNow;
+                var deadlineSeconds =
+                    _options.StartupAllowanceSeconds + limits.TimeoutSeconds + _options.KillGraceSeconds;
                 var deadline = TimeSpan.FromSeconds(deadlineSeconds);
                 using var deadlineCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 deadlineCts.CancelAfter(deadline);
@@ -184,9 +204,37 @@ namespace Blocks.FunctionRunner.Sandbox
                 var parser = new SandboxOutputParser();
                 var output = parser.Parse(stdout);
 
+                // Split the wall clock into the platform's part and the tenant's. The sandbox
+                // reports when its handler began; before that line is boot and import. Null when an
+                // older runtime image did not say, or when the run never got that far.
+                long? startupMs = null;
+                long? executionMs = null;
+                if (output.StartedAtUnixMs is { } startedAtUnixMs)
+                {
+                    var handlerStart = DateTimeOffset.FromUnixTimeMilliseconds(startedAtUnixMs);
+                    var startup = (long)(handlerStart - startedAtWall).TotalMilliseconds;
+
+                    // Two clocks, so a little skew is normal and a negative reading is meaningless
+                    // rather than interesting.
+                    startupMs = startup < 0 ? 0 : startup;
+                    executionMs = stopwatch.ElapsedMilliseconds - startupMs;
+                    if (executionMs < 0) executionMs = 0;
+
+                    if (timedOut)
+                    {
+                        _logger.LogWarning(
+                            "Run {RunId} timed out: {StartupMs}ms starting up, {ExecutionMs}ms executing "
+                            + "(limit {Limit}s, startup allowance {Allowance}s)",
+                            runId, startupMs, executionMs, limits.TimeoutSeconds,
+                            _options.StartupAllowanceSeconds);
+                    }
+                }
+
                 return new SandboxResult
                 {
                     Output = output,
+                    StartupMs = startupMs,
+                    ExecutionMs = executionMs,
                     ExitCode = (int)(inspect.State?.ExitCode ?? -1),
                     OomKilled = inspect.State?.OOMKilled ?? false,
                     TimedOut = timedOut,
