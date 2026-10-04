@@ -667,5 +667,28 @@ namespace XUnitTest.Workflow
             result.IsSuccess.Should().BeFalse();
             result.ErrorMessage.Should().Contain("Output too large");
         }
+
+        // ----- Number types ------------------------------------------------------
+
+        [Fact]
+        public async Task RunAsync_WholeNumbers_AreStoredAsIntegers_FractionsAsDoubles()
+        {
+            var ctx = Context(new List<WorkflowItemExecutionEntity>(), AllMode,
+                "return [{ age: 1, big: 9007199254740991, negative: -3, salary: 1.5, huge: 1e300 }];");
+
+            var result = await new TransformCodeV1Node().RunAsync(ctx);
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            var output = result.OutputItems[0].Data.Output;
+            output["age"].BsonType.Should().Be(BsonType.Int32);
+            output["age"].AsInt32.Should().Be(1);
+            output["big"].BsonType.Should().Be(BsonType.Int64);
+            output["big"].AsInt64.Should().Be(9007199254740991);
+            output["negative"].AsInt32.Should().Be(-3);
+            output["salary"].BsonType.Should().Be(BsonType.Double);
+            output["salary"].AsDouble.Should().Be(1.5);
+            // Beyond the safe-integer range stays a double.
+            output["huge"].BsonType.Should().Be(BsonType.Double);
+        }
     }
 }
