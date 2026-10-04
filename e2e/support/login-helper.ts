@@ -43,25 +43,24 @@ export async function isLoginSurface(page: Page): Promise<boolean> {
 export async function dismissSingleSessionTakeover(page: Page) {
   const leave = page.getByRole("button", { name: /Leave /i })
   const heading = page.getByRole("heading", { name: /Your session is in /i })
-  // Full-page takeover can paint after SPA hydrate; keep polling and reclaim.
-  for (let i = 0; i < 15; i++) {
-    const leaveVisible = await leave.first().isVisible({ timeout: 1_000 }).catch(() => false)
+  // Full-page takeover often paints after SPA hydrate / SignalR claim.
+  for (let i = 0; i < 20; i++) {
+    const leaveVisible = await leave.first().isVisible({ timeout: 1_200 }).catch(() => false)
     const headingVisible = await heading.isVisible({ timeout: 300 }).catch(() => false)
     if (!leaveVisible && !headingVisible) {
       continue
     }
-    if (leaveVisible) {
-      await leave.first().click({ timeout: 10_000, force: true })
-    } else {
-      // Heading without button yet — wait briefly then retry.
+    if (!leaveVisible) {
       await page.waitForTimeout(400)
       continue
     }
-    await heading.waitFor({ state: "hidden", timeout: 20_000 }).catch(() => {})
-    await leave.first().waitFor({ state: "hidden", timeout: 5_000 }).catch(() => {})
-    await page.waitForTimeout(400)
-    // If takeover reappears (stale lock), claim again.
-    if (await heading.isVisible({ timeout: 1_000 }).catch(() => false)) {
+    await leave.first().click({ timeout: 10_000 })
+    await Promise.race([
+      heading.waitFor({ state: "hidden", timeout: 20_000 }).catch(() => {}),
+      leave.first().waitFor({ state: "hidden", timeout: 20_000 }).catch(() => {}),
+    ])
+    await page.waitForTimeout(500)
+    if (await heading.isVisible({ timeout: 1_500 }).catch(() => false)) {
       continue
     }
     return
