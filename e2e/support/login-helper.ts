@@ -45,7 +45,25 @@ async function fillCredentialsAndSubmit(page: Page) {
   const passwordField = oidcPasswordField(page)
   await expect(passwordField).toBeVisible({ timeout: 10_000 })
   await passwordField.fill(password)
+
+  // IAM returns JSON { redirect_uri } and the SPA navigates client-side. On PR
+  // previews that hop can stall on AUTHENTICATING; follow the URI explicitly.
+  const loginRespPromise = page.waitForResponse(
+    (r) => /\/api\/oidc\/login\/?$/.test(r.url()) && r.request().method() === "POST",
+    { timeout: 90_000 },
+  )
   await page.getByRole("button", { name: "Login", exact: true }).click()
+  const loginResp = await loginRespPromise
+  if (loginResp.ok()) {
+    try {
+      const body = (await loginResp.json()) as { redirect_uri?: string }
+      if (body.redirect_uri && !/\/app\/console/.test(page.url())) {
+        await page.goto(body.redirect_uri, { waitUntil: "domcontentloaded" })
+      }
+    } catch {
+      // non-JSON body — let waitForURL below handle navigation
+    }
+  }
 }
 
 export async function loginThroughOidc(page: Page, options?: { loginPath?: string }) {
@@ -82,7 +100,7 @@ export async function loginThroughOidc(page: Page, options?: { loginPath?: strin
 
       if (await emailField.isVisible().catch(() => false)) {
         await fillCredentialsAndSubmit(page)
-        await page.waitForURL(/\/app\/console/, { timeout: 45_000 })
+        await page.waitForURL(/\/app\/console/, { timeout: 90_000 })
         return
       }
 

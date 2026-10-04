@@ -39,7 +39,11 @@
          lazy argument evaluation). The runner logs once per run and per lifecycle event,
          never per request, so the readability of plain structured logging wins.
          CA1031 (catch-all) is deliberate: a sandbox failure must never take the runner
-         down, so the processing loops catch broadly and report. -->
-    <NoWarn>$(NoWarn);CA1848;CA1873;CA1031</NoWarn>
+         down, so the processing loops catch broadly and report.
+         NU1507 (multi-source CPM without packageSourceMapping) is raised by CI restore
+         which passes nuget.org + nuget.selise.biz via NUGET_SOURCES; TreatWarningsAsErrors
+         would fail the restore. Mapping is not used because CI auth is bound to those -s
+         sources, not a repo nuget.config. -->
+    <NoWarn>$(NoWarn);CA1848;CA1873;CA1031;NU1507</NoWarn>
   </PropertyGroup>
 </Project>
