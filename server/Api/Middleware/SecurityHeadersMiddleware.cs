@@ -2,7 +2,7 @@ namespace BlocksTemplate.Api.Middleware;
 
 /// <summary>
 /// Browser security headers for SPA + API (OWASP ZAP DAST bar).
-/// Env bootstrap via /runtime-config.js; style-src keeps unsafe-inline for Radix/emotion.
+/// Env bootstrap via /runtime-config.js; style/script without unsafe-inline (release/monitor pattern).
 /// </summary>
 public sealed class SecurityHeadersMiddleware
 {
@@ -78,7 +78,7 @@ public sealed class SecurityHeadersMiddleware
             "default-src 'self' blob:; " +
             "script-src 'self' blob: https://cdn.jsdelivr.net; " +
             "worker-src 'self' blob:; " +
-            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
+            "style-src 'self' https://cdn.jsdelivr.net; " +
             "img-src 'self' data: blob: https://blocksdev.blob.core.windows.net https://az-cdn.selise.biz; " +
             "font-src 'self' data: https://cdn.jsdelivr.net; " +
             "connect-src 'self' " + connectHosts + " https://cdn.jsdelivr.net; " +

@@ -438,6 +438,12 @@
         <member name="M:BlocksTemplate.Api.GlobalApiRoutePrefixConvention.#ctor(System.String)">
             <summary>Prepends a segment (e.g. <c>api</c>) to every controller’s attribute route template.</summary>
         </member>
+        <member name="T:BlocksTemplate.Api.Middleware.SecurityHeadersMiddleware">
+            <summary>
+            Browser security headers for SPA + API (OWASP ZAP DAST bar).
+            Env bootstrap via /runtime-config.js; style/script without unsafe-inline (release/monitor pattern).
+            </summary>
+        </member>
         <member name="T:Api.Controllers.NotifierController">
             <summary>
             Delivery and read-state for user notifications, routed as <c>/api/Notifier/{action}</c>.
