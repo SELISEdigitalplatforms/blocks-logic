@@ -35,12 +35,28 @@ async function resolveBlocksKey(): Promise<string> {
   return match[1]
 }
 
+/** Preview auth is cookie-issued; API [Authorize] expects the host cookie as Bearer. */
+function accessTokenFromStorage(storageStatePath: string): string | undefined {
+  const raw = JSON.parse(fs.readFileSync(storageStatePath, "utf8")) as {
+    cookies?: Array<{ name: string; value: string }>
+  }
+  const host = new URL(e2eBaseUrl()).hostname
+  return raw.cookies?.find((c) => c.name === host)?.value
+}
+
 async function api(storageStatePath: string | undefined) {
   const blocksKey = await resolveBlocksKey()
+  const headers: Record<string, string> = { "x-blocks-key": blocksKey }
+  if (storageStatePath && fs.existsSync(storageStatePath)) {
+    const token = accessTokenFromStorage(storageStatePath)
+    if (token) {
+      headers.Authorization = `Bearer ${token}`
+    }
+  }
   return playwrightRequest.newContext({
     baseURL: e2eBaseUrl(),
     ignoreHTTPSErrors: true,
-    extraHTTPHeaders: { "x-blocks-key": blocksKey },
+    extraHTTPHeaders: headers,
     ...(storageStatePath && fs.existsSync(storageStatePath)
       ? { storageState: storageStatePath }
       : {}),

@@ -6,7 +6,7 @@ import {
   waitForLogicDashboardReady,
 } from "./create-and-delete-project"
 import { e2eBaseUrl } from "./env"
-import { ensureAuthenticated, isLoginSurface } from "./login-helper"
+import { dismissSingleSessionTakeover, ensureAuthenticated, isLoginSurface } from "./login-helper"
 import { LOGIC_SESSION_PATH, readLogicProject } from "./logic-project"
 
 async function persistSuiteSession(page: Page) {
@@ -50,6 +50,7 @@ export async function openSharedProjectDashboard(page: Page) {
 
   const gotoDashboard = async () => {
     await page.goto(targetUrl, { waitUntil: "domcontentloaded" })
+    await dismissSingleSessionTakeover(page)
   }
 
   await gotoDashboard()

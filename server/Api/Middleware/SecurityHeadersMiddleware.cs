@@ -33,10 +33,9 @@ public sealed class SecurityHeadersMiddleware
         headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
         headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
 
-        if (!headers.ContainsKey("Content-Security-Policy"))
-        {
-            headers["Content-Security-Policy"] = BuildCsp();
-        }
+        // Always apply our CSP (Monaco needs jsDelivr + blob workers). Do not leave a
+        // stricter policy from another middleware in place.
+        headers["Content-Security-Policy"] = BuildCsp();
 
         if (!headers.ContainsKey("Cache-Control"))
         {

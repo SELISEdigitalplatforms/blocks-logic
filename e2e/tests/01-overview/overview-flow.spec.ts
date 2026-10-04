@@ -23,6 +23,10 @@ test.describe("flow: Overview menu", () => {
 
     await page.goto(`${e2eBaseUrl()}/app/console`, { waitUntil: "domcontentloaded" });
     await dismissSingleSessionTakeover(page);
+    // Takeover can paint after the first dismiss poll; claim again before topbar asserts.
+    if (!(await topbar.themeTablist.isVisible({ timeout: 3_000 }).catch(() => false))) {
+      await dismissSingleSessionTakeover(page);
+    }
 
     await test.step("Topbar: switching theme to Dark applies it, then Light restores it", async () => {
       await expect(topbar.themeTablist).toBeVisible({ timeout: 30_000 });
