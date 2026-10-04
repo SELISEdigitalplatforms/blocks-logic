@@ -14,6 +14,7 @@ namespace DomainService.Utilities
             #region Services
             serviceCollection.AddSignalR(); 
 
+            serviceCollection.AddSingleton<NotificationServiceValidators>();
             serviceCollection.AddSingleton<INotificationService, NotificationService>();
             serviceCollection.AddSingleton<INotificationRepository, NotificationRepository>();
             serviceCollection.AddSingleton<INotifierServiceFactory, NotifierServiceFactory>();

@@ -4,24 +4,26 @@ namespace DomainService.Notification
 {
     public class RegisterWebPushSubscriptionRequestValidator : AbstractValidator<RegisterWebPushSubscriptionRequest>
     {
+        private const string RequiredMessage = "required";
+
         public RegisterWebPushSubscriptionRequestValidator()
         {
             RuleFor(x => x.Endpoint)
                 .Cascade(CascadeMode.Stop)
-                .NotEmpty().WithMessage("required")
+                .NotEmpty().WithMessage(RequiredMessage)
                 .Must(BeAbsoluteHttpUrl).WithMessage("must be an absolute http(s) URL");
 
             RuleFor(x => x.Keys)
-                .NotNull().WithMessage("required");
+                .NotNull().WithMessage(RequiredMessage);
 
             RuleFor(x => x.Keys.P256dh)
                 .Cascade(CascadeMode.Stop)
-                .NotEmpty().WithMessage("required")
+                .NotEmpty().WithMessage(RequiredMessage)
                 .When(x => x.Keys != null);
 
             RuleFor(x => x.Keys.Auth)
                 .Cascade(CascadeMode.Stop)
-                .NotEmpty().WithMessage("required")
+                .NotEmpty().WithMessage(RequiredMessage)
                 .When(x => x.Keys != null);
         }
 

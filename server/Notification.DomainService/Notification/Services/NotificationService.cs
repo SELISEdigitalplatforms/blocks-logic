@@ -21,21 +21,19 @@ namespace DomainService.Notification
         private readonly IConfigurationRepository _configurationRepository;
         private readonly IWebPushVapidKeyService _vapidKeyService;
 
-        public NotificationService(INotificationRepository notificationRepository,
-                                   IValidator<Subscription> validator,
-                                   IValidator<NotifyRequest> notifyRequestValidator,
-                                   IValidator<RegisterWebPushSubscriptionRequest> registerWebPushValidator,
-                                   IValidator<UnregisterWebPushSubscriptionRequest> unregisterWebPushValidator,
-                                   ILogger<NotificationService> logger,
-                                   INotifierServiceFactory notifierFactory,
-                                   IConfigurationRepository configurationRepository,
-                                   IWebPushVapidKeyService vapidKeyService)
+        public NotificationService(
+            INotificationRepository notificationRepository,
+            NotificationServiceValidators validators,
+            ILogger<NotificationService> logger,
+            INotifierServiceFactory notifierFactory,
+            IConfigurationRepository configurationRepository,
+            IWebPushVapidKeyService vapidKeyService)
         {
             _notificationRepository = notificationRepository;
-            _subscriptionValidator = validator;
-            _notifyRequestValidator = notifyRequestValidator;
-            _registerWebPushValidator = registerWebPushValidator;
-            _unregisterWebPushValidator = unregisterWebPushValidator;
+            _subscriptionValidator = validators.Subscription;
+            _notifyRequestValidator = validators.NotifyRequest;
+            _registerWebPushValidator = validators.RegisterWebPush;
+            _unregisterWebPushValidator = validators.UnregisterWebPush;
             _notifierFactory = notifierFactory;
             _configurationRepository = configurationRepository;
             _vapidKeyService = vapidKeyService;

@@ -39,10 +39,11 @@ namespace XUnitTest.Notification
 
             _sut = new NotificationService(
                 _repository.Object,
-                subscriptionValidator.Object,
-                notifyValidator.Object,
-                new RegisterWebPushSubscriptionRequestValidator(),
-                new UnregisterWebPushSubscriptionRequestValidator(),
+                new NotificationServiceValidators(
+                    subscriptionValidator.Object,
+                    notifyValidator.Object,
+                    new RegisterWebPushSubscriptionRequestValidator(),
+                    new UnregisterWebPushSubscriptionRequestValidator()),
                 Mock.Of<ILogger<NotificationService>>(),
                 Mock.Of<INotifierServiceFactory>(),
                 Mock.Of<IConfigurationRepository>(),
