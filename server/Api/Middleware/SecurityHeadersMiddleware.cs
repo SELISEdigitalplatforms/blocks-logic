@@ -50,7 +50,7 @@ public sealed class SecurityHeadersMiddleware
             || path == "/"
             || path.EndsWith(".html", StringComparison.OrdinalIgnoreCase)
             || path.EndsWith("runtime-config.js", StringComparison.OrdinalIgnoreCase)
-            || !Path.HasExtension(path))
+            || !System.IO.Path.HasExtension(path))
         {
             headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0";
             headers["Pragma"] = "no-cache";
