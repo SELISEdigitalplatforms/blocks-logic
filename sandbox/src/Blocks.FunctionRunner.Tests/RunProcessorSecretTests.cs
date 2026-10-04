@@ -189,29 +189,27 @@ namespace Blocks.FunctionRunner.Tests
 
         /// <summary>
         /// Admission (host / tenant / function slots) can return Deferred under a shared CI Redis.
-        /// Retry the same queued run until the processor is past those gates.
+        /// Clear leftover slots, re-queue, and retry until the processor is past those gates.
         /// </summary>
         private async Task<RunProcessor.Disposition> ProcessUntilAdmittedAsync(
             ISandbox sandbox, IRunSecretResolver resolver, string envelope)
         {
-            var job = await QueueAsync(envelope);
             var disposition = RunProcessor.Disposition.Deferred;
-            for (var attempt = 0; attempt < 40; attempt++)
+            for (var attempt = 0; attempt < 80; attempt++)
             {
-                // Drop any leftover admission / lease state from a prior Deferred attempt so
-                // TenantSlots / concurrency / lease cannot pin this run out indefinitely.
                 await _db!.KeyDeleteAsync(
                 [
-                    RedisKeys.Lease(job.RunId),
-                    RedisKeys.Concurrency(job.FunctionId),
-                    RedisKeys.TenantSlots(job.TenantId ?? _tenant),
-                    RedisKeys.Cancel(job.RunId),
+                    RedisKeys.Run(_runId),
+                    RedisKeys.Lease(_runId),
+                    RedisKeys.Concurrency(_functionId),
+                    RedisKeys.TenantSlots(_tenant),
+                    RedisKeys.Cancel(_runId),
                 ]);
-                await _db.HashSetAsync(RedisKeys.Run(job.RunId), "status", RunStatuses.Queued);
 
+                var job = await QueueAsync(envelope);
                 disposition = await Processor(sandbox, resolver).ProcessAsync(job, CancellationToken.None);
                 if (disposition != RunProcessor.Disposition.Deferred) return disposition;
-                await Task.Delay(25);
+                await Task.Delay(50);
             }
             return disposition;
         }

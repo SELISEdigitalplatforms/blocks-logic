@@ -11,6 +11,7 @@ namespace Blocks.FunctionRunner.Tests
     /// need a real server because the whole point is the Lua and the expiry behaviour, which a
     /// fake would only re-implement — and it was exactly that behaviour that was wrong.
     /// </summary>
+    [Collection("FunctionRunner.Redis.Serial")]
     public sealed class FunctionConcurrencyTests : IAsyncLifetime
     {
         private ConnectionMultiplexer? _redis;

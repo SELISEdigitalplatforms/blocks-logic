@@ -23,6 +23,8 @@ namespace Blocks.FunctionRunner.Tests
     {
         private ConnectionMultiplexer? _redis;
         private IDatabase? _db;
+        // Unique per instance: shared "tenant_test" filled TenantSlots under parallel CI.
+        private readonly string _tenant = $"tenant_env_{Guid.NewGuid():N}";
         private readonly string _runsDir = Path.Combine(Path.GetTempPath(), $"fn-runs-{Guid.NewGuid():N}");
         private readonly string _runId = $"run_test_{Guid.NewGuid():N}";
         private readonly string _functionId = $"fn_test_{Guid.NewGuid():N}";
@@ -54,7 +56,7 @@ namespace Blocks.FunctionRunner.Tests
                 await _db.KeyDeleteAsync(
                 [
                     RedisKeys.Run(_runId), RedisKeys.Lease(_runId), RedisKeys.Concurrency(_functionId),
-                    RedisKeys.Result(_runId), RedisKeys.Logs(_runId),
+                    RedisKeys.TenantSlots(_tenant), RedisKeys.Result(_runId), RedisKeys.Logs(_runId),
                 ]);
             }
             if (_redis is not null) await _redis.DisposeAsync();
@@ -96,7 +98,7 @@ namespace Blocks.FunctionRunner.Tests
 
             public long TotalMemoryBytes => 64L * 1024 * 1024 * 1024;
 
-            public HostSignalSample Sample() => new(0, 0, 0, 64L * 1024 * 1024 * 1024);
+            public HostSignalSample Sample() => new(0, 0, 0, long.MaxValue);
         }
 
         private RunProcessor Processor(ISandbox sandbox, Action<string, int>? handoff = null)
@@ -105,7 +107,9 @@ namespace Blocks.FunctionRunner.Tests
             {
                 RunnerId = "test-runner",
                 RunsDir = _runsDir,
-                MaxActiveSandboxes = 4,
+                MaxActiveSandboxes = 32,
+                MaxSandboxesPerTenant = 64,
+                ReservedHostMemoryMb = 0,
             });
             var budget = new HostBudget(options, new RoomyHost(), new SandboxFootprint(), NullLogger<HostBudget>.Instance);
 
@@ -130,7 +134,7 @@ namespace Blocks.FunctionRunner.Tests
             {
                 RunId = _runId,
                 FunctionId = _functionId,
-                TenantId = "tenant_test",
+                TenantId = _tenant,
                 Image = "img@sha256:abc",
                 Attempt = 3,
                 Deliveries = 2,
