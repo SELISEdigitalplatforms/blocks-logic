@@ -140,21 +140,42 @@ namespace XUnitTest.Functions
         }
 
         [Theory]
-        [InlineData(false, false, "user-1", Tenant)]
-        [InlineData(true, true, "user-1", Tenant)]
-        [InlineData(true, false, "", Tenant)]
-        [InlineData(true, false, "user-1", "another-tenant")]
-        public async Task An_unauthenticated_impersonated_userless_or_foreign_caller_gets_no_grant(
-            bool authenticated, bool impersonated, string userId, string callerTenant)
+        [InlineData(false, "user-1", Tenant)]
+        [InlineData(true, "", Tenant)]
+        [InlineData(true, "user-1", "another-tenant")]
+        public async Task An_unauthenticated_userless_or_foreign_caller_gets_no_grant(
+            bool authenticated, string userId, string callerTenant)
         {
             RequestBy(userId);
 
             var grant = await Service().CreateGrantAsync(
-                Tenant, Caller(tenantId: callerTenant, userId: userId, authenticated: authenticated, impersonated: impersonated),
+                Tenant, Caller(tenantId: callerTenant, userId: userId, authenticated: authenticated),
                 AuthMode.Token);
 
             grant.Should().BeNull();
             NoGrantWritten();
+        }
+
+        /// <summary>
+        /// The Functions pages sit under the console's impersonate route, so this is the ordinary
+        /// case, not an edge one: refusing it was why Test could not call Blocks at all. What keeps
+        /// it safe is downstream — Genesis records the session on the grant and IAM refuses to
+        /// redeem once the session ends — not a refusal here.
+        /// </summary>
+        [Fact]
+        public async Task An_impersonated_caller_gets_a_grant()
+        {
+            RequestBy("user-1");
+
+            var grant = await Service().CreateGrantAsync(
+                Tenant, Caller(userId: "user-1", impersonated: true), AuthMode.Token);
+
+            grant.Should().Be(Grant);
+            _store.Verify(
+                s => s.CreateAsync(
+                    It.Is<BlocksContext>(c => c.Impersonated && c.UserId == "user-1"),
+                    "7", "stamp-1", It.IsAny<TimeSpan?>()),
+                Times.Once);
         }
 
         [Fact]

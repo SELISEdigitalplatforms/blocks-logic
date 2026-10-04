@@ -19,7 +19,7 @@
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="SeliseBlocks.Genesis.OS" Version="4.2.2" />
+    <PackageVersion Include="SeliseBlocks.Genesis.OS" Version="4.2.4" />
     <!-- The runner resolves a run's {{secret.<id>}} references itself, right before the sandbox
          starts (Runs/BlocksSecretsRunResolver.cs), so the plaintext never enters the queue.
          Same version as server/Directory.Packages.props; it depends on Genesis 4.2.2, which is
