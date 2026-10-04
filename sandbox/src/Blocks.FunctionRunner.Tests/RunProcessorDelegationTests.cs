@@ -19,6 +19,7 @@ namespace Blocks.FunctionRunner.Tests
     /// faked: when the runner redeems the grant beside the envelope, what the sandbox is handed,
     /// that the token never reaches Redis or a log, and that no token never fails a run.
     /// </summary>
+    [Collection("FunctionRunner.Redis.Serial")]
     public sealed class RunProcessorDelegationTests : IAsyncLifetime
     {
         private const string Tenant = "tenant_delegation_test";

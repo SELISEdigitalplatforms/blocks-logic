@@ -13,6 +13,10 @@ using Xunit;
 
 namespace Blocks.FunctionRunner.Tests
 {
+    /// <summary>Serialise Redis-backed RunProcessor secret tests so admission slots do not race.</summary>
+    [CollectionDefinition("FunctionRunner.Redis.Serial", DisableParallelization = true)]
+    public sealed class FunctionRunnerRedisSerialDefinition;
+
     /// <summary>
     /// The runner resolves a run's <c>{{secret.&lt;id&gt;}}</c> references itself, right before
     /// the sandbox starts. End to end through <see cref="RunProcessor"/> against a real Redis
@@ -20,6 +24,7 @@ namespace Blocks.FunctionRunner.Tests
     /// faked: what the sandbox is handed, what is refused before it is ever started, and that a
     /// value never reaches Redis, the result entry or a log line.
     /// </summary>
+    [Collection("FunctionRunner.Redis.Serial")]
     public sealed class RunProcessorSecretTests : IAsyncLifetime
     {
         // Unique per instance so parallel xUnit workers do not share RedisKeys.TenantSlots
@@ -117,8 +122,9 @@ namespace Blocks.FunctionRunner.Tests
             {
                 RunnerId = "test-runner",
                 RunsDir = _runsDir,
-                MaxActiveSandboxes = 4,
+                MaxActiveSandboxes = 32,
                 MaxSandboxesPerTenant = 64,
+                ReservedHostMemoryMb = 0,
             });
             var budget = new HostBudget(options, new RoomyHost(), new SandboxFootprint(), NullLogger<HostBudget>.Instance);
 
@@ -155,9 +161,13 @@ namespace Blocks.FunctionRunner.Tests
             ["sec_token"] = TokenValue,
         });
 
-        private async Task<RunJob> QueueAsync(string envelope, int protocol = RedisKeys.RunProtocolVersion, string? tenant = null)
+        private async Task<RunJob> QueueAsync(
+            string envelope,
+            int protocol = RedisKeys.RunProtocolVersion,
+            string? tenant = null,
+            bool useInstanceTenant = true)
         {
-            tenant ??= _tenant;
+            if (useInstanceTenant && tenant is null) tenant = _tenant;
             await _db!.HashSetAsync(RedisKeys.Run(_runId),
             [
                 new HashEntry("envelope", envelope),
@@ -174,6 +184,24 @@ namespace Blocks.FunctionRunner.Tests
                 Attempt = 1,
                 Protocol = protocol,
             };
+        }
+
+        /// <summary>
+        /// Admission (host / tenant / function slots) can return Deferred under a shared CI Redis.
+        /// Retry the same queued run until the processor is past those gates.
+        /// </summary>
+        private async Task<RunProcessor.Disposition> ProcessUntilAdmittedAsync(
+            ISandbox sandbox, IRunSecretResolver resolver, string envelope)
+        {
+            var job = await QueueAsync(envelope);
+            var disposition = RunProcessor.Disposition.Deferred;
+            for (var attempt = 0; attempt < 40; attempt++)
+            {
+                disposition = await Processor(sandbox, resolver).ProcessAsync(job, CancellationToken.None);
+                if (disposition != RunProcessor.Disposition.Deferred) return disposition;
+                await Task.Delay(25);
+            }
+            return disposition;
         }
 
         private async Task<NameValueEntry[]> ResultEntryAsync()
@@ -367,8 +395,7 @@ namespace Blocks.FunctionRunner.Tests
             var resolver = new FakeRunSecretResolver(@throw: new SecretStoreUnavailableException(
                 "the key vault could not be read", new InvalidOperationException($"inner detail {StripeValue}")));
 
-            var disposition = await Processor(sandbox, resolver).ProcessAsync(
-                await QueueAsync(Envelope(ReferencingEnv)), CancellationToken.None);
+            var disposition = await ProcessUntilAdmittedAsync(sandbox, resolver, Envelope(ReferencingEnv));
 
             disposition.Should().Be(RunProcessor.Disposition.Complete);
             sandbox.Calls.Should().Be(0);
@@ -405,7 +432,7 @@ namespace Blocks.FunctionRunner.Tests
             var resolver = Resolves();
 
             await Processor(sandbox, resolver).ProcessAsync(
-                await QueueAsync(Envelope(ReferencingEnv), tenant: null), CancellationToken.None);
+                await QueueAsync(Envelope(ReferencingEnv), tenant: null, useInstanceTenant: false), CancellationToken.None);
 
             resolver.Calls.Should().BeEmpty();
             sandbox.Calls.Should().Be(0);
