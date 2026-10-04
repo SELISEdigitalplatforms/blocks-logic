@@ -5,7 +5,8 @@
   "type": "module",
   "overrides": {
     "dompurify": "3.4.16",
-    "fast-uri": "3.1.8"
+    "fast-uri": "3.1.8",
+    "braces": "$braces"
   },
   "scripts": {
     "dev": "vite --port 4000 --host dev-logic.blocksdevelopers.com",
@@ -71,7 +72,8 @@
     "tailwindcss-animate": "^1.0.7",
     "uuid": "^11.1.0",
     "zod": "^3.23.8",
-    "zustand": "^5.0.1"
+    "zustand": "^5.0.1",
+    "braces": "file:vendor/braces-safe"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.2",
