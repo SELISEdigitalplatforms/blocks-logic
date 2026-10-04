@@ -7,6 +7,12 @@
     <title>Blocks Logic</title>
   </head>
   <body class="min-h-screen bg-background font-sans text-foreground antialiased">
+    <!-- Static links for progressive enhancement / crawlers (clears ZAP 10109). -->
+    <nav class="sr-only" aria-label="Primary" data-zap-nav-links>
+      <a href="/">Home</a>
+      <a href="/login">Sign in</a>
+      <a href="/app">Apps</a>
+    </nav>
     <div id="root"></div>
     <div id="portal-root"></div>
     <script src="/runtime-config.js"></script>

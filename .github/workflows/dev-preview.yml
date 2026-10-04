@@ -106,6 +106,20 @@ jobs:
           RELEASE="${{ steps.vars.outputs.release }}"
           REGISTRY="${{ secrets.AZURE_BLOCKS_CONTAINER_REGISTRY }}"
 
+          # Clear stuck pending helm revisions left by cancelled concurrency upgrades.
+          STATUS="$(helm status "${RELEASE}" -n "${NAMESPACE}" 2>/dev/null | awk '/^STATUS:/ {print $2}' || true)"
+          if echo "${STATUS}" | grep -qiE 'pending-'; then
+            echo "Clearing stuck helm lock on ${RELEASE} (status=${STATUS})"
+            while IFS=$'\t' read -r name st; do
+              case "${st}" in
+                pending-*)
+                  echo "Deleting helm secret ${name} (${st})"
+                  kubectl delete secret "${name}" -n "${NAMESPACE}" --ignore-not-found
+                  ;;
+              esac
+            done < <(kubectl get secrets -n "${NAMESPACE}" -l "owner=helm,name=${RELEASE}" -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.labels.status}{"\n"}{end}')
+          fi
+
           helm upgrade --install "${RELEASE}" "./${CHART_PATH}" \
             --namespace "${NAMESPACE}" \
             --values "./${VALUES_FILE}" \
@@ -201,7 +215,21 @@ jobs:
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
 
       - name: Uninstall preview release
-        run: helm uninstall "${{ steps.vars.outputs.release }}" --namespace "${NAMESPACE}" --ignore-not-found
+        run: |
+          RELEASE="${{ steps.vars.outputs.release }}"
+          STATUS="$(helm status "${RELEASE}" -n "${NAMESPACE}" 2>/dev/null | awk '/^STATUS:/ {print $2}' || true)"
+          if echo "${STATUS}" | grep -qiE 'pending-'; then
+            echo "Clearing stuck helm lock on ${RELEASE} (status=${STATUS})"
+            while IFS=$'\t' read -r name st; do
+              case "${st}" in
+                pending-*)
+                  echo "Deleting helm secret ${name} (${st})"
+                  kubectl delete secret "${name}" -n "${NAMESPACE}" --ignore-not-found
+                  ;;
+              esac
+            done < <(kubectl get secrets -n "${NAMESPACE}" -l "owner=helm,name=${RELEASE}" -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.labels.status}{"\n"}{end}')
+          fi
+          helm uninstall "${RELEASE}" --namespace "${NAMESPACE}" --ignore-not-found
 
       - name: Deregister preview from IAM
         run: |
