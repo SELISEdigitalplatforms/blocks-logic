@@ -49,6 +49,20 @@ namespace Functions.DomainService.Utils
             services.AddSingleton<IFunctionRunRepository, FunctionRunRepository>();
             services.AddSingleton<IFunctionRunLogRepository, FunctionRunLogRepository>();
             services.AddSingleton<IFunctionBuildRepository, FunctionBuildRepository>();
+
+            // The artifact store, on the tenant's own storage. It takes the tenant per call and enters
+            // that tenant's context itself, so one instance serves every tenant. The storage stack it
+            // uses is registered by the Api (RegisterCommonInternalServices) but not by the Worker, so
+            // it is TryAdd-ed here — harmless where the host already has it. The store resolves these
+            // on use, never in its constructor (see FunctionArtifactStore).
+            services.TryAddSingleton<CloudConfiguration.DomainService.Shared.Services.IConfigurationRepository,
+                CloudConfiguration.DomainService.Shared.Services.ConfigurationRepository>();
+            services.TryAddSingleton<Common.InternalService.Storage.IStorageServiceFactory,
+                Common.InternalService.Storage.StorageServiceFactory>();
+            services.TryAddTransient<Common.InternalService.Storage.AzureBlobStorageService>();
+            services.TryAddTransient<Common.InternalService.Storage.AwsS3StorageService>();
+            services.TryAddTransient<Common.InternalService.Storage.AwsS3CompatibleStorageService>();
+            services.AddSingleton<Storage.IFunctionArtifactStore, Storage.FunctionArtifactStore>();
             services.AddSingleton<IFunctionAuditRepository, FunctionAuditRepository>();
 
             services.AddSingleton<ITenantAccessor, TenantAccessor>();

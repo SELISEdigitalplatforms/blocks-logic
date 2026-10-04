@@ -10,10 +10,16 @@ namespace Blocks.FunctionRunner.Sandbox
     public interface IImageResolver
     {
         /// <summary>
-        /// Returns a reference that can be run, pulling it if absent.
+        /// Returns a reference that can be run, producing it if absent.
+        /// <para>
+        /// With an <paramref name="artifactUrl"/> the image is built here from that artifact and the
+        /// shared base — which is how a host runs a function it has never seen without the host that
+        /// built it being involved. Without one it is pulled, as it always was.
+        /// </para>
         /// </summary>
         /// <returns>The reference to run, or null when the image cannot be resolved.</returns>
-        Task<string?> EnsureAsync(string reference, CancellationToken token);
+        Task<string?> EnsureAsync(
+            string reference, CancellationToken token, string? artifactUrl = null, string? artifactSha256 = null);
     }
 
     /// <inheritdoc cref="IImageResolver"/>
@@ -37,14 +43,32 @@ namespace Blocks.FunctionRunner.Sandbox
         private readonly RunnerOptions _options;
         private readonly ILogger<ImageResolver> _logger;
 
-        public ImageResolver(IDockerClient docker, IOptions<RunnerOptions> options, ILogger<ImageResolver> logger)
+        private readonly IArtifactImageBuilder? _artifacts;
+
+        /// <summary>
+        /// <paramref name="artifacts"/> is optional so the many call sites that construct this
+        /// directly in tests keep compiling; a run that actually carries an artifact and finds it
+        /// missing fails loudly rather than silently pulling instead.
+        /// </summary>
+        public ImageResolver(
+            IDockerClient docker,
+            IOptions<RunnerOptions> options,
+            ILogger<ImageResolver> logger,
+            IArtifactImageBuilder? artifacts = null)
+            : this(docker, options, logger)
+        {
+            _artifacts = artifacts;
+        }
+
+        private ImageResolver(IDockerClient docker, IOptions<RunnerOptions> options, ILogger<ImageResolver> logger)
         {
             _docker = docker;
             _options = options.Value;
             _logger = logger;
         }
 
-        public async Task<string?> EnsureAsync(string reference, CancellationToken token)
+        public async Task<string?> EnsureAsync(
+            string reference, CancellationToken token, string? artifactUrl = null, string? artifactSha256 = null)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(reference);
 
@@ -57,11 +81,28 @@ namespace Blocks.FunctionRunner.Sandbox
             }
             catch (DockerImageNotFoundException)
             {
-                // Fall through and pull.
+                // Fall through and produce it.
             }
             catch (DockerApiException ex)
             {
                 _logger.LogWarning("Inspecting image {Reference} failed: {Message}", reference, ex.Message);
+            }
+
+            // An artifact is the whole point: it is what makes this host able to produce the image
+            // itself. Never fall back to pulling when one was offered — a registry miss would be
+            // reported as the reason a run failed when the real reason was the artifact.
+            if (!string.IsNullOrWhiteSpace(artifactUrl))
+            {
+                if (_artifacts is null)
+                {
+                    _logger.LogError(
+                        "Run carries an artifact for {Reference} but no artifact builder is wired up", reference);
+                    return null;
+                }
+
+                return await _artifacts.BuildAsync(reference, artifactUrl, artifactSha256, token).ConfigureAwait(false)
+                    ? reference
+                    : null;
             }
 
             var (name, tag) = SplitReference(reference);

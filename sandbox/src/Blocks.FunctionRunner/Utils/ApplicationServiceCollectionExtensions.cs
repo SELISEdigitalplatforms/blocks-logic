@@ -70,6 +70,20 @@ namespace Blocks.FunctionRunner.Utils
             // Typed client: Image GC deletes the registry's copy of an image as well as the
             // daemon's, so the two stores cannot drift apart.
             services.AddHttpClient<IRegistryClient, Maintenance.RegistryClient>();
+
+            // Downloading a build artifact. Its own named client so the timeout suits a large,
+            // slow body rather than the short calls the registry client makes.
+            services.AddHttpClient(Sandbox.ArtifactImageBuilder.HttpClientName,
+                client => client.Timeout = TimeSpan.FromMinutes(10));
+            services.AddSingleton<Sandbox.IArtifactImageBuilder, Sandbox.ArtifactImageBuilder>();
+            services.AddSingleton<Maintenance.IImageUsageLog, Maintenance.ImageUsageLog>();
+            services.AddSingleton<Builds.IDependencyCache, Builds.DependencyCache>();
+            services.AddSingleton<SecretStore.ISecretStoreBreaker, SecretStore.SecretStoreBreaker>();
+
+            // Uploading a build artifact. Same reasoning as the download client: a large body
+            // deserves a timeout that is not the default short one.
+            services.AddHttpClient(Builds.BuildProcessor.ArtifactUploadClientName,
+                client => client.Timeout = TimeSpan.FromMinutes(10));
             services.AddSingleton<StartupGuard>();
             services.AddSingleton<IImageResolver, ImageResolver>();
             services.AddSingleton<ISandbox, DockerSandbox>();

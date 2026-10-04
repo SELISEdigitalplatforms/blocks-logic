@@ -89,7 +89,8 @@ namespace Blocks.FunctionRunner.Tests
 
         private sealed class ResolvesAnything : IImageResolver
         {
-            public Task<string?> EnsureAsync(string reference, CancellationToken token) =>
+            public Task<string?> EnsureAsync(
+                string reference, CancellationToken token, string? artifactUrl = null, string? artifactSha256 = null) =>
                 Task.FromResult<string?>(reference);
         }
 

@@ -30,6 +30,8 @@ namespace Blocks.FunctionRunner.Runs
         private readonly ISandbox _sandbox;
         private readonly IImageResolver _images;
         private readonly HostBudget _budget;
+        private readonly Maintenance.IImageUsageLog? _usage;
+        private readonly SecretStore.ISecretStoreBreaker? _secretBreaker;
         private readonly IRunSecretResolver _secrets;
         private readonly IRunAccessTokenResolver _accessTokens;
         private readonly RunnerOptions _options;
@@ -43,12 +45,16 @@ namespace Blocks.FunctionRunner.Runs
             IRunSecretResolver secrets,
             IRunAccessTokenResolver accessTokens,
             IOptions<RunnerOptions> options,
-            ILogger<RunProcessor> logger)
+            ILogger<RunProcessor> logger,
+            Maintenance.IImageUsageLog? usage = null,
+            SecretStore.ISecretStoreBreaker? secretBreaker = null)
         {
             _db = db;
             _sandbox = sandbox;
             _images = images;
             _budget = budget;
+            _usage = usage;
+            _secretBreaker = secretBreaker;
             _secrets = secrets;
             _accessTokens = accessTokens;
             _options = options.Value;
@@ -117,6 +123,60 @@ namespace Blocks.FunctionRunner.Runs
             var fields = hash.ToDictionary(e => e.Name.ToString(), e => e.Value.ToString(), StringComparer.Ordinal);
             var limits = ReadLimits(fields);
 
+            // Stamped before the image, because producing it is part of how long this run took
+            // from the caller's point of view even though it happens before admission.
+            var startedAt = DateTimeOffset.UtcNow;
+
+            // --- image, before any slot is taken ------------------------------------
+            // Producing the image can mean downloading an artifact and building it, which is
+            // seconds. Doing that while holding a host slot, a tenant slot and one of the
+            // function's own meant a cold function paid for capacity it was not yet using — and on
+            // a busy host that is capacity the deployed version wanted. Nothing here needs a slot:
+            // a slot is for running. The work is also cached and idempotent, so preparing for a run
+            // that is then deferred costs nothing the next attempt does not reuse.
+            var image = await _images
+                .EnsureAsync(job.Image, token, job.ArtifactUrl, job.ArtifactSha256)
+                .ConfigureAwait(false);
+
+            // What the cache evicts by. Stamped on resolve rather than on completion so a run that
+            // fails still counts as use — the image was wanted, which is the question the cache is
+            // asking.
+            if (image is not null) _usage?.Touch(image);
+            if (image is null)
+            {
+                await CompleteAsync(job, runKey, startedAt, RunStatuses.Failed, ErrorCodes.ImagePullFailed,
+                    $"the image '{job.Image}' could not be resolved", null, 0, null, null, null, null, false)
+                    .ConfigureAwait(false);
+                return Disposition.Complete;
+            }
+
+            // Asked before any slot is taken, which is the whole point: a store that is known to
+            // be down should cost nothing at all, rather than three slots per run for the length
+            // of a timeout. Resolution itself stays where it is, as late as possible.
+            if (_secretBreaker?.ShouldSkip(job.TenantId) == true)
+            {
+                _logger.LogDebug(
+                    "Secret store for tenant {TenantId} is being left alone; deferring run {RunId}",
+                    job.TenantId, job.RunId);
+                return Disposition.Deferred;
+            }
+
+            // A test yields to real traffic. It is a developer convenience and the deployed
+            // version is somebody's customer, so on a busy host the test waits — on the queue, like
+            // everything else that cannot run yet. Checked before the reservation so a waiting test
+            // holds nothing at all.
+            if (job.IsTest && _budget.Capacity > 0)
+            {
+                var usedPercent = _budget.Active * 100 / _budget.Capacity;
+                if (usedPercent >= _options.TestDeferAbovePercent)
+                {
+                    _logger.LogDebug(
+                        "Host is {Used}% busy; deferring test run {RunId} so deployed versions keep the room",
+                        usedPercent, job.RunId);
+                    return Disposition.Deferred;
+                }
+            }
+
             // Admission. Neither refusal is a failure: the entry stays pending and is retried.
             using var reservation = _budget.TryReserve(limits.MemoryBytes);
             if (reservation is null)
@@ -162,21 +222,11 @@ namespace Blocks.FunctionRunner.Runs
                 return Disposition.NotOurs;
             }
 
-            var startedAt = DateTimeOffset.UtcNow;
             await SetStatusAsync(runKey, RunStatuses.Starting).ConfigureAwait(false);
 
             var runDir = Path.Combine(_options.RunsDir, job.RunId);
             try
             {
-                // --- image ------------------------------------------------------------
-                var image = await _images.EnsureAsync(job.Image, token).ConfigureAwait(false);
-                if (image is null)
-                {
-                    await CompleteAsync(job, runKey, startedAt, RunStatuses.Failed, ErrorCodes.ImagePullFailed,
-                        $"the image '{job.Image}' could not be resolved", null, 0, null, null, null, null, false)
-                        .ConfigureAwait(false);
-                    return Disposition.Complete;
-                }
 
                 // --- envelope ---------------------------------------------------------
                 // What comes off the queue carries secret-bound variables as references; the
@@ -200,10 +250,45 @@ namespace Blocks.FunctionRunner.Runs
                         var prepared = await ResolveSecretsAsync(job, envelope, token).ConfigureAwait(false);
                         if (prepared.Failure is { } failure)
                         {
+                            // An unreachable store is not this function's failure — nothing ran, and
+                            // the code was never at fault. Everything else here that cannot run yet
+                            // is deferred: a full host, a tenant over its share, a function at its
+                            // limit. This is the same thing, so it gets the same answer.
+                            //
+                            // Failing instead spent one of the run's attempts, and a second blip
+                            // then reported a permanently failed run to a tenant whose function was
+                            // fine. The breaker below keeps the deferred runs from taking slots
+                            // while they wait.
+                            if (failure.Code == ErrorCodes.SecretStoreUnavailable)
+                            {
+                                _secretBreaker?.RecordUnavailable(job.TenantId);
+
+                                // Deferring suits a deployed run: nobody is waiting, the entry keeps
+                                // its place on the stream, and it runs when the store is back.
+                                //
+                                // A test is the opposite. Someone is watching it, and the test loop
+                                // gives admission a bounded two minutes — so deferring there just
+                                // spins until that runs out and then reports "no sandbox slot freed
+                                // up", which is not what happened. The person waiting is better
+                                // served by the real reason, straight away.
+                                if (!job.IsTest)
+                                {
+                                    _logger.LogWarning(
+                                        "Run {RunId} cannot start: the secret store is unreachable. Leaving it "
+                                        + "queued rather than failing it.", job.RunId);
+                                    return Disposition.Deferred;
+                                }
+                            }
+
+                            // A secret that does not exist, or that this caller may not read, is the
+                            // author's to fix. Retrying it changes nothing, so it stays a failure.
+                            _secretBreaker?.RecordSuccess(job.TenantId);
                             await CompleteAsync(job, runKey, startedAt, RunStatuses.Failed, failure.Code,
                                 failure.Message, null, 0, null, null, null, null, false).ConfigureAwait(false);
                             return Disposition.Complete;
                         }
+
+                        _secretBreaker?.RecordSuccess(job.TenantId);
                         envelope = prepared.Envelope!;
                         resolvedValues = prepared.Values;
                     }
@@ -258,7 +343,9 @@ namespace Blocks.FunctionRunner.Runs
                 if (result.HostFailure is not null)
                 {
                     await CompleteAsync(job, runKey, startedAt, RunStatuses.Failed, ErrorCodes.SandboxStartFailed,
-                        Redact(result.HostFailure, resolvedValues), result.ExitCode, result.DurationMs, null, null, null, null, false)
+                        Redact(result.HostFailure, resolvedValues), result.ExitCode, result.DurationMs,
+                        null, null, null, null, false,
+                        startupMs: result.StartupMs, executionMs: result.ExecutionMs)
                         .ConfigureAwait(false);
                     return Disposition.Complete;
                 }
@@ -281,7 +368,8 @@ namespace Blocks.FunctionRunner.Runs
                     job, runKey, startedAt, status, errorCode, errorMessage, result.ExitCode, result.DurationMs,
                     result.PeakMemoryBytes, result.CpuUsageMs, result.Output.ResultJson,
                     WithFailureLine(result.Output, errorCode, errorMessage, resolvedValues),
-                    result.Output.Truncated)
+                    result.Output.Truncated,
+                    startupMs: result.StartupMs, executionMs: result.ExecutionMs)
                     .ConfigureAwait(false);
 
                 return Disposition.Complete;
@@ -467,7 +555,8 @@ namespace Blocks.FunctionRunner.Runs
             RunJob job, string runKey, DateTimeOffset startedAt,
             string status, string? errorCode, string? errorMessage,
             int? exitCode, long durationMs, long? peakMemory, long? cpuUsageMs,
-            string? resultJson, List<string>? logs, bool truncated)
+            string? resultJson, List<string>? logs, bool truncated,
+            long? startupMs = null, long? executionMs = null)
         {
             var completedAt = DateTimeOffset.UtcNow;
             string? resultKey = null;
@@ -505,6 +594,8 @@ namespace Blocks.FunctionRunner.Runs
                 new("errorMessage", Truncate(errorMessage, 4096) ?? string.Empty),
                 new("exitCode", exitCode?.ToString(CultureInfo.InvariantCulture) ?? string.Empty),
                 new("durationMs", durationMs.ToString(CultureInfo.InvariantCulture)),
+                new("startupMs", startupMs?.ToString(CultureInfo.InvariantCulture) ?? string.Empty),
+                new("executionMs", executionMs?.ToString(CultureInfo.InvariantCulture) ?? string.Empty),
                 new("peakMemoryBytes", peakMemory?.ToString(CultureInfo.InvariantCulture) ?? string.Empty),
                 new("cpuUsageMs", cpuUsageMs?.ToString(CultureInfo.InvariantCulture) ?? string.Empty),
                 new("runnerId", _options.RunnerId),

@@ -108,6 +108,15 @@ namespace Functions.DomainService.Entities
         /// <summary>Digest-pinned image reference, e.g. <c>registry/fn/{id}@sha256:…</c>.</summary>
         public string ImageDigest { get; set; } = string.Empty;
 
+        /// <summary>
+        /// The build whose artifact this version runs from, and that artifact's SHA-256. Both empty
+        /// on a version built the old way, which still runs from <see cref="ImageDigest"/>.
+        /// </summary>
+        public string? ArtifactId { get; set; }
+
+        /// <inheritdoc cref="ArtifactId" />
+        public string? ArtifactSha256 { get; set; }
+
         /// <summary>sha256 of the source this version was built from.</summary>
         public string CodeHash { get; set; } = string.Empty;
 
@@ -223,6 +232,16 @@ namespace Functions.DomainService.Entities
 
         public BuildStatus Status { get; set; } = BuildStatus.Queued;
         public string? ImageDigest { get; set; }
+
+        /// <summary>
+        /// SHA-256 of the artifact this build uploaded, when it uploaded one.
+        /// <para>
+        /// Its presence is what says a build produced an artifact rather than a registry image. The
+        /// artifact's own address is this build's <c>ItemId</c>; this is what a runner checks after
+        /// downloading, so a truncated or swapped blob is never built into an image and executed.
+        /// </para>
+        /// </summary>
+        public string? ArtifactSha256 { get; set; }
         public string? Packages { get; set; }
         public string? Log { get; set; }
         public string? ErrorMessage { get; set; }

@@ -59,6 +59,7 @@ namespace Blocks.FunctionRunner.Maintenance
         private readonly IDockerClient _docker;
         private readonly IDatabase _db;
         private readonly IRegistryClient _registry;
+        private readonly IImageUsageLog? _usage;
         private readonly RunnerOptions _options;
         private readonly ILogger<ImageGc> _logger;
         private readonly TimeSpan _grace;
@@ -74,8 +75,13 @@ namespace Blocks.FunctionRunner.Maintenance
             IRegistryClient registry,
             IOptions<RunnerOptions> options,
             ILogger<ImageGc> logger,
-            TimeSpan? grace = null)
+            TimeSpan? grace = null,
+            IImageUsageLog? usage = null)
         {
+            // Optional so the sweeps that existing tests construct keep compiling. Without it the
+            // cap simply does not evict — the keep-set behaviour is unchanged, which is the safe
+            // way round for a cache.
+            _usage = usage;
             _docker = docker;
             _db = db;
             _registry = registry;
@@ -215,7 +221,123 @@ namespace Blocks.FunctionRunner.Maintenance
             }
 
             if (removed > 0) _logger.LogInformation("Image GC pruned {Count} image(s)", removed);
+            removed += await EnforceCacheCapAsync(images, inUse, token).ConfigureAwait(false);
+
             return removed;
+       }
+
+        /// <summary>
+        /// Evicts the coldest function images once this host holds more than it should.
+        /// <para>
+        /// Unlike the sweep above, this removes images the keep set still references — on purpose.
+        /// With an artifact behind it an image is a cache entry, not a store: evicting one costs the
+        /// next run of that function a few seconds of rebuild, where keeping every live function on
+        /// a host that serves a thousand of them would cost the disk. A host holds what it is busy
+        /// with, not everything that exists.
+        /// </para>
+        /// <para>
+        /// Never evicts an image a container is holding, and never the base image — the base is what
+        /// every rebuild is built from, so dropping it would make every eviction far more expensive
+        /// than it should be.
+        /// </para>
+        /// </summary>
+        private async Task<int> EnforceCacheCapAsync(
+            IList<ImagesListResponse> images, HashSet<string> inUse, CancellationToken token)
+        {
+            if (_usage is null) return 0;
+
+            var cap = _options.MaxCachedImages > 0
+                ? _options.MaxCachedImages
+                : DeriveCapFromDisk(images);
+            if (cap <= 0) return 0;
+
+            var candidates = images
+                .Where(i => i.ID is not null && !inUse.Contains(i.ID) && !IsBaseImage(i) && !IsTestImage(i.Labels))
+                .Select(i => new
+                {
+                    Image = i,
+                    Reference = i.RepoTags?.FirstOrDefault() ?? i.RepoDigests?.FirstOrDefault() ?? i.ID!,
+                })
+                .Select(x => new
+                {
+                    x.Image,
+                    x.Reference,
+                    // No record means this host has not run it since the log existed, which makes it
+                    // the coldest thing here — exactly what should go first.
+                    LastUsed = _usage.LastUsedUtc(x.Reference) ?? DateTime.MinValue,
+                })
+                .OrderBy(x => x.LastUsed)
+                .ToList();
+
+            var excess = candidates.Count - cap;
+            if (excess <= 0) return 0;
+
+            _logger.LogInformation(
+                "Image cache holds {Held} function images, over the cap of {Cap}; evicting the {Excess} coldest",
+                candidates.Count, cap, excess);
+
+            var evicted = 0;
+            foreach (var candidate in candidates.Take(excess))
+            {
+                try
+                {
+                    await _docker.Images.DeleteImageAsync(
+                        candidate.Image.ID!, new ImageDeleteParameters { Force = false }, token)
+                        .ConfigureAwait(false);
+                    evicted++;
+                }
+                catch (DockerApiException ex)
+                {
+                    // Almost always a stopped container still holding it; the next sweep gets it.
+                    _logger.LogDebug(
+                        "Could not evict {Reference}: {Message}", candidate.Reference, ex.Message);
+                }
+            }
+
+            return evicted;
+        }
+
+        /// <summary>
+        /// How many images this host can hold, worked out from the disk rather than guessed.
+        /// <para>
+        /// A hand-set number has to be chosen for the smallest disk anyone might deploy on, and is
+        /// then wrong on every larger one — the same reason <c>HostBudget</c> measures the machine
+        /// instead of reading a constant. So: take the share of the disk images may use, divide by
+        /// what an image here actually costs, and use that.
+        /// </para>
+        /// <para>
+        /// The average is measured from the images present. With none to measure from there is also
+        /// nothing to evict, so the answer does not matter yet.
+        /// </para>
+        /// </summary>
+        private int DeriveCapFromDisk(IList<ImagesListResponse> images)
+        {
+            var functionImages = images.Where(i => !IsBaseImage(i)).ToList();
+            if (functionImages.Count == 0) return 0;
+
+            var averageBytes = (long)functionImages.Average(i => (double)Math.Max(i.Size, 1));
+            if (averageBytes <= 0) return 0;
+
+            long budgetBytes;
+            try
+            {
+                var drive = new DriveInfo(Path.GetPathRoot(_options.RunsDir) ?? "/");
+                budgetBytes = (long)(drive.TotalSize * (_options.ImageDiskPercent / 100.0));
+            }
+            catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
+            {
+                // Without a reading there is no honest number, and evicting on a guess would throw
+                // away images for no reason. Do nothing instead.
+                _logger.LogDebug("Could not read the image disk: {Message}", ex.Message);
+                return 0;
+            }
+
+            var derived = (int)Math.Max(1, budgetBytes / averageBytes);
+            _logger.LogDebug(
+                "Image cache cap derived as {Cap} ({Percent}% of disk, average image {AverageMb} MB)",
+                derived, _options.ImageDiskPercent, averageBytes / 1024 / 1024);
+
+            return derived;
         }
 
         private async Task<HashSet<string>> LoadKeepSetAsync()

@@ -288,6 +288,20 @@ export const CodeEditor = ({
     container.addEventListener("keyup", stopKeyPropagation);
     container.addEventListener("keypress", stopKeyPropagation);
 
+    // No "Close (Escape)" tooltip on the find widget's close button: Monaco positions it badly in
+    // this layout, often over the button itself, where it blinks and swallows the click. Its
+    // hover service listens on the button, so stopping the pointer-over events on the way down
+    // (capture) keeps the tooltip from ever opening. The click is a separate event and still
+    // lands; the other find-widget buttons keep their tooltips.
+    const HOVER_EVENTS = ["mouseover", "mouseenter", "pointerover", "pointerenter"] as const;
+    const suppressCloseTooltip = (event: Event) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest(".find-widget .codicon-widget-close")) {
+        event.stopPropagation();
+      }
+    };
+    HOVER_EVENTS.forEach((type) => container.addEventListener(type, suppressCloseTooltip, true));
+
     // VS Code's own binding for "Format Document".
     editor.addCommand(
       monacoInstance.KeyMod.Shift | monacoInstance.KeyMod.Alt | monacoInstance.KeyCode.KeyF,
@@ -298,6 +312,9 @@ export const CodeEditor = ({
       container.removeEventListener("keydown", stopKeyPropagation);
       container.removeEventListener("keyup", stopKeyPropagation);
       container.removeEventListener("keypress", stopKeyPropagation);
+      HOVER_EVENTS.forEach((type) =>
+        container.removeEventListener(type, suppressCloseTooltip, true),
+      );
       editorRef.current = null;
       if (actionsRef) actionsRef.current = null;
     });

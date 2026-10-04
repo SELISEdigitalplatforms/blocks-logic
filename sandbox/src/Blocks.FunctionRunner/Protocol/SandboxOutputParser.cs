@@ -22,6 +22,13 @@ namespace Blocks.FunctionRunner.Protocol
         /// <summary>True when a result line said ok, false when it said not-ok, null when absent.</summary>
         public bool? Ok { get; internal set; }
 
+        /// <summary>
+        /// When the handler began, as the sandbox's own clock reported it. Null for a sandbox that
+        /// never got that far — it failed during boot or import — and for an older runtime image
+        /// that does not emit the line.
+        /// </summary>
+        public long? StartedAtUnixMs { get; internal set; }
+
         public string? ErrorCode { get; internal set; }
         public string? ErrorMessage { get; internal set; }
         public string? ErrorStack { get; internal set; }
@@ -112,6 +119,13 @@ namespace Blocks.FunctionRunner.Protocol
             {
                 case "log":
                     AppendLog(output, line);
+                    break;
+
+                case "started":
+                    // The moment the tenant's own code began. Everything before it is boot and
+                    // module import, which is the platform's time, not theirs. Recorded so the two
+                    // can be reported apart and so the kill timer measures the right thing.
+                    output.StartedAtUnixMs ??= evt.At;
                     break;
 
                 case "truncated":

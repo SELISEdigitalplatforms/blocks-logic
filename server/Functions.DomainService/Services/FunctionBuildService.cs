@@ -68,21 +68,31 @@ namespace Functions.DomainService.Services
         private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
 
         private readonly IFunctionBuildRepository _buildRepository;
+        private readonly Storage.IFunctionArtifactStore _artifacts;
         private readonly ICacheClient _cache;
         private readonly IConfiguration _configuration;
         private readonly ILogger<FunctionBuildService> _logger;
 
         public FunctionBuildService(
             IFunctionBuildRepository buildRepository,
+            Storage.IFunctionArtifactStore artifacts,
             ICacheClient cache,
             IConfiguration configuration,
             ILogger<FunctionBuildService> logger)
         {
             _buildRepository = buildRepository;
+            _artifacts = artifacts;
             _cache = cache;
             _configuration = configuration;
             _logger = logger;
         }
+
+        /// <summary>
+        /// How long a build's upload URL stays valid. Long enough for the entry to wait its turn on a
+        /// busy host and for a large dependency tree to upload, short enough that a leaked job entry
+        /// is not a lasting write capability.
+        /// </summary>
+        internal static readonly TimeSpan ArtifactUploadWindow = TimeSpan.FromHours(2);
 
         public async Task<FunctionBuildEntity> GetAsync(
             string tenantId, string buildId, CancellationToken cancellationToken = default)
@@ -134,6 +144,7 @@ namespace Functions.DomainService.Services
                     inProgress.ItemId,
                     BuildStatus.Failed,
                     imageDigest: null,
+                    artifactSha256: null,
                     packages: null,
                     log: null,
                     errorMessage: "the build was never picked up by a runner and has been retired",
@@ -197,6 +208,31 @@ namespace Functions.DomainService.Services
                 SourceHash = sourceHash,
                 Status = BuildStatus.Queued,
             };
+
+            // Signed before the build runs, because the builder cannot sign for itself — it holds no
+            // storage credential. Keyed by the build id rather than by what the build produces, since
+            // the URL has to exist before there is anything to hash. The window covers a build that
+            // queues behind others, not just one that starts immediately.
+            //
+            // Signed before the record is written, too, so nothing is left behind if signing throws.
+            //
+            // A tenant whose storage cannot hold artifacts (none configured, SFTP, or it failed to
+            // open) is not a failed build: the field is left out and the runner pushes to the
+            // registry, as it did before the store existed.
+            string? artifactUploadUrl = null;
+            try
+            {
+                artifactUploadUrl = await _artifacts
+                    .CreateUploadUrlAsync(tenantId, build.ItemId, ArtifactUploadWindow, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (Storage.FunctionArtifactStoreUnavailableException ex)
+            {
+                _logger.LogWarning(
+                    "Build {BuildId} for function {FunctionId} will push to the registry instead of uploading an artifact: {Reason}",
+                    build.ItemId, function.ItemId, ex.Message);
+            }
+
             await _buildRepository.CreateAsync(tenantId, build, cancellationToken);
 
             if (!string.IsNullOrEmpty(function.Source.LockJson))
@@ -216,16 +252,22 @@ namespace Functions.DomainService.Services
             var sourceKey = FunctionQueueKeys.Source(build.ItemId);
             await database.StringSetAsync(sourceKey, sourceBundle, FunctionQueueKeys.SourceTtl);
 
-            await database.StreamAddAsync(FunctionQueueKeys.BuildsStream,
-            [
-                new NameValueEntry("buildId", build.ItemId),
-                new NameValueEntry("functionId", function.ItemId),
-                new NameValueEntry("tenantId", tenantId),
-                new NameValueEntry("sourceKey", sourceKey),
-                new NameValueEntry("imageRef", imageRef),
-                new NameValueEntry("allowScripts", "false"),
-                new NameValueEntry("protocol", FunctionQueueKeys.ProtocolVersion),
-            ]);
+            var entry = new List<NameValueEntry>
+            {
+                new("buildId", build.ItemId),
+                new("functionId", function.ItemId),
+                new("tenantId", tenantId),
+                new("sourceKey", sourceKey),
+                new("imageRef", imageRef),
+                new("allowScripts", "false"),
+                new("protocol", FunctionQueueKeys.ProtocolVersion),
+            };
+            if (artifactUploadUrl is not null)
+            {
+                entry.Add(new NameValueEntry(FunctionQueueKeys.BuildArtifactUploadField, artifactUploadUrl));
+            }
+
+            await database.StreamAddAsync(FunctionQueueKeys.BuildsStream, [.. entry]);
 
             _logger.LogInformation(
                 "Queued build {BuildId} for function {FunctionId} (source hash {SourceHash})",

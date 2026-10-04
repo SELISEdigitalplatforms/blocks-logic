@@ -33,6 +33,7 @@ import { TERMINAL_RUN_STATUSES } from "../../types/run.types";
 import { FunctionStatusChip } from "../../components/function-status-chip";
 import { CodeEditor, type CodeEditorActions } from "../../components/code-editor";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
+import { ResizeHandle } from "../../components/resize-handle";
 import { SandboxHelpCard } from "../../components/sandbox-help-card";
 import { EnvironmentCard } from "../../components/environment-card";
 import { ConnectionsCard } from "../../components/connections-card";
@@ -85,6 +86,14 @@ const rangeStart = (range: string, now: number): string => {
  * why the reserve only has to account for what sits above the card and never for its insides.
  */
 const CODE_CARD_HEIGHT = "max(400px, calc(100dvh - 264px))";
+
+/**
+ * How far the bottom-edge grip can take the code card. The floor is the default's own floor; the
+ * ceiling keeps a long file from turning the card into something taller than any screen can show
+ * at once, where the editor would stop scrolling inside itself and the page would scroll instead.
+ */
+const CODE_CARD_MIN_HEIGHT = 400;
+const CODE_CARD_MAX_HEIGHT = 1600;
 
 /** The cards beside the editor, one at a time so none of them sits below the fold. */
 const SIDE_PANELS = [
@@ -187,6 +196,9 @@ export const FunctionDetailPage = () => {
   // The editor's own view settings. They belong to the person reading the file, not to the
   // function, so they are page state and are never part of the saved source.
   const [isWrapped, setIsWrapped] = useState(false);
+  // `null` until the grip is used: the card then follows the window (CODE_CARD_HEIGHT).
+  const [codeCardHeight, setCodeCardHeight] = useState<number | null>(null);
+  const codeCardRef = useRef<HTMLDivElement>(null);
   const editorActions = useRef<CodeEditorActions | null>(null);
   const setLimits = useFunctionEditorStore((s) => s.setLimits);
   const retry = useFunctionEditorStore((s) => s.retry);
@@ -496,8 +508,9 @@ export const FunctionDetailPage = () => {
             className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]"
           >
             <Card
+              ref={codeCardRef}
               className="flex min-w-0 flex-col overflow-hidden"
-              style={{ height: CODE_CARD_HEIGHT }}
+              style={{ height: codeCardHeight ?? CODE_CARD_HEIGHT }}
             >
               <div className="flex shrink-0 items-center justify-between gap-3 border-b bg-surface-app pr-4">
                 <div className="flex">
@@ -583,6 +596,16 @@ export const FunctionDetailPage = () => {
                 packages. Variables arrive as <code className="font-mono">ctx.env.NAME</code> —
                 inside the handler, where <code className="font-mono">ctx</code> exists.
               </p>
+              <ResizeHandle
+                targetRef={codeCardRef}
+                height={codeCardHeight}
+                min={CODE_CARD_MIN_HEIGHT}
+                max={CODE_CARD_MAX_HEIGHT}
+                onResize={setCodeCardHeight}
+                onReset={() => setCodeCardHeight(null)}
+                label="Resize code editor"
+                className="border-t"
+              />
             </Card>
 
             {/* Same height as the editor on wide screens, scrolling inside, so switching panels

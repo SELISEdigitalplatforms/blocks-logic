@@ -149,6 +149,8 @@ namespace Blocks.FunctionRunner.Runs
                 VersionId = entry.Get("versionId"),
                 TenantId = entry.Get("tenantId"),
                 Image = entry.Get("image") ?? string.Empty,
+                ArtifactUrl = entry.Get(RedisKeys.RunArtifactUrlField),
+                ArtifactSha256 = entry.Get(RedisKeys.RunArtifactSha256Field),
                 Attempt = ReadAttempt(entry),
                 Deliveries = deliveries,
                 Protocol = protocol,

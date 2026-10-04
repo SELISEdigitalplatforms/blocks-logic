@@ -5,6 +5,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Azure.Storage.Blobs" />
     <PackageReference Include="FluentValidation" />
     <PackageReference Include="MongoDB.Driver" />
     <PackageReference Include="SeliseBlocks.Genesis.OS" />

@@ -70,6 +70,7 @@ export class ProtocolWriter {
   #lines = 0;
   #truncated = false;
   #resultWritten = false;
+  #startedWritten = false;
   #sink;
   /** `[{ raw, escaped }]` for every secret-backed value, longest first. */
   #secrets = [];
@@ -166,6 +167,24 @@ export class ProtocolWriter {
     if (this.#truncated) return;
     this.#truncated = true;
     this.#emit({ t: 'truncated', reason });
+  }
+
+  /**
+   * The one line that says the function's own code is about to begin.
+   *
+   * Everything before it — the gVisor sandbox booting, Node starting, importing a dependency tree —
+   * is the platform's time, not the tenant's. Without this line the runner cannot tell the two
+   * apart, so it has to arm its kill timer from container start and allow a fixed grace for the
+   * boot. A function with a thousand dependencies then gets killed as TIMED_OUT while its handler
+   * is still well inside its own budget, which reads as the tenant's fault and is not.
+   *
+   * Written outside the log budget: it is accounting, not output, and it must not be the line that
+   * a chatty function pushes over the limit.
+   */
+  started() {
+    if (this.#startedWritten) return;
+    this.#startedWritten = true;
+    this.#sink(_stringify({ t: 'started', at: _now() }) + '\n');
   }
 
   /** The single success line. Returns null on success, or an error code. */
