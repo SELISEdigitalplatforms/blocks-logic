@@ -38,6 +38,21 @@ export async function isLoginSurface(page: Page): Promise<boolean> {
   return false
 }
 
+async function safeGoto(page: Page, url: string) {
+  for (let i = 0; i < 3; i++) {
+    try {
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 })
+      return
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (!/ERR_ABORTED|interrupted|navigating/i.test(message) || i === 2) {
+        throw error
+      }
+      await page.waitForTimeout(1_000)
+    }
+  }
+}
+
 async function fillCredentialsAndSubmit(page: Page) {
   const { email, password } = e2eCredentials()
   const emailField = oidcEmailField(page)
@@ -46,8 +61,8 @@ async function fillCredentialsAndSubmit(page: Page) {
   await expect(passwordField).toBeVisible({ timeout: 10_000 })
   await passwordField.fill(password)
 
-  // IAM returns JSON { redirect_uri } and the SPA navigates client-side. On PR
-  // previews that hop can stall on AUTHENTICATING; follow the URI explicitly.
+  // IAM returns JSON { redirect_uri }; SPA navigates client-side. On PR previews
+  // that hop can stall on AUTHENTICATING — follow the URI explicitly when needed.
   const loginRespPromise = page.waitForResponse(
     (r) => /\/api\/oidc\/login\/?$/.test(r.url()) && r.request().method() === "POST",
     { timeout: 90_000 },
@@ -57,8 +72,12 @@ async function fillCredentialsAndSubmit(page: Page) {
   if (loginResp.ok()) {
     try {
       const body = (await loginResp.json()) as { redirect_uri?: string }
-      if (body.redirect_uri && !/\/app\/console/.test(page.url())) {
-        await page.goto(body.redirect_uri, { waitUntil: "domcontentloaded" })
+      if (body.redirect_uri) {
+        // Give the SPA a moment to navigate itself; only force when still on IAM.
+        await page.waitForTimeout(1_500)
+        if (/dev-iam|\/oidc\/login/i.test(page.url())) {
+          await safeGoto(page, body.redirect_uri)
+        }
       }
     } catch {
       // non-JSON body — let waitForURL below handle navigation
@@ -70,7 +89,7 @@ export async function loginThroughOidc(page: Page, options?: { loginPath?: strin
   const base = e2eBaseUrl()
   const loginPath = options?.loginPath ?? `${base}/login`
 
-  await page.goto(loginPath, { waitUntil: "domcontentloaded" })
+  await safeGoto(page, loginPath)
 
   for (let attempt = 0; attempt < 3; attempt++) {
     if (await consoleHeading(page).isVisible({ timeout: 3_000 }).catch(() => false)) {
@@ -83,7 +102,7 @@ export async function loginThroughOidc(page: Page, options?: { loginPath?: strin
         await loginButton.click({ timeout: 8_000 })
       } catch {
         if (await consoleHeading(page).isVisible({ timeout: 3_000 }).catch(() => false)) return
-        await page.goto(`${base}/app/console`, { waitUntil: "domcontentloaded" })
+        await safeGoto(page, `${base}/app/console`)
         continue
       }
 
@@ -101,17 +120,26 @@ export async function loginThroughOidc(page: Page, options?: { loginPath?: strin
       if (await emailField.isVisible().catch(() => false)) {
         await fillCredentialsAndSubmit(page)
         await page.waitForURL(/\/app\/console/, { timeout: 90_000 })
+        await expect(consoleHeading(page)).toBeVisible({ timeout: 30_000 })
         return
       }
 
-      await page.goto(`${base}/app/console`, { waitUntil: "domcontentloaded" })
+      await safeGoto(page, `${base}/app/console`)
       continue
     }
 
-    await page.goto(`${base}/app/console`, { waitUntil: "domcontentloaded" })
+    // Already on IAM credential form without the product login gate.
+    if (await oidcEmailField(page).isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await fillCredentialsAndSubmit(page)
+      await page.waitForURL(/\/app\/console/, { timeout: 90_000 })
+      await expect(consoleHeading(page)).toBeVisible({ timeout: 30_000 })
+      return
+    }
+
+    await safeGoto(page, `${base}/app/console`)
   }
 
-  await page.goto(`${base}/app/console`, { waitUntil: "domcontentloaded" })
+  await safeGoto(page, `${base}/app/console`)
   await expect(consoleHeading(page)).toBeVisible({ timeout: 30_000 })
 }
 
@@ -121,7 +149,7 @@ export async function loginThroughOidc(page: Page, options?: { loginPath?: strin
  */
 export async function ensureAuthenticated(page: Page) {
   const base = e2eBaseUrl()
-  await page.goto(`${base}/app/console`, { waitUntil: "domcontentloaded" })
+  await safeGoto(page, `${base}/app/console`)
 
   if (await consoleHeading(page).isVisible({ timeout: 15_000 }).catch(() => false)) {
     return
@@ -139,7 +167,7 @@ export async function ensureAuthenticatedOnCurrentOrigin(page: Page) {
   }
 
   const origin = new URL(href).origin
-  await page.goto(`${origin}/app/console`, { waitUntil: "domcontentloaded" })
+  await safeGoto(page, `${origin}/app/console`)
 
   if (await consoleHeading(page).isVisible({ timeout: 15_000 }).catch(() => false)) {
     return
