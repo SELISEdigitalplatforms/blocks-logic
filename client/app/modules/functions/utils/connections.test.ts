@@ -37,6 +37,15 @@ describe("CONNECTION_PRESETS", () => {
     }
   });
 
+  it("calls Blocks as the caller first, and never as the client for an anonymous HTTP caller", () => {
+    const snippet = preset("blocks").snippet;
+    expect(snippet).toContain("ctx.blocks.accessToken");
+    expect(snippet).not.toContain("ctx.context.accessToken");
+    const guard = snippet.indexOf('ctx.run.invokedBy.type === "http" && !ctx.context.isAuthenticated');
+    expect(guard).toBeGreaterThan(-1);
+    expect(guard).toBeLessThan(snippet.indexOf("clientCredentials("));
+  });
+
   it("keeps every connection string and credential secret", () => {
     // The one plain endpoint: the project's public API host, filled in from its domain.
     const plainUrls = new Set(["BLOCKS_API_URL"]);

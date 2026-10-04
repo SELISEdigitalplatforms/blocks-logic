@@ -114,6 +114,15 @@ DOTNET_ENVIRONMENT=Production
 # KeyVault__ClientSecret=
 # KeyVault__TenantId=
 # Secrets__ValueStore=
+#
+# On a host that is NOT an Azure VM, also set ASPNETCORE_ENVIRONMENT=Development. The Key Vault
+# credential in SeliseBlocks.Secrets.OS is a DefaultAzureCredential, which probes the instance
+# metadata service at. Off Azure that probe is swallowed rather than refused:
+# measured, 200s and then the whole chain fails, so the KeyVault__* client secret above is never
+# tried and every secret-bound run reports "the secret store did not answer within 20s".
+# KeyVaultCredentialFactory skips managed identity when this is Development. Leave it unset on
+# Azure, where managed identity is the right credential and answers immediately.
+# ASPNETCORE_ENVIRONMENT=Development
 
 # --- Runner identity and paths ----------------------------------------------
 RUNNER__RunnerId=$(hostname -s)

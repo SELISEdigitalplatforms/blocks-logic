@@ -42,7 +42,8 @@ export const CONNECTION_PRESETS: IConnectionPreset[] = [
   {
     id: "blocks",
     label: "Blocks APIs",
-    description: "Data, mail, IAM and notifier through @seliseblocks/client with a service token.",
+    description:
+      "Data, mail, IAM and notifier through @seliseblocks/client, as the signed-in caller — or a client-credentials client when there is none.",
     packageName: "@seliseblocks/client",
     version: "0.2.0",
     variables: [
@@ -55,24 +56,41 @@ export const CONNECTION_PRESETS: IConnectionPreset[] = [
       {
         key: "BLOCKS_CLIENT_ID",
         secret: true,
-        hint: "Client id of an IAM client-credentials client",
+        hint: "Optional: an IAM client-credentials client, used only when a run has no caller token (public trigger, schedule)",
       },
-      { key: "BLOCKS_CLIENT_SECRET", secret: true, hint: "That client's secret" },
+      {
+        key: "BLOCKS_CLIENT_SECRET",
+        secret: true,
+        hint: "Optional: that client's secret",
+      },
     ],
     snippet: `import { createBlocksClient } from "@seliseblocks/client";
 
 export default async function (input, ctx) {
-  // The token acts as the client, not the caller: check the caller yourself.
-  if (!ctx.context.isAuthenticated) throw new Error("sign-in required");
-
   const base = { apiUrl: ctx.env.BLOCKS_API_URL, xBlocksKey: ctx.context.tenantId };
-  const login = await createBlocksClient(base).auth.oidc.clientCredentials({
-    clientId: ctx.env.BLOCKS_CLIENT_ID,
-    clientSecret: ctx.env.BLOCKS_CLIENT_SECRET,
-  });
-  if (!login?.access_token) throw new Error("Blocks client-credentials login failed");
 
-  const blocks = createBlocksClient({ ...base, accessToken: login.access_token });
+  // The caller's own token: Blocks applies their roles and permissions. undefined on a public
+  // trigger, a schedule, or a client-credentials or impersonated caller.
+  let accessToken = ctx.blocks.accessToken;
+
+  if (!accessToken) {
+    // No caller token: act as a client-credentials client instead. That token is the client's,
+    // not a user's — never hand its rights to an anonymous HTTP caller.
+    if (ctx.run.invokedBy.type === "http" && !ctx.context.isAuthenticated) {
+      throw new Error("sign-in required");
+    }
+    if (!ctx.env.BLOCKS_CLIENT_ID || !ctx.env.BLOCKS_CLIENT_SECRET) {
+      throw new Error("No caller token and no BLOCKS_CLIENT_ID / BLOCKS_CLIENT_SECRET set");
+    }
+    const login = await createBlocksClient(base).auth.oidc.clientCredentials({
+      clientId: ctx.env.BLOCKS_CLIENT_ID,
+      clientSecret: ctx.env.BLOCKS_CLIENT_SECRET,
+    });
+    if (!login?.access_token) throw new Error("Blocks client-credentials login failed");
+    accessToken = login.access_token;
+  }
+
+  const blocks = createBlocksClient({ ...base, accessToken });
   return await blocks.data.collection("Students").list();
 }`,
   },

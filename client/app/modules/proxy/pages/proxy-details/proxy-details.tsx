@@ -107,22 +107,30 @@ const EndpointRow = ({
   clientUrl,
   upstreamUrl,
   inherited,
+  proxyWide,
 }: {
   route: ProxyRoute;
   clientUrl: string;
   upstreamUrl: string;
   /** The proxy's policy, used when this endpoint sets none. Inherited whole, as the gateway reads it. */
   inherited: ProxyResilience | null;
+  /** Proxy-wide body merge and response filter. Inherited field by field, as the gateway reads it. */
+  proxyWide: Pick<Proxy, "bodyMerge" | "responseMode" | "responseInclude">;
 }) => {
   const forwardPath = (route.upstreamPath ?? route.path).replace(/^\/+|\/+$/g, "");
   const forwardsTo = forwardPath
     ? `${upstreamUrl.replace(/\/+$/, "")}/${forwardPath}`
     : upstreamUrl;
-  const filters = route.responseMode === "select";
-  const paths = route.responseInclude ?? [];
+  const filters = (route.responseMode ?? proxyWide.responseMode) === "select";
+  const paths = route.responseInclude ?? proxyWide.responseInclude ?? [];
+  const filterFromProxy = filters && !route.responseMode;
   const { tree } = pathsToTree(paths);
   const extras = [
-    route.bodyMerge?.length ? pluralize(route.bodyMerge.length, "body field") : null,
+    route.bodyMerge?.length
+      ? pluralize(route.bodyMerge.length, "body field")
+      : !route.bodyMerge && proxyWide.bodyMerge.length
+        ? `${pluralize(proxyWide.bodyMerge.length, "body field")} from the proxy-wide settings`
+        : null,
     route.headers?.length ? pluralize(route.headers.length, "extra header") : null,
     route.query?.length ? pluralize(route.query.length, "extra query param") : null,
   ].filter(Boolean);
@@ -146,12 +154,20 @@ const EndpointRow = ({
             "The vendor’s whole response"
           ) : paths.length ? (
             <div className="space-y-1">
-              <span>Only {pluralize(paths.length, "field")}:</span>
+              <span>
+                Only {pluralize(paths.length, "field")}:
+                {filterFromProxy ? (
+                  <span className="text-muted-foreground"> — from the proxy-wide filter</span>
+                ) : null}
+              </span>
               <ResponseFilterTree nodes={tree} />
             </div>
           ) : (
             <>
               An empty object (<code>{"{}"}</code>) — no fields selected yet
+              {filterFromProxy ? (
+                <span className="text-muted-foreground"> — from the proxy-wide filter</span>
+              ) : null}
             </>
           )}
         </dd>
@@ -206,6 +222,7 @@ const EndpointsSection = ({
             clientUrl={clientUrlFor(route.path)}
             upstreamUrl={proxy.upstreamUrl}
             inherited={proxy.resilience}
+            proxyWide={proxy}
           />
         ))}
       </ul>

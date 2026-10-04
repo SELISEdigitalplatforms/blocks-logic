@@ -46,7 +46,16 @@ export const SANDBOX_CTX_DOCS = [
     description:
       "tenantId, userId, roles, permissions, isAuthenticated. Empty identity on a public call — never a privileged token.",
   },
-  { name: "ctx.run", description: "id, version, attempt, invokedBy — http, workflow or test." },
+  {
+    name: "ctx.blocks.accessToken",
+    description:
+      "The caller's Blocks token, fresh for this run: pass it as accessToken to @seliseblocks/client, with ctx.context.tenantId as xBlocksKey. undefined on a public trigger, a schedule, a client-credentials or impersonated caller — check it before calling Blocks. Masked in logs.",
+  },
+  {
+    name: "ctx.run",
+    description:
+      "id, version, attempt, and invokedBy { type, id } — type is http, workflow, test, replay, schedule or event.",
+  },
   {
     name: "ctx.log.info / warn / error",
     description: "Structured lines kept on the run. console.log is captured too.",

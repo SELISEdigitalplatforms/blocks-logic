@@ -157,6 +157,112 @@ describe("ProxyForm", () => {
     expect(saved?.responseInclude).toEqual([]);
   });
 
+  it("keeps a proxy-wide response filter set outside the console when the proxy is saved", async () => {
+    // Sending "all" here would silently drop the filter and relay fields the owner chose to hide.
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+    const p1 = (await proxyService.get("p1"))!;
+    const proxy = { ...p1, responseMode: "select" as const, responseInclude: ["data.id"] };
+
+    renderWithProviders(
+      <MemoryRouter>
+        <ProxyForm mode="edit" proxy={proxy} onSuccess={onSuccess} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Proxy-wide response filter is on")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+    const saved = await proxyService.get("p1");
+    expect(saved?.responseMode).toBe("select");
+    expect(saved?.responseInclude).toEqual(["data.id"]);
+  });
+
+  it("turns the proxy-wide response filter off only when the owner asks", async () => {
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+    const p1 = (await proxyService.get("p1"))!;
+    const proxy = { ...p1, responseMode: "select" as const, responseInclude: ["data.id"] };
+
+    renderWithProviders(
+      <MemoryRouter>
+        <ProxyForm mode="edit" proxy={proxy} onSuccess={onSuccess} />
+      </MemoryRouter>,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Turn off: Proxy-wide response filter is on" }),
+    );
+    expect(screen.queryByText("Proxy-wide response filter is on")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+    const saved = await proxyService.get("p1");
+    expect(saved?.responseMode).toBe("all");
+    expect(saved?.responseInclude).toEqual([]);
+  });
+
+  it("keeps proxy-wide body fields and per-method overrides set outside the console on save", async () => {
+    // p1 carries both, set through the API. A save that sent them empty would change what the vendor
+    // receives (body fields) and where POST calls go (per-method upstream).
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+    const proxy = (await proxyService.get("p1"))!;
+    expect(proxy.bodyMerge.length).toBeGreaterThan(0);
+    expect(proxy.methodConfigs.length).toBeGreaterThan(0);
+
+    renderWithProviders(
+      <MemoryRouter>
+        <ProxyForm mode="edit" proxy={proxy} onSuccess={onSuccess} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Proxy-wide body fields are on")).toBeTruthy();
+    expect(screen.getByText("Per-method overrides are on")).toBeTruthy();
+    // Body-merge values can hold a credential; the card names keys only.
+    for (const row of proxy.bodyMerge) {
+      expect(screen.queryByText(row.value)).toBeNull();
+    }
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+    const saved = await proxyService.get("p1");
+    expect(saved?.bodyMerge).toEqual(proxy.bodyMerge);
+    expect(saved?.methodConfigs).toEqual(proxy.methodConfigs);
+  });
+
+  it("clears proxy-wide body fields and per-method overrides only when the owner turns them off", async () => {
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+    const proxy = (await proxyService.get("p1"))!;
+
+    renderWithProviders(
+      <MemoryRouter>
+        <ProxyForm mode="edit" proxy={proxy} onSuccess={onSuccess} />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Turn off: Proxy-wide body fields are on" }));
+    await user.click(screen.getByRole("button", { name: "Turn off: Per-method overrides are on" }));
+    expect(screen.queryByTestId("proxy-api-only-settings")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+    const saved = await proxyService.get("p1");
+    expect(saved?.bodyMerge).toEqual([]);
+    expect(saved?.methodConfigs).toEqual([]);
+  });
+
+  it("shows no proxy-wide settings card for a new proxy", () => {
+    renderWithProviders(
+      <MemoryRouter>
+        <ProxyForm mode="create" />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByTestId("proxy-api-only-settings")).toBeNull();
+  });
+
   it("edits an existing proxy, seeding its credential from headers, and has no delete action", async () => {
     const user = userEvent.setup();
     const onSuccess = vi.fn();

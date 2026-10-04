@@ -59,7 +59,8 @@ namespace Proxy.DomainService.Entities
 
         /// <summary>
         /// Per-method overrides. Empty ⇒ every method uses the shared <see cref="Headers"/> / <see cref="Query"/>
-        /// / <see cref="Upstream"/>. Not yet writable via the API (the validator rejects a non-empty value).
+        /// / <see cref="Upstream"/>. Writable via the API / CLI (validated in ProxyConfigValidator.NormalizeMethodConfigs);
+        /// The Logic console does not edit it but keeps it on save.
         /// </summary>
         public List<ProxyMethodConfig> MethodConfigs { get; set; } = new();
 

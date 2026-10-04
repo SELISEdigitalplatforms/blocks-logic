@@ -28,6 +28,7 @@ import {
 } from "../utils";
 import { KeyValueFieldArray } from "./key-value-field-array";
 import { ProxyAccessCard } from "./proxy-access-card";
+import { ProxyApiOnlySettingsCard } from "./proxy-api-only-settings-card";
 import { ProxyResilienceCard } from "./proxy-resilience-card";
 import { ProxyFormHeader } from "./proxy-form-header";
 import { ProxyRoutesCard, blankRoute } from "./proxy-routes-card";
@@ -49,8 +50,10 @@ type Props = {
  *
  * `methods` is derived from the endpoints rather than edited: the server needs the list for the
  * 405 `Allow` header, but there is nothing for the user to decide that the endpoints do not already
- * say. Body-merge and response filtering exist only per endpoint, so the proxy-level fields are sent
- * empty; `methodConfigs` is superseded by endpoints and sent empty too.
+ * say. Body-merge and response filtering are edited per endpoint, and `methodConfigs` is superseded by
+ * endpoints, but the CLI and API can still set all three proxy-wide. Those values are kept as loaded:
+ * resetting them on every save would silently drop a filter (relaying fields the owner chose to hide),
+ * a merged body field, or a per-method upstream. They are cleared only from ProxyApiOnlySettingsCard.
  */
 export const ProxyForm = ({
   mode,
@@ -99,12 +102,12 @@ export const ProxyForm = ({
       access: values.access ?? defaultProxyAccess(),
       // Proxy-wide, and a real setting rather than a derived one: a route with none inherits this.
       resilience: values.resilience ?? null,
-      // Per-endpoint only; nothing at proxy level.
-      bodyMerge: [],
-      bodyMode: "passthrough",
-      methodConfigs: [],
-      responseMode: "all",
-      responseInclude: [],
+      // Proxy-wide values set outside the console: kept as loaded, never reset by a save.
+      bodyMerge: values.bodyMerge ?? [],
+      bodyMode: values.bodyMode ?? "passthrough",
+      methodConfigs: values.methodConfigs ?? [],
+      responseMode: values.responseMode ?? "all",
+      responseInclude: values.responseInclude ?? [],
     };
   };
 
@@ -143,6 +146,11 @@ export const ProxyForm = ({
         routes,
         access: proxy.access ?? defaultProxyAccess(),
         resilience: proxy.resilience ?? null,
+        bodyMerge: proxy.bodyMerge,
+        bodyMode: proxy.bodyMerge.length ? "merge" : "passthrough",
+        methodConfigs: proxy.methodConfigs,
+        responseMode: proxy.responseMode,
+        responseInclude: proxy.responseInclude,
       });
     } else if (!isEdit && seededForId.current !== "new") {
       seededForId.current = "new";
@@ -244,6 +252,9 @@ export const ProxyForm = ({
             />
           </CardContent>
         </Card>
+
+        {/* Proxy-wide settings only the CLI / API can set; shown so a save never hides them. */}
+        <ProxyApiOnlySettingsCard form={form} />
 
         {/* Who can call it: one policy shared by every endpoint below. */}
         <ProxyAccessCard control={form.control} />
