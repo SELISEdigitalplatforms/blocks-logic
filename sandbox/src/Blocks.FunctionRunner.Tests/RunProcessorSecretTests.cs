@@ -67,6 +67,7 @@ namespace Blocks.FunctionRunner.Tests
                 await _db.KeyDeleteAsync(
                 [
                     RedisKeys.Run(_runId), RedisKeys.Lease(_runId), RedisKeys.Concurrency(_functionId),
+                    RedisKeys.TestConcurrency(_functionId),
                     RedisKeys.TenantSlots(_tenant), RedisKeys.Result(_runId), RedisKeys.Logs(_runId),
                 ]);
             }
@@ -167,13 +168,18 @@ namespace Blocks.FunctionRunner.Tests
             string envelope,
             int protocol = RedisKeys.RunProtocolVersion,
             string? tenant = null,
-            bool useInstanceTenant = true)
+            bool useInstanceTenant = true,
+            bool isTest = false)
         {
             if (useInstanceTenant && tenant is null) tenant = _tenant;
             await _db!.HashSetAsync(RedisKeys.Run(_runId),
             [
                 new HashEntry("envelope", envelope),
                 new HashEntry("status", RunStatuses.Queued),
+                new HashEntry("memoryBytes", "134217728"),
+                new HashEntry("cpuMillicores", "1000"),
+                new HashEntry("concurrency", "10"),
+                new HashEntry("timeoutSeconds", "5"),
             ]);
             await _db.KeyExpireAsync(RedisKeys.Run(_runId), TimeSpan.FromMinutes(5));
 
@@ -185,6 +191,7 @@ namespace Blocks.FunctionRunner.Tests
                 Image = "img@sha256:abc",
                 Attempt = 1,
                 Protocol = protocol,
+                IsTest = isTest,
             };
         }
 
@@ -196,9 +203,9 @@ namespace Blocks.FunctionRunner.Tests
             ISandbox sandbox, IRunSecretResolver resolver, string envelope)
         {
             var disposition = RunProcessor.Disposition.Deferred;
-            string? lastGate = null;
             for (var attempt = 0; attempt < 80; attempt++)
             {
+                _logs.Lines.Clear();
                 await _db!.KeyDeleteAsync(
                 [
                     RedisKeys.Run(_runId),
@@ -209,50 +216,14 @@ namespace Blocks.FunctionRunner.Tests
                 ]);
 
                 var job = await QueueAsync(envelope);
-
-                // Probe each gate the same way ProcessAsync does, so a Deferred failure names the cause.
-                var options = Microsoft.Extensions.Options.Options.Create(new RunnerOptions
-                {
-                    RunnerId = "test-runner",
-                    RunsDir = _runsDir,
-                    MaxActiveSandboxes = 32,
-                    MaxSandboxesPerTenant = 64,
-                    ReservedHostMemoryMb = 0,
-                });
-                var budget = new HostBudget(options, new RoomyHost(), new SandboxFootprint(), NullLogger<HostBudget>.Instance);
-                var limits = RunLimits.Default;
-                using (var reservation = budget.TryReserve(limits.MemoryBytes))
-                {
-                    if (reservation is null) lastGate = $"host TryReserve active={budget.Active} cap={budget.Capacity}";
-                    else
-                    {
-                        await using var tenantSlot = await FunctionConcurrency.TryEnterTenantAsync(
-                            _db, _tenant, job.RunId, options.Value.TenantSlotLimit(budget.Capacity));
-                        if (tenantSlot is null) lastGate = $"tenant slots full for {_tenant}";
-                        else
-                        {
-                            await using var slot = await FunctionConcurrency.TryEnterAsync(
-                                _db, _functionId, job.RunId, limits.FunctionConcurrency);
-                            if (slot is null) lastGate = $"function concurrency full for {_functionId}";
-                            else lastGate = "gates_open";
-                        }
-                    }
-                }
-
-                // Clear probe slots before the real ProcessAsync.
-                await _db.KeyDeleteAsync(
-                [
-                    RedisKeys.Concurrency(_functionId),
-                    RedisKeys.TenantSlots(_tenant),
-                ]);
-
                 disposition = await Processor(sandbox, resolver).ProcessAsync(job, CancellationToken.None);
                 if (disposition != RunProcessor.Disposition.Deferred) return disposition;
                 await Task.Delay(50);
             }
 
             throw new InvalidOperationException(
-                $"ProcessAsync stayed Deferred after 80 attempts; last probe gate={lastGate}");
+                $"ProcessAsync stayed Deferred after 80 attempts; logs:
+{_logs.All}");
         }
 
         private async Task<NameValueEntry[]> ResultEntryAsync()
@@ -441,12 +412,15 @@ namespace Blocks.FunctionRunner.Tests
         [SkippableFact]
         public async Task A_store_outage_is_reported_as_retryable_and_never_starts_the_sandbox()
         {
+            // Interactive tests fail immediately with SecretStoreUnavailable (someone is watching).
+            // Deployed runs defer instead — covered by A_deployed_run_defers_when_the_secret_store_is_down.
             Skip.If(Unavailable, "no Redis available");
             var sandbox = new RecordingSandbox();
             var resolver = new FakeRunSecretResolver(@throw: new SecretStoreUnavailableException(
                 "the key vault could not be read", new InvalidOperationException($"inner detail {StripeValue}")));
 
-            var disposition = await ProcessUntilAdmittedAsync(sandbox, resolver, Envelope(ReferencingEnv));
+            var disposition = await ProcessUntilAdmittedAsync(
+                sandbox, resolver, Envelope(ReferencingEnv), isTest: true);
 
             disposition.Should().Be(RunProcessor.Disposition.Complete);
             sandbox.Calls.Should().Be(0);
@@ -458,6 +432,36 @@ namespace Blocks.FunctionRunner.Tests
             // The inner exception is never logged or reported — nothing vouches for its text.
             _logs.All.Should().NotContain("inner detail");
             NoValueAnywhere(Field(result, "errorMessage")!);
+        }
+
+        [SkippableFact]
+        public async Task A_deployed_run_defers_when_the_secret_store_is_down()
+        {
+            // Deployed traffic keeps its place on the queue until the store is back; nothing is
+            // failed and the sandbox never starts.
+            Skip.If(Unavailable, "no Redis available");
+            var sandbox = new RecordingSandbox();
+            var resolver = new FakeRunSecretResolver(@throw: new SecretStoreUnavailableException(
+                "the key vault could not be read", new InvalidOperationException($"inner detail {StripeValue}")));
+
+            await _db!.KeyDeleteAsync(
+            [
+                RedisKeys.Run(_runId),
+                RedisKeys.Lease(_runId),
+                RedisKeys.Concurrency(_functionId),
+                RedisKeys.TenantSlots(_tenant),
+                RedisKeys.Cancel(_runId),
+            ]);
+            var job = await QueueAsync(Envelope(ReferencingEnv), isTest: false);
+            var disposition = await Processor(sandbox, resolver).ProcessAsync(job, CancellationToken.None);
+
+            disposition.Should().Be(RunProcessor.Disposition.Deferred);
+            sandbox.Calls.Should().Be(0);
+            Directory.Exists(RunDir).Should().BeFalse();
+            var status = (string?)await _db.HashGetAsync(RedisKeys.Run(_runId), "status");
+            status.Should().BeOneOf(RunStatuses.Queued, RunStatuses.Starting);
+            _logs.All.Should().NotContain("inner detail");
+            NoValueAnywhere(_logs.All);
         }
 
         [SkippableFact]
