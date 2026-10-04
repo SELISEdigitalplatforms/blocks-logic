@@ -71,7 +71,11 @@ namespace Functions.DomainService.Services
 
             var build = await _buildService.EnsureImageAsync(
                 tenantId, function, cancellationToken, waitSecondsOverride: null, request.Rebuild);
-            if (build.Status != BuildStatus.Succeeded || string.IsNullOrEmpty(build.ImageDigest))
+            // A build is usable if it produced either an artifact or a registry image. Both are
+            // accepted so a runner on the old path and one on the new path can deploy side by side
+            // during the cutover; neither being present means the build gave us nothing to run.
+            var hasArtifact = !string.IsNullOrEmpty(build.ArtifactSha256);
+            if (build.Status != BuildStatus.Succeeded || (string.IsNullOrEmpty(build.ImageDigest) && !hasArtifact))
             {
                 throw new FunctionValidationException(
                     build.Status is BuildStatus.Queued or BuildStatus.Building
@@ -94,7 +98,13 @@ namespace Functions.DomainService.Services
                     LastUpdatedBy = actorId ?? string.Empty,
                     FunctionId = function.ItemId,
                     Number = nextNumber,
-                    ImageDigest = build.ImageDigest,
+                    ImageDigest = build.ImageDigest ?? string.Empty,
+
+                    // The artifact is addressed by the build that made it, so the version keeps the
+                    // build id rather than a separate name. Null on a version built the old way.
+                    ArtifactId = hasArtifact ? build.ItemId : null,
+                    ArtifactSha256 = build.ArtifactSha256,
+
                     CodeHash = FunctionHashing.CodeHash(function.Source),
                     ManifestHash = FunctionHashing.ManifestHash(function.Source),
                     Source = function.Source,

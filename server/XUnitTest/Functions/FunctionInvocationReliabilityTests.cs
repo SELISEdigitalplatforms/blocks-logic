@@ -35,6 +35,7 @@ namespace XUnitTest.Functions
         private readonly Mock<IFunctionAuthorizationService> _authorization = new();
         private readonly Mock<IFunctionBuildService> _builds = new();
         private readonly Mock<IFunctionDelegationService> _delegation = new();
+        private readonly Mock<global::Functions.DomainService.Storage.IFunctionArtifactStore> _artifacts = new();
         private readonly Mock<ISubscriber> _subscriber = new();
         private readonly (IDatabase Database, FakeRedisDatabase Fake) _redis = FakeRedisDatabase.Create();
 
@@ -100,7 +101,8 @@ namespace XUnitTest.Functions
             return new FunctionInvocationService(
                 _functions.Object, _versions.Object, _runs.Object, _admission.Object,
                 _authorization.Object, _builds.Object, new Mock<IEndpointAccessAuthorizer>().Object,
-                _delegation.Object, new HttpContextAccessor(), cache.Object, configuration, NullLogger<FunctionInvocationService>.Instance);
+                _delegation.Object, new HttpContextAccessor(), _artifacts.Object, cache.Object, configuration,
+                NullLogger<FunctionInvocationService>.Instance);
         }
 
         private void RunIs(Func<FunctionRunEntity?> current) =>
@@ -183,6 +185,72 @@ namespace XUnitTest.Functions
             entry!.Single(e => e.Name == "protocol").Value.ToString()
                 .Should().Be(FunctionQueueKeys.RunProtocolVersion.ToString());
             FunctionQueueKeys.RunProtocolVersion.Should().BeGreaterThan(FunctionQueueKeys.ProtocolVersion);
+        }
+
+        // ---- the artifact a runner needs to build the image locally ------------------
+
+        private const string ArtifactSas = "https://acct.blob.core.windows.net/blocks-fn-artifacts/t1/b1.tar?sig=x";
+
+        /// <summary>
+        /// A signed, read-only URL and the hash to check it against, so a host that has never seen
+        /// this function can fetch what it needs and know it got the right bytes.
+        /// </summary>
+        [Fact]
+        public async Task A_version_with_an_artifact_queues_its_url_and_its_hash()
+        {
+            _version.ArtifactId = "build_1";
+            _version.ArtifactSha256 = "deadbeef";
+            _artifacts
+                .Setup(a => a.CreateDownloadUrlAsync(Tenant, "build_1", It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(ArtifactSas);
+
+            await InvokeUntilQueuedAsync();
+
+            var entry = _redis.Fake.Calls("StreamAddAsync").Single()[1] as NameValueEntry[];
+            entry!.Single(e => e.Name == FunctionQueueKeys.RunArtifactUrlField).Value.ToString()
+                .Should().Be(ArtifactSas);
+            entry.Single(e => e.Name == FunctionQueueKeys.RunArtifactSha256Field).Value.ToString()
+                .Should().Be("deadbeef");
+        }
+
+        /// <summary>
+        /// The old path, untouched. A runner that predates these fields must see exactly what it saw
+        /// before, which is what lets both run side by side through the cutover.
+        /// </summary>
+        [Fact]
+        public async Task A_version_without_an_artifact_queues_neither_field()
+        {
+            _version.ArtifactId = null;
+
+            await InvokeUntilQueuedAsync();
+
+            var entry = _redis.Fake.Calls("StreamAddAsync").Single()[1] as NameValueEntry[];
+            entry!.Should().NotContain(e => e.Name == FunctionQueueKeys.RunArtifactUrlField);
+            entry.Should().NotContain(e => e.Name == FunctionQueueKeys.RunArtifactSha256Field);
+            _artifacts.Verify(
+                a => a.CreateDownloadUrlAsync(
+                    It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        /// <summary>
+        /// The artifact is gone from the store. Queueing a half-described run would hand a host a URL
+        /// to nothing; the entry falls back to the image reference instead and the run still goes.
+        /// </summary>
+        [Fact]
+        public async Task An_artifact_missing_from_the_store_does_not_queue_an_empty_url()
+        {
+            _version.ArtifactId = "build_gone";
+            _artifacts
+                .Setup(a => a.CreateDownloadUrlAsync(
+                    It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((string?)null);
+
+            await InvokeUntilQueuedAsync();
+
+            var entry = _redis.Fake.Calls("StreamAddAsync").Single()[1] as NameValueEntry[];
+            entry!.Should().NotContain(e => e.Name == FunctionQueueKeys.RunArtifactUrlField);
+            entry.Single(e => e.Name == "image").Value.ToString().Should().NotBeEmpty();
         }
 
         [Fact]

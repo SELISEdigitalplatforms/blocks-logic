@@ -30,6 +30,7 @@ namespace Blocks.FunctionRunner.Runs
         private readonly ISandbox _sandbox;
         private readonly IImageResolver _images;
         private readonly HostBudget _budget;
+        private readonly Maintenance.IImageUsageLog? _usage;
         private readonly IRunSecretResolver _secrets;
         private readonly IRunAccessTokenResolver _accessTokens;
         private readonly RunnerOptions _options;
@@ -43,12 +44,14 @@ namespace Blocks.FunctionRunner.Runs
             IRunSecretResolver secrets,
             IRunAccessTokenResolver accessTokens,
             IOptions<RunnerOptions> options,
-            ILogger<RunProcessor> logger)
+            ILogger<RunProcessor> logger,
+            Maintenance.IImageUsageLog? usage = null)
         {
             _db = db;
             _sandbox = sandbox;
             _images = images;
             _budget = budget;
+            _usage = usage;
             _secrets = secrets;
             _accessTokens = accessTokens;
             _options = options.Value;
@@ -169,7 +172,16 @@ namespace Blocks.FunctionRunner.Runs
             try
             {
                 // --- image ------------------------------------------------------------
-                var image = await _images.EnsureAsync(job.Image, token).ConfigureAwait(false);
+                // The artifact, when the control plane sent one, is how this host produces the
+                // image itself rather than asking a registry for what another host built.
+                var image = await _images
+                    .EnsureAsync(job.Image, token, job.ArtifactUrl, job.ArtifactSha256)
+                    .ConfigureAwait(false);
+
+                // What the cache evicts by. Stamped on resolve rather than on completion so a run
+                // that fails still counts as use — the image was wanted, which is the question the
+                // cache is asking.
+                if (image is not null) _usage?.Touch(image);
                 if (image is null)
                 {
                     await CompleteAsync(job, runKey, startedAt, RunStatuses.Failed, ErrorCodes.ImagePullFailed,

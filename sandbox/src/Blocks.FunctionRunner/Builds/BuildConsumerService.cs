@@ -118,6 +118,7 @@ namespace Blocks.FunctionRunner.Builds
                 TenantId = entry.Get("tenantId"),
                 SourceKey = entry.Get("sourceKey") ?? RedisKeys.Source(buildId),
                 ImageRef = entry.Get("imageRef") ?? string.Empty,
+                ArtifactUploadUrl = entry.Get(RedisKeys.BuildArtifactUploadField),
                 AllowScripts = string.Equals(entry.Get("allowScripts"), "true", StringComparison.OrdinalIgnoreCase),
             };
 

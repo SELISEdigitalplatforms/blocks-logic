@@ -125,7 +125,8 @@ namespace Functions.DomainService.Consumers
 
             await _buildRepository.ApplyResultAsync(
                 tenantId, buildId, status,
-                entry.Get("imageDigest"), entry.Get("packages"), entry.Get("log"), entry.Get("errorMessage"),
+                entry.Get("imageDigest"), entry.Get("artifactSha256"),
+                entry.Get("packages"), entry.Get("log"), entry.Get("errorMessage"),
                 DateTime.UtcNow, cancellationToken);
         }
     }

@@ -59,6 +59,7 @@ namespace Blocks.FunctionRunner.Maintenance
         private readonly IDockerClient _docker;
         private readonly IDatabase _db;
         private readonly IRegistryClient _registry;
+        private readonly IImageUsageLog? _usage;
         private readonly RunnerOptions _options;
         private readonly ILogger<ImageGc> _logger;
         private readonly TimeSpan _grace;
@@ -74,8 +75,13 @@ namespace Blocks.FunctionRunner.Maintenance
             IRegistryClient registry,
             IOptions<RunnerOptions> options,
             ILogger<ImageGc> logger,
-            TimeSpan? grace = null)
+            TimeSpan? grace = null,
+            IImageUsageLog? usage = null)
         {
+            // Optional so the sweeps that existing tests construct keep compiling. Without it the
+            // cap simply does not evict — the keep-set behaviour is unchanged, which is the safe
+            // way round for a cache.
+            _usage = usage;
             _docker = docker;
             _db = db;
             _registry = registry;
@@ -215,7 +221,82 @@ namespace Blocks.FunctionRunner.Maintenance
             }
 
             if (removed > 0) _logger.LogInformation("Image GC pruned {Count} image(s)", removed);
+            removed += await EnforceCacheCapAsync(images, inUse, token).ConfigureAwait(false);
+
             return removed;
+       }
+
+        /// <summary>
+        /// Evicts the coldest function images once this host holds more than it should.
+        /// <para>
+        /// Unlike the sweep above, this removes images the keep set still references — on purpose.
+        /// With an artifact behind it an image is a cache entry, not a store: evicting one costs the
+        /// next run of that function a few seconds of rebuild, where keeping every live function on
+        /// a host that serves a thousand of them would cost the disk. A host holds what it is busy
+        /// with, not everything that exists.
+        /// </para>
+        /// <para>
+        /// Never evicts an image a container is holding, and never the base image — the base is what
+        /// every rebuild is built from, so dropping it would make every eviction far more expensive
+        /// than it should be.
+        /// </para>
+        /// </summary>
+        private async Task<int> EnforceCacheCapAsync(
+            IList<ImagesListResponse> images, HashSet<string> inUse, CancellationToken token)
+        {
+            var cap = _options.MaxCachedImages;
+            if (cap <= 0 || _usage is null)
+            {
+                // Zero means "derive from the disk", which is not implemented yet; until it is, no
+                // count-based eviction happens and the keep set alone decides. Said plainly rather
+                // than silently doing nothing.
+                return 0;
+            }
+
+            var candidates = images
+                .Where(i => i.ID is not null && !inUse.Contains(i.ID) && !IsBaseImage(i) && !IsTestImage(i.Labels))
+                .Select(i => new
+                {
+                    Image = i,
+                    Reference = i.RepoTags?.FirstOrDefault() ?? i.RepoDigests?.FirstOrDefault() ?? i.ID!,
+                })
+                .Select(x => new
+                {
+                    x.Image,
+                    x.Reference,
+                    // No record means this host has not run it since the log existed, which makes it
+                    // the coldest thing here — exactly what should go first.
+                    LastUsed = _usage.LastUsedUtc(x.Reference) ?? DateTime.MinValue,
+                })
+                .OrderBy(x => x.LastUsed)
+                .ToList();
+
+            var excess = candidates.Count - cap;
+            if (excess <= 0) return 0;
+
+            _logger.LogInformation(
+                "Image cache holds {Held} function images, over the cap of {Cap}; evicting the {Excess} coldest",
+                candidates.Count, cap, excess);
+
+            var evicted = 0;
+            foreach (var candidate in candidates.Take(excess))
+            {
+                try
+                {
+                    await _docker.Images.DeleteImageAsync(
+                        candidate.Image.ID!, new ImageDeleteParameters { Force = false }, token)
+                        .ConfigureAwait(false);
+                    evicted++;
+                }
+                catch (DockerApiException ex)
+                {
+                    // Almost always a stopped container still holding it; the next sweep gets it.
+                    _logger.LogDebug(
+                        "Could not evict {Reference}: {Message}", candidate.Reference, ex.Message);
+                }
+            }
+
+            return evicted;
         }
 
         private async Task<HashSet<string>> LoadKeepSetAsync()

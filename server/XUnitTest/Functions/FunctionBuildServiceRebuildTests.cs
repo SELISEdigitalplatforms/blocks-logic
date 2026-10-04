@@ -27,6 +27,7 @@ namespace XUnitTest.Functions
         private const string Tenant = "t1";
 
         private readonly Mock<IFunctionBuildRepository> _builds = new(MockBehavior.Loose);
+        private readonly Mock<global::Functions.DomainService.Storage.IFunctionArtifactStore> _artifacts = new(MockBehavior.Loose);
         private readonly Mock<IDatabase> _database = new(MockBehavior.Loose);
         private readonly List<FunctionBuildEntity> _created = [];
 
@@ -76,7 +77,7 @@ namespace XUnitTest.Functions
             cache.Setup(c => c.CacheDatabase()).Returns(_database.Object);
 
             return new FunctionBuildService(
-                _builds.Object, cache.Object,
+                _builds.Object, _artifacts.Object, cache.Object,
                 new ConfigurationBuilder().AddInMemoryCollection([]).Build(),
                 NullLogger<FunctionBuildService>.Instance);
         }

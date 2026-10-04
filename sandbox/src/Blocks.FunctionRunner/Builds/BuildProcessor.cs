@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Net.Http;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Blocks.FunctionRunner.Contracts;
@@ -67,14 +69,18 @@ namespace Blocks.FunctionRunner.Builds
         private readonly ILogger<BuildProcessor> _logger;
         private readonly string _template;
 
+        private readonly IHttpClientFactory _httpClientFactory;
+
         public BuildProcessor(
             IDatabase db,
             IDockerClient docker,
             IDependencyInstaller installer,
             Maintenance.IRegistryClient registry,
+            IHttpClientFactory httpClientFactory,
             IOptions<RunnerOptions> options,
             ILogger<BuildProcessor> logger)
         {
+            _httpClientFactory = httpClientFactory;
             _db = db;
             _docker = docker;
             _installer = installer;
@@ -214,12 +220,36 @@ namespace Blocks.FunctionRunner.Builds
                 // A test build is for this host alone: it runs here, in the same job, and is
                 // deleted straight after. It never goes near a registry, so no other host can be
                 // asked for it and no registry copy is left behind.
-                var digest = job.LocalOnly
-                    ? await LocalImageIdAsync(tag, log, token).ConfigureAwait(false)
-                    : await PushAsync(tag, log, token).ConfigureAwait(false);
-                if (digest is null)
+                // Three ways to publish, and which one applies is decided by the job, not by
+                // configuration — so a control plane on the old path and one on the new can both be
+                // served by this runner without a flag to get wrong.
+                //
+                // A test build stays here: it runs on this host, in this job, and is deleted after.
+                // An artifact upload is the new path — the context goes to the store and every host
+                // builds its own image from it. A push is the old one.
+                string? digest = null;
+                string? artifactSha = null;
+
+                if (job.LocalOnly)
                 {
-                    await PublishAsync(job, outcome, "FAILED", null, null, PublishableLog(), "the image could not be pushed")
+                    digest = await LocalImageIdAsync(tag, log, token).ConfigureAwait(false);
+                }
+                else if (!string.IsNullOrWhiteSpace(job.ArtifactUploadUrl))
+                {
+                    artifactSha = await UploadArtifactAsync(job, dirs.Context, log, token).ConfigureAwait(false);
+                }
+                else
+                {
+                    digest = await PushAsync(tag, log, token).ConfigureAwait(false);
+                }
+
+                if (digest is null && artifactSha is null)
+                {
+                    await PublishAsync(
+                        job, outcome, "FAILED", null, null, PublishableLog(),
+                        job.ArtifactUploadUrl is null
+                            ? "the image could not be pushed"
+                            : "the build artifact could not be uploaded")
                         .ConfigureAwait(false);
                     return outcome;
                 }
@@ -241,7 +271,8 @@ namespace Blocks.FunctionRunner.Builds
                 // digest when it becomes a deployed version and unpins it when that version goes.
                 // Until then the image is protected by Image GC's grace window, and a Test whose
                 // image has been reclaimed rebuilds rather than failing (DECISIONS D3).
-                await PublishAsync(job, outcome, "SUCCEEDED", digest, packages, PublishableLog(), null).ConfigureAwait(false);
+                await PublishAsync(job, outcome, "SUCCEEDED", digest, packages, PublishableLog(), null, artifactSha)
+                    .ConfigureAwait(false);
 
                 _logger.LogInformation("Build {BuildId} produced {Digest}", job.BuildId, digest);
             }
@@ -448,6 +479,114 @@ namespace Blocks.FunctionRunner.Builds
         /// admin call would trade a rare silent failure for a common loud one.
         /// </para>
         /// </summary>
+        /// <summary>
+        /// Tars the build context and uploads it to the one blob the job's signed URL allows.
+        /// <para>
+        /// The <i>context</i>, not the image: manifest, the installed dependency tree and the source,
+        /// which is exactly what a host needs to build this function from the shared base. Shipping
+        /// the image instead would carry a copy of Node in every function's artifact.
+        /// </para>
+        /// <para>
+        /// The image was still built above, and deliberately — it is the cheapest validation there
+        /// is, and a function that cannot build should fail here, where the log reaches the build
+        /// record, rather than later on whichever host first tries to run it.
+        /// </para>
+        /// </summary>
+        /// <returns>The artifact's SHA-256, or null when it could not be uploaded.</returns>
+        private async Task<string?> UploadArtifactAsync(
+            BuildJob job, string contextDir, StringBuilder log, CancellationToken token)
+        {
+            var archive = Path.Combine(Path.GetTempPath(), $"fn-artifact-{job.BuildId}.tar");
+
+            try
+            {
+                // Same flags the dependency archive uses: a fixed sort order and zeroed timestamps,
+                // so an unchanged context produces byte-identical bytes and the hash means something.
+                var tar = await RunToolAsync(
+                    "tar",
+                    ["--sort=name", "--mtime=@0", "--owner=0", "--group=0", "--numeric-owner",
+                     "-cf", archive, "-C", contextDir, "."],
+                    token).ConfigureAwait(false);
+
+                if (tar != 0)
+                {
+                    log.AppendLine($"packing the build context failed (tar exited {tar})");
+                    return null;
+                }
+
+                string sha;
+                await using (var stream = File.OpenRead(archive))
+                {
+                    sha = Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, token).ConfigureAwait(false));
+                }
+
+                var client = _httpClientFactory.CreateClient(ArtifactUploadClientName);
+                using var content = new StreamContent(File.OpenRead(archive));
+
+                // Azure block blobs refuse a PUT without this header; it is the one piece of the
+                // storage protocol the builder has to know, and it keeps the SAS doing everything
+                // else.
+                content.Headers.Add("x-ms-blob-type", "BlockBlob");
+
+                using var response = await client
+                    .PutAsync(job.ArtifactUploadUrl, content, token)
+                    .ConfigureAwait(false);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    log.AppendLine($"uploading the build artifact failed with {(int)response.StatusCode}");
+                    _logger.LogError(
+                        "Build {BuildId} could not upload its artifact: {Status}", job.BuildId, (int)response.StatusCode);
+                    return null;
+                }
+
+                _logger.LogInformation(
+                    "Build {BuildId} uploaded its artifact ({Bytes} bytes, sha256 {Sha})",
+                    job.BuildId, new FileInfo(archive).Length, sha);
+
+                return sha;
+            }
+            catch (Exception ex) when (ex is HttpRequestException or IOException)
+            {
+                log.AppendLine($"uploading the build artifact failed: {ex.Message}");
+                _logger.LogError(ex, "Build {BuildId} could not upload its artifact", job.BuildId);
+                return null;
+            }
+            finally
+            {
+                try
+                {
+                    File.Delete(archive);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    _logger.LogDebug("Could not delete {Path}: {Message}", archive, ex.Message);
+                }
+            }
+        }
+
+        private static async Task<int> RunToolAsync(string file, string[] arguments, CancellationToken token)
+        {
+            var info = new System.Diagnostics.ProcessStartInfo(file)
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+
+            foreach (var argument in arguments)
+            {
+                info.ArgumentList.Add(argument);
+            }
+
+            using var process = System.Diagnostics.Process.Start(info)
+                ?? throw new InvalidOperationException($"could not start {file}");
+            await process.WaitForExitAsync(token).ConfigureAwait(false);
+            return process.ExitCode;
+        }
+
+        /// <summary>The named client used to PUT an artifact. Its timeout suits a large, slow body.</summary>
+        public const string ArtifactUploadClientName = "fn-artifact-upload";
+
         private async Task<string?> PushAsync(string tag, StringBuilder log, CancellationToken token)
         {
             var (name, imageTag) = Sandbox.ImageResolver.SplitReference(tag);
@@ -726,7 +865,8 @@ namespace Blocks.FunctionRunner.Builds
         }
 
         private Task<RedisValue> PublishAsync(
-            BuildJob job, BuildOutcome outcome, string status, string? digest, string? packages, string? log, string? error)
+            BuildJob job, BuildOutcome outcome, string status, string? digest, string? packages, string? log,
+            string? error, string? artifactSha256 = null)
         {
             outcome.Succeeded = status == "SUCCEEDED";
             outcome.Image = digest;
@@ -755,6 +895,7 @@ namespace Blocks.FunctionRunner.Builds
                 new NameValueEntry("tenantId", job.TenantId ?? string.Empty),
                 new NameValueEntry("status", status),
                 new NameValueEntry("imageDigest", digest ?? string.Empty),
+                new NameValueEntry(RedisKeys.BuildArtifactSha256Field, artifactSha256 ?? string.Empty),
                 new NameValueEntry("packages", packages ?? "[]"),
                 new NameValueEntry("log", log ?? string.Empty),
                 new NameValueEntry("errorMessage", error ?? string.Empty),

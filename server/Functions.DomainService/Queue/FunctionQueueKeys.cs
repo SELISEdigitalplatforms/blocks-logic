@@ -75,6 +75,31 @@ namespace Functions.DomainService.Queue
         /// </summary>
         public const string RunDelegationField = "delegation";
 
+        /// <summary>
+        /// Optional field of a <see cref="BuildsStream"/> entry: a short-lived, write-only URL for the
+        /// one blob this build's artifact belongs in.
+        /// <para>
+        /// Optional on purpose, and no protocol bump: a runner that predates it ignores the field and
+        /// publishes to the registry as it always did, so an old runner in front of this control plane
+        /// keeps working. A runner that understands it uploads instead.
+        /// </para>
+        /// </summary>
+        public const string BuildArtifactUploadField = "artifactUploadUrl";
+
+        /// <summary>
+        /// Optional fields of a <see cref="RunsStream"/> entry: a short-lived, read-only URL for the
+        /// artifact this run needs, and the SHA-256 the runner must find once it has it.
+        /// <para>
+        /// The hash is what makes the download trustworthy — the URL is signed, but a truncated or
+        /// swapped blob would otherwise be built into an image and executed. Same optionality rule as
+        /// the upload field above.
+        /// </para>
+        /// </summary>
+        public const string RunArtifactUrlField = "artifactUrl";
+
+        /// <inheritdoc cref="RunArtifactUrlField" />
+        public const string RunArtifactSha256Field = "artifactSha256";
+
         // ---- streams ------------------------------------------------------------
         public static string RunsStream => _prefix + "functions:runs";
         public static string ResultsStream => _prefix + "functions:results";

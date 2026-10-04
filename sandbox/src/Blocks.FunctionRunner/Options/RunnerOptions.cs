@@ -48,6 +48,34 @@ namespace Blocks.FunctionRunner.Options
         public string BuildsDir { get; set; } = "/var/lib/blocks-runner/builds";
 
         /// <summary>
+        /// Scratch space for downloading and unpacking a run's build artifact before it is built
+        /// into a local image. Emptied after each build — the image is what lasts.
+        /// </summary>
+        [Required]
+        public string ArtifactsDir { get; set; } = "/var/lib/blocks-runner/artifacts";
+
+        /// <summary>
+        /// How many function images this host keeps before evicting the least recently used, as
+        /// <c>RUNNER__MaxCachedImages</c>.
+        /// <para>
+        /// Zero (the default) derives it from the disk instead, so a 64 GB temp disk and a 512 GB
+        /// data disk both do something sensible without anyone setting a number. Set it to pin an
+        /// explicit count. Disk is a cache here, not a store: an evicted image rebuilds from its
+        /// artifact in seconds, so holding too few costs latency, never correctness.
+        /// </para>
+        /// </summary>
+        [Range(0, 100_000)]
+        public int MaxCachedImages { get; set; }
+
+        /// <summary>
+        /// The share of the image disk function images may occupy, as <c>RUNNER__ImageDiskPercent</c>.
+        /// Whichever of this and <see cref="MaxCachedImages"/> binds first is the one that evicts.
+        /// Builds and run directories need room on the same disk, which is why this is well under 100.
+        /// </summary>
+        [Range(10, 95)]
+        public int ImageDiskPercent { get; set; } = 70;
+
+        /// <summary>
         /// The image store this runner pushes to and pulls from. A loopback address is one registry
         /// per host; anything else is shared with every other runner pointed at it, which changes
         /// what this process may safely delete — see <see cref="PruneRegistry"/>.

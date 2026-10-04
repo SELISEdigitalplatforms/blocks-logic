@@ -37,6 +37,27 @@ namespace Blocks.FunctionRunner.Contracts
         /// traffic. Never set from the wire — the test loop sets it on the job it builds.
         /// </summary>
         public bool IsTest { get; init; }
+
+        /// <summary>
+        /// A short-lived, read-only URL for this version's build artifact, when the control plane
+        /// sent one.
+        /// <para>
+        /// Present means this host may build the image itself from a shared base rather than pull it
+        /// from a registry — which is what lets a host run a function it has never seen without the
+        /// host that built it being involved. Absent means the old path: pull <see cref="Image"/>.
+        /// </para>
+        /// </summary>
+        public string? ArtifactUrl { get; init; }
+
+        /// <summary>
+        /// SHA-256 the downloaded artifact must have.
+        /// <para>
+        /// The URL is signed, but signing says where the bytes came from, not that they are whole. A
+        /// truncated or swapped artifact would otherwise be built into an image and executed, so the
+        /// download is checked against this before anything is built from it.
+        /// </para>
+        /// </summary>
+        public string? ArtifactSha256 { get; init; }
     }
 
     /// <summary>A result written to <see cref="RedisKeys.ResultsStream"/> for the logic Worker.</summary>
@@ -92,6 +113,17 @@ namespace Blocks.FunctionRunner.Contracts
         /// </summary>
         public bool LocalOnly { get; init; }
 
+        /// <summary>
+        /// A short-lived, write-only URL for the one blob this build's artifact belongs in, when the
+        /// control plane sent one.
+        /// <para>
+        /// Present means publish by uploading the build context rather than by pushing an image to a
+        /// registry. The builder holds no storage credential of its own — this URL is the whole of
+        /// its access, and it can write only this one blob.
+        /// </para>
+        /// </summary>
+        public string? ArtifactUploadUrl { get; init; }
+
         public int Protocol { get; init; } = RedisKeys.ProtocolVersion;
     }
 
@@ -106,6 +138,13 @@ namespace Blocks.FunctionRunner.Contracts
 
         public required string Status { get; init; }
         public string? ImageDigest { get; init; }
+
+        /// <summary>
+        /// SHA-256 of the artifact this build uploaded, when it uploaded one. Its presence is what
+        /// tells the control plane the build published an artifact rather than a registry image.
+        /// </summary>
+        public string? ArtifactSha256 { get; init; }
+
         public string? Packages { get; init; }
         public string? Log { get; init; }
         public string? ErrorMessage { get; init; }

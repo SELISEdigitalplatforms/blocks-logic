@@ -155,6 +155,7 @@ namespace Functions.DomainService.Repositories
             string buildId,
             BuildStatus status,
             string? imageDigest,
+            string? artifactSha256,
             string? packages,
             string? log,
             string? errorMessage,
@@ -164,6 +165,7 @@ namespace Functions.DomainService.Repositories
             var update = Builders<FunctionBuildEntity>.Update
                 .Set(b => b.Status, status)
                 .Set(b => b.ImageDigest, imageDigest)
+                .Set(b => b.ArtifactSha256, artifactSha256)
                 .Set(b => b.Packages, packages)
                 .Set(b => b.Log, log)
                 .Set(b => b.ErrorMessage, errorMessage)

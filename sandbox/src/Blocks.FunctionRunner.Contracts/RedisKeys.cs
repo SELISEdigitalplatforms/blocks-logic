@@ -117,6 +117,29 @@ namespace Blocks.FunctionRunner.Contracts
         /// </summary>
         public const string RunDelegationField = "delegation";
 
+        /// <summary>
+        /// Optional field of a builds entry: a short-lived, write-only URL for this build's artifact.
+        /// Mirrors <c>FunctionQueueKeys.BuildArtifactUploadField</c>. Absent on an entry from a
+        /// control plane that predates it, which is the old registry path.
+        /// </summary>
+        public const string BuildArtifactUploadField = "artifactUploadUrl";
+
+        /// <summary>
+        /// Optional fields of a runs entry: a short-lived, read-only URL for the artifact this run
+        /// needs, and the SHA-256 it must have. Mirror
+        /// <c>FunctionQueueKeys.RunArtifactUrlField</c> / <c>RunArtifactSha256Field</c>.
+        /// </summary>
+        public const string RunArtifactUrlField = "artifactUrl";
+
+        /// <inheritdoc cref="RunArtifactUrlField" />
+        public const string RunArtifactSha256Field = "artifactSha256";
+
+        /// <summary>
+        /// Field of a build-results entry: the SHA-256 of the artifact this build uploaded, when it
+        /// uploaded one. Mirrors what <c>FunctionBuildResultConsumer</c> reads.
+        /// </summary>
+        public const string BuildArtifactSha256Field = "artifactSha256";
+
         /// <summary>The serialized result of a run. TTL 24 h.</summary>
         public static string Result(string runId) => $"{_prefix}function:result:{runId}";
 

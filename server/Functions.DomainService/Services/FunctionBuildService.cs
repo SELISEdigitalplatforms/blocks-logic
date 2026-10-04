@@ -68,21 +68,31 @@ namespace Functions.DomainService.Services
         private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
 
         private readonly IFunctionBuildRepository _buildRepository;
+        private readonly Storage.IFunctionArtifactStore _artifacts;
         private readonly ICacheClient _cache;
         private readonly IConfiguration _configuration;
         private readonly ILogger<FunctionBuildService> _logger;
 
         public FunctionBuildService(
             IFunctionBuildRepository buildRepository,
+            Storage.IFunctionArtifactStore artifacts,
             ICacheClient cache,
             IConfiguration configuration,
             ILogger<FunctionBuildService> logger)
         {
             _buildRepository = buildRepository;
+            _artifacts = artifacts;
             _cache = cache;
             _configuration = configuration;
             _logger = logger;
         }
+
+        /// <summary>
+        /// How long a build's upload URL stays valid. Long enough for the entry to wait its turn on a
+        /// busy host and for a large dependency tree to upload, short enough that a leaked job entry
+        /// is not a lasting write capability.
+        /// </summary>
+        internal static readonly TimeSpan ArtifactUploadWindow = TimeSpan.FromHours(2);
 
         public async Task<FunctionBuildEntity> GetAsync(
             string tenantId, string buildId, CancellationToken cancellationToken = default)
@@ -134,6 +144,7 @@ namespace Functions.DomainService.Services
                     inProgress.ItemId,
                     BuildStatus.Failed,
                     imageDigest: null,
+                    artifactSha256: null,
                     packages: null,
                     log: null,
                     errorMessage: "the build was never picked up by a runner and has been retired",
@@ -212,6 +223,12 @@ namespace Functions.DomainService.Services
                 files = BuildFileMap(function.Source),
             });
 
+            // Signed before the build runs, because the builder cannot sign for itself — it holds no
+            // storage credential. Keyed by the build id rather than by what the build produces, since
+            // the URL has to exist before there is anything to hash. The window covers a build that
+            // queues behind others, not just one that starts immediately.
+            var artifactUploadUrl = _artifacts.CreateUploadUrl(tenantId, build.ItemId, ArtifactUploadWindow);
+
             var database = _cache.CacheDatabase();
             var sourceKey = FunctionQueueKeys.Source(build.ItemId);
             await database.StringSetAsync(sourceKey, sourceBundle, FunctionQueueKeys.SourceTtl);
@@ -225,6 +242,7 @@ namespace Functions.DomainService.Services
                 new NameValueEntry("imageRef", imageRef),
                 new NameValueEntry("allowScripts", "false"),
                 new NameValueEntry("protocol", FunctionQueueKeys.ProtocolVersion),
+                new NameValueEntry(FunctionQueueKeys.BuildArtifactUploadField, artifactUploadUrl),
             ]);
 
             _logger.LogInformation(

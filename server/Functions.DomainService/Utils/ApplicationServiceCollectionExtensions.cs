@@ -49,6 +49,11 @@ namespace Functions.DomainService.Utils
             services.AddSingleton<IFunctionRunRepository, FunctionRunRepository>();
             services.AddSingleton<IFunctionRunLogRepository, FunctionRunLogRepository>();
             services.AddSingleton<IFunctionBuildRepository, FunctionBuildRepository>();
+
+            // The artifact store. Singleton because its BlobContainerClient is thread-safe and
+            // holds a connection pool worth reusing; it takes the tenant per call, never from
+            // ambient context, so one instance serves every tenant.
+            services.AddSingleton<Storage.IFunctionArtifactStore, Storage.FunctionArtifactStore>();
             services.AddSingleton<IFunctionAuditRepository, FunctionAuditRepository>();
 
             services.AddSingleton<ITenantAccessor, TenantAccessor>();
