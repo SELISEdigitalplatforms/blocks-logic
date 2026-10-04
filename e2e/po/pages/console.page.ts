@@ -73,18 +73,18 @@ export class ConsolePage {
     await this.configureButton().click();
   }
 
-  // ---- Resources cards (Docs / Code / Cloud) -------------------------------
+  // ---- Resources cards (Learn/Build/Automate → Read Docs / Install CLI / Bootstrap)
 
   docsLink(): Locator {
-    return this.page.getByRole("link", { name: "Docs", exact: false });
+    return this.page.getByRole("link", { name: /Read Docs/i });
   }
 
   codeLink(): Locator {
-    return this.page.getByRole("link", { name: "Code", exact: false });
+    return this.page.getByRole("link", { name: /Install CLI/i });
   }
 
   cloudLink(): Locator {
-    return this.page.getByRole("link", { name: "Cloud", exact: false });
+    return this.page.getByRole("link", { name: /Bootstrap/i });
   }
 
   /**
