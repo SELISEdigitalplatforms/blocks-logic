@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { type UseFormReturn, useWatch } from "react-hook-form";
+import { type PathValue, type UseFormReturn, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui-kits/button/button";
 import { Card, CardContent } from "@/components/ui-kits/card/card";
 import { ProxyFormValues } from "../types";
@@ -58,7 +58,7 @@ export const ProxyApiOnlySettingsCard = ({ form }: Props) => {
 
   const clear = <K extends "responseMode" | "responseInclude" | "bodyMerge" | "bodyMode" | "methodConfigs">(
     name: K,
-    value: ProxyFormValues[K],
+    value: PathValue<ProxyFormValues, K>,
   ) => form.setValue(name, value, { shouldDirty: true });
 
   return (
