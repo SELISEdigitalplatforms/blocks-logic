@@ -200,7 +200,7 @@ namespace Blocks.FunctionRunner.Tests
         /// Clear leftover slots, re-queue, and retry until the processor is past those gates.
         /// </summary>
         private async Task<RunProcessor.Disposition> ProcessUntilAdmittedAsync(
-            ISandbox sandbox, IRunSecretResolver resolver, string envelope)
+            ISandbox sandbox, IRunSecretResolver resolver, string envelope, bool isTest = false)
         {
             var disposition = RunProcessor.Disposition.Deferred;
             for (var attempt = 0; attempt < 80; attempt++)
@@ -211,19 +211,19 @@ namespace Blocks.FunctionRunner.Tests
                     RedisKeys.Run(_runId),
                     RedisKeys.Lease(_runId),
                     RedisKeys.Concurrency(_functionId),
+                    RedisKeys.TestConcurrency(_functionId),
                     RedisKeys.TenantSlots(_tenant),
                     RedisKeys.Cancel(_runId),
                 ]);
 
-                var job = await QueueAsync(envelope);
+                var job = await QueueAsync(envelope, isTest: isTest);
                 disposition = await Processor(sandbox, resolver).ProcessAsync(job, CancellationToken.None);
                 if (disposition != RunProcessor.Disposition.Deferred) return disposition;
                 await Task.Delay(50);
             }
 
             throw new InvalidOperationException(
-                $"ProcessAsync stayed Deferred after 80 attempts; logs:
-{_logs.All}");
+                "ProcessAsync stayed Deferred after 80 attempts; logs: " + _logs.All);
         }
 
         private async Task<NameValueEntry[]> ResultEntryAsync()
