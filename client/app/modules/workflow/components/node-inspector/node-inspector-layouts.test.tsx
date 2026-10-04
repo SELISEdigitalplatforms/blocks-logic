@@ -1,5 +1,5 @@
 import React from "react";
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
 import { NodeInspector } from "./node-inspector";
@@ -88,6 +88,33 @@ describe("LayoutWithTest", () => {
       },
     );
     expect(screen.getByText("Field A")).toBeTruthy();
+    expect(screen.getByText("Run Test")).toBeTruthy();
+  });
+
+  it("replaces the right panel with the guide and restores it", () => {
+    const Guide = () => <div>Guide body</div>;
+
+    renderWithProviders(
+      <Sheet open>
+        <LayoutWithTest schema={schema} guide={Guide} />
+      </Sheet>,
+      {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        seedWorkflow: (store: any) => {
+          const sel = node({ name: "Beta" });
+          store.getState().addNode(sel);
+          store.setState({ selectedNode: sel, editorMode: "editor" });
+        },
+      },
+    );
+
+    expect(screen.getByText("Run Test")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Guide" }));
+
+    expect(screen.getByText("Guide body")).toBeTruthy();
+    expect(screen.queryByText("Run Test")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Hide guide" }));
     expect(screen.getByText("Run Test")).toBeTruthy();
   });
 });

@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui-kits/button/button";
 import { Copy, EllipsisVertical, Play, Trash, Rss, Ban } from "lucide-react";
-import { useWorkflow, useStepExecute, useHandleExecuteStep } from "../../hooks";
+import { useHandleExecuteStep } from "../../hooks";
+import { useWorkflowStore, useWorkflowStoreApi } from "../../store";
 import { getStatusStyles } from "../../utils/workflow-execution-editor.util";
 import {
   DropdownMenu,
@@ -26,9 +27,17 @@ type EditorNodeBaseProps = {
 
 export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
   const [isToolbarVisible, setIsToolbarVisible] = useState(false);
-  const { getNodeById, deleteNode, selectAndConfigureNode, selectedNode, updateNode, duplicateNode, isNodeNameUnique, workflowId, stepExecutionReachableNodeIds, executedNodes, isListening, listeningNodeId } =
-    useWorkflow();
-  const node = getNodeById(id);
+  const store = useWorkflowStoreApi();
+  const node = useWorkflowStore((state) => state.nodesMap[id]);
+  const deleteNode = useWorkflowStore((state) => state.deleteNode);
+  const selectNode = useWorkflowStore((state) => state.selectNode);
+  const openConfigModal = useWorkflowStore((state) => state.openConfigModal);
+  const updateNode = useWorkflowStore((state) => state.updateNode);
+  const duplicateNode = useWorkflowStore((state) => state.duplicateNode);
+  const stepExecutionReachableNodeIds = useWorkflowStore((state) => state.stepExecutionReachableNodeIds);
+  const executedNodes = useWorkflowStore((state) => state.executedNodes);
+  const isListening = useWorkflowStore((state) => state.isListening);
+  const listeningNodeId = useWorkflowStore((state) => state.listeningNodeId);
   const { handleExecuteStep, executeStepModal } = useHandleExecuteStep();
 
 
@@ -49,7 +58,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
   const handleRenameSubmit = () => {
     const newName = editName.trim();
     if (newName && newName !== node?.name) {
-      if (!isNodeNameUnique(newName, id)) {
+      if (!isNodeNameUnique(newName)) {
         showErrorToast({
           title: "Validation Error",
           errors: "A node with this name already exists.",
@@ -59,6 +68,13 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
       updateNode(id, { name: newName });
     }
     setIsRenaming(false);
+  };
+
+  const isNodeNameUnique = (name: string) => {
+    const lowerName = name.trim().toLowerCase();
+    return !Object.values(store.getState().nodesMap).some(
+      (candidate) => candidate.name?.toLowerCase() === lowerName && candidate.id !== id,
+    );
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -181,7 +197,8 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
               className="cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation();
-                selectAndConfigureNode(node);
+                selectNode(node);
+                openConfigModal();
               }}
             >
               <span>Open</span>

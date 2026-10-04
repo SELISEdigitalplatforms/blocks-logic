@@ -1,12 +1,18 @@
 using Microsoft.AspNetCore.Mvc;
 using Blocks.Genesis;
-using DomainService.Workflow.Dtos;
-using DomainService.Workflow.Services;
+using Workflow.DomainService.Dtos;
+using Workflow.DomainService.Services;
+using Workflow.DomainService.Logging;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 
 namespace Utilities.Api.Controllers
 {
+    /// <summary>
+    /// Management API for workflows, their versions and their executions, routed as
+    /// <c>/api/Workflow/{action}</c>. Every action except the webhook entry points requires a bearer
+    /// token; the tenant always comes from <see cref="BlocksContext"/> and is never taken from the payload.
+    /// </summary>
     [ApiController]
     [Route("[controller]/[action]")]
     public class WorkflowController : ControllerBase
@@ -15,17 +21,25 @@ namespace Utilities.Api.Controllers
         private readonly IWorkflowService _workflowService;
         private readonly IWorkflowVersionService _workflowVersionService;
         private readonly IWorkflowExecutionService _workflowExecutionService;
+        private readonly IWorkflowImportService _workflowImportService;
+        private readonly IExecutionLogService _executionLogService;
 
+        /// <summary>Takes the workflow, version, execution, import and execution log services.</summary>
         public WorkflowController(
             IWorkflowService workflowService,
             IWorkflowVersionService workflowVersionService,
-            IWorkflowExecutionService workflowExecutionService)
+            IWorkflowExecutionService workflowExecutionService,
+            IWorkflowImportService workflowImportService,
+            IExecutionLogService executionLogService)
         {
             _workflowService = workflowService;
             _workflowVersionService = workflowVersionService;
             _workflowExecutionService = workflowExecutionService;
+            _workflowImportService = workflowImportService;
+            _executionLogService = executionLogService;
         }
 
+        /// <summary><c>POST</c> — the tenant's workflows, filtered and paged by the request body.</summary>
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> GetAll([FromBody] WorkflowGetsRequestDto dto)
@@ -35,6 +49,7 @@ namespace Utilities.Api.Controllers
             return Ok(workflows);
         }
 
+        /// <summary><c>GET</c> — one workflow by id, including its node graph.</summary>
         [Authorize]
         [HttpGet]
         public async Task<IActionResult> Get([FromQuery] WorkflowGetRequestDto dto)
@@ -44,6 +59,7 @@ namespace Utilities.Api.Controllers
             return Ok(workflow);
         }
 
+        /// <summary><c>POST</c> — creates a workflow. 201 on success.</summary>
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] WorkflowCreateRequestDto dto)
@@ -53,6 +69,7 @@ namespace Utilities.Api.Controllers
             return StatusCode(StatusCodes.Status201Created, result);
         }
 
+        /// <summary><c>POST</c> — copies an existing workflow into a new one. 201 on success.</summary>
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> Duplicate([FromBody] WorkflowDuplicateRequestDto dto)
@@ -62,6 +79,7 @@ namespace Utilities.Api.Controllers
             return StatusCode(StatusCodes.Status201Created, result);
         }
 
+        /// <summary><c>PUT</c> — rewrites a workflow's name, description and node graph.</summary>
         [Authorize]
         [HttpPut]
         public async Task<IActionResult> Update([FromBody] WorkflowUpdateRequestDto dto)
@@ -71,6 +89,28 @@ namespace Utilities.Api.Controllers
             return Ok(result);
         }
 
+        /// <summary>
+        /// <c>POST</c> — enqueues a workflow import. The file must already be in storage.
+        /// Returns immediately; completion is delivered via the <c>workflow-import</c> notification.
+        /// </summary>
+        [Authorize]
+        [HttpPost]
+        public async Task<IActionResult> Import([FromBody] WorkflowImportRequestDto dto)
+        {
+            if (dto == null || string.IsNullOrWhiteSpace(dto.FileId))
+            {
+                return BadRequest(new BaseMutationResponse
+                {
+                    IsSuccess = false,
+                    Errors = new Dictionary<string, string> { { "Message", "FileId is required" } },
+                });
+            }
+
+            var result = await _workflowImportService.EnqueueAsync(dto);
+            return Ok(result);
+        }
+
+        /// <summary><c>DELETE</c> — removes a workflow by id.</summary>
         [Authorize]
         [HttpDelete]
         public async Task<IActionResult> Delete([FromQuery] WorkflowDeleteRequestDto dto)
@@ -80,6 +120,7 @@ namespace Utilities.Api.Controllers
             return Ok(result);
         }
 
+        /// <summary><c>POST</c> — snapshots the working workflow as a new version row. 201 on success.</summary>
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> CreateVersion([FromBody] WorkflowVersionCreateRequestDto dto)
@@ -89,6 +130,7 @@ namespace Utilities.Api.Controllers
             return StatusCode(StatusCodes.Status201Created, result);
         }
 
+        /// <summary><c>POST</c> — edits an existing version's metadata.</summary>
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> UpdateVersion([FromBody] WorkflowVersionUpdateRequestDto dto)
@@ -99,6 +141,7 @@ namespace Utilities.Api.Controllers
         }
 
 
+        /// <summary><c>POST</c> — the version history for one workflow.</summary>
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> GetVersions([FromBody] WorkflowGetVersionsRequestDto dto)
@@ -108,6 +151,7 @@ namespace Utilities.Api.Controllers
             return Ok(result);
         }
 
+        /// <summary><c>POST</c> — the workflow graph as captured by a specific version.</summary>
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> GetWorkflowByVersion([FromBody] GetWorkflowByVersionRequestDto dto)
@@ -117,6 +161,7 @@ namespace Utilities.Api.Controllers
             return Ok(result);
         }
 
+        /// <summary><c>POST</c> — snapshots the current graph as a new version and publishes it in one step.</summary>
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> PublishNewVersion([FromBody] WorkflowPublishNewVersionRequestDto dto)
@@ -126,6 +171,7 @@ namespace Utilities.Api.Controllers
             return Ok(result);
         }
 
+        /// <summary><c>POST</c> — publishes an existing version, making it the one webhooks execute.</summary>
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> PublishVersion([FromBody] WorkflowPublishVersionRequestDto dto)
@@ -135,6 +181,7 @@ namespace Utilities.Api.Controllers
             return Ok(result);
         }
 
+        /// <summary><c>POST</c> — takes the workflow out of service; its webhooks stop executing.</summary>
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> Unpublish([FromBody] WorkflowUnpublishRequestDto dto)
@@ -144,6 +191,7 @@ namespace Utilities.Api.Controllers
             return Ok(result);
         }
 
+        /// <summary><c>POST</c> — restores a soft-deleted workflow.</summary>
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> Restore([FromBody] WorkflowRestoreRequestDto dto)
@@ -155,21 +203,79 @@ namespace Utilities.Api.Controllers
 
 
 
-        [HttpPost("{projectKey}/{workflowId}/{webhookId}")]
-        public async Task<IActionResult> Webhook(string projectKey, string workflowId, string webhookId, [FromBody] JsonElement input)
+        /// <summary>
+        /// Data-plane entry point: runs the published workflow behind a webhook trigger.
+        /// <c>POST /api/Workflow/Webhook/{tenantId}/{workflowId}/{webhookId}</c>. Anonymous at the framework
+        /// level — the trigger's own <c>authType</c> decides whether a caller must be authenticated or
+        /// authorized, and a failure surfaces here as 401.
+        /// </summary>
+        [HttpPost("{tenantId}/{workflowId}/{webhookId}")]
+        public async Task<IActionResult> Webhook(string tenantId, string workflowId, string webhookId, [FromBody] JsonElement input)
         {
-            var dto = new WorkflowWebhookRequestDto
+            try
             {
-                ProjectKey = projectKey,
-                Input = input
-            };
+                var response = await _workflowExecutionService.TriggerWebhookAsync(
+                    workflowId,
+                    webhookId,
+                    tenantId,
+                    input
+                );
+
+                return Ok(response);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return StatusCode(401, new { message = "Unauthorized" });
+            }
+
+        }
+
+        /// <summary>
+        /// The <c>webhook-test</c> twin of <see cref="Webhook"/>: runs the DRAFT graph rather than the
+        /// published version, for the console's test panel. Same route shape, same 401 behaviour.
+        /// </summary>
+        [ActionName("webhook-test")]
+        [HttpPost("{tenantId}/{workflowId}/{webhookId}")]
+        public async Task<IActionResult> TestWebhook(string tenantId, string workflowId, string webhookId, [FromBody] JsonElement input)
+        {
+            try
+            {
+                var response = await _workflowExecutionService.TriggerTestWebhookAsync(
+                    workflowId,
+                    webhookId,
+                    tenantId,
+                    input
+                );
+
+                return Ok(response);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return StatusCode(401, new { message = "Unauthorized" });
+            }
+
+        }
+
+        /// <summary>
+        /// Header-based twin of <see cref="Webhook"/>: tenant comes from <c>x-blocks-key</c> rather than the
+        /// path. <c>POST /api/Workflow/Webhook/{workflowId}/{webhookId}</c>. Anonymous at the framework
+        /// level — missing or blank header is 400; trigger <c>authType</c> failures still surface as 401.
+        /// </summary>
+        [ActionName("Webhook")]
+        [HttpPost("{workflowId}/{webhookId}")]
+        public async Task<IActionResult> WebhookByHeader(string workflowId, string webhookId, [FromBody] JsonElement input)
+        {
+            if (!TryGetTenantIdFromBlocksKey(out var tenantId, out var error))
+            {
+                return error;
+            }
 
             try
             {
                 var response = await _workflowExecutionService.TriggerWebhookAsync(
                     workflowId,
                     webhookId,
-                    projectKey,
+                    tenantId,
                     input
                 );
 
@@ -179,25 +285,28 @@ namespace Utilities.Api.Controllers
             {
                 return StatusCode(401, new { message = "Unauthorized" });
             }
-
         }
 
+        /// <summary>
+        /// Header-based twin of <see cref="TestWebhook"/>: tenant comes from <c>x-blocks-key</c> rather than
+        /// the path. <c>POST /api/Workflow/webhook-test/{workflowId}/{webhookId}</c>. Same 400/401 behaviour
+        /// as <see cref="WebhookByHeader"/>.
+        /// </summary>
         [ActionName("webhook-test")]
-        [HttpPost("{projectKey}/{workflowId}/{webhookId}")]
-        public async Task<IActionResult> TestWebhook(string projectKey, string workflowId, string webhookId, [FromBody] JsonElement input)
+        [HttpPost("{workflowId}/{webhookId}")]
+        public async Task<IActionResult> TestWebhookByHeader(string workflowId, string webhookId, [FromBody] JsonElement input)
         {
-            var dto = new WorkflowWebhookRequestDto
+            if (!TryGetTenantIdFromBlocksKey(out var tenantId, out var error))
             {
-                ProjectKey = projectKey,
-                Input = input
-            };
+                return error;
+            }
 
             try
             {
                 var response = await _workflowExecutionService.TriggerTestWebhookAsync(
                     workflowId,
                     webhookId,
-                    projectKey,
+                    tenantId,
                     input
                 );
 
@@ -207,8 +316,9 @@ namespace Utilities.Api.Controllers
             {
                 return StatusCode(401, new { message = "Unauthorized" });
             }
-
         }
+
+        /// <summary><c>POST</c> — executes a single node in isolation and returns its output, for the node inspector.</summary>
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> StepExecute([FromBody] StepExecuteRequestDto dto)
@@ -218,6 +328,7 @@ namespace Utilities.Api.Controllers
             return Ok(executions);
         }
 
+        /// <summary><c>POST</c> — fires a listener-type trigger by hand.</summary>
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> TriggerListener([FromBody] TriggerListenerRequestDto dto)
@@ -228,15 +339,22 @@ namespace Utilities.Api.Controllers
         }
 
 
+        /// <summary><c>GET</c> — the execution history for one workflow.</summary>
         [Authorize]
         [HttpGet]
         public async Task<IActionResult> GetExecutions([FromQuery] WorkflowExecutionsGetRequestDto dto)
         {
             var tenantId = GetTenantId();
             var executions = await _workflowExecutionService.GetExecutionsByWorkflowIdAsync(tenantId, dto);
+            if (executions.HttpStatus != StatusCodes.Status200OK)
+            {
+                return StatusCode(executions.HttpStatus, executions);
+            }
+
             return Ok(executions);
         }
 
+        /// <summary><c>GET</c> — one execution, including per-node results.</summary>
         [Authorize]
         [HttpGet]
         public async Task<IActionResult> GetExecution([FromQuery] WorkflowExecutionGetRequestDto dto)
@@ -246,6 +364,17 @@ namespace Utilities.Api.Controllers
             return Ok(execution);
         }
 
+        /// <summary><c>GET</c> — the stage log lines of one execution (stages and counts only, never data values),
+        /// with whether they are available, expired or still arriving.</summary>
+        [Authorize]
+        [HttpGet]
+        public async Task<IActionResult> GetExecutionLogs([FromQuery] WorkflowExecutionLogsGetRequestDto dto)
+        {
+            var tenantId = GetTenantId();
+            return Ok(await _executionLogService.GetAsync(tenantId, dto, HttpContext?.RequestAborted ?? default));
+        }
+
+        /// <summary><c>GET</c> — the most recent successful execution, used to prefill node inputs from real data.</summary>
         [Authorize]
         [HttpGet]
         public async Task<IActionResult> LastSuccessfullExecution([FromQuery] LastSuccessfullExecutionRequestDto dto)
@@ -260,6 +389,18 @@ namespace Utilities.Api.Controllers
             var context = BlocksContext.GetContext();
             if (context == null) return "";
             return context.TenantId;
+        }
+
+        private bool TryGetTenantIdFromBlocksKey(out string tenantId, out IActionResult error)
+        {
+            tenantId = Request.Headers["x-blocks-key"].ToString().Trim();
+            if (string.IsNullOrWhiteSpace(tenantId))
+            {
+                error = BadRequest(new { message = "x-blocks-key header is required" });
+                return false;
+            }
+            error = null!;
+            return true;
         }
     }
 }

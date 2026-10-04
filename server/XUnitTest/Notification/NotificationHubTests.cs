@@ -194,6 +194,7 @@ namespace XUnitTest.Notification
             [
                 new Claim("tenant_id", "tenant-x"),
                 new Claim("user_id", "user-x"),
+                new Claim("original_tenant_id", "tenant-x"),
             ])));
 
             BlocksContext? seen = null;

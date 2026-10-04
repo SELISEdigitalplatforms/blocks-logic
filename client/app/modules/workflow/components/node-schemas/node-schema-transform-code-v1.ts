@@ -1,6 +1,8 @@
+import { NodeGuideTransformCodeV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
 
 export const NodeSchemaTransformCodeV1: NodeSchemaDefinition = {
+  guide: NodeGuideTransformCodeV1,
   schema: {
     type: "code",
     category: "transform",
@@ -30,7 +32,7 @@ export const NodeSchemaTransformCodeV1: NodeSchemaDefinition = {
       },
       {
         id: "script",
-        type: "code-editor-v2",
+        type: "code-editor",
         label: "Script",
         info: "Write your transformation script here. Use the provided variables to access input data.",
         key: "script",
@@ -59,4 +61,5 @@ export const NodeSchemaTransformCodeV1: NodeSchemaDefinition = {
     },
   },
   transform: (node) => node,
+  fieldReference: (p) => ({ kind: "code", mode: p.mode === "each" ? "each" : "all" }),
 };

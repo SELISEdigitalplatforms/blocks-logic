@@ -1,6 +1,8 @@
+import { NodeGuideLogicIfV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
 
 export const NodeSchemaLogicIfV1: NodeSchemaDefinition = {
+  guide: NodeGuideLogicIfV1,
   schema: {
     type: "if",
     category: "logic",
@@ -14,7 +16,7 @@ export const NodeSchemaLogicIfV1: NodeSchemaDefinition = {
         key: "conditionType",
         options: [
           { value: "all", label: "All conditions (AND)" },
-          { value: "any", label: "Any condition (OR)" },
+          { value: "or", label: "Any condition (OR)" },
         ],
         defaultValue: "all",
       },

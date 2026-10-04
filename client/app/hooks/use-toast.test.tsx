@@ -139,3 +139,23 @@ describe("toast variants", () => {
     expect(Array.isArray(result.current.toasts[0].description)).toBe(true);
   });
 });
+
+describe("Toaster component", () => {
+  it("renders toast with close button and variant classes", async () => {
+    const { render, screen } = await import("@testing-library/react");
+    const { Toaster } = await import("@/components/ui-kits/toaster/toaster");
+
+    const { unmount } = render(<Toaster />);
+    act(() => {
+      showSuccessToast({ description: "Success notification" });
+    });
+
+    expect(screen.getByText("Success notification")).toBeDefined();
+    const closeBtn = document.querySelector("[toast-close]");
+    expect(closeBtn).toBeTruthy();
+    expect(closeBtn?.className).toContain("group-[.success]:text-green-700/70");
+    expect(closeBtn?.className).toContain("dark:group-[.success]:text-green-300");
+
+    unmount();
+  });
+});

@@ -19,3 +19,9 @@ client/dist
 # Local secrets and env files
 **/Secret.json
 **/.env
+
+# The function runner. It deploys to its own VM via sandbox/deploy.sh and is never built into
+# any image here - all three Dockerfiles copy only `server` and `client` - so keeping it out of
+# the build context saves uploading the provisioning scripts and the runtime image sources to
+# the daemon on every build.
+sandbox

@@ -4,17 +4,805 @@
         <name>Api</name>
     </assembly>
     <members>
+        <member name="T:BlocksTemplate.Api.Controllers.CertificateController">
+            <summary>Certificate storage for the tenant, routed as <c>/api/Certificate/{action}</c>.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.CertificateController.#ctor(Common.InternalService.Storage.ICertificateStorageService)">
+            <summary>Takes the certificate storage service.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.CertificateController.UploadCertificate(Microsoft.AspNetCore.Http.IFormFile,System.Boolean)">
+            <summary>
+            Stores a public certificate for the calling tenant and returns the URL to read it back.
+            </summary>
+            <remarks>
+            The file arrives as multipart form data while the flag arrives on the query string, so
+            both are bound explicitly - a single complex parameter would be inferred as
+            <c>[FromBody]</c> and reject the upload. Callers also send a <c>TenantId</c> query
+            parameter; it is ignored, because the tenant comes from the request context.
+            </remarks>
+        </member>
+        <member name="T:BlocksTemplate.Api.Controllers.DeploymentController">
+            <summary>
+            Source-control integration behind the deployment feature, routed as
+            <c>/api/Deployment/{action}</c>. Every action requires a bearer token and delegates straight to
+            <see cref="T:DeploymentDriver.IDeploymentDriverService"/>, which talks to the connected provider.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.#ctor(DeploymentDriver.IDeploymentDriverService)">
+            <summary>
+            Source-control integration behind the deployment feature, routed as
+            <c>/api/Deployment/{action}</c>. Every action requires a bearer token and delegates straight to
+            <see cref="T:DeploymentDriver.IDeploymentDriverService"/>, which talks to the connected provider.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.IsAuthorized">
+            <summary><c>GET</c> — whether this tenant has a working provider authorization.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.AccessToken(System.String)">
+            <summary><c>GET</c> — exchanges an OAuth callback <paramref name="code"/> for an access token and stores it.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.RemoveAuthorization">
+            <summary><c>POST</c> — revokes the stored authorization, leaving the connection record in place.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.DeleteAuthorization">
+            <summary><c>DELETE</c> — removes the stored authorization outright.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.GetReposList">
+            <summary><c>GET</c> — every repository the authorization can see.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.GetUser">
+            <summary><c>GET</c> — the provider account the authorization belongs to.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.GetRepos(System.String,System.Int32,System.Int32)">
+            <summary><c>GET</c> — repository search, paged (1-based <paramref name="PageNumber"/>, default 30 per page).</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.GetBranches(System.String)">
+            <summary><c>GET</c> — the branches of one repository.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.GithubBranchExists(System.String)">
+            <summary><c>GET</c> — whether the expected branch exists on the given GitHub repository.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.UpdateRepoDomain(Devops.DomainService.Deployment.Models.Request.RepoDomainUpdateRequest)">
+            <summary><c>POST</c> — points a repository at a different deployment domain.</summary>
+        </member>
+        <member name="T:BlocksTemplate.Api.Controllers.FunctionsController">
+            <summary>
+            Every HTTP entry point for functions, in two parts that do not share a security model.
+            <list type="bullet">
+            <item>
+            The <b>management surface</b> — everything a tenant does to their own functions in the
+            Blocks Studio. Routed by convention to <c>/api/functions/{action}</c>, and every action
+            carries its own <c>[ProtectedEndPoint]</c>: an authenticated, already-authorized caller
+            is assumed throughout.
+            </item>
+            <item>
+            The <b>public invocation surface</b> at the bottom of this file — <c>/api/fn/…</c>,
+            reached by callers who are not necessarily Blocks users at all. It is built the way the
+            proxy gateway is: a catch-all route on every method, anonymous at the framework level, the
+            tenant resolved from <c>x-blocks-key</c> by the shared access authorizer, and the stored
+            "Who can call it" enforced per call. Its routes are absolute (<c>~/api/…</c>) because they
+            do not follow the controller's template.
+            </item>
+            </list>
+            <para>
+            <b>Do not put a class-level <c>[Authorize]</c> or <c>[ProtectedEndPoint]</c> on this
+            type.</b> It would shut off public invocation for every tenant, and the failure would
+            show up as callers' 401s rather than as anything failing here. Authorization on this
+            controller is per-action, on purpose — a new action gets nothing by default, so give it
+            the attribute it needs.
+            </para>
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.#ctor(Functions.DomainService.Services.IFunctionService,Functions.DomainService.Services.IFunctionDeploymentService,Functions.DomainService.Services.IFunctionInvocationService,Functions.DomainService.Services.IFunctionRunService,Functions.DomainService.Services.IFunctionBuildService,Functions.DomainService.Services.IFunctionAuditService,Common.InternalService.Access.IEndpointAccessAuthorizer,Functions.DomainService.Services.IFunctionPollTokenService,Microsoft.Extensions.Logging.ILogger{BlocksTemplate.Api.Controllers.FunctionsController})">
+            <summary>
+            The management services, plus the shared access authorizer that resolves the tenant on
+            the anonymous <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.Invoke(System.String,System.String)"/> route — the same one the proxy gateway uses — and the
+            poll-token service behind the anonymous <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.PollRunResult(System.String)"/>.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.MapInvokeRefusalsAsync(System.Func{System.Threading.Tasks.Task{Functions.DomainService.Dtos.Responses.InvokeResultDto}})">
+            <summary>
+            The two refusals a Studio-side invocation (Test, Replay) can hit that are the caller's
+            to act on, answered as such instead of escaping as a 500: a credential-shaped key the
+            control plane refused to put in an envelope (400), the function's own rate limit
+            (429 with <c>Retry-After</c>), and a run queue that refused the run (503 with <c>Retry-After</c>). Everything else keeps the pipeline's existing handling.
+            </summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Controllers.FunctionsController.InvokeHardBodyLimitBytes">
+            <summary>
+            Same shape as the proxy gateway's own cap: a little above the service's ceiling, so the
+            service — not Kestrel's generic 413 — is what answers an oversized body, with the
+            documented error shape. Kestrel still stops a runaway upload here.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.Invoke(System.String,System.String)">
+            <summary>
+            The public function endpoint (DECISIONS D5): <c>{METHOD} /api/fn/{functionId}/{**path}</c>.
+            A tenant's client calls this instead of hosting the code. The route is registered for
+            GET and POST; the trigger picks one of them, and the other is refused with 405 once the
+            caller is authorized. Anything after the id is passed to the handler as
+            <c>input.path</c>, with the method, query, allow-listed headers and body alongside it
+            (see <c>FunctionHttpInputBuilder</c>).
+            <para>
+            The tenant comes from <c>x-blocks-key</c> (or the tenant claim of a presented token),
+            resolved by the shared <see cref="T:Common.InternalService.Access.IEndpointAccessAuthorizer"/>, never from the route, the
+            query or the body. There is exactly one tenant in this request and it is the one whose
+            certificate then has to validate any token presented — a second, unvalidated tenant id
+            in the path would let any valid key reach a <c>Public</c> function in whatever other
+            tenant the caller could name.
+            </para>
+            <para>
+            <see cref="T:Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute"/> at the framework level, like the proxy gateway: a
+            tenant key identifies a tenant but authenticates no user, and whether a caller may
+            proceed is the deployed version's own "Who can call it" (public, or a Blocks token
+            optionally narrowed by roles / permissions), decided per stored policy inside
+            <c>FunctionInvocationService.InvokeHttpAsync</c>. The Genesis bearer handler skips
+            anonymous actions entirely, so that service is where the token is validated. Saying
+            anonymous explicitly also keeps the endpoint public if this class ever acquires a
+            type-level authorization attribute.
+            </para>
+            <para>
+            The route is absolute (<c>~/</c>) so it stays <c>/api/fn/…</c> whatever this controller
+            or method is called: it is a published contract clients hard-code. That also puts it
+            outside <c>GlobalApiRoutePrefixConvention</c>, which only prefixes controller-level
+            templates — hence the <c>api</c> segment written out here, once.
+            </para>
+            <para>
+            Errors use the gateway's body shape, <c>{ code, message, instance }</c>, with
+            <c>FUNCTION_INVOKE_*</c> codes: 401 for no tenant or no usable token, 403 when the token
+            validates but the rules refuse it (or HTTP is switched off), 404 for an unknown or
+            undeployed function — but only to a caller who could have reached it, so 401 comes
+            first — 405 with an <c>Allow</c> header for the method the trigger does not take, 413
+            over the body ceiling, 400 for input the sandbox cannot be given, 429 with
+            <c>Retry-After</c> when the function's own rate limit refuses the call (only with
+            <c>Functions:RateLimits:Enabled</c>).
+            </para>
+            <para>
+            <b>Always asynchronous.</b> The answer is 202 with a run id and a <c>pollToken</c>; the
+            caller collects the outcome from <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.PollRunResult(System.String)"/>. There is no synchronous
+            mode: a run is a fresh sandbox, so holding the request open bought a few hundred
+            milliseconds of latency at the cost of a connection held for the whole run, an ingress
+            timeout that had to exceed it, and a caller who lost the result when the connection
+            dropped. A <c>wait</c> query parameter or a <c>Prefer: wait=</c> header is still accepted
+            and ignored, so an older client gets an answer rather than a 400 — it just gets 202.
+            </para>
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.ReadBodyAsync(System.Threading.CancellationToken)">
+            <summary>
+            Reads the body up to <see cref="F:Functions.DomainService.Services.FunctionHttpInputBuilder.MaxBodyBytes"/>, the same way the
+            proxy gateway buffers its own. Returns <c>(null, true)</c> the moment the cap is passed —
+            by the declared length, or by the bytes actually read — so nothing over it is held.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.InvokeError(System.Int32,System.String,System.String,System.String)">
+            <summary>Blocks-generated error body, the gateway's shape: <c>{ code: "FUNCTION_INVOKE_&lt;OUTCOME&gt;", message, instance }</c>.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.TryIssuePollTokenAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Mints the 202's poll token. A failure here (Redis unavailable) must not fail the call:
+            the run is already queued, and a 5xx would only invite a retry that queues it twice.
+            The caller then gets a 202 without a token — the same as before tokens existed.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.PollRun(System.String)">
+            <summary>
+            The poll half of Fire/Poll for a Blocks user: <c>GET /api/fn/runs/{runId}</c>. The full
+            run record — input included — so it takes the same <c>function::read</c> permission as
+            <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.GetRun(System.String)"/>, and reads only within the caller's own tenant. A signed-in user
+            without that permission polls with the run's token instead (<see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.PollRunResult(System.String)"/>).
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.PollRunResult(System.String)">
+            <summary>
+            The anonymous poll: <c>GET /api/fn/runs/{runId}/result</c> with the <c>x-poll-token</c>
+            header from the 202, and the same <c>x-blocks-key</c> the invoke used. Answers status,
+            result and error only — never the input or headers.
+            <para>
+            The token rides in a header, not the query, so it does not land in access logs. Every
+            refusal after the tenant check — missing, malformed, wrong or expired token, a token for
+            another tenant's run, a run that no longer exists — is the same 404, so the route says
+            nothing about which run ids exist. Anonymous at the framework level for the same reason
+            <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.Invoke(System.String,System.String)"/> is.
+            </para>
+            </summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Controllers.FunctionsController.PollTokenHeader">
+            <summary>The request header that carries the 202's poll token.</summary>
+        </member>
+        <member name="T:BlocksTemplate.Api.Controllers.HealthController">
+            <summary>
+            Health-check configuration and the heartbeat endpoint monitored services call, routed as
+            <c>/api/Health/{action}</c>.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.HealthController.#ctor(ObservabilityDriver.IObservabilityDriverService)">
+            <summary>
+            Health-check configuration and the heartbeat endpoint monitored services call, routed as
+            <c>/api/Health/{action}</c>.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.HealthController.SaveHealth(DomainService.Health.Models.SaveHealthConfigurationRequest)">
+            <summary><c>POST</c> — creates a health-check configuration.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.HealthController.UpdateHealth(DomainService.Health.Models.UpdateHealthConfigurationRequest)">
+            <summary><c>POST</c> — updates an existing health-check configuration.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.HealthController.Ping(System.String)">
+            <summary>
+            <c>GET /api/Health/Ping/{itemId}</c> — the heartbeat a monitored service calls to report itself
+            alive. Deliberately unauthenticated: the caller is an external service holding only the id.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.HealthController.DeleteHealth(System.String)">
+            <summary><c>DELETE</c> — removes a health-check configuration.</summary>
+        </member>
+        <member name="T:BlocksTemplate.Api.Controllers.LanguageController">
+            <summary>Language reference data, routed as <c>/api/Language/{action}</c>.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.LanguageController.#ctor(Common.InternalService.Language.ILanguageManagementService)">
+            <summary>Takes the language management service.</summary>
+        </member>
         <member name="M:BlocksTemplate.Api.Controllers.LanguageController.Gets(Common.InternalService.Language.GetLanguagesRequest)">
             <summary>
             Retrieves all available languages.
             </summary>
             <returns>A list of <see cref="T:Common.InternalService.Language.Language"/> objects.</returns>
         </member>
+        <member name="T:BlocksTemplate.Api.Controllers.MailController">
+            <summary>
+            Mail sending and mailbox reads, routed as <c>/api/Mail/{action}</c>. Failures surface as 400 with
+            the service result as the body rather than as an exception.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.MailController.#ctor(Mail.DomainService.Mails.IMailService)">
+            <summary>Takes the mail and configuration services.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.MailController.SendToAny(Mail.DomainService.Mails.SendMailToAny)">
+            <summary><c>POST</c> — sends a mail to arbitrary recipients, bypassing the stored recipient lists.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.MailController.Send(Mail.DomainService.Mails.SendMail)">
+            <summary><c>POST</c> — sends a mail through the configured mail server.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.MailController.GetMailBoxMails(Mail.DomainService.Mails.GetMailBoxMails)">
+            <summary>
+            <c>GET</c> — the messages in a synced mailbox. Anonymous, unlike its single-message twin
+            <see cref="M:BlocksTemplate.Api.Controllers.MailController.GetMailBoxMail(Mail.DomainService.Mails.GetMailBoxMail)"/>.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.MailController.GetMailBoxMail(Mail.DomainService.Mails.GetMailBoxMail)">
+            <summary><c>GET</c> — one message from a synced mailbox.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.MailController.Gets(Mail.DomainService.Mails.GetMailConfigurationsRequest)">
+            <summary>
+            <c>GET</c> — summaries of the configured mail servers. The request object is accepted for
+            signature symmetry with the other reads and is deliberately unused.
+            </summary>
+        </member>
+        <member name="T:BlocksTemplate.Api.Controllers.MonitorController">
+            <summary>
+            Read-only uptime monitoring: monitors, their incidents and their response-time / downtime series,
+            routed as <c>/api/Monitor/{action}</c>. Every action requires a bearer token.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.MonitorController.#ctor(Common.InternalService.Monitor.IMonitorObservabilityService)">
+            <summary>
+            Read-only uptime monitoring: monitors, their incidents and their response-time / downtime series,
+            routed as <c>/api/Monitor/{action}</c>. Every action requires a bearer token.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.MonitorController.GetMonitorList(System.String,System.String,System.Int32,System.Int32)">
+            <summary><c>GET</c> — the tenant's monitors, optionally narrowed by source type, paged (0-based).</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.MonitorController.GetMonitorListByRepoId(System.String,System.String)">
+            <summary><c>GET</c> — the monitors attached to one repository.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.MonitorController.GetMonitorById(System.String)">
+            <summary><c>GET</c> — one monitor by id.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.MonitorController.GetIncidentList(System.String,System.Int32,System.Int32)">
+            <summary><c>GET</c> — the incident history for one monitor, paged (0-based).</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.MonitorController.GetMonitorDetails(System.String)">
+            <summary><c>GET</c> — one monitor with its current status and summary figures.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.MonitorController.GetMonitorResponseTime(System.String,System.String,System.String)">
+            <summary><c>GET</c> — the response-time series for one monitor over an optional date range.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.MonitorController.GetMonitorDownTime(System.String,System.String,System.String)">
+            <summary><c>GET</c> — the downtime series for one monitor over an optional date range.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.MonitorController.IsExternalServiceConfigured(System.String)">
+            <summary><c>GET</c> — whether the given external service has been configured for monitoring.</summary>
+        </member>
+        <member name="T:BlocksTemplate.Api.Controllers.NotificationController">
+            <summary>Notification-channel configuration, routed as <c>/api/Notification/{action}</c>.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.NotificationController.#ctor(CloudConfiguration.DomainService.Shared.Services.IConfigurationService)">
+            <summary>Takes the configuration service.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.NotificationController.Gets(CloudConfiguration.DomainService.Notification.RequestModel.GetNotificationConfigurationsRequest)">
+            <summary><c>GET</c> — the tenant's notification configurations, filtered by the query string.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.NotificationController.Get(CloudConfiguration.DomainService.Notification.RequestModel.GetNotificationConfigurationRequest)">
+            <summary><c>GET</c> — one notification configuration.</summary>
+        </member>
+        <member name="T:BlocksTemplate.Api.Controllers.SchedulerController">
+            <summary>Scheduled-job management, routed as <c>/api/Scheduler/{action}</c>.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.SchedulerController.#ctor(Scheduler.DomainService.Services.IScheduleService)">
+            <summary>Takes the schedule service.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.SchedulerController.CreateSchedule(Scheduler.DomainService.Dtos.Requests.CreateScheduleRequestDto)">
+            <summary>
+            Creates a schedule.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.SchedulerController.UpdateSchedule(Scheduler.DomainService.Dtos.Requests.UpdateScheduleRequestDto)">
+            <summary>
+            Updates an existing schedule.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.SchedulerController.DeleteSchedule(Scheduler.DomainService.Dtos.Requests.DeleteScheduleRequestDto)">
+            <summary>
+            Permanently deletes a schedule.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.SchedulerController.GetSchedules(Scheduler.DomainService.Dtos.Requests.GetSchedulesRequestDto)">
+            <summary>
+            Get schedules.
+            </summary>
+        </member>
+        <!-- Badly formed XML comment ignored for member "T:BlocksTemplate.Api.Controllers.SecretController" -->
+        <member name="M:BlocksTemplate.Api.Controllers.SecretController.#ctor(Common.InternalService.Secret.Services.ISecretCatalogService)">
+            <summary>Takes the secret catalog service.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.SecretController.GetAll(Common.InternalService.Secret.GetSecretsRequest)">
+            <summary>
+            The tenant's platform secrets: <c>id</c> / <c>name</c> / <c>tags</c> only, never a value and never
+            the Blocks Secrets type. Optionally narrowed by <c>name</c>, <c>tag</c> and <c>search</c>. The
+            tenant and caller identity come from the ambient <c>BlocksContext</c> (this is an
+            <c>[Authorize]</c> route).
+            </summary>
+        </member>
+        <member name="T:BlocksTemplate.Api.Controllers.StorageController">
+            <summary>
+            Storage-provider configuration plus the pre-signed URL flow for uploads and downloads, routed as
+            <c>/api/Storage/{action}</c>. File bytes never pass through this API — callers get a URL and talk
+            to the provider directly.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.StorageController.#ctor(CloudConfiguration.DomainService.Shared.Services.IConfigurationService,StorageDriver.IStorageDriverService)">
+            <summary>Takes the configuration service and the storage driver.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.StorageController.Save(CloudConfiguration.DomainService.Storage.RequestModel.SaveStorageConfigurationRequest)">
+            <summary><c>POST</c> — creates or updates a storage-provider configuration.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.StorageController.Gets(CloudConfiguration.DomainService.Storage.RequestModel.GetStorageConfigurationsRequest)">
+            <summary>
+            <c>GET</c> — every storage configuration for the tenant. The request object is accepted for
+            signature symmetry and is deliberately unused.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.StorageController.Get(CloudConfiguration.DomainService.Storage.RequestModel.GetStorageConfigurationRequest)">
+            <summary><c>GET</c> — one storage configuration.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.StorageController.Delete(CloudConfiguration.DomainService.Storage.RequestModel.DeleteStorageConfigurationRequest)">
+            <summary><c>DELETE</c> — removes a storage configuration.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.StorageController.GetPreSignedUrlForUpload(DomainService.Storage.GetPreSignedUrlForUploadRequest)">
+            <summary><c>POST</c> — a pre-signed URL the client uploads to directly.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.StorageController.CompleteUpload(DomainService.Storage.CompleteUploadRequest)">
+            <summary>
+            <c>POST</c> — compatibility route for clients that cannot call the blocks-data API
+            directly. Delegates to the storage driver, which forwards to blocks-data's own
+            verification pipeline; this route does not duplicate any completion/verification logic.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.StorageController.GetFile(DomainService.Storage.GetFileRequest)">
+            <summary><c>GET</c> — a pre-signed download URL for one file.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.StorageController.GetFiles(DomainService.Storage.GetFilesRequest)">
+            <summary><c>POST</c> — pre-signed download URLs for several files in one call.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.StorageController.DeleteFile(DomainService.Storage.DeleteFileRequest)">
+            <summary><c>DELETE</c> via <c>POST</c> — removes a file from the provider.</summary>
+        </member>
+        <member name="T:BlocksTemplate.Api.FunctionExceptionFilter">
+            <summary>
+            Maps the function domain's exceptions onto HTTP status codes for the <b>management</b>
+            surface — everything the Studio calls at <c>/api/functions/…</c>.
+            </summary>
+            <remarks>
+            The public invocation surface does its own mapping inline, because it answers in the
+            invoke error envelope (<c>{ error: { code, message } }</c>) that non-Blocks callers see, not
+            in <see cref="T:Blocks.Genesis.BaseResponse"/>. That path catches every one of these before they reach a
+            filter, so this only ever fires for the management actions.
+            <para>
+            Those actions return their DTO directly rather than an <see cref="T:Microsoft.AspNetCore.Mvc.ActionResult"/>, so
+            before this existed a validation failure — an empty name, a note over its length, a rollback
+            to a version that is not there — left the domain exception unhandled and the caller got a
+            bare 500. A 500 tells a client to retry something that will fail identically every time.
+            </para>
+            <para>
+            Modelled on <c>SecretExceptionFilter</c>, and deliberately the same response shape: the
+            client's error handling reads <c>errors</c> off the body and shows it, whichever endpoint
+            produced it.
+            </para>
+            </remarks>
+        </member>
         <member name="T:BlocksTemplate.Api.GlobalApiRoutePrefixConvention">
             <summary>Prepends a segment (e.g. <c>api</c>) to every controller’s attribute route template.</summary>
         </member>
         <member name="M:BlocksTemplate.Api.GlobalApiRoutePrefixConvention.#ctor(System.String)">
             <summary>Prepends a segment (e.g. <c>api</c>) to every controller’s attribute route template.</summary>
+        </member>
+        <member name="T:Api.Controllers.NotifierController">
+            <summary>
+            Delivery and read-state for user notifications, routed as <c>/api/Notifier/{action}</c>.
+            The two send actions are anonymous because internal services call them; everything that reads or
+            mutates a user's own notifications requires a bearer token.
+            </summary>
+        </member>
+        <member name="M:Api.Controllers.NotifierController.#ctor(DomainService.Notification.INotificationService,Microsoft.Extensions.Logging.ILogger{Api.Controllers.NotifierController})">
+            <summary>Takes the notification service and a logger.</summary>
+        </member>
+        <member name="M:Api.Controllers.NotifierController.Notify(DomainService.Shared.NotifyRequest)">
+            <summary><c>POST</c> — delivers a notification through the configured channels.</summary>
+        </member>
+        <member name="M:Api.Controllers.NotifierController.SendSecretNotification(DomainService.Shared.NotifyRequest)">
+            <summary>
+            <c>POST</c> — the secrets-pipeline variant of <see cref="M:Api.Controllers.NotifierController.Notify(DomainService.Shared.NotifyRequest)"/>, hidden from the API explorer.
+            Same service call; kept separate so its traffic is distinguishable in logs.
+            </summary>
+        </member>
+        <member name="M:Api.Controllers.NotifierController.GetUnreadNotificationsBySubscriptionFilter(DomainService.Shared.GetUnreadNotificationsRequestBySubscriptionFilter)">
+            <summary>
+            <c>GET</c> — the caller's unread notifications matching a subscription filter. Note the filter
+            arrives in the body despite the <c>GET</c> verb.
+            </summary>
+        </member>
+        <member name="M:Api.Controllers.NotifierController.MarkAllNotificationAsRead">
+            <summary><c>POST</c> — marks every one of the caller's notifications read.</summary>
+        </member>
+        <member name="M:Api.Controllers.NotifierController.MarkNotificationAsRead(DomainService.Notification.MarkNotificationAsReadRequest)">
+            <summary><c>POST</c> — marks one notification read.</summary>
+        </member>
+        <member name="M:Api.Controllers.NotifierController.GetNotifications(DomainService.Notification.GetNotificationsRequest)">
+            <summary><c>GET</c> — the caller's notifications, filtered and paged by the query string.</summary>
+        </member>
+        <member name="T:Api.Controllers.PeopleController">
+            <summary>Directory lookups for the tenant's users, routed as <c>/api/People/{action}</c>.</summary>
+        </member>
+        <member name="M:Api.Controllers.PeopleController.#ctor(DomainService.People.IPeopleService)">
+            <summary>Takes the people service.</summary>
+        </member>
+        <member name="M:Api.Controllers.PeopleController.Gets(DomainService.People.GetPeoplesRequest)">
+            <summary><c>POST</c> — the tenant's users, filtered and paged by the request body.</summary>
+        </member>
+        <member name="T:Api.Controllers.ProjectController">
+            <summary>Project listing and the caller's current project, routed as <c>/api/Project/{action}</c>.</summary>
+        </member>
+        <member name="M:Api.Controllers.ProjectController.#ctor(DomainService.Projects.IProjectManagementService)">
+            <summary>Takes the project management service.</summary>
+        </member>
+        <member name="M:Api.Controllers.ProjectController.Gets(DomainService.Projects.GetProjectsRequest)">
+            <summary><c>GET</c> — the caller's projects, grouped for the project switcher.</summary>
+        </member>
+        <member name="M:Api.Controllers.ProjectController.Get">
+            <summary><c>GET</c> — the project the current request context resolves to.</summary>
+        </member>
+        <member name="T:Api.Controllers.ServiceController">
+            <summary>Service registry lookups, routed as <c>/api/Service/{action}</c>.</summary>
+        </member>
+        <member name="M:Api.Controllers.ServiceController.#ctor(DomainService.ManagedService.IServiceManagement)">
+            <summary>Takes the service-management service.</summary>
+        </member>
+        <member name="M:Api.Controllers.ServiceController.GetAll(DomainService.ManagedService.GetAllServiceRequest)">
+            <summary><c>POST</c> — the registered services, filtered and paged by the request body.</summary>
+        </member>
+        <member name="T:Api.Controllers.TemplateController">
+            <summary>Mail/notification template lookups, routed as <c>/api/Template/{action}</c>.</summary>
+        </member>
+        <member name="M:Api.Controllers.TemplateController.#ctor(Mail.DomainService.Template.Services.ITemplateService)">
+            <summary>Takes the template service.</summary>
+        </member>
+        <member name="M:Api.Controllers.TemplateController.Gets(Mail.DomainService.Mails.GetAllTemplates)">
+            <summary><c>GET</c> — the tenant's templates, filtered by the query string.</summary>
+        </member>
+        <member name="T:Utilities.Api.Controllers.ProxiesController">
+            <summary>
+            Both proxy planes behind one controller:
+            <list type="bullet">
+            <item><b>Control plane</b> (Phase 1 / SPEC3) — a resource-oriented surface rooted at
+            <c>/api/Proxies</c>: the collection itself, one proxy at <c>/{proxyId}</c>, and its
+            <c>/versions</c>, <c>/executions</c> and <c>/overview</c> sub-resources. The controller segment still
+            comes from <c>[controller]</c> plus the global <c>api</c> prefix
+            (<see cref="T:BlocksTemplate.Api.GlobalApiRoutePrefixConvention"/>); only the sub-paths are explicit.
+            Every action requires a bearer token and the tenant is taken from <see cref="T:Blocks.Genesis.BlocksContext"/>.
+            Where a service result carries its own <c>HttpStatus</c> the controller honours it, so the service
+            stays the single source of truth for the SPEC §3.4 error contract.</item>
+            <item><b>Data plane</b> (Phase 2) — <see cref="M:Utilities.Api.Controllers.ProxiesController.Gateway(System.String,System.String)"/> at
+            <c>{METHOD} /api/proxy/gateway/{slug}/{**path}</c>, the path a tenant's client calls instead of the
+            vendor. That route is pinned absolutely rather than derived from the convention, because it is a
+            published contract (see the remarks on <see cref="M:Utilities.Api.Controllers.ProxiesController.Gateway(System.String,System.String)"/>). Unlike every other action it is
+            <see cref="T:Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute"/>: who may call a proxy ("Who can call it" — public, or a Blocks
+            token optionally narrowed by roles / permissions) is stored per proxy, so the action resolves the
+            tenant from <c>x-blocks-key</c> itself and hands the request to the shared
+            <see cref="T:Common.InternalService.Access.IEndpointAccessAuthorizer"/>, which validates the token against that tenant's certificate
+            and evaluates the stored policy.</item>
+            </list>
+            <para>
+            A route id always wins over the same id supplied in the body or query string: the URL identifies the
+            resource, the payload only describes it.
+            </para>
+            </summary>
+        </member>
+        <member name="F:Utilities.Api.Controllers.ProxiesController.GatewayHardBodyLimitBytes">
+            <summary>
+            Kestrel-level backstop on the gateway body, deliberately ABOVE
+            <see cref="P:Proxy.DomainService.Services.ProxyGatewayService.MaxRequestBodyBytes"/> (10 MB) rather than equal to it.
+            <para>
+            The 10 MB cap has to stay in application code: exceeding it is a documented outcome
+            (<c>RequestTooLarge</c>) that answers 413 with the Blocks error body and still records an execution
+            row. A framework-level limit set to the same value would pre-empt that and return a bare Kestrel
+            413 with no row and no <c>code</c>. This one only catches a client streaming far past the point
+            where the answer is already decided, so the contract is unchanged and the ceiling is bounded.
+            </para>
+            </summary>
+        </member>
+        <member name="F:Utilities.Api.Controllers.ProxiesController._openApiImport">
+            <summary>
+            Takes the four control-plane services, the data-plane gateway service, and the shared access
+            authorizer that enforces each proxy's "Who can call it" policy on the gateway route.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.List(Proxy.DomainService.Dtos.ProxyGetAllRequestDto)">
+            <summary>
+            <c>GET /api/Proxies</c> — the console list page: the tenant's proxies newest-created first,
+            optionally narrowed by a name / slug search term and by isActive state. A list projection: full
+            upstream and header rows are not included.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.Create(Proxy.DomainService.Dtos.ProxyCreateRequestDto)">
+            <summary>
+            <c>POST /api/Proxies</c> — creates a proxy and its first <c>ProxyVersions</c> row. 201 on success;
+            409 <c>PROXY_SLUG_CONFLICT</c> when the slug derived from the name already exists for the tenant.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.Get(System.String)">
+            <summary>
+            <c>GET /api/Proxies/{proxyId}</c> — one proxy and its full configuration. An unknown id, or another
+            tenant's proxy, returns 200 with a null payload rather than 404.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.Update(System.String,Proxy.DomainService.Dtos.ProxyUpdateRequestDto)">
+            <summary>
+            <c>PUT /api/Proxies/{proxyId}</c> — rewrites the proxy's configuration and appends the per-field
+            change set as a new version row. The slug is immutable and is never recomputed from a changed name.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.SetEnabled(System.String,Proxy.DomainService.Dtos.ProxyToggleRequestDto)">
+            <summary>
+            <c>PATCH /api/Proxies/{proxyId}</c> — a partial update; <c>enabled</c> is the only field honoured.
+            While disabled the proxy's <see cref="M:Utilities.Api.Controllers.ProxiesController.Gateway(System.String,System.String)"/> route answers 404
+            <c>PROXY_GATEWAY_PROXYNOTFOUND</c>, exactly as an unknown slug does.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.Delete(System.String)">
+            <summary>
+            <c>DELETE /api/Proxies/{proxyId}</c> — hard-deletes the proxy document. Its <c>ProxyVersions</c> and
+            <c>ProxyExecutions</c> rows are deliberately retained, so Change history and Request logs keep
+            working afterwards.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.ListVersions(System.String,Proxy.DomainService.Dtos.ProxyGetVersionsRequestDto)">
+            <summary>
+            <c>GET /api/Proxies/{proxyId}/versions</c> — the <em>Change history</em> tab: the append-only
+            version rows for one proxy, newest first, each carrying its per-field change set and the effective
+            config snapshot after that change.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.Revert(System.String,System.String)">
+            <summary>
+            <c>POST /api/Proxies/{proxyId}/versions/{versionId}/revert</c> — restores the configuration
+            captured by that version and records the restore as a new <c>Revert</c> version row. A controlled
+            action rather than a resource, so it stays a verb on a POST. History is never rewritten or
+            truncated; the version number moves forward, not back.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.Test(Proxy.DomainService.Dtos.ProxyTestRequestDto)">
+            <summary>
+            <c>POST /api/Proxies/test</c> — console-only: run the data-plane forward pipeline against a saved
+            proxy or an unsaved draft and return the result WITHOUT recording a <c>ProxyExecutions</c> row and
+            WITHOUT creating or mutating any <c>Proxies</c> / <c>ProxyVersions</c> data (SPEC §3.3). It sits on
+            the collection, not under <c>{proxyId}</c>, precisely because the draft it tests need not exist yet.
+            The tenant is taken from <see cref="T:Blocks.Genesis.BlocksContext"/>; no <c>X-Blocks-Key</c> is required here.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.PreviewOpenApi(Proxy.DomainService.Dtos.ProxyOpenApiPreviewRequestDto,System.Threading.CancellationToken)">
+            <summary>
+            <c>POST /api/Proxies/openapi/preview</c> — reads an OpenAPI document and lists the routes it
+            would produce, so the caller can review them before anything is saved.
+            <para>
+            This writes nothing. The chosen operations come back through the ordinary create/update call,
+            which is what keeps an import inside the same validation, versioning and audit as a route typed
+            by hand rather than around them.
+            </para>
+            <para>
+            A specification may be pasted (<c>specJson</c>) or named by URL (<c>specUrl</c>); the URL is
+            fetched through the same guard as any upstream, because otherwise this endpoint is a request
+            this server makes to wherever a caller points it.
+            </para>
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.ListExecutions(System.String,Proxy.DomainService.Dtos.ProxyGetExecutionsRequestDto)">
+            <summary>
+            <c>GET /api/Proxies/{proxyId}/executions</c> — SPEC3 §3.1, the <em>Request logs</em> list for one
+            proxy: all-time, filtered by <c>statusClass</c>, newest-first, paged, or a Live tail when
+            <c>afterId</c> is supplied. Returns 400 <c>PROXY_VALIDATION</c> on a bad field and 404
+            <c>PROXY_NOT_FOUND</c> for a genuinely unknown proxy id (a deleted proxy whose rows remain still
+            works).
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.GetExecution(System.String,System.String)">
+            <summary>
+            <c>GET /api/Proxies/{proxyId}/executions/{executionId}</c> — SPEC3 §3.2, one expanded request-log
+            row including the full stored response body, clipped to 64 KB for transport (the stored row is
+            untouched). An unknown id, an id whose proxy differs, or another tenant's row all return 200 with
+            <c>data: null</c>.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.GetOverview(System.String)">
+            <summary>
+            <c>GET /api/Proxies/{proxyId}/overview</c> — SPEC3 §3.3, the Overview tiles for one proxy (calls /
+            avg latency / error rate over the rolling 24h window) plus the Configuration-panel convenience
+            fields. 404 <c>PROXY_NOT_FOUND</c> only when the id neither exists for the tenant nor has any
+            execution rows.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.Gateway(System.String,System.String)">
+            <summary>
+            Data plane (Phase 2). A tenant's client calls <c>{METHOD} /api/proxy/gateway/{slug}/{**path}</c>
+            instead of the vendor. The tenant comes from the <c>x-blocks-key</c> header (or the tenant claim of a
+            presented token); the proxy's stored <see cref="P:Proxy.DomainService.Services.ProxyResolvedConfig.Access"/> policy then decides
+            whether a Blocks token is required and which roles / permissions the caller must hold. A missing
+            tenant or a missing / invalid token when one is required is answered 401 and writes NO execution
+            row (C1); a valid token that fails the rules is answered 403 and DOES write a row
+            (<see cref="F:Proxy.DomainService.Entities.ProxyExecutionOutcome.Forbidden"/>), like a probe of an undeclared route. Blocks then
+            rebuilds the request against the stored upstream, attaches ONLY the configured headers / query
+            params, calls the third party server-side, relays the response, and records one
+            <see cref="T:Proxy.DomainService.Entities.ProxyExecutionEntity"/> per attempt.
+            <para>
+            Unlike the control-plane actions above, this route is <b>pinned absolutely</b> (<c>~/</c>) instead of
+            being derived from <c>[controller]</c>. The path is a published contract that third-party clients
+            hard-code, so it must not change if this method or its controller is ever renamed, and the
+            registered template must be the exact lowercase spelling we document rather than a case-insensitive
+            match for it. The leading <c>~/</c> also makes it skip
+            <see cref="T:BlocksTemplate.Api.GlobalApiRoutePrefixConvention"/>, so the <c>api</c> segment is written
+            here once and never doubled.
+            </para>
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.Relay(Proxy.DomainService.Services.ProxyForwardResult)">
+            <summary>Relays the upstream status, body, and Content-Type byte-for-byte. No other header is relayed.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.GatewayError(System.String,System.Int32,System.String,System.Nullable{System.Int32})">
+            <summary>
+            Blocks-generated error body (SPEC §3.4): <c>{ code: "PROXY_GATEWAY_&lt;OUTCOME&gt;", message, instance }</c>.
+            </summary>
+        </member>
+        <member name="F:Utilities.Api.Controllers.ProxiesController.MaxCallerFieldLength">
+            <summary>
+            Cap on a caller-supplied provenance header before it is stored. A User-Agent or Referer is
+            attacker-controlled and unbounded; the execution row is not the place to find that out.
+            </summary>
+        </member>
+        <member name="T:Utilities.Api.Controllers.WorkflowController">
+            <summary>
+            Management API for workflows, their versions and their executions, routed as
+            <c>/api/Workflow/{action}</c>. Every action except the webhook entry points requires a bearer
+            token; the tenant always comes from <see cref="T:Blocks.Genesis.BlocksContext"/> and is never taken from the payload.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.#ctor(Workflow.DomainService.Services.IWorkflowService,Workflow.DomainService.Services.IWorkflowVersionService,Workflow.DomainService.Services.IWorkflowExecutionService,Workflow.DomainService.Services.IWorkflowImportService,Workflow.DomainService.Logging.IExecutionLogService)">
+            <summary>Takes the workflow, version, execution, import and execution log services.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.GetAll(Workflow.DomainService.Dtos.WorkflowGetsRequestDto)">
+            <summary><c>POST</c> — the tenant's workflows, filtered and paged by the request body.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.Get(Workflow.DomainService.Dtos.WorkflowGetRequestDto)">
+            <summary><c>GET</c> — one workflow by id, including its node graph.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.Create(Workflow.DomainService.Dtos.WorkflowCreateRequestDto)">
+            <summary><c>POST</c> — creates a workflow. 201 on success.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.Duplicate(Workflow.DomainService.Dtos.WorkflowDuplicateRequestDto)">
+            <summary><c>POST</c> — copies an existing workflow into a new one. 201 on success.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.Update(Workflow.DomainService.Dtos.WorkflowUpdateRequestDto)">
+            <summary><c>PUT</c> — rewrites a workflow's name, description and node graph.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.Import(Workflow.DomainService.Dtos.WorkflowImportRequestDto)">
+            <summary>
+            <c>POST</c> — enqueues a workflow import. The file must already be in storage.
+            Returns immediately; completion is delivered via the <c>workflow-import</c> notification.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.Delete(Workflow.DomainService.Dtos.WorkflowDeleteRequestDto)">
+            <summary><c>DELETE</c> — removes a workflow by id.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.CreateVersion(Workflow.DomainService.Dtos.WorkflowVersionCreateRequestDto)">
+            <summary><c>POST</c> — snapshots the working workflow as a new version row. 201 on success.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.UpdateVersion(Workflow.DomainService.Dtos.WorkflowVersionUpdateRequestDto)">
+            <summary><c>POST</c> — edits an existing version's metadata.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.GetVersions(Workflow.DomainService.Dtos.WorkflowGetVersionsRequestDto)">
+            <summary><c>POST</c> — the version history for one workflow.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.GetWorkflowByVersion(Workflow.DomainService.Dtos.GetWorkflowByVersionRequestDto)">
+            <summary><c>POST</c> — the workflow graph as captured by a specific version.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.PublishNewVersion(Workflow.DomainService.Dtos.WorkflowPublishNewVersionRequestDto)">
+            <summary><c>POST</c> — snapshots the current graph as a new version and publishes it in one step.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.PublishVersion(Workflow.DomainService.Dtos.WorkflowPublishVersionRequestDto)">
+            <summary><c>POST</c> — publishes an existing version, making it the one webhooks execute.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.Unpublish(Workflow.DomainService.Dtos.WorkflowUnpublishRequestDto)">
+            <summary><c>POST</c> — takes the workflow out of service; its webhooks stop executing.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.Restore(Workflow.DomainService.Dtos.WorkflowRestoreRequestDto)">
+            <summary><c>POST</c> — restores a soft-deleted workflow.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.Webhook(System.String,System.String,System.String,System.Text.Json.JsonElement)">
+            <summary>
+            Data-plane entry point: runs the published workflow behind a webhook trigger.
+            <c>POST /api/Workflow/Webhook/{tenantId}/{workflowId}/{webhookId}</c>. Anonymous at the framework
+            level — the trigger's own <c>authType</c> decides whether a caller must be authenticated or
+            authorized, and a failure surfaces here as 401.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.TestWebhook(System.String,System.String,System.String,System.Text.Json.JsonElement)">
+            <summary>
+            The <c>webhook-test</c> twin of <see cref="M:Utilities.Api.Controllers.WorkflowController.Webhook(System.String,System.String,System.String,System.Text.Json.JsonElement)"/>: runs the DRAFT graph rather than the
+            published version, for the console's test panel. Same route shape, same 401 behaviour.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.WebhookByHeader(System.String,System.String,System.Text.Json.JsonElement)">
+            <summary>
+            Header-based twin of <see cref="M:Utilities.Api.Controllers.WorkflowController.Webhook(System.String,System.String,System.String,System.Text.Json.JsonElement)"/>: tenant comes from <c>x-blocks-key</c> rather than the
+            path. <c>POST /api/Workflow/Webhook/{workflowId}/{webhookId}</c>. Anonymous at the framework
+            level — missing or blank header is 400; trigger <c>authType</c> failures still surface as 401.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.TestWebhookByHeader(System.String,System.String,System.Text.Json.JsonElement)">
+            <summary>
+            Header-based twin of <see cref="M:Utilities.Api.Controllers.WorkflowController.TestWebhook(System.String,System.String,System.String,System.Text.Json.JsonElement)"/>: tenant comes from <c>x-blocks-key</c> rather than
+            the path. <c>POST /api/Workflow/webhook-test/{workflowId}/{webhookId}</c>. Same 400/401 behaviour
+            as <see cref="M:Utilities.Api.Controllers.WorkflowController.WebhookByHeader(System.String,System.String,System.Text.Json.JsonElement)"/>.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.StepExecute(Workflow.DomainService.Dtos.StepExecuteRequestDto)">
+            <summary><c>POST</c> — executes a single node in isolation and returns its output, for the node inspector.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.TriggerListener(Workflow.DomainService.Dtos.TriggerListenerRequestDto)">
+            <summary><c>POST</c> — fires a listener-type trigger by hand.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.GetExecutions(Workflow.DomainService.Dtos.WorkflowExecutionsGetRequestDto)">
+            <summary><c>GET</c> — the execution history for one workflow.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.GetExecution(Workflow.DomainService.Dtos.WorkflowExecutionGetRequestDto)">
+            <summary><c>GET</c> — one execution, including per-node results.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.GetExecutionLogs(Workflow.DomainService.Dtos.WorkflowExecutionLogsGetRequestDto)">
+            <summary><c>GET</c> — the stage log lines of one execution (stages and counts only, never data values),
+            with whether they are available, expired or still arriving.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.LastSuccessfullExecution(Workflow.DomainService.Dtos.LastSuccessfullExecutionRequestDto)">
+            <summary><c>GET</c> — the most recent successful execution, used to prefill node inputs from real data.</summary>
         </member>
         <member name="T:Program">
             <summary>

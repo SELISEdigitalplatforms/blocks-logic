@@ -14,13 +14,28 @@ vi.mock("react-router", async (orig) => {
 const svc = vi.hoisted(() => ({
   deleteWorkflow: vi.fn().mockResolvedValue({ isSuccess: true }),
   duplicateWorkflow: vi.fn().mockResolvedValue({ isSuccess: true }),
+  createWorkflow: vi.fn().mockResolvedValue({ isSuccess: true, itemId: "NEW" }),
   updateWorkflow: vi.fn().mockResolvedValue({ isSuccess: true }),
   publishWorkflow: vi.fn().mockResolvedValue({ isSuccess: true }),
   publishWorkflowNewVersion: vi.fn().mockResolvedValue({ isSuccess: true }),
   unpublishWorkflow: vi.fn().mockResolvedValue({ isSuccess: true }),
+  getWorkflowById: vi.fn().mockResolvedValue({
+    isSuccess: true,
+    data: { name: "wf", description: "", settings: {}, nodes: [], edges: [] },
+  }),
 }));
 vi.mock("@/modules/workflow/services/workflow.service", () => ({
   workflowService: svc,
+}));
+const exportHook = vi.hoisted(() => ({
+  exportWorkflow: vi.fn(),
+  isExporting: false,
+}));
+vi.mock("@blocks-workflow/hooks/use-import-workflow", () => ({
+  useImportWorkflow: () => ({ importWorkflow: vi.fn(), isImporting: false }),
+}));
+vi.mock("../../hooks/use-export-workflow", () => ({
+  useExportWorkflow: () => exportHook,
 }));
 
 import { WorkflowList } from "./workflow-list";
@@ -61,7 +76,27 @@ describe("WorkflowList", () => {
 
   it("shows the empty state", () => {
     wrap(<WorkflowList workflow={[]} isLoading={false} />);
-    expect(screen.getByText("No results found.")).toBeTruthy();
+    expect(screen.getByText("Create your first workflow")).toBeTruthy();
+    expect(screen.getByText("Create workflow")).toBeTruthy();
+  });
+
+  it("shows the Import control in the empty state", () => {
+    const { container } = wrap(<WorkflowList workflow={[]} isLoading={false} />);
+    expect(screen.getByRole("button", { name: /import/i })).toBeTruthy();
+    expect(container.querySelector('input[type="file"]')).not.toBeNull();
+  });
+
+  it("exports from the row menu", async () => {
+    const user = userEvent.setup();
+    wrap(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      <WorkflowList workflow={[wf("42") as any]} isLoading={false} />,
+    );
+    const triggers = screen.getAllByRole("button");
+    await user.click(triggers[triggers.length - 1]);
+    await user.click(await screen.findByText("Export"));
+    expect(exportHook.exportWorkflow).toHaveBeenCalledWith("42");
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it("renders workflow rows with name and status", () => {

@@ -83,11 +83,20 @@ export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVer
     }
   };
 
-  const handleRestore = () => {
-    restoreWorkflow.mutate({
-      workflowId: workflowId || "",
-      versionId: version.itemId,
-    });
+  const handleRestore = async () => {
+    try {
+      const response = (await restoreWorkflow.mutateAsync({
+        workflowId: workflowId || "",
+        versionId: version.itemId,
+      })) as unknown as { isSuccess?: boolean; errors?: { Message?: string } };
+      if (response && response.isSuccess === false) {
+        showErrorToast({ errors: response.errors?.Message || "Failed to restore workflow version." });
+      } else {
+        showSuccessToast({ description: "Workflow version successfully restored." });
+      }
+    } catch (error) {
+      showErrorToast({ errors: (error instanceof Error ? error.message : "") || "Failed to restore workflow version." });
+    }
   };
 
   return (

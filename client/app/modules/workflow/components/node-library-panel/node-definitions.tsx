@@ -11,6 +11,8 @@ import {
 	Clock,
 	DatabaseZap,
 	Code2,
+	FunctionSquare,
+	Waypoints,
 } from "lucide-react";
 
 export const NodeDefinitions: WorkflowNodeDefinition[] = [
@@ -36,7 +38,6 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		description: "Triggers the workflow when a new email is received",
 		type: "email",
 		category: "trigger",
-		isComingSoon: true,
 		version: "v1",
 		defaultName: "Email Trigger",
 		handleSpec: {
@@ -60,15 +61,14 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		},
 	},
 	{
-		id: "trigger-blockschedule-v1",
+		id: "trigger-schedule-v1",
 		icon: <Clock className="h-5 w-5 text-rose-500" />,
-		title: "Blocks Schedule",
-		description: "Triggers the workflow based on a scheduled block of time",
-		type: "blockschedule",
+		title: "Schedule",
+		description: "Triggers the workflow on a schedule (cron)",
+		type: "schedule",
 		category: "trigger",
 		version: "v1",
-		isComingSoon: true,
-		defaultName: "Blocks Schedule",
+		defaultName: "Schedule",
 		handleSpec: {
 			source: ["source"],
 			target: [],
@@ -118,6 +118,21 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		},
 	},
 	{
+		id: "action-proxy-v1",
+		icon: <Waypoints className="h-5 w-5 text-teal-500" />,
+		title: "Proxy",
+		description:
+			"Call a configured proxy. The upstream URL and its credentials stay in the proxy, never in the workflow.",
+		type: "proxy",
+		category: "action",
+		version: "v1",
+		defaultName: "Proxy",
+		handleSpec: {
+			source: ["source"],
+			target: ["target"],
+		},
+	},
+	{
 		id: "action-dataAction-v1",
 		icon: <Database className="h-5 w-5 text-cyan-500" />,
 		title: "Data Action",
@@ -127,6 +142,21 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		type: "dataAction",
 		version: "v1",
 		defaultName: "Data Action",
+		handleSpec: {
+			source: ["source"],
+			target: ["target"],
+		},
+	},
+	{
+		id: "action-function-v1",
+		icon: <FunctionSquare className="h-5 w-5 text-primary" />,
+		title: "Function",
+		description:
+			"Run a deployed function and pass its result to the next node.",
+		category: "action",
+		type: "function",
+		version: "v1",
+		defaultName: "Function",
 		handleSpec: {
 			source: ["source"],
 			target: ["target"],

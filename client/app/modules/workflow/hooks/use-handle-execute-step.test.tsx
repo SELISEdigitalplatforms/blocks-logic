@@ -56,19 +56,6 @@ describe("useHandleExecuteStep", () => {
     expect(svc.updateWorkflow).not.toHaveBeenCalled();
   });
 
-  it("requires an execution id when asked", async () => {
-    const { result } = renderHook(() => useHandleExecuteStep(), {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      wrapper: makeHookWrapper(seedGraph(1) as any),
-    });
-    await act(async () => {
-      await result.current.handleExecuteStep("action", true);
-    });
-    expect(toasts.showErrorToast).toHaveBeenCalledWith(
-      expect.objectContaining({ errors: "No successful execution found" }),
-    );
-  });
-
   it("saves, step-executes and stores the returned execution", async () => {
     svc.stepExecute.mockResolvedValue({ itemId: "exec-1" });
     const { result } = renderHook(() => useHandleExecuteStep(), {

@@ -1,5 +1,6 @@
-﻿using Blocks.Genesis;
+using Blocks.Genesis;
 using DomainService.Shared;
+using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using System.Linq.Expressions;
 
@@ -9,39 +10,43 @@ namespace DomainService.Notification
     {
         private readonly IDbContextProvider _dbContextProvider;
         private readonly IBlocksSecret _blocksSecret;
-        private IMongoDatabase _clientDb;
 
         private const string _notificationCollection = "OfflineNotifications";
+        private readonly ILogger<NotificationRepository> _logger;
 
-        public NotificationRepository(IDbContextProvider dbContextProvider, IBlocksSecret blocksSecret)
+        public NotificationRepository(IDbContextProvider dbContextProvider, IBlocksSecret blocksSecret, ILogger<NotificationRepository> logger)
 
         {
             _dbContextProvider = dbContextProvider;
             _blocksSecret = blocksSecret;
-            _clientDb = ResolvedClientDb();
+            _logger = logger;
         }
 
         private IMongoDatabase ResolvedClientDb()
-    {
-        var blocksContext = BlocksContext.GetContext();
-
-        if(blocksContext.Impersonated)
         {
-            return _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, "BlocksRootDb");
+            var blocksContext = BlocksContext.GetContext() ?? throw new InvalidOperationException("Tenant context is required.");
+            if (blocksContext.Impersonated)
+            {
+                return _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, _blocksSecret.RootDatabaseName);
+            }
+
+            return _dbContextProvider.GetDatabase(blocksContext.TenantId);
         }
 
-        return _dbContextProvider.GetDatabase(blocksContext.TenantId);
-    }
+        private IMongoCollection<OfflineNotification> NotificationCollection() =>
+            ResolvedClientDb().GetCollection<OfflineNotification>(_notificationCollection);
 
         public void Save<T>(T data, string collectionName = "")
         {
-            IMongoCollection<T> collection = _clientDb.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? (typeof(T).Name + "s") : collectionName);
+            var database = ResolvedClientDb();
+            IMongoCollection<T> collection = database.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? (typeof(T).Name + "s") : collectionName);
             collection.InsertOne(data);
         }
 
         public async Task<T> GetItemAsync<T>(Expression<Func<T, bool>> filterExpression, string collectionName = "")
         {
-            var collection = _clientDb.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? typeof(T).Name + "s" : collectionName);
+            var database = ResolvedClientDb();
+            var collection = database.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? typeof(T).Name + "s" : collectionName);
             var filterBuilder = Builders<T>.Filter;
             var filter = filterBuilder.Where(filterExpression);
 
@@ -51,7 +56,8 @@ namespace DomainService.Notification
 
         public async Task<List<T>> GetItemsAsync<T>(Expression<Func<T, bool>> filterExpression, string collectionName = "")
         {
-            var collection = _clientDb.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? typeof(T).Name + "s" : collectionName);
+            var database = ResolvedClientDb();
+            var collection = database.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? typeof(T).Name + "s" : collectionName);
             var filterBuilder = Builders<T>.Filter;
             var filter = filterBuilder.Where(filterExpression);
 
@@ -61,31 +67,34 @@ namespace DomainService.Notification
 
         public async Task SaveAsync<T>(T data, string collectionName = "")
         {
-            IMongoCollection<T> collection = _clientDb.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? (typeof(T).Name + "s") : collectionName);
+            var database = ResolvedClientDb();
+            IMongoCollection<T> collection = database.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? (typeof(T).Name + "s") : collectionName);
             await collection.InsertOneAsync(data);
         }
 
         public async Task SaveAsync<T>(List<T> listOfData)
         {
-            IMongoCollection<T> collection = _clientDb.GetCollection<T>(typeof(T).Name + "s");
+            var database = ResolvedClientDb();
+            IMongoCollection<T> collection = database.GetCollection<T>(typeof(T).Name + "s");
            await collection.InsertManyAsync(listOfData);
         }
 
         public async Task DeleteAsync<T>(Expression<Func<T, bool>> dataFilters)
         {
-            IMongoCollection<T> collection = _clientDb.GetCollection<T>(typeof(T).Name + "s");
+            var database = ResolvedClientDb();
+            IMongoCollection<T> collection = database.GetCollection<T>(typeof(T).Name + "s");
             await collection.DeleteManyAsync(dataFilters);
         }
 
         public IQueryable<T> GetItems<T>()
         {
-           return _clientDb.GetCollection<T>(typeof(T).Name + "s").AsQueryable();
+            var database = ResolvedClientDb();
+            return database.GetCollection<T>(typeof(T).Name + "s").AsQueryable();
         }
 
         public async Task UpdateNotificationAsReadByUserIdAsync(string userId)
         {
             var builder = Builders<OfflineNotification>.Filter;
-            var collection = _clientDb.GetCollection<OfflineNotification>(_notificationCollection);
 
             // Match all notifications visible to this user (aligned with GetNotificationsAsync scope)
             var userNotificationFilter = builder.Or(
@@ -100,11 +109,11 @@ namespace DomainService.Notification
 
             // First, initialize null ReadByUserIds to empty list (required for $addToSet)
             var nullReadByUserIdsFilter = unreadFilter & builder.Eq(q => q.ReadByUserIds, null);
+            var updateDefinition = new UpdateDefinitionBuilder<OfflineNotification>().AddToSet(p => p.ReadByUserIds, userId);
+            var collection = NotificationCollection();
             await collection.UpdateManyAsync(nullReadByUserIdsFilter,
                 new UpdateDefinitionBuilder<OfflineNotification>().Set(p => p.ReadByUserIds, new List<string>()));
-
-            // Then add userId to ReadByUserIds for all unread notifications
-            var updateDefinition = new UpdateDefinitionBuilder<OfflineNotification>().AddToSet(p => p.ReadByUserIds, userId);
+            // Then add userId to ReadByUserIds for all unread notifications.
             await collection.UpdateManyAsync(unreadFilter, updateDefinition);
         }
 
@@ -116,31 +125,31 @@ namespace DomainService.Notification
             var updateDefinition = new UpdateDefinitionBuilder<OfflineNotification>().AddToSet(p => p.ReadByUserIds,
                 userId.ToString());
 
-            await _clientDb.GetCollection<OfflineNotification>(_notificationCollection).UpdateOneAsync(filter, updateDefinition);
+            await NotificationCollection().UpdateOneAsync(filter, updateDefinition);
         }
 
         public async Task<GetNotificationsResponse> GetNotificationsAsync(GetNotificationsRequest request)
         {
-            var collection = _clientDb.GetCollection<OfflineNotification>("OfflineNotifications");
-            var builder = Builders<OfflineNotification>.Filter;
-            var filter = FilterDefinition<OfflineNotification>.Empty;
             var userId = BlocksContext.GetContext()?.UserId;
+            if (string.IsNullOrWhiteSpace(userId))
+                throw new InvalidOperationException("User context is required to read notifications.");
 
-            if (request.IsUnreadOnly)
-                filter = builder.Where(n => !n.ReadByUserIds.Contains(userId));
-
-            filter = filter & builder.Where(n => !string.IsNullOrWhiteSpace(n.Payload.UserId) && n.Payload.UserId == userId);
+            var builder = Builders<OfflineNotification>.Filter;
+            var userFilter = builder.Where(n => !string.IsNullOrWhiteSpace(n.Payload.UserId) && n.Payload.UserId == userId);
+            var unreadFilter = userFilter & builder.Where(n => !n.ReadByUserIds.Contains(userId));
+            var pageFilter = request.IsUnreadOnly ? unreadFilter : userFilter;
 
             var options = new FindOptions<OfflineNotification>
             {
-                Skip = request.PageSize * request.Page,
+                Skip = checked(request.PageSize * request.Page),
                 Limit = request.PageSize,
                 Sort = Builders<OfflineNotification>.Sort.Descending(n => n.CreatedTime)
             };
 
-            var notifications = await (await collection.FindAsync(filter, options)).ToListAsync();
-            var unReadNotificationsCount = await collection.CountDocumentsAsync(filter & builder.Where(n => !n.ReadByUserIds.Contains(userId)));
-            var totalNotificationCount =  await collection.CountDocumentsAsync(filter);
+            var collection = NotificationCollection();
+            var notifications = await (await collection.FindAsync(pageFilter, options)).ToListAsync();
+            var unreadCount = await collection.CountDocumentsAsync(unreadFilter);
+            var totalCount = await collection.CountDocumentsAsync(pageFilter);
 
             if (!request.IsUnreadOnly)
             {
@@ -153,8 +162,8 @@ namespace DomainService.Notification
             return new GetNotificationsResponse
             {
                 Notifications = notifications,
-                UnReadNotificationsCount = unReadNotificationsCount,
-                TotalNotificationsCount = totalNotificationCount
+                UnReadNotificationsCount = unreadCount,
+                TotalNotificationsCount = totalCount
             };
         }
     }

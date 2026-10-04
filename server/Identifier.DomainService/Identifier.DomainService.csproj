@@ -3,15 +3,14 @@
   <ItemGroup>
 	  <PackageReference Include="Azure.ResourceManager.ServiceBus" />
 	  <PackageReference Include="FluentValidation" />
-	  <PackageReference Include="SeliseBlocks.MailDriver.OS" />
+	
 	  <PackageReference Include="SeliseBlocks.StorageDriver.OS" />
 	  <PackageReference Include="SixLabors.Fonts" />
     <PackageReference Include="SeliseBlocks.Genesis.OS" />
   </ItemGroup>
 
   <ItemGroup>
-    <!--<ProjectReference Include="..\Captcha.DomainService\Captcha.DomainService.csproj" />
-    <ProjectReference Include="..\Iam.DomainService\Iam.DomainService.csproj" />-->
+    <ProjectReference Include="..\Mail.DomainService\Mail.DomainService.csproj" />
   </ItemGroup>
 
   

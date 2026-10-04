@@ -19,14 +19,19 @@ const toasts = vi.hoisted(() => ({
   showSuccessToast: vi.fn(),
   showInfoToast: vi.fn(),
 }));
+const clipboard = vi.hoisted(() => ({
+  copyToClipboard: vi.fn().mockResolvedValue(undefined),
+}));
+const workflowServiceMock = vi.hoisted(() => ({
+  triggerListener: vi.fn().mockResolvedValue({}),
+  stepExecute: vi.fn().mockResolvedValue({}),
+  updateWorkflow: vi.fn().mockResolvedValue({}),
+  getWorkflowExecutionById: vi.fn().mockResolvedValue({ data: {} }),
+}));
 vi.mock("@/hooks/use-toast", () => toasts);
+vi.mock("@blocks-workflow/utils/copy-to-clipboard", () => clipboard);
 vi.mock("../../services/workflow.service", () => ({
-  workflowService: {
-    triggerListener: vi.fn().mockResolvedValue({}),
-    stepExecute: vi.fn().mockResolvedValue({}),
-    updateWorkflow: vi.fn().mockResolvedValue({}),
-    getWorkflowExecutionById: vi.fn().mockResolvedValue({ data: {} }),
-  },
+  workflowService: workflowServiceMock,
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -42,7 +47,9 @@ const node = (id: string, extra: Record<string, unknown> = {}): any => ({
   ...extra,
 });
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 describe("InputPanel", () => {
   it("returns null without a selected node", () => {
@@ -74,6 +81,10 @@ describe("InputPanel", () => {
     await user.click(screen.getByRole("tab", { name: "Table" }));
     await user.click(screen.getByRole("tab", { name: "JSON" }));
     await waitFor(() => expect(screen.getAllByText(/item 1/).length).toBeGreaterThan(0));
+    await user.click(screen.getByRole("button", { name: "Copy input JSON" }));
+    expect(clipboard.copyToClipboard).toHaveBeenCalledWith(
+      JSON.stringify([{ name: "Ada" }], null, 2),
+    );
   });
 });
 
@@ -154,6 +165,31 @@ describe("NodeInspectorHeader", () => {
     fireEvent.click(buttons[buttons.length - 1]);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect((store as any).getState().isConfigModalOpen).toBe(false);
+  });
+
+  it("executes the selected node without requiring a previous execution", async () => {
+    renderWithProviders(inSheet(<NodeInspectorHeader />), {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      seedWorkflow: (store: any) => {
+        const sel = node("n1");
+        store.getState().setWorkflow({ itemId: "w1", name: "Workflow" });
+        store.getState().addNode(sel);
+        store.setState({ selectedNode: sel, editorMode: "editor", nextExecutionId: null });
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /execute step/i }));
+
+    await waitFor(() => expect(workflowServiceMock.stepExecute).toHaveBeenCalled());
+    expect(workflowServiceMock.stepExecute.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        WorkflowId: "w1",
+        NodeId: "n1",
+      }),
+    );
+    expect(toasts.showErrorToast).not.toHaveBeenCalledWith(
+      expect.objectContaining({ errors: "No successful execution found" }),
+    );
   });
 });
 

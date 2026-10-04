@@ -1,0 +1,25 @@
+# .versions — pinned artefact versions for the Runner VM.
+# Sourced by lib.sh's load_versions(). Change deliberately; checksums must change with them.
+
+# gVisor: release 20260831 publishes only the bundle (no standalone runsc/shim objects),
+# and this build requires its sidecar binaries in gvisor-bin/ next to runsc.
+GVISOR_RELEASE=20260831
+GVISOR_ARCH=x86_64
+GVISOR_BASE_URL=https://storage.googleapis.com/gvisor/releases/release
+GVISOR_BUNDLE=gvisor.tar.zstd
+GVISOR_BUNDLE_SHA512=d22004c60601495d01a7863df3d10103883d2cddec5762297330069611a2f4daebfd10908356f577e2b8f55e2eb6f973d4d14c925db5c919623c83399188c164
+
+# Container images used by the host itself (never by tenant functions).
+# REDIS_IMAGE is no longer a running service — the runner uses the Blocks Redis over the
+# VPN. It survives only as the throwaway redis-cli `make status` runs when the host has
+# no redis-tools installed.
+REGISTRY_IMAGE=registry:2
+REDIS_IMAGE=redis:8-alpine
+PROBE_IMAGE=alpine:3.22
+
+# Apt packages are installed unversioned so security updates still apply; these are the
+# candidate versions seen on the reference VM and recorded into .facts after install.
+EXPECT_DOCKER_VERSION=29.1.3-0ubuntu4.1
+EXPECT_CONTAINERD_VERSION=2.2.2-0ubuntu1.1
+EXPECT_BUILDX_VERSION=0.30.1-0ubuntu1
+EXPECT_DOTNET_SDK_VERSION=10.0.111-0ubuntu1~26.04.1

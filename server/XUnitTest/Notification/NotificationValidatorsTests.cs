@@ -127,13 +127,22 @@ namespace XUnitTest.Notification
             var anonymous = await validator.ValidateAsync(new NotifyRequest { ConfigurationName = "personal" });
             var withUser = await validator.ValidateAsync(
                 new NotifyRequest { ConfigurationName = "personal", UserIds = ["user-1"] });
-            var withRoles = await validator.ValidateAsync(
+            var withEmptyRoles = await validator.ValidateAsync(
                 new NotifyRequest { ConfigurationName = "personal", Roles = [] });
+            var withRoles = await validator.ValidateAsync(
+                new NotifyRequest { ConfigurationName = "personal", Roles = ["admin"] });
+            var withEmptyOrg = await validator.ValidateAsync(
+                new NotifyRequest { ConfigurationName = "personal", OrganizationIds = [] });
+            var withOrg = await validator.ValidateAsync(
+                new NotifyRequest { ConfigurationName = "personal", OrganizationIds = ["org-1"] });
 
             anonymous.IsValid.Should().BeFalse();
-            anonymous.Errors.Should().Contain(e => e.ErrorMessage == "UserIds or Roles cannot be empty");
+            anonymous.Errors.Should().Contain(e => e.ErrorMessage == "UserIds, Roles, and OrganizationIds cannot all be empty");
             withUser.IsValid.Should().BeTrue();
-            withRoles.IsValid.Should().BeTrue("an empty role list is still a role selection");
+            withEmptyRoles.IsValid.Should().BeFalse("an empty role list carries no actual role selection");
+            withRoles.IsValid.Should().BeTrue();
+            withEmptyOrg.IsValid.Should().BeFalse("an empty organization list carries no actual organization selection");
+            withOrg.IsValid.Should().BeTrue();
         }
 
         [Fact]

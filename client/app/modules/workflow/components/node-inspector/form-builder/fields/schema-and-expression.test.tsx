@@ -8,7 +8,7 @@ import { ArrayField } from "./array-field";
 import { ExpressionInputField } from "./expression-input-field";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const cfg: any = { projectKey: "pk", workflowId: "wf", nodeId: "child" };
+const cfg: any = { tenantId: "pk", workflowId: "wf", nodeId: "child" };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const field = (extra: Record<string, unknown> = {}): any => ({
   id: "f",

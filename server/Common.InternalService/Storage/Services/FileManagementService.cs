@@ -329,7 +329,7 @@ namespace Common.InternalService.Storage
             return await GetFileResponse(result.Item1, result.Item2, configuration, tenantId);
         }
 
-        private async Task<List<FileResponse>?> GetFileResponse(IEnumerable<BsonDocument> bsonElements, FileResponse[] responses, StorageConfiguration configuration, string? projectKey)
+        private async Task<List<FileResponse>?> GetFileResponse(IEnumerable<BsonDocument> bsonElements, FileResponse[] responses, StorageConfiguration configuration, string? tenantId)
         {
             List<FileResponse>? finalfileResponse = new List<FileResponse>();
 
@@ -342,7 +342,7 @@ namespace Common.InternalService.Storage
                 var latestVersionNo = fileVersionAggregate["MaxVersion"].IsBsonNull ? 0 : fileVersionAggregate["MaxVersion"].AsInt64;
                 var fileResponse = responses.First(f => f.ItemId.Equals(fileId));
 
-                var fileUrlResponse = await GetFileUrlResponse(configuration, projectKey, fileResponse, latestVersionNo, latestVersion);
+                var fileUrlResponse = await GetFileUrlResponse(configuration, tenantId, fileResponse, latestVersionNo, latestVersion);
 
                 if (fileUrlResponse.Errors != null)
                 {
@@ -361,7 +361,7 @@ namespace Common.InternalService.Storage
             return finalfileResponse;
         }
 
-        private async Task<FileResponse> GetFileUrlResponse(StorageConfiguration configuration, string? projectKey, FileResponse fileResponse, long latestVersionNo, string latestVersion)
+        private async Task<FileResponse> GetFileUrlResponse(StorageConfiguration configuration, string? tenantId, FileResponse fileResponse, long latestVersionNo, string latestVersion)
         {
             var storageServiceProvider = _storageServiceFactory.GetStorageService(configuration);
 
@@ -370,7 +370,6 @@ namespace Common.InternalService.Storage
                 ItemId = fileResponse.ItemId,
                 FileVersion = latestVersionNo,
                 ConfigurationName = configuration.Name,
-                ProjectKey = projectKey ?? BlocksContext.GetContext().TenantId,
                 AccessModifier = fileResponse.AccessModifier
             };
 

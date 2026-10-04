@@ -91,6 +91,26 @@ namespace Mail.DomainService.Services
 
             return mailServerConfigurationCollection.Find(_ => true).FirstOrDefaultAsync();
         }
+
+        public async Task<List<MailServerConfigurationSummary>> GetMailServerConfigurationSummariesAsync()
+        {
+            var collection = GetCollection<MailServerConfiguration>();
+            var options = new FindOptions<MailServerConfiguration, MailServerConfigurationSummary>
+            {
+                Sort = Builders<MailServerConfiguration>.Sort.Descending(c => c.IsDefault),
+                Projection = Builders<MailServerConfiguration>.Projection.Expression(c => new MailServerConfigurationSummary
+                {
+                    ItemId = c.ItemId,
+                    Name = c.Name,
+                    IsDefault = c.IsDefault,
+                    IsInbound = c.IsInbound,
+                    Provider = c.Provider
+                })
+            };
+
+            using var cursor = await collection.FindAsync(FilterDefinition<MailServerConfiguration>.Empty, options);
+            return await cursor.ToListAsync();
+        }
         public Task<EmailTemplate> GetEmailTemplateByPurpose(string purpose, string language, string organizationId)
         {
             return GetEmailTemplate(purpose, language, organizationId);
@@ -163,7 +183,7 @@ namespace Mail.DomainService.Services
         //deprecated
         public async Task<(List<MailBoxEntity> Mails, long TotalCount)> GetMailBoxMails(GetMailBoxMails request)
         {
-            var dbContext = _dbContextProvider.GetDatabase(request.ProjectKey);
+            var dbContext = _dbContextProvider.GetDatabase(BlocksContext.GetContext()?.TenantId);
             var collection = dbContext.GetCollection<MailBoxEntity>($"{nameof(MailBoxEntity)}s");
 
             var builder = Builders<MailBoxEntity>.Filter;
@@ -212,7 +232,7 @@ namespace Mail.DomainService.Services
 
         public async Task<(List<MailBoxEntityResponse> Mails, long TotalCount)> GetMailBoxAggregatedMails(GetMailBoxMails request)
         {
-            var dbContext = _dbContextProvider.GetDatabase(request.ProjectKey);
+            var dbContext = _dbContextProvider.GetDatabase(BlocksContext.GetContext()?.TenantId);
             var collection = dbContext.GetCollection<MailBoxEntity>($"{nameof(MailBoxEntity)}s");
 
             var groupBy = new BsonDocument
@@ -305,9 +325,9 @@ namespace Mail.DomainService.Services
             return (mails, totalCount);
         }
 
-        public async Task<MailBoxEntity> GetMailBoxMail(string messageId, string projectKey)
+        public async Task<MailBoxEntity> GetMailBoxMail(string messageId, string tenantId)
         {
-            var dbContext = _dbContextProvider.GetDatabase(projectKey);
+            var dbContext = _dbContextProvider.GetDatabase(tenantId);
             var collection = dbContext.GetCollection<MailBoxEntity>($"{nameof(MailBoxEntity)}s");
             var filter = Builders<MailBoxEntity>.Filter.Eq(x => x.MessageId, messageId);
 

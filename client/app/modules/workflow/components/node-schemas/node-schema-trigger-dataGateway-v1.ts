@@ -1,9 +1,10 @@
 import React from "react";
-import { useProjectStore } from "@seliseblocks/genesis-os";
+import { NodeGuideTriggerDataGatewayV1 } from "../node-guides";
 import { dataService } from "../../services/data.service";
 import { NodeSchemaDefinition } from "./node-schema.type";
 
 export const NodeSchemaTriggerDataGatewayV1: NodeSchemaDefinition = {
+  guide: NodeGuideTriggerDataGatewayV1,
   schema: {
     type: "dataGateway",
     category: "trigger",
@@ -21,16 +22,22 @@ export const NodeSchemaTriggerDataGatewayV1: NodeSchemaDefinition = {
             "Editor test mode will only pickup data triggers on records that have the ",
             React.createElement(
               "code",
-              { className: "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold" },
-              "Tags"
+              {
+                className:
+                  "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold",
+              },
+              "Tags",
             ),
             " property value of ",
             React.createElement(
               "code",
-              { className: "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold" },
-              "mock-data"
+              {
+                className:
+                  "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold",
+              },
+              "mock-data",
             ),
-            ". Whenever a data has mock data value it will be ignored in the published workflow data trigger."
+            ". Whenever a data has mock data value it will be ignored in the published workflow data trigger.",
           ),
         }),
       },
@@ -45,7 +52,6 @@ export const NodeSchemaTriggerDataGatewayV1: NodeSchemaDefinition = {
         options: (_data, config) => {
           return dataService
             .getSchemaList({
-              projectKey: config.projectKey,
               pageNo: 1,
               pageSize: 200,
               sortDescending: true,
@@ -64,14 +70,11 @@ export const NodeSchemaTriggerDataGatewayV1: NodeSchemaDefinition = {
           const parts = (value as string).split(":::");
           const collectionName = parts[0] || "";
           const schemaName = parts[1] || "";
-          const selectedProject = useProjectStore.getState().selectedProject;
-          const projectKey = selectedProject?.tenantId ?? "";
 
           return {
             collectionName_composite: value,
             collectionName,
             schemaName,
-            projectKey,
           };
         },
       },
@@ -125,19 +128,9 @@ Document fields are populated from the selected collection schema. For Update op
       collectionName_composite: "",
       collectionName: "",
       schemaName: "",
-      projectKey: "",
       operation: "",
     },
     settings: {},
   },
-  transform: (node) => {
-    const selectedProject = useProjectStore.getState().selectedProject;
-    return {
-      ...node,
-      parameters: {
-        ...node.parameters,
-        projectKey: selectedProject?.tenantId ?? "",
-      },
-    };
-  },
+  transform: (node) => node,
 };

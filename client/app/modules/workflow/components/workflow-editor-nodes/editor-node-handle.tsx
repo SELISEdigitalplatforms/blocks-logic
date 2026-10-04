@@ -1,9 +1,9 @@
 import { cn } from "@/lib/utils";
 import { getHandleLabel } from "@blocks-workflow/constants";
-import { useWorkflow } from "@blocks-workflow/hooks";
+import { useWorkflowStore } from "@blocks-workflow/store";
 import { Handle, Position, useConnection } from "@xyflow/react";
 import { LucidePlus } from "lucide-react";
-import { createContext, useContext } from "react";
+import { createContext, useContext, useMemo } from "react";
 
 type HandleContextValue = {
   id: string;
@@ -49,10 +49,8 @@ export const EditorNodeHandle = ({
   isConnectableStart = true,
   nodeId,
 }: EditorNodeHandleProps) => {
-  const { getNodeById } = useWorkflow();
+  const node = useWorkflowStore((state) => state.nodesMap[nodeId]);
   const connection = useConnection();
-  //temp solution
-  const node = getNodeById(nodeId);
   if (!node) return null;
 
   const isConnectionInitiated =
@@ -100,19 +98,25 @@ type NodeHandleArrowProps = {
 };
 
 export const EditorNodeHandleArrow = ({ className }: NodeHandleArrowProps) => {
-  const { openNodeLibraryPanel, selectNode, selectHandle, getNodeById, edges } = useWorkflow();
   const { id, isConnectionInitiated, nodeId, position, type } = useHandleContext();
-  if (isConnectionInitiated) return null;
-
-  const isConnected = edges.some(
-    (edge) =>
-      (type === "source" && edge.source === nodeId && edge.sourceHandle === id) ||
-      (type === "target" && edge.target === nodeId && edge.targetHandle === id),
+  const openNodeLibraryPanel = useWorkflowStore((state) => state.openNodeLibraryPanel);
+  const selectNode = useWorkflowStore((state) => state.selectNode);
+  const selectHandle = useWorkflowStore((state) => state.selectHandle);
+  const edgesMap = useWorkflowStore((state) => state.edgesMap);
+  const node = useWorkflowStore((state) => state.nodesMap[nodeId]);
+  const isConnected = useMemo(
+    () =>
+      Object.values(edgesMap).some(
+        (edge) =>
+          (type === "source" && edge.source === nodeId && edge.sourceHandle === id) ||
+          (type === "target" && edge.target === nodeId && edge.targetHandle === id),
+      ),
+    [edgesMap, id, nodeId, type],
   );
 
+  if (isConnectionInitiated) return null;
   if (isConnected) return null;
 
-  const node = getNodeById(nodeId);
   if (!node) return null;
   if (node?.data?.hasHandleArrow === false) return null;
 

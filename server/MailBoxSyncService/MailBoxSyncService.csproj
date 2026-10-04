@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <!-- The connection-cache key is asserted directly: it is what keeps two tenants
+         with the same mailbox username off one authenticated IMAP session. -->
+    <InternalsVisibleTo Include="XUnitTest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SeliseBlocks.ConfigurationDriver" />
+    <PackageReference Include="SeliseBlocks.Genesis.OS" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Workflow.DomainService\Workflow.DomainService.csproj" />
+    <ProjectReference Include="..\Mail.DomainService\Mail.DomainService.csproj" />
+  </ItemGroup>
+
+</Project>

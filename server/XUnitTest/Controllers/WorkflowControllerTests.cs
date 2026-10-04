@@ -1,7 +1,9 @@
 using System.Text.Json;
 using Blocks.Genesis;
-using DomainService.Workflow.Dtos;
-using DomainService.Workflow.Services;
+using Workflow.DomainService.Dtos;
+using Workflow.DomainService.Services;
+using Workflow.DomainService.Logging;
+using Microsoft.AspNetCore.Authorization;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -16,12 +18,19 @@ namespace XUnitTest.Controllers
         private readonly Mock<IWorkflowService> _workflowService = new();
         private readonly Mock<IWorkflowVersionService> _versionService = new();
         private readonly Mock<IWorkflowExecutionService> _executionService = new();
+        private readonly Mock<IWorkflowImportService> _importService = new();
+        private readonly Mock<IExecutionLogService> _executionLogService = new();
         private readonly WorkflowController _controller;
 
         public WorkflowControllerTests()
         {
             TestBlocksContext.Set("tenant-abc");
-            _controller = new WorkflowController(_workflowService.Object, _versionService.Object, _executionService.Object);
+            _controller = new WorkflowController(
+                _workflowService.Object,
+                _versionService.Object,
+                _executionService.Object,
+                _importService.Object,
+                _executionLogService.Object);
         }
 
         public void Dispose() => TestBlocksContext.Clear();
@@ -30,6 +39,15 @@ namespace XUnitTest.Controllers
         {
             using var doc = JsonDocument.Parse("{}");
             return doc.RootElement.Clone();
+        }
+
+        private void SetBlocksKey(string? value)
+        {
+            _controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
+            if (value is not null)
+            {
+                _controller.Request.Headers["x-blocks-key"] = value;
+            }
         }
 
         [Fact]
@@ -79,6 +97,28 @@ namespace XUnitTest.Controllers
             var result = await _controller.Duplicate(new WorkflowDuplicateRequestDto { Name = "wf", WorkflowId = "wf" });
 
             result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status201Created);
+        }
+
+        [Fact]
+        public async Task Import_ReturnsOk_WhenFileIdPresent()
+        {
+            _importService.Setup(s => s.EnqueueAsync(It.IsAny<WorkflowImportRequestDto>()))
+                .ReturnsAsync(new BaseMutationResponse { IsSuccess = true });
+
+            var result = await _controller.Import(new WorkflowImportRequestDto { FileId = "file-1", MessageCoRelationId = "cor-1" });
+
+            result.Should().BeOfType<OkObjectResult>();
+            _importService.Verify(s => s.EnqueueAsync(It.Is<WorkflowImportRequestDto>(d =>
+                d.FileId == "file-1" && d.MessageCoRelationId == "cor-1")), Times.Once);
+        }
+
+        [Fact]
+        public async Task Import_ReturnsBadRequest_WhenFileIdMissing()
+        {
+            var result = await _controller.Import(new WorkflowImportRequestDto { FileId = "  " });
+
+            result.Should().BeOfType<BadRequestObjectResult>();
+            _importService.Verify(s => s.EnqueueAsync(It.IsAny<WorkflowImportRequestDto>()), Times.Never);
         }
 
         [Fact]
@@ -237,6 +277,100 @@ namespace XUnitTest.Controllers
         }
 
         [Fact]
+        public async Task WebhookByHeader_Success_ReturnsOk()
+        {
+            SetBlocksKey("proj1");
+            _executionService.Setup(s => s.TriggerWebhookAsync("wf1", "wh1", "proj1", It.IsAny<JsonElement>()))
+                .ReturnsAsync(new WorkflowWebhookResponseDto());
+
+            var result = await _controller.WebhookByHeader("wf1", "wh1", EmptyJson());
+
+            result.Should().BeOfType<OkObjectResult>();
+            _executionService.Verify(s => s.TriggerWebhookAsync("wf1", "wh1", "proj1", It.IsAny<JsonElement>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task WebhookByHeader_MissingHeader_Returns400()
+        {
+            SetBlocksKey(null);
+
+            var result = await _controller.WebhookByHeader("wf1", "wh1", EmptyJson());
+
+            result.Should().BeOfType<BadRequestObjectResult>();
+            _executionService.Verify(s => s.TriggerWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<JsonElement>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task WebhookByHeader_WhitespaceHeader_Returns400()
+        {
+            SetBlocksKey("   ");
+
+            var result = await _controller.WebhookByHeader("wf1", "wh1", EmptyJson());
+
+            result.Should().BeOfType<BadRequestObjectResult>();
+            _executionService.Verify(s => s.TriggerWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<JsonElement>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task WebhookByHeader_Unauthorized_Returns401()
+        {
+            SetBlocksKey("proj1");
+            _executionService.Setup(s => s.TriggerWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<JsonElement>()))
+                .ThrowsAsync(new UnauthorizedAccessException());
+
+            var result = await _controller.WebhookByHeader("wf1", "wh1", EmptyJson());
+
+            result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(401);
+        }
+
+        [Fact]
+        public async Task TestWebhookByHeader_Success_ReturnsOk()
+        {
+            SetBlocksKey("proj1");
+            _executionService.Setup(s => s.TriggerTestWebhookAsync("wf1", "wh1", "proj1", It.IsAny<JsonElement>()))
+                .ReturnsAsync(new WorkflowWebhookResponseDto());
+
+            var result = await _controller.TestWebhookByHeader("wf1", "wh1", EmptyJson());
+
+            result.Should().BeOfType<OkObjectResult>();
+            _executionService.Verify(s => s.TriggerTestWebhookAsync("wf1", "wh1", "proj1", It.IsAny<JsonElement>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task TestWebhookByHeader_MissingHeader_Returns400()
+        {
+            SetBlocksKey(null);
+
+            var result = await _controller.TestWebhookByHeader("wf1", "wh1", EmptyJson());
+
+            result.Should().BeOfType<BadRequestObjectResult>();
+            _executionService.Verify(s => s.TriggerTestWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<JsonElement>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task TestWebhookByHeader_WhitespaceHeader_Returns400()
+        {
+            SetBlocksKey("   ");
+
+            var result = await _controller.TestWebhookByHeader("wf1", "wh1", EmptyJson());
+
+            result.Should().BeOfType<BadRequestObjectResult>();
+            _executionService.Verify(s => s.TriggerTestWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<JsonElement>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task TestWebhookByHeader_Unauthorized_Returns401()
+        {
+            SetBlocksKey("proj1");
+            _executionService.Setup(s => s.TriggerTestWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<JsonElement>()))
+                .ThrowsAsync(new UnauthorizedAccessException());
+
+            var result = await _controller.TestWebhookByHeader("wf1", "wh1", EmptyJson());
+
+            result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(401);
+        }
+
+        [Fact]
         public async Task StepExecute_ReturnsOk()
         {
             _executionService.Setup(s => s.StepExecuteAsync("tenant-abc", It.IsAny<StepExecuteRequestDto>()))
@@ -267,6 +401,52 @@ namespace XUnitTest.Controllers
             var result = await _controller.GetExecutions(new WorkflowExecutionsGetRequestDto { WorkflowId = "wf" });
 
             result.Should().BeOfType<OkObjectResult>();
+        }
+
+        [Fact]
+        public async Task GetExecutionLogs_ReturnsOk_ForTheCallersTenant()
+        {
+            var expected = new WorkflowExecutionLogsGetResponseDto();
+            _executionLogService.Setup(s => s.GetAsync("tenant-abc", It.Is<WorkflowExecutionLogsGetRequestDto>(d => d.ExecutionId == "e"), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(expected);
+
+            var result = await _controller.GetExecutionLogs(new WorkflowExecutionLogsGetRequestDto { ExecutionId = "e" });
+
+            result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeSameAs(expected);
+        }
+
+        [Fact]
+        public void GetExecutionLogs_IsAnAuthorizedGet_RoutedAsWorkflowGetExecutionLogs()
+        {
+            var method = typeof(WorkflowController).GetMethod(nameof(WorkflowController.GetExecutionLogs))!;
+
+            method.GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true).Should().NotBeEmpty();
+            method.GetCustomAttributes(typeof(HttpGetAttribute), inherit: true).Should().NotBeEmpty();
+            var route = (RouteAttribute)typeof(WorkflowController).GetCustomAttributes(typeof(RouteAttribute), inherit: true).Single();
+            route.Template.Should().Be("[controller]/[action]");
+        }
+
+        [Fact]
+        public async Task GetExecutions_InvalidPageSize_ReturnsBadRequest()
+        {
+            _executionService
+                .Setup(s => s.GetExecutionsByWorkflowIdAsync("tenant-abc", It.IsAny<WorkflowExecutionsGetRequestDto>()))
+                .ReturnsAsync(new WorkflowExecutionsGetResponseDto
+                {
+                    HttpStatus = StatusCodes.Status400BadRequest,
+                    Data = [],
+                    TotalCount = 0,
+                    Errors = new Dictionary<string, string> { { "Message", "PageSize must be between 1 and 100." } },
+                });
+
+            var result = await _controller.GetExecutions(new WorkflowExecutionsGetRequestDto
+            {
+                WorkflowId = "wf",
+                PageSize = 0,
+            });
+
+            var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+            objectResult.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
         }
 
         [Fact]

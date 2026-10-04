@@ -12,5 +12,11 @@
         public IEnumerable<string> Attachments { get; set; } = Enumerable.Empty<string>();
         public Dictionary<string, string> BodyDataContext { get; set; } = new Dictionary<string, string>();
         public bool SendPhoneNumberAsEmail { get; set; } = false;
+
+        /// <summary>
+        /// Opaque value echoed back on the MailSentEvent so the caller can match the outcome to
+        /// its own work. Optional; existing payloads are unaffected.
+        /// </summary>
+        public string? CorrelationId { get; set; }
     }
 }

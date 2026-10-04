@@ -31,6 +31,12 @@ namespace XUnitTest.Notification
                     It.IsAny<Expression<Func<NotificationConnection, bool>>>(), It.IsAny<string>()))
                 .ReturnsAsync(connections.ToList());
 
+        private void SetupUsers(params NotificationUser[] users) =>
+            _repository.Setup(r => r.GetItemsAsync(
+                    It.IsAny<Expression<Func<NotificationUser, bool>>>(), "Users"))
+                .Returns((Expression<Func<NotificationUser, bool>> filter, string _) =>
+                    Task.FromResult(users.Where(filter.Compile()).ToList()));
+
         [Fact]
         public async Task GetClientAsync_AddressesEveryConnectionHeldByTheRequestedUsers()
         {
@@ -77,6 +83,97 @@ namespace XUnitTest.Notification
 
             _repository.Verify(r => r.GetItemsAsync(
                 It.IsAny<Expression<Func<NotificationConnection, bool>>>(), It.IsAny<string>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task GetClientAsync_ResolvesRolesToTheUsersHoldingThem()
+        {
+            SetupUsers(
+                new NotificationUser
+                {
+                    ItemId = "user-1",
+                    OrganizationIds = ["org-123"],
+                    Roles = new Dictionary<string, List<string>> { ["org-123"] = ["admin"] }
+                },
+                new NotificationUser
+                {
+                    ItemId = "user-2",
+                    OrganizationIds = ["org-123"],
+                    Roles = new Dictionary<string, List<string>> { ["org-123"] = ["member"] }
+                });
+            SetupConnections(new NotificationConnection { ConnectionId = "conn-1", UserId = "user-1" });
+
+            var payload = new NotifierPayload { Roles = ["admin"] };
+            await _sut.GetClientAsync(payload);
+
+            payload.UserIds.Should().Equal("user-1");
+            _hub.AddressedConnectionIds.Should().Equal("conn-1");
+        }
+
+        [Fact]
+        public async Task GetClientAsync_KeepsExplicitUserIdsWhenNoUserHoldsTheRequestedRole()
+        {
+            SetupUsers();
+            SetupConnections(new NotificationConnection { ConnectionId = "conn-1", UserId = "user-1" });
+
+            var payload = new NotifierPayload { UserIds = ["user-1"], Roles = ["missing-role"] };
+            await _sut.GetClientAsync(payload);
+
+            payload.UserIds.Should().Equal("user-1");
+            _hub.AddressedConnectionIds.Should().Equal("conn-1");
+        }
+
+        [Fact]
+        public async Task GetClientAsync_ResolvesRolesScopedToTheRequestedOrganizations()
+        {
+            SetupUsers(
+                new NotificationUser
+                {
+                    ItemId = "user-1",
+                    OrganizationIds = ["org-123"],
+                    Roles = new Dictionary<string, List<string>> { ["org-123"] = ["admin"] }
+                },
+                new NotificationUser
+                {
+                    ItemId = "user-2",
+                    OrganizationIds = ["org-999"],
+                    Roles = new Dictionary<string, List<string>> { ["org-999"] = ["admin"] }
+                });
+            SetupConnections(new NotificationConnection { ConnectionId = "conn-1", UserId = "user-1" });
+
+            var payload = new NotifierPayload { Roles = ["admin"], OrganizationIds = ["org-123"] };
+            await _sut.GetClientAsync(payload);
+
+            payload.UserIds.Should().Equal("user-1");
+            _hub.AddressedConnectionIds.Should().Equal("conn-1");
+        }
+
+        [Fact]
+        public async Task GetClientAsync_ResolvesEveryUserInTheRequestedOrganizationsWhenNoUserIdsOrRolesAreGiven()
+        {
+            SetupUsers(
+                new NotificationUser { ItemId = "user-1", OrganizationIds = ["org-123"] },
+                new NotificationUser { ItemId = "user-2", OrganizationIds = ["org-999"] });
+            SetupConnections(new NotificationConnection { ConnectionId = "conn-1", UserId = "user-1" });
+
+            var payload = new NotifierPayload { OrganizationIds = ["org-123"] };
+            await _sut.GetClientAsync(payload);
+
+            payload.UserIds.Should().Equal("user-1");
+            _hub.AddressedConnectionIds.Should().Equal("conn-1");
+        }
+
+        [Fact]
+        public async Task GetClientAsync_PrefersExplicitUserIdsOverOrganizationIdsWhenBothAreGiven()
+        {
+            SetupUsers(new NotificationUser { ItemId = "user-2", OrganizationIds = ["org-123"] });
+            SetupConnections(new NotificationConnection { ConnectionId = "conn-1", UserId = "user-1" });
+
+            var payload = new NotifierPayload { UserIds = ["user-1"], OrganizationIds = ["org-123"] };
+            await _sut.GetClientAsync(payload);
+
+            payload.UserIds.Should().Equal("user-1");
+            _hub.AddressedConnectionIds.Should().Equal("conn-1");
         }
     }
 }

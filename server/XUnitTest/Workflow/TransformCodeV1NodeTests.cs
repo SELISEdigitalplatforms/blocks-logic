@@ -1,6 +1,6 @@
-using DomainService.Workflow.Entities;
-using DomainService.Workflow.Nodes;
-using DomainService.Workflow.Nodes.TransformCodeV1;
+using Workflow.DomainService.Entities;
+using Workflow.DomainService.Nodes;
+using Workflow.DomainService.Nodes.TransformCodeV1;
 using FluentAssertions;
 using MongoDB.Bson;
 
@@ -297,6 +297,69 @@ namespace XUnitTest.Workflow
                 .Select(t => t.ToInt32()).Should().Equal(1, 2, 3);
         }
 
+        [Fact]
+        public async Task RunAsync_AllMode_All_PairsEachOutputToItsAncestorSource()
+        {
+            var items = new List<WorkflowItemExecutionEntity>
+            {
+                Item("in", new BsonDocument { { "value", "alpha" } }),
+            };
+            var ancestors = new List<WorkflowItemExecutionEntity>
+            {
+                Item("p1", new BsonDocument { { "v", 1 } }, branch: "left", nodeName: "Prev"),
+                Item("p2", new BsonDocument { { "v", 2 } }, branch: "right", nodeName: "Prev"),
+            };
+            var ctx = Context(items, AllMode, "return $node['Prev'].all();");
+            ctx.AncestorNodeOutputs = new Dictionary<string, List<WorkflowItemExecutionEntity>>
+            {
+                { "Prev", ancestors },
+            };
+
+            var result = await new TransformCodeV1Node().RunAsync(ctx);
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            result.OutputItems.Should().HaveCount(2);
+
+            result.OutputItems[0].Data.Output.AsBsonDocument.Contains("__id").Should().BeFalse();
+            result.OutputItems[0].Data.Output["v"].ToInt32().Should().Be(1);
+            result.OutputItems[0].ParentItemIds.Should().BeEquivalentTo(new[] { "p1" });
+            result.OutputItems[0].Branch.Should().Be("left");
+            result.OutputItems[0].Data.Input["v"].ToInt32().Should().Be(1);
+
+            result.OutputItems[1].Data.Output.AsBsonDocument.Contains("__id").Should().BeFalse();
+            result.OutputItems[1].Data.Output["v"].ToInt32().Should().Be(2);
+            result.OutputItems[1].ParentItemIds.Should().BeEquivalentTo(new[] { "p2" });
+            result.OutputItems[1].Branch.Should().Be("right");
+        }
+
+        [Fact]
+        public async Task RunAsync_AllMode_WrappedAll_FallsBackToEveryDirectInput()
+        {
+            var items = new List<WorkflowItemExecutionEntity>
+            {
+                Item("a", new BsonDocument { { "n", 1 } }),
+                Item("b", new BsonDocument { { "n", 2 } }),
+            };
+            var ancestors = new List<WorkflowItemExecutionEntity>
+            {
+                Item("p1", new BsonDocument { { "v", 1 } }, nodeName: "Prev"),
+                Item("p2", new BsonDocument { { "v", 2 } }, nodeName: "Prev"),
+            };
+            var ctx = Context(items, AllMode, "return { source: $node['Prev'].all() };");
+            ctx.AncestorNodeOutputs = new Dictionary<string, List<WorkflowItemExecutionEntity>>
+            {
+                { "Prev", ancestors },
+            };
+
+            var result = await new TransformCodeV1Node().RunAsync(ctx);
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            result.OutputItems.Should().HaveCount(1);
+            result.OutputItems[0].Data.Output.AsBsonDocument.Contains("__id").Should().BeFalse();
+            result.OutputItems[0].ParentItemIds.Should().BeEquivalentTo(new[] { "a", "b" });
+            result.OutputItems[0].Branch.Should().Be("source");
+        }
+
         // ----- Each mode: $json / $item / $node.<X>.json -----------------------
 
         [Fact]
@@ -383,6 +446,75 @@ namespace XUnitTest.Workflow
 
             result.IsSuccess.Should().BeTrue(result.ErrorMessage);
             result.OutputItems[0].Data.Output["answer"].ToInt32().Should().Be(42);
+        }
+
+        [Fact]
+        public async Task RunAsync_PerItem_NodeReference_PreservesNestedArraysAndIsoDates()
+        {
+            var input = Item("a", new BsonDocument { { "totalCount", 35 } },
+                nodeName: "HTTP Request3", parentItemIds: new List<string> { "prev-1" });
+            var ancestor = Item("prev-1", new BsonDocument
+            {
+                { "success", true },
+                { "data", new BsonDocument
+                    {
+                        { "quantities", new BsonArray
+                            {
+                                new BsonDocument
+                                {
+                                    { "itemKey", "User" },
+                                    { "unitLabel", "user" },
+                                    { "quantity", 1 },
+                                },
+                            }
+                        },
+                        { "currentPeriodStartUtc", "2026-09-03T09:48:17.913Z" },
+                        { "meters", new BsonArray
+                            {
+                                new BsonDocument
+                                {
+                                    { "meterKey", "screening" },
+                                    { "includedQuantity", 450 },
+                                },
+                            }
+                        },
+                    }
+                },
+            }, nodeName: "HTTP Request2");
+
+            var ctx = Context(new List<WorkflowItemExecutionEntity> { input }, EachMode,
+                """
+                const quantities = $node["HTTP Request2"]?.json ?? {};
+                return {
+                    allowedUserCount: quantities,
+                    userCount: $json.totalCount
+                };
+                """);
+            ctx.AncestorNodeOutputs = new Dictionary<string, List<WorkflowItemExecutionEntity>>
+            {
+                { "HTTP Request3", new List<WorkflowItemExecutionEntity> { input } },
+                { "HTTP Request2", new List<WorkflowItemExecutionEntity> { ancestor } },
+            };
+
+            var result = await new TransformCodeV1Node().RunAsync(ctx);
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            var output = result.OutputItems[0].Data.Output.AsBsonDocument;
+            output["userCount"].ToInt32().Should().Be(35);
+
+            var data = output["allowedUserCount"]["data"].AsBsonDocument;
+            var quantities = data["quantities"].AsBsonArray;
+            quantities.Should().HaveCount(1);
+            quantities[0]["itemKey"].AsString.Should().Be("User");
+            quantities[0]["unitLabel"].AsString.Should().Be("user");
+            quantities[0]["quantity"].ToInt32().Should().Be(1);
+
+            data["currentPeriodStartUtc"].AsString.Should().Be("2026-09-03T09:48:17.913Z");
+
+            var meters = data["meters"].AsBsonArray;
+            meters.Should().HaveCount(1);
+            meters[0]["meterKey"].AsString.Should().Be("screening");
+            meters[0]["includedQuantity"].ToInt32().Should().Be(450);
         }
 
         // ----- Sandbox / security -----------------------------------------------

@@ -65,12 +65,13 @@ jobs:
       version: ${{ steps.config.outputs.version }} # Version suffix based on environment
       client_dockerfile_path: ${{ steps.config.outputs.client_dockerfile_path }} # Path to Dockerfile
       worker_dockerfile_path: ${{ steps.config.outputs.worker_dockerfile_path }} # Path to Window/Console service Dockerfile
+      mailboxsync_dockerfile_path: ${{ steps.config.outputs.mailboxsync_dockerfile_path }}
       dependency_track_host: ${{ steps.config.outputs.dependency_track_host }} # e.g., api-dt.seliseblocks.com
       dependency_track_frontend_url: ${{ steps.config.outputs.dependency_track_frontend_url }} # e.g., sca.seliseblocks.com
       dotnet_version: ${{ steps.config.outputs.dotnet_version }}
       has_submodules: ${{ steps.config.outputs.has_submodules }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Load shared variables first (if enabled)
       - name: Load Shared Configuration
@@ -94,6 +95,7 @@ jobs:
           # From vars.env (if loaded) or fallback to defaults
           echo "client_dockerfile_path=${DOCKERFILE_CLIENT:-./Dockerfile}" >> $GITHUB_OUTPUT
           echo "worker_dockerfile_path=${DOCKERFILE_WORKER:-./Dockerfile.worker}" >> $GITHUB_OUTPUT
+          echo "mailboxsync_dockerfile_path=${DOCKERFILE_MAILBOXSYNC:-./Dockerfile.mailboxsync}" >> $GITHUB_OUTPUT
 
           # From vars.env (if loaded) or fallback to defaults
           echo "service_name=${SERVICE_NAME:-github.event.repository.name}" >> $GITHUB_OUTPUT
@@ -145,22 +147,11 @@ jobs:
           echo "- **SonarQube Enabled**: ${{ env.RUN_SONARQUBE }}" >> $GITHUB_STEP_SUMMARY
           echo "- **SCA Scan Enabled**: ${{ env.RUN_SCA_SCAN }}" >> $GITHUB_STEP_SUMMARY
 
-  # # Run tests and checks on PRs only (optional)
-  # pr-checks:
-  #     if: github.event_name == 'pull_request' && needs.initialization.outputs.run_tests == 'true'
-  #     needs: [initialization]
-  #     uses: SELISEdigitalplatforms/blocks-inventory/.github/workflows/test-dotnet.yml@main
-  #     with:
-  #         SERVICE_NAME: ${{ needs.initialization.outputs.service_name }}
-  #         LOAD_CUSTOM_VARS: ${{ needs.initialization.outputs.load_custom_vars == 'true' }}
-  #     secrets:
-  #         SELISE_GITHUB_PAT: ${{ secrets.SELISE_GITHUB_PAT }}
-
   # Run SonarQube analysis on both push and pull_request
   sonarqube:
     # if: github.event_name == 'pull_request' && needs.initialization.outputs.run_sonarqube == 'true'
     if: needs.initialization.outputs.run_sonarqube == 'true'
-    needs: [ initialization ]
+    needs: [initialization]
     uses: SELISEdigitalplatforms/blocks-inventory/.github/workflows/sonarqube-dotnet.yml@main
     with:
       SOLUTION_NAME: ${{ needs.initialization.outputs.solution_name }}
@@ -190,7 +181,7 @@ jobs:
   # ==============================================
   sca-scan-dotnet:
     if: needs.initialization.outputs.run_sca_scan == 'true'
-    needs: [ initialization ]
+    needs: [initialization]
     uses: SELISEdigitalplatforms/blocks-inventory/.github/workflows/sca-scan-dotnet.yml@main
     with:
       # Project Configuration
@@ -229,7 +220,7 @@ jobs:
   # Build and push image
   build-client:
     # needs: [initialization, sonarqube, sca-scan-dotnet]
-    needs: [ initialization, sonarqube ]
+    needs: [initialization, sonarqube]
     # if: ${{ github.event_name == 'push' && (success() || needs.sonarqube.result == 'skipped' ) && (success() || needs.sca-scan-dotnet.result == 'skipped' ) }}
     if: |
       github.event_name == 'push' &&
@@ -255,7 +246,7 @@ jobs:
 
   # Update GitOps repository
   update-gitops-client:
-    needs: [ initialization, build-client ]
+    needs: [initialization, build-client]
     if: |
       github.event_name == 'push' &&
       always() &&
@@ -279,7 +270,7 @@ jobs:
 
   # Build and push image
   build-worker:
-    needs: [ initialization, sonarqube ]
+    needs: [initialization, sonarqube]
     if: |
       github.event_name == 'push' &&
       always() &&
@@ -303,7 +294,7 @@ jobs:
 
   # Update GitOps repository
   update-gitops-worker:
-    needs: [ initialization, build-worker ]
+    needs: [initialization, build-worker]
     if: |
       github.event_name == 'push' &&
       always() &&
@@ -321,6 +312,49 @@ jobs:
       TAG_STRATEGY: ${{ needs.initialization.outputs.tag_strategy }}
       CLUSTER_NAME: ${{ needs.initialization.outputs.cluster_name }}
       # GITOPS_BRANCH: "main"
+    secrets:
+      SELISE_GITHUB_PAT: ${{ secrets.SELISE_GITHUB_PAT }}
+      DOCKERHUB_ORG: ${{ secrets.DOCKERHUB_ORG }}
+
+  build-mailboxsync:
+    needs: [initialization, sonarqube]
+    if: |
+      github.event_name == 'push' &&
+      always() &&
+      needs.initialization.result == 'success' &&
+      (needs.sonarqube.result == 'success' || needs.sonarqube.result == 'skipped')
+    uses: SELISEdigitalplatforms/blocks-inventory/.github/workflows/build-push.yml@main
+    with:
+      SERVICE_NAME: ${{ needs.initialization.outputs.service_name }}
+      SERVICE_TYPE: "mailboxsync"
+      ENVIRONMENT: ${{ needs.initialization.outputs.environment }}
+      TAG_STRATEGY: ${{ needs.initialization.outputs.tag_strategy }}
+      DOCKERFILE_PATH: ${{ needs.initialization.outputs.mailboxsync_dockerfile_path }}
+      BUILD_ARGS: |
+        BUILD_VERSION=${{ github.sha }}
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      DOCKERHUB_ORG: ${{ secrets.DOCKERHUB_ORG }}
+      SELISE_GITHUB_PAT: ${{ secrets.SELISE_GITHUB_PAT }}
+
+  update-gitops-mailboxsync:
+    needs: [initialization, build-mailboxsync]
+    if: |
+      github.event_name == 'push' &&
+      always() &&
+      needs.initialization.result == 'success' &&
+      needs.build-mailboxsync.result == 'success'
+    uses: SELISEdigitalplatforms/blocks-inventory/.github/workflows/update-gitops-central.yml@main
+    with:
+      SERVICE_NAME: ${{ needs.initialization.outputs.service_name }}
+      SERVICE_TYPE: "mailboxsync"
+      ENVIRONMENT: ${{ needs.initialization.outputs.environment }}
+      IMAGE_TAG: ${{ needs.build-mailboxsync.outputs.image_tag }}
+      COMMIT_TAG: ${{ needs.build-mailboxsync.outputs.commit_tag }}
+      SEMANTIC_TAG: ${{ needs.build-mailboxsync.outputs.semantic_tag }}
+      TAG_STRATEGY: ${{ needs.initialization.outputs.tag_strategy }}
+      CLUSTER_NAME: ${{ needs.initialization.outputs.cluster_name }}
     secrets:
       SELISE_GITHUB_PAT: ${{ secrets.SELISE_GITHUB_PAT }}
       DOCKERHUB_ORG: ${{ secrets.DOCKERHUB_ORG }}

@@ -1,0 +1,56 @@
+[Unit]
+Description=Blocks Functions runner (gVisor sandbox executor)
+After=network-online.target docker.service blocks-fn-firewall.service
+Wants=network-online.target
+Requires=docker.service
+# Without the firewall the egress policy is absent, so a sandbox would reach private space.
+# The runner must not run in that window.
+BindsTo=blocks-fn-firewall.service
+
+[Service]
+Type=notify
+NotifyAccess=main
+User=blocks-runner
+Group=blocks-runner
+# Driving the Docker Engine is the runner's job; membership is root-equivalent on this host
+# and is accepted deliberately (nothing else runs on the VM).
+SupplementaryGroups=docker
+
+WorkingDirectory=/opt/blocks-function-runner
+ExecStart=/opt/blocks-function-runner/Blocks.FunctionRunner
+EnvironmentFile=/etc/blocks-runner/runner.env
+
+Restart=always
+RestartSec=5
+TimeoutStopSec=90
+KillSignal=SIGTERM
+LimitNOFILE=65536
+
+# --- hardening -----------------------------------------------------------------
+# The runner is the trusted half, but it executes untrusted code next door, so it gets the
+# same treatment as any exposed service. It writes only its own state directory.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=false
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=false
+LockPersonality=true
+MemoryDenyWriteExecute=false
+ReadWritePaths=/var/lib/blocks-runner
+# The Engine socket is the runner's only channel to the host's container runtime.
+ReadOnlyPaths=/etc/blocks-runner
+
+# --- observability -------------------------------------------------------------
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=blocks-function-runner
+
+[Install]
+WantedBy=multi-user.target

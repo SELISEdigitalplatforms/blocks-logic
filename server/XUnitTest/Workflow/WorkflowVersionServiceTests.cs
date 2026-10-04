@@ -1,8 +1,8 @@
 using Blocks.Genesis;
-using DomainService.Workflow.Dtos;
-using DomainService.Workflow.Entities;
-using DomainService.Workflow.Repositories;
-using DomainService.Workflow.Services;
+using Workflow.DomainService.Dtos;
+using Workflow.DomainService.Entities;
+using Workflow.DomainService.Repositories;
+using Workflow.DomainService.Services;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;

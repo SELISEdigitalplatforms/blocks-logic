@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BlocksTemplate.Api.Controllers
 {
+    /// <summary>Notification-channel configuration, routed as <c>/api/Notification/{action}</c>.</summary>
     [ApiController]
     [Route("[controller]/[action]")]
     public class NotificationController
@@ -14,6 +15,7 @@ namespace BlocksTemplate.Api.Controllers
         private readonly IConfigurationService _configurationService;
 
 
+        /// <summary>Takes the configuration service.</summary>
         public NotificationController ( IConfigurationService configurationService
                                        )
             {
@@ -23,6 +25,7 @@ namespace BlocksTemplate.Api.Controllers
 
 
 
+        /// <summary><c>GET</c> — the tenant's notification configurations, filtered by the query string.</summary>
         [HttpGet]
         [Authorize]
         public async Task<GetNotificationConfigurationsResponse> Gets ( [FromQuery] GetNotificationConfigurationsRequest request )
@@ -30,6 +33,7 @@ namespace BlocksTemplate.Api.Controllers
         return await _configurationService.GetNotificationConfigurationsAsync(request);
         }
 
+        /// <summary><c>GET</c> — one notification configuration.</summary>
         [HttpGet]
         [Authorize]
         public async Task<NotificationConfiguration> Get ( [FromQuery] GetNotificationConfigurationRequest request )

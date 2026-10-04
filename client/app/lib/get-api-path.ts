@@ -1,10 +1,10 @@
-import { getRuntimeEnv } from "@seliseblocks/genesis-os";
+import { getLogicBaseUrl } from "@/lib/logic-base-url";
 
 export const getApiPath = (_servicePath: string): string => {
   return "/api";
 };
 
 export const getApiUrl = (_servicePath: string, endpoint: string): string => {
-  const baseUrl = getRuntimeEnv("BLOCKS_LOGIC_BASE_URL");
+  const baseUrl = getLogicBaseUrl();
   return `${baseUrl}/api/${endpoint}`;
 };

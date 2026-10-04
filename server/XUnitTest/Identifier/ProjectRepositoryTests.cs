@@ -11,9 +11,9 @@ using XUnitTest.TestHelpers;
 namespace XUnitTest.Identifier
 {
     /// <summary>
-    /// Unit tests for <see cref="ProjectRepository"/>. The tenant database is resolved once in the
-    /// constructor from the ambient <see cref="BlocksContext"/>, so the context is installed before the
-    /// repository is built. Mongo access is exercised through mocked collections and cursors.
+    /// Unit tests for <see cref="ProjectRepository"/>. The root database is resolved once in the
+    /// constructor from main configuration. Tenant context controls user filters per operation.
+    /// Mongo access is exercised through mocked collections and cursors.
     /// </summary>
     public class ProjectRepositoryTests : IDisposable
     {
@@ -22,11 +22,8 @@ namespace XUnitTest.Identifier
         private readonly Mock<IMongoDatabase> _clientDb = new();
 
         private readonly Mock<IMongoCollection<Tenant>> _clientTenants = new();
-        private readonly Mock<IMongoCollection<Tenant>> _providerTenants = new();
         private readonly Mock<IMongoCollection<Project>> _clientProjects = new();
-        private readonly Mock<IMongoCollection<Project>> _providerProjects = new();
         private readonly Mock<IMongoCollection<ProjectPeople>> _clientProjectPeoples = new();
-        private readonly Mock<IMongoCollection<ProjectPeople>> _providerProjectPeoples = new();
         private readonly Mock<IMongoCollection<BlocksGuid>> _blocksGuids = new();
 
         public ProjectRepositoryTests()
@@ -34,15 +31,13 @@ namespace XUnitTest.Identifier
             TestBlocksContext.Set();
             _blocksSecret.SetupGet(s => s.DatabaseConnectionString).Returns("mongodb://localhost");
 
-            _dbContextProvider.Setup(p => p.GetDatabase("tenant-123")).Returns(_clientDb.Object);
+            _blocksSecret.SetupGet(s => s.RootDatabaseName).Returns("BlocksRootDb");
+            _dbContextProvider.Setup(p => p.GetDatabase("mongodb://localhost", "BlocksRootDb", false)).Returns(_clientDb.Object);
             _clientDb.Setup(d => d.GetCollection<Tenant>(IdentifierConstants.TenantCollectionName, null)).Returns(_clientTenants.Object);
             _clientDb.Setup(d => d.GetCollection<Project>(IdentifierConstants.TenantCollectionName, null)).Returns(_clientProjects.Object);
             _clientDb.Setup(d => d.GetCollection<ProjectPeople>(IdentifierConstants.ProjectPeopleCollectionName, null)).Returns(_clientProjectPeoples.Object);
             _clientDb.Setup(d => d.GetCollection<BlocksGuid>("BlocksGuids", null)).Returns(_blocksGuids.Object);
 
-            _dbContextProvider.Setup(p => p.GetCollection<Tenant>(IdentifierConstants.TenantCollectionName)).Returns(_providerTenants.Object);
-            _dbContextProvider.Setup(p => p.GetCollection<Project>(IdentifierConstants.TenantCollectionName)).Returns(_providerProjects.Object);
-            _dbContextProvider.Setup(p => p.GetCollection<ProjectPeople>(IdentifierConstants.ProjectPeopleCollectionName)).Returns(_providerProjectPeoples.Object);
         }
 
         public void Dispose() => TestBlocksContext.Clear();
@@ -124,7 +119,7 @@ namespace XUnitTest.Identifier
         [Fact]
         public async Task GetProjectIdsByGroupId_ProjectsTenantIds()
         {
-            SetupProjection<Tenant, string>(_providerTenants, "DTENANT-1", "PTENANT-1");
+            SetupProjection<Tenant, string>(_clientTenants, "DTENANT-1", "PTENANT-1");
 
             var result = await CreateRepository().GetProjectIdsByGroupId("group-1");
 
@@ -138,8 +133,8 @@ namespace XUnitTest.Identifier
         [Fact]
         public async Task GetProjectPeoplesAsync_ReturnsProjectsForTheGroup()
         {
-            SetupFind(_providerProjectPeoples, new ProjectPeople { ItemId = "pp-1", TenantId = "DTENANT-1", UserId = "user-123" });
-            SetupFind(_providerProjects, new Project { TenantId = "DTENANT-1", TenantGroupId = "group-1" });
+            SetupFind(_clientProjectPeoples, new ProjectPeople { ItemId = "pp-1", TenantId = "DTENANT-1", UserId = "user-123" });
+            SetupFind(_clientProjects, new Project { TenantId = "DTENANT-1", TenantGroupId = "group-1" });
 
             var result = await CreateRepository().GetProjectPeoplesAsync("group-1");
 
@@ -149,10 +144,12 @@ namespace XUnitTest.Identifier
         [Fact]
         public async Task GetAllByLastModifiedDateAsync_GroupsOwnedAndSharedProjects()
         {
-            SetupFind(_clientProjects,
-                new Project { TenantId = "DTENANT-1", TenantGroupId = "group-1", CreatedBy = "user-123" });
+            _clientProjects.SetupSequence(c => c.FindAsync(It.IsAny<FilterDefinition<Project>>(),
+                    It.IsAny<FindOptions<Project, Project>>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(NewCursor(new List<Project> { new() { TenantId = "DTENANT-1", TenantGroupId = "group-1", CreatedBy = "user-123" } }))
+                .ReturnsAsync(NewCursor(new List<Project> { new() { TenantId = "STENANT-2", TenantGroupId = "group-2" } }))
+                .ReturnsAsync(NewCursor(new List<Project> { new() { TenantId = "PTENANT-3", TenantGroupId = "group-2" } }));
             SetupFind(_clientProjectPeoples, new ProjectPeople { ItemId = "pp-1", TenantId = "STENANT-2", UserId = "user-123" });
-            SetupFind(_providerProjects, new Project { TenantId = "PTENANT-3", TenantGroupId = "group-2" });
 
             var result = await CreateRepository().GetAllByLastModifiedDateAsync(new GetProjectsRequest { PageSize = 10 });
 
@@ -167,7 +164,7 @@ namespace XUnitTest.Identifier
         {
             SetupFind(_clientProjects);
             SetupFind(_clientProjectPeoples);
-            SetupFind(_providerProjects);
+            SetupFind(_clientProjects);
 
             var result = await CreateRepository().GetAllByLastModifiedDateAsync(
                 new GetProjectsRequest { TenantGroupId = "group-1", PageSize = 10 });

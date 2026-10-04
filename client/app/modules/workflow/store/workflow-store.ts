@@ -446,35 +446,50 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
 
   // Selection operations
   selectNode: (node: EditorNode | null) => {
-    const { nodesMap } = get();
+    const { nodesMap, selectedNode } = get();
+    const nextSelectedNodeId = node?.id;
     const updatedNodesMap = { ...nodesMap };
-    
-    Object.keys(updatedNodesMap).forEach((id) => {
-      updatedNodesMap[id] = {
-        ...updatedNodesMap[id],
-        selected: node ? id === node.id : false,
-      };
-    });
+    let nodesChanged = false;
+
+    for (const [id, currentNode] of Object.entries(nodesMap)) {
+      const shouldSelect = nextSelectedNodeId ? id === nextSelectedNodeId : false;
+      if (currentNode.selected !== shouldSelect) {
+        updatedNodesMap[id] = {
+          ...currentNode,
+          selected: shouldSelect,
+        };
+        nodesChanged = true;
+      }
+    }
+
+    const nextSelectedNode = nextSelectedNodeId ? (updatedNodesMap[nextSelectedNodeId] || node) : null;
+    if (!nodesChanged && selectedNode === nextSelectedNode) return;
 
     set({
-      nodesMap: updatedNodesMap,
-      selectedNode: node ? (updatedNodesMap[node.id] || node) : null,
+      nodesMap: nodesChanged ? updatedNodesMap : nodesMap,
+      selectedNode: nextSelectedNode,
     });
   },
 
   deselectNode: () => {
     const { nodesMap } = get();
     const updatedNodesMap = { ...nodesMap };
-    
-    Object.keys(updatedNodesMap).forEach((id) => {
-      updatedNodesMap[id] = {
-        ...updatedNodesMap[id],
-        selected: false,
-      };
-    });
+    let nodesChanged = false;
+
+    for (const [id, currentNode] of Object.entries(nodesMap)) {
+      if (currentNode.selected) {
+        updatedNodesMap[id] = {
+          ...currentNode,
+          selected: false,
+        };
+        nodesChanged = true;
+      }
+    }
+
+    if (!nodesChanged && !get().selectedNode) return;
 
     set({
-      nodesMap: updatedNodesMap,
+      nodesMap: nodesChanged ? updatedNodesMap : nodesMap,
       selectedNode: null,
     });
   },

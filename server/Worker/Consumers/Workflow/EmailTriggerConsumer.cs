@@ -1,13 +1,11 @@
 using Blocks.Genesis;
-using DomainService.Workflow.Events;
-using DomainService.Workflow.Services;
-
+using Mail.DomainService.Mails;
+using Workflow.DomainService.Services;
 
 namespace Worker.Consumers.Workflow
 {
     public class EmailTriggerConsumer : IConsumer<EmailTriggerEvent>
     {
-
         private readonly IWorkflowExecutionService _workflowExecutionService;
 
         public EmailTriggerConsumer(IWorkflowExecutionService workflowExecutionService)

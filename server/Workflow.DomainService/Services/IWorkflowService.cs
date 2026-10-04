@@ -1,0 +1,32 @@
+using Blocks.Genesis;
+using Workflow.DomainService.Dtos;
+
+namespace Workflow.DomainService.Services
+{
+    public interface IWorkflowService
+    {
+        Task<BaseMutationResponse> CreateAsync(string tenantId, WorkflowCreateRequestDto dto);
+
+        Task<BaseMutationResponse> DuplicateAsync(string tenantId, WorkflowDuplicateRequestDto dto);
+
+        Task<WorkflowGetsResponseDto> GetAllAsync(string tenantId, WorkflowGetsRequestDto dto);
+
+        Task<WorkflowGetResponseDto> GetAsync(string tenantId, WorkflowGetRequestDto dto);
+
+        Task<BaseMutationResponse> UpdateAsync(string tenantId, WorkflowUpdateRequestDto dto);
+
+        Task<BaseMutationResponse> DeleteAsync(string tenantId, WorkflowDeleteRequestDto dto);
+
+        Task<GetWorkflowByVersionResponseDto> GetWorkflowByVersionAsync(string tenantId, GetWorkflowByVersionRequestDto dto);
+
+        Task<BaseMutationResponse> PublishNewVersionAsync(string tenantId, WorkflowPublishNewVersionRequestDto dto);
+
+        Task<BaseMutationResponse> PublishVersionAsync(string tenantId, WorkflowPublishVersionRequestDto dto);
+
+        Task<BaseMutationResponse> UnpublishAsync(string tenantId, WorkflowUnpublishRequestDto dto);
+
+        Task<BaseMutationResponse> RestoreAsync(string tenantId, WorkflowRestoreRequestDto dto);
+
+        Task<BaseMutationResponse> TriggerListenerAsync(string tenantId, TriggerListenerRequestDto dto);
+    }
+}

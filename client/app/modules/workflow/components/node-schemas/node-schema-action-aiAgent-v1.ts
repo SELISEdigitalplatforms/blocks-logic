@@ -1,8 +1,10 @@
 import { API_BASES } from "@/constants/endpoint.constant";
 import { agentService } from "@/modules/workflow/services/agent.service";
+import { NodeGuideActionAiAgentV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
 
 export const NodeSchemaActionAiAgentV1: NodeSchemaDefinition = {
+  guide: NodeGuideActionAiAgentV1,
   schema: {
     type: "agent",
     category: "action",
@@ -21,12 +23,11 @@ export const NodeSchemaActionAiAgentV1: NodeSchemaDefinition = {
               .getAgents({
                 limit: 100,
                 offset: 0,
-                project_key: config.projectKey,
               })
               .then((res) =>
                 resolve(
                   res.agents.map((agent) => ({
-                    value: `${agent.id}_${agent.widget_id}_${config.projectKey}`,
+                    value: `${agent.id}_${agent.widget_id}_${config.tenantId}`,
                     label: agent.name,
                   })),
                 ),
@@ -35,12 +36,11 @@ export const NodeSchemaActionAiAgentV1: NodeSchemaDefinition = {
           });
         },
         onChange: (value: unknown) => {
-          const [AgentId, WidgetId, ProjectKey] = (value as string).split("_");
+          const [AgentId, WidgetId] = (value as string).split("_");
           return {
             agent: value,
             AgentId,
             WidgetId,
-            ProjectKey,
           };
         },
       },
@@ -60,7 +60,6 @@ export const NodeSchemaActionAiAgentV1: NodeSchemaDefinition = {
     parameters: {
       AgentId: "",
       WidgetId: "",
-      ProjectKey: "",
       input: "",
       ApiBaseUrl: "",
     },

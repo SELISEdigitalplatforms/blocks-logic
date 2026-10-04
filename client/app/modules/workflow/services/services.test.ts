@@ -72,15 +72,47 @@ describe("workflowService", () => {
 
   it("reads executions and a single execution", async () => {
     await workflowService.getWorkflowExecutions({ workflowId: "w1" } as never);
-    expect(http.logicService.get).toHaveBeenCalledWith(
-      expect.stringContaining("WorkflowId=w1"),
-    );
+    const legacyUrl = http.logicService.get.mock.calls.at(-1)?.[0] as string;
+    expect(legacyUrl).toContain("WorkflowId=w1");
+    expect(legacyUrl).not.toContain("PageSize");
     await workflowService.getWorkflowExecutionById({
       executionId: "e1",
     } as never);
     expect(http.logicService.get).toHaveBeenCalledWith(
       expect.stringContaining("ExecutionId=e1"),
     );
+  });
+
+  it("reads an execution's logs", async () => {
+    await workflowService.getWorkflowExecutionLogs({ executionId: "e 1" });
+    expect(http.logicService.get).toHaveBeenCalledWith(
+      expect.stringMatching(/\/Workflow\/GetExecutionLogs\?ExecutionId=e\+1$/),
+    );
+  });
+
+  it("sends paging cursors only when they are set", async () => {
+    await workflowService.getWorkflowExecutions({
+      workflowId: "w1",
+      pageSize: 20,
+      beforeId: "old",
+    });
+    const olderUrl = http.logicService.get.mock.calls.at(-1)?.[0] as string;
+    expect(olderUrl).toContain("WorkflowId=w1");
+    expect(olderUrl).toContain("PageSize=20");
+    expect(olderUrl).toContain("BeforeId=old");
+    expect(olderUrl).not.toContain("AfterId");
+
+    await workflowService.getWorkflowExecutions({
+      workflowId: "w1",
+      pageSize: 20,
+      afterId: "head",
+      refreshIds: ["a", "b"],
+    });
+    const newerUrl = http.logicService.get.mock.calls.at(-1)?.[0] as string;
+    expect(newerUrl).toContain("AfterId=head");
+    expect(newerUrl).toContain("RefreshIds=a");
+    expect(newerUrl).toContain("RefreshIds=b");
+    expect(newerUrl).not.toContain("BeforeId");
   });
 
   it("covers version, publish, restore and listener endpoints", async () => {
@@ -110,18 +142,29 @@ describe("workflowService", () => {
 
 describe("emailService", () => {
   it("fetches inbound-capable email configs with paging", async () => {
-    await emailService.fetchEmailConfigs("pk", 0, 50);
+    http.logicService.get.mockResolvedValue([
+      { itemId: "m1", name: "Inbox", isInbound: true, isDefault: true, provider: 0 },
+    ]);
+    const result = await emailService.fetchEmailConfigs(0, 50);
     expect(http.logicService.get).toHaveBeenCalledWith(
       expect.stringContaining("pageNumber=1"),
       undefined,
       { absoluteUrl: true },
     );
+    expect(result).toEqual([
+      { itemId: "m1", name: "Inbox", isInbound: true, isDefault: true, provider: 0 },
+    ]);
+  });
+
+  it("returns an empty list when Mail/Gets is not an array", async () => {
+    http.logicService.get.mockResolvedValue(null);
+    await expect(emailService.fetchEmailConfigs(0, 50)).resolves.toEqual([]);
   });
 
   it("fetches email templates", async () => {
-    await emailService.fetchEmailTemplates(0, 10, "pk", "", "Name", false, "", "");
+    await emailService.fetchEmailTemplates(0, 10, "", "Name", false, "", "");
     expect(http.logicService.get).toHaveBeenCalledWith(
-      expect.stringContaining("projectKey=pk"),
+      expect.stringContaining("pageSize=10"),
       undefined,
       { absoluteUrl: true },
     );
@@ -133,7 +176,6 @@ describe("agentService", () => {
     await agentService.getAgents({
       limit: 10,
       offset: 0,
-      project_key: "pk",
     });
     expect(http.agentsService.post).toHaveBeenCalled();
   });
@@ -142,7 +184,6 @@ describe("agentService", () => {
 describe("dataService", () => {
   it("gets the schema list", async () => {
     await dataService.getSchemaList({
-      projectKey: "pk",
       pageNo: 1,
       pageSize: 20,
       sortDescending: true,
@@ -151,14 +192,14 @@ describe("dataService", () => {
       schemaType: "",
     });
     expect(http.dataService.get).toHaveBeenCalledWith(
-      expect.stringContaining("ProjectKey=pk"),
+      expect.stringContaining("PageSize=20"),
       undefined,
       { absoluteUrl: true },
     );
   });
 
   it("gets schema details", async () => {
-    await dataService.getSchemaDetails("id1", "pk");
+    await dataService.getSchemaDetails("id1");
     expect(http.dataService.get).toHaveBeenCalledWith(
       expect.stringContaining("id=id1"),
       undefined,
@@ -169,9 +210,9 @@ describe("dataService", () => {
 
 describe("languageManagerService", () => {
   it("fetches languages for a project", async () => {
-    await languageManagerService.fetchBlocksLanguages("pk");
+    await languageManagerService.fetchBlocksLanguages();
     expect(http.logicService.get).toHaveBeenCalledWith(
-      expect.stringContaining("projectKey=pk"),
+      expect.stringContaining("/Gets"),
       undefined,
       { absoluteUrl: true },
     );
@@ -180,9 +221,9 @@ describe("languageManagerService", () => {
 
 describe("authClientService", () => {
   it("gets client credentials for a project", async () => {
-    await authClientService.clients.getClientCredentials({ projectKey: "pk" });
+    await authClientService.clients.getClientCredentials();
     expect(http.iamService.get).toHaveBeenCalledWith(
-      expect.stringContaining("ProjectKey=pk"),
+      expect.stringContaining("client-credentials"),
       undefined,
       { absoluteUrl: true },
     );
@@ -199,31 +240,32 @@ describe("iamService", () => {
     );
   });
 
-  it("lists roles via POST with body containing organizationId", async () => {
-    await iamService.getRoles({ organizationId: "default", search: "adm" });
+  // getRoles/getPermissions take no filter arguments: the webhook RBAC picker loads the full
+  // first page and filters client-side, so the request body is a fixed paging + sort envelope.
+  it("lists roles via POST against the absolute IAM base url", async () => {
+    await iamService.getRoles();
     expect(http.iamService.post).toHaveBeenCalledWith(
       expect.stringContaining("/api/iam/roles"),
       expect.objectContaining({
-        organizationId: "default",
-        filter: { search: "adm" },
+        page: 0,
+        pageSize: 100,
+        filter: { search: "" },
+        sort: { property: "Name", isDescending: false },
       }),
       undefined,
       { absoluteUrl: true },
     );
   });
 
-  it("lists permissions via POST with projectKey and roles", async () => {
-    await iamService.getPermissions({
-      projectKey: "pk1",
-      roles: ["cloudadmin"],
-      search: "user",
-    });
+  it("lists permissions via POST, honouring caller paging but not filtering", async () => {
+    await iamService.getPermissions({ pageSize: 200 });
     expect(http.iamService.post).toHaveBeenCalledWith(
       expect.stringContaining("/api/iam/permissions"),
       expect.objectContaining({
-        projectKey: "pk1",
-        roles: ["cloudadmin"],
-        filter: expect.objectContaining({ search: "user" }),
+        page: 0,
+        pageSize: 200,
+        filter: { search: "", isBuiltIn: "", resourceGroup: "" },
+        sort: { property: "Name", isDescending: false },
       }),
       undefined,
       { absoluteUrl: true },

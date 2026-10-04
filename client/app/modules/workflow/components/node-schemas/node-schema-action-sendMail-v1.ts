@@ -1,4 +1,5 @@
 import { languageManagerService } from "@blocks-workflow/services/language.manager.service";
+import { NodeGuideActionSendMailV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
 import { emailService } from "@blocks-workflow/services/email.services";
 import { IEmailTemplate } from "../../models/email";
@@ -7,16 +8,16 @@ import { extractTemplateBodyKeys } from "../../utils/extract-template-keys";
 // ── Shared template cache ──────────────────────────────────────────────
 // Both the template select `options` and the body-map `fixedKeys` resolve
 // from the same cached promise so only ONE API call is made per project.
-let _cachedProjectKey = "";
+let _cachedTenantId = "";
 let _cachedPromise: Promise<IEmailTemplate[]> | null = null;
 
-function getTemplates(projectKey: string): Promise<IEmailTemplate[]> {
-  if (_cachedProjectKey === projectKey && _cachedPromise) {
+function getTemplates(tenantId: string): Promise<IEmailTemplate[]> {
+  if (_cachedTenantId === tenantId && _cachedPromise) {
     return _cachedPromise;
   }
-  _cachedProjectKey = projectKey;
+  _cachedTenantId = tenantId;
   _cachedPromise = emailService
-    .fetchEmailTemplates(0, 100, projectKey, "", "Name", false, "", "")
+    .fetchEmailTemplates(0, 100, "", "Name", false, "", "")
     .then((res) => res.templates);
   return _cachedPromise;
 }
@@ -24,17 +25,16 @@ function getTemplates(projectKey: string): Promise<IEmailTemplate[]> {
 function findTemplate(
   templates: IEmailTemplate[],
   emailTemplate: string,
-  projectKey: string,
 ): IEmailTemplate | undefined {
   return templates.find((t) => {
-    const compositeValue = `${t.name || ""}_${projectKey}`;
-    return compositeValue === emailTemplate;
+    return (t.name || "") === emailTemplate.split("_")[0];
   });
 }
 
 // ── Schema ─────────────────────────────────────────────────────────────
 
 export const NodeSchemaActionSendMailV1: NodeSchemaDefinition = {
+  guide: NodeGuideActionSendMailV1,
   schema: {
     type: "sendMail",
     category: "action",
@@ -48,20 +48,19 @@ export const NodeSchemaActionSendMailV1: NodeSchemaDefinition = {
         key: "EmailTemplate",
         required: true,
         options: (_data, config) => {
-          return getTemplates(config.projectKey).then((templates) => {
+          return getTemplates(config.tenantId).then((templates) => {
             if (!templates.length) return [];
             return templates.map((t) => ({
               label: t.name || "",
-              value: `${t.name}_${config.projectKey}`,
+              value: `${t.name}_${config.tenantId}`,
             }));
           });
         },
         onChange(value) {
-          const [Template, ProjectKey] = (value as string).split("_");
+          const [Template] = (value as string).split("_");
           return {
             EmailTemplate: value,
             Template,
-            ProjectKey,
           };
         },
       },
@@ -75,7 +74,7 @@ export const NodeSchemaActionSendMailV1: NodeSchemaDefinition = {
         options: (_data, config) => {
           return new Promise((resolve, reject) => {
             languageManagerService
-              .fetchBlocksLanguages(config.projectKey)
+              .fetchBlocksLanguages()
               .then((res) => {
                 if (!res.length) return resolve([]);
                 resolve(
@@ -111,11 +110,21 @@ export const NodeSchemaActionSendMailV1: NodeSchemaDefinition = {
           if (!emailTemplate || typeof emailTemplate !== "string") {
             return Promise.resolve([]);
           }
-          return getTemplates(config.projectKey).then((templates) => {
-            const selected = findTemplate(templates, emailTemplate, config.projectKey);
-            return extractTemplateBodyKeys(selected?.templateBody);
-          });
-        },
+          return getTemplates(config.tenantId).then((templates) => {
+            const selected = findTemplate(templates, emailTemplate);
+          return extractTemplateBodyKeys(selected?.templateBody);
+        });
+      },
+    },
+      {
+        id: "attachments",
+        type: "expression-list",
+        label: "Attachments",
+        info: 'Storage File IDs to attach. Use a literal File ID, or an expression such as {{$json.output.fileId}} or {{$node["NodeName"].json.output.fileId}} to resolve it per run.',
+        key: "Attachments",
+        required: false,
+        placeholder: "File ID or {{ expression }}",
+        addButtonText: "Add attachment",
       },
     ],
     settings: [],
@@ -124,10 +133,10 @@ export const NodeSchemaActionSendMailV1: NodeSchemaDefinition = {
     parameters: {
       EmailTemplate: "",
       Template: "",
-      ProjectKey: "",
       Language: "",
       To: "",
       BodyDataContext: {},
+      Attachments: [],
     },
     settings: {},
   },

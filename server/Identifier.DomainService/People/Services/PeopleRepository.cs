@@ -99,9 +99,9 @@ namespace DomainService.People
             return (peoples.ToList(), totalCount, peoplesTotalCount.Count, isOwner);
         }
 
-        private async Task<bool> IsOwner(string userId, List<string> projectKeys)
+        private async Task<bool> IsOwner(string userId, List<string> tenantIds)
         {
-            var filter = Builders<ProjectPeople>.Filter.Eq(x => x.UserId, userId) & Builders<ProjectPeople>.Filter.In(x => x.TenantId, projectKeys)
+            var filter = Builders<ProjectPeople>.Filter.Eq(x => x.UserId, userId) & Builders<ProjectPeople>.Filter.In(x => x.TenantId, tenantIds)
                 & Builders<ProjectPeople>.Filter.Eq(x => x.IsCreator, true);
 
             var result = await _dbContextProvider.GetCollection<ProjectPeople>(_peopleCollectionName).CountDocumentsAsync(filter);

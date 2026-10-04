@@ -6,6 +6,7 @@
     <PackageReference Include="JUnitLogger" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="Moq" />
+    <PackageReference Include="SeliseBlocks.Genesis.OS" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
   </ItemGroup>
@@ -15,9 +16,14 @@
 
   <ItemGroup>
 	<ProjectReference Include="..\Api\Api.csproj" />
-	<ProjectReference Include="..\Iam.DomainService\Iam.DomainService.csproj" />
-	<ProjectReference Include="..\Mfa.DomainService\Mfa.DomainService.csproj" />
+	<ProjectReference Include="..\Proxy.DomainService\Proxy.DomainService.csproj" />
+	<ProjectReference Include="..\MailBoxSyncService\MailBoxSyncService.csproj" />
 	<ProjectReference Include="..\Worker\Worker.csproj" />
+	<ProjectReference Include="..\Functions.DomainService\Functions.DomainService.csproj" />
+	<!-- The runner's protocol constants, so the ceiling-parity test can compare the two halves
+	     directly instead of against copied literals. Contracts has no package references of its
+	     own, so this pulls nothing from the sandbox tree's separate package versions. -->
+	<ProjectReference Include="..\..\sandbox\src\Blocks.FunctionRunner.Contracts\Blocks.FunctionRunner.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,7 +1,8 @@
-# Blocks Logic; End-to-End Tests (Playwright)
+# Blocks Logic — End-to-End Tests (Playwright)
 
-E2E tests that drive the real app through the browser, including the dev-iam
-login redirect flow.
+Follows the shared Blocks product e2e template
+(`e2e-spec/SPEC-blocks-e2e-suite-template.md`),
+same shape as `blocks-data/e2e`.
 
 ## One-time setup
 
@@ -32,88 +33,94 @@ or directly:
 
 ```bash
 cd e2e
-npm test
+npm test              # logic-setup + feature specs + logic-teardown
+npm run test:features # ordered subset from features.mjs
 ```
 
 ### Against remote dev (default)
-
-The shipped `.env.e2e.example` targets the deployed dev host and sets
-`E2E_NO_WEBSERVER=1`, so nothing is built or started locally:
 
 ```
 E2E_BASE_URL=https://dev-logic.blocksdevelopers.com
 E2E_NO_WEBSERVER=1
 ```
 
-`global-setup.ts` prints this warning on that path; it is expected and
-harmless, because the remote host already serves its own correct base URL:
+Reuse an existing project (recommended when console slots are limited):
 
 ```
-[e2e] index.html not found ... — skipping BLOCKS_LOGIC_BASE_URL patch.
+E2E_REUSE_PROJECT_NAME=test
+# or
+E2E_PROJECT_ID=effa326b-8188-4aad-85e3-6e9a4d890c09
 ```
 
 ### Against a local build
-
-Build the FE into `server/Api/wwwroot` and let Playwright start the API on
-`API_PORT` (**5000**, see `run.sh`):
 
 ```
 E2E_BASE_URL=https://dev-logic.blocksdevelopers.com:5000
 # E2E_NO_WEBSERVER left unset / not 1
 ```
 
-This needs a hosts entry pointing the domain at your machine:
+Hosts entry:
 
 ```
 127.0.0.1 dev-logic.blocksdevelopers.com
 ```
 
-HTTPS on that port is opt-in and comes from the machine env vars **`LOGIC_SSL_CERT`**
-and **`LOGIC_SSL_KEY`** (`run.sh` → `configure_backend_tls`). Both must be set and
-both files must exist, otherwise the API falls back to plain HTTP on the same
-port and `E2E_BASE_URL` must use `http://`.
-
-Auto-start runs `bash run.sh -b`, so **Git Bash's `bash` must be on PATH**. To
-manage the server yourself, set `E2E_NO_WEBSERVER=1`.
-
 ### Other run modes
+
 ```bash
-npm run test:headed   # watch it in a real browser
-npm run test:ui       # Playwright UI mode
-npm run report        # open the last HTML report
+npm run test:headed
+npm run test:ui
+npm run report
+E2E_FEATURES=create npm run test:features
 ```
 
 ## Knobs in `.env.e2e`
 
 | Variable | Effect |
 |---|---|
-| `E2E_BASE_URL` | Host under test. No default; a missing value fails loudly. |
-| `E2E_USERNAME` / `E2E_PASSWORD` | Dev-IAM test account (captcha is disabled on dev). |
-| `E2E_NO_WEBSERVER=1` | Don't auto-start the app; you manage the server (required for remote dev). |
-| `E2E_PAUSE_MS` | How long the browser holds after **each** test. Defaults to **10 s in headed mode**, 0 when headless; `0` disables. |
-| `E2E_SLOWMO` | Milliseconds of delay per action, to watch the steps themselves. |
-| `E2E_HOLD_MS` | Extra hold at the end of the login spec only. |
+| `E2E_BASE_URL` | Blocks **Logic** host. Dev: `https://dev-logic.blocksdevelopers.com`. Prod: `https://logic.seliseblocks.com`. |
+| `E2E_OS_BASE_URL` | Blocks **OS** (optional). Derived: `dev-logic`→`dev-os`, `logic.`→`os.`. |
+| `E2E_USERNAME` / `E2E_PASSWORD` | OIDC test account. |
+| `PROJECT_NAME` | Optional create prefix (`${PROJECT_NAME} ${Date.now()}`). |
+| `E2E_REUSE_PROJECT_NAME` | Reuse named project instead of creating. |
+| `E2E_PROJECT_ID` | Open project by UUID — skips console card search. |
+| `E2E_KEEP_PROJECT=1` | Never delete shared project after run. |
+| `E2E_NO_WEBSERVER=1` | Don't auto-start the app (required for remote host). |
+| `E2E_FEATURES` | Comma-separated feature ids or `all` for `test:features`. |
+| `E2E_PAUSE_MS` | Hold browser after each test (headed debugging). |
+| `E2E_SLOWMO` | Slow motion ms per Playwright action. |
 
-## Discovering / updating selectors
+## Lifecycle
 
-The username/password fields live on the dev-iam page. To capture or verify
-selectors against the live page:
+Playwright projects: **`logic-setup` → `logic` → `logic-teardown`**
 
-```bash
-npm run codegen -- <E2E_BASE_URL>/login
-```
+1. **Suite setup** (`tests/suite/suite.setup.spec.ts`) — OIDC login, reuse or create one shared project, write `logic-project.json`, then save `logic-session.json` **after** the dashboard is open (so localStorage keeps project/env). Does **not** open Workflow.
+2. **Features** (`tests/workflow/*.spec.ts`, …) — use session; direct `goto` to `/app/{itemId}/dashboard`, then feature area via helpers (`openWorkflowList` seeds Workflow if empty). Failures keep the project.
+3. **Session / context recovery** — login gate or console bounce → re-auth if needed, one env-chip open to reseed localStorage, persist session (never create a new project).
+4. **Suite teardown** (`tests/suite/suite.teardown.spec.ts`) — delete project on **Blocks OS** only when every `logic` test passed (unless `E2E_KEEP_PROJECT=1`).
 
 ## Layout
 
 ```
 e2e/
-  tests/auth/login.spec.ts   # login through dev-iam -> /app/console
-  support/test-base.ts       # shared `test` with the post-test pause
-  fixtures/                  # auth storage state (gitignored)
-  playwright.config.ts       # baseURL + creds from .env.e2e
-  global-setup.ts            # local-build index.html base-URL patch
+  features.mjs / run-e2e.mjs      # optional ordered feature runner
+  tests/
+    auth/login.spec.ts            # standalone auth smoke (project "setup")
+    suite/
+      suite.setup.spec.ts         # login + shared project
+      suite.teardown.spec.ts      # OS delete when suite passed
+    workflow/*.spec.ts            # feature specs only
+  support/
+    env.ts                        # Logic URL + OS derivation
+    login-helper.ts
+    create-and-delete-project.ts
+    logic-project.ts              # logic-session / logic-project fixtures
+    suite-helpers.ts              # openSharedProjectDashboard
+    run-outcome.ts                # markSuiteTestFailed
+    test-base.ts                  # pause + mark failures for project "logic"
+    workflow-helpers.ts           # feature-only
+  fixtures/                       # gitignored
+  SPEC-multi-env.md
 ```
 
-The login spec saves its session to `fixtures/auth.json`; the `chromium`
-project reuses it, so any spec added outside `tests/auth/` starts already
-logged in.
+To stand up another Blocks product e2e, copy this layout and rename the product slug (`logic` → `{product}`) — see the template SPEC.

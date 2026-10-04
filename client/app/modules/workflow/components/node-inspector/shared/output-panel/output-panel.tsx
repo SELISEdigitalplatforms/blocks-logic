@@ -4,7 +4,7 @@ import { useWorkflowStore } from "@blocks-workflow/store";
 import { copyToClipboard } from "@blocks-workflow/utils/copy-to-clipboard";
 import { useCallback, useMemo, useState } from "react";
 import { inferSchemaFromRuntimeRows } from "@blocks-workflow/utils/runtime-node-data";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, Copy } from "lucide-react";
 import { useWorkflow } from "@blocks-workflow/hooks/use-workflow";
 import { Button } from "@/components/ui-kits/button/button";
 import { Textarea } from "@/components/ui-kits/textarea/textarea";
@@ -330,10 +330,25 @@ function RuntimeJson({ rows }: { rows: unknown[] }) {
     return <p className="p-3 text-xs text-low-emphasis">No runtime output data available.</p>;
   }
 
+  const json = JSON.stringify(rows, null, 2);
+
   return (
-    <pre className="p-3 text-xs leading-relaxed text-high-emphasis">
-      <code>{JSON.stringify(rows, null, 2)}</code>
-    </pre>
+    <div className="relative">
+      <Button
+        type="button"
+        variant="ghost"
+        size="xxs"
+        className="absolute right-2 top-2 h-7 px-2 text-low-emphasis"
+        aria-label="Copy output JSON"
+        title="Copy output JSON"
+        onClick={() => void copyToClipboard(json)}
+      >
+        <Copy className="h-4 w-4" />
+      </Button>
+      <pre className="p-3 pr-12 text-xs leading-relaxed text-high-emphasis">
+        <code>{json}</code>
+      </pre>
+    </div>
   );
 }
 

@@ -8,5 +8,4 @@ export type ILanguageConfig = {
 export interface IImportFile {
   messageCoRelationId: string;
   fileId: string;
-  projectKey: string;
 }

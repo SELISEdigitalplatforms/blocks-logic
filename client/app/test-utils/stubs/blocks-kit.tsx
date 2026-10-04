@@ -18,7 +18,18 @@ export type RuntimeKey = string;
  */
 export const getRuntimeEnv = (_key?: RuntimeKey): string => "";
 
-type HttpClientOptions = { baseURL?: string; blocksKey?: string };
+/**
+ * Mirrors the SDK helper: a project carrying its own custom domain resolves to that app's
+ * `blocksapi.` host; anything else falls back to the shared public host, which is unset here.
+ */
+export const getProjectBlocksApiUrl = (project?: { customDomain?: string | null } | null): string =>
+  project?.customDomain ? `blocksapi.${project.customDomain}` : "";
+
+type HttpClientOptions = {
+  baseURL?: string;
+  blocksKey?: string;
+  onError?: (...args: unknown[]) => unknown;
+};
 
 /**
  * Minimal HttpClient stand-in. Service tests mock `@/lib/http-client` or the
@@ -67,6 +78,14 @@ export class HttpError extends Error {
 // Returns a path scoper; the identity keeps navigation targets predictable.
 export const useScopedPath = () => (path: string) => path;
 
+// Cross-app redirect prefetch stand-in. Reports "ready" with a no-op redirect so
+// components that gate a button on `isReady` render it enabled in tests.
+export const usePrefetchRedirect = (_options?: unknown) => ({
+  isFetching: false,
+  isReady: true,
+  redirect: () => {},
+});
+
 // Theme hook stand-in.
 export const useTheme = () => ({
   theme: "light",
@@ -104,3 +123,15 @@ const passthrough = (label: string) => {
 
 // Layout component rendered as a transparent passthrough.
 export const BlocksAppLayout = passthrough("BlocksAppLayout");
+export const RollbarProvider = passthrough("RollbarProvider");
+
+export const getRollbar = (_options?: { service?: string }) => ({});
+
+export const createHttpFailureReporter =
+  (_rollbar?: unknown) =>
+  (..._args: unknown[]) => {};
+
+export const attachQueryErrorReporting = (
+  _queryClient?: unknown,
+  _rollbar?: unknown,
+) => {};

@@ -7,6 +7,15 @@ namespace CloudConfiguration.DomainService.Storage.Validators
 {
     public class StorageConfigurationValidator : AbstractValidator<SaveStorageConfigurationRequest>
     {
+        /// <summary>Lower bound for a configured upload/download URL expiry, in seconds.</summary>
+        private const int MinExpirySeconds = 1;
+
+        /// <summary>Upper bound for a configured upload/download URL expiry (7 days), so a signed URL cannot be made effectively permanent.</summary>
+        private const int MaxExpirySeconds = 604_800;
+
+        /// <summary>The only access modifiers <c>UploadCompletionRequiredFor</c> may name, matching blocks-data's <c>AccessModifierValidation</c>.</summary>
+        private static readonly string[] AllowedUploadCompletionAccessModifiers = { "Public", "Private" };
+
         private readonly IConfigurationRepository _configurationRepository;
 
         public StorageConfigurationValidator(IConfigurationRepository configurationRepository)
@@ -47,6 +56,27 @@ namespace CloudConfiguration.DomainService.Storage.Validators
                 .WithMessage("StorageStrategy must not be empty.")
                 .Must(strategy => strategy == "Azure" || strategy == "AWS" || strategy == "SftpStorage" || strategy == "S3Compatible")
                 .WithMessage("StorageStrategy must be one of the following values: 'Azure', 'AWS', 'SftpStorage', 'S3Compatible'.");
+
+            // Validate Phase 1 upload-security fields
+            RuleFor(config => config.UploadUrlExpirySeconds)
+                .InclusiveBetween(MinExpirySeconds, MaxExpirySeconds)
+                .WithMessage($"UploadUrlExpirySeconds must be between {MinExpirySeconds} and {MaxExpirySeconds} seconds.")
+                .When(config => config.UploadUrlExpirySeconds.HasValue);
+
+            RuleFor(config => config.DownloadUrlExpirySeconds)
+                .InclusiveBetween(MinExpirySeconds, MaxExpirySeconds)
+                .WithMessage($"DownloadUrlExpirySeconds must be between {MinExpirySeconds} and {MaxExpirySeconds} seconds.")
+                .When(config => config.DownloadUrlExpirySeconds.HasValue);
+
+            RuleFor(config => config.MaxFileSizeInBytes)
+                .GreaterThan(0)
+                .WithMessage("MaxFileSizeInBytes must be a positive value.")
+                .When(config => config.MaxFileSizeInBytes.HasValue);
+
+            RuleFor(config => config.UploadCompletionRequiredFor)
+                .Must(HaveOnlyAllowedAndUniqueAccessModifiers)
+                .WithMessage($"UploadCompletionRequiredFor may only contain unique values from: {string.Join(", ", AllowedUploadCompletionAccessModifiers)}.")
+                .When(config => config.UploadCompletionRequiredFor != null);
 
             When(config => config.StorageStrategy == "SftpStorage", () =>
             {
@@ -115,6 +145,30 @@ namespace CloudConfiguration.DomainService.Storage.Validators
                 .NotNull()
                 .WithMessage("Host must not be empty.");
             });
+        }
+
+        private static bool HaveOnlyAllowedAndUniqueAccessModifiers(List<string>? accessModifiers)
+        {
+            if (accessModifiers is null)
+            {
+                return true;
+            }
+
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var accessModifier in accessModifiers)
+            {
+                if (!AllowedUploadCompletionAccessModifiers.Contains(accessModifier, StringComparer.Ordinal))
+                {
+                    return false;
+                }
+
+                if (!seen.Add(accessModifier))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private static bool IsAzureStorageConnectionStringValid(string connectionString)

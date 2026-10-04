@@ -1,6 +1,3 @@
-export interface IGetClientsPayload {
-  projectKey: string;
-}
 export interface IClientConfigResponse {
   scope: string;
   itemId: string;
@@ -23,7 +20,6 @@ export interface IOrganization {
   name: string;
   description?: string;
   [key: string]: unknown;
-  organizationId:string;
 }
 
 export interface IRole {
@@ -58,7 +54,7 @@ export interface IListPagePayload {
 export interface IGetOrganizationsPayload extends IListPagePayload {}
 
 export interface IGetOrganizationsResponse {
-  organizations: IOrganization[];
+  organizations: IOrganization[] | null;
   isSuccess: boolean;
   totalCount: number;
   errors:unknown

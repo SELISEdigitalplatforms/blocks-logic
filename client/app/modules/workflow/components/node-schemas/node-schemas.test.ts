@@ -14,6 +14,8 @@ const {
   getOrganizations,
   getRoles,
   getPermissions,
+  getProxies,
+  getProxy,
 } = vi.hoisted(() => ({
   getAgents: vi.fn(),
   fetchEmailConfigs: vi.fn(),
@@ -25,6 +27,8 @@ const {
   getOrganizations: vi.fn(),
   getRoles: vi.fn(),
   getPermissions: vi.fn(),
+  getProxies: vi.fn(),
+  getProxy: vi.fn(),
 }));
 
 vi.mock("@/modules/workflow/services/agent.service", () => ({
@@ -43,17 +47,25 @@ vi.mock("@blocks-workflow/services/iam.service", () => ({
   authClientService: { clients: { getClientCredentials } },
   iamService: { getOrganizations, getRoles, getPermissions },
 }));
+vi.mock("@/modules/proxy/services/proxy.service", () => ({
+  proxyService: { getAll: getProxies, get: getProxy },
+}));
 
 import { useProjectStore } from "@seliseblocks/genesis-os";
 import { NodeSchemasDefinition } from "./node-schemas";
 import { NodeSchemaTriggerWebhookV1 } from "./node-schema-trigger-webhook-v1";
 import { NodeSchemaTriggerEmailV1 } from "./node-schema-trigger-email-v1";
 import { NodeSchemaTriggerDataGatewayV1 } from "./node-schema-trigger-dataGateway-v1";
-import { NodeSchemaTriggerBlockscheduleV1 } from "./node-schema-trigger-blockschedule-v1";
+import { NodeSchemaTriggerScheduleV1 } from "./node-schema-trigger-schedule-v1";
 import { NodeSchemaActionAiAgentV1 } from "./node-schema-action-aiAgent-v1";
 import { NodeSchemaActionSendMailV1 } from "./node-schema-action-sendMail-v1";
 import { NodeSchemaActionHttpRequestV1 } from "./node-schema-action-httpRequest-v1";
 import { NodeSchemaActionDataActionV1 } from "./node-schema-action-dataAction-v1";
+import {
+  NodeSchemaActionProxy,
+  buildProxyRouteDetails,
+  clearProxyDetailCache,
+} from "./node-schema-action-proxy";
 import { NodeSchemaTransformSetFieldV1 } from "./node-schema-transform-setfield-v1";
 import { NodeSchemaTransformCodeV1 } from "./node-schema-transform-code-v1";
 import { NodeSchemaLogicIfV1 } from "./node-schema-logic-if-v1";
@@ -61,9 +73,10 @@ import { NodeSchemaLogicIfV1 } from "./node-schema-logic-if-v1";
 type AnyRec = Record<string, unknown>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const field = (schema: { schema: { parameters: any[]; settings: any[] } }, key: string) =>
-  [...schema.schema.parameters, ...schema.schema.settings].find(
-    (f) => f.key === key,
-  );
+  [...schema.schema.parameters, ...schema.schema.settings].find((f) => f.key === key);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const fieldById = (schema: { schema: { parameters: any[]; settings: any[] } }, id: string) =>
+  [...schema.schema.parameters, ...schema.schema.settings].find((f) => f.id === id);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -83,13 +96,14 @@ describe("NodeSchemasDefinition registry", () => {
         "triggerwebhookv1",
         "triggeremailv1",
         "triggerdataGatewayv1",
-        "triggerblockschedulev1",
+        "triggerschedulev1",
         "actionagentv1",
         "transformsetfieldv1",
         "transformcodev1",
         "actionsendMailv1",
         "actionhttpRequestv1",
         "actiondataActionv1",
+        "actionproxyv1",
         "logicifv1",
       ]),
     );
@@ -107,7 +121,7 @@ describe("NodeSchemasDefinition registry", () => {
 
 describe("logic/if v1", () => {
   it("transform returns a shallow clone", () => {
-    const node = { id: "n1", parameters: { conditionType: "any" } } as never;
+    const node = { id: "n1", parameters: { conditionType: "or" } } as never;
     expect(NodeSchemaLogicIfV1.transform?.(node)).toEqual(node);
   });
 });
@@ -119,11 +133,51 @@ describe("http request v1", () => {
   });
 
   it("exposes dependent fields for query/header/body toggles", () => {
-    expect(field(NodeSchemaActionHttpRequestV1, "queryParameters").dependsOn)
-      .toEqual({ key: "haveQueryParameters", value: true });
+    expect(field(NodeSchemaActionHttpRequestV1, "queryParameters").dependsOn).toEqual({
+      key: "haveQueryParameters",
+      value: true,
+    });
     expect(field(NodeSchemaActionHttpRequestV1, "body").dependsOn).toEqual({
       key: "bodyContentType",
       value: "json",
+    });
+  });
+
+  it("offers Blocks Authentication and Client Credential, defaulting to no extra auth", () => {
+    const authType = field(NodeSchemaActionHttpRequestV1, "authenticationType");
+    const values = (authType.options as { value: string }[]).map((option) => option.value);
+    expect(values).toEqual(
+      expect.arrayContaining(["blocksAuthentication", "clientCredential"]),
+    );
+    expect(NodeSchemaActionHttpRequestV1.defaults?.parameters?.authenticationType).toBe("");
+    expect(field(NodeSchemaActionHttpRequestV1, "clientCredential_composite").dependsOn).toEqual({
+      key: "authenticationType",
+      value: "clientCredential",
+      operator: "equals",
+    });
+  });
+
+  it("transform maps legacy useBlocksAuthorization true to blocksAuthentication", () => {
+    const node = { id: "n1", parameters: { useBlocksAuthorization: true } } as never;
+    const out = NodeSchemaActionHttpRequestV1.transform?.(node) as AnyRec;
+    expect((out.parameters as AnyRec).authenticationType).toBe("blocksAuthentication");
+  });
+
+  it("transform does not overwrite an existing authenticationType", () => {
+    const node = {
+      id: "n1",
+      parameters: { authenticationType: "clientCredential", useBlocksAuthorization: true },
+    } as never;
+    const out = NodeSchemaActionHttpRequestV1.transform?.(node) as AnyRec;
+    expect((out.parameters as AnyRec).authenticationType).toBe("clientCredential");
+  });
+
+  it("client credential onChange splits id and secret", () => {
+    const onChange = field(NodeSchemaActionHttpRequestV1, "clientCredential_composite").onChange;
+    expect(onChange("cc1:::s1", {}, {})).toEqual({
+      clientCredential_composite: "cc1:::s1",
+      clientId: "cc1",
+      clientSecret: "s1",
     });
   });
 });
@@ -135,8 +189,7 @@ describe("transform set-field v1", () => {
   });
 
   it("carries a continue-on-error setting", () => {
-    expect(field(NodeSchemaTransformSetFieldV1, "settings.continueOnError"))
-      .toBeDefined();
+    expect(field(NodeSchemaTransformSetFieldV1, "settings.continueOnError")).toBeDefined();
   });
 });
 
@@ -146,11 +199,10 @@ describe("ai agent v1", () => {
       agents: [{ id: "a1", widget_id: "w1", name: "Agent One" }],
     });
     const opts = field(NodeSchemaActionAiAgentV1, "agent").options;
-    const result = await opts({}, { projectKey: "pk-1" });
+    const result = await opts({}, { tenantId: "pk-1" });
     expect(getAgents).toHaveBeenCalledWith({
       limit: 100,
       offset: 0,
-      project_key: "pk-1",
     });
     expect(result).toEqual([{ value: "a1_w1_pk-1", label: "Agent One" }]);
   });
@@ -158,7 +210,7 @@ describe("ai agent v1", () => {
   it("options rejects when the service fails", async () => {
     getAgents.mockRejectedValue(new Error("boom"));
     const opts = field(NodeSchemaActionAiAgentV1, "agent").options;
-    await expect(opts({}, { projectKey: "pk-1" })).rejects.toThrow("boom");
+    await expect(opts({}, { tenantId: "pk-1" })).rejects.toThrow("boom");
   });
 
   it("onChange splits the composite agent value", () => {
@@ -167,7 +219,6 @@ describe("ai agent v1", () => {
       agent: "a1_w1_pk-1",
       AgentId: "a1",
       WidgetId: "w1",
-      ProjectKey: "pk-1",
     });
   });
 
@@ -179,37 +230,54 @@ describe("ai agent v1", () => {
 });
 
 describe("email trigger v1", () => {
-  it("options returns only inbound mailboxes", async () => {
+  const mailboxConfig = { tenantId: "pk-1" };
+
+  it("options returns only inbound mailboxes from the slim Gets payload", async () => {
     fetchEmailConfigs.mockResolvedValue([
-      { itemId: "m1", name: "Inbox", isInbound: true },
-      { itemId: "m2", name: "Outbox", isInbound: false },
+      { itemId: "m1", name: "Inbox", isInbound: true, isDefault: true, provider: 0 },
+      { itemId: "m2", name: "Outbox", isInbound: false, isDefault: false, provider: 0 },
+      { itemId: "", name: "Broken", isInbound: true, isDefault: false, provider: 1 },
     ]);
     const opts = field(NodeSchemaTriggerEmailV1, "mailbox_composite").options;
-    const result = await opts({}, { projectKey: "pk-1" });
+    const result = await opts({}, mailboxConfig);
     expect(result).toEqual([{ value: "m1_pk-1", label: "Inbox" }]);
+  });
+
+  it("options falls back to itemId when name is missing", async () => {
+    fetchEmailConfigs.mockResolvedValue([
+      { itemId: "m3", name: "", isInbound: true, isDefault: false, provider: 1 },
+    ]);
+    const opts = field(NodeSchemaTriggerEmailV1, "mailbox_composite").options;
+    const result = await opts({}, mailboxConfig);
+    expect(result).toEqual([{ value: "m3_pk-1", label: "m3" }]);
   });
 
   it("options rejects on failure", async () => {
     fetchEmailConfigs.mockRejectedValue(new Error("nope"));
     const opts = field(NodeSchemaTriggerEmailV1, "mailbox_composite").options;
-    await expect(opts({}, { projectKey: "pk-1" })).rejects.toThrow("nope");
+    await expect(opts({}, mailboxConfig)).rejects.toThrow("nope");
   });
 
-  it("onChange derives the mail server configuration id", () => {
-    const onChange = field(
-      NodeSchemaTriggerEmailV1,
-      "mailbox_composite",
-    ).onChange;
-    expect(onChange("m1_pk-1")).toEqual({
-      mailbox_composite: "m1_pk-1",
+  it("onChange stores the mailbox itemId", () => {
+    const onChange = field(NodeSchemaTriggerEmailV1, "mailbox_composite").onChange;
+    expect(onChange("m1_pk_with_underscores", {}, mailboxConfig)).toEqual({
+      mailbox_composite: "m1_pk_with_underscores",
       mailServerConfigurationId: "m1",
-      projectKey: "pk-1",
     });
   });
 
   it("transform is a passthrough", () => {
     const node = { id: "n", parameters: {} } as never;
     expect(NodeSchemaTriggerEmailV1.transform?.(node)).toBe(node);
+  });
+
+  it("exposes a testSubject parameter for test-mode matching", () => {
+    expect(field(NodeSchemaTriggerEmailV1, "testSubject")).toMatchObject({
+      key: "testSubject",
+      type: "text",
+      required: false,
+    });
+    expect(NodeSchemaTriggerEmailV1.defaults.parameters.testSubject).toBe("");
   });
 });
 
@@ -220,7 +288,7 @@ describe("send mail v1", () => {
       totalCount: 1,
     });
     const opts = field(NodeSchemaActionSendMailV1, "EmailTemplate").options;
-    const result = await opts({}, { projectKey: "cache-pk" });
+    const result = await opts({}, { tenantId: "cache-pk" });
     expect(result).toEqual([{ label: "Welcome", value: "Welcome_cache-pk" }]);
   });
 
@@ -228,37 +296,32 @@ describe("send mail v1", () => {
     fetchEmailTemplates.mockResolvedValue({ templates: [], totalCount: 0 });
     const opts = field(NodeSchemaActionSendMailV1, "EmailTemplate").options;
     // fresh project key to bypass the module-level cache
-    expect(await opts({}, { projectKey: "empty-pk" })).toEqual([]);
+    expect(await opts({}, { tenantId: "empty-pk" })).toEqual([]);
   });
 
-  it("template onChange splits template and project key", () => {
+  it("template onChange splits the template name", () => {
     const onChange = field(NodeSchemaActionSendMailV1, "EmailTemplate").onChange;
     expect(onChange("Welcome_pk-1")).toEqual({
       EmailTemplate: "Welcome_pk-1",
       Template: "Welcome",
-      ProjectKey: "pk-1",
     });
   });
 
   it("language options map languages", async () => {
-    fetchBlocksLanguages.mockResolvedValue([
-      { languageName: "English", languageCode: "en" },
-    ]);
+    fetchBlocksLanguages.mockResolvedValue([{ languageName: "English", languageCode: "en" }]);
     const opts = field(NodeSchemaActionSendMailV1, "Language").options;
-    expect(await opts({}, { projectKey: "pk-1" })).toEqual([
-      { label: "English", value: "en" },
-    ]);
+    expect(await opts({}, { tenantId: "pk-1" })).toEqual([{ label: "English", value: "en" }]);
   });
 
   it("language options return [] when none exist", async () => {
     fetchBlocksLanguages.mockResolvedValue([]);
     const opts = field(NodeSchemaActionSendMailV1, "Language").options;
-    expect(await opts({}, { projectKey: "pk-1" })).toEqual([]);
+    expect(await opts({}, { tenantId: "pk-1" })).toEqual([]);
   });
 
   it("body fixedKeys return [] when no template is selected", async () => {
     const f = field(NodeSchemaActionSendMailV1, "BodyDataContext");
-    expect(await f.fixedKeys({}, { projectKey: "pk-1" })).toEqual([]);
+    expect(await f.fixedKeys({}, { tenantId: "pk-1" })).toEqual([]);
   });
 
   it("body fixedKeys extract keys from the matched template", async () => {
@@ -267,30 +330,55 @@ describe("send mail v1", () => {
       totalCount: 1,
     });
     const f = field(NodeSchemaActionSendMailV1, "BodyDataContext");
-    const keys = await f.fixedKeys(
-      { EmailTemplate: "Promo_body-pk" },
-      { projectKey: "body-pk" },
-    );
+    const keys = await f.fixedKeys({ EmailTemplate: "Promo_body-pk" }, { tenantId: "body-pk" });
     expect(Array.isArray(keys)).toBe(true);
+  });
+
+  it("has an Attachments field of type expression-list", () => {
+    const f = field(NodeSchemaActionSendMailV1, "Attachments");
+    expect(f).toBeDefined();
+    expect(f.type).toBe("expression-list");
+    expect(f.required).toBeFalsy();
+  });
+
+  it("defaults Attachments to an empty array", () => {
+    expect(NodeSchemaActionSendMailV1.defaults.parameters.Attachments).toEqual([]);
   });
 });
 
 describe("webhook trigger v1", () => {
-  it("displayValue builds the production URL when mode is production", () => {
-    const f = field(NodeSchemaTriggerWebhookV1, "executionMode");
-    const url = f.displayValue(
-      { executionMode: 1 },
-      { projectKey: "pk", workflowId: "wf", nodeId: "nd", executionMode: 0 },
+  const urlConfig = { tenantId: "pk", workflowId: "wf", nodeId: "nd", executionMode: 0 };
+
+  it("labels the header-based URL and the deprecated path URL", () => {
+    expect(fieldById(NodeSchemaTriggerWebhookV1, "webhook-url").label).toBe("Webhook URL");
+    expect(fieldById(NodeSchemaTriggerWebhookV1, "webhook-url-deprecated").label).toBe(
+      "Deprecated Webhook URL",
     );
+  });
+
+  it("displayValue builds the production URL without project key", () => {
+    const f = fieldById(NodeSchemaTriggerWebhookV1, "webhook-url");
+    const url = f.displayValue({ executionMode: 1 }, urlConfig);
+    expect(url).toContain("/Workflow/webhook/wf/nd");
+    expect(url).not.toContain("/pk/");
+  });
+
+  it("displayValue builds the test URL without project key and falls back to config mode", () => {
+    const f = fieldById(NodeSchemaTriggerWebhookV1, "webhook-url");
+    const url = f.displayValue({}, urlConfig);
+    expect(url).toContain("/Workflow/webhook-test/wf/nd");
+    expect(url).not.toContain("/pk/");
+  });
+
+  it("deprecated displayValue builds the production URL with project key", () => {
+    const f = fieldById(NodeSchemaTriggerWebhookV1, "webhook-url-deprecated");
+    const url = f.displayValue({ executionMode: 1 }, urlConfig);
     expect(url).toContain("/Workflow/webhook/pk/wf/nd");
   });
 
-  it("displayValue builds the test URL and falls back to config mode", () => {
-    const f = field(NodeSchemaTriggerWebhookV1, "executionMode");
-    const url = f.displayValue(
-      {},
-      { projectKey: "pk", workflowId: "wf", nodeId: "nd", executionMode: 0 },
-    );
+  it("deprecated displayValue builds the test URL with project key and falls back to config mode", () => {
+    const f = fieldById(NodeSchemaTriggerWebhookV1, "webhook-url-deprecated");
+    const url = f.displayValue({}, urlConfig);
     expect(url).toContain("/Workflow/webhook-test/pk/wf/nd");
   });
 
@@ -345,9 +433,9 @@ describe("webhook trigger v1", () => {
       },
     } as never) as AnyRec;
     expect((allOut.parameters as AnyRec).authorization.matchType).toBe("all");
-    expect(
-      ((allOut.parameters as AnyRec).authorization as AnyRec).roles.items,
-    ).toEqual(["clouduser"]);
+    expect(((allOut.parameters as AnyRec).authorization as AnyRec).roles.items).toEqual([
+      "clouduser",
+    ]);
 
     const anyOut = NodeSchemaTriggerWebhookV1.transform?.({
       ...base,
@@ -374,65 +462,93 @@ describe("webhook trigger v1", () => {
     );
   });
 
-  it.skip("organization options prepend the default (from JWT) sentinel", async () => {
-    getOrganizations.mockResolvedValue([
-      { itemId: "org-1", name: "Acme" },
-      { itemId: "org-2", name: "Globex" },
+  it("organization options prepend None and Default, then map itemId", async () => {
+    getOrganizations.mockResolvedValue({
+      organizations: [
+        { itemId: "org-1", name: "Acme" },
+        { itemId: "org-2", name: "Globex" },
+      ],
+    });
+    const opts = field(NodeSchemaTriggerWebhookV1, "organizationId").options as (
+      data: AnyRec,
+      config: AnyRec,
+    ) => Promise<{ value: string; label: string }[]>;
+    const result = await opts({}, { tenantId: "pk" });
+    expect(result).toEqual([
+      { value: "", label: "None" },
+      { value: "default", label: "Default" },
+      { value: "org-1", label: "Acme" },
+      { value: "org-2", label: "Globex" },
     ]);
-    const opts = field(
-      NodeSchemaTriggerWebhookV1,
-      "authorization.organizationId",
-    ).options as (data: AnyRec, config: AnyRec) => Promise<{ value: string; label: string }[]>;
-    const result = await opts({}, { projectKey: "pk" });
-    expect(result[0]).toEqual({ value: "default", label: "default (from JWT)" });
-    expect(result.map((o) => o.value)).toEqual(
-      expect.arrayContaining(["org-1", "org-2"]),
-    );
+  });
+
+  it("organization options are None only when organizations is null", async () => {
+    getOrganizations.mockResolvedValue({
+      organizations: null,
+      totalCount: 0,
+      isSuccess: false,
+      errors: { multi_org_disabled: "Multi-organization mode is disabled." },
+    });
+    const opts = field(NodeSchemaTriggerWebhookV1, "organizationId").options as (
+      data: AnyRec,
+      config: AnyRec,
+    ) => Promise<{ value: string; label: string }[]>;
+    expect(await opts({}, { tenantId: "pk" })).toEqual([{ value: "", label: "None" }]);
+  });
+
+  it("organization options are None only when organizations is empty", async () => {
+    getOrganizations.mockResolvedValue({
+      organizations: [],
+      totalCount: 0,
+      isSuccess: true,
+    });
+    const opts = field(NodeSchemaTriggerWebhookV1, "organizationId").options as (
+      data: AnyRec,
+      config: AnyRec,
+    ) => Promise<{ value: string; label: string }[]>;
+    expect(await opts({}, { tenantId: "pk" })).toEqual([{ value: "", label: "None" }]);
+  });
+
+  it("organization options are None only when getOrganizations rejects", async () => {
+    getOrganizations.mockRejectedValue(new Error("network"));
+    const opts = field(NodeSchemaTriggerWebhookV1, "organizationId").options as (
+      data: AnyRec,
+      config: AnyRec,
+    ) => Promise<{ value: string; label: string }[]>;
+    expect(await opts({}, { tenantId: "pk" })).toEqual([{ value: "", label: "None" }]);
   });
 
   it.skip("roles options call getRoles with the selected organization", async () => {
     getRoles.mockResolvedValue([{ itemId: "r1", name: "clouduser" }]);
-    const opts = field(
-      NodeSchemaTriggerWebhookV1,
-      "authorization.roles",
-    ).options as (data: AnyRec, config: AnyRec) => Promise<{ value: string; label: string }[]>;
-    const result = await opts(
-      { authorization: { organizationId: "acme" } },
-      { projectKey: "pk" },
-    );
+    const opts = field(NodeSchemaTriggerWebhookV1, "authorization.roles").options as (
+      data: AnyRec,
+      config: AnyRec,
+    ) => Promise<{ value: string; label: string }[]>;
+    const result = await opts({ authorization: { organizationId: "acme" } }, { tenantId: "pk" });
     expect(getRoles).toHaveBeenCalledWith({ organizationId: "acme" });
     expect(result).toEqual([{ value: "clouduser", label: "clouduser" }]);
   });
 
   it.skip("permissions options call getPermissions with selected roles", async () => {
     getPermissions.mockResolvedValue([{ itemId: "p1", name: "Change User Password" }]);
-    const opts = field(
-      NodeSchemaTriggerWebhookV1,
-      "authorization.permissions",
-    ).options as (data: AnyRec, config: AnyRec) => Promise<{ value: string; label: string }[]>;
+    const opts = field(NodeSchemaTriggerWebhookV1, "authorization.permissions").options as (
+      data: AnyRec,
+      config: AnyRec,
+    ) => Promise<{ value: string; label: string }[]>;
     const result = await opts(
       { authorization: { roles: { items: ["cloudadmin"] } } },
-      { projectKey: "pk-1" },
+      { tenantId: "pk-1" },
     );
     expect(getPermissions).toHaveBeenCalledWith({
-      projectKey: "pk-1",
       roles: ["cloudadmin"],
     });
-    expect(result).toEqual([
-      { value: "Change User Password", label: "Change User Password" },
-    ]);
+    expect(result).toEqual([{ value: "Change User Password", label: "Change User Password" }]);
   });
 
-  it.skip("defaults the authorization block with empty roles/permissions", () => {
-    const auth = NodeSchemaTriggerWebhookV1.defaults.parameters
-      .authorization as AnyRec;
-    expect(auth).toEqual({
-      organizationId: "default",
-      roles: { operator: "all", items: [] },
-      permissions: { operator: "any", items: [] },
-      isRolePermission: true,
-    });
+  it("defaults organizationId to empty (None)", () => {
+    expect(NodeSchemaTriggerWebhookV1.defaults.parameters.organizationId).toBe("");
   });
+});
 
 describe("data gateway trigger v1", () => {
   it("collection options map schema list into composite values", async () => {
@@ -441,25 +557,18 @@ describe("data gateway trigger v1", () => {
         items: [{ collectionName: "col", schemaName: "Sch", id: "id1" }],
       },
     });
-    const opts = field(
-      NodeSchemaTriggerDataGatewayV1,
-      "collectionName_composite",
-    ).options;
-    expect(await opts({}, { projectKey: "pk-1" })).toEqual([
+    const opts = field(NodeSchemaTriggerDataGatewayV1, "collectionName_composite").options;
+    expect(await opts({}, { tenantId: "pk-1" })).toEqual([
       { value: "col:::Sch:::id1", label: "Sch" },
     ]);
   });
 
-  it("collection onChange splits parts and reads the project tenant", () => {
-    const onChange = field(
-      NodeSchemaTriggerDataGatewayV1,
-      "collectionName_composite",
-    ).onChange;
+  it("collection onChange splits parts", () => {
+    const onChange = field(NodeSchemaTriggerDataGatewayV1, "collectionName_composite").onChange;
     expect(onChange("col:::Sch:::id1")).toEqual({
       collectionName_composite: "col:::Sch:::id1",
       collectionName: "col",
       schemaName: "Sch",
-      projectKey: "tenant-1",
     });
   });
 
@@ -479,38 +588,103 @@ describe("data gateway trigger v1", () => {
     expect(out).toContain('"Operation": "Inserted"');
     expect(out).toContain('"CollectionName": "col"');
   });
-
-  it("transform injects the project tenant id", () => {
-    const node = { id: "n", parameters: {} } as never;
-    const out = NodeSchemaTriggerDataGatewayV1.transform?.(node) as AnyRec;
-    expect((out.parameters as AnyRec).projectKey).toBe("tenant-1");
-  });
 });
 
 describe("data action v1", () => {
+  it("puts raw query mode first and defaults new nodes to raw mode", () => {
+    expect(NodeSchemaActionDataActionV1.schema.parameters.map((param) => param.key)).toEqual([
+      // Deprecation notice for the guided query fields; renders above the mode switch.
+      "queryModeNotes",
+      "rawQueryMode",
+      "authenticationType",
+      "clientCredential_composite",
+      "rawQuery",
+      "collectionName_composite",
+      "actionType",
+      "filter",
+      "fieldMapping",
+      "getFields",
+    ]);
+    expect(NodeSchemaActionDataActionV1.defaults.parameters.rawQueryMode).toBe(true);
+    expect(NodeSchemaActionDataActionV1.defaults.parameters.rawQuery).toBe("");
+  });
+
+  it("shows the raw query editor only in raw query mode", () => {
+    const rawQuery = field(NodeSchemaActionDataActionV1, "rawQuery");
+    expect(rawQuery.type).toBe("graphql-code-editor");
+    expect(rawQuery.dependsOn).toEqual({
+      key: "rawQueryMode",
+      value: true,
+      operator: "equals",
+    });
+  });
+
+  it("hides collection and action fields in raw query mode", () => {
+    expect(
+      field(NodeSchemaActionDataActionV1, "collectionName_composite").hidden({
+        rawQueryMode: true,
+      }),
+    ).toBe(true);
+    expect(
+      field(NodeSchemaActionDataActionV1, "actionType").hidden({
+        rawQueryMode: true,
+      }),
+    ).toBe(true);
+    expect(
+      field(NodeSchemaActionDataActionV1, "filter").hidden({
+        rawQueryMode: true,
+      }),
+    ).toBe(true);
+    expect(
+      field(NodeSchemaActionDataActionV1, "fieldMapping").hidden({
+        rawQueryMode: true,
+        actionType: "updateData",
+      }),
+    ).toBe(true);
+    expect(
+      field(NodeSchemaActionDataActionV1, "getFields").hidden({
+        rawQueryMode: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("keeps collection and action fields available in legacy mode", () => {
+    expect(
+      field(NodeSchemaActionDataActionV1, "collectionName_composite").hidden({
+        rawQueryMode: false,
+      }),
+    ).toBe(false);
+    expect(
+      field(NodeSchemaActionDataActionV1, "actionType").hidden({
+        rawQueryMode: false,
+      }),
+    ).toBe(false);
+    expect(
+      field(NodeSchemaActionDataActionV1, "filter").hidden({
+        rawQueryMode: false,
+      }),
+    ).toBe(false);
+    expect(
+      field(NodeSchemaActionDataActionV1, "getFields").hidden({
+        rawQueryMode: false,
+      }),
+    ).toBe(false);
+  });
+
   it("collection options map schema list", async () => {
     getSchemaList.mockResolvedValue({
       data: { items: [{ collectionName: "c", schemaName: "S", id: "i" }] },
     });
-    const opts = field(
-      NodeSchemaActionDataActionV1,
-      "collectionName_composite",
-    ).options;
-    expect(await opts({}, { projectKey: "pk-1" })).toEqual([
-      { value: "c:::S:::i", label: "S" },
-    ]);
+    const opts = field(NodeSchemaActionDataActionV1, "collectionName_composite").options;
+    expect(await opts({}, { tenantId: "pk-1" })).toEqual([{ value: "c:::S:::i", label: "S" }]);
   });
 
   it("collection onChange returns base fields without a store", () => {
-    const onChange = field(
-      NodeSchemaActionDataActionV1,
-      "collectionName_composite",
-    ).onChange;
+    const onChange = field(NodeSchemaActionDataActionV1, "collectionName_composite").onChange;
     const result = onChange("c:::S:::", {}, {});
     expect(result).toMatchObject({
       collectionName: "c",
       schemaName: "S",
-      projectKey: "tenant-1",
       projectShortKey: "slug-1",
     });
     // No schema id present, so getSchemaDetails is not called.
@@ -524,10 +698,7 @@ describe("data action v1", () => {
     const store = {
       getState: () => ({ selectedNode, updateNode }),
     };
-    const onChange = field(
-      NodeSchemaActionDataActionV1,
-      "collectionName_composite",
-    ).onChange;
+    const onChange = field(NodeSchemaActionDataActionV1, "collectionName_composite").onChange;
     onChange("c:::S:::schema-1", {}, { store });
     await vi.waitFor(() => expect(getSchemaDetails).toHaveBeenCalled());
     await vi.waitFor(() => expect(updateNode).toHaveBeenCalledWith("sn", expect.any(Object)));
@@ -536,10 +707,7 @@ describe("data action v1", () => {
   it("collection onChange swallows schema detail errors", async () => {
     getSchemaDetails.mockRejectedValue(new Error("fail"));
     const store = { getState: () => ({ selectedNode: null, updateNode: vi.fn() }) };
-    const onChange = field(
-      NodeSchemaActionDataActionV1,
-      "collectionName_composite",
-    ).onChange;
+    const onChange = field(NodeSchemaActionDataActionV1, "collectionName_composite").onChange;
     expect(() => onChange("c:::S:::schema-1", {}, { store })).not.toThrow();
     await vi.waitFor(() => expect(getSchemaDetails).toHaveBeenCalled());
   });
@@ -549,24 +717,31 @@ describe("data action v1", () => {
       { itemId: "cc1", clientSecret: "s1", name: "Active", isActive: true },
       { itemId: "cc2", clientSecret: "s2", name: "Inactive", isActive: false },
     ]);
-    const opts = field(
-      NodeSchemaActionDataActionV1,
-      "clientCredential_composite",
-    ).options;
-    expect(await opts({}, { projectKey: "pk-1" })).toEqual([
+    const opts = field(NodeSchemaActionDataActionV1, "clientCredential_composite").options;
+    expect(await opts({}, { tenantId: "pk-1" })).toEqual([
       { value: "cc1:::s1", label: "Active" },
     ]);
   });
 
   it("client credential onChange splits id and secret", () => {
-    const onChange = field(
-      NodeSchemaActionDataActionV1,
-      "clientCredential_composite",
-    ).onChange;
+    const onChange = field(NodeSchemaActionDataActionV1, "clientCredential_composite").onChange;
     expect(onChange("cc1:::s1", {}, {})).toEqual({
       clientCredential_composite: "cc1:::s1",
       clientId: "cc1",
       clientSecret: "s1",
+    });
+  });
+
+  it("offers Blocks Authentication and keeps the credential dropdown on Client Credential", () => {
+    const authType = field(NodeSchemaActionDataActionV1, "authenticationType");
+    const values = (authType.options as { value: string }[]).map((option) => option.value);
+    expect(values).toEqual(
+      expect.arrayContaining(["clientCredential", "blocksAuthentication"]),
+    );
+    expect(field(NodeSchemaActionDataActionV1, "clientCredential_composite").dependsOn).toEqual({
+      key: "authenticationType",
+      value: "clientCredential",
+      operator: "equals",
     });
   });
 
@@ -581,9 +756,237 @@ describe("data action v1", () => {
     const node = { id: "n", parameters: {} } as never;
     const out = NodeSchemaActionDataActionV1.transform?.(node) as AnyRec;
     const params = out.parameters as AnyRec;
-    expect(params.projectKey).toBe("tenant-1");
     expect(params.projectShortKey).toBe("slug-1");
     expect("apiBaseUrl" in params).toBe(true);
+  });
+});
+
+describe("action proxy v1", () => {
+  beforeEach(() => clearProxyDetailCache());
+
+  it("loads only active proxies through the current list filter", async () => {
+    getProxies.mockResolvedValue({
+      items: [
+        {
+          id: "p1",
+          slug: "stripe",
+          name: "Stripe",
+        },
+      ],
+      totalCount: 1,
+    });
+
+    const opts = field(NodeSchemaActionProxy, "proxy_composite").options;
+    expect(await opts({}, {})).toEqual([{ value: "p1:::stripe", label: "Stripe" }]);
+    expect(getProxies).toHaveBeenCalledWith({ isActive: true });
+  });
+
+  it("route options fall back to the base path when a proxy has no route allowlist", async () => {
+    getProxy.mockResolvedValue({
+      id: "p1",
+      slug: "stripe",
+      name: "Stripe",
+      methods: ["GET", "POST"],
+      routes: [],
+    });
+
+    const opts = field(NodeSchemaActionProxy, "route_composite").options;
+    expect(await opts({ proxyId: "p1" }, {})).toEqual([
+      { value: "GET:::", label: "GET /" },
+      { value: "POST:::", label: "POST /" },
+    ]);
+    expect(getProxy).toHaveBeenCalledWith("p1");
+  });
+
+  describe("endpoint configuration panel", () => {
+    const route = (overrides: Record<string, unknown> = {}) => ({
+      method: "GET",
+      path: "orders/{id}",
+      upstreamPath: null,
+      headers: null,
+      query: null,
+      bodyMerge: null,
+      responseMode: null,
+      responseInclude: null,
+      ...overrides,
+    });
+
+    const proxy = (overrides: Record<string, unknown> = {}) =>
+      ({
+        id: "p1",
+        slug: "vendor",
+        name: "Vendor",
+        upstreamUrl: "https://api.vendor.test/v1/",
+        methods: ["GET", "POST"],
+        headers: [{ key: "Authorization", value: "{{$VAR.vendor-key}}" }],
+        query: [{ key: "api_key", value: "abc" }],
+        bodyMerge: [{ key: "tenant", value: "acme" }],
+        methodConfigs: [],
+        routes: [route(), route({ method: "POST", path: "orders" })],
+        responseMode: "all",
+        responseInclude: [],
+        ...overrides,
+      }) as never;
+
+    type Details = ReturnType<typeof buildProxyRouteDetails>;
+    const entry = (details: Details, id: string) =>
+      details.fields.find((candidate) => candidate.field.id === `routeConfig-${id}`);
+    const valueOf = (details: Details, id: string) => entry(details, id)?.value;
+
+    it("is a transient read-only panel right after Endpoint, shown once an endpoint is picked", () => {
+      const params = NodeSchemaActionProxy.schema.parameters;
+      const index = params.findIndex((p) => p.key === "routeConfig");
+      expect(params[index - 1].key).toBe("route_composite");
+      expect(params[index]).toMatchObject({
+        type: "readonly-details",
+        transient: true,
+        dependsOn: { key: "route_composite", value: "", operator: "notEquals" },
+        detailsDependencies: ["proxyId", "routeMethod", "routePath"],
+      });
+    });
+
+    it("shows a GET endpoint's settings as one form field each, with no body fields", () => {
+      const details = buildProxyRouteDetails(proxy(), "GET", "orders/{id}");
+
+      expect(entry(details, "method")?.field.type).toBe("text");
+      expect(valueOf(details, "method")).toBe("GET");
+      expect(entry(details, "upstream")?.field).toMatchObject({ type: "text", copyable: true });
+      expect(valueOf(details, "upstream")).toBe("https://api.vendor.test/v1/orders/{id}");
+      expect(entry(details, "access")?.field).toMatchObject({ type: "radio", label: "Authentication" });
+      expect(valueOf(details, "access")).toBe("blocksToken");
+      expect(entry(details, "headers")?.field.type).toBe("key-value-pairs");
+      expect(valueOf(details, "headers")).toEqual({ Authorization: "{{$VAR.vendor-key}}" });
+      // Query params and body fields live on the node's own fields, locked there.
+      expect(entry(details, "query")).toBeUndefined();
+      expect(entry(details, "bodyMerge")).toBeUndefined();
+      expect(entry(details, "responseSelect")?.field.type).toBe("switch");
+      expect(valueOf(details, "responseSelect")).toBe(false);
+      expect(entry(details, "responseInclude")).toBeUndefined();
+      expect(details.link).toBeUndefined();
+    });
+
+    it("gives every field a unique, prefixed id", () => {
+      const details = buildProxyRouteDetails(proxy(), "POST", "orders");
+      const ids = details.fields.map((candidate) => candidate.field.id);
+      expect(new Set(ids).size).toBe(ids.length);
+      expect(ids.every((id) => id.startsWith("routeConfig-"))).toBe(true);
+    });
+
+    it("locks the config's query params and body fields onto the node's own fields", async () => {
+      getProxy.mockResolvedValue(proxy());
+      const get = { proxyId: "p1", routeMethod: "GET", routePath: "orders/{id}" };
+      const post = { proxyId: "p1", routeMethod: "POST", routePath: "orders" };
+      const locked = (key: string, data: Record<string, unknown>) =>
+        field(NodeSchemaActionProxy, key).locked(data, {});
+
+      expect(await locked("haveQuery", get)).toBe(true);
+      expect(await locked("queryParams", get)).toEqual({ api_key: "abc" });
+      expect(await locked("havebody", post)).toBe(true);
+      expect(await locked("body", post)).toEqual({ tenant: "acme" });
+      // No body on a GET, and nothing for an endpoint that is gone.
+      expect(await locked("body", get)).toEqual({});
+      expect(await locked("havebody", { ...post, routePath: "gone" })).toBe(false);
+      expect(await locked("queryParams", { ...get, proxyId: "" })).toEqual({});
+
+      for (const key of ["haveQuery", "queryParams", "havebody", "body"]) {
+        expect(field(NodeSchemaActionProxy, key).lockedDependencies).toEqual([
+          "proxyId",
+          "routeMethod",
+          "routePath",
+        ]);
+      }
+    });
+
+    it("leaves the switches free when the config adds no query or body", async () => {
+      getProxy.mockResolvedValue(proxy({ query: [], bodyMerge: [] }));
+      const post = { proxyId: "p1", routeMethod: "POST", routePath: "orders" };
+
+      expect(await field(NodeSchemaActionProxy, "haveQuery").locked(post, {})).toBe(false);
+      expect(await field(NodeSchemaActionProxy, "havebody").locked(post, {})).toBe(false);
+    });
+
+    it("shows an endpoint header replacing the connection's, and the endpoint's own response shape", () => {
+      const details = buildProxyRouteDetails(
+        proxy({
+          routes: [
+            route({
+              upstreamPath: "v2/orders/{id}",
+              headers: [{ key: "authorization", value: "Bearer other" }],
+              responseMode: "select",
+              responseInclude: ["data.id", "items[].name"],
+            }),
+          ],
+        }),
+        "GET",
+        "orders/{id}",
+      );
+
+      expect(valueOf(details, "upstream")).toBe("https://api.vendor.test/v1/v2/orders/{id}");
+      expect(valueOf(details, "headers")).toEqual({ authorization: "Bearer other" });
+      expect(valueOf(details, "responseSelect")).toBe(true);
+      expect(entry(details, "responseInclude")?.field.type).toBe("path-list");
+      expect(valueOf(details, "responseInclude")).toEqual(["data.id", "items[].name"]);
+    });
+
+    it("shows the caller access rules", () => {
+      const details = buildProxyRouteDetails(
+        proxy({
+          access: {
+            kind: "blocksToken",
+            combine: "and",
+            roles: { mode: "all", values: ["admin"] },
+            permissions: { mode: "any", values: ["orders.read"] },
+          },
+        }),
+        "GET",
+        "orders/{id}",
+      );
+
+      expect(entry(details, "roles")?.field.label).toBe("Roles (caller needs all)");
+      expect(valueOf(details, "roles")).toEqual(["admin"]);
+      expect(valueOf(details, "permissions")).toEqual(["orders.read"]);
+      expect(valueOf(details, "combine")).toBe("and");
+
+      const open = buildProxyRouteDetails(
+        proxy({
+          access: {
+            kind: "public",
+            combine: "or",
+            roles: { mode: "any", values: [] },
+            permissions: { mode: "any", values: [] },
+          },
+        }),
+        "GET",
+        "orders/{id}",
+      );
+      expect(valueOf(open, "access")).toBe("public");
+      expect(entry(open, "roles")).toBeUndefined();
+    });
+
+    it("treats an empty allowlist as the base path", () => {
+      const details = buildProxyRouteDetails(proxy({ routes: [] }), "POST", "");
+
+      expect(valueOf(details, "upstream")).toBe("https://api.vendor.test/v1");
+    });
+
+    it("says so when the saved endpoint was removed from the proxy", () => {
+      const details = buildProxyRouteDetails(proxy(), "DELETE", "orders/{id}");
+
+      expect(details.fields).toEqual([]);
+      expect(details.message).toBe("This endpoint no longer exists on the proxy.");
+      expect(details.link).toBeUndefined();
+    });
+
+    it("shares one proxy fetch between the Endpoint options and the panel", async () => {
+      getProxy.mockResolvedValue(proxy());
+      const data = { proxyId: "p1", routeMethod: "GET", routePath: "orders/{id}" };
+
+      await field(NodeSchemaActionProxy, "route_composite").options(data, {});
+      const details = await field(NodeSchemaActionProxy, "routeConfig").details(data, {});
+
+      expect(getProxy).toHaveBeenCalledTimes(1);
+      expect(valueOf(details, "upstream")).toBe("https://api.vendor.test/v1/orders/{id}");
+    });
   });
 });
 
@@ -615,14 +1018,13 @@ describe("transform code v1", () => {
 
   it("carries a single javascript code-editor field for the script", () => {
     const script = field(NodeSchemaTransformCodeV1, "script");
-    expect(script.type).toBe("code-editor-v2");
+    expect(script.type).toBe("code-editor");
     expect(script.language).toBe("javascript");
     expect(script.dependsOn).toBeUndefined();
     expect(NodeSchemaTransformCodeV1.defaults.parameters.script).toBe("");
   });
 
   it("carries a continue-on-error setting", () => {
-    expect(field(NodeSchemaTransformCodeV1, "settings.continueOnError"))
-      .toBeDefined();
+    expect(field(NodeSchemaTransformCodeV1, "settings.continueOnError")).toBeDefined();
   });
 });

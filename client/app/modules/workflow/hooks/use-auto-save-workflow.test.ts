@@ -5,7 +5,6 @@ import { mockWorkflowServiceFactory } from "../test-utils/__mocks__";
 import { mockWorkflowNode1 } from "../test-utils/__mocks__";
 import { workflowService } from "../services/workflow.service";
 import { mockUpdateWorkflowResponse, MOCK_WORKFLOW_ID_1 } from "../test-utils/__mocks__";
-import { TEST_PROJECT_KEY } from "@/test-utils/__mocks__/data.mock";
 import { useAutoSaveWorkflow } from "./use-auto-save-workflow";
 import type { Edge } from "@xyflow/react";
 import { mockWorkflowEdge1 } from "../test-utils/__mocks__";
@@ -28,7 +27,6 @@ vi.mock("../store", () => ({
 
 const DEFAULT_OPTIONS = {
   workflowId: MOCK_WORKFLOW_ID_1,
-  projectKey: TEST_PROJECT_KEY,
   debounceMs: 500,
 };
 

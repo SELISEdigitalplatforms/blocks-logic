@@ -115,7 +115,7 @@ dotnet run --project server/Api/Api.csproj
 
 Vite exposes env vars prefixed with **`BLOCKS_`** (see **`client/vite.config.ts`**). Copy **`client/.env.example`** → **`client/.env`** and set values as needed:
 
-- **`BLOCKS_API_BASE_URL`**: base URL the client uses for API calls.
+- **`BLOCKS_API_BASE_URL`**: external backend target for Vite's local `/api` proxy. Browser calls to Logic use the page origin.
 - **`BLOCKS_X_BLOCKS_KEY`**: Genesis / Blocks project key when your environment requires it.
 - **`BLOCKS_IAM_BASE_URL`**: IAM base URL for the OIDC sign-in flow.
 - **`BLOCKS_OIDC_CLIENT_ID`**: OIDC client id used by the sign-in flow.
@@ -171,6 +171,24 @@ npm --prefix client run test -- --coverage
 - Contribution conventions and workflow: [CONTRIBUTING.md](CONTRIBUTING.md)
 - Reporting a vulnerability: [SECURITY.md](SECURITY.md)
 - Community standards: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+
+## Database placement (Genesis 4.2.2)
+
+API, Worker, and MailBoxSyncService use the published Genesis 4.2.2 package. Runtime access follows each tenant's stored `DbConnectionString` and `DBName`; environment-to-connection selection belongs to OS.
+
+The scheduler discovers enabled tenants from main's configured root database and scans their stored connections. It logs each failed tenant and continues scanning healthy tenants; a root registry failure propagates. Job registration and queue publishing retain the scheduled tenant ID. Notification configuration and notification writes resolve their database per operation, including when repositories are singletons. Identifier project/membership metadata remains on main/root; managed-service reads retain their tenant/impersonation semantics. Mailbox, workflow, proxy, and monitoring stores retain their existing ownership.
+
+Notification listing, subscription-filter queries, and read-status updates cover both the current tenant database and main/root, where impersonated writes can land. An unresolved placement fails the read rather than returning an incomplete page. Mailbox sync skips a tenant whose inbound configuration database is unavailable and continues with the other tenants in that polling cycle.
+
+Routing regression tests include scheduler connection selection/failure isolation, scheduled-message context, and concurrent notification writes and refreshed placement using the real Genesis provider. Local integration tests use disposable databases; run a compatible local MongoDB (4.4 or newer for the currently resolved driver), then:
+
+```powershell
+dotnet test server/XUnitTest/XUnitTest.csproj -c Release
+```
+
+The new routing fixture defaults to localhost:27017. Set `BLOCKS_ROUTING_TEST_MONGO_PORT` to use another local test port. It never accepts a remote server or deployed credentials. These tests do not establish deployed cluster connectivity. The latest dev baseline also has eight unrelated failing `ActionProxyNodeTests`; those failures were reproduced before these changes.
+
+Deploy every API, worker, scheduler host and mailbox process before enabling split placement in OS. Keep one main/root registry. Existing tenant migration, missed Redis refresh recovery and cross-cluster cutover remain separate work.
 
 ## License
 

@@ -1,0 +1,785 @@
+"use client";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router";
+import { useProjectStore, useScopedPath } from "@seliseblocks/genesis-os";
+import { parseAsInteger, parseAsString, useQueryStates } from "nuqs";
+import {
+  Check,
+  Copy,
+  Loader2,
+  Pencil,
+  Rocket,
+  Save,
+  Search,
+  Sparkles,
+  WrapText,
+} from "lucide-react";
+import PageBreadcrumb from "@/components/breadcrumb/breadcrumb";
+import { Button } from "@/components/ui-kits/button/button";
+import { Card, CardContent, CardHeader } from "@/components/ui-kits/card/card";
+import { Pagination } from "@/components/ui-kits/pagination/pagination";
+import { Input } from "@/components/ui-kits/input/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui-kits/tabs/tabs";
+import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
+import { isErrorWithErrors } from "@/lib/error";
+import { cn } from "@/lib/utils";
+import { useGetFunction } from "../../hooks/use-function";
+import { useFunctionEditor } from "../../hooks/use-function-editor";
+import { useDeployFunction, useUpdateFunction } from "../../hooks/use-functions";
+import { useGetRuns } from "../../hooks/use-runs";
+import { useGetVersions } from "../../hooks/use-versions";
+import { useFunctionEditorStore } from "../../store/function-editor-store";
+import { TERMINAL_RUN_STATUSES } from "../../types/run.types";
+import { FunctionStatusChip } from "../../components/function-status-chip";
+import { CodeEditor, type CodeEditorActions } from "../../components/code-editor";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
+import { SandboxHelpCard } from "../../components/sandbox-help-card";
+import { EnvironmentCard } from "../../components/environment-card";
+import { ConnectionsCard } from "../../components/connections-card";
+import { TestPanel } from "../../components/test-panel";
+import { LimitsForm } from "../../components/limits-form";
+import { RetryForm } from "../../components/retry-form";
+import { VariablesEditor } from "../../components/variables-editor";
+import { DangerZoneCard } from "../../components/danger-zone-card";
+import { TriggerHttpCard } from "../../components/trigger-http-card";
+import { TriggerWorkflowCard } from "../../components/trigger-workflow-card";
+import { InvokeSnippetCard } from "../../components/invoke-snippet-card";
+import { OutputActionsEditor } from "../../components/output-actions-editor";
+import { RunsTable } from "../../components/runs-table";
+import { RunsFilterBar, RunsFilterValue } from "../../components/runs-filter-bar";
+import { RunDetail } from "../../components/run-detail";
+import { VersionsTable } from "../../components/versions-table";
+import { DeleteFunctionDialog } from "../../components/delete-function-dialog";
+import { buildInvokeUrl } from "../../components/endpoint-badge";
+import { ProxyMethodBadge } from "@/modules/proxy/components/proxy-method-badge";
+import { getProxyPublicHost } from "@/modules/proxy/constants/proxy.constant";
+import { toHttpVerb } from "../../constants/endpoint.constant";
+import { checkSetup } from "../../utils/connections";
+import { payloadOf } from "../../utils/test-input";
+
+const RUNS_PAGE_SIZE = 20;
+
+/**
+ * The runs range chips, as an ISO lower bound for the query.
+ *
+ * Rounded down to the minute, and it must stay that way: this value is part of the runs query key,
+ * so a fresh `Date.now()` on every render gave every render a new key — react-query fetched, the
+ * result re-rendered, the key changed again. That is the request-per-render loop that filled the
+ * network panel and kept the Runs tab on its skeleton forever.
+ */
+const rangeStart = (range: string, now: number): string => {
+  const hours = range === "24h" ? 24 : range === "30d" ? 24 * 30 : 24 * 7;
+  const start = now - hours * 60 * 60 * 1000;
+  return new Date(Math.floor(start / 60_000) * 60_000).toISOString();
+};
+
+/**
+ * The code card is sized to reach the bottom of the window instead of stopping at a fixed 520px,
+ * so a tall monitor shows more of the file. Everything above it is fixed chrome — the 60px app
+ * header, the breadcrumb, the title block and the tab strip — plus the page's own bottom padding,
+ * which is what this reserve adds up to. `max()` is the floor: on a short window, or a phone where
+ * the header block wraps onto extra rows, the card keeps a usable editor and scrolls with the page
+ * rather than collapsing. 400px is that floor less the card's own ~106px of padding, file tabs and
+ * footnote — it leaves the 280px of editor this tab has always guaranteed. The card is a flex
+ * column, so those two take their natural height and the editor takes whatever is left, which is
+ * why the reserve only has to account for what sits above the card and never for its insides.
+ */
+const CODE_CARD_HEIGHT = "max(400px, calc(100dvh - 264px))";
+
+/** The cards beside the editor, one at a time so none of them sits below the fold. */
+const SIDE_PANELS = [
+  { value: "test", label: "Test" },
+  { value: "environment", label: "Environment" },
+  { value: "connections", label: "Connections" },
+] as const;
+type SidePanel = (typeof SIDE_PANELS)[number]["value"];
+
+/**
+ * One editor tool. Icon-only to fit the file-tab row, so the accessible name and the tooltip
+ * carry the label and the shortcut — an icon nobody can name is not a control.
+ */
+const EditorToolButton = ({
+  label,
+  hint,
+  shortcut,
+  icon: Icon,
+  isActive,
+  onClick,
+}: {
+  label: string;
+  hint: string;
+  shortcut?: string;
+  icon: typeof Search;
+  isActive?: boolean;
+  onClick: () => void;
+}) => (
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        aria-label={label}
+        aria-pressed={isActive}
+        className={cn(
+          "h-7 w-7 text-medium-emphasis hover:text-foreground",
+          isActive && "bg-primary/10 text-primary hover:text-primary",
+        )}
+        onClick={onClick}
+      >
+        <Icon className="h-3.5 w-3.5" />
+      </Button>
+    </TooltipTrigger>
+    <TooltipContent side="bottom" className="text-xs">
+      {hint}
+      {shortcut ? <span className="ml-1.5 font-mono text-low-emphasis">{shortcut}</span> : null}
+    </TooltipContent>
+  </Tooltip>
+);
+
+const TAB_ORDER = ["code", "trigger", "output", "configuration", "runs", "versions"] as const;
+const TAB_LABELS: Record<(typeof TAB_ORDER)[number], string> = {
+  code: "Code",
+  trigger: "Trigger",
+  output: "Output",
+  configuration: "Configuration",
+  runs: "Runs",
+  versions: "Versions",
+};
+
+export const FunctionDetailPage = () => {
+  const navigate = useNavigate();
+  const scoped = useScopedPath();
+  const { pathname } = useLocation();
+  const params = useParams<{ itemId: string; functionId: string }>();
+  const functionId = params.functionId ?? "";
+
+  const [queryParams, setQueryParams] = useQueryStates({
+    tab: parseAsString.withDefault("code"),
+    runId: parseAsString.withDefault(""),
+    runStatus: parseAsString.withDefault(""),
+    runTrigger: parseAsString.withDefault(""),
+    runRange: parseAsString.withDefault("7d"),
+    runSearch: parseAsString.withDefault(""),
+    runPage: parseAsInteger.withDefault(0),
+  });
+  const [isRunsAutoRefresh, setIsRunsAutoRefresh] = useState(true);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [renameDraft, setRenameDraft] = useState<string | null>(null);
+  const [isEndpointCopied, setIsEndpointCopied] = useState(false);
+  const [sidePanel, setSidePanel] = useState<SidePanel>("test");
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  const isRenameSubmitting = useRef(false);
+
+  const { data: fn, isLoading, isFetched } = useGetFunction({ functionId });
+  const { save, isSaving, isDirty } = useFunctionEditor(functionId, fn);
+  const { mutateAsync: deployAsync, isPending: isDeploying } = useDeployFunction();
+  const { mutateAsync: renameAsync, isPending: isRenaming } = useUpdateFunction();
+
+  const indexJs = useFunctionEditorStore((s) => s.indexJs);
+  const packageJson = useFunctionEditorStore((s) => s.packageJson);
+  const setIndexJs = useFunctionEditorStore((s) => s.setIndexJs);
+  const setPackageJson = useFunctionEditorStore((s) => s.setPackageJson);
+  const activeFile = useFunctionEditorStore((s) => s.activeFile);
+  const setActiveFile = useFunctionEditorStore((s) => s.setActiveFile);
+  const limits = useFunctionEditorStore((s) => s.limits);
+  const selectedProject = useProjectStore().selectedProject;
+  // The editor's own view settings. They belong to the person reading the file, not to the
+  // function, so they are page state and are never part of the saved source.
+  const [isWrapped, setIsWrapped] = useState(false);
+  const editorActions = useRef<CodeEditorActions | null>(null);
+  const setLimits = useFunctionEditorStore((s) => s.setLimits);
+  const retry = useFunctionEditorStore((s) => s.retry);
+  const setRetry = useFunctionEditorStore((s) => s.setRetry);
+  const trigger = useFunctionEditorStore((s) => s.trigger);
+  const setTrigger = useFunctionEditorStore((s) => s.setTrigger);
+  const outputActions = useFunctionEditorStore((s) => s.outputActions);
+  const setOutputActions = useFunctionEditorStore((s) => s.setOutputActions);
+  const variables = useFunctionEditorStore((s) => s.variables);
+  // What the Connections panel warns about, so its tab can flag it while another panel is open.
+  const setupIssueCount = useMemo(() => {
+    const setup = checkSetup(indexJs, packageJson, variables);
+    return (
+      Number(!setup.manifestValid) +
+      setup.missingPackages.length +
+      Number(setup.missingVariables.length > 0) +
+      Number(setup.emptyVariables.length > 0)
+    );
+  }, [indexJs, packageJson, variables]);
+  const requestTestRun = useFunctionEditorStore((s) => s.requestTestRun);
+  const setTestInput = useFunctionEditorStore((s) => s.setTestInput);
+  const setVariables = useFunctionEditorStore((s) => s.setVariables);
+
+  // Held in state and written from an effect: reading the clock during render is the very thing
+  // that made this value unstable, and `react-hooks/purity` is right to reject it. Recomputed when
+  // the range changes, then once a minute so a page left open does not keep a stale window.
+  const [runsFromUtc, setRunsFromUtc] = useState("");
+  useEffect(() => {
+    const apply = () => setRunsFromUtc(rangeStart(queryParams.runRange, Date.now()));
+    apply();
+    const timer = window.setInterval(apply, 60_000);
+    return () => window.clearInterval(timer);
+  }, [queryParams.runRange]);
+
+  const runsFilter: RunsFilterValue = {
+    status: queryParams.runStatus,
+    invokedBy: queryParams.runTrigger,
+    range: queryParams.runRange,
+    search: queryParams.runSearch,
+    autoRefresh: isRunsAutoRefresh,
+  };
+  const { data: runsData, isLoading: isRunsLoading } = useGetRuns(
+    {
+      functionId,
+      // Every chip, "Running" included, is a server-side filter: the API maps it to the
+      // non-terminal set. Trimming the page client-side made the total and the pager describe a
+      // different set of runs than the table showed.
+      status: queryParams.runStatus || undefined,
+      invokedBy: queryParams.runTrigger || undefined,
+      searchKey: queryParams.runSearch || undefined,
+      fromUtc: runsFromUtc,
+      pageNumber: queryParams.runPage,
+      pageSize: RUNS_PAGE_SIZE,
+    },
+    // Live-polled only where it is on screen. Elsewhere it feeds the tab's count and the test
+    // panel's last run, which a test refreshes itself when it starts and when its run settles.
+    { autoRefresh: isRunsAutoRefresh && queryParams.tab === "runs", enabled: !!runsFromUtc },
+  );
+  const { data: versionsData, isLoading: isVersionsLoading } = useGetVersions(functionId);
+
+  useEffect(() => {
+    if (functionId && isFetched && !isLoading && !fn) {
+      showErrorToast({ errors: "Function not found" });
+      navigate(scoped("functions"));
+    }
+  }, [functionId, isFetched, isLoading, fn, navigate, scoped]);
+
+  useEffect(() => {
+    if (renameDraft !== null) renameInputRef.current?.focus();
+  }, [renameDraft]);
+
+  const handleDeploy = async () => {
+    try {
+      // Deploying the previous source because the save failed would ship the wrong code.
+      if (isDirty && !(await save())) return;
+      const version = await deployAsync({ functionId });
+      showSuccessToast({ description: `Deployed as v${version.number}.` });
+    } catch (error) {
+      if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
+      return showErrorToast({ errors: "Failed to deploy function" });
+    }
+  };
+
+  const handleRename = async () => {
+    // Enter and blur both land here, and they fire in sequence for a single rename: submitting
+    // sets `isRenaming`, which disables the input, and disabling a focused field blurs it. A ref
+    // rather than `isRenaming` because the guard has to hold within one render, before React has
+    // re-rendered this handler with the new flag.
+    if (isRenameSubmitting.current) return;
+    const name = renameDraft?.trim();
+    if (!fn || !name || name === fn.name) return setRenameDraft(null);
+    isRenameSubmitting.current = true;
+    try {
+      await renameAsync({ functionId, name, description: fn.description });
+      setRenameDraft(null);
+    } catch (error) {
+      if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
+      return showErrorToast({ errors: "Failed to rename function" });
+    } finally {
+      isRenameSubmitting.current = false;
+    }
+  };
+
+  const copyEndpoint = () => {
+    navigator.clipboard.writeText(buildInvokeUrl(functionId, selectedProject));
+    setIsEndpointCopied(true);
+    setTimeout(() => setIsEndpointCopied(false), 1400);
+  };
+
+  if (isLoading || !isFetched) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+  if (!fn) return null;
+
+  // Deploy answers with the version once the image is built, so "Building…" is exactly the window
+  // where that request is in flight — the API exposes no build id to poll from here.
+  const isBuilding = isDeploying;
+  const isDeployed = fn.activeVersionNumber != null;
+  const hasUndeployedChanges = isDirty || fn.isDirty;
+  const deployLabel = isBuilding
+    ? "Building…"
+    : !isDeployed
+      ? "Deploy"
+      : hasUndeployedChanges
+        ? `Deploy v${fn.lastVersionNumber + 1}`
+        : "Up to date ✓";
+
+  const runs = runsData?.data ?? [];
+  const hasActiveRun = runs.some((run) => !TERMINAL_RUN_STATUSES.includes(run.status));
+  const hasRunFilters =
+    !!queryParams.runStatus || !!queryParams.runTrigger || !!queryParams.runSearch;
+
+  const tabBadges: Record<(typeof TAB_ORDER)[number], string> = {
+    code: "",
+    trigger: "",
+    output: outputActions.length ? String(outputActions.length) : "",
+    configuration: variables.length ? String(variables.length) : "",
+    runs: runsData?.totalCount ? String(runsData.totalCount) : "",
+    versions: isDeployed ? `v${fn.activeVersionNumber}` : "",
+  };
+
+  return (
+    <div className="flex min-h-screen flex-col">
+      <div className="px-6 pt-4 pb-2">
+        {/* The last crumb is the function id, which prettifies into nonsense — name it explicitly. */}
+        <PageBreadcrumb breadcrumbIndex={3} customTitles={{ [pathname]: fn.name }} />
+      </div>
+
+      <div className="flex-1 space-y-4 px-6 pb-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <div className="flex items-center gap-2.5">
+              {renameDraft === null ? (
+                <>
+                  <h1 className="truncate text-2xl font-bold tracking-tight">{fn.name}</h1>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Rename function"
+                    className="h-7 w-7 text-medium-emphasis hover:text-foreground"
+                    onClick={() => setRenameDraft(fn.name)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                </>
+              ) : (
+                <Input
+                  ref={renameInputRef}
+                  aria-label="Function name"
+                  className="h-9 max-w-xs text-lg font-semibold"
+                  value={renameDraft}
+                  disabled={isRenaming}
+                  onChange={(e) => setRenameDraft(e.target.value)}
+                  onBlur={() => void handleRename()}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void handleRename();
+                    if (e.key === "Escape") setRenameDraft(null);
+                  }}
+                />
+              )}
+              <FunctionStatusChip status={fn.status} />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-medium-emphasis">
+              <span className="flex min-w-0 items-center gap-1.5">
+                <ProxyMethodBadge method={toHttpVerb(trigger.httpMethod)} />
+                <code className="truncate font-mono">
+                  {buildInvokeUrl(functionId, selectedProject)}
+                </code>
+                <button
+                  type="button"
+                  aria-label="Copy endpoint"
+                  className="shrink-0 text-medium-emphasis hover:text-foreground"
+                  onClick={copyEndpoint}
+                >
+                  {isEndpointCopied ? (
+                    <Check className="h-3.5 w-3.5 text-success" />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              </span>
+              <span>
+                {isDeployed ? (
+                  <>
+                    active{" "}
+                    <code className="font-mono font-semibold text-primary">
+                      v{fn.activeVersionNumber}
+                    </code>
+                  </>
+                ) : (
+                  "not deployed"
+                )}
+              </span>
+              {isDirty && (
+                <span className="flex items-center gap-1.5 font-medium text-warning-800">
+                  <span className="h-1.5 w-1.5 rounded-full bg-warning-800" />
+                  unsaved changes
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setQueryParams({ tab: "code", runId: "" });
+                requestTestRun();
+              }}
+            >
+              Test run
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => void save()}
+              disabled={isSaving || !isDirty}
+            >
+              <Save className="h-3.5 w-3.5" />
+              {isSaving ? "Saving…" : "Save"}
+            </Button>
+            <Button
+              size="sm"
+              className="gap-1.5"
+              onClick={handleDeploy}
+              disabled={isBuilding || (isDeployed && !hasUndeployedChanges)}
+            >
+              {isBuilding ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Rocket className="h-3.5 w-3.5" />
+              )}
+              {deployLabel}
+            </Button>
+          </div>
+        </div>
+
+        <Tabs
+          value={queryParams.tab}
+          // Leaving the runs tab clears its filters. They only mean anything beside the runs
+          // table, and a URL carrying `?runStatus=Running` while another tab is open both reads
+          // as nonsense and silently narrows the list on the next visit.
+          onValueChange={(tab) =>
+            setQueryParams(
+              tab === "runs"
+                ? { tab }
+                : {
+                    tab,
+                    runId: null,
+                    runStatus: null,
+                    runTrigger: null,
+                    runSearch: null,
+                    runRange: null,
+                    runPage: null,
+                  },
+            )
+          }
+          className="flex flex-col gap-3"
+        >
+          {/* Segmented pills, matching Blocks OS settings (idp/settings/pages/settings-page).
+              Six tabs do not fit a phone, so the strip scrolls rather than wrapping — the
+              pill group keeps its shape instead of breaking onto a second row. */}
+          <div className="-mx-1 overflow-x-auto px-1 pb-0.5">
+            <TabsList className="h-[42px] w-max bg-blocks-primary-shades-300">
+              {TAB_ORDER.map((tab) => (
+                <TabsTrigger key={tab} value={tab} className="h-8 gap-2 px-4 text-sm font-medium">
+                  {TAB_LABELS[tab]}
+                  {!!tabBadges[tab] && (
+                    <span className="text-[10px] font-semibold text-low-emphasis">
+                      {tabBadges[tab]}
+                    </span>
+                  )}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
+
+          <TabsContent
+            value="code"
+            className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]"
+          >
+            <Card
+              className="flex min-w-0 flex-col overflow-hidden"
+              style={{ height: CODE_CARD_HEIGHT }}
+            >
+              <div className="flex shrink-0 items-center justify-between gap-3 border-b bg-surface-app pr-4">
+                <div className="flex">
+                  {(["index.js", "package.json"] as const).map((file) => (
+                    <button
+                      key={file}
+                      className={cn(
+                        "border-b-2 px-4 py-2.5 font-mono text-xs",
+                        activeFile === file
+                          ? "border-primary font-semibold text-primary"
+                          : "border-transparent text-medium-emphasis hover:text-foreground",
+                      )}
+                      onClick={() => setActiveFile(file)}
+                    >
+                      {file}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <span className="hidden text-xs text-low-emphasis sm:inline">
+                    {activeFile === "index.js"
+                      ? `ES modules · ${indexJs.split("\n").length} lines`
+                      : "pinned versions only · installed at deploy"}
+                  </span>
+                  {/* Monaco owns all three; these only make them visible. Every one keeps its
+                      keyboard shortcut, so the buttons are a discovery aid rather than the
+                      only way in. */}
+                  <div className="ml-2 flex items-center gap-0.5 border-l pl-2">
+                    <EditorToolButton
+                      label="Search"
+                      hint="Find and replace — click again to close"
+                      shortcut="Ctrl+F · Esc"
+                      icon={Search}
+                      onClick={() => editorActions.current?.find()}
+                    />
+                    <EditorToolButton
+                      label="Format"
+                      hint="Format document"
+                      shortcut="Shift+Alt+F"
+                      icon={Sparkles}
+                      onClick={() => editorActions.current?.format()}
+                    />
+                    <EditorToolButton
+                      label="Wrap lines"
+                      hint={isWrapped ? "Stop wrapping long lines" : "Wrap long lines"}
+                      icon={WrapText}
+                      isActive={isWrapped}
+                      onClick={() => setIsWrapped((wrapped) => !wrapped)}
+                    />
+                  </div>
+                </div>
+              </div>
+              {/* `min-h-0` so this row can shrink below the editor's content height: without it a
+                  flex item refuses to go under its min-content size and the card grows past the
+                  window instead of the editor scrolling inside it. */}
+              <div className="min-h-0 flex-1">
+                {activeFile === "index.js" ? (
+                  <CodeEditor
+                    language="javascript"
+                    value={indexJs}
+                    onChange={setIndexJs}
+                    height="100%"
+                    className="overflow-hidden"
+                    wordWrap={isWrapped}
+                    actionsRef={editorActions}
+                    // The tenant's own keys, so `ctx.env.` completes with what is actually bound.
+                    envKeys={variables.map((variable) => variable.key)}
+                  />
+                ) : (
+                  <CodeEditor
+                    language="json"
+                    value={packageJson}
+                    onChange={setPackageJson}
+                    height="100%"
+                    className="overflow-hidden"
+                    wordWrap={isWrapped}
+                    actionsRef={editorActions}
+                  />
+                )}
+              </div>
+              <p className="shrink-0 border-t bg-surface-app px-4 py-2.5 text-xs text-medium-emphasis">
+                Native <code className="font-mono">fetch()</code>, async/await and pinned npm
+                packages. Variables arrive as <code className="font-mono">ctx.env.NAME</code> —
+                inside the handler, where <code className="font-mono">ctx</code> exists.
+              </p>
+            </Card>
+
+            {/* Same height as the editor on wide screens, scrolling inside, so switching panels
+                never moves the page. Panels stay mounted (`forceMount`) so a half-typed test input
+                survives a look at Connections. */}
+            <Tabs
+              value={sidePanel}
+              onValueChange={(value) => setSidePanel(value as SidePanel)}
+              className="flex min-w-0 flex-col gap-3 xl:h-[max(400px,calc(100dvh_-_264px))]"
+            >
+              <TabsList className="grid h-10 w-full shrink-0 grid-cols-3">
+                {SIDE_PANELS.map((panel) => (
+                  <TabsTrigger key={panel.value} value={panel.value} className="gap-1.5 text-xs">
+                    {panel.label}
+                    {panel.value === "connections" && setupIssueCount > 0 && (
+                      <span
+                        className="h-1.5 w-1.5 rounded-full bg-warning-700"
+                        aria-label={`${setupIssueCount} setup ${setupIssueCount === 1 ? "issue" : "issues"}`}
+                      />
+                    )}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+              <TabsContent
+                value="test"
+                forceMount
+                className="mt-0 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto"
+              >
+                <TestPanel
+                  functionId={functionId}
+                  lastRunId={runsData?.data?.[0]?.id}
+                  onOpenRun={(runId) => setQueryParams({ tab: "runs", runId })}
+                  onBeforeRun={isDirty ? save : undefined}
+                />
+              </TabsContent>
+              <TabsContent
+                value="environment"
+                forceMount
+                className="mt-0 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto"
+              >
+                <EnvironmentCard
+                  variables={variables}
+                  onEditVariables={() => setQueryParams({ tab: "configuration" })}
+                />
+                <SandboxHelpCard limits={limits} />
+              </TabsContent>
+              <TabsContent
+                value="connections"
+                forceMount
+                className="mt-0 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto"
+              >
+                <ConnectionsCard
+                  indexJs={indexJs}
+                  packageJson={packageJson}
+                  variables={variables}
+                  onPackageJsonChange={setPackageJson}
+                  onVariablesChange={setVariables}
+                  onEditVariables={() => setQueryParams({ tab: "configuration" })}
+                  blocksApiHost={getProxyPublicHost(selectedProject)}
+                />
+              </TabsContent>
+            </Tabs>
+          </TabsContent>
+
+          {/* Full width with the supporting cards in columns, like proxy-details' overview. */}
+          <TabsContent value="trigger" className="flex flex-col gap-4">
+            <TriggerHttpCard value={trigger} onChange={setTrigger} functionId={fn.id} />
+            <div className="grid gap-4 xl:grid-cols-2">
+              <TriggerWorkflowCard value={trigger} onChange={setTrigger} />
+              <InvokeSnippetCard functionId={fn.id} trigger={trigger} />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="output" className="flex flex-col gap-4">
+            <Card>
+              <CardContent>
+                <OutputActionsEditor value={outputActions} onChange={setOutputActions} />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="configuration" className="flex flex-col gap-4">
+            <Card className="overflow-hidden">
+              <VariablesEditor value={variables} onChange={setVariables} />
+            </Card>
+            <div className="grid items-start gap-4 xl:grid-cols-2">
+              <Card>
+                <CardContent className="flex flex-col gap-4 p-5">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-base font-semibold">Limits</span>
+                    <span className="text-xs leading-relaxed text-medium-emphasis">
+                      Applied to every invocation, the same for every function.
+                    </span>
+                  </div>
+                  <LimitsForm />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="flex flex-col gap-4 p-5">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-base font-semibold">Retries</span>
+                    <span className="text-xs leading-relaxed text-medium-emphasis">
+                      What happens when a run fails.
+                    </span>
+                  </div>
+                  <RetryForm />
+                </CardContent>
+              </Card>
+            </div>
+            <DangerZoneCard onDelete={() => setIsDeleteOpen(true)} />
+          </TabsContent>
+
+          <TabsContent value="runs" className="flex flex-col gap-4">
+            {queryParams.runId ? (
+              <RunDetail
+                runId={queryParams.runId}
+                memoryLimitMb={limits.memoryMb}
+                cpuLimitMillicores={limits.cpuMillicores}
+                onBack={() => setQueryParams({ runId: "" })}
+                onUseAsTestInput={(input) => {
+                  // The stored input is the whole request; the test box holds only its body (or
+                  // query), which Test wraps again. Pasting the request in whole made the handler
+                  // receive it nested inside input.body.
+                  setTestInput(payloadOf(input));
+                  setQueryParams({ tab: "code", runId: "" });
+                }}
+              />
+            ) : (
+              <>
+                <Card>
+                  <CardHeader className="mb-4 p-0">
+                    <RunsFilterBar
+                      value={runsFilter}
+                      hasActiveRun={hasActiveRun}
+                      onChange={(partial) => {
+                        if (partial.autoRefresh !== undefined)
+                          setIsRunsAutoRefresh(partial.autoRefresh);
+                        setQueryParams({
+                          ...(partial.status !== undefined ? { runStatus: partial.status } : {}),
+                          ...(partial.invokedBy !== undefined
+                            ? { runTrigger: partial.invokedBy }
+                            : {}),
+                          ...(partial.range !== undefined ? { runRange: partial.range } : {}),
+                          ...(partial.search !== undefined ? { runSearch: partial.search } : {}),
+                          runPage: 0,
+                        });
+                      }}
+                    />
+                  </CardHeader>
+                  <CardContent>
+                    <RunsTable
+                      runs={runs}
+                      isLoading={isRunsLoading}
+                      memoryLimitMb={limits.memoryMb}
+                      hasFilters={hasRunFilters}
+                      isDeployed={isDeployed}
+                      onOpenRun={(runId) => setQueryParams({ runId })}
+                    />
+                    {!!runsData?.totalCount && runsData.totalCount > RUNS_PAGE_SIZE && (
+                      <div className="mt-5 flex justify-end">
+                        <Pagination
+                          totalCount={runsData.totalCount}
+                          page={queryParams.runPage}
+                          pageSize={RUNS_PAGE_SIZE}
+                          pageSizeOptions={[RUNS_PAGE_SIZE]}
+                          onChange={(runPage) => setQueryParams({ runPage })}
+                          onPageSizeChange={() => undefined}
+                        />
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            )}
+          </TabsContent>
+
+          <TabsContent value="versions" className="flex flex-col gap-4">
+            <Card>
+              <CardContent>
+                <VersionsTable
+                  functionId={functionId}
+                  versions={versionsData?.data ?? []}
+                  activeVersionNumber={fn.activeVersionNumber}
+                  isLoading={isVersionsLoading}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      <DeleteFunctionDialog
+        open={isDeleteOpen}
+        onOpenChange={setIsDeleteOpen}
+        fn={{ id: fn.id, name: fn.name }}
+        onDeleted={() => navigate(scoped("functions"))}
+      />
+    </div>
+  );
+};

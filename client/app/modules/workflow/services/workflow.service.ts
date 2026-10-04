@@ -1,5 +1,5 @@
 import { serviceInstances } from "@/lib/http-client";
-import { WORKFLOW_ENDPOINTS } from "../constants/endpoint.constant";
+import { WORKFLOW_ENDPOINTS, STORAGE_ENDPOINTS } from "../constants/endpoint.constant";
 import {
   IGetWorkflowsPayload,
   IGetWorkflowsResponse,
@@ -17,6 +17,8 @@ import {
   IGetWorkflowExecutionsResponse,
   IGetWorkflowExecutionByIdPayload,
   IGetWorkflowExecutionByIdResponse,
+  IGetWorkflowExecutionLogsPayload,
+  IGetWorkflowExecutionLogsResponse,
   ICreateWorkflowVersionPayload,
   ICreateWorkflowVersionResponse,
   IGetWorkflowVersionsPayload,
@@ -38,6 +40,10 @@ import {
   ITriggerListenerPayload,
   ITriggerListenerResponse,
   IStepExecutePayload,
+  IImportWorkflowPayload,
+  IImportWorkflowResponse,
+  IGetPreSignedUrlForUploadPayload,
+  IGetPreSignedUrlForUploadResponse,
 } from "../types/workflow.service.type";
 
 export class WorkflowService {
@@ -77,9 +83,21 @@ export class WorkflowService {
   getWorkflowExecutions = (
     payload: IGetWorkflowExecutionsPayload,
   ): Promise<IGetWorkflowExecutionsResponse> => {
-    const params = new URLSearchParams({ 
-      WorkflowId: payload.workflowId 
+    const params = new URLSearchParams({
+      WorkflowId: payload.workflowId,
     });
+    if (payload.pageSize != null) {
+      params.set("PageSize", String(payload.pageSize));
+    }
+    if (payload.beforeId) {
+      params.set("BeforeId", payload.beforeId);
+    }
+    if (payload.afterId) {
+      params.set("AfterId", payload.afterId);
+    }
+    for (const id of payload.refreshIds ?? []) {
+      if (id) params.append("RefreshIds", id);
+    }
     return this.LogicHttpClient.get(`${WORKFLOW_ENDPOINTS.GET_EXECUTIONS}?${params.toString()}`);
   }
 
@@ -90,6 +108,13 @@ export class WorkflowService {
       ExecutionId: payload.executionId,
     });
     return this.LogicHttpClient.get(`${WORKFLOW_ENDPOINTS.GET_EXECUTION}?${params.toString()}`);
+  }
+
+  getWorkflowExecutionLogs = (
+    payload: IGetWorkflowExecutionLogsPayload,
+  ): Promise<IGetWorkflowExecutionLogsResponse> => {
+    const params = new URLSearchParams({ ExecutionId: payload.executionId });
+    return this.LogicHttpClient.get(`${WORKFLOW_ENDPOINTS.GET_EXECUTION_LOGS}?${params.toString()}`);
   }
 
   createWorkflowVersion = (payload: ICreateWorkflowVersionPayload): Promise<ICreateWorkflowVersionResponse> => {
@@ -139,6 +164,30 @@ export class WorkflowService {
 
   triggerListener = (payload: ITriggerListenerPayload): Promise<ITriggerListenerResponse> => {
     return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.TRIGGER_LISTENER}`, payload);
+  }
+
+  importWorkflow = (payload: IImportWorkflowPayload): Promise<IImportWorkflowResponse> => {
+    return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.IMPORT}`, payload);
+  }
+
+  getPreSignedUrlForUpload = (
+    payload: IGetPreSignedUrlForUploadPayload,
+  ): Promise<IGetPreSignedUrlForUploadResponse> => {
+    return this.LogicHttpClient.post(`${STORAGE_ENDPOINTS.GET_PRESIGNED_URL}`, payload);
+  }
+
+  uploadFileToPresignedUrl = async (url: string, file: File): Promise<void> => {
+    const response = await fetch(url, {
+      method: "PUT",
+      headers: {
+        "Content-Type": file.type || "application/json",
+        "x-ms-blob-type": "Blockblob",
+      },
+      body: file,
+    });
+    if (!response.ok) {
+      throw new Error("Failed to upload the workflow file.");
+    }
   }
 }
 

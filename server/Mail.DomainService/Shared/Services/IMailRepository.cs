@@ -8,6 +8,7 @@ namespace Mail.DomainService.Services
         Task<bool> FileExists(string fileId);
         Task<List<string>> GetEmailAdressOfUsers(IEnumerable<string> emails);
         Task<MailServerConfiguration> GetMailServerConfigurationByTenantId(string tenantId);
+        Task<List<MailServerConfigurationSummary>> GetMailServerConfigurationSummariesAsync();
         Task<EmailTemplate> GetEmailTemplateByPurpose(string purpose, string language, string organizationId);
         Task<MailServerConfiguration> GetMailServerConfigurationByPurpose(string purpose, string language, string organizationId);
         Task<bool> MailTemplateForPurposeExists(string purpose, string language);
@@ -16,6 +17,6 @@ namespace Mail.DomainService.Services
         Task<MailToBeSent> GetMailToBeSent(string itemId);
         Task<(List<MailBoxEntity> Mails, long TotalCount)> GetMailBoxMails(GetMailBoxMails request); //deprecated
         Task<(List<MailBoxEntityResponse> Mails, long TotalCount)> GetMailBoxAggregatedMails(GetMailBoxMails request);
-        Task<MailBoxEntity> GetMailBoxMail(string messageId, string projectKey);
+        Task<MailBoxEntity> GetMailBoxMail(string messageId, string tenantId);
     }
 }

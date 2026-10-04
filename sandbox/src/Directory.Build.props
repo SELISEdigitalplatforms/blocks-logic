@@ -1,0 +1,45 @@
+<Project>
+  <!-- Shared build settings for every Blocks.FunctionRunner project.
+       Matches server/Directory.Build.props on everything that should be uniform across the
+       repository - TargetFramework, Nullable, ImplicitUsings, EnforceCodeStyleInBuild - and is
+       backed by the repository's own .editorconfig, which /sandbox/.editorconfig extends rather
+       than replaces.
+
+       It is a separate file rather than an inherited one because MSBuild stops at the nearest
+       Directory.Build.props: these projects sit outside server/, so server's never applies to
+       them. That is the intent. The runner executes untrusted tenant code on a dedicated VM and
+       is held to the stricter pair below, which the rest of the repository is not ready for
+       (see CONTRIBUTING.md's ratchet plan). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- Surface the .editorconfig naming/code-style rules at build time, as blocks-logic does. -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+
+    <!-- The one deliberate divergence from server/Directory.Build.props, and the reason for it:
+         server pairs AnalysisLevel=latest-All with TreatWarningsAsErrors *off* (its CI tolerates
+         the diagnostics and CONTRIBUTING.md plans to ratchet later). This half runs untrusted
+         workloads, so warnings stay errors; latest-All with warnings-as-errors does not build
+         (CA1515/CA1062/CA2007/CA1002/CA1032 across most files), so the level stays at
+         latest-recommended. Do not "align" these two values by raising the level or dropping
+         warnings-as-errors - the pair is the point, and CI builds this solution in Release. -->
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- Globalization is invariant so the runner cannot depend on host ICU data. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+
+    <!-- CA1848/CA1873 are the high-performance-logging rules (LoggerMessage delegates,
+         lazy argument evaluation). The runner logs once per run and per lifecycle event,
+         never per request, so the readability of plain structured logging wins.
+         CA1031 (catch-all) is deliberate: a sandbox failure must never take the runner
+         down, so the processing loops catch broadly and report. -->
+    <NoWarn>$(NoWarn);CA1848;CA1873;CA1031</NoWarn>
+  </PropertyGroup>
+</Project>

@@ -76,12 +76,15 @@ export interface IDeleteWorkflowResponse {
 
 export interface IGetWorkflowExecutionsPayload {
   workflowId: string;
+  pageSize?: number;
+  beforeId?: string;
+  afterId?: string;
+  refreshIds?: string[];
 }
 
 export interface WorkflowExecution {
   id: string;
   workflowId: string;
-  projectKey: string;
   status: number;
   executionMode: WorkflowExecutionMode;
   startedAt: string;
@@ -89,12 +92,14 @@ export interface WorkflowExecution {
   duration: number;
   triggeredBy: string;
   errorMessage: string;
+  attemptNumber?: number;
 }
 
 export interface IGetWorkflowExecutionsResponse {
   data: WorkflowExecution[];
   totalCount: number;
   errors: unknown;
+  refreshed?: WorkflowExecution[] | null;
 }
 
 export interface IGetWorkflowExecutionByIdPayload {
@@ -113,6 +118,52 @@ export interface IGetWorkflowExecutionById {
   items: ExecutedItem[];
   executionMode: WorkflowExecutionMode;
   id: string;
+  status?: number;
+  finishedAt?: string | null;
+  errorMessage?: string | null;
+}
+
+export type ExecutionLogLevel = "Information" | "Warning" | "Error";
+
+/** Mirrors the backend enum, which serialises as a number (like WorkflowExecutionStatus). */
+export enum ExecutionLogsAvailability {
+  Available = 0,
+  Expired = 1,
+  NotRecorded = 2,
+  SourceUnavailable = 3,
+}
+
+export interface ExecutionLogEntry {
+  timestamp: string;
+  level: ExecutionLogLevel;
+  stage: string;
+  nodeId?: string | null;
+  runIndex?: number | null;
+  nodeName?: string | null;
+  nodeType?: string | null;
+  message: string;
+  source: "api" | "worker";
+}
+
+export interface IGetWorkflowExecutionLogsPayload {
+  executionId: string;
+}
+
+export interface IWorkflowExecutionLogs {
+  executionId: string;
+  traceId?: string | null;
+  availability: ExecutionLogsAvailability;
+  expiresAt?: string | null;
+  retentionDays: number;
+  mayStillArrive: boolean;
+  isTruncated: boolean;
+  logs: ExecutionLogEntry[];
+}
+
+export interface IGetWorkflowExecutionLogsResponse {
+  data: IWorkflowExecutionLogs;
+  isSuccess: boolean;
+  errors: unknown;
 }
 
 export interface ICreateWorkflowVersionPayload {
@@ -247,4 +298,34 @@ export interface ITriggerListenerResponse {
   itemId: string;
   errors: unknown;
   isSuccess: boolean;
+}
+
+export interface IImportWorkflowPayload {
+  fileId: string;
+  messageCoRelationId: string;
+}
+
+export interface IImportWorkflowResponse {
+  itemId?: string;
+  isSuccess: boolean;
+  errors?: unknown;
+}
+
+export interface IGetPreSignedUrlForUploadPayload {
+  itemId?: string;
+  name: string;
+  configurationName: string;
+  projectKey: string;
+  metaData: string;
+  parentDirectoryId: string;
+  tags: string;
+  accessModifier: string;
+  moduleName: number;
+}
+
+export interface IGetPreSignedUrlForUploadResponse {
+  errors: null | unknown;
+  isSuccess: boolean;
+  fileId: string;
+  uploadUrl: string;
 }

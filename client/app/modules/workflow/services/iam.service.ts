@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { serviceInstances } from "@/lib/http-client";
 import { getRuntimeEnv } from "@seliseblocks/genesis-os";
-import { IClientConfigResponse, IGetClientsPayload, IGetOrganizationsResponse, IGetPermissionsResponse, IGetRolesResponse } from "../models/iam";
+import { getLogicBaseUrl } from "@/lib/logic-base-url";
+import { IClientConfigResponse, IGetOrganizationsResponse, IGetPermissionsResponse, IGetRolesResponse } from "../models/iam";
 import { AUTH_CLIENT_ENDPOINTS, IAM_AUTHORIZATION_ENDPOINTS } from "../constants/iam.endpoint.constant";
 import {
   IGetOrganizationsPayload,
@@ -14,12 +15,10 @@ import {
 
 export class AuthClientsService {
   private readonly IamHttpClient = serviceInstances.iamService;
-  getClientCredentials(
-    payload: IGetClientsPayload,
-  ): Promise<IClientConfigResponse[]> {
-    const baseUrl = getRuntimeEnv("BLOCKS_IAM_BASE_URL") || getRuntimeEnv("BLOCKS_LOGIC_BASE_URL");
+  getClientCredentials(): Promise<IClientConfigResponse[]> {
+    const baseUrl = getRuntimeEnv("BLOCKS_IAM_BASE_URL") || getLogicBaseUrl();
     return this.IamHttpClient.get(
-      `${baseUrl}${AUTH_CLIENT_ENDPOINTS.GET_CLIENT_CREDENTIALS}?ProjectKey=${payload.projectKey}`,
+      `${baseUrl}${AUTH_CLIENT_ENDPOINTS.GET_CLIENT_CREDENTIALS}`,
       undefined,
       { absoluteUrl: true },
     );
@@ -30,7 +29,7 @@ export class AuthClientsService {
 export class IamService {
   private readonly IamHttpClient = serviceInstances.iamService;
   private readonly baseUrl =
-    getRuntimeEnv("BLOCKS_IAM_BASE_URL") || getRuntimeEnv("BLOCKS_LOGIC_BASE_URL");
+    getRuntimeEnv("BLOCKS_IAM_BASE_URL") || getLogicBaseUrl();
 
   getOrganizations(payload: IGetOrganizationsPayload = {}): Promise<IGetOrganizationsResponse> {
     const page = payload.page ?? 0;

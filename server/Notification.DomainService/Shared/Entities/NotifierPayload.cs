@@ -1,4 +1,4 @@
-﻿
+
 namespace DomainService.Shared
 {
     public class NotifierPayload
@@ -8,12 +8,18 @@ namespace DomainService.Shared
         /// <summary>
         ///     It is only applicable or considered when we want User Specific Notification for multiple users
         /// </summary>
-        public List<string> UserIds { get; set; }
+        public List<string>? UserIds { get; set; }
 
         /// <summary>
         /// It is only applicable or considered when we want User Specific Notification for multiple users based on their roles
         /// </summary>
-        public List<string> Roles { get; set; }
+        public List<string>? Roles { get; set; }
+
+        /// <summary>
+        /// It is only applicable or considered when Roles is set; scopes role resolution to users who hold the role
+        /// within one of these organizations. When empty/null, role resolution is not scoped by organization.
+        /// </summary>
+        public List<string>? OrganizationIds { get; set; }
 
         /// <summary>
         ///     It is only applicable or considered when we want Filter Specific Notification
