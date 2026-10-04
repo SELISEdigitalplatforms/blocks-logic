@@ -111,6 +111,9 @@ test.describe("Web Push API", () => {
         configurationName: "does-not-exist-webpush-e2e",
         userIds: ["nobody"],
         denormalizedPayload: '{"title":"x"}',
+        connectionId: "e2e-webpush",
+        responseKey: "webpush",
+        responseValue: "e2e",
       },
     })
     expect(unknown.status()).toBe(200)
