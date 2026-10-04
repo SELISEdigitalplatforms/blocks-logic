@@ -56,7 +56,7 @@ export const varNameRef: VariableRefCodec = {
 export const soleRefKey = (value: string, codec: VariableRefCodec): string | null => {
   const trimmed = value.trim();
   const match = codec.pattern().exec(trimmed);
-  if (!match || match.index !== 0 || match[0] !== trimmed) return null;
+  if (match?.index !== 0 || match?.[0] !== trimmed) return null;
   return match[1];
 };
 

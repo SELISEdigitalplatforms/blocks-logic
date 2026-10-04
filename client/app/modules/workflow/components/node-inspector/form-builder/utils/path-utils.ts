@@ -5,7 +5,7 @@ const isSafePathPart = (part: string): boolean => part.length > 0 && !FORBIDDEN_
 export const getValueByPath = (data: Record<string, unknown>, path: string): unknown => {
   return path.split(".").reduce<unknown>((acc, part) => {
     if (!isSafePathPart(part)) return undefined;
-    if (acc && typeof acc === "object" && Object.prototype.hasOwnProperty.call(acc, part)) {
+    if (acc && typeof acc === "object" && Object.hasOwn(acc, part)) {
       return (acc as Record<string, unknown>)[part];
     }
     return undefined;
@@ -31,8 +31,8 @@ export const setValueByPath = (
     current = next;
   }
 
-  const last = keys[keys.length - 1];
-  if (!isSafePathPart(last)) return data;
+  const last = keys.at(-1);
+  if (last === undefined || !isSafePathPart(last)) return data;
   current[last] = value;
   return result;
 };
