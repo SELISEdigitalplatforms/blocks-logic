@@ -282,6 +282,7 @@ test.describe("flow: Overview menu", () => {
     await test.step("Console: heading, Add Project CTA, and at least one env chip render", async () => {
       const edgeConsole = new ConsolePage(page);
       await page.goto(`${e2eBaseUrl()}/app/console`, { waitUntil: "domcontentloaded" });
+      await dismissSingleSessionTakeover(page);
       await edgeConsole.expectConsoleHeading();
 
       const add = edgeConsole.addProjectText;
