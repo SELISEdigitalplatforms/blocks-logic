@@ -22,7 +22,9 @@ namespace Blocks.FunctionRunner.Tests
     /// </summary>
     public sealed class RunProcessorSecretTests : IAsyncLifetime
     {
-        private const string Tenant = "tenant_secret_test";
+        // Unique per instance so parallel xUnit workers do not share RedisKeys.TenantSlots
+        // and flake ProcessAsync with Disposition.Deferred under Sonar's full suite run.
+        private readonly string _tenant = $"tenant_sec_{Guid.NewGuid():N}";
         private const string StripeValue = "sk_live_RESOLVED_4242";
         private const string TokenValue = "tok_RESOLVED_9191";
 
@@ -60,7 +62,7 @@ namespace Blocks.FunctionRunner.Tests
                 await _db.KeyDeleteAsync(
                 [
                     RedisKeys.Run(_runId), RedisKeys.Lease(_runId), RedisKeys.Concurrency(_functionId),
-                    RedisKeys.Result(_runId), RedisKeys.Logs(_runId),
+                    RedisKeys.TenantSlots(_tenant), RedisKeys.Result(_runId), RedisKeys.Logs(_runId),
                 ]);
             }
             if (_redis is not null) await _redis.DisposeAsync();
@@ -116,6 +118,7 @@ namespace Blocks.FunctionRunner.Tests
                 RunnerId = "test-runner",
                 RunsDir = _runsDir,
                 MaxActiveSandboxes = 4,
+                MaxSandboxesPerTenant = 64,
             });
             var budget = new HostBudget(options, new RoomyHost(), new SandboxFootprint(), NullLogger<HostBudget>.Instance);
 
@@ -127,11 +130,11 @@ namespace Blocks.FunctionRunner.Tests
 
         private static readonly string[] DevRole = ["dev"];
 
-        private static string Envelope(object env, string contextTenant = Tenant, object? input = null) =>
+        private string Envelope(object env, string? contextTenant = null, object? input = null) =>
             JsonSerializer.Serialize(new Dictionary<string, object?>
             {
                 ["run"] = new { id = "r", attempt = 1 },
-                ["context"] = new { tenantId = contextTenant, userId = "user_1", organizationId = "org_1", roles = DevRole },
+                ["context"] = new { tenantId = contextTenant ?? _tenant, userId = "user_1", organizationId = "org_1", roles = DevRole },
                 ["env"] = env,
                 ["maskedEnv"] = Array.Empty<string>(),
                 ["input"] = input ?? new { },
@@ -152,8 +155,9 @@ namespace Blocks.FunctionRunner.Tests
             ["sec_token"] = TokenValue,
         });
 
-        private async Task<RunJob> QueueAsync(string envelope, int protocol = RedisKeys.RunProtocolVersion, string? tenant = Tenant)
+        private async Task<RunJob> QueueAsync(string envelope, int protocol = RedisKeys.RunProtocolVersion, string? tenant = null)
         {
+            tenant ??= _tenant;
             await _db!.HashSetAsync(RedisKeys.Run(_runId),
             [
                 new HashEntry("envelope", envelope),
@@ -235,7 +239,7 @@ namespace Blocks.FunctionRunner.Tests
                 .Should().BeEquivalentTo([StripeValue, TokenValue], "the bootstrap masks the bare values too");
 
             resolver.Calls.Should().ContainSingle("every reference is resolved in one lookup");
-            resolver.Calls[0].TenantId.Should().Be(Tenant);
+            resolver.Calls[0].TenantId.Should().Be(_tenant);
             resolver.Calls[0].Ids.Should().BeEquivalentTo(["sec_stripe", "sec_token"], "each id once");
             resolver.Calls[0].Caller.UserId.Should().Be("user_1");
 
@@ -413,7 +417,7 @@ namespace Blocks.FunctionRunner.Tests
         {
             Skip.If(Unavailable, "no Redis available");
             var resolver = Resolves();
-            var bad = """{"run":{"id":"r"},"context":{"tenantId":"tenant_secret_test","accessToken":"x"},"env":{"A":"{{secret.sec_stripe}}"}}""";
+            var bad = "{\"run\":{\"id\":\"r\"},\"context\":{\"tenantId\":\"" + _tenant + "\",\"accessToken\":\"x\"},\"env\":{\"A\":\"{{secret.sec_stripe}}\"}}";
 
             await Processor(new RecordingSandbox(), resolver).ProcessAsync(await QueueAsync(bad), CancellationToken.None);
 
