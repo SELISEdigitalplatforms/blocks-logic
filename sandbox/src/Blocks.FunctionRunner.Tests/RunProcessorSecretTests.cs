@@ -174,10 +174,20 @@ namespace Blocks.FunctionRunner.Tests
 
         private async Task<NameValueEntry[]> ResultEntryAsync()
         {
-            var entries = await _db!.StreamRangeAsync(RedisKeys.ResultsStream, "-", "+");
-            return entries
-                .Select(e => e.Values)
-                .Last(v => v.Any(f => f.Name == "runId" && f.Value == _runId));
+            // The results stream is shared across the whole FunctionRunner suite. Reading
+            // from "-" without a bound misses the newest entries once hundreds of tests have
+            // already appended; search newest-first instead.
+            for (var attempt = 0; attempt < 25; attempt++)
+            {
+                var entries = await _db!.StreamRangeAsync(
+                    RedisKeys.ResultsStream, "-", "+", count: 500, messageOrder: Order.Descending);
+                var match = entries
+                    .Select(e => e.Values)
+                    .FirstOrDefault(v => v.Any(f => f.Name == "runId" && f.Value == _runId));
+                if (match is not null) return match;
+                await Task.Delay(40);
+            }
+            throw new InvalidOperationException($"no results-stream entry for run {_runId}");
         }
 
         private static string? Field(NameValueEntry[] entry, string name) =>
@@ -353,9 +363,10 @@ namespace Blocks.FunctionRunner.Tests
             var resolver = new FakeRunSecretResolver(@throw: new SecretStoreUnavailableException(
                 "the key vault could not be read", new InvalidOperationException($"inner detail {StripeValue}")));
 
-            await Processor(sandbox, resolver).ProcessAsync(
+            var disposition = await Processor(sandbox, resolver).ProcessAsync(
                 await QueueAsync(Envelope(ReferencingEnv)), CancellationToken.None);
 
+            disposition.Should().Be(RunProcessor.Disposition.Complete);
             sandbox.Calls.Should().Be(0);
             Directory.Exists(RunDir).Should().BeFalse();
             var result = await ResultEntryAsync();
