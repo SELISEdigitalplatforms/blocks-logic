@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import fs from "fs";
 import path from "path";
 import { reuseOrCreateSharedProject } from "../../support/create-and-delete-project";
-import { loginThroughOidc } from "../../support/login-helper";
+import { dismissSingleSessionTakeover, loginThroughOidc } from "../../support/login-helper";
 import { LOGIC_SESSION_PATH, writeLogicProject } from "../../support/logic-project";
 import { resetRunOutcome } from "../../support/run-outcome";
 
@@ -12,6 +12,7 @@ test.describe("logic suite setup", () => {
     resetRunOutcome();
 
     await loginThroughOidc(page);
+    await dismissSingleSessionTakeover(page);
     await expect(
       page.getByRole("heading", { name: /Your Blocks Projects|Welcome to SELISE Blocks/ }),
     ).toBeVisible({ timeout: 30_000 });

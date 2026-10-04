@@ -38,6 +38,16 @@ export async function isLoginSurface(page: Page): Promise<boolean> {
   return false
 }
 
+
+/** Claim this tab when another window holds the project session. */
+export async function dismissSingleSessionTakeover(page: Page) {
+  const leave = page.getByRole("button", { name: /^Leave / })
+  if (await leave.isVisible({ timeout: 1_500 }).catch(() => false)) {
+    await leave.click()
+    await page.waitForTimeout(500)
+  }
+}
+
 async function safeGoto(page: Page, url: string) {
   for (let i = 0; i < 3; i++) {
     try {
@@ -150,12 +160,14 @@ export async function loginThroughOidc(page: Page, options?: { loginPath?: strin
 export async function ensureAuthenticated(page: Page) {
   const base = e2eBaseUrl()
   await safeGoto(page, `${base}/app/console`)
+  await dismissSingleSessionTakeover(page)
 
   if (await consoleHeading(page).isVisible({ timeout: 15_000 }).catch(() => false)) {
     return
   }
 
   await loginThroughOidc(page)
+  await dismissSingleSessionTakeover(page)
   await expect(consoleHeading(page)).toBeVisible({ timeout: 30_000 })
 }
 
@@ -168,12 +180,14 @@ export async function ensureAuthenticatedOnCurrentOrigin(page: Page) {
 
   const origin = new URL(href).origin
   await safeGoto(page, `${origin}/app/console`)
+  await dismissSingleSessionTakeover(page)
 
   if (await consoleHeading(page).isVisible({ timeout: 15_000 }).catch(() => false)) {
     return
   }
 
   await loginThroughOidc(page, { loginPath: `${origin}/login` })
+  await dismissSingleSessionTakeover(page)
   await expect(consoleHeading(page)).toBeVisible({ timeout: 30_000 })
 }
 

@@ -22,10 +22,25 @@ function publicKey(body: Record<string, unknown>): string {
   return String(body.publicKey ?? body.PublicKey ?? "")
 }
 
+async function resolveBlocksKey(): Promise<string> {
+  const res = await fetch(`${e2eBaseUrl()}/runtime-config.js`)
+  if (!res.ok) {
+    throw new Error(`runtime-config.js HTTP ${res.status}`)
+  }
+  const body = await res.text()
+  const match = body.match(/BLOCKS_X_BLOCKS_KEY:\s*"([^"]+)"/)
+  if (!match?.[1]) {
+    throw new Error("BLOCKS_X_BLOCKS_KEY missing from runtime-config.js")
+  }
+  return match[1]
+}
+
 async function api(storageStatePath: string | undefined) {
+  const blocksKey = await resolveBlocksKey()
   return playwrightRequest.newContext({
     baseURL: e2eBaseUrl(),
     ignoreHTTPSErrors: true,
+    extraHTTPHeaders: { "x-blocks-key": blocksKey },
     ...(storageStatePath && fs.existsSync(storageStatePath)
       ? { storageState: storageStatePath }
       : {}),

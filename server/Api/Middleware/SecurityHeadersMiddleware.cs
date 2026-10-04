@@ -74,13 +74,15 @@ public sealed class SecurityHeadersMiddleware
             "https://api.rollbar.com " +
             "https://code.selise.biz";
 
+        // Monaco (@monaco-editor/react) loads vs from jsDelivr; workers use blob:.
         return
             "default-src 'self' blob:; " +
-            "script-src 'self'; " +
-            "style-src 'self' 'unsafe-inline'; " +
+            "script-src 'self' blob: https://cdn.jsdelivr.net; " +
+            "worker-src 'self' blob:; " +
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
             "img-src 'self' data: blob: https://blocksdev.blob.core.windows.net https://az-cdn.selise.biz; " +
-            "font-src 'self' data:; " +
-            "connect-src 'self' " + connectHosts + "; " +
+            "font-src 'self' data: https://cdn.jsdelivr.net; " +
+            "connect-src 'self' " + connectHosts + " https://cdn.jsdelivr.net; " +
             "frame-ancestors 'none'; " +
             "base-uri 'self'; " +
             "object-src 'none'; " +

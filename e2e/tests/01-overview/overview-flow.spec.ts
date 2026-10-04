@@ -1,5 +1,6 @@
 import test, { expect } from "@playwright/test";
 import { e2eBaseUrl } from "../../support/env";
+import { dismissSingleSessionTakeover } from "../../support/login-helper";
 import { openEnvironment } from "../../support/navigation";
 import { readLogicProject } from "../../support/logic-project";
 import {
@@ -21,6 +22,7 @@ test.describe("flow: Overview menu", () => {
     const dashboard = new DashboardPage(page);
 
     await page.goto(`${e2eBaseUrl()}/app/console`, { waitUntil: "domcontentloaded" });
+    await dismissSingleSessionTakeover(page);
 
     await test.step("Topbar: switching theme to Dark applies it, then Light restores it", async () => {
       await expect(topbar.themeTablist).toBeVisible({ timeout: 30_000 });
