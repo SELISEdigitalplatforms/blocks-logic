@@ -1,65 +1,54 @@
 import { describe, expect, it, vi } from "vitest";
 import { screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
 import { RetryForm } from "./retry-form";
-import { IRetryPolicy } from "../../types/function.types";
+import { DEFAULT_LIMITS_OPTIONS } from "../../constants/limits.constant";
 
-const noRetry: IRetryPolicy = {
-  attempts: 1,
-  backoff: "None",
-  initialDelaySeconds: 0,
-  maxDelaySeconds: 0,
-};
+const { useGetLimitsOptions } = vi.hoisted(() => ({ useGetLimitsOptions: vi.fn() }));
+
+vi.mock("../../hooks/use-functions", () => ({ useGetLimitsOptions }));
+
+const panelText = () => screen.getByTestId("retry-profile").textContent ?? "";
 
 describe("RetryForm", () => {
-  it("summarises a single attempt as no retry", () => {
-    renderWithProviders(<RetryForm value={noRetry} onChange={vi.fn()} />);
-    expect(screen.getByText(/^no retry — a failure is final/i)).toBeTruthy();
-  });
-
-  it("picks a backoff and its canonical delays when retries are switched on", async () => {
-    const onChange = vi.fn();
-    renderWithProviders(<RetryForm value={noRetry} onChange={onChange} />);
-
-    await userEvent.click(screen.getByRole("combobox", { name: /attempts/i }));
-    await userEvent.click(screen.getByRole("option", { name: "3" }));
-
-    expect(onChange).toHaveBeenCalledWith({
-      attempts: 3,
-      backoff: "Exponential",
-      initialDelaySeconds: 1,
-      maxDelaySeconds: 20,
+  it("counts the attempts the way the scheduler does — the first run included", () => {
+    // 2 attempts is one retry. Describing it as "2 retries" would promise three runs of a function
+    // that may not be safe to run twice.
+    useGetLimitsOptions.mockReturnValue({
+      data: { ...DEFAULT_LIMITS_OPTIONS, attempts: 2, retryDelaySeconds: 5 },
     });
+
+    renderWithProviders(<RetryForm />);
+
+    expect(panelText()).toContain("The first run plus one retry");
+    expect(panelText()).toContain("5 s");
   });
 
-  it("keeps the delays consistent with a fixed backoff", async () => {
-    const onChange = vi.fn();
-    renderWithProviders(
-      <RetryForm
-        value={{ attempts: 3, backoff: "Exponential", initialDelaySeconds: 1, maxDelaySeconds: 20 }}
-        onChange={onChange}
-      />,
-    );
+  it("says plainly when there is no retry at all", () => {
+    useGetLimitsOptions.mockReturnValue({ data: { ...DEFAULT_LIMITS_OPTIONS, attempts: 1 } });
 
-    await userEvent.click(screen.getByRole("combobox", { name: /backoff/i }));
-    await userEvent.click(screen.getByRole("option", { name: /fixed/i }));
+    renderWithProviders(<RetryForm />);
 
-    expect(onChange).toHaveBeenCalledWith({
-      attempts: 3,
-      backoff: "Fixed",
-      initialDelaySeconds: 5,
-      maxDelaySeconds: 5,
+    expect(panelText()).toContain("No retry — a failure is final.");
+  });
+
+  it("reads the policy from the server rather than holding its own", () => {
+    useGetLimitsOptions.mockReturnValue({
+      data: { ...DEFAULT_LIMITS_OPTIONS, attempts: 4, retryDelaySeconds: 30 },
     });
+
+    renderWithProviders(<RetryForm />);
+
+    expect(panelText()).toContain("The first run plus 3 retries");
+    expect(panelText()).toContain("30 s");
   });
 
-  it("describes the cadence it will actually use", () => {
-    renderWithProviders(
-      <RetryForm
-        value={{ attempts: 3, backoff: "Exponential", initialDelaySeconds: 1, maxDelaySeconds: 20 }}
-        onChange={vi.fn()}
-      />,
-    );
-    expect(screen.getByText(/up to 3 attempts, backing off 1 s, 5 s, 20 s/i)).toBeTruthy();
+  it("offers nothing to change", () => {
+    useGetLimitsOptions.mockReturnValue({ data: undefined });
+
+    renderWithProviders(<RetryForm />);
+
+    expect(screen.queryAllByRole("combobox")).toHaveLength(0);
+    expect(screen.queryAllByRole("spinbutton")).toHaveLength(0);
   });
 });

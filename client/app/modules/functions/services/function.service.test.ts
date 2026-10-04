@@ -76,11 +76,6 @@ describe("functionService", () => {
       { functionId: "fn_1" },
     );
 
-    await functionService.rollbackFunction({ functionId: "fn_1", versionNumber: 2 });
-    expect(http.logicService.post).toHaveBeenCalledWith(
-      expect.stringContaining("/Functions/Rollback"),
-      { functionId: "fn_1", versionNumber: 2 },
-    );
   });
 
   it("builds GetVersions and GetVersionSource query strings", async () => {

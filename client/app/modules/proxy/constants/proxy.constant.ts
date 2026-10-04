@@ -33,6 +33,11 @@ export const PROXY_ENDPOINTS = {
   execution: (proxyId: string, executionId: string) =>
     `${PROXY_BASE}/${id(proxyId)}/executions/${id(executionId)}`,
   /** `GET` — the filtered log as a CSV attachment. */
+  /**
+   * `POST` — read an OpenAPI document and report the routes it would produce. Writes nothing: the
+   * chosen operations come back through the ordinary create / update call.
+   */
+  OPENAPI_PREVIEW: `${PROXY_BASE}/openapi/preview`,
   /** `GET` — the Overview tiles. */
   overview: (proxyId: string) => `${PROXY_BASE}/${id(proxyId)}/overview`,
 } as const;

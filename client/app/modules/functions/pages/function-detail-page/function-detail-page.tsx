@@ -674,11 +674,10 @@ export const FunctionDetailPage = () => {
                   <div className="flex flex-col gap-1">
                     <span className="text-base font-semibold">Limits</span>
                     <span className="text-xs leading-relaxed text-medium-emphasis">
-                      Applied to every invocation. Runs over the concurrency setting queue rather
-                      than fail.
+                      Applied to every invocation, the same for every function.
                     </span>
                   </div>
-                  <LimitsForm value={limits} onChange={setLimits} />
+                  <LimitsForm />
                 </CardContent>
               </Card>
               <Card>
@@ -686,12 +685,10 @@ export const FunctionDetailPage = () => {
                   <div className="flex flex-col gap-1">
                     <span className="text-base font-semibold">Retries</span>
                     <span className="text-xs leading-relaxed text-medium-emphasis">
-                      One policy for the whole function — a failed run and a failed output action
-                      retry the same way. After the last attempt the run is kept as failed and can
-                      be replayed.
+                      What happens when a run fails.
                     </span>
                   </div>
-                  <RetryForm value={retry} onChange={setRetry} />
+                  <RetryForm />
                 </CardContent>
               </Card>
             </div>

@@ -66,5 +66,12 @@ namespace Proxy.DomainService.Dtos
         /// same way it would fail Save; it is not enforced on the Test call itself (the console user is the caller).
         /// </summary>
         public ProxyAccessInputDto? Access { get; set; }
+
+        /// <summary>
+        /// The draft's timeout / retry / breaker. Carried so a Test behaves like the call it stands in for:
+        /// a timeout somebody has just configured has to be the timeout the Test runs under, or the panel
+        /// answers a question nobody asked. Validated like Create / Update, so bounds are refused here too.
+        /// </summary>
+        public ProxyResilienceInputDto? Resilience { get; set; }
     }
 }

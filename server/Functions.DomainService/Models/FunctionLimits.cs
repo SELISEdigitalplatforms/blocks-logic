@@ -3,22 +3,33 @@ using Functions.DomainService.Enums;
 namespace Functions.DomainService.Models
 {
     /// <summary>
-    /// Per-run resource limits as the tenant configures them.
+    /// Per-run resource limits.
     /// <para>
-    /// These are a <i>request</i>. The Runner VM clamps every value to the platform ceiling
-    /// again before it creates a sandbox, so nothing here can widen a sandbox — a mistake in
-    /// this half cannot become a security problem in the other. <see cref="Clamp"/> exists so
-    /// the interface shows the tenant the same numbers the runner will actually apply.
+    /// <b>Not configurable.</b> Every function gets exactly the same profile: 100 millicores,
+    /// 128 MB, 30 seconds, 10 concurrent runs. The fields remain on the model so stored documents
+    /// written when they were editable still deserialize, but nothing reads them — <see cref="Clamp"/>
+    /// discards whatever they hold and returns the platform profile, and every consumer goes
+    /// through <see cref="Clamp"/> before a sandbox is created.
+    /// </para>
+    /// <para>
+    /// One profile for everyone is what makes capacity predictable: a host's slot count means the
+    /// same thing whoever is running, admission can count slots rather than weigh them, and no
+    /// tenant can make their own runs cheaper or more expensive than anyone else's.
     /// </para>
     /// </summary>
     public class FunctionLimits
     {
-        public int CpuMillicores { get; set; } = Ceiling.DefaultCpuMillicores;
-        public int MemoryMb { get; set; } = Ceiling.DefaultMemoryMb;
-        public int TimeoutSeconds { get; set; } = Ceiling.DefaultTimeoutSeconds;
+        /// <summary>Ignored. <see cref="Ceiling.CpuMillicores"/> is what a run gets.</summary>
+        public int CpuMillicores { get; set; } = Ceiling.CpuMillicores;
 
-        /// <summary>Concurrent runs of this function, 1–25. A scheduling limit, never a rejection.</summary>
-        public int Concurrency { get; set; } = Ceiling.DefaultConcurrency;
+        /// <summary>Ignored. <see cref="Ceiling.MemoryMb"/> is what a run gets.</summary>
+        public int MemoryMb { get; set; } = Ceiling.MemoryMb;
+
+        /// <summary>Ignored. <see cref="Ceiling.TimeoutSeconds"/> is what a run gets.</summary>
+        public int TimeoutSeconds { get; set; } = Ceiling.TimeoutSeconds;
+
+        /// <summary>Ignored. <see cref="Ceiling.Concurrency"/> runs of one function at a time.</summary>
+        public int Concurrency { get; set; } = Ceiling.Concurrency;
 
         /// <summary>
         /// Requests per minute. <c>null</c> means unlimited, which is the default and the only
@@ -30,24 +41,50 @@ namespace Functions.DomainService.Models
         /// <inheritdoc cref="RequestsPerMinute"/>
         public int? RequestsPerDay { get; set; }
 
-        /// <summary>The platform ceilings, mirrored from DECISIONS.md and the runner's own constants.</summary>
+        /// <summary>
+        /// The one profile every function runs under. Not ceilings a function may choose under —
+        /// these are the values, and the runner holds its own copy of each in
+        /// <c>Blocks.FunctionRunner.Contracts.Ceilings</c> and applies them again. The two must
+        /// move together; where they differ the runner wins, by construction.
+        /// </summary>
         public static class Ceiling
         {
             /// <summary>
-            /// Fixed, not a ceiling: every sandbox gets exactly this and a function cannot ask
-            /// for less or more. Mirrors <c>Ceilings.CpuMillicores</c> on the runner, which
-            /// carries the reasoning and enforces it again.
+            /// Every sandbox gets exactly this. 100 millicores is where Node's cold start stops
+            /// dominating the request: each call is a fresh container, so boot and module import
+            /// are paid every time and they are pure CPU.
             /// </summary>
             public const int CpuMillicores = 100;
 
-            public const int MemoryMb = 200;
+            /// <summary>
+            /// Every sandbox gets exactly this. The runner gives V8 75 % of it as old-space heap
+            /// (96 MB), and Node's own baseline is ~40-50 MB, so a function with a few dependencies
+            /// has modest room. Held low deliberately: it is what lets one host carry many
+            /// concurrent sandboxes, and capacity is the scarce thing here.
+            /// </summary>
+            public const int MemoryMb = 128;
 
             /// <summary>
-            /// Mirrors the runner's <c>Ceilings.MinMemoryBytes</c>: below it Node cannot start and
-            /// Docker refuses the container, so a smaller value is a guaranteed start failure.
+            /// The hard wall clock for one run. A function that needs longer is not a function —
+            /// it is a job, and it should fan out into several runs rather than hold a slot.
             /// </summary>
-            public const int MinMemoryMb = 32;
-            public const int TimeoutSeconds = 90;
+            public const int TimeoutSeconds = 30;
+
+            /// <summary>
+            /// Concurrent runs of one function, across the whole fleet (the runner holds the count
+            /// in Redis, so adding hosts does not raise it). Runs beyond it queue; nothing is
+            /// refused for concurrency.
+            /// </summary>
+            public const int Concurrency = 10;
+
+            /// <summary>
+            /// Attempts for a failed run, including the first. 2 means one retry. Fixed, because
+            /// whether a retry is safe depends on the function and the platform cannot know —
+            /// one is a reasonable allowance for a transient failure without making a
+            /// side-effecting function run three times.
+            /// </summary>
+            public const int Attempts = 2;
+
             public const int PidLimit = 64;
             public const int TmpfsMb = 64;
             public const long InputBytes = 1024 * 1024;
@@ -55,61 +92,60 @@ namespace Functions.DomainService.Models
             public const long LogBytes = 1024 * 1024;
             public const int LogLines = 10_000;
 
-            public const int MinConcurrency = 1;
-
-            /// <summary>
-            /// Mirrors the runner's <c>Ceilings.MaxFunctionConcurrency</c>, which carries the
-            /// reasoning for the number. Runs beyond it queue; nothing is refused.
-            /// </summary>
-            public const int MaxConcurrency = 25;
-
-            /// <summary>Defaults for a newly created function — deliberately below the ceilings.</summary>
-            public const int DefaultCpuMillicores = 100;
-
-            /// <summary>
-            /// The practical floor, not a comfortable default. The runner gives V8 75 % of this as
-            /// its old-space heap (96 MB here) and Node's own baseline is ~40-50 MB, so a function
-            /// with a few dependencies has little room left. It is set low so a small VM fits more
-            /// concurrent sandboxes; a function that OOMs should be given more rather than having
-            /// this raised for everyone.
-            /// </summary>
-            public const int DefaultMemoryMb = 128;
-            public const int DefaultTimeoutSeconds = 10;
-            public const int DefaultConcurrency = 2;
-            public const int DefaultAttempts = 1;
-
             public const string RuntimeId = "node24";
         }
 
         /// <summary>
-        /// Returns a copy with every value inside the platform ceilings. Mirrors what the
-        /// runner does; if the two ever disagree the runner wins, by construction.
+        /// The platform profile, whatever this instance holds.
+        /// <para>
+        /// Every consumer calls this before a run — deployment, the envelope builder and the
+        /// invocation service — so a document stored when these were editable, or a request that
+        /// still sends them, changes nothing about what actually executes.
+        /// </para>
         /// </summary>
         public FunctionLimits Clamp() => new()
         {
-            // Fixed rather than clamped. Whatever a caller or an older stored document says,
-            // the effective value is the platform's — the runner ignores this field too, so
-            // honouring a different number here would only mislead the editor.
             CpuMillicores = Ceiling.CpuMillicores,
-            MemoryMb = Math.Clamp(
-                MemoryMb <= 0 ? Ceiling.DefaultMemoryMb : MemoryMb, Ceiling.MinMemoryMb, Ceiling.MemoryMb),
-            TimeoutSeconds = Math.Clamp(
-                TimeoutSeconds <= 0 ? Ceiling.DefaultTimeoutSeconds : TimeoutSeconds, 1, Ceiling.TimeoutSeconds),
-            Concurrency = Math.Clamp(
-                Concurrency <= 0 ? Ceiling.DefaultConcurrency : Concurrency,
-                Ceiling.MinConcurrency, Ceiling.MaxConcurrency),
-            RequestsPerMinute = RequestsPerMinute is > 0 ? RequestsPerMinute : null,
-            RequestsPerDay = RequestsPerDay is > 0 ? RequestsPerDay : null,
+            MemoryMb = Ceiling.MemoryMb,
+            TimeoutSeconds = Ceiling.TimeoutSeconds,
+            Concurrency = Ceiling.Concurrency,
+
+            // Rate limiting is off by platform decision; the fields stay so an older document
+            // deserializes, and null is what every code path already reads as "unlimited".
+            RequestsPerMinute = null,
+            RequestsPerDay = null,
         };
     }
 
-    /// <summary>How a failed run is retried. Attempts include the first, so 1 means no retry.</summary>
+    /// <summary>
+    /// How a failed run is retried. Attempts include the first, so 2 means one retry.
+    /// <para>
+    /// <b>Not configurable</b>, like <see cref="FunctionLimits"/>. <see cref="Fixed"/> is the one
+    /// policy, and the fields stay settable only so stored documents deserialize.
+    /// </para>
+    /// </summary>
     public class RetryPolicy
     {
-        public int Attempts { get; set; } = FunctionLimits.Ceiling.DefaultAttempts;
-        public BackoffKind Backoff { get; set; } = BackoffKind.None;
+        public int Attempts { get; set; } = FunctionLimits.Ceiling.Attempts;
+        public BackoffKind Backoff { get; set; } = BackoffKind.Fixed;
         public int InitialDelaySeconds { get; set; } = 5;
         public int MaxDelaySeconds { get; set; } = 300;
+
+        /// <summary>
+        /// The policy every function retries under: one retry, five seconds later.
+        /// <para>
+        /// The wait is deliberate. A retry fired the instant the first attempt failed almost always
+        /// meets the same condition — the upstream still down, the dependency still cold — so it
+        /// spends an attempt to learn nothing.
+        /// </para>
+        /// </summary>
+        public static RetryPolicy Fixed => new()
+        {
+            Attempts = FunctionLimits.Ceiling.Attempts,
+            Backoff = BackoffKind.Fixed,
+            InitialDelaySeconds = 5,
+            MaxDelaySeconds = 300,
+        };
 
         /// <summary>Delay before <paramref name="attempt"/> (1-based; attempt 1 never waits).</summary>
         public TimeSpan DelayFor(int attempt)

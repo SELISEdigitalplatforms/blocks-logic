@@ -7,7 +7,6 @@ vi.mock("@blocks-functions/services/function.service", () => ({
 }));
 
 import {
-  FUNCTION_STEP_MAX_WAIT_SECONDS,
   NodeSchemaActionFunction,
 } from "./node-schema-action-function";
 
@@ -29,7 +28,6 @@ describe("NodeSchemaActionFunction", () => {
       functionId: "",
       inputMode: "item",
       inputExpression: "",
-      waitTimeoutSec: null,
     });
   });
 
@@ -62,17 +60,19 @@ describe("NodeSchemaActionFunction", () => {
   });
 
   it("gives every user-facing field a tooltip", () => {
-    for (const key of ["functionId", "inputMode", "inputExpression", "waitTimeoutSec"]) {
+    for (const key of ["functionId", "inputMode", "inputExpression"]) {
       expect(field(key).info, key).toBeTruthy();
     }
   });
 
-  it("caps the wait timeout at the server's sync ceiling", () => {
-    // Functions:SyncWaitMaxSeconds is 180 s; the editor must not offer a wait the server clamps.
-    expect(FUNCTION_STEP_MAX_WAIT_SECONDS).toBe(180);
-    expect(field("waitTimeoutSec").min).toBe(1);
-    expect(field("waitTimeoutSec").max).toBe(FUNCTION_STEP_MAX_WAIT_SECONDS);
-    expect(field("waitTimeoutSec").info).toContain("180");
+  it("offers no wait setting — the step waits for the run, and that is not a choice", () => {
+    // A step that waits a different length of time from the run it started either abandons a run
+    // that goes on to execute and fire its output actions, or idles past one that cannot still be
+    // in flight. Neither is a decision worth offering.
+    expect(
+      NodeSchemaActionFunction.schema.parameters.find((p) => p.key === "waitTimeoutSec"),
+    ).toBeUndefined();
+    expect(NodeSchemaActionFunction.defaults.parameters).not.toHaveProperty("waitTimeoutSec");
   });
 
   it("labels the input modes by what the function receives", () => {

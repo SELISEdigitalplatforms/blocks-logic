@@ -28,6 +28,7 @@ import {
 } from "../utils";
 import { KeyValueFieldArray } from "./key-value-field-array";
 import { ProxyAccessCard } from "./proxy-access-card";
+import { ProxyResilienceCard } from "./proxy-resilience-card";
 import { ProxyFormHeader } from "./proxy-form-header";
 import { ProxyRoutesCard, blankRoute } from "./proxy-routes-card";
 import { useProjectStore } from "@seliseblocks/genesis-os";
@@ -96,6 +97,8 @@ export const ProxyForm = ({
       routes: values.routes ?? [],
       // One policy for every endpoint of the proxy.
       access: values.access ?? defaultProxyAccess(),
+      // Proxy-wide, and a real setting rather than a derived one: a route with none inherits this.
+      resilience: values.resilience ?? null,
       // Per-endpoint only; nothing at proxy level.
       bodyMerge: [],
       bodyMode: "passthrough",
@@ -139,6 +142,7 @@ export const ProxyForm = ({
         credentials: toCredentialRows(proxy.headers, proxy.query),
         routes,
         access: proxy.access ?? defaultProxyAccess(),
+        resilience: proxy.resilience ?? null,
       });
     } else if (!isEdit && seededForId.current !== "new") {
       seededForId.current = "new";
@@ -243,6 +247,9 @@ export const ProxyForm = ({
 
         {/* Who can call it: one policy shared by every endpoint below. */}
         <ProxyAccessCard control={form.control} />
+
+        {/* What happens when the vendor is slow or down. Nothing here until it is asked for. */}
+        <ProxyResilienceCard control={form.control} />
 
         {/* Endpoints: every per-call setting, on the call it belongs to. */}
         <Card className="rounded-xl">

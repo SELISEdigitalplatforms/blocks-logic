@@ -51,6 +51,74 @@ namespace XUnitTest.Proxy
             Enabled = true,
         };
 
+        /// <summary>
+        /// A Test runs under the draft's own timeout / retry / breaker.
+        /// <para>
+        /// The panel exists to answer "what will this do when I save it". A Test that quietly ran with no
+        /// timeout while the form showed one would answer a different question, and the difference would
+        /// only surface in production.
+        /// </para>
+        /// </summary>
+        [Fact]
+        public async Task Test_Draft_ForwardsUnderTheDraftsOwnResilience()
+        {
+            ProxyForwardRequest? captured = null;
+            _gateway.Setup(g => g.ForwardAsync(It.IsAny<ProxyForwardRequest>(), It.IsAny<CancellationToken>()))
+                .Callback<ProxyForwardRequest, CancellationToken>((req, _) => captured = req)
+                .ReturnsAsync(new ProxyForwardResult { StatusCode = 200, Outcome = ProxyExecutionOutcome.Success });
+
+            await _service.TestAsync(Tenant, "u1", new ProxyTestRequestDto
+            {
+                Draft = new ProxyTestDraftDto
+                {
+                    Upstream = "https://x.test",
+                    Methods = new() { "GET" },
+                    Resilience = new ProxyResilienceInputDto { TimeoutSeconds = 7 },
+                },
+                Method = "GET",
+            });
+
+            captured!.ResolvedConfig!.Resilience!.TimeoutSeconds.Should().Be(7);
+        }
+
+        /// <summary>A draft that asks for nothing still runs under nothing, not under a default.</summary>
+        [Fact]
+        public async Task Test_Draft_WithNoResilience_ForwardsWithNone()
+        {
+            ProxyForwardRequest? captured = null;
+            _gateway.Setup(g => g.ForwardAsync(It.IsAny<ProxyForwardRequest>(), It.IsAny<CancellationToken>()))
+                .Callback<ProxyForwardRequest, CancellationToken>((req, _) => captured = req)
+                .ReturnsAsync(new ProxyForwardResult { StatusCode = 200, Outcome = ProxyExecutionOutcome.Success });
+
+            await _service.TestAsync(Tenant, "u1", new ProxyTestRequestDto
+            {
+                Draft = new ProxyTestDraftDto { Upstream = "https://x.test", Methods = new() { "GET" } },
+                Method = "GET",
+            });
+
+            captured!.ResolvedConfig!.Resilience.Should().BeNull();
+        }
+
+        /// <summary>A draft whose bounds the API would refuse fails the Test the same way it fails Save.</summary>
+        [Fact]
+        public async Task Test_Draft_WithResilienceOutOfBounds_Returns400_NoForward()
+        {
+            var result = await _service.TestAsync(Tenant, "u1", new ProxyTestRequestDto
+            {
+                Draft = new ProxyTestDraftDto
+                {
+                    Upstream = "https://x.test",
+                    Methods = new() { "GET" },
+                    Resilience = new ProxyResilienceInputDto { TimeoutSeconds = 120 },
+                },
+                Method = "GET",
+            });
+
+            result.IsSuccess.Should().BeFalse();
+            result.HttpStatus.Should().Be(400);
+            _gateway.VerifyNoOtherCalls();
+        }
+
         [Fact]
         public async Task Test_BothProxyIdAndDraft_Returns400_NoForward()
         {

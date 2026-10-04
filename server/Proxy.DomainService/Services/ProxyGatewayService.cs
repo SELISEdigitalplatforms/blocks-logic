@@ -33,6 +33,7 @@ namespace Proxy.DomainService.Services
         private readonly IProxyVariableResolver _variableResolver;
         private readonly IProxyUpstreamGuard _upstreamGuard;
         private readonly IProxyStatsRecorder _statsRecorder;
+        private readonly IProxyCircuitBreaker _breaker;
         private readonly ILogger<ProxyGatewayService> _logger;
 
         public ProxyGatewayService(
@@ -42,7 +43,10 @@ namespace Proxy.DomainService.Services
             IProxyVariableResolver variableResolver,
             IProxyUpstreamGuard upstreamGuard,
             IProxyStatsRecorder statsRecorder,
-            ILogger<ProxyGatewayService> logger)
+            ILogger<ProxyGatewayService> logger,
+            // Optional so every existing construction of this service keeps compiling and behaving
+            // identically: with no breaker configured on a proxy, this is never consulted anyway.
+            IProxyCircuitBreaker? breaker = null)
         {
             _httpClientFactory = httpClientFactory;
             _proxyRepository = proxyRepository;
@@ -50,6 +54,7 @@ namespace Proxy.DomainService.Services
             _variableResolver = variableResolver;
             _upstreamGuard = upstreamGuard;
             _statsRecorder = statsRecorder;
+            _breaker = breaker ?? new ProxyCircuitBreaker();
             _logger = logger;
         }
 
@@ -241,15 +246,91 @@ namespace Proxy.DomainService.Services
                     injectedHeaderKeys, injectedQueryKeys, "The upstream endpoint is not an allowed destination"));
             }
 
+            var resilience = effective.Resilience;
+
+            // Refused before anything is sent, and only when this proxy asked for a breaker. The code is
+            // its own outcome so the caller can tell "we declined to call the upstream" from "the upstream
+            // did not answer" — retrying the first immediately is pointless.
+            if (resilience?.Breaker is { } breakerConfig
+                && _breaker.IsOpen(request.TenantId, upstreamHost, breakerConfig))
+            {
+                stopwatch.Stop();
+                _logger.LogWarning(
+                    "Proxy gateway: circuit open for upstream {Host} on slug '{Slug}' (tenant {TenantId}); "
+                    + "returning 503 without calling it.",
+                    upstreamHost, config.Slug, request.TenantId);
+                return await FinalizeAsync(request, config, route, BuildFailure(
+                    ProxyExecutionOutcome.UpstreamUnavailable, 503, startedAt, stopwatch, storedUrl, upstreamHost,
+                    injectedHeaderKeys, injectedQueryKeys,
+                    "The upstream endpoint is failing and calls to it are paused"));
+            }
+
             HttpResponseMessage response;
             try
             {
                 // Factory clients are pooled and cheap; do NOT dispose per call.
                 var client = _httpClientFactory.CreateClient(UpstreamClientName);
-                using var message = BuildUpstreamRequest(
-                    effHeaders, request, effBody, effContentType, outboundUrl, vars, out var attachedHeaderKeys);
-                injectedHeaderKeys = attachedHeaderKeys;
-                response = await client.SendAsync(message, HttpCompletionOption.ResponseContentRead, cancellationToken);
+
+                // One attempt unless the tenant configured retries, which is exactly what this did before.
+                var attempts = resilience?.Retry?.Attempts ?? 1;
+                response = null!;
+
+                for (var attempt = 1; ; attempt++)
+                {
+                    using var message = BuildUpstreamRequest(
+                        effHeaders, request, effBody, effContentType, outboundUrl, vars, out var attachedHeaderKeys);
+                    injectedHeaderKeys = attachedHeaderKeys;
+
+                    // The configured timeout is the budget for the whole forward, retries included — not
+                    // per attempt. Without that, 30s × 3 attempts is a 90s hang and the caller gave up long
+                    // ago. With nothing configured there is no linked source at all, so the named client's
+                    // own timeout applies and the behaviour is unchanged.
+                    CancellationTokenSource? timeoutSource = null;
+                    if (resilience?.TimeoutSeconds is { } seconds)
+                    {
+                        // What is left of the budget after everything already spent, floored just above
+                        // zero so the last attempt is a real attempt rather than an instant cancel.
+                        var remaining = TimeSpan.FromSeconds(seconds) - stopwatch.Elapsed;
+                        if (remaining < TimeSpan.FromMilliseconds(50)) remaining = TimeSpan.FromMilliseconds(50);
+
+                        timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                        timeoutSource.CancelAfter(remaining);
+                    }
+
+                    using var _timeoutScope = timeoutSource;
+                    var sendToken = timeoutSource?.Token ?? cancellationToken;
+
+                    try
+                    {
+                        response = await client.SendAsync(
+                            message, HttpCompletionOption.ResponseContentRead, sendToken);
+
+                        if (attempt >= attempts || !IsRetryableStatus(response.StatusCode)) break;
+
+                        response.Dispose();
+                    }
+                    catch (Exception ex) when (
+                        attempt < attempts
+                        && !cancellationToken.IsCancellationRequested
+                        && (ex is HttpRequestException || ex is OperationCanceledException))
+                    {
+                        // A transport failure or this attempt's timeout, with attempts left. The caller
+                        // hanging up is never retried: that exception carries the caller's own token.
+                        _logger.LogInformation(
+                            "Proxy gateway: attempt {Attempt} of {Attempts} to {Host} failed ({Message}); retrying.",
+                            attempt, attempts, upstreamHost, ex.Message);
+                    }
+
+                    await DelayBeforeRetryAsync(resilience!.Retry!, attempt, cancellationToken);
+                }
+
+                if (resilience?.Breaker is { } onSuccess)
+                {
+                    // Reached the host and it answered. Whatever the status, the circuit's question is
+                    // "is this host responding", and it is.
+                    _breaker.RecordSuccess(request.TenantId, upstreamHost);
+                    _ = onSuccess;
+                }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -262,9 +343,11 @@ namespace Proxy.DomainService.Services
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
                 stopwatch.Stop();
+                RecordUpstreamFailure(effective, request.TenantId, upstreamHost);
                 _logger.LogWarning(
-                    "Proxy gateway: upstream {Host} did not respond within 30s for slug '{Slug}' (tenant {TenantId}); returning 504.",
-                    upstreamHost, config.Slug, request.TenantId);
+                    "Proxy gateway: upstream {Host} did not respond within {Timeout}s for slug '{Slug}' "
+                    + "(tenant {TenantId}); returning 504.",
+                    upstreamHost, effective.Resilience?.TimeoutSeconds ?? 30, config.Slug, request.TenantId);
                 return await FinalizeAsync(request, config, route, BuildFailure(
                     ProxyExecutionOutcome.Timeout, 504, startedAt, stopwatch, storedUrl, upstreamHost,
                     injectedHeaderKeys, injectedQueryKeys, "Upstream did not respond within 30s"));
@@ -282,6 +365,7 @@ namespace Proxy.DomainService.Services
             catch (HttpRequestException ex)
             {
                 stopwatch.Stop();
+                RecordUpstreamFailure(effective, request.TenantId, upstreamHost);
                 _logger.LogWarning(ex,
                     "Proxy gateway: upstream {Host} unreachable for slug '{Slug}' (tenant {TenantId}); returning 502.",
                     upstreamHost, config.Slug, request.TenantId);
@@ -417,6 +501,48 @@ namespace Proxy.DomainService.Services
             }
         }
 
+        /// <summary>
+        /// Counts one failure against the upstream host, but only where this proxy asked for a breaker.
+        /// Timeouts and connection failures are what it counts; a 4xx or 5xx answer is not, because the
+        /// host is plainly alive and the breaker's question is only whether it is reachable.
+        /// </summary>
+        private void RecordUpstreamFailure(EffectiveConfig effective, string tenantId, string host)
+        {
+            if (effective.Resilience?.Breaker is { } breaker)
+            {
+                _breaker.RecordFailure(tenantId, host, breaker);
+            }
+        }
+
+        /// <summary>
+        /// Status codes worth sending again. Deliberately narrow: a 4xx other than 429 will fail the same
+        /// way every time, and retrying it only multiplies the load on an upstream that already said no.
+        /// </summary>
+        private static bool IsRetryableStatus(System.Net.HttpStatusCode status) =>
+            status is System.Net.HttpStatusCode.TooManyRequests
+                or System.Net.HttpStatusCode.BadGateway
+                or System.Net.HttpStatusCode.ServiceUnavailable
+                or System.Net.HttpStatusCode.GatewayTimeout;
+
+        /// <summary>
+        /// Waits between attempts, as the tenant configured. Jittered so a vendor recovering from an
+        /// outage does not take the whole fleet's retries in one synchronised burst.
+        /// </summary>
+        private static async Task DelayBeforeRetryAsync(
+            ProxyRetryConfig retry, int attempt, CancellationToken cancellationToken)
+        {
+            if (retry.Backoff == ProxyBackoffKind.None) return;
+
+            var seconds = retry.Backoff == ProxyBackoffKind.Fixed
+                ? retry.InitialDelaySeconds
+                : retry.InitialDelaySeconds * Math.Pow(2, attempt - 1);
+
+            var delay = TimeSpan.FromSeconds(Math.Min(seconds, ProxyConfigValidator.MaxRetryDelaySeconds));
+            var jittered = delay * (0.8 + (Random.Shared.NextDouble() * 0.4));
+
+            await Task.Delay(jittered, cancellationToken);
+        }
+
         /// <summary>The configuration one forward actually runs against, after route and method overrides.</summary>
         private sealed record EffectiveConfig(
             IReadOnlyList<ProxyKeyValue> Headers,
@@ -424,7 +550,8 @@ namespace Proxy.DomainService.Services
             string Upstream,
             IReadOnlyList<ProxyKeyValue> BodyMerge,
             ProxyResponseMode ResponseMode,
-            IReadOnlyList<string> ResponseInclude);
+            IReadOnlyList<string> ResponseInclude,
+            ProxyResilienceConfig? Resilience);
 
         /// <summary>
         /// Resolves the configuration for this call. Precedence is route &rarr; per-method override &rarr;
@@ -449,7 +576,11 @@ namespace Proxy.DomainService.Services
                 over?.Upstream ?? config.Upstream,
                 route?.BodyMerge ?? config.BodyMerge,
                 route?.ResponseMode ?? config.ResponseMode,
-                route?.ResponseInclude ?? config.ResponseInclude);
+                route?.ResponseInclude ?? config.ResponseInclude,
+                // Whole-object inherit, not field by field: a route that configures resilience states its
+                // own policy, and silently blending half of it with the proxy's would produce a timeout
+                // and a retry count nobody chose together.
+                route?.Resilience ?? config.Resilience);
         }
 
         /// <summary>

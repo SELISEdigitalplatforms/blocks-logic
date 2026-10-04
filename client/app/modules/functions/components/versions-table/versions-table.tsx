@@ -6,7 +6,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/to
 import { cn } from "@/lib/utils";
 import { IFunctionVersionSummary } from "../../types/version.types";
 import { formatAbsoluteTime, formatRelativeTime, formatRunCount } from "../../utils/format";
-import { RollbackDialog } from "../rollback-dialog";
 import { VersionSourceDialog } from "../version-source-dialog";
 
 /**
@@ -29,7 +28,6 @@ export const VersionsTable = ({
   activeVersionNumber,
   isLoading,
 }: VersionsTableProps) => {
-  const [rollbackTarget, setRollbackTarget] = useState<IFunctionVersionSummary | null>(null);
   const [sourceTarget, setSourceTarget] = useState<IFunctionVersionSummary | null>(null);
 
   return (
@@ -131,28 +129,13 @@ export const VersionsTable = ({
                     <span className="rounded bg-success/15 px-2 py-0.5 text-[10px] font-semibold uppercase text-success">
                       Active
                     </span>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="xs"
-                      className="text-xs"
-                      onClick={() => setRollbackTarget(version)}
-                    >
-                      Roll back
-                    </Button>
-                  )}
+                  ) : null}
                 </div>
               </div>
             );
           })}
       </div>
 
-      <RollbackDialog
-        functionId={functionId}
-        version={rollbackTarget}
-        open={!!rollbackTarget}
-        onOpenChange={(open) => !open && setRollbackTarget(null)}
-      />
       <VersionSourceDialog
         functionId={functionId}
         version={sourceTarget}

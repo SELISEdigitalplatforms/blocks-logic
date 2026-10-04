@@ -76,6 +76,7 @@ const buildProxy = (values: ProxyFormValues, existing?: Proxy): Proxy => {
         ? [...new Set(values.responseInclude.map((path) => path.trim()).filter(Boolean))]
         : [],
     access: values.access ?? defaultProxyAccess(),
+    resilience: values.resilience ?? null,
     calls24h: existing?.calls24h ?? 0,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,

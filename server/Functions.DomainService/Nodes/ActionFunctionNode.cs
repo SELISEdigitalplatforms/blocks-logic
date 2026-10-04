@@ -44,16 +44,6 @@ namespace Functions.DomainService.Nodes
                 return NodeExecutionResult.Failed("the function action step has no function selected");
             }
 
-            // Checked here rather than left to the invocation service: a non-positive wait window
-            // makes WaitForResultAsync's deadline expire before its first poll, so the step would
-            // queue a run that really does execute and then fail as "still running" — a side effect
-            // with no result, from a value the editor should not have accepted in the first place.
-            if (parameters.WaitTimeoutSec is <= 0)
-            {
-                return NodeExecutionResult.Failed(
-                    $"wait timeout must be at least 1 second, but is {parameters.WaitTimeoutSec}");
-            }
-
             var callerContext = BlocksContext.GetContext();
             var outputItems = new List<NodeOutputItem>();
 
@@ -77,9 +67,13 @@ namespace Functions.DomainService.Nodes
                 InvokeResultDto result;
                 try
                 {
+                    // null, always: the step waits exactly as long as the run may take. A stored
+                    // WaitTimeoutSec from when this was editable is deliberately not read — see
+                    // ActionFunctionParameters.WaitTimeoutSec for why a step must not disagree with
+                    // the run it is waiting for.
                     result = await _invocationService.InvokeFromWorkflowAsync(
                         context.TenantId, parameters.FunctionId, inputJson, callerContext,
-                        parameters.WaitTimeoutSec, context.WorkflowExecutionId, context.CancellationToken);
+                        waitTimeoutSeconds: null, context.WorkflowExecutionId, context.CancellationToken);
                 }
                 catch (OperationCanceledException)
                 {

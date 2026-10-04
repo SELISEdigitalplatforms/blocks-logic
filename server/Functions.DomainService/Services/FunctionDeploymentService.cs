@@ -16,9 +16,6 @@ namespace Functions.DomainService.Services
             string tenantId, DeployFunctionRequestDto request, string? actorId, string? actorEmail,
             CancellationToken cancellationToken = default);
 
-        Task<FunctionVersionSummaryDto> RollbackAsync(
-            string tenantId, RollbackFunctionRequestDto request, string? actorId, string? actorEmail,
-            CancellationToken cancellationToken = default);
     }
 
     /// <summary>
@@ -41,7 +38,6 @@ namespace Functions.DomainService.Services
         private readonly IFunctionImagePinService _imagePins;
         private readonly IFunctionAuditService _auditService;
         private readonly IValidator<DeployFunctionRequestDto> _deployValidator;
-        private readonly IValidator<RollbackFunctionRequestDto> _rollbackValidator;
         private readonly ILogger<FunctionDeploymentService> _logger;
 
         public FunctionDeploymentService(
@@ -52,7 +48,6 @@ namespace Functions.DomainService.Services
             IFunctionImagePinService imagePins,
             IFunctionAuditService auditService,
             IValidator<DeployFunctionRequestDto> deployValidator,
-            IValidator<RollbackFunctionRequestDto> rollbackValidator,
             ILogger<FunctionDeploymentService> logger)
         {
             _functionRepository = functionRepository;
@@ -62,7 +57,6 @@ namespace Functions.DomainService.Services
             _imagePins = imagePins;
             _auditService = auditService;
             _deployValidator = deployValidator;
-            _rollbackValidator = rollbackValidator;
             _logger = logger;
         }
 
@@ -157,35 +151,6 @@ namespace Functions.DomainService.Services
             await _retentionService.PruneAsync(tenantId, function.ItemId, created.ItemId, cancellationToken);
 
             return FunctionVersionSummaryDto.From(created);
-        }
-
-        public async Task<FunctionVersionSummaryDto> RollbackAsync(
-            string tenantId, RollbackFunctionRequestDto request, string? actorId, string? actorEmail,
-            CancellationToken cancellationToken = default)
-        {
-            await ValidateAsync(_rollbackValidator, request);
-
-            var function = await _functionRepository.GetByIdAsync(tenantId, request.FunctionId, cancellationToken)
-                ?? throw new FunctionNotFoundException($"function '{request.FunctionId}' was not found");
-
-            var target = await _versionRepository.GetByNumberAsync(tenantId, function.ItemId, request.VersionNumber, cancellationToken)
-                ?? throw new FunctionNotFoundException(
-                    $"function '{request.FunctionId}' has no version {request.VersionNumber}");
-
-            // Only the pointer moves. In-flight runs already carry their own copy of the
-            // version they started under, so they are unaffected either way.
-            function.ActiveVersionId = target.ItemId;
-            function.Status = FunctionStatus.Live;
-            function.LastUpdatedDate = DateTime.UtcNow;
-            function.LastUpdatedBy = actorId ?? string.Empty;
-            await _functionRepository.MoveActiveVersionAsync(
-                tenantId, function.ItemId, target.ItemId, actorId, cancellationToken);
-
-            await _auditService.RecordAsync(
-                tenantId, function.ItemId, FunctionsConstants.AuditActions.RolledBack, actorId, actorEmail,
-                new { ToVersion = target.Number }, cancellationToken);
-
-            return FunctionVersionSummaryDto.From(target);
         }
 
         private static async Task ValidateAsync<T>(IValidator<T> validator, T instance)

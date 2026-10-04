@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { resilienceIssues } from "./proxy-resilience";
 import {
   ProxyAccess,
   ProxyAccessRule,
@@ -514,6 +515,35 @@ const credentialSchema = z.object({
   sendAs: z.enum(["header", "query"]),
 });
 
+/**
+ * Timeout / retry / breaker, as the form holds them.
+ *
+ * The bounds are not here: they are in {@link resilienceIssues}, raised from the one `superRefine`
+ * below so the proxy's object and every route's are judged by the same rules — and by the same rules
+ * the API applies. A number out of range is a message under the field, never a parse failure that
+ * would replace it with "Expected number".
+ */
+const retryValuesSchema = z.object({
+  attempts: z.number(),
+  backoff: z.enum(["none", "fixed", "exponential"]),
+  initialDelaySeconds: z.number(),
+  idempotent: z.boolean(),
+});
+
+const breakerValuesSchema = z.object({
+  failureThreshold: z.number(),
+  openSeconds: z.number(),
+});
+
+const resilienceSchema = z
+  .object({
+    timeoutSeconds: z.number().nullable().default(null),
+    retry: retryValuesSchema.nullable().default(null),
+    breaker: breakerValuesSchema.nullable().default(null),
+  })
+  .nullable()
+  .default(null);
+
 const routeSchema = z.object({
   method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
   path: z.string(),
@@ -523,6 +553,8 @@ const routeSchema = z.object({
   bodyMerge: keyValueSchema.nullable().default(null),
   responseMode: z.enum(["all", "select"]).nullable().default(null),
   responseInclude: z.array(z.string()).nullable().default(null),
+  /** `null` ⇒ inherit the connection's, whole. The server reads it the same way. */
+  resilience: resilienceSchema,
 });
 
 const accessRuleSchema = z.object({
@@ -559,6 +591,7 @@ export const proxyFormSchema = z
     responseMode: z.enum(["all", "select"]).default("all"),
     responseInclude: z.array(z.string()).default([]),
     access: accessSchema.default(defaultProxyAccess),
+    resilience: resilienceSchema,
   })
   .superRefine((values, ctx) => {
     const accessProblem = validateProxyAccess(values.access ?? defaultProxyAccess());
@@ -566,8 +599,24 @@ export const proxyFormSchema = z
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["access"], message: accessProblem });
     }
 
+    resilienceIssues(values.resilience).forEach((issue) => {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["resilience", ...issue.path],
+        message: issue.message,
+      });
+    });
+
     const seenRoutes = new Set<string>();
     values.routes?.forEach((route, index) => {
+      resilienceIssues(route.resilience).forEach((issue) => {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["routes", index, "resilience", ...issue.path],
+          message: issue.message,
+        });
+      });
+
       const parsed = parseRouteTemplate(route.path);
       if (!parsed.ok) {
         ctx.addIssue({
@@ -706,11 +755,14 @@ export const proxyFormDefaultValues: ProxyFormValues = {
       bodyMerge: null,
       responseMode: null,
       responseInclude: null,
+      resilience: null,
     },
   ],
   responseMode: "all",
   responseInclude: [],
   access: defaultProxyAccess(),
+  // Nothing is configured until somebody configures it: no timeout of our choosing, no retries.
+  resilience: null,
   credentials: [],
 };
 

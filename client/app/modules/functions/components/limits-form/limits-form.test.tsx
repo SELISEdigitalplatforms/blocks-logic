@@ -3,47 +3,58 @@ import { screen } from "@testing-library/react";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
 import { LimitsForm } from "./limits-form";
 import { DEFAULT_LIMITS_OPTIONS } from "../../constants/limits.constant";
-import { IFunctionLimits } from "../../types/function.types";
 
-// Unmocked it would fetch; undefined data is what the form sees before GetLimits resolves, which
-// is exactly the path that must fall back to DEFAULT_LIMITS_OPTIONS.
-vi.mock("../../hooks/use-functions", () => ({
-  useGetLimitsOptions: () => ({ data: undefined }),
-}));
+const { useGetLimitsOptions } = vi.hoisted(() => ({ useGetLimitsOptions: vi.fn() }));
 
-const limits: IFunctionLimits = {
-  cpuMillicores: 100,
-  memoryMb: 192,
-  timeoutSeconds: 10,
-  concurrency: 2,
-  requestsPerMinute: null,
-  requestsPerDay: null,
-};
+vi.mock("../../hooks/use-functions", () => ({ useGetLimitsOptions }));
 
-const render = (value: IFunctionLimits = limits) =>
-  renderWithProviders(<LimitsForm value={value} onChange={vi.fn()} />);
+const panelText = () => screen.getByTestId("limits-profile").textContent ?? "";
 
 describe("LimitsForm", () => {
-  it("names every ceiling the dropdowns are capped at, the timeout included", () => {
-    render();
+  it("shows the profile the server reports, not a copy held here", () => {
+    // The point of reading it from GetLimits: if the platform profile moves, this panel moves with
+    // it. A hardcoded 128 in the client would keep telling people the old number.
+    useGetLimitsOptions.mockReturnValue({
+      data: { ...DEFAULT_LIMITS_OPTIONS, memoryMb: 512, timeoutSeconds: 120, concurrency: 40 },
+    });
 
-    const line = screen.getByText(/Enforced per invocation by the sandbox/);
-    expect(line.textContent).toContain(`${DEFAULT_LIMITS_OPTIONS.ceilingMemoryMb} MB`);
-    expect(line.textContent).toContain(`${DEFAULT_LIMITS_OPTIONS.ceilingTimeoutSeconds} s`);
+    renderWithProviders(<LimitsForm />);
+
+    expect(panelText()).toContain("512 MB");
+    expect(panelText()).toContain("120 s per run");
+    expect(panelText()).toContain("40 at a time");
   });
 
-  it("does not offer CPU as a choice", () => {
-    // Fixed at 100m: every call is a cold container, so a smaller share would only slow Node's
-    // boot, and admission counts memory and slots rather than CPU so it frees nothing either.
-    render();
+  it("falls back to the platform profile before GetLimits resolves", () => {
+    // `undefined` data is what the panel sees on first paint. It must show the real numbers, not
+    // blanks that then flicker into place.
+    useGetLimitsOptions.mockReturnValue({ data: undefined });
 
-    expect(screen.queryByLabelText("CPU")).toBeNull();
-    expect(screen.getByText("CPU").parentElement?.textContent).toContain("100m per run");
+    renderWithProviders(<LimitsForm />);
+
+    expect(panelText()).toContain(`${DEFAULT_LIMITS_OPTIONS.memoryMb} MB`);
+    expect(panelText()).toContain(`${DEFAULT_LIMITS_OPTIONS.timeoutSeconds} s per run`);
+    expect(panelText()).toContain(`${DEFAULT_LIMITS_OPTIONS.cpuMillicores}m per run`);
   });
 
-  it("caps the timeout at 90 s", () => {
-    // The fallback the form uses before GetLimits resolves must agree with the server's own
-    // ceiling, or the list offers a value the sandbox will silently clamp away.
-    expect(DEFAULT_LIMITS_OPTIONS.ceilingTimeoutSeconds).toBe(90);
+  it("offers nothing to change", () => {
+    // These are not settings any more. A control here would promise a choice the API discards.
+    useGetLimitsOptions.mockReturnValue({ data: undefined });
+
+    renderWithProviders(<LimitsForm />);
+
+    expect(screen.queryAllByRole("combobox")).toHaveLength(0);
+    expect(screen.queryAllByRole("textbox")).toHaveLength(0);
+    expect(screen.queryAllByRole("spinbutton")).toHaveLength(0);
+  });
+
+  it("still names the caps a function author has to design around", () => {
+    useGetLimitsOptions.mockReturnValue({ data: undefined });
+
+    renderWithProviders(<LimitsForm />);
+
+    expect(panelText()).toContain("Input");
+    expect(panelText()).toContain("Result");
+    expect(panelText()).toContain("Temp disk");
   });
 });

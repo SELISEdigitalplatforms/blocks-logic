@@ -100,6 +100,13 @@ namespace Proxy.DomainService.Entities
         /// neither has to aggregate <c>ProxyExecutions</c>. Eventually consistent by design; never part of a
         /// config version, a change set, or a Revert.
         /// </summary>
+        /// <summary>
+        /// Timeout, retry and breaker settings shared by every route that does not override them.
+        /// <c>null</c> — the default — means none of it applies, which is the behaviour this proxy had
+        /// before the setting existed.
+        /// </summary>
+        public ProxyResilienceConfig? Resilience { get; set; }
+
         public ProxyStats Stats { get; set; } = new();
     }
 }

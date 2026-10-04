@@ -47,6 +47,8 @@ namespace Proxy.DomainService.Dtos
         /// Who can call the gateway route. Omitted ⇒ reset to the default (Blocks token, any signed-in
         /// caller), so the console must always send the current value back on Update.
         /// </summary>
+        public ProxyResilienceInputDto? Resilience { get; set; }
+
         public ProxyAccessInputDto? Access { get; set; }
     }
 }

@@ -1,25 +1,16 @@
-/** Fallback shown before `GetLimits` resolves — mirrors `FunctionLimits.Ceiling` server-side. */
+/**
+ * Shown only until `GetLimits` resolves — the server is the source of these numbers, not this file.
+ * Mirrors `FunctionLimits.Ceiling` so the first paint matches what arrives a moment later.
+ */
 export const DEFAULT_LIMITS_OPTIONS = {
-  ceilingCpuMillicores: 100,
-  ceilingMemoryMb: 200,
-  ceilingTimeoutSeconds: 90,
-  minConcurrency: 1,
-  maxConcurrency: 25,
-  defaultCpuMillicores: 100,
-  defaultMemoryMb: 128,
-  defaultTimeoutSeconds: 10,
-  defaultConcurrency: 2,
+  cpuMillicores: 100,
+  memoryMb: 128,
+  timeoutSeconds: 30,
+  concurrency: 10,
+  attempts: 2,
+  retryDelaySeconds: 5,
   showRateLimits: false,
 } as const;
-
-/**
- * Selectable limit values, from FEATURES-AND-UI §4.7. The design deliberately offers a short list
- * of steps rather than a free number: every option is a value the sandbox actually honours, and the
- * last one in each list is the platform ceiling.
- */
-export const MEMORY_MB_OPTIONS = [128, 156, 200] as const;
-export const TIMEOUT_SECONDS_OPTIONS = [5, 10, 15, 30, 45, 60, 90] as const;
-export const RETRY_ATTEMPTS_OPTIONS = [1, 2, 3, 5] as const;
 
 /** Not configurable — enforced by the runner whatever the caller asks for. */
 export const HARD_CAPS = [

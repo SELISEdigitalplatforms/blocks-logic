@@ -96,7 +96,7 @@
         <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.#ctor(Functions.DomainService.Services.IFunctionService,Functions.DomainService.Services.IFunctionDeploymentService,Functions.DomainService.Services.IFunctionInvocationService,Functions.DomainService.Services.IFunctionRunService,Functions.DomainService.Services.IFunctionBuildService,Functions.DomainService.Services.IFunctionAuditService,Common.InternalService.Access.IEndpointAccessAuthorizer,Functions.DomainService.Services.IFunctionPollTokenService,Microsoft.Extensions.Logging.ILogger{BlocksTemplate.Api.Controllers.FunctionsController})">
             <summary>
             The management services, plus the shared access authorizer that resolves the tenant on
-            the anonymous <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.Invoke(System.String,System.String,System.Boolean)"/> route — the same one the proxy gateway uses — and the
+            the anonymous <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.Invoke(System.String,System.String)"/> route — the same one the proxy gateway uses — and the
             poll-token service behind the anonymous <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.PollRunResult(System.String)"/>.
             </summary>
         </member>
@@ -115,7 +115,7 @@
             documented error shape. Kestrel still stops a runaway upload here.
             </summary>
         </member>
-        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.Invoke(System.String,System.String,System.Boolean)">
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.Invoke(System.String,System.String)">
             <summary>
             The public function endpoint (DECISIONS D5): <c>{METHOD} /api/fn/{functionId}/{**path}</c>.
             A tenant's client calls this instead of hosting the code. The route is registered for
@@ -155,18 +155,17 @@
             first — 405 with an <c>Allow</c> header for the method the trigger does not take, 413
             over the body ceiling, 400 for input the sandbox cannot be given, 429 with
             <c>Retry-After</c> when the function's own rate limit refuses the call (only with
-            <c>Functions:RateLimits:Enabled</c>). 202 with a run id and a <c>pollToken</c> is the
-            fire-and-forget shape (see <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.PollRunResult(System.String)"/>); 200 carries the result once
-            <c>?wait=true</c> saw a terminal outcome.
+            <c>Functions:RateLimits:Enabled</c>).
             </para>
-            </summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.ShouldWait(System.Boolean)">
-            <summary>
-            <c>?wait=true</c>, matching DECISIONS D5. A <c>Prefer: wait=&lt;sec&gt;</c> header is
-            also accepted for parity with the spec's Sync/Fire/Poll language, treated the same
-            as a plain <c>wait=true</c> — the actual wait budget is the function's own timeout
-            plus a fixed grace, not whatever value the header names.
+            <para>
+            <b>Always asynchronous.</b> The answer is 202 with a run id and a <c>pollToken</c>; the
+            caller collects the outcome from <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.PollRunResult(System.String)"/>. There is no synchronous
+            mode: a run is a fresh sandbox, so holding the request open bought a few hundred
+            milliseconds of latency at the cost of a connection held for the whole run, an ingress
+            timeout that had to exceed it, and a caller who lost the result when the connection
+            dropped. A <c>wait</c> query parameter or a <c>Prefer: wait=</c> header is still accepted
+            and ignored, so an older client gets an answer rather than a 400 — it just gets 202.
+            </para>
             </summary>
         </member>
         <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.ReadBodyAsync(System.Threading.CancellationToken)">
@@ -204,7 +203,7 @@
             refusal after the tenant check — missing, malformed, wrong or expired token, a token for
             another tenant's run, a run that no longer exists — is the same 404, so the route says
             nothing about which run ids exist. Anonymous at the framework level for the same reason
-            <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.Invoke(System.String,System.String,System.Boolean)"/> is.
+            <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.Invoke(System.String,System.String)"/> is.
             </para>
             </summary>
         </member>
@@ -553,7 +552,7 @@
             </para>
             </summary>
         </member>
-        <member name="M:Utilities.Api.Controllers.ProxiesController.#ctor(Proxy.DomainService.Services.IProxyService,Proxy.DomainService.Services.IProxyVersionService,Proxy.DomainService.Services.IProxyTestService,Proxy.DomainService.Services.IProxyExecutionService,Proxy.DomainService.Services.IProxyGatewayService,Common.InternalService.Access.IEndpointAccessAuthorizer,Microsoft.Extensions.Logging.ILogger{Utilities.Api.Controllers.ProxiesController})">
+        <member name="F:Utilities.Api.Controllers.ProxiesController._openApiImport">
             <summary>
             Takes the four control-plane services, the data-plane gateway service, and the shared access
             authorizer that enforces each proxy's "Who can call it" policy on the gateway route.
@@ -620,6 +619,22 @@
             WITHOUT creating or mutating any <c>Proxies</c> / <c>ProxyVersions</c> data (SPEC §3.3). It sits on
             the collection, not under <c>{proxyId}</c>, precisely because the draft it tests need not exist yet.
             The tenant is taken from <see cref="T:Blocks.Genesis.BlocksContext"/>; no <c>X-Blocks-Key</c> is required here.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.PreviewOpenApi(Proxy.DomainService.Dtos.ProxyOpenApiPreviewRequestDto,System.Threading.CancellationToken)">
+            <summary>
+            <c>POST /api/Proxies/openapi/preview</c> — reads an OpenAPI document and lists the routes it
+            would produce, so the caller can review them before anything is saved.
+            <para>
+            This writes nothing. The chosen operations come back through the ordinary create/update call,
+            which is what keeps an import inside the same validation, versioning and audit as a route typed
+            by hand rather than around them.
+            </para>
+            <para>
+            A specification may be pasted (<c>specJson</c>) or named by URL (<c>specUrl</c>); the URL is
+            fetched through the same guard as any upstream, because otherwise this endpoint is a request
+            this server makes to wherever a caller points it.
+            </para>
             </summary>
         </member>
         <member name="M:Utilities.Api.Controllers.ProxiesController.ListExecutions(System.String,Proxy.DomainService.Dtos.ProxyGetExecutionsRequestDto)">

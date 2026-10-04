@@ -10,6 +10,10 @@
     <PackageVersion Include="SeliseBlocks.Localization.OS" Version="4.0.2" />
     <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.9.0" />
     <PackageVersion Include="FluentValidation" Version="12.0.0" />
+    <!-- The OpenAPI reader for the Proxy's route import. Pinned to the version Genesis already brings
+         in, so the two cannot disagree: a lower one here loses at resolution and the build then sees a
+         different API surface than the package declares. -->
+    <PackageVersion Include="Microsoft.OpenApi" Version="2.7.5" />
     <PackageVersion Include="Jint" Version="4.15.3" />
     <PackageVersion Include="FluentValidation.AspNetCore" Version="11.3.0" />
     <PackageVersion Include="Newtonsoft.Json" Version="13.0.3" />

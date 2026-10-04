@@ -69,12 +69,6 @@ namespace Functions.DomainService.Dtos.Requests
         public string? Note { get; set; }
     }
 
-    public sealed class RollbackFunctionRequestDto
-    {
-        public string FunctionId { get; set; } = string.Empty;
-        public int VersionNumber { get; set; }
-    }
-
     public sealed class GetRunsRequestDto
     {
         public string? FunctionId { get; set; }

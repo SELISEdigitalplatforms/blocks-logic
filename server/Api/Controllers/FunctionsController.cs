@@ -135,11 +135,6 @@ namespace BlocksTemplate.Api.Controllers
         public async Task<FunctionVersionSummaryDto> Deploy([FromBody] DeployFunctionRequestDto request)
             => await _deploymentService.DeployAsync(GetTenantId(), request, GetUserId(), GetEmail());
 
-        [HttpPost]
-        [ProtectedEndPoint("blocks-logic::function::manage")]
-        public async Task<FunctionVersionSummaryDto> Rollback([FromBody] RollbackFunctionRequestDto request)
-            => await _deploymentService.RollbackAsync(GetTenantId(), request, GetUserId(), GetEmail());
-
         [HttpGet]
         [ProtectedEndPoint("blocks-logic::function::read")]
         public async Task<BaseQueryListResponse<List<FunctionVersionSummaryDto>>> GetVersions(
@@ -295,15 +290,22 @@ namespace BlocksTemplate.Api.Controllers
         /// first — 405 with an <c>Allow</c> header for the method the trigger does not take, 413
         /// over the body ceiling, 400 for input the sandbox cannot be given, 429 with
         /// <c>Retry-After</c> when the function's own rate limit refuses the call (only with
-        /// <c>Functions:RateLimits:Enabled</c>). 202 with a run id and a <c>pollToken</c> is the
-        /// fire-and-forget shape (see <see cref="PollRunResult"/>); 200 carries the result once
-        /// <c>?wait=true</c> saw a terminal outcome.
+        /// <c>Functions:RateLimits:Enabled</c>).
+        /// </para>
+        /// <para>
+        /// <b>Always asynchronous.</b> The answer is 202 with a run id and a <c>pollToken</c>; the
+        /// caller collects the outcome from <see cref="PollRunResult"/>. There is no synchronous
+        /// mode: a run is a fresh sandbox, so holding the request open bought a few hundred
+        /// milliseconds of latency at the cost of a connection held for the whole run, an ingress
+        /// timeout that had to exceed it, and a caller who lost the result when the connection
+        /// dropped. A <c>wait</c> query parameter or a <c>Prefer: wait=</c> header is still accepted
+        /// and ignored, so an older client gets an answer rather than a 400 — it just gets 202.
         /// </para>
         /// </summary>
         [AllowAnonymous]
         [RequestSizeLimit(InvokeHardBodyLimitBytes)]
         [AcceptVerbs("GET", "POST", Route = "~/api/fn/{functionId}/{**path}")]
-        public async Task<IActionResult> Invoke(string functionId, string? path, [FromQuery] bool wait)
+        public async Task<IActionResult> Invoke(string functionId, string? path)
         {
             var instance = Request.Path.Value ?? $"/api/fn/{functionId}/{path}";
             var aborted = HttpContext.RequestAborted;
@@ -331,7 +333,9 @@ namespace BlocksTemplate.Api.Controllers
                 ContentType = string.IsNullOrWhiteSpace(Request.ContentType) ? null : Request.ContentType,
                 Body = tooLarge ? null : body,
                 BodyTooLarge = tooLarge,
-                Wait = ShouldWait(wait),
+                // Never. Every HTTP invocation is fire-and-forget; only a workflow step waits,
+                // and it does so through InvokeFromWorkflowAsync, not through this route.
+                Wait = false,
             };
 
             try
@@ -396,19 +400,6 @@ namespace BlocksTemplate.Api.Controllers
                 // the caller is told why rather than getting a 500.
                 return InvokeError(400, "FORBIDDEN_CONTENT", ex.Message, instance);
             }
-        }
-
-        /// <summary>
-        /// <c>?wait=true</c>, matching DECISIONS D5. A <c>Prefer: wait=&lt;sec&gt;</c> header is
-        /// also accepted for parity with the spec's Sync/Fire/Poll language, treated the same
-        /// as a plain <c>wait=true</c> — the actual wait budget is the function's own timeout
-        /// plus a fixed grace, not whatever value the header names.
-        /// </summary>
-        private bool ShouldWait(bool queryWait)
-        {
-            if (queryWait) return true;
-            var prefer = Request.Headers.TryGetValue("Prefer", out var value) ? value.ToString() : null;
-            return prefer is not null && prefer.Contains("wait=", StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>

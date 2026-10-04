@@ -169,7 +169,7 @@ namespace XUnitTest.Functions
         [InlineData(typeof(FunctionRequestTooLargeException), 413)]
         public void A_management_refusal_is_its_own_status_code_and_not_a_500(Type exceptionType, int expected)
         {
-            // Create, Update, Save, Deploy and Rollback return their DTO directly rather than an
+            // Create, Update, Save and Deploy return their DTO directly rather than an
             // ActionResult, so nothing mapped these and every one of them surfaced as a bare 500
             // — which tells a client to retry something that will fail identically every time.
             var context = ContextFor((Exception)Activator.CreateInstance(exceptionType, "nope")!);

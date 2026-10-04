@@ -73,6 +73,34 @@ describe("ProxyForm", () => {
     expect(saved?.methodConfigs).toEqual([]);
   });
 
+  it("saves a timeout the user configured, and nothing when they configure nothing", async () => {
+    // Both halves matter. The console sends every field back on save, so a number that appeared on
+    // its own would be stored as though somebody had chosen it.
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+    renderWithProviders(
+      <MemoryRouter>
+        <ProxyForm mode="create" onSuccess={onSuccess} />
+      </MemoryRouter>,
+    );
+
+    fillConnection("Slow Vendor", "https://api.example.com");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+    expect((await proxyService.get(onSuccess.mock.calls[0][0]))?.resilience).toBeNull();
+
+    await user.click(screen.getByLabelText("Set a timeout for this proxy"));
+    fireEvent.change(screen.getByLabelText("Seconds"), { target: { value: "8" } });
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(2));
+    expect((await proxyService.get(onSuccess.mock.calls[1][0]))?.resilience).toEqual({
+      timeoutSeconds: 8,
+      retry: null,
+      breaker: null,
+    });
+  });
+
   it("stores credential rows as headers or query by their delivery slot", async () => {
     const user = userEvent.setup();
     const onSuccess = vi.fn();

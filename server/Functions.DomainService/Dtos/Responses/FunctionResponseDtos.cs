@@ -231,18 +231,22 @@ namespace Functions.DomainService.Dtos.Responses
         public string? PollToken { get; set; }
     }
 
-    /// <summary>Static platform ceilings and defaults, for the editor's limits form.</summary>
+    /// <summary>
+    /// The one profile every function runs under.
+    /// <para>
+    /// These are not ceilings to choose under and not defaults to start from — they are the values,
+    /// the same for every function. The editor reads them from here rather than holding its own copy,
+    /// so the number on screen is always the number the runner applies.
+    /// </para>
+    /// </summary>
     public sealed class FunctionLimitsOptionsDto
     {
-        public int CeilingCpuMillicores { get; set; } = FunctionLimits.Ceiling.CpuMillicores;
-        public int CeilingMemoryMb { get; set; } = FunctionLimits.Ceiling.MemoryMb;
-        public int CeilingTimeoutSeconds { get; set; } = FunctionLimits.Ceiling.TimeoutSeconds;
-        public int MinConcurrency { get; set; } = FunctionLimits.Ceiling.MinConcurrency;
-        public int MaxConcurrency { get; set; } = FunctionLimits.Ceiling.MaxConcurrency;
-        public int DefaultCpuMillicores { get; set; } = FunctionLimits.Ceiling.DefaultCpuMillicores;
-        public int DefaultMemoryMb { get; set; } = FunctionLimits.Ceiling.DefaultMemoryMb;
-        public int DefaultTimeoutSeconds { get; set; } = FunctionLimits.Ceiling.DefaultTimeoutSeconds;
-        public int DefaultConcurrency { get; set; } = FunctionLimits.Ceiling.DefaultConcurrency;
+        public int CpuMillicores { get; set; } = FunctionLimits.Ceiling.CpuMillicores;
+        public int MemoryMb { get; set; } = FunctionLimits.Ceiling.MemoryMb;
+        public int TimeoutSeconds { get; set; } = FunctionLimits.Ceiling.TimeoutSeconds;
+        public int Concurrency { get; set; } = FunctionLimits.Ceiling.Concurrency;
+        public int Attempts { get; set; } = FunctionLimits.Ceiling.Attempts;
+        public int RetryDelaySeconds { get; set; } = RetryPolicy.Fixed.InitialDelaySeconds;
 
         /// <summary>
         /// Requests-per-minute/day are modelled and enforced (DECISIONS.md) but hidden in the

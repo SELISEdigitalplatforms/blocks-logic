@@ -168,8 +168,10 @@ namespace Functions.DomainService.Services
                 LockJson = request.LockJson,
             };
             function.SourceHash = FunctionHashing.SourceHash(function.Source);
-            function.Limits = request.Limits;
-            function.Retry = request.Retry;
+            // Stored as the platform profile, not as sent. The values are fixed, so keeping a
+            // caller's numbers would make the saved document disagree with what actually runs.
+            function.Limits = request.Limits.Clamp();
+            function.Retry = RetryPolicy.Fixed;
             function.Trigger = request.Trigger;
             function.OutputActions = request.OutputActions;
             function.Variables = request.Variables;

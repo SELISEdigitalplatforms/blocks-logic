@@ -15,7 +15,7 @@
 # SandboxProfileTests now compares the two, so a change to Ceilings fails the suite until it
 # is made here too.
 : "${FN_CPUS:=0.1}"                  # 100 millicores
-: "${FN_MEMORY:=200m}"               # 200 MB, swap equal
+: "${FN_MEMORY:=128m}"               # 128 MB, swap equal
 : "${FN_PIDS:=64}"
 : "${FN_TMPFS_SIZE:=64m}"
 : "${FN_UID:=10001}"

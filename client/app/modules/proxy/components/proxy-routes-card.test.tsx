@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
 import { Form } from "@/components/ui-kits/form/form";
-import { ProxyCredentialRow, ProxyFormValues, ProxyRoute } from "../types";
+import { ProxyCredentialRow, ProxyFormValues, ProxyResilience, ProxyRoute } from "../types";
 import { proxyFormDefaultValues, proxyFormSchema } from "../utils";
 import { ProxyRoutesCard, blankRoute } from "./proxy-routes-card";
 
@@ -178,5 +178,125 @@ describe("ProxyRoutesCard method changes", () => {
     await user.click(screen.getByRole("button", { name: "Remove endpoint 1" }));
     expect(screen.getByTestId("methods").textContent).toBe("DELETE");
     expect(screen.queryByText(/does not allow/)).toBeNull();
+  });
+});
+
+const InheritanceHarness = ({
+  proxyResilience = null,
+  route = {},
+  validate = false,
+  onSubmit = vi.fn(),
+}: {
+  proxyResilience?: ProxyResilience | null;
+  route?: Partial<ProxyRoute>;
+  validate?: boolean;
+  onSubmit?: (values: ProxyFormValues) => void;
+}) => {
+  const form = useForm<ProxyFormValues>({
+    defaultValues: {
+      ...proxyFormDefaultValues,
+      name: "orders",
+      upstreamUrl: "https://api.vendor.test",
+      resilience: proxyResilience,
+      routes: [{ ...blankRoute("GET"), path: "orders", ...route }],
+    },
+    resolver: validate ? zodResolver(proxyFormSchema) : undefined,
+  });
+  const routes = form.watch("routes");
+
+  return (
+    <Form {...form}>
+      {/* `noValidate`, as ProxyForm renders it: the schema's messages are the ones users read. */}
+      <form noValidate onSubmit={form.handleSubmit(onSubmit)}>
+        <ProxyRoutesCard
+          upstreamUrl="https://api.vendor.test"
+          clientUrlFor={(path) => `/gateway/p/${path}`}
+          onTest={vi.fn()}
+          variables={[]}
+        />
+        <button type="submit">Save</button>
+      </form>
+      <pre data-testid="routes">{JSON.stringify(routes[0]?.resilience ?? null)}</pre>
+    </Form>
+  );
+};
+
+const proxyPolicy: ProxyResilience = {
+  timeoutSeconds: 12,
+  retry: null,
+  breaker: { failureThreshold: 5, openSeconds: 30 },
+};
+
+const openResilience = (user: ReturnType<typeof userEvent.setup>) =>
+  user.click(screen.getByRole("button", { name: /if this endpoint is slow or failing/i }));
+
+const routeResilience = () => JSON.parse(screen.getByTestId("routes").textContent ?? "null");
+
+describe("ProxyRoutesCard timeouts and retries", () => {
+  it("an endpoint with none of its own shows the connection's, and says where it came from", () => {
+    // Inheritance is whole-object in the gateway (`route ?? proxy`), so the row has to read as "this
+    // policy, from there" rather than as something assembled from both.
+    renderWithProviders(<InheritanceHarness proxyResilience={proxyPolicy} />);
+
+    const summary = screen.getByText(/from the connection/).parentElement?.textContent ?? "";
+    expect(summary).toContain("12s timeout");
+    expect(summary).toContain("breaker opens after 5 failures");
+  });
+
+  it("names the state plainly when neither the endpoint nor the connection has one", () => {
+    renderWithProviders(<InheritanceHarness />);
+
+    expect(screen.getByText(/Not configured/)).toBeTruthy();
+  });
+
+  it("an override starts from nothing rather than from a copy of the connection's", async () => {
+    // A pre-filled copy would look inherited while no longer being so: later edits to the connection
+    // would stop reaching this endpoint, silently.
+    const user = userEvent.setup();
+    renderWithProviders(<InheritanceHarness proxyResilience={proxyPolicy} />);
+
+    await openResilience(user);
+    await user.click(screen.getByLabelText("Separate timeouts and retries for endpoint 1"));
+
+    expect(routeResilience()).toEqual({ timeoutSeconds: null, retry: null, breaker: null });
+    expect(screen.getByText(/Nothing set yet, so this endpoint still uses the connection's/)).toBeTruthy();
+  });
+
+  it("an endpoint's own number is judged by the same rules, and answered in its own row", async () => {
+    // The schema raises these under `routes.<i>.resilience`, which is a different place from the
+    // proxy's — a message that landed on the wrong row would be worse than none.
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    renderWithProviders(
+      <InheritanceHarness
+        validate
+        onSubmit={onSubmit}
+        route={{ resilience: { timeoutSeconds: 99, retry: null, breaker: null } }}
+      />,
+    );
+
+    await openResilience(user);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(screen.getByText("The timeout must be between 1 and 30 seconds.")).toBeTruthy(),
+    );
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("switching the last setting off hands the endpoint back to the connection", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <InheritanceHarness
+        proxyResilience={proxyPolicy}
+        route={{ resilience: { timeoutSeconds: 3, retry: null, breaker: null } }}
+      />,
+    );
+
+    await openResilience(user);
+    await user.click(screen.getByLabelText("Set a timeout for endpoint 1"));
+
+    expect(routeResilience()).toBeNull();
+    expect(screen.getByText(/from the connection/)).toBeTruthy();
   });
 });

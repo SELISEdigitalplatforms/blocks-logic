@@ -50,6 +50,10 @@ namespace Functions.DomainService.Utils
             public const string Tested = "FunctionTested";
             public const string Deployed = "FunctionDeployed";
             public const string VersionActivated = "VersionActivated";
+            /// <summary>
+            /// No longer written — rolling back was removed. Kept so audit rows recorded while it
+            /// existed still render with a label rather than a raw action string.
+            /// </summary>
             public const string RolledBack = "FunctionRolledBack";
             public const string Paused = "FunctionPaused";
             public const string Resumed = "FunctionResumed";

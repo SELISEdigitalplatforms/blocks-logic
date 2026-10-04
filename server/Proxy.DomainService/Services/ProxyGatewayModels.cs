@@ -56,6 +56,9 @@ namespace Proxy.DomainService.Services
         /// <summary>Field paths kept when <see cref="ResponseMode"/> is <see cref="ProxyResponseMode.Select"/>.</summary>
         public IReadOnlyList<string> ResponseInclude { get; init; } = Array.Empty<string>();
 
+        /// <summary><c>null</c> unless the tenant configured one; see <see cref="ProxyResilienceConfig"/>.</summary>
+        public ProxyResilienceConfig? Resilience { get; init; }
+
         public static ProxyResolvedConfig FromEntity(ProxyDetailEntity proxy) => new()
         {
             ProxyId = proxy.ItemId,
@@ -71,6 +74,7 @@ namespace Proxy.DomainService.Services
             Routes = proxy.Routes,
             ResponseMode = proxy.ResponseMode,
             ResponseInclude = proxy.ResponseInclude,
+            Resilience = proxy.Resilience,
         };
     }
 

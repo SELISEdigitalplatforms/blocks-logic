@@ -17,7 +17,7 @@ namespace Blocks.FunctionRunner.Contracts
         /// </summary>
         public const int CpuMillicores = 100;
 
-        public const long MemoryBytes = 200L * 1024 * 1024;
+        public const long MemoryBytes = 128L * 1024 * 1024;
         public const int PidLimit = 64;
 
         /// <summary>
@@ -45,8 +45,10 @@ namespace Blocks.FunctionRunner.Contracts
         /// same number, and this one clamps again, so the two must move together — a control plane
         /// allowing more than the runner does silently loses the difference to a killed sandbox.
         /// </summary>
-        public const int TimeoutSeconds = 90;
-        public const int DefaultTimeoutSeconds = 10;
+        public const int TimeoutSeconds = 30;
+
+        /// <summary>Kept equal to <see cref="TimeoutSeconds"/>: there is one value, not a range.</summary>
+        public const int DefaultTimeoutSeconds = TimeoutSeconds;
         public const long InputBytes = 1024 * 1024;
         public const long ResultBytes = 5L * 1024 * 1024;
         public const long LogBytes = 1024 * 1024;
@@ -67,8 +69,10 @@ namespace Blocks.FunctionRunner.Contracts
         /// </para>
         /// </summary>
         public const int MinFunctionConcurrency = 1;
-        public const int MaxFunctionConcurrency = 25;
-        public const int DefaultFunctionConcurrency = 2;
+        public const int MaxFunctionConcurrency = 10;
+
+        /// <summary>Kept equal to <see cref="MaxFunctionConcurrency"/>: one value, not a range.</summary>
+        public const int DefaultFunctionConcurrency = MaxFunctionConcurrency;
 
         /// <summary>uid and gid the function process runs as inside the sandbox.</summary>
         public const int SandboxUid = 10001;
@@ -129,14 +133,13 @@ namespace Blocks.FunctionRunner.Contracts
         public static RunLimits Default => Clamp(null, null, null, null, null, null);
 
         /// <summary>
-        /// Clamps a requested profile to the ceilings. Every argument is optional; a null, zero
-        /// or negative value falls back to the ceiling (or, for timeout, to the 10 s default).
-        /// A value above a ceiling is silently reduced — the caller does not get to argue — and
-        /// memory and PIDs below the floor a sandbox can start with are raised to that floor
-        /// (<see cref="Ceilings.MinMemoryBytes"/>, <see cref="Ceilings.MinPidLimit"/>).
+        /// Returns the platform profile. Every argument is accepted and ignored.
         /// <para>
-        /// <paramref name="cpuMillicores"/> is the exception: it is ignored entirely and every
-        /// sandbox receives <see cref="Ceilings.CpuMillicores"/>. See that constant for why.
+        /// The parameters remain so the wire format, the control plane's copy of it and every
+        /// existing call site keep compiling and behaving — what changed is that none of the values
+        /// are negotiable any more. A sandbox gets <see cref="Ceilings.CpuMillicores"/>,
+        /// <see cref="Ceilings.MemoryBytes"/> and <see cref="Ceilings.TimeoutSeconds"/>, whatever
+        /// arrives.
         /// </para>
         /// </summary>
         public static RunLimits Clamp(
@@ -149,32 +152,18 @@ namespace Blocks.FunctionRunner.Contracts
         {
             return new RunLimits
             {
-                // Not clamped — fixed. The argument is accepted so the wire format and the
-                // control plane's copy of it keep working, and then ignored: CPU is the one
-                // dimension a function does not get to choose.
+                // Every dimension is fixed, not clamped. The arguments are still accepted so the
+                // wire format and the control plane's copy of it keep working unchanged, and then
+                // ignored: one profile for every sandbox is what makes a slot mean the same thing
+                // whoever is running, and it is enforced here as well as upstream so a mistake in
+                // the control plane cannot widen a sandbox.
                 CpuMillicores = Ceilings.CpuMillicores,
-                MemoryBytes = ClampLong(memoryBytes, Ceilings.MinMemoryBytes, Ceilings.MemoryBytes, Ceilings.MemoryBytes),
-                PidLimit = ClampInt(pidLimit, Ceilings.MinPidLimit, Ceilings.PidLimit, Ceilings.PidLimit),
-                TmpfsBytes = ClampLong(tmpfsBytes, 1, Ceilings.TmpfsBytes, Ceilings.TmpfsBytes),
-                TimeoutSeconds = ClampInt(timeoutSeconds, 1, Ceilings.TimeoutSeconds, Ceilings.DefaultTimeoutSeconds),
-                FunctionConcurrency = ClampInt(
-                    functionConcurrency,
-                    Ceilings.MinFunctionConcurrency,
-                    Ceilings.MaxFunctionConcurrency,
-                    Ceilings.DefaultFunctionConcurrency),
+                MemoryBytes = Ceilings.MemoryBytes,
+                PidLimit = Ceilings.PidLimit,
+                TmpfsBytes = Ceilings.TmpfsBytes,
+                TimeoutSeconds = Ceilings.TimeoutSeconds,
+                FunctionConcurrency = Ceilings.MaxFunctionConcurrency,
             };
-        }
-
-        private static int ClampInt(int? value, int min, int max, int fallback)
-        {
-            if (value is null || value <= 0) return fallback;
-            return value.Value < min ? min : value.Value > max ? max : value.Value;
-        }
-
-        private static long ClampLong(long? value, long min, long max, long fallback)
-        {
-            if (value is null || value <= 0) return fallback;
-            return value.Value < min ? min : value.Value > max ? max : value.Value;
         }
     }
 }

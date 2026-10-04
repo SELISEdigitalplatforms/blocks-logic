@@ -7,13 +7,6 @@ import { SelectOption } from "../node-inspector/form-builder/form-field.types";
 /** One page is enough for a picker; the list is sorted by name so it is scannable. */
 const FUNCTION_PICKER_PAGE_SIZE = 200;
 
-/**
- * Longest wait the step may be configured for. Mirrors the server's `Functions:SyncWaitMaxSeconds`
- * (FunctionInvocationService.DefaultSyncWaitMaxSeconds): anything above it is clamped there
- * anyway, so offering it here would only promise a wait the server will not honour.
- */
-export const FUNCTION_STEP_MAX_WAIT_SECONDS = 180;
-
 const CODE_CLASS = "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold";
 const code = (text: string) => React.createElement("code", { className: CODE_CLASS }, text);
 
@@ -122,17 +115,6 @@ export const NodeSchemaActionFunction: NodeSchemaDefinition = {
         height: 168,
         dependsOn: { key: "inputMode", value: "expression" },
       },
-      {
-        id: "waitTimeoutSec",
-        type: "number",
-        label: "Wait timeout (seconds)",
-        info:
-          "How long this step waits for the function to finish, from 1 to 180 seconds. Leave empty to use the function's own timeout plus a short grace period. If the run is still going when the wait ends, the step fails.",
-        key: "waitTimeoutSec",
-        placeholder: "Function's own timeout",
-        min: 1,
-        max: FUNCTION_STEP_MAX_WAIT_SECONDS,
-      },
     ],
     settings: [],
   },
@@ -141,7 +123,6 @@ export const NodeSchemaActionFunction: NodeSchemaDefinition = {
       functionId: "",
       inputMode: "item",
       inputExpression: "",
-      waitTimeoutSec: null,
     },
     settings: {},
   },

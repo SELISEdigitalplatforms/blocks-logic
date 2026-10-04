@@ -21,6 +21,7 @@ namespace XUnitTest.Proxy
         private readonly Mock<IProxyExecutionService> _executionService = new();
         private readonly Mock<IProxyGatewayService> _gatewayService = new();
         private readonly Mock<IEndpointAccessAuthorizer> _accessAuthorizer = new();
+        private readonly Mock<IProxyOpenApiImportService> _openApiImport = new();
         private readonly ProxiesController _controller;
 
         public ProxiesControllerTests()
@@ -28,7 +29,8 @@ namespace XUnitTest.Proxy
             TestBlocksContext.Set("tenant-abc");
             _controller = new ProxiesController(
                 _proxyService.Object, _versionService.Object, _testService.Object, _executionService.Object,
-                _gatewayService.Object, _accessAuthorizer.Object, NullLogger<ProxiesController>.Instance);
+                _gatewayService.Object, _accessAuthorizer.Object, _openApiImport.Object,
+                NullLogger<ProxiesController>.Instance);
         }
 
         public void Dispose()

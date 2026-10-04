@@ -89,7 +89,8 @@ export const TriggerHttpCard = ({ value, onChange, functionId }: TriggerHttpCard
               <p className="text-sm font-semibold">HTTP endpoint</p>
               <p className="text-xs text-muted-foreground">
                 Always on. The call returns <code className="font-mono">202 Accepted</code> with a
-                run id, or the result itself with <code className="font-mono">?wait=true</code>.
+                run id and a poll token — never the result itself, so nothing holds a connection
+                open for the length of a run.
               </p>
             </div>
             {/* One method per function, like a proxy route: the other one is refused with 405. */}

@@ -1,7 +1,13 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PROXY_QUERY_KEY } from "../constants";
 import { proxyService } from "../services";
-import { ProxyFormValues, ProxyListParams, ProxyLogFilter, ProxyTestRequest } from "../types";
+import {
+  ProxyFormValues,
+  ProxyListParams,
+  ProxyLogFilter,
+  ProxyOpenApiPreviewRequest,
+  ProxyTestRequest,
+} from "../types";
 
 export const useGetProxies = (params: ProxyListParams = {}) =>
   useQuery({
@@ -128,6 +134,16 @@ export const useRevertProxyVersion = () => {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: PROXY_QUERY_KEY }),
   });
 };
+
+/**
+ * Reads an OpenAPI document. A mutation rather than a query because it is an action the user takes
+ * with input they just typed, and nothing about it is worth caching under a key.
+ */
+export const usePreviewOpenApi = () =>
+  useMutation({
+    mutationKey: [...PROXY_QUERY_KEY, "openapi-preview"],
+    mutationFn: (request: ProxyOpenApiPreviewRequest) => proxyService.previewOpenApi(request),
+  });
 
 export const useSendProxyTestRequest = () =>
   useMutation({

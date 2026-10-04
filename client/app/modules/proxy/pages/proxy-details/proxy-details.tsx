@@ -25,8 +25,8 @@ import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { getProxyClientUrl } from "../../constants";
 import { useGetProxyById, useGetProxyOverview, useToggleProxy } from "../../hooks";
-import { Proxy, ProxyKeyValue, ProxyRoute, ResponseFieldNode } from "../../types";
-import { describeProxyAccess, pathsToTree } from "../../utils";
+import { Proxy, ProxyKeyValue, ProxyResilience, ProxyRoute, ResponseFieldNode } from "../../types";
+import { describeProxyAccess, describeResilience, pathsToTree } from "../../utils";
 import { ProxyMethodBadge } from "../../components/proxy-method-badge";
 import { ProxyMethodChips } from "../../components/proxy-method-chips";
 import { ProxyStatusBadge } from "../../components/proxy-status-badge";
@@ -106,10 +106,13 @@ const EndpointRow = ({
   route,
   clientUrl,
   upstreamUrl,
+  inherited,
 }: {
   route: ProxyRoute;
   clientUrl: string;
   upstreamUrl: string;
+  /** The proxy's policy, used when this endpoint sets none. Inherited whole, as the gateway reads it. */
+  inherited: ProxyResilience | null;
 }) => {
   const forwardPath = (route.upstreamPath ?? route.path).replace(/^\/+|\/+$/g, "");
   const forwardsTo = forwardPath
@@ -152,6 +155,13 @@ const EndpointRow = ({
             </>
           )}
         </dd>
+        <dt className="text-muted-foreground">If it fails</dt>
+        <dd>
+          {describeResilience(route.resilience ?? inherited)}
+          {route.resilience ? null : (
+            <span className="text-muted-foreground"> — from the connection</span>
+          )}
+        </dd>
       </dl>
     </li>
   );
@@ -177,6 +187,7 @@ const EndpointsSection = ({
         bodyMerge: null,
         responseMode: null,
         responseInclude: null,
+        resilience: null,
       }));
 
   return (
@@ -194,6 +205,7 @@ const EndpointsSection = ({
             route={route}
             clientUrl={clientUrlFor(route.path)}
             upstreamUrl={proxy.upstreamUrl}
+            inherited={proxy.resilience}
           />
         ))}
       </ul>
@@ -601,6 +613,19 @@ export const ProxyDetails = () => {
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {describeProxyAccess(proxy.access)}
+                      </p>
+                    </div>
+                    <div data-testid="proxy-resilience-summary">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        If the vendor is slow or down
+                      </p>
+                      <p className="mt-1 text-sm font-medium">
+                        {describeResilience(proxy.resilience)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {proxy.resilience
+                          ? "Endpoints use this unless they set their own."
+                          : "No timeout, retries or circuit breaker configured. Calls wait for the vendor and are never sent twice."}
                       </p>
                     </div>
                     <EndpointsSection proxy={proxy} clientUrlFor={clientUrlFor} />

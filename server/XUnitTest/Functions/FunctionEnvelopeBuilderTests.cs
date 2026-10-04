@@ -70,7 +70,8 @@ namespace XUnitTest.Functions
             root.GetProperty("context").GetProperty("tenantId").GetString().Should().Be("tenant_1");
             root.GetProperty("env").GetProperty("REGION").GetString().Should().Be("ch");
             root.GetProperty("input").GetProperty("orderId").GetString().Should().Be("123");
-            root.GetProperty("limits").GetProperty("timeoutMs").GetInt32().Should().Be(25_000);
+            // The platform profile, not whatever the function document holds.
+            root.GetProperty("limits").GetProperty("timeoutMs").GetInt32().Should().Be(30_000);
         }
 
         [Fact]
@@ -141,10 +142,17 @@ namespace XUnitTest.Functions
                 .Should().BeFalse();
         }
 
+        /// <summary>
+        /// Editing a function must not change how an already-deployed version behaves.
+        /// <para>
+        /// Limits are no longer part of that promise — they are fixed, so the version's copy and the
+        /// editable copy produce the same profile and neither can win. Everything else a version
+        /// snapshots still does win, which is what this now pins.
+        /// </para>
+        /// </summary>
         [Fact]
         public void The_version_snapshot_wins_over_the_editable_configuration()
         {
-            // Editing a function must not change how an already-deployed version behaves.
             var version = new FunctionVersionEntity
             {
                 Limits = new FunctionLimits { TimeoutSeconds = 5 },
@@ -155,8 +163,11 @@ namespace XUnitTest.Functions
             var json = FunctionEnvelopeBuilder.Build(Run(), version, Function(), Context(), null);
 
             using var doc = Parse(json);
-            doc.RootElement.GetProperty("limits").GetProperty("timeoutMs").GetInt32().Should().Be(5_000);
             doc.RootElement.GetProperty("env").GetProperty("REGION").GetString().Should().Be("us");
+
+            // The version asked for 5 s and gets the platform's 30 s, exactly as the editable copy
+            // would have. A stored limit is inert on both sides.
+            doc.RootElement.GetProperty("limits").GetProperty("timeoutMs").GetInt32().Should().Be(30_000);
         }
 
         [Fact]

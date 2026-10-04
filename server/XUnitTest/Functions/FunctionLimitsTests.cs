@@ -15,115 +15,100 @@ namespace XUnitTest.Functions
     public class FunctionLimitsTests
     {
         [Fact]
-        public void Defaults_for_a_new_function_sit_below_the_ceilings()
+        public void A_new_function_starts_on_the_platform_profile()
         {
             var limits = new FunctionLimits();
 
-            // CPU is fixed rather than a ceiling to sit below, so the default is the value itself.
-            limits.CpuMillicores.Should().Be(FunctionLimits.Ceiling.CpuMillicores);
-            limits.MemoryMb.Should().Be(128).And.BeLessThan(FunctionLimits.Ceiling.MemoryMb);
-            limits.TimeoutSeconds.Should().Be(10).And.BeLessThan(FunctionLimits.Ceiling.TimeoutSeconds);
-            limits.Concurrency.Should().Be(2);
+            limits.CpuMillicores.Should().Be(100);
+            limits.MemoryMb.Should().Be(128);
+            limits.TimeoutSeconds.Should().Be(30);
+            limits.Concurrency.Should().Be(10);
         }
 
         [Fact]
-        public void Rate_limits_default_to_unlimited()
+        public void Rate_limits_are_unlimited()
         {
-            // Null means unlimited, and unlimited is the only value V1 uses.
             var limits = new FunctionLimits();
 
             limits.RequestsPerMinute.Should().BeNull();
             limits.RequestsPerDay.Should().BeNull();
         }
 
-        [Fact]
-        public void A_greedy_request_is_clamped_to_the_ceilings()
+        /// <summary>
+        /// The point of the whole design: what a caller asks for does not matter.
+        /// <para>
+        /// A greedy request and a modest one produce the same profile, so a tenant can neither widen
+        /// a sandbox nor narrow one. Capacity planning then means something — a slot is the same
+        /// size whoever is running in it.
+        /// </para>
+        /// </summary>
+        [Theory]
+        [InlineData(64_000, 65_536, 86_400, 500)]
+        [InlineData(150, 156, 5, 3)]
+        [InlineData(0, 0, 0, 0)]
+        [InlineData(-1, -1, -1, -1)]
+        public void Whatever_is_asked_for_the_profile_is_the_same(
+            int cpu, int memoryMb, int timeoutSeconds, int concurrency)
         {
             var clamped = new FunctionLimits
             {
-                CpuMillicores = 64_000,
-                MemoryMb = 65_536,
-                TimeoutSeconds = 86_400,
-                Concurrency = 500,
+                CpuMillicores = cpu,
+                MemoryMb = memoryMb,
+                TimeoutSeconds = timeoutSeconds,
+                Concurrency = concurrency,
             }.Clamp();
 
             clamped.CpuMillicores.Should().Be(FunctionLimits.Ceiling.CpuMillicores);
             clamped.MemoryMb.Should().Be(FunctionLimits.Ceiling.MemoryMb);
             clamped.TimeoutSeconds.Should().Be(FunctionLimits.Ceiling.TimeoutSeconds);
-            clamped.Concurrency.Should().Be(FunctionLimits.Ceiling.MaxConcurrency);
+            clamped.Concurrency.Should().Be(FunctionLimits.Ceiling.Concurrency);
         }
 
+        /// <summary>
+        /// A document stored while these were editable keeps loading, and stops mattering.
+        /// <para>
+        /// Nothing migrates it: every consumer calls <see cref="FunctionLimits.Clamp"/> before a run,
+        /// so the old numbers are inert from the moment this ships, and the next save rewrites them.
+        /// </para>
+        /// </summary>
         [Fact]
-        public void A_modest_request_is_honoured()
+        public void An_older_document_with_the_old_ceilings_runs_on_the_new_profile()
         {
-            var clamped = new FunctionLimits
+            var stored = new FunctionLimits
             {
-                CpuMillicores = 150,
-                MemoryMb = 156,
-                TimeoutSeconds = 30,
-                Concurrency = 3,
-            }.Clamp();
+                MemoryMb = 200,
+                TimeoutSeconds = 90,
+                Concurrency = 25,
+                RequestsPerMinute = 600,
+            };
 
-            // Not honoured: CPU is the one dimension a function does not choose.
-            clamped.CpuMillicores.Should().Be(FunctionLimits.Ceiling.CpuMillicores);
-            clamped.MemoryMb.Should().Be(156);
-            clamped.TimeoutSeconds.Should().Be(30);
-            clamped.Concurrency.Should().Be(3);
-        }
+            var effective = stored.Clamp();
 
-        [Theory]
-        [InlineData(0)]
-        [InlineData(-1)]
-        public void Nonsensical_values_fall_back_to_defaults_rather_than_widening(int value)
-        {
-            var clamped = new FunctionLimits
-            {
-                CpuMillicores = value,
-                MemoryMb = value,
-                TimeoutSeconds = value,
-                Concurrency = value,
-            }.Clamp();
-
-            clamped.CpuMillicores.Should().Be(FunctionLimits.Ceiling.CpuMillicores);
-            clamped.MemoryMb.Should().Be(FunctionLimits.Ceiling.DefaultMemoryMb);
-            clamped.TimeoutSeconds.Should().Be(FunctionLimits.Ceiling.DefaultTimeoutSeconds);
-            clamped.Concurrency.Should().Be(FunctionLimits.Ceiling.DefaultConcurrency);
+            effective.MemoryMb.Should().Be(128);
+            effective.TimeoutSeconds.Should().Be(30);
+            effective.Concurrency.Should().Be(10);
+            effective.RequestsPerMinute.Should().BeNull();
         }
 
         [Fact]
-        public void Clamping_normalises_a_zero_rate_limit_to_unlimited()
+        public void The_fixed_retry_policy_is_one_retry_five_seconds_later()
         {
-            // Zero would otherwise mean "refuse everything", which no tenant intends to set.
-            var clamped = new FunctionLimits { RequestsPerMinute = 0, RequestsPerDay = 0 }.Clamp();
+            var policy = RetryPolicy.Fixed;
 
-            clamped.RequestsPerMinute.Should().BeNull();
-            clamped.RequestsPerDay.Should().BeNull();
+            policy.Attempts.Should().Be(2);
+            policy.DelayFor(1).Should().Be(TimeSpan.Zero, "the first attempt never waits");
+            policy.DelayFor(2).Should().Be(TimeSpan.FromSeconds(5));
         }
 
-        [Theory]
-        [InlineData(1)]
-        [InlineData(31)]
-        public void Memory_below_the_floor_is_raised_to_it(int memoryMb)
-        {
-            // Docker refuses a container under ~6 MB and Node needs more: a 1 MB request used to
-            // pass validation and fail every run at sandbox start instead.
-            new FunctionLimits { MemoryMb = memoryMb }.Clamp().MemoryMb.Should().Be(FunctionLimits.Ceiling.MinMemoryMb);
-        }
-
+        /// <summary>
+        /// The two halves keep separate copies of these constants — the control plane does not
+        /// reference the runner's contracts — so this test is the only thing stopping them drifting.
+        /// The runner applies its own copy before creating a sandbox, so if they ever disagree the
+        /// runner wins and the difference is lost silently to a killed sandbox.
+        /// </summary>
         [Fact]
-        public void Concurrency_below_the_floor_is_raised_not_zeroed()
+        public void The_profile_matches_the_runners_own_constants()
         {
-            new FunctionLimits { Concurrency = 1 }.Clamp().Concurrency.Should().Be(1);
-        }
-
-        [Fact]
-        public void The_ceilings_match_the_runners_own_constants()
-        {
-            // The runner clamps every request to its own copy of these, so a control plane that
-            // allows more than the runner does loses the difference to a killed sandbox rather
-            // than to an error anyone sees. The two used to live in separate repositories and
-            // this test compared copied literals; they are one repository now, so it compares the
-            // constants themselves and drift is no longer possible to write.
             FunctionLimits.Ceiling.CpuMillicores.Should().Be(RunnerCeilings.CpuMillicores);
             FunctionLimits.Ceiling.TimeoutSeconds.Should().Be(RunnerCeilings.TimeoutSeconds);
             FunctionLimits.Ceiling.PidLimit.Should().Be(RunnerCeilings.PidLimit);
@@ -131,24 +116,19 @@ namespace XUnitTest.Functions
             FunctionLimits.Ceiling.ResultBytes.Should().Be(RunnerCeilings.ResultBytes);
             FunctionLimits.Ceiling.LogBytes.Should().Be(RunnerCeilings.LogBytes);
             FunctionLimits.Ceiling.LogLines.Should().Be(RunnerCeilings.LogLines);
+            FunctionLimits.Ceiling.Concurrency.Should().Be(RunnerCeilings.MaxFunctionConcurrency);
 
-            // Stated in different units on each side, so these are converted rather than compared.
+            // Stated in different units on each side, so converted rather than compared.
             (FunctionLimits.Ceiling.MemoryMb * 1024L * 1024L).Should().Be(RunnerCeilings.MemoryBytes);
             (FunctionLimits.Ceiling.TmpfsMb * 1024L * 1024L).Should().Be(RunnerCeilings.TmpfsBytes);
-            (FunctionLimits.Ceiling.MinMemoryMb * 1024L * 1024L).Should().Be(RunnerCeilings.MinMemoryBytes);
 
-            // Concurrency is scheduled by the control plane and clamped again by the runner, so
-            // the two do have to agree — comparing the constants is what keeps them agreeing.
-            FunctionLimits.Ceiling.MinConcurrency.Should().Be(RunnerCeilings.MinFunctionConcurrency);
-            FunctionLimits.Ceiling.MaxConcurrency.Should().Be(RunnerCeilings.MaxFunctionConcurrency);
-            FunctionLimits.Ceiling.DefaultConcurrency.Should().Be(RunnerCeilings.DefaultFunctionConcurrency);
-
-            // Raised from 5, which capped one function near 375 runs a minute. Pinned so that a
-            // later edit to one side has to be deliberate.
-            FunctionLimits.Ceiling.MaxConcurrency.Should().Be(25);
-
-            // The value this change was about, pinned so a later edit to one side is deliberate.
-            FunctionLimits.Ceiling.TimeoutSeconds.Should().Be(90);
+            // Pinned as literals too, so changing a platform promise takes a deliberate edit here
+            // and not just a number somewhere else.
+            FunctionLimits.Ceiling.CpuMillicores.Should().Be(100);
+            FunctionLimits.Ceiling.MemoryMb.Should().Be(128);
+            FunctionLimits.Ceiling.TimeoutSeconds.Should().Be(30);
+            FunctionLimits.Ceiling.Concurrency.Should().Be(10);
+            FunctionLimits.Ceiling.Attempts.Should().Be(2);
         }
 
         // ----------------------------------------------------------------- retry ----

@@ -35,7 +35,30 @@ namespace Proxy.DomainService.Services
             BodyMerge = source.BodyMerge?.Select(CloneKeyValue).ToList(),
             ResponseMode = source.ResponseMode,
             ResponseInclude = source.ResponseInclude is null ? null : new List<string>(source.ResponseInclude),
+            Resilience = CloneResilience(source.Resilience),
         };
+
+        /// <summary>
+        /// A snapshot has to own its copy, or reverting to an old version would hand back an object the
+        /// live proxy is still mutating.
+        /// </summary>
+        public static ProxyResilienceConfig? CloneResilience(ProxyResilienceConfig? source) =>
+            source is null ? null : new ProxyResilienceConfig
+            {
+                TimeoutSeconds = source.TimeoutSeconds,
+                Retry = source.Retry is null ? null : new ProxyRetryConfig
+                {
+                    Attempts = source.Retry.Attempts,
+                    Backoff = source.Retry.Backoff,
+                    InitialDelaySeconds = source.Retry.InitialDelaySeconds,
+                    Idempotent = source.Retry.Idempotent,
+                },
+                Breaker = source.Breaker is null ? null : new ProxyBreakerConfig
+                {
+                    FailureThreshold = source.Breaker.FailureThreshold,
+                    OpenSeconds = source.Breaker.OpenSeconds,
+                },
+            };
 
         /// <summary>Captures the full effective configuration of <paramref name="proxy"/> as an independent snapshot.</summary>
         public static ProxyConfigSnapshot SnapshotOf(ProxyDetailEntity proxy) => new()
@@ -50,6 +73,7 @@ namespace Proxy.DomainService.Services
             BodyMerge = proxy.BodyMerge.Select(CloneKeyValue).ToList(),
             MethodConfigs = proxy.MethodConfigs.Select(CloneMethodConfig).ToList(),
             Routes = proxy.Routes.Select(CloneRoute).ToList(),
+            Resilience = CloneResilience(proxy.Resilience),
             ResponseMode = proxy.ResponseMode,
             ResponseInclude = new List<string>(proxy.ResponseInclude),
             Access = proxy.Access.Clone(),

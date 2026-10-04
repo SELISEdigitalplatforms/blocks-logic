@@ -66,6 +66,7 @@ describe("proxy routes", () => {
           bodyMerge: null,
           responseMode: null,
           responseInclude: null,
+          resilience: null,
         },
       ]);
     });
@@ -124,8 +125,44 @@ describe("proxy routes", () => {
           bodyMerge: [],
           responseMode: "select",
           responseInclude: ["id"],
+          resilience: null,
         },
       ]);
+    });
+
+    it("round-trips a route's resilience, which the form cannot yet edit", () => {
+      // The console rebuilds every route field by field on save. A member it does not carry is a
+      // member it deletes — so a policy set through the API would vanish the first time somebody
+      // renamed a header in the UI.
+      const proxy = mapProxyDetailDtoToProxy(
+        detailDto([
+          {
+            method: "get",
+            path: "orders",
+            resilience: {
+              timeoutSeconds: 9,
+              retry: { attempts: 2, backoff: "Exponential", initialDelaySeconds: 3, idempotent: true },
+              breaker: { failureThreshold: 4, openSeconds: 20 },
+            },
+          },
+        ]),
+      );
+
+      expect(proxy.routes[0].resilience).toEqual({
+        timeoutSeconds: 9,
+        retry: { attempts: 2, backoff: "exponential", initialDelaySeconds: 3, idempotent: true },
+        breaker: { failureThreshold: 4, openSeconds: 20 },
+      });
+    });
+
+    it("reads an empty resilience object as not configured", () => {
+      // "Configured with nothing" and "not configured" are the same state on the server, and the
+      // difference matters: only the second one inherits.
+      const proxy = mapProxyDetailDtoToProxy(
+        detailDto([{ method: "get", path: "orders", resilience: {} }]),
+      );
+
+      expect(proxy.routes[0].resilience).toBeNull();
     });
 
     it("treats a missing routes field as no routes", () => {

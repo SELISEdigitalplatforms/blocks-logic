@@ -100,16 +100,22 @@ export interface IFunctionDetail {
   lastVersionNumber: number;
 }
 
+/**
+ * The one profile every function runs under, as the server reports it.
+ *
+ * Not ceilings to choose under and not defaults to start from — these are the values. The console
+ * displays them and never writes them, so a change to the platform profile reaches the screen
+ * without anyone editing the client.
+ */
 export interface IFunctionLimitsOptions {
-  ceilingCpuMillicores: number;
-  ceilingMemoryMb: number;
-  ceilingTimeoutSeconds: number;
-  minConcurrency: number;
-  maxConcurrency: number;
-  defaultCpuMillicores: number;
-  defaultMemoryMb: number;
-  defaultTimeoutSeconds: number;
-  defaultConcurrency: number;
+  cpuMillicores: number;
+  memoryMb: number;
+  timeoutSeconds: number;
+  /** Concurrent runs of one function, across the whole fleet. Runs beyond it queue. */
+  concurrency: number;
+  /** Attempts including the first, so 2 is one retry. */
+  attempts: number;
+  retryDelaySeconds: number;
   /** Requests/minute and requests/day are modelled but hidden unless this is on. */
   showRateLimits: boolean;
 }
@@ -178,9 +184,4 @@ export interface IDeployFunctionPayload {
   note?: string | null;
   /** Build again instead of deploying this source's cached image. */
   rebuild?: boolean;
-}
-
-export interface IRollbackFunctionPayload {
-  functionId: string;
-  versionNumber: number;
 }

@@ -90,7 +90,6 @@ namespace Functions.DomainService.Utils
             services.AddValidator<SaveFunctionRequestDto, SaveFunctionRequestValidator>();
             services.AddValidator<TestFunctionRequestDto, TestFunctionRequestValidator>();
             services.AddValidator<DeployFunctionRequestDto, DeployFunctionRequestValidator>();
-            services.AddValidator<RollbackFunctionRequestDto, RollbackFunctionRequestValidator>();
 
             return services;
         }

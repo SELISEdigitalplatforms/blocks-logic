@@ -93,6 +93,7 @@ namespace Proxy.DomainService.Utils
             DiffMethodConfigs(before.MethodConfigs, after.MethodConfigs, changes);
             DiffRoutes(before.Routes, after.Routes, changes);
             DiffResponseInclude(before.ResponseInclude, after.ResponseInclude, changes);
+            DiffResilience(before.Resilience, after.Resilience, changes);
 
             return changes;
         }
@@ -103,6 +104,62 @@ namespace Proxy.DomainService.Utils
         /// JSON on both sides. Changing a route's method or path is therefore a remove plus an add, which is
         /// what it actually is — the pair is the route's identity.
         /// </summary>
+        /// <summary>
+        /// Timeout, retries and the breaker, as three rows rather than one.
+        /// <para>
+        /// Somebody reading the history wants to know what changed about the <em>behaviour</em>, and
+        /// "retries: off → 3 attempts, exponential from 1s" says that where a serialized object does not.
+        /// Three rows because they are three decisions: turning retries on is not the same edit as
+        /// shortening a timeout, and collapsing them would hide which one someone made.
+        /// </para>
+        /// </summary>
+        private static void DiffResilience(
+            ProxyResilienceConfig? before, ProxyResilienceConfig? after, List<ProxyFieldChange> changes)
+        {
+            Row("resilience:timeout", "timeout", TimeoutWords(before?.TimeoutSeconds), TimeoutWords(after?.TimeoutSeconds));
+            Row("resilience:retry", "retries", RetryWords(before?.Retry), RetryWords(after?.Retry));
+            Row("resilience:breaker", "circuit breaker", BreakerWords(before?.Breaker), BreakerWords(after?.Breaker));
+
+            void Row(string field, string label, string beforeText, string afterText)
+            {
+                if (string.Equals(beforeText, afterText, StringComparison.Ordinal)) return;
+
+                changes.Add(new ProxyFieldChange
+                {
+                    Field = field, Label = label, Before = beforeText, After = afterText,
+                });
+            }
+        }
+
+        /// <summary>
+        /// "Not set" rather than a number, because that is the real state and it is the one that inherits.
+        /// Showing a number here would tell the reader a value was chosen when none was.
+        /// </summary>
+        private static string TimeoutWords(int? seconds) =>
+            seconds is null ? NotSetWord : $"{seconds}s";
+
+        private static string RetryWords(ProxyRetryConfig? retry)
+        {
+            if (retry is null) return OffWord;
+
+            var shape = retry.Backoff switch
+            {
+                ProxyBackoffKind.Fixed => $", every {retry.InitialDelaySeconds}s",
+                ProxyBackoffKind.Exponential => $", backing off from {retry.InitialDelaySeconds}s",
+                _ => ", immediately",
+            };
+
+            return $"{retry.Attempts} attempts{shape}";
+        }
+
+        private static string BreakerWords(ProxyBreakerConfig? breaker) =>
+            breaker is null
+                ? OffWord
+                : $"opens after {breaker.FailureThreshold} failures, stays open {breaker.OpenSeconds}s";
+
+        private const string NotSetWord = "not set";
+        private const string OffWord = "off";
+
         private static void DiffRoutes(
             IReadOnlyList<ProxyRouteConfig> before,
             IReadOnlyList<ProxyRouteConfig> after,

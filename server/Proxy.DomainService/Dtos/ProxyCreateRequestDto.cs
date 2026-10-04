@@ -38,6 +38,8 @@ namespace Proxy.DomainService.Dtos
         public List<string>? ResponseInclude { get; set; }
 
         /// <summary>Who can call the gateway route. Omitted ⇒ a Blocks token is required, any signed-in caller.</summary>
+        public ProxyResilienceInputDto? Resilience { get; set; }
+
         public ProxyAccessInputDto? Access { get; set; }
 
         /// <summary>Defaults to <c>true</c> when omitted.</summary>

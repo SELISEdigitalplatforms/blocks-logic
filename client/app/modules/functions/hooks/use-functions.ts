@@ -4,7 +4,6 @@ import {
   ICreateFunctionPayload,
   IDeployFunctionPayload,
   IGetFunctionsPayload,
-  IRollbackFunctionPayload,
   IUpdateFunctionPayload,
 } from "../types/function.types";
 
@@ -67,20 +66,6 @@ export const useDeployFunction = () => {
   return useMutation({
     mutationKey: [FUNCTIONS_QUERY_KEY, "deploy"],
     mutationFn: (payload: IDeployFunctionPayload) => functionService.deployFunction(payload),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: [FUNCTIONS_QUERY_KEY] });
-      queryClient.invalidateQueries({
-        queryKey: [FUNCTIONS_QUERY_KEY, "versions", variables.functionId],
-      });
-    },
-  });
-};
-
-export const useRollbackFunction = () => {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationKey: [FUNCTIONS_QUERY_KEY, "rollback"],
-    mutationFn: (payload: IRollbackFunctionPayload) => functionService.rollbackFunction(payload),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: [FUNCTIONS_QUERY_KEY] });
       queryClient.invalidateQueries({

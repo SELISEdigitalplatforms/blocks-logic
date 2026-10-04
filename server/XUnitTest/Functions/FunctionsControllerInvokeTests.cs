@@ -86,7 +86,7 @@ namespace XUnitTest.Functions
         {
             GivenRequest(tenant: null);
 
-            var result = await _controller.Invoke("fn_1", "orders/42", wait: false);
+            var result = await _controller.Invoke("fn_1", "orders/42");
 
             Outcome(result).Should().Be((401, "FUNCTION_INVOKE_UNAUTHORIZED"));
             _invocation.Verify(s => s.InvokeHttpAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<InvokeFunctionRequestDto>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -104,7 +104,7 @@ namespace XUnitTest.Functions
             GivenRequest();
             ServiceThrows((Exception)Activator.CreateInstance(exception, "why")!);
 
-            var result = await _controller.Invoke("fn_1", "orders/42", wait: false);
+            var result = await _controller.Invoke("fn_1", "orders/42");
 
             var outcome = Outcome(result);
             outcome.Status.Should().Be(status);
@@ -122,7 +122,7 @@ namespace XUnitTest.Functions
             GivenRequest(method: "GET", body: null, contentType: null);
             ServiceThrows(new FunctionMethodNotAllowedException("POST"));
 
-            var result = await _controller.Invoke("fn_1", null, wait: false);
+            var result = await _controller.Invoke("fn_1", null);
 
             Outcome(result).Should().Be((405, "FUNCTION_INVOKE_METHOD_NOT_ALLOWED"));
             _controller.Response.Headers.Allow.ToString().Should().Be("POST");
@@ -133,13 +133,13 @@ namespace XUnitTest.Functions
         {
             GivenRequest();
             ServiceAnswers(new InvokeResultDto { RunId = "run_1", Status = "QUEUED" });
-            (await _controller.Invoke("fn_1", "orders/42", wait: false)).Should().BeOfType<AcceptedResult>();
+            (await _controller.Invoke("fn_1", "orders/42")).Should().BeOfType<AcceptedResult>();
 
             ServiceAnswers(new InvokeResultDto { RunId = "run_1", Status = "RUNNING" });
-            (await _controller.Invoke("fn_1", "orders/42", wait: true)).Should().BeOfType<AcceptedResult>();
+            (await _controller.Invoke("fn_1", "orders/42")).Should().BeOfType<AcceptedResult>();
 
             ServiceAnswers(new InvokeResultDto { RunId = "run_1", Status = "SUCCEEDED", Result = "{}" });
-            (await _controller.Invoke("fn_1", "orders/42", wait: true)).Should().BeOfType<OkObjectResult>();
+            (await _controller.Invoke("fn_1", "orders/42")).Should().BeOfType<OkObjectResult>();
         }
 
         [Theory]
@@ -151,7 +151,7 @@ namespace XUnitTest.Functions
             // A wait that lapses while the runner holds the run used to answer 200 with no result.
             GivenRequest();
             ServiceAnswers(new InvokeResultDto { RunId = "run_1", Status = status });
-            (await _controller.Invoke("fn_1", "orders/42", wait: true)).Should().BeOfType<AcceptedResult>();
+            (await _controller.Invoke("fn_1", "orders/42")).Should().BeOfType<AcceptedResult>();
         }
 
         [Theory]
@@ -163,7 +163,7 @@ namespace XUnitTest.Functions
         {
             GivenRequest();
             ServiceAnswers(new InvokeResultDto { RunId = "run_1", Status = status });
-            (await _controller.Invoke("fn_1", "orders/42", wait: true)).Should().BeOfType<OkObjectResult>();
+            (await _controller.Invoke("fn_1", "orders/42")).Should().BeOfType<OkObjectResult>();
         }
 
         [Fact]
@@ -172,7 +172,7 @@ namespace XUnitTest.Functions
             GivenRequest();
             ServiceThrows(new FunctionUnavailableException("the run queue is unavailable", "run_1", 7));
 
-            var result = await _controller.Invoke("fn_1", "orders/42", wait: false);
+            var result = await _controller.Invoke("fn_1", "orders/42");
 
             Outcome(result).Should().Be((503, "FUNCTION_INVOKE_UNAVAILABLE"));
             _controller.Response.Headers.RetryAfter.ToString().Should().Be("7");
@@ -203,7 +203,7 @@ namespace XUnitTest.Functions
             });
             ServiceAnswers(new InvokeResultDto { RunId = "run_1", Status = "QUEUED" });
 
-            await _controller.Invoke("fn_1", "orders/42", wait: false);
+            await _controller.Invoke("fn_1", "orders/42");
 
             _seen.Should().NotBeNull();
             _seen!.Method.Should().Be("PUT");
@@ -222,22 +222,31 @@ namespace XUnitTest.Functions
             _seen.Headers!.Keys.Should().Contain("Authorization").And.Contain("Accept");
         }
 
-        [Fact]
-        public async Task Wait_comes_from_the_query_or_the_Prefer_header()
+        /// <summary>
+        /// There is no synchronous invocation, and asking for one is ignored rather than refused.
+        /// <para>
+        /// An older client still sends <c>?wait=true</c> or <c>Prefer: wait=10</c>. Refusing those
+        /// with a 400 would break a caller for asking for something that used to work; answering 202
+        /// gives it a run id and a poll token, which is an answer it can act on.
+        /// </para>
+        /// </summary>
+        [Theory]
+        [InlineData("?wait=true")]
+        [InlineData("?wait=false")]
+        [InlineData("")]
+        public async Task Asking_to_wait_is_ignored_and_the_answer_is_still_202(string query)
         {
-            GivenRequest();
+            GivenRequest(more: r =>
+            {
+                r.QueryString = new Microsoft.AspNetCore.Http.QueryString(query);
+                r.Headers["Prefer"] = "wait=10";
+            });
             ServiceAnswers(new InvokeResultDto { RunId = "run_1", Status = "QUEUED" });
 
-            await _controller.Invoke("fn_1", null, wait: true);
-            _seen!.Wait.Should().BeTrue();
+            var result = await _controller.Invoke("fn_1", null);
 
-            GivenRequest(more: r => r.Headers["Prefer"] = "wait=10");
-            await _controller.Invoke("fn_1", null, wait: false);
-            _seen!.Wait.Should().BeTrue();
-
-            GivenRequest();
-            await _controller.Invoke("fn_1", null, wait: false);
-            _seen!.Wait.Should().BeFalse();
+            result.Should().BeOfType<AcceptedResult>();
+            _seen!.Wait.Should().BeFalse("no HTTP invocation ever holds the request open");
         }
 
         [Fact]
@@ -246,7 +255,7 @@ namespace XUnitTest.Functions
             GivenRequest(method: "GET", body: null, contentType: null);
             ServiceAnswers(new InvokeResultDto { RunId = "run_1", Status = "QUEUED" });
 
-            await _controller.Invoke("fn_1", "orders", wait: false);
+            await _controller.Invoke("fn_1", "orders");
 
             _seen!.Body.Should().BeNull();
             _seen.ContentType.Should().BeNull();
@@ -261,7 +270,7 @@ namespace XUnitTest.Functions
             GivenRequest(body: big, contentType: "text/plain");
             ServiceAnswers(new InvokeResultDto { RunId = "run_1", Status = "QUEUED" });
 
-            await _controller.Invoke("fn_1", null, wait: false);
+            await _controller.Invoke("fn_1", null);
 
             _seen!.BodyTooLarge.Should().BeTrue();
             _seen.Body.Should().BeNull();
@@ -273,7 +282,7 @@ namespace XUnitTest.Functions
             GivenRequest(body: "small", contentType: "text/plain", more: r => r.ContentLength = FunctionHttpInputBuilder.MaxBodyBytes + 1);
             ServiceAnswers(new InvokeResultDto { RunId = "run_1", Status = "QUEUED" });
 
-            await _controller.Invoke("fn_1", null, wait: false);
+            await _controller.Invoke("fn_1", null);
 
             _seen!.BodyTooLarge.Should().BeTrue();
         }
@@ -286,7 +295,7 @@ namespace XUnitTest.Functions
             GivenRequest();
             ServiceThrows(new FunctionRateLimitedException("this function allows 10 requests per minute", 18));
 
-            var result = await _controller.Invoke("fn_1", "orders/42", wait: false);
+            var result = await _controller.Invoke("fn_1", "orders/42");
 
             Outcome(result).Should().Be((429, "FUNCTION_INVOKE_RATE_LIMITED"));
             _controller.Response.Headers.RetryAfter.ToString().Should().Be("18");
@@ -305,7 +314,7 @@ namespace XUnitTest.Functions
             ServiceAnswers(new InvokeResultDto { RunId = "run_1", Status = "QUEUED" });
             _pollTokens.Setup(p => p.IssueAsync("tenant-abc", "run_1", It.IsAny<CancellationToken>())).ReturnsAsync("tok");
 
-            var result = await _controller.Invoke("fn_1", "orders/42", wait: false);
+            var result = await _controller.Invoke("fn_1", "orders/42");
 
             result.Should().BeOfType<AcceptedResult>()
                 .Which.Value.Should().BeOfType<InvokeResultDto>().Which.PollToken.Should().Be("tok");
@@ -317,7 +326,7 @@ namespace XUnitTest.Functions
             GivenRequest();
             ServiceAnswers(new InvokeResultDto { RunId = "run_1", Status = "SUCCEEDED", Result = "{}" });
 
-            var result = await _controller.Invoke("fn_1", "orders/42", wait: true);
+            var result = await _controller.Invoke("fn_1", "orders/42");
 
             ((OkObjectResult)result).Value.Should().BeOfType<InvokeResultDto>().Which.PollToken.Should().BeNull();
             _pollTokens.Verify(p => p.IssueAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -332,7 +341,7 @@ namespace XUnitTest.Functions
             _pollTokens.Setup(p => p.IssueAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .ThrowsAsync(new InvalidOperationException("redis down"));
 
-            var result = await _controller.Invoke("fn_1", "orders/42", wait: false);
+            var result = await _controller.Invoke("fn_1", "orders/42");
 
             result.Should().BeOfType<AcceptedResult>()
                 .Which.Value.Should().BeOfType<InvokeResultDto>().Which.PollToken.Should().BeNull();

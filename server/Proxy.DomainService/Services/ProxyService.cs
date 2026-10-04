@@ -106,6 +106,7 @@ namespace Proxy.DomainService.Services
                 ResponseMode = proxy.ResponseMode.ToString(),
                 ResponseInclude = proxy.ResponseInclude.ToList(),
                 Access = ToAccessDto(proxy.Access),
+                Resilience = ToResilienceDto(proxy.Resilience),
                 CurrentVersion = proxy.CurrentVersion,
                 CreatedDate = proxy.CreatedDate,
                 CreatedBy = proxy.CreatedBy,
@@ -123,7 +124,8 @@ namespace Proxy.DomainService.Services
 
             var validation = ProxyConfigValidator.Validate(
                 request.Name, request.Upstream, request.Methods, request.Headers, request.Query, request.MethodConfigs,
-                request.BodyMerge, request.ResponseMode, request.ResponseInclude, request.Routes, request.Access);
+                request.BodyMerge, request.ResponseMode, request.ResponseInclude, request.Routes, request.Access,
+                request.Resilience);
             if (!validation.IsValid)
             {
                 _logger.LogWarning(
@@ -163,6 +165,7 @@ namespace Proxy.DomainService.Services
                 ResponseMode = validation.ResponseMode,
                 ResponseInclude = validation.ResponseInclude,
                 Access = validation.Access,
+                Resilience = validation.Resilience,
                 CurrentVersion = 1,
                 CreatedDate = now,
                 LastUpdatedDate = now,
@@ -202,7 +205,8 @@ namespace Proxy.DomainService.Services
 
             var validation = ProxyConfigValidator.Validate(
                 request.Name, request.Upstream, request.Methods, request.Headers, request.Query, request.MethodConfigs,
-                request.BodyMerge, request.ResponseMode, request.ResponseInclude, request.Routes, request.Access);
+                request.BodyMerge, request.ResponseMode, request.ResponseInclude, request.Routes, request.Access,
+                request.Resilience);
             if (!validation.IsValid)
             {
                 _logger.LogWarning(
@@ -278,6 +282,7 @@ namespace Proxy.DomainService.Services
             proxy.ResponseMode = validation.ResponseMode;
             proxy.ResponseInclude = validation.ResponseInclude;
             proxy.Access = validation.Access;
+            proxy.Resilience = validation.Resilience;
             proxy.LastUpdatedDate = DateTime.UtcNow;
             proxy.LastUpdatedBy = ProxyVersionFactory.CurrentUserId();
             proxy.CurrentVersion += 1;
@@ -395,7 +400,30 @@ namespace Proxy.DomainService.Services
             BodyMerge = source.BodyMerge?.Select(ToKeyValueDto).ToList(),
             ResponseMode = source.ResponseMode?.ToString(),
             ResponseInclude = source.ResponseInclude is null ? null : new List<string>(source.ResponseInclude),
+            Resilience = ToResilienceDto(source.Resilience),
         };
+
+        /// <summary>
+        /// Absent stays absent all the way out: a caller must be able to tell "not configured" from
+        /// "configured with the usual numbers", because only the first one inherits.
+        /// </summary>
+        private static ProxyResilienceDto? ToResilienceDto(ProxyResilienceConfig? source) =>
+            source is null ? null : new ProxyResilienceDto
+            {
+                TimeoutSeconds = source.TimeoutSeconds,
+                Retry = source.Retry is null ? null : new ProxyRetryDto
+                {
+                    Attempts = source.Retry.Attempts,
+                    Backoff = source.Retry.Backoff.ToString(),
+                    InitialDelaySeconds = source.Retry.InitialDelaySeconds,
+                    Idempotent = source.Retry.Idempotent,
+                },
+                Breaker = source.Breaker is null ? null : new ProxyBreakerDto
+                {
+                    FailureThreshold = source.Breaker.FailureThreshold,
+                    OpenSeconds = source.Breaker.OpenSeconds,
+                },
+            };
 
         private static ProxyAccessDto ToAccessDto(EndpointAccessPolicy source) => new()
         {

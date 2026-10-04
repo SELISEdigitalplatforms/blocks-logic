@@ -106,6 +106,9 @@ describe("proxy mapper", () => {
         permissions: { mode: "any", values: [] },
         organizationId: "",
       },
+      // null, not an object: the console sends "not configured" for a proxy whose form never
+      // offered these, which is what keeps a save from inventing a policy.
+      resilience: null,
       enabled: true,
     });
     expect(mapProxyToUpdatePayload("p1", values)).toMatchObject({ itemId: "p1" });
@@ -137,6 +140,63 @@ describe("proxy mapper", () => {
     });
     expect(test.draft?.bodyMerge).toEqual([]);
     expect(test.draft).not.toHaveProperty("bodyMode");
+  });
+
+  it("a Test runs under the draft's own policy, including each endpoint's", () => {
+    // Otherwise the panel answers a different question than the form is asking, and the difference
+    // only shows up once it is live.
+    const payload = mapProxyTestRequestToPayload({
+      method: "GET",
+      draft: {
+        name: "P",
+        upstreamUrl: "https://api.x.com",
+        methods: ["GET"],
+        headers: [],
+        query: [],
+        bodyMerge: [],
+        bodyMode: "passthrough",
+        methodConfigs: [],
+        responseMode: "all",
+        responseInclude: [],
+        routes: [
+          {
+            method: "GET",
+            path: "orders",
+            upstreamPath: null,
+            headers: null,
+            query: null,
+            bodyMerge: null,
+            responseMode: null,
+            responseInclude: null,
+            resilience: { timeoutSeconds: 4, retry: null, breaker: null },
+          },
+        ],
+        access: {
+          kind: "blocksToken",
+          combine: "or",
+          roles: { mode: "any", values: [] },
+          permissions: { mode: "any", values: [] },
+          organizationId: "",
+        },
+        resilience: {
+          timeoutSeconds: 9,
+          retry: { attempts: 2, backoff: "exponential", initialDelaySeconds: 1, idempotent: true },
+          breaker: null,
+        },
+      },
+    });
+
+    expect(payload.draft?.resilience).toEqual({
+      timeoutSeconds: 9,
+      // The wire spelling is the API's, not the console's.
+      retry: { attempts: 2, backoff: "Exponential", initialDelaySeconds: 1, idempotent: true },
+      breaker: null,
+    });
+    expect(payload.draft?.routes?.[0]?.resilience).toEqual({
+      timeoutSeconds: 4,
+      retry: null,
+      breaker: null,
+    });
   });
 
   it("maps a detail DTO's bodyMerge, tolerating a missing/null list", () => {

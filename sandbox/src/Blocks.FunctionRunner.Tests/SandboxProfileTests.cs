@@ -44,7 +44,7 @@ namespace Blocks.FunctionRunner.Tests
         /// </summary>
         [SkippableTheory]
         [InlineData("FN_CPUS", "0.1")]
-        [InlineData("FN_MEMORY", "200m")]
+        [InlineData("FN_MEMORY", "128m")]
         [InlineData("FN_PIDS", "64")]
         [InlineData("FN_TMPFS_SIZE", "64m")]
         [InlineData("FN_UID", "10001")]
@@ -57,7 +57,7 @@ namespace Blocks.FunctionRunner.Tests
             // change to either one alone fails: the table is what verify.sh must agree with, and
             // these assertions are what say the table is still the truth.
             $"{Ceilings.CpuMillicores / 1000.0:0.###}".Should().Be("0.1");
-            $"{Ceilings.MemoryBytes / 1024 / 1024}m".Should().Be("200m");
+            $"{Ceilings.MemoryBytes / 1024 / 1024}m".Should().Be("128m");
             Ceilings.PidLimit.Should().Be(64);
             $"{Ceilings.TmpfsBytes / 1024 / 1024}m".Should().Be("64m");
             Ceilings.SandboxUid.Should().Be(10001);
@@ -108,8 +108,8 @@ namespace Blocks.FunctionRunner.Tests
             var host = Create().HostConfig;
 
             host.NanoCPUs.Should().Be(100_000_000);
-            host.Memory.Should().Be(200L * 1024 * 1024);
-            host.MemorySwap.Should().Be(200L * 1024 * 1024);
+            host.Memory.Should().Be(128L * 1024 * 1024);
+            host.MemorySwap.Should().Be(128L * 1024 * 1024);
             host.PidsLimit.Should().Be(64);
             host.Tmpfs["/tmp"].Should().Contain("size=67108864").And.Contain("noexec");
         }
@@ -162,7 +162,7 @@ namespace Blocks.FunctionRunner.Tests
             env.Should().HaveCount(4);
             env.Should().Contain("NODE_ENV=production");
             env.Should().Contain("BLOCKS_EXECUTION_FILE=/run/blocks/execution.json");
-            env.Should().Contain("NODE_OPTIONS=--max-old-space-size=150");
+            env.Should().Contain("NODE_OPTIONS=--max-old-space-size=96", "75 % of the fixed 128 MB");
             env.Should().NotContain(e =>
                 e.Contains("SECRET", StringComparison.OrdinalIgnoreCase) ||
                 e.Contains("CONNECTION", StringComparison.OrdinalIgnoreCase) ||

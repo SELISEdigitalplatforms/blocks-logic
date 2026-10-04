@@ -61,6 +61,7 @@ const routesFor = (proxy: Proxy, method: ProxyMethod): ProxyRoute[] =>
           bodyMerge: null,
           responseMode: null,
           responseInclude: null,
+          resilience: null,
         },
       ];
 

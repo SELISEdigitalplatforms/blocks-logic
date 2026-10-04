@@ -41,6 +41,12 @@ namespace Proxy.DomainService.Utils
         /// </summary>
         public List<ProxyRouteConfig> Routes { get; set; } = new();
 
+        /// <summary>
+        /// The proxy-wide timeout / retry / breaker settings, or <c>null</c> when the tenant configured
+        /// none — which is the same as never having configured them.
+        /// </summary>
+        public ProxyResilienceConfig? Resilience { get; set; }
+
         /// <summary>Normalized response-body treatment. Defaults to <see cref="ProxyResponseMode.All"/>.</summary>
         public ProxyResponseMode ResponseMode { get; set; } = ProxyResponseMode.All;
 
@@ -80,7 +86,8 @@ namespace Proxy.DomainService.Utils
             string? responseMode = null,
             IEnumerable<string>? responseInclude = null,
             IEnumerable<ProxyRouteConfigInputDto>? routes = null,
-            ProxyAccessInputDto? access = null)
+            ProxyAccessInputDto? access = null,
+            ProxyResilienceInputDto? resilience = null)
         {
             var result = new ProxyConfigValidationResult();
 
@@ -94,6 +101,7 @@ namespace Proxy.DomainService.Utils
             NormalizeResponseFilter(responseMode, responseInclude, result);
             result.Routes = NormalizeRoutes(routes, result);
             result.Access = NormalizeAccess(access, result);
+            result.Resilience = NormalizeResilience(resilience, "this proxy", "resilience", result);
 
             return result;
         }
@@ -209,6 +217,124 @@ namespace Proxy.DomainService.Utils
         /// proxy-wide default, which is the case this whole layer exists to serve.
         /// </para>
         /// </summary>
+        /// <summary>Bounds for the resilience settings. Ceilings, not defaults — nothing here is filled in.</summary>
+        internal const int MaxTimeoutSeconds = 30;
+        internal const int MaxRetryAttempts = 3;
+        internal const int MaxRetryDelaySeconds = 30;
+        internal const int MaxBreakerThreshold = 100;
+        internal const int MaxBreakerOpenSeconds = 600;
+
+        /// <summary>
+        /// Turns the submitted resilience settings into a stored config, or <c>null</c> when nothing was
+        /// asked for.
+        /// <para>
+        /// Nothing is defaulted. An absent member stays absent, and an object that asks for nothing comes
+        /// back as <c>null</c> so it is stored exactly like "never configured" — which keeps a route that
+        /// was saved through a form it did not fill in behaving as it always did.
+        /// </para>
+        /// <para>
+        /// The ceiling on the timeout is not a product opinion. The gateway holds a connection and a
+        /// request thread for the whole forward, so an unbounded value is a denial of service against this
+        /// host; the tenant picks any value up to it.
+        /// </para>
+        /// </summary>
+        internal static ProxyResilienceConfig? NormalizeResilience(
+            ProxyResilienceInputDto? input, string where, string field, ProxyConfigValidationResult result)
+        {
+            if (input is null) return null;
+
+            var config = new ProxyResilienceConfig();
+
+            if (input.TimeoutSeconds is { } timeout)
+            {
+                if (timeout < 1 || timeout > MaxTimeoutSeconds)
+                {
+                    result.Errors[field] = $"The timeout for {where} must be between 1 and {MaxTimeoutSeconds} seconds.";
+                    return null;
+                }
+
+                config.TimeoutSeconds = timeout;
+            }
+
+            if (input.Retry is { } retry)
+            {
+                var attempts = retry.Attempts ?? 1;
+                if (attempts < 1 || attempts > MaxRetryAttempts)
+                {
+                    result.Errors[field] = $"Retry attempts for {where} must be between 1 and {MaxRetryAttempts}.";
+                    return null;
+                }
+
+                // The rule this whole setting exists to enforce. The platform cannot tell whether an
+                // upstream tolerates the same request twice, and guessing wrong bills someone twice, so
+                // more than one attempt requires the tenant to say so in as many words.
+                if (attempts > 1 && retry.Idempotent != true)
+                {
+                    result.Errors[field] =
+                        $"Retries for {where} need 'idempotent' set to true — confirmation that sending this "
+                        + "request more than once is safe. GET and HEAD usually are; POST usually is not.";
+                    return null;
+                }
+
+                var backoff = ProxyBackoffKind.None;
+                if (!string.IsNullOrWhiteSpace(retry.Backoff)
+                    && !Enum.TryParse(retry.Backoff.Trim(), ignoreCase: true, out backoff))
+                {
+                    result.Errors[field] = $"The retry backoff for {where} must be 'None', 'Fixed' or 'Exponential'.";
+                    return null;
+                }
+
+                var delay = retry.InitialDelaySeconds ?? 1;
+                if (delay < 1 || delay > MaxRetryDelaySeconds)
+                {
+                    result.Errors[field] =
+                        $"The retry delay for {where} must be between 1 and {MaxRetryDelaySeconds} seconds.";
+                    return null;
+                }
+
+                // One attempt is no retry at all, so it is stored as "not configured" rather than as a
+                // policy that happens to do nothing.
+                if (attempts > 1)
+                {
+                    config.Retry = new ProxyRetryConfig
+                    {
+                        Attempts = attempts,
+                        Backoff = backoff,
+                        InitialDelaySeconds = delay,
+                        Idempotent = true,
+                    };
+                }
+            }
+
+            if (input.Breaker is { } breaker)
+            {
+                var threshold = breaker.FailureThreshold ?? 0;
+                var openSeconds = breaker.OpenSeconds ?? 0;
+
+                if (threshold < 1 || threshold > MaxBreakerThreshold)
+                {
+                    result.Errors[field] =
+                        $"The breaker failure threshold for {where} must be between 1 and {MaxBreakerThreshold}.";
+                    return null;
+                }
+
+                if (openSeconds < 1 || openSeconds > MaxBreakerOpenSeconds)
+                {
+                    result.Errors[field] =
+                        $"The breaker open duration for {where} must be between 1 and {MaxBreakerOpenSeconds} seconds.";
+                    return null;
+                }
+
+                config.Breaker = new ProxyBreakerConfig
+                {
+                    FailureThreshold = threshold,
+                    OpenSeconds = openSeconds,
+                };
+            }
+
+            return config.IsEmpty ? null : config;
+        }
+
         private static List<ProxyRouteConfig> NormalizeRoutes(
             IEnumerable<ProxyRouteConfigInputDto>? routes, ProxyConfigValidationResult result)
         {
@@ -304,6 +430,8 @@ namespace Proxy.DomainService.Utils
                     BodyMerge = routeBodyMerge,
                     ResponseMode = routeResponseMode,
                     ResponseInclude = routeResponseInclude,
+                    Resilience = NormalizeResilience(
+                        entry.Resilience, $"route '{method.Wire()} /{path}'", "routes", result),
                 });
             }
 

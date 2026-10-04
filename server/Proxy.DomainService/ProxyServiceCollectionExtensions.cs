@@ -59,6 +59,13 @@ namespace Proxy.DomainService
 
             services.AddHostedService<ProxyStatsFlushService>();
 
+            // Singleton: the breaker's whole job is to remember this process's recent experience of a
+            // host, which it cannot do if it is rebuilt per request.
+            services.AddSingleton<Utils.IProxyCircuitBreaker, Utils.ProxyCircuitBreaker>();
+
+            // Stateless: it parses a document and proposes routes, writing nothing.
+            services.AddSingleton<Services.IProxyOpenApiImportService, Services.ProxyOpenApiImportService>();
+
             // IHttpClientFactory + the buffered upstream client used by the forwarder.
             services.AddHttpClient();
             services.AddHttpClient(ProxyGatewayService.UpstreamClientName, client =>

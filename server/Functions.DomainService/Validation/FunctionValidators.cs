@@ -129,35 +129,23 @@ namespace Functions.DomainService.Validation
         }
     }
 
+    /// <summary>
+    /// Deliberately empty.
+    /// <para>
+    /// Limits are not configurable: whatever a request carries is discarded by
+    /// <see cref="FunctionLimits.Clamp"/> before anything runs, and the save stores the platform
+    /// profile rather than what was sent. Rejecting a value that is already ignored would turn a
+    /// harmless leftover field in somebody's script into a failed deploy, so the validator stays and
+    /// says nothing — the shape is still checked, the numbers no longer matter.
+    /// </para>
+    /// </summary>
     public class FunctionLimitsValidator : AbstractValidator<FunctionLimits>
     {
-        public FunctionLimitsValidator()
-        {
-            RuleFor(x => x.CpuMillicores).InclusiveBetween(1, FunctionLimits.Ceiling.CpuMillicores);
-            RuleFor(x => x.MemoryMb).InclusiveBetween(FunctionLimits.Ceiling.MinMemoryMb, FunctionLimits.Ceiling.MemoryMb);
-            RuleFor(x => x.TimeoutSeconds).InclusiveBetween(1, FunctionLimits.Ceiling.TimeoutSeconds);
-            RuleFor(x => x.Concurrency).InclusiveBetween(
-                FunctionLimits.Ceiling.MinConcurrency, FunctionLimits.Ceiling.MaxConcurrency);
-
-            // Rejected outright rather than silently clamped: unlike the ceilings (where
-            // clamping just means "you got less than you asked for"), a caller who typed a
-            // negative rate limit almost certainly meant something else and deserves to be told.
-            RuleFor(x => x.RequestsPerMinute).GreaterThan(0).When(x => x.RequestsPerMinute.HasValue);
-            RuleFor(x => x.RequestsPerDay).GreaterThan(0).When(x => x.RequestsPerDay.HasValue);
-        }
     }
 
+    /// <summary>Empty for the same reason as <see cref="FunctionLimitsValidator"/>.</summary>
     public class RetryPolicyValidator : AbstractValidator<RetryPolicy>
     {
-        public RetryPolicyValidator()
-        {
-            RuleFor(x => x.Attempts).InclusiveBetween(1, 5);
-            RuleFor(x => x.InitialDelaySeconds).InclusiveBetween(1, 300);
-            RuleFor(x => x.MaxDelaySeconds).InclusiveBetween(1, 900);
-            RuleFor(x => x)
-                .Must(x => x.MaxDelaySeconds >= x.InitialDelaySeconds)
-                .WithMessage("The maximum retry delay cannot be shorter than the initial delay.");
-        }
     }
 
     public class TriggerConfigValidator : AbstractValidator<TriggerConfig>
@@ -236,12 +224,4 @@ namespace Functions.DomainService.Validation
         }
     }
 
-    public class RollbackFunctionRequestValidator : AbstractValidator<RollbackFunctionRequestDto>
-    {
-        public RollbackFunctionRequestValidator()
-        {
-            RuleFor(x => x.FunctionId).NotEmpty();
-            RuleFor(x => x.VersionNumber).GreaterThan(0);
-        }
-    }
 }

@@ -45,6 +45,7 @@ namespace Proxy.DomainService.Utils
                 BodyMerge = route.BodyMerge,
                 ResponseMode = route.ResponseMode?.ToString(),
                 ResponseInclude = route.ResponseInclude,
+                Resilience = route.Resilience,
             },
             Options);
 
@@ -117,6 +118,11 @@ namespace Proxy.DomainService.Utils
                 BodyMerge = payload.BodyMerge,
                 ResponseMode = responseMode,
                 ResponseInclude = payload.ResponseInclude,
+
+                // Revalidated on the way back in, not trusted. A history row can be older than the
+                // current bounds, or edited in the database, and revert does not re-run the validator —
+                // so a value outside them is dropped rather than installed.
+                Resilience = SafeResilience(payload.Resilience),
             };
         }
 
@@ -137,6 +143,46 @@ namespace Proxy.DomainService.Utils
             public string? ResponseMode { get; set; }
 
             public List<string>? ResponseInclude { get; set; }
+
+            public ProxyResilienceConfig? Resilience { get; set; }
+        }
+
+        /// <summary>
+        /// Keeps a restored resilience config only where every value is still inside today's bounds.
+        /// Out-of-range members are dropped individually, so one stale number does not discard the rest.
+        /// </summary>
+        private static ProxyResilienceConfig? SafeResilience(ProxyResilienceConfig? source)
+        {
+            if (source is null) return null;
+
+            var safe = new ProxyResilienceConfig();
+
+            if (source.TimeoutSeconds is { } timeout
+                && timeout >= 1 && timeout <= ProxyConfigValidator.MaxTimeoutSeconds)
+            {
+                safe.TimeoutSeconds = timeout;
+            }
+
+            // The idempotency claim travels with the policy. A restored retry without it is dropped:
+            // the tenant's assertion that repeating is safe cannot be inferred from an old row.
+            if (source.Retry is { Idempotent: true } retry
+                && retry.Attempts > 1 && retry.Attempts <= ProxyConfigValidator.MaxRetryAttempts
+                && retry.InitialDelaySeconds >= 1
+                && retry.InitialDelaySeconds <= ProxyConfigValidator.MaxRetryDelaySeconds)
+            {
+                safe.Retry = retry;
+            }
+
+            if (source.Breaker is { } breaker
+                && breaker.FailureThreshold >= 1
+                && breaker.FailureThreshold <= ProxyConfigValidator.MaxBreakerThreshold
+                && breaker.OpenSeconds >= 1
+                && breaker.OpenSeconds <= ProxyConfigValidator.MaxBreakerOpenSeconds)
+            {
+                safe.Breaker = breaker;
+            }
+
+            return safe.IsEmpty ? null : safe;
         }
     }
 }

@@ -270,32 +270,30 @@ namespace XUnitTest.Functions
             service.Calls[0].WorkflowExecutionId.Should().Be("exec-1");
         }
 
-        [Fact]
-        public async Task The_configured_wait_timeout_is_passed_through()
-        {
-            var service = new FakeInvocationService();
-            var items = new List<WorkflowItemExecutionEntity> { Item("i1", new BsonDocument()) };
-
-            await Node(service).RunAsync(Context(items, waitTimeoutSec: 12));
-
-            service.Calls[0].WaitTimeoutSeconds.Should().Be(12);
-        }
-
+        /// <summary>
+        /// The step waits exactly as long as the run may take, and a stored override is ignored.
+        /// <para>
+        /// It used to be editable. A step that waits for less time than the run it started does not
+        /// cancel anything — the run executes and fires its output actions regardless — it only
+        /// stops being there to collect the result, which is a side effect with nothing to show for
+        /// it. Waiting longer achieves nothing either, since the run cannot outlive its own timeout.
+        /// </para>
+        /// </summary>
         [Theory]
+        [InlineData(null)]
+        [InlineData(12)]
         [InlineData(0)]
         [InlineData(-30)]
-        public async Task A_non_positive_wait_timeout_fails_before_queueing_a_run(int waitTimeoutSec)
+        public async Task A_stored_wait_timeout_is_ignored_and_the_step_waits_for_the_run(int? waitTimeoutSec)
         {
-            // The run would really execute; only the waiting would be skipped. Failing the step
-            // after causing that side effect is the worst of both outcomes.
             var service = new FakeInvocationService();
             var items = new List<WorkflowItemExecutionEntity> { Item("i1", new BsonDocument()) };
 
             var result = await Node(service).RunAsync(Context(items, waitTimeoutSec: waitTimeoutSec));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("at least 1 second");
-            service.Calls.Should().BeEmpty();
+            result.IsSuccess.Should().BeTrue();
+            service.Calls.Should().ContainSingle()
+                .Which.WaitTimeoutSeconds.Should().BeNull("the run's own timeout is the wait");
         }
 
         [Fact]

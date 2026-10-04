@@ -77,6 +77,41 @@ export type ProxyAccess = {
  * A `null` override means "inherit the proxy-wide value". An empty array is NOT the same thing: it is
  * an explicit "none", which is how a route opts out of a proxy-wide body merge.
  */
+/**
+ * Timeout, retry and breaker settings. Every member is optional and **nothing is defaulted**: the
+ * server stores `null` as "not configured", which is not the same as a value that happens to match
+ * the usual one. A route inherits the proxy's whole object when its own is `null`, never field by
+ * field, so a partial copy here would produce a policy nobody chose.
+ */
+export type ProxyResilience = {
+  /** Budget for the whole forward, retries included. `null` ⇒ the platform's own client timeout. */
+  timeoutSeconds: number | null;
+  /** `null` ⇒ no retries. The server refuses `attempts > 1` without {@link ProxyRetry.idempotent}. */
+  retry: ProxyRetry | null;
+  /** `null` ⇒ no breaker. */
+  breaker: ProxyBreaker | null;
+};
+
+/** Shape of the wait between retry attempts, as the API names it. */
+export type ProxyBackoff = "none" | "fixed" | "exponential";
+
+export type ProxyRetry = {
+  attempts: number;
+  backoff: ProxyBackoff;
+  initialDelaySeconds: number;
+  /**
+   * The tenant's assertion that sending this request twice is safe. The platform cannot know, and a
+   * retried POST is how somebody gets charged twice — so this is a deliberate claim, never inferred
+   * from the method.
+   */
+  idempotent: boolean;
+};
+
+export type ProxyBreaker = {
+  failureThreshold: number;
+  openSeconds: number;
+};
+
 export type ProxyRoute = {
   method: ProxyMethod;
   /** Client-facing template, no leading slash. `""` is the base path. e.g. `orders/{id}/refunds`. */
@@ -88,6 +123,8 @@ export type ProxyRoute = {
   bodyMerge: ProxyKeyValue[] | null;
   responseMode: ProxyResponseMode | null;
   responseInclude: string[] | null;
+  /** `null` ⇒ inherit the proxy's, which is itself `null` unless configured. */
+  resilience: ProxyResilience | null;
 };
 
 export type Proxy = {
@@ -115,6 +152,8 @@ export type Proxy = {
   responseInclude: string[];
   /** Who can call the gateway route. Populated by the detail read; the list row carries the default. */
   access: ProxyAccess;
+  /** Proxy-wide timeout / retry / breaker. `null` unless configured; routes inherit it whole. */
+  resilience: ProxyResilience | null;
   calls24h: number;
   createdAt?: string;
   updatedAt?: string;
@@ -163,6 +202,7 @@ export type ProxyFormValues = Pick<
   | "responseMode"
   | "responseInclude"
   | "access"
+  | "resilience"
 > & {
   bodyMode: ProxyBodyMode;
   /** Form-only. When present it is the source of truth for `headers` and `query`. */
@@ -266,6 +306,26 @@ export type ProxyRouteDto = {
   bodyMerge?: ProxyKeyValueDto[] | null;
   responseMode?: string | null;
   responseInclude?: string[] | null;
+  resilience?: ProxyResilienceDto | null;
+};
+
+/** Mirrors server `ProxyResilienceDto` / `ProxyResilienceInputDto`. Absent members stay absent. */
+export type ProxyResilienceDto = {
+  timeoutSeconds?: number | null;
+  retry?: ProxyRetryDto | null;
+  breaker?: ProxyBreakerDto | null;
+};
+
+export type ProxyRetryDto = {
+  attempts?: number | null;
+  backoff?: string | null;
+  initialDelaySeconds?: number | null;
+  idempotent?: boolean | null;
+};
+
+export type ProxyBreakerDto = {
+  failureThreshold?: number | null;
+  openSeconds?: number | null;
 };
 
 export type ProxyMethodConfigDto = {
@@ -324,6 +384,7 @@ export type ProxyDetailDto = {
   bodyMerge?: ProxyKeyValueDto[] | null;
   methodConfigs: ProxyMethodConfigDto[];
   routes?: ProxyRouteDto[] | null;
+  resilience?: ProxyResilienceDto | null;
   responseMode?: string | null;
   responseInclude?: string[] | null;
   access?: ProxyAccessDto | null;
@@ -506,4 +567,65 @@ export type ProxyMutationResponse = {
   code?: string | null;
   /** Human-readable failure message when the server provides one. */
   message?: string | null;
+};
+
+// ---------------------------------------------------------------------------
+// Importing from an OpenAPI document
+// ---------------------------------------------------------------------------
+
+/** `POST /api/Proxies/openapi/preview` — a specification to read, pasted or named by URL. */
+export type ProxyOpenApiPreviewRequest = {
+  specJson?: string;
+  specUrl?: string;
+  /** The proxy being imported into, so collisions with its saved routes are reported. */
+  proxyId?: string;
+};
+
+export type ProxyOpenApiOperationDto = {
+  operationId: string;
+  method: string;
+  path: string;
+  summary?: string;
+  queryParameters?: string[];
+  headerParameters?: string[];
+  securityHeaders?: string[];
+  alreadyExists?: boolean;
+};
+
+export type ProxyOpenApiPreviewDto = {
+  baseUrl?: string;
+  operations?: ProxyOpenApiOperationDto[];
+  errors?: string[];
+  warnings?: string[];
+};
+
+/**
+ * One operation the document describes, as the import dialog shows it.
+ *
+ * Nothing here carries a value: parameter and header <em>names</em> come across, never the examples a
+ * specification may contain. A credential lifted out of a document would be an example at best and a
+ * leak at worst, so the imported rows arrive empty and wait for a `{{$VAR.name}}`.
+ */
+export type ProxyOpenApiOperation = {
+  /** The document's own operationId, or `"METHOD path"` when it declares none. Selection key. */
+  operationId: string;
+  method: ProxyMethod;
+  path: string;
+  summary: string;
+  queryParameters: string[];
+  headerParameters: string[];
+  /** Header names the document's security schemes imply — names only. */
+  securityHeaders: string[];
+  /** This method and path are already defined, here or on the saved proxy. Importing would collide. */
+  alreadyExists: boolean;
+};
+
+export type ProxyOpenApiPreview = {
+  /** The document's first server URL, or `""` when it declares none. */
+  baseUrl: string;
+  operations: ProxyOpenApiOperation[];
+  /** Non-empty means nothing can be imported, and says why. */
+  errors: string[];
+  /** Did not stop the import: a verb the gateway cannot forward, a missing server. */
+  warnings: string[];
 };

@@ -56,6 +56,9 @@ namespace Proxy.DomainService.Dtos
         /// <summary>Who can call the gateway route. Shared by every declared route.</summary>
         public ProxyAccessDto Access { get; set; } = new();
 
+        /// <summary>Timeout / retry / breaker, or <c>null</c> when the tenant configured none.</summary>
+        public ProxyResilienceDto? Resilience { get; set; }
+
         public int CurrentVersion { get; set; }
 
         public DateTime CreatedDate { get; set; }

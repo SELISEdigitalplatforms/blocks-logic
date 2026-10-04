@@ -168,7 +168,7 @@ namespace Functions.DomainService.Entities
         public string? Result { get; set; }
 
         public int Attempt { get; set; } = 1;
-        public int MaxAttempts { get; set; } = FunctionLimits.Ceiling.DefaultAttempts;
+        public int MaxAttempts { get; set; } = FunctionLimits.Ceiling.Attempts;
 
         public DateTime? StartedAt { get; set; }
         public DateTime? CompletedAt { get; set; }

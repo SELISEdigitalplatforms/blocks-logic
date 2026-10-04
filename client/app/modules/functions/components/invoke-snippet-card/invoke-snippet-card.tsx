@@ -72,8 +72,9 @@ export const InvokeSnippetCard = ({ functionId, trigger }: InvokeSnippetCardProp
           {'202 Accepted\n{ "runId": "run_7f21c4", "status": "QUEUED" }'}
         </pre>
         <span className="text-xs leading-relaxed text-medium-emphasis">
-          Add <code className="font-mono">?wait=true</code> to hold the call open for the result, or
-          poll <code className="font-mono">GET …/fn/runs/{"{runId}"}</code>. Every trigger — HTTP,
+          The call always returns straight away. Collect the result with{" "}
+          <code className="font-mono">GET …/fn/runs/{"{runId}"}</code>, using the{" "}
+          <code className="font-mono">pollToken</code> that came back with it. Every trigger — HTTP,
           workflow or a test from the editor — is listed under Runs.
         </span>
       </div>

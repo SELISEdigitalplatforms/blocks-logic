@@ -9,7 +9,6 @@ import {
   IFunctionLimitsOptions,
   IGetFunctionsPayload,
   IGetFunctionsResponse,
-  IRollbackFunctionPayload,
   ISaveFunctionPayload,
   IUpdateFunctionPayload,
 } from "../types/function.types";
@@ -77,10 +76,6 @@ export class FunctionService {
 
   deployFunction = (payload: IDeployFunctionPayload): Promise<IFunctionVersionSummary> => {
     return this.logicHttpClient.post(FUNCTIONS_ENDPOINTS.DEPLOY, payload);
-  };
-
-  rollbackFunction = (payload: IRollbackFunctionPayload): Promise<IFunctionVersionSummary> => {
-    return this.logicHttpClient.post(FUNCTIONS_ENDPOINTS.ROLLBACK, payload);
   };
 
   getVersions = (

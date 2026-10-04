@@ -48,6 +48,9 @@ namespace Proxy.DomainService.Entities
         /// </summary>
         public List<ProxyRouteConfig> Routes { get; set; } = new();
 
+        /// <summary>Timeout / retry / breaker as they stood, or <c>null</c> when none were configured.</summary>
+        public ProxyResilienceConfig? Resilience { get; set; }
+
         /// <summary>
         /// Response-body treatment on forward, captured per version so Revert round-trips a
         /// <c>responseMode</c> change. <see cref="ProxyResponseMode.All"/> ⇒ relayed unchanged.

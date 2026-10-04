@@ -65,6 +65,8 @@ namespace Utilities.Api.Controllers
         /// Takes the four control-plane services, the data-plane gateway service, and the shared access
         /// authorizer that enforces each proxy's "Who can call it" policy on the gateway route.
         /// </summary>
+        private readonly IProxyOpenApiImportService _openApiImport;
+
         public ProxiesController(
             IProxyService proxyService,
             IProxyVersionService proxyVersionService,
@@ -72,8 +74,10 @@ namespace Utilities.Api.Controllers
             IProxyExecutionService proxyExecutionService,
             IProxyGatewayService gatewayService,
             IEndpointAccessAuthorizer accessAuthorizer,
+            IProxyOpenApiImportService openApiImport,
             ILogger<ProxiesController> logger)
         {
+            _openApiImport = openApiImport;
             _proxyService = proxyService;
             _proxyVersionService = proxyVersionService;
             _proxyTestService = proxyTestService;
@@ -252,6 +256,68 @@ namespace Utilities.Api.Controllers
             return outcome.IsSuccess
                 ? Ok(outcome.Result)
                 : StatusCode(outcome.HttpStatus, new { code = outcome.Code, errors = outcome.Errors });
+        }
+
+        /// <summary>
+        /// <c>POST /api/Proxies/openapi/preview</c> — reads an OpenAPI document and lists the routes it
+        /// would produce, so the caller can review them before anything is saved.
+        /// <para>
+        /// This writes nothing. The chosen operations come back through the ordinary create/update call,
+        /// which is what keeps an import inside the same validation, versioning and audit as a route typed
+        /// by hand rather than around them.
+        /// </para>
+        /// <para>
+        /// A specification may be pasted (<c>specJson</c>) or named by URL (<c>specUrl</c>); the URL is
+        /// fetched through the same guard as any upstream, because otherwise this endpoint is a request
+        /// this server makes to wherever a caller points it.
+        /// </para>
+        /// </summary>
+        [Authorize]
+        [HttpPost("openapi/preview")]
+        public async Task<IActionResult> PreviewOpenApi(
+            [FromBody] ProxyOpenApiPreviewRequestDto dto, CancellationToken cancellationToken)
+        {
+            if (!TryGetTenantId(out var tenantId, out var error))
+            {
+                return error;
+            }
+
+            if (dto is null || (string.IsNullOrWhiteSpace(dto.SpecJson) && string.IsNullOrWhiteSpace(dto.SpecUrl)))
+            {
+                return BadRequest(new
+                {
+                    code = ProxyErrorCodes.Validation,
+                    errors = new Dictionary<string, string>
+                    {
+                        ["spec"] = "Provide the specification either as specJson or as specUrl.",
+                    },
+                });
+            }
+
+            // Collisions are reported against the proxy the caller intends to import into, so "this route
+            // already exists" is answered before anything is created rather than after.
+            IEnumerable<Proxy.DomainService.Entities.ProxyRouteConfig>? existing = null;
+            if (!string.IsNullOrWhiteSpace(dto.ProxyId))
+            {
+                var current = await _proxyService.GetAsync(tenantId, new ProxyGetRequestDto { ItemId = dto.ProxyId });
+                existing = current?.Data?.Routes?
+                    .Select(r => new Proxy.DomainService.Entities.ProxyRouteConfig
+                    {
+                        Method = HttpMethodTypeExtensions.TryParse(r.Method, out var parsed) ? parsed : default,
+                        Path = r.Path ?? string.Empty,
+                    })
+                    .ToList();
+            }
+
+            var preview = string.IsNullOrWhiteSpace(dto.SpecJson)
+                ? await _openApiImport.PreviewFromUrlAsync(dto.SpecUrl!, existing, cancellationToken)
+                : _openApiImport.Preview(dto.SpecJson!, existing);
+
+            // A preview that found nothing usable is a 400 with the reasons, not an empty 200: the caller
+            // pasted something and needs to know why it produced no routes.
+            return preview.Errors.Count == 0
+                ? Ok(preview)
+                : BadRequest(new { code = ProxyErrorCodes.Validation, errors = preview.Errors, warnings = preview.Warnings });
         }
 
         /// <summary>

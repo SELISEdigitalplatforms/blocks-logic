@@ -22,6 +22,13 @@ namespace Proxy.DomainService.Entities
         public const string UpstreamError = "UpstreamError";
         public const string Timeout = "Timeout";
         public const string UpstreamUnreachable = "UpstreamUnreachable";
+
+        /// <summary>
+        /// The breaker is open for this upstream host, so nothing was sent. Distinct from
+        /// <see cref="UpstreamUnreachable"/> on purpose: the caller needs to know this was our decision and
+        /// that retrying immediately is pointless.
+        /// </summary>
+        public const string UpstreamUnavailable = "UpstreamUnavailable";
         public const string UpstreamBlocked = "UpstreamBlocked";
         public const string UpstreamResponseTooLarge = "UpstreamResponseTooLarge";
         public const string RequestTooLarge = "RequestTooLarge";
