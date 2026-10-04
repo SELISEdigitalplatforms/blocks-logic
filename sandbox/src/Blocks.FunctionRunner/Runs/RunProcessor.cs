@@ -262,10 +262,22 @@ namespace Blocks.FunctionRunner.Runs
                             if (failure.Code == ErrorCodes.SecretStoreUnavailable)
                             {
                                 _secretBreaker?.RecordUnavailable(job.TenantId);
-                                _logger.LogWarning(
-                                    "Run {RunId} cannot start: the secret store is unreachable. Leaving it "
-                                    + "queued rather than failing it.", job.RunId);
-                                return Disposition.Deferred;
+
+                                // Deferring suits a deployed run: nobody is waiting, the entry keeps
+                                // its place on the stream, and it runs when the store is back.
+                                //
+                                // A test is the opposite. Someone is watching it, and the test loop
+                                // gives admission a bounded two minutes — so deferring there just
+                                // spins until that runs out and then reports "no sandbox slot freed
+                                // up", which is not what happened. The person waiting is better
+                                // served by the real reason, straight away.
+                                if (!job.IsTest)
+                                {
+                                    _logger.LogWarning(
+                                        "Run {RunId} cannot start: the secret store is unreachable. Leaving it "
+                                        + "queued rather than failing it.", job.RunId);
+                                    return Disposition.Deferred;
+                                }
                             }
 
                             // A secret that does not exist, or that this caller may not read, is the
