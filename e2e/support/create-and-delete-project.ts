@@ -8,7 +8,7 @@ import {
 } from "./login-helper"
 
 const ENV_BUTTON =
-  /Development|Testing|Staging|IAT|UAT|Production|Pre-Prod|Prod Shadow/
+  /Development|Testing|Staging|IAT|UAT|Production|Pre-Prod|Prod Shadow|^dev$/i
 
 const isVisibleNow = async (locator: { isVisible: (opts: { timeout: number }) => Promise<boolean> }) =>
   locator.isVisible({ timeout: 500 }).catch(() => false)
@@ -174,7 +174,8 @@ async function readProjectNameFromDashboard(page: Page): Promise<string> {
 
 async function openProjectById(page: Page, projectId: string) {
   const target = `${e2eBaseUrl()}/app/${projectId}/dashboard`
-  for (let attempt = 0; attempt < 3; attempt++) {
+  const reuseName = process.env.E2E_REUSE_PROJECT_NAME?.trim()
+  for (let attempt = 0; attempt < 4; attempt++) {
     await page.goto(target, { waitUntil: "domcontentloaded" })
     await dismissSingleSessionTakeover(page)
 
@@ -183,19 +184,28 @@ async function openProjectById(page: Page, projectId: string) {
       continue
     }
 
-    // Prefer configured reuse name when the SPA is slow to paint chrome.
-    const reuseName = process.env.E2E_REUSE_PROJECT_NAME?.trim()
     const workflow = page.getByRole("link", { name: "Workflow" })
-    const ready = await workflow.isVisible({ timeout: 25_000 }).catch(() => false)
+    const projectBtn = page.getByRole("button", { name: /^Project / })
+    const ready = await Promise.race([
+      workflow.waitFor({ state: "visible", timeout: 45_000 }).then(() => true),
+      projectBtn.waitFor({ state: "visible", timeout: 45_000 }).then(() => true),
+    ]).catch(() => false)
+
     if (ready) {
       let projectName = reuseName || ""
       try {
         projectName = await readProjectNameFromDashboard(page)
       } catch {
-        if (!projectName) throw new Error(`Could not read project name from dashboard: ${page.url()}`)
+        if (!projectName) {
+          throw new Error(`Could not read project name from dashboard: ${page.url()}`)
+        }
       }
+      await expect(workflow).toBeVisible({ timeout: 20_000 })
       return { projectName, dashboardUrl: page.url(), itemId: projectId }
     }
+
+    // Hard reload next attempt — blank SPA shells are common right after OIDC.
+    await page.reload({ waitUntil: "domcontentloaded" }).catch(() => {})
   }
 
   throw new Error(`Dashboard did not become ready for project ${projectId}: ${page.url()}`)
