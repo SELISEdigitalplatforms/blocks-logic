@@ -307,8 +307,11 @@ export async function createProject(page: Page) {
     const nameInput = page.locator('[placeholder="Enter your project name"]:visible')
     await nameInput.fill(projectName)
 
-    await page.getByRole("checkbox", { name: "I confirm that I will use" }).click()
-    await page.getByRole("checkbox", { name: "I accept the Terms of services" }).click()
+    // OS create wizard checkboxes are sometimes not exposed as role=checkbox.
+    const confirm = page.getByText(/I confirm that I will use Blocks exclusively/i).first()
+    const terms = page.getByText(/I accept the Terms of services/i).first()
+    await confirm.click({ timeout: 15_000 })
+    await terms.click({ timeout: 15_000 })
 
     const continueButton = page.getByRole("button", { name: "Continue", exact: true })
     await expect(continueButton).toBeEnabled()
