@@ -1,6 +1,11 @@
 import { Page, expect, test } from "@playwright/test"
 import { e2eBaseUrl, e2eOsBaseUrl, e2eProjectId } from "./env"
-import { ensureAuthenticated, ensureAuthenticatedOnCurrentOrigin } from "./login-helper"
+import {
+  dismissSingleSessionTakeover,
+  ensureAuthenticated,
+  ensureAuthenticatedOnCurrentOrigin,
+  isLoginSurface,
+} from "./login-helper"
 
 const ENV_BUTTON =
   /Development|Testing|Staging|IAT|UAT|Production|Pre-Prod|Prod Shadow/
@@ -168,10 +173,32 @@ async function readProjectNameFromDashboard(page: Page): Promise<string> {
 }
 
 async function openProjectById(page: Page, projectId: string) {
-  await page.goto(`${e2eBaseUrl()}/app/${projectId}/dashboard`, { waitUntil: "domcontentloaded" })
-  const projectName = await readProjectNameFromDashboard(page)
-  await expect(page.getByRole("link", { name: "Workflow" })).toBeVisible({ timeout: 20_000 })
-  return { projectName, dashboardUrl: page.url(), itemId: projectId }
+  const target = `${e2eBaseUrl()}/app/${projectId}/dashboard`
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await page.goto(target, { waitUntil: "domcontentloaded" })
+    await dismissSingleSessionTakeover(page)
+
+    if (await isLoginSurface(page)) {
+      await ensureAuthenticated(page)
+      continue
+    }
+
+    // Prefer configured reuse name when the SPA is slow to paint chrome.
+    const reuseName = process.env.E2E_REUSE_PROJECT_NAME?.trim()
+    const workflow = page.getByRole("link", { name: "Workflow" })
+    const ready = await workflow.isVisible({ timeout: 25_000 }).catch(() => false)
+    if (ready) {
+      let projectName = reuseName || ""
+      try {
+        projectName = await readProjectNameFromDashboard(page)
+      } catch {
+        if (!projectName) throw new Error(`Could not read project name from dashboard: ${page.url()}`)
+      }
+      return { projectName, dashboardUrl: page.url(), itemId: projectId }
+    }
+  }
+
+  throw new Error(`Dashboard did not become ready for project ${projectId}: ${page.url()}`)
 }
 
 export async function openNamedProjectDashboard(
