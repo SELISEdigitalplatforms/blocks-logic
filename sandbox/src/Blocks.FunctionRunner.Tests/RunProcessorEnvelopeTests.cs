@@ -147,10 +147,14 @@ namespace Blocks.FunctionRunner.Tests
 
         private async Task<NameValueEntry[]> ResultEntryAsync()
         {
-            var entries = await _db!.StreamRangeAsync(RedisKeys.ResultsStream, "-", "+");
-            return entries
+            var entries = await _db!.StreamRangeAsync(
+                RedisKeys.ResultsStream, "-", "+", count: 500, messageOrder: Order.Descending);
+            var match = entries
                 .Select(e => e.Values)
-                .Last(v => v.Any(f => f.Name == "runId" && f.Value == _runId));
+                .FirstOrDefault(v => v.Any(f => f.Name == "runId" && f.Value == _runId));
+            if (match is null)
+                throw new InvalidOperationException($"no results-stream entry for run {_runId}");
+            return match;
         }
 
         private static string? Field(NameValueEntry[] entry, string name) =>
