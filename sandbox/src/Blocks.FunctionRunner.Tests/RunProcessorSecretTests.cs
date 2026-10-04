@@ -111,7 +111,7 @@ namespace Blocks.FunctionRunner.Tests
         {
             public double Cores => 8;
 
-            public long TotalMemoryBytes => 64L * 1024 * 1024 * 1024;
+            public long TotalMemoryBytes => 1L << 50; // 1 PiB — HostBudget arithmetic must never refuse tests
 
             // long.MaxValue available: HostBudget's MemAvailable floor must never refuse these tests.
             public HostSignalSample Sample() => new(0, 0, 0, long.MaxValue);
@@ -195,6 +195,7 @@ namespace Blocks.FunctionRunner.Tests
             ISandbox sandbox, IRunSecretResolver resolver, string envelope)
         {
             var disposition = RunProcessor.Disposition.Deferred;
+            string? lastGate = null;
             for (var attempt = 0; attempt < 80; attempt++)
             {
                 await _db!.KeyDeleteAsync(
@@ -207,11 +208,50 @@ namespace Blocks.FunctionRunner.Tests
                 ]);
 
                 var job = await QueueAsync(envelope);
+
+                // Probe each gate the same way ProcessAsync does, so a Deferred failure names the cause.
+                var options = Microsoft.Extensions.Options.Options.Create(new RunnerOptions
+                {
+                    RunnerId = "test-runner",
+                    RunsDir = _runsDir,
+                    MaxActiveSandboxes = 32,
+                    MaxSandboxesPerTenant = 64,
+                    ReservedHostMemoryMb = 0,
+                });
+                var budget = new HostBudget(options, new RoomyHost(), new SandboxFootprint(), NullLogger<HostBudget>.Instance);
+                var limits = RunLimits.Default;
+                using (var reservation = budget.TryReserve(limits.MemoryBytes))
+                {
+                    if (reservation is null) lastGate = $"host TryReserve active={budget.Active} cap={budget.Capacity}";
+                    else
+                    {
+                        await using var tenantSlot = await FunctionConcurrency.TryEnterTenantAsync(
+                            _db, _tenant, job.RunId, options.Value.TenantSlotLimit(budget.Capacity));
+                        if (tenantSlot is null) lastGate = $"tenant slots full for {_tenant}";
+                        else
+                        {
+                            await using var slot = await FunctionConcurrency.TryEnterAsync(
+                                _db, _functionId, job.RunId, limits.FunctionConcurrency);
+                            if (slot is null) lastGate = $"function concurrency full for {_functionId}";
+                            else lastGate = "gates_open";
+                        }
+                    }
+                }
+
+                // Clear probe slots before the real ProcessAsync.
+                await _db.KeyDeleteAsync(
+                [
+                    RedisKeys.Concurrency(_functionId),
+                    RedisKeys.TenantSlots(_tenant),
+                ]);
+
                 disposition = await Processor(sandbox, resolver).ProcessAsync(job, CancellationToken.None);
                 if (disposition != RunProcessor.Disposition.Deferred) return disposition;
                 await Task.Delay(50);
             }
-            return disposition;
+
+            throw new InvalidOperationException(
+                $"ProcessAsync stayed Deferred after 80 attempts; last probe gate={lastGate}");
         }
 
         private async Task<NameValueEntry[]> ResultEntryAsync()

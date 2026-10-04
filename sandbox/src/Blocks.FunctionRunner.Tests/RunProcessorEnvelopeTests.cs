@@ -96,7 +96,7 @@ namespace Blocks.FunctionRunner.Tests
         {
             public double Cores => 8;
 
-            public long TotalMemoryBytes => 64L * 1024 * 1024 * 1024;
+            public long TotalMemoryBytes => 1L << 50; // 1 PiB — HostBudget arithmetic must never refuse tests
 
             public HostSignalSample Sample() => new(0, 0, 0, long.MaxValue);
         }
