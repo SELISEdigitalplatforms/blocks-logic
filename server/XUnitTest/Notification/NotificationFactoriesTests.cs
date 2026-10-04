@@ -37,6 +37,11 @@ namespace XUnitTest.Notification
                 Mock.Of<ILogger<FirebaseNotificationServiceProvider>>(),
                 _repository.Object,
                 new ConfigurationBuilder().Build()));
+            collection.AddSingleton(new WebPushNotificationServiceProvider(
+                Mock.Of<ILogger<WebPushNotificationServiceProvider>>(),
+                _repository.Object,
+                Mock.Of<IWebPushVapidKeyService>(),
+                Mock.Of<IWebPushSender>()));
 
             _services = collection.BuildServiceProvider();
         }
@@ -72,6 +77,7 @@ namespace XUnitTest.Notification
         [Theory]
         [InlineData(NotifierTypes.SignalR, typeof(SignalRNotificationServiceProvider))]
         [InlineData(NotifierTypes.Firebase, typeof(FirebaseNotificationServiceProvider))]
+        [InlineData(NotifierTypes.WebPush, typeof(WebPushNotificationServiceProvider))]
         public void GetNotifierServiceProvider_ResolvesTheChannelForTheType(
             NotifierTypes type, Type expected)
         {

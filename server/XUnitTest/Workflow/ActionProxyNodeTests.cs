@@ -112,6 +112,14 @@ namespace XUnitTest.Workflow
                 { "body", body },
             };
 
+        private static string ErrorMessageOf(NodeExecutionResult result)
+        {
+            result.OutputItems.Should().ContainSingle();
+            var output = result.OutputItems[0].Data.Output.AsBsonDocument;
+            output["error"].AsBoolean.Should().BeTrue();
+            return output["message"].AsString;
+        }
+
         // ----- Metadata ------------------------------------------------------------
 
         [Fact]
@@ -191,8 +199,8 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(parameters));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("cannot contain");
+            result.IsSuccess.Should().BeTrue();
+            ErrorMessageOf(result).Should().Contain("cannot contain");
             _sent.Should().BeEmpty();
         }
 
@@ -205,8 +213,8 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(parameters));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("not valid");
+            result.IsSuccess.Should().BeTrue();
+            ErrorMessageOf(result).Should().Contain("not valid");
             _sent.Should().BeEmpty();
         }
 
@@ -215,8 +223,8 @@ namespace XUnitTest.Workflow
         {
             var result = await Node().RunAsync(Context(Parameters(routePath: "orders/{id}")));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("id");
+            result.IsSuccess.Should().BeTrue();
+            ErrorMessageOf(result).Should().Contain("id");
             _sent.Should().BeEmpty();
         }
 
@@ -272,8 +280,8 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(parameters));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().StartWith("Invalid JSON body:");
+            result.IsSuccess.Should().BeTrue();
+            ErrorMessageOf(result).Should().StartWith("Invalid JSON body:");
             _sent.Should().BeEmpty();
         }
 
@@ -375,8 +383,8 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(Parameters()));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("text/html");
+            result.IsSuccess.Should().BeTrue();
+            ErrorMessageOf(result).Should().Contain("text/html");
         }
 
         // ----- Gateway refusals -----------------------------------------------------
@@ -392,9 +400,10 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(Parameters(routePath: "orders")));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("does not declare the endpoint GET orders");
-            result.ErrorMessage.Should().Contain("re-select the endpoint");
+            result.IsSuccess.Should().BeTrue();
+            var message = ErrorMessageOf(result);
+            message.Should().Contain("does not declare the endpoint GET orders");
+            message.Should().Contain("re-select the endpoint");
         }
 
         [Fact]
@@ -409,9 +418,10 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(Parameters(method: "DELETE")));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("does not allow DELETE");
-            result.ErrorMessage.Should().Contain("GET, POST");
+            result.IsSuccess.Should().BeTrue();
+            var message = ErrorMessageOf(result);
+            message.Should().Contain("does not allow DELETE");
+            message.Should().Contain("GET, POST");
         }
 
         [Fact]
@@ -427,9 +437,10 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(Parameters()));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("503");
-            result.ErrorMessage.Should().Contain("Could not connect to the upstream endpoint");
+            result.IsSuccess.Should().BeTrue();
+            var message = ErrorMessageOf(result);
+            message.Should().Contain("503");
+            message.Should().Contain("Could not connect to the upstream endpoint");
         }
     }
 }

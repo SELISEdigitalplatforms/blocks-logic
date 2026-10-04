@@ -8,27 +8,39 @@ const ENV_BUTTON =
 const isVisibleNow = async (locator: { isVisible: (opts: { timeout: number }) => Promise<boolean> }) =>
   locator.isVisible({ timeout: 500 }).catch(() => false)
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-}
-
 /** Match e2e-created names: `Test Project 123` and `${PROJECT_NAME} 123`. */
-function orphanProjectPatterns(): RegExp[] {
+function orphanProjectPrefixes(): string[] {
   const prefixes = new Set(["Test Project"])
   const configured = process.env.PROJECT_NAME?.trim()
   if (configured) prefixes.add(configured)
-  return [...prefixes].map((prefix) => new RegExp(`${escapeRegExp(prefix)} \\d+`, "g"))
+  return [...prefixes]
+}
+
+function collectOrphanNames(bodyText: string, prefixes: string[]): string[] {
+  const names = new Set<string>()
+  for (const prefix of prefixes) {
+    let from = 0
+    while (from < bodyText.length) {
+      const at = bodyText.indexOf(prefix, from)
+      if (at < 0) break
+      let i = at + prefix.length
+      if (i >= bodyText.length || bodyText[i] !== " ") {
+        from = at + 1
+        continue
+      }
+      i += 1
+      const digitStart = i
+      while (i < bodyText.length && bodyText[i] >= "0" && bodyText[i] <= "9") i += 1
+      if (i > digitStart) names.add(bodyText.slice(at, i))
+      from = i
+    }
+  }
+  return [...names]
 }
 
 async function listOrphanProjectNames(page: Page): Promise<string[]> {
   const bodyText = await page.locator("body").innerText().catch(() => "")
-  const names = new Set<string>()
-  for (const pattern of orphanProjectPatterns()) {
-    for (const match of bodyText.matchAll(pattern)) {
-      names.add(match[0])
-    }
-  }
-  return [...names]
+  return collectOrphanNames(bodyText, orphanProjectPrefixes())
 }
 
 function addProjectControl(page: Page) {
@@ -412,7 +424,7 @@ export async function deleteCreatedProject(
       }
       return deleted
     } catch (error) {
-      console.warn(`[e2e] Failed to delete project "${projectName}" on OS:`, error)
+      console.warn("[e2e] Failed to delete project on OS:", projectName, error)
       return false
     }
   })

@@ -87,5 +87,52 @@ namespace XUnitTest.Controllers
 
             result.Should().BeSameAs(response);
         }
+
+        [Fact]
+        public async Task RegisterWebPushSubscription_ReturnsServiceResponse()
+        {
+            var response = new BaseResponse { IsSuccess = true };
+            _service.Setup(s => s.RegisterWebPushSubscriptionAsync(It.IsAny<RegisterWebPushSubscriptionRequest>()))
+                .ReturnsAsync(response);
+
+            var result = await _controller.RegisterWebPushSubscription(new RegisterWebPushSubscriptionRequest());
+
+            result.Should().BeSameAs(response);
+        }
+
+        [Fact]
+        public async Task UnregisterWebPushSubscription_ReturnsServiceResponse()
+        {
+            var response = new BaseResponse { IsSuccess = true };
+            _service.Setup(s => s.UnregisterWebPushSubscriptionAsync(It.IsAny<UnregisterWebPushSubscriptionRequest>()))
+                .ReturnsAsync(response);
+
+            var result = await _controller.UnregisterWebPushSubscription(new UnregisterWebPushSubscriptionRequest());
+
+            result.Should().BeSameAs(response);
+        }
+
+        [Fact]
+        public async Task GetWebPushPublicKey_ReturnsServiceResponse()
+        {
+            var response = new GetWebPushPublicKeyResponse { PublicKey = "BKx" };
+            _service.Setup(s => s.GetWebPushPublicKeyAsync()).ReturnsAsync(response);
+
+            var result = await _controller.GetWebPushPublicKey();
+
+            result.Should().BeSameAs(response);
+        }
+
+        [Fact]
+        public async Task RotateWebPushVapidKeys_ReturnsServiceResponse()
+        {
+            var response = new BaseResponse { IsSuccess = true };
+            _service.Setup(s => s.RotateWebPushVapidKeysAsync()).ReturnsAsync(response);
+
+            var result = await _controller.RotateWebPushVapidKeys();
+
+            result.Should().BeSameAs(response);
+        }
+
     }
 }

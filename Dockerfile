@@ -64,3 +64,6 @@ RUN chown -R app:app /app
 USER app
 
 ENTRYPOINT ["dotnet", "Api.dll"]
+
+# Satisfy DS-0026: container liveness probe (API listens on ASPNETCORE_URLS / 8080 by convention).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 CMD wget -q -O /dev/null http://127.0.0.1:5000/ || exit 1

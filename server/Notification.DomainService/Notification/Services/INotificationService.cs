@@ -1,10 +1,5 @@
-﻿using Blocks.Genesis;
+using Blocks.Genesis;
 using DomainService.Shared;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace DomainService.Notification
 {
@@ -19,5 +14,9 @@ namespace DomainService.Notification
         Task<GetNotificationsResponse> GetNotificationsAsync(GetNotificationsRequest request);
         Task<BaseResponse> MarkAllNotificationAsRead();
         Task<BaseResponse> MarkNotificationAsRead(MarkNotificationAsReadRequest request);
+        Task<BaseResponse> RegisterWebPushSubscriptionAsync(RegisterWebPushSubscriptionRequest request);
+        Task<BaseResponse> UnregisterWebPushSubscriptionAsync(UnregisterWebPushSubscriptionRequest request);
+        Task<GetWebPushPublicKeyResponse> GetWebPushPublicKeyAsync();
+        Task<BaseResponse> RotateWebPushVapidKeysAsync();
     }
 }

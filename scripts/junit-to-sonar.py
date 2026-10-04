@@ -17,7 +17,7 @@ report if any path is unknown.
 
 import os
 import sys
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET  # pip install -r scripts/requirements-sonar.txt
 from xml.sax.saxutils import escape, quoteattr
 
 
@@ -35,7 +35,10 @@ def main():
     junit_path, out_path = sys.argv[1], sys.argv[2]
     prefix = sys.argv[3].strip("/") if len(sys.argv) > 3 else ""
 
-    root = ET.parse(junit_path).getroot()
+    # Avoid XXE: do not resolve external entities; strip DOCTYPE before parse.
+    raw = Path(junit_path).read_text(encoding="utf-8")
+    raw = __import__("re").sub(r"<!DOCTYPE[^>]*>", "", raw, count=1, flags=__import__("re").IGNORECASE)
+    root = ET.fromstring(raw)
     suites = root.iter("testsuite") if root.tag == "testsuites" else [root]
 
     files = {}

@@ -48,6 +48,7 @@ namespace XUnitTest.Notification
         [Theory]
         [InlineData(typeof(SignalRNotificationServiceProvider))]
         [InlineData(typeof(FirebaseNotificationServiceProvider))]
+        [InlineData(typeof(WebPushNotificationServiceProvider))]
         [InlineData(typeof(BroadcastReceiver))]
         [InlineData(typeof(UserSpecificReceiver))]
         [InlineData(typeof(FilterSpecificReceiver))]

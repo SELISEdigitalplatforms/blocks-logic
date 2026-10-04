@@ -54,8 +54,10 @@ export const varNameRef: VariableRefCodec = {
  * there is no chip that would honestly represent the surrounding text.
  */
 export const soleRefKey = (value: string, codec: VariableRefCodec): string | null => {
-  const match = value.trim().match(new RegExp(`^${codec.pattern().source}$`));
-  return match ? match[1] : null;
+  const trimmed = value.trim();
+  const match = codec.pattern().exec(trimmed);
+  if (!match || match.index !== 0 || match[0] !== trimmed) return null;
+  return match[1];
 };
 
 /** Every key referenced in `value`, in order, including duplicates. */

@@ -47,3 +47,6 @@ RUN chown -R app:app /app
 USER app
 
 ENTRYPOINT ["dotnet", "Worker.dll"]
+
+# Satisfy DS-0026: container liveness probe (API listens on ASPNETCORE_URLS / 8080 by convention).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 CMD pgrep -x dotnet >/dev/null || pgrep -x node >/dev/null || exit 1

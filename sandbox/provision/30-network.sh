@@ -115,7 +115,14 @@ done <"$DENY_FILE"
 fact FN_DENY_EXTRA_V4 "${EXTRA4[*]:-}"
 fact FN_DENY_EXTRA_V6 "${EXTRA6[*]:-}"
 
-join_elems() { local IFS=', '; printf '%s' "$*"; }
+join_elems() {
+  local out="" e
+  for e in "$@"; do
+    if [ -n "$out" ]; then out+=", "; fi
+    out+="$e"
+  done
+  printf '%s' "$out"
+}
 DENY4_ELEMS="$(join_elems \
   10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 169.254.0.0/16 100.64.0.0/10 127.0.0.0/8 \
   "$HOST_SUBNET_ELEM" \

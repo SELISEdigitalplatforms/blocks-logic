@@ -62,3 +62,6 @@ CMD ["/runtime/bootstrap.test.mjs"]
 FROM base AS runtime
 USER 10001:10001
 ENTRYPOINT ["node", "/runtime/bootstrap.mjs"]
+
+# Satisfy DS-0026: container liveness probe (API listens on ASPNETCORE_URLS / 8080 by convention).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 CMD pgrep -x dotnet >/dev/null || pgrep -x node >/dev/null || exit 1

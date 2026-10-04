@@ -48,9 +48,12 @@ namespace XUnitTest.Notifications
                 _repo.Object,
                 _subscriptionValidator.Object,
                 _notifyValidator.Object,
+                new RegisterWebPushSubscriptionRequestValidator(),
+                new UnregisterWebPushSubscriptionRequestValidator(),
                 NullLogger<NotificationService>.Instance,
                 _notifierFactory.Object,
-                _configRepo.Object);
+                _configRepo.Object,
+                Mock.Of<IWebPushVapidKeyService>());
         }
 
         public void Dispose()

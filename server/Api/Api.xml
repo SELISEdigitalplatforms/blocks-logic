@@ -472,6 +472,18 @@
         <member name="M:Api.Controllers.NotifierController.GetNotifications(DomainService.Notification.GetNotificationsRequest)">
             <summary><c>GET</c> — the caller's notifications, filtered and paged by the query string.</summary>
         </member>
+        <member name="M:Api.Controllers.NotifierController.RegisterWebPushSubscription(DomainService.Notification.RegisterWebPushSubscriptionRequest)">
+            <summary><c>POST</c> — registers (upserts) a browser Web Push subscription for the caller.</summary>
+        </member>
+        <member name="M:Api.Controllers.NotifierController.UnregisterWebPushSubscription(DomainService.Notification.UnregisterWebPushSubscriptionRequest)">
+            <summary><c>POST</c> — removes a browser Web Push subscription for the caller (no-op if missing).</summary>
+        </member>
+        <member name="M:Api.Controllers.NotifierController.GetWebPushPublicKey">
+            <summary><c>GET</c> — returns the tenant VAPID public key, creating a keypair on first call.</summary>
+        </member>
+        <member name="M:Api.Controllers.NotifierController.RotateWebPushVapidKeys">
+            <summary><c>POST</c> — rotates the tenant VAPID keypair and clears all Web Push subscriptions.</summary>
+        </member>
         <member name="T:Api.Controllers.PeopleController">
             <summary>Directory lookups for the tenant's users, routed as <c>/api/People/{action}</c>.</summary>
         </member>
