@@ -74,6 +74,7 @@ export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
         key: "authenticationType",
         required: false,
         options: [
+          { label: "None", value: "" },
           { label: "Blocks Authentication", value: "blocksAuthentication" },
           { label: "Client Credential", value: "clientCredential" },
         ],
