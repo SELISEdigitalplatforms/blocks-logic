@@ -516,7 +516,7 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
         {
             if (value.IsNull() || value.IsUndefined()) return JValue.CreateNull();
             if (value.IsBoolean()) return new JValue(value.AsBoolean());
-            if (value.IsNumber()) return new JValue(value.AsNumber());
+            if (value.IsNumber()) return NumberToJValue(value.AsNumber());
             if (value.IsString()) return new JValue(value.AsString());
             if (value.IsDate())
             {
@@ -548,6 +548,19 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
                 return result;
             }
             return JValue.CreateNull();
+        }
+
+        // JS has only doubles. Whole numbers within the safe-integer range go out as
+        // integers, so 42 is stored as 42 (not 42.0) and later nodes can read it as an int.
+        private const double MaxSafeInteger = 9_007_199_254_740_991d;
+
+        private static JValue NumberToJValue(double number)
+        {
+            if (Math.Abs(number) <= MaxSafeInteger && Math.Floor(number) == number)
+            {
+                return new JValue((long)number);
+            }
+            return new JValue(number);
         }
 
         private static JToken BsonValueToJToken(BsonValue value)

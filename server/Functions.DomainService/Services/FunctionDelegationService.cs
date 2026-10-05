@@ -33,11 +33,20 @@ namespace Functions.DomainService.Services
     /// mechanism every Blocks message worker uses, and the workflow engine before it.
     /// </para>
     /// <para>
-    /// <b>Who gets one.</b> Only an authenticated user on a non-public trigger, calling within the
-    /// run's own tenant, and not under impersonation — an impersonation session must not turn into
-    /// a plain, unflagged token for the impersonated user. A <c>client_credentials</c> caller gets
-    /// none: such a caller already holds a credential it can give the function as a secret. A
-    /// public trigger, a schedule, or anything else without a user: none.
+    /// <b>Who gets one.</b> Any authenticated user on a non-public trigger, calling within the
+    /// run's own tenant. A <c>client_credentials</c> caller gets none: such a caller already holds
+    /// a credential it can give the function as a secret. A public trigger, a schedule, or
+    /// anything else without a user: none.
+    /// </para>
+    /// <para>
+    /// <b>Impersonation is included</b>, and is the ordinary case here: the Functions pages sit
+    /// under the console's impersonate route, so clicking Test is almost always an impersonated
+    /// caller. Refusing those was why a developer's own function could not call Blocks at all.
+    /// What makes it safe is not refusing here but what the grant carries: Genesis records the
+    /// impersonation session on it, and IAM resolves the user in the tenant they really live in,
+    /// refuses once the session stops, and mints a token that still says it is impersonated. The
+    /// function ends up with exactly the authority of the console session that started it —
+    /// neither a plain unflagged token nor nothing at all.
     /// </para>
     /// <para>
     /// <b>Version material</b> comes from the validated token's claims on the current request
@@ -64,14 +73,31 @@ namespace Functions.DomainService.Services
 
         public async Task<string?> CreateGrantAsync(string tenantId, BlocksContext? caller, AuthMode authMode)
         {
-            if (authMode == AuthMode.Public
-                || caller is null
-                || !caller.IsAuthenticated
-                || caller.Impersonated
-                || string.IsNullOrWhiteSpace(caller.UserId)
-                || string.IsNullOrWhiteSpace(tenantId)
+            // Every arm says why. The cost of this being silent was a day of looking in the wrong
+            // place: the run simply logged blocks-skipped, and nothing anywhere said a grant had
+            // been declined, let alone which condition declined it.
+            if (authMode == AuthMode.Public)
+            {
+                _logger.LogDebug(
+                    "A public run in tenant {TenantId} gets no access token; that is what public means",
+                    tenantId);
+                return null;
+            }
+
+            if (caller is null || !caller.IsAuthenticated || string.IsNullOrWhiteSpace(caller.UserId))
+            {
+                _logger.LogDebug(
+                    "No authenticated user behind a run in tenant {TenantId}; it gets no access token",
+                    tenantId);
+                return null;
+            }
+
+            if (string.IsNullOrWhiteSpace(tenantId)
                 || !string.Equals(caller.TenantId, tenantId, StringComparison.Ordinal))
             {
+                _logger.LogWarning(
+                    "The caller of a run in tenant {TenantId} belongs to a different tenant; it gets no access token",
+                    tenantId);
                 return null;
             }
 
