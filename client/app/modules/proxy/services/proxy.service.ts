@@ -126,7 +126,7 @@ export class ProxyService {
   getAll = async (params: ProxyListParams = {}): Promise<ProxyListPage> => {
     const response = await this.logicHttpClient.get<BaseQueryListResponse<ProxyListItemDto[]>>(
       `${PROXY_ENDPOINTS.COLLECTION}${buildQuery({
-        search: params.searchKey?.trim() || undefined,
+        search: params.search?.trim() || undefined,
         isActive: params.isActive,
         pageSize: params.pageSize ?? 200,
         pageNumber: params.pageNumber ?? 0,

@@ -500,6 +500,43 @@ namespace XUnitTest.Functions
         }
 
         /// <summary>
+        /// The Test button always has a signed-in user, and ctx.context already carries them, so a
+        /// Public trigger must not leave the editor's run without ctx.blocks.accessToken.
+        /// </summary>
+        [Fact]
+        public async Task A_test_of_a_public_function_still_asks_for_the_callers_grant()
+        {
+            RunIs(() => Run(RunStatus.Queued));
+            GrantsAre(Grant);
+            _function.Trigger.AuthMode = AuthMode.Public;
+
+            await Service(("Functions:HttpSyncWaitMaxSeconds", "1"))
+                .TestAsync(Tenant, "fn-1", new TestFunctionRequestDto { FunctionId = "fn-1", InputJson = "{}" });
+
+            _delegation.Verify(
+                d => d.CreateGrantAsync(Tenant, It.IsAny<BlocksContext?>(), AuthMode.Token), Times.Once);
+            _delegation.Verify(
+                d => d.CreateGrantAsync(It.IsAny<string>(), It.IsAny<BlocksContext?>(), AuthMode.Public), Times.Never);
+        }
+
+        [Fact]
+        public async Task A_workflow_run_of_a_public_function_keeps_the_public_auth_mode()
+        {
+            GrantsAre(null);
+            _version.Trigger.AuthMode = AuthMode.Public;
+            using var cts = new CancellationTokenSource();
+            _runs
+                .Setup(r => r.CreateAsync(Tenant, It.IsAny<FunctionRunEntity>(), It.IsAny<CancellationToken>()))
+                .Callback((string _, FunctionRunEntity run, CancellationToken _) => { _created = run; cts.Cancel(); })
+                .Returns(Task.CompletedTask);
+
+            var act = () => Service().InvokeFromWorkflowAsync(Tenant, "fn-1", "{}", Caller, null, "wf-1", cts.Token);
+            await act.Should().ThrowAsync<OperationCanceledException>();
+
+            _delegation.Verify(d => d.CreateGrantAsync(Tenant, Caller, AuthMode.Public), Times.Once);
+        }
+
+        /// <summary>
         /// A test builds and runs on a host that is also serving deployed functions, so one costs
         /// real capacity. Refused rather than queued, because the developer is watching: "wait a
         /// moment" is a better answer than a run that surfaces minutes later.

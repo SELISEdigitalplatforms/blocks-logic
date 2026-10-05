@@ -58,7 +58,7 @@ describe("ProxyService HTTP wiring", () => {
       totalCount: 1,
     });
 
-    const page = await proxyService.getAll({ searchKey: "stri" });
+    const page = await proxyService.getAll({ search: "stri" });
 
     expect(logicService.get).toHaveBeenCalledWith(
       "/api/Proxies?search=stri&pageSize=200&pageNumber=0",

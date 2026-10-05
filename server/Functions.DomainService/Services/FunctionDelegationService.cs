@@ -111,9 +111,12 @@ namespace Functions.DomainService.Services
 
                 if (tokenVersion is null || securityStamp is null)
                 {
-                    _logger.LogDebug(
-                        "No token_version/security_stamp for the caller of a run in tenant {TenantId}; it gets no access token",
-                        tenantId);
+                    // A Warning, not Debug: an authenticated user reached this point, so a missing
+                    // claim is a token problem (IAM writes security_stamp "" for a user without one),
+                    // not the expected "nobody to delegate" case above.
+                    _logger.LogWarning(
+                        "No token_version/security_stamp for the caller of a run in tenant {TenantId} (token_version {HasTokenVersion}, security_stamp {HasSecurityStamp}); it gets no access token",
+                        tenantId, tokenVersion is not null, securityStamp is not null);
                     return null;
                 }
 

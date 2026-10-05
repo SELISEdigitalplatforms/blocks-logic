@@ -16,7 +16,7 @@ export const Proxies = () => {
   const { queryParams, setQueryParams } = useProxyFilterQueryParams();
 
   const { data, isLoading, isFetching } = useGetProxies({
-    searchKey: queryParams.search,
+    search: queryParams.search,
     isActive: queryParams.isActive === "all" ? undefined : queryParams.isActive === "1",
     pageNumber: queryParams.page,
     pageSize: queryParams.pageSize,

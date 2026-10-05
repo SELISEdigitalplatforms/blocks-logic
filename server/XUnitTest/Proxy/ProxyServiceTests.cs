@@ -300,6 +300,24 @@ namespace XUnitTest.Proxy
             _proxyRepo.Verify(r => r.GetAllAsync(Tenant, "a.b+c", null, 20, 0), Times.Once);
         }
 
+        // ---------- GetAll : searchKey alias ----------
+        [Theory]
+        [InlineData(null, "stripe", "stripe")]      // only searchKey sent -> used
+        [InlineData("stripe", "other", "stripe")]   // both sent -> search wins
+        [InlineData("  ", "stripe", "stripe")]      // blank search -> falls back to searchKey
+        [InlineData(null, "  ", null)]              // blank searchKey -> no filter
+        public async Task GetAll_AcceptsSearchKeyAlias(string? search, string? searchKey, string? expected)
+        {
+            _proxyRepo.Setup(r => r.GetAllAsync(Tenant, expected, null, 20, 0))
+                .ReturnsAsync(new List<ProxyDetailEntity>());
+            _proxyRepo.Setup(r => r.CountAsync(Tenant, expected, null)).ReturnsAsync(0);
+
+            await _service.GetAllAsync(Tenant, new ProxyGetAllRequestDto { Search = search, SearchKey = searchKey });
+
+            _proxyRepo.Verify(r => r.GetAllAsync(Tenant, expected, null, 20, 0), Times.Once);
+            _proxyRepo.Verify(r => r.CountAsync(Tenant, expected, null), Times.Once);
+        }
+
         // ---------- GetAll : IsActive passthrough ----------
         [Theory]
         [InlineData(true)]

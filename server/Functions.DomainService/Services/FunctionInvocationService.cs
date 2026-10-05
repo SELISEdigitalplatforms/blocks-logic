@@ -515,9 +515,20 @@ namespace Functions.DomainService.Services
             // The caller's identity for ctx.blocks.accessToken, as a delegation grant id the runner
             // redeems right before the sandbox starts — never a token. Written now, while the
             // caller's validated token is still in scope; null for a public trigger, an
-            // unauthenticated or impersonated caller, and anything without a user.
-            var delegationGrantId = await _delegation.CreateGrantAsync(
-                tenantId, context, (version?.Trigger ?? function.Trigger).AuthMode);
+            // unauthenticated caller, and anything without a user. An impersonating caller DOES
+            // get one: the grant carries the session, and IAM mints a token that still says it is
+            // impersonated.
+            //
+            // Only AuthMode reaches this. The trigger's Roles/Permissions decide who may invoke;
+            // they do not narrow the token, so the function runs with everything this user can do.
+            //
+            // A Test is never anonymous: the endpoint needs a signed-in user, and ctx.context already
+            // carries that user whatever the trigger says. A Public trigger describes who may call the
+            // deployed route, so it must not leave the editor's own run without a token.
+            var grantAuthMode = invokedBy == InvokedByType.Test
+                ? AuthMode.Token
+                : (version?.Trigger ?? function.Trigger).AuthMode;
+            var delegationGrantId = await _delegation.CreateGrantAsync(tenantId, context, grantAuthMode);
 
             // Last point at which the caller going away may stop anything. From the insert on, the
             // record exists, and a cancelled enqueue would strand it QUEUED with nothing queued —

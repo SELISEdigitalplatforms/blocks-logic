@@ -190,7 +190,7 @@ export const mockProxyService = {
 
   getAll: async (params: ProxyListParams = {}): Promise<ProxyListPage> => {
     await waitForMock();
-    const search = params.searchKey?.trim().toLowerCase();
+    const search = params.search?.trim().toLowerCase();
     let matches = search
       ? proxyStore.filter((proxy) =>
           [proxy.name, proxy.slug, proxy.upstreamMasked].some((value) =>
