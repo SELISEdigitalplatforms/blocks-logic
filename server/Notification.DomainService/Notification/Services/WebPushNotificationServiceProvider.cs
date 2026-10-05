@@ -1,75 +1,78 @@
+using Blocks.Genesis;
 using DomainService.Entities;
 using DomainService.Shared;
 using Microsoft.Extensions.Logging;
-using WebPush;
 
 namespace DomainService.Notification
 {
+    /// <summary>
+    /// Queues one <see cref="WebPushDeliveryCommand"/> per registered device and returns. The
+    /// Worker's delivery consumer does the encrypted send, retry, and 410 cleanup.
+    /// </summary>
     public class WebPushNotificationServiceProvider : INotifier
     {
         private readonly ILogger<WebPushNotificationServiceProvider> _logger;
         private readonly INotificationRepository _notificationRepository;
-        private readonly IWebPushVapidKeyService _vapidKeyService;
-        private readonly IWebPushSender _sender;
+        private readonly IMessageClient _messageClient;
 
         public WebPushNotificationServiceProvider(
             ILogger<WebPushNotificationServiceProvider> logger,
             INotificationRepository notificationRepository,
-            IWebPushVapidKeyService vapidKeyService,
-            IWebPushSender? sender = null)
+            IMessageClient messageClient)
         {
             _logger = logger;
             _notificationRepository = notificationRepository;
-            _vapidKeyService = vapidKeyService;
-            _sender = sender ?? new WebPushSender();
+            _messageClient = messageClient;
         }
 
         public async Task Notify(NotifyRequest notifyRequest, NotificationConfiguration configuration)
         {
+            ArgumentNullException.ThrowIfNull(notifyRequest);
+
             var payload = notifyRequest.DenormalizedPayload ?? string.Empty;
             var userIds = notifyRequest.UserIds ?? [];
-            if (userIds.Count == 0)
+            var tenantId = BlocksContext.GetContext()?.TenantId ?? string.Empty;
+            var queued = 0;
+
+            foreach (var userId in userIds.Where(u => !string.IsNullOrWhiteSpace(u)))
             {
-                _logger.LogDebug("WebPush: no UserIds — nothing to deliver");
-                return;
-            }
-
-            var (publicKey, privateKey, subject) = await _vapidKeyService.GetVapidDetailsAsync().ConfigureAwait(false);
-            var vapid = new VapidDetails(subject, publicKey, privateKey);
-
-            foreach (var userId in userIds)
-            {
-                if (string.IsNullOrWhiteSpace(userId))
-                    continue;
-
                 var subscriptions = await _notificationRepository
                     .GetItemsAsync<WebPushSubscription>(s => s.UserId == userId)
                     .ConfigureAwait(false);
 
-                if (subscriptions.Count == 0)
-                {
-                    _logger.LogDebug("WebPush: user {UserId} has no registered devices", userId);
-                    continue;
-                }
-
                 foreach (var subscription in subscriptions)
                 {
-                    try
+                    await PublishAsync(new WebPushDeliveryCommand
                     {
-                        var pushSubscription = new PushSubscription(
-                            subscription.Endpoint,
-                            subscription.Keys?.P256dh ?? string.Empty,
-                            subscription.Keys?.Auth ?? string.Empty);
-
-                        await _sender.SendAsync(pushSubscription, payload, vapid).ConfigureAwait(false);
-                        _logger.LogInformation("WebPush: delivered to user {UserId} endpoint {Endpoint}", userId, subscription.Endpoint);
-                    }
-                    catch (Exception ex)
-                    {
-                        // Phase 1: continue remaining devices; retry/410 cleanup is Phase 2.
-                        _logger.LogError(ex, "WebPush: delivery failed for user {UserId} endpoint {Endpoint}", userId, subscription.Endpoint);
-                    }
+                        SubscriptionEndpoint = subscription.Endpoint,
+                        KeysP256dh = subscription.Keys?.P256dh ?? string.Empty,
+                        KeysAuth = subscription.Keys?.Auth ?? string.Empty,
+                        UserId = userId,
+                        TenantId = tenantId,
+                        DenormalizedPayload = payload,
+                        Attempt = 1,
+                    }).ConfigureAwait(false);
+                    queued++;
                 }
+            }
+
+            _logger.LogInformation("WebPush: queued {Count} delivery command(s)", queued);
+        }
+
+        private async Task PublishAsync(WebPushDeliveryCommand command)
+        {
+            try
+            {
+                await _messageClient.SendToConsumerAsync(new ConsumerMessage<WebPushDeliveryCommand>
+                {
+                    ConsumerName = WebPushConstants.DeliveryQueueName,
+                    Payload = command,
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "WebPush: could not queue delivery for user {UserId}", command.UserId);
+                throw new WebPushQueueUnavailableException(WebPushConstants.QueueErrorMessage, ex);
             }
         }
     }

@@ -21,6 +21,7 @@ using Worker;
 using Worker.Configuration;
 using Worker.Consumers;
 using Worker.Consumers.Mail;
+using Worker.Consumers.Notification;
 using Worker.Consumers.Workflow;
 using Dtos = DomainService.Dtos;
 
@@ -82,6 +83,7 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             services.AddSingleton<IConsumer<DataChangeEvent>, DataTriggerConsumer>();
             services.AddSingleton<IConsumer<EmailTriggerEvent>, EmailTriggerConsumer>();
             services.AddSingleton<IConsumer<PublishScheduleCommand>, SchedulerTriggerConsumer>();
+            services.AddSingleton<IConsumer<DomainService.Notification.WebPushDeliveryCommand>, WebPushDeliveryConsumer>();
             services.AddApplicationServices();
             services.AddSchedulerServices();
             services.AddSchedulerWorkerServices();

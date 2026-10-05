@@ -27,6 +27,8 @@ namespace DomainService.Utilities
             serviceCollection.AddSingleton<WebPushNotificationServiceProvider>();
             serviceCollection.AddSingleton<IWebPushVapidKeyService, WebPushVapidKeyService>();
             serviceCollection.AddSingleton<IWebPushSender, WebPushSender>();
+            serviceCollection.AddSingleton<IWebPushDeliveryService, WebPushDeliveryService>();
+            serviceCollection.AddSingleton<IWebPushDeliveryDispatcher, WebPushDeliveryDispatcher>();
             serviceCollection.AddSingleton<BroadcastReceiver>();
             serviceCollection.AddSingleton<UserSpecificReceiver>();
             serviceCollection.AddSingleton<FilterSpecificReceiver>();

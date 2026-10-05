@@ -36,6 +36,8 @@ namespace XUnitTest.Notification
         [InlineData(typeof(IStrategicClientProviderFactory), typeof(StrategicClientProviderFactory))]
         [InlineData(typeof(IConfigurationService), typeof(ConfigurationService))]
         [InlineData(typeof(IConfigurationRepository), typeof(ConfigurationRepository))]
+        [InlineData(typeof(IWebPushDeliveryService), typeof(WebPushDeliveryService))]
+        [InlineData(typeof(IWebPushDeliveryDispatcher), typeof(WebPushDeliveryDispatcher))]
         public void RegisterAllNotificationApplicationServices_RegistersTheServicesAsSingletons(
             Type service, Type implementation)
         {

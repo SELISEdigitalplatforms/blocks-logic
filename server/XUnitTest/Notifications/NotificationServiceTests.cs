@@ -163,6 +163,30 @@ namespace XUnitTest.Notifications
         }
 
         [Fact]
+        public async Task NotifyAsync_WhenTheDeliveryQueueIsUnavailable_ReturnsTheQueueError_C2()
+        {
+            _notifier.Setup(n => n.Notify(It.IsAny<NotifyRequest>(), It.IsAny<NotificationConfiguration>()))
+                     .ThrowsAsync(new WebPushQueueUnavailableException());
+
+            var result = await _sut.NotifyAsync(new NotifyRequest { ConfigurationName = "web-push" });
+
+            result.IsSuccess.Should().BeFalse();
+            result.Errors.Should().ContainKey("delivery")
+                  .WhoseValue.Should().Be("Unable to queue notification for delivery.");
+        }
+
+        [Fact]
+        public async Task NotifyAsync_DoesNotSwallowOtherProviderExceptions()
+        {
+            _notifier.Setup(n => n.Notify(It.IsAny<NotifyRequest>(), It.IsAny<NotificationConfiguration>()))
+                     .ThrowsAsync(new InvalidOperationException("boom"));
+
+            var act = () => _sut.NotifyAsync(new NotifyRequest { ConfigurationName = "cfg" });
+
+            await act.Should().ThrowAsync<InvalidOperationException>();
+        }
+
+        [Fact]
         public async Task NotifyAsync_ReturnsTheValidationErrorsWithoutNotifying()
         {
             _notifyValidator

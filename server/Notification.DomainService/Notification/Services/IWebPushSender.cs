@@ -13,6 +13,6 @@ namespace DomainService.Notification
         private readonly WebPushClient _client = new();
 
         public Task SendAsync(PushSubscription subscription, string payload, VapidDetails vapidDetails, CancellationToken cancellationToken = default) =>
-            _client.SendNotificationAsync(subscription, payload, vapidDetails);
+            _client.SendNotificationAsync(subscription, payload, vapidDetails, cancellationToken);
     }
 }

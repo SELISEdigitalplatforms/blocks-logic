@@ -100,7 +100,18 @@ namespace DomainService.Notification
                 };
             }
 
-            await SendNotificationAsync(configuration, notifyRequest);
+            try
+            {
+                await SendNotificationAsync(configuration, notifyRequest);
+            }
+            catch (WebPushQueueUnavailableException)
+            {
+                return new BaseResponse
+                {
+                    IsSuccess = false,
+                    Errors = new Dictionary<string, string> { { WebPushConstants.QueueErrorKey, WebPushConstants.QueueErrorMessage } }
+                };
+            }
 
             //TODO
             //await PublishEventForNotification(notifyRequest);

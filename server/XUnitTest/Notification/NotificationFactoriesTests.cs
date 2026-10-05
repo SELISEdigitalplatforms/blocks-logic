@@ -1,3 +1,4 @@
+using Blocks.Genesis;
 using DomainService.Notification;
 using DomainService.Shared;
 using FluentAssertions;
@@ -40,8 +41,7 @@ namespace XUnitTest.Notification
             collection.AddSingleton(new WebPushNotificationServiceProvider(
                 Mock.Of<ILogger<WebPushNotificationServiceProvider>>(),
                 _repository.Object,
-                Mock.Of<IWebPushVapidKeyService>(),
-                Mock.Of<IWebPushSender>()));
+                Mock.Of<IMessageClient>()));
 
             _services = collection.BuildServiceProvider();
         }
