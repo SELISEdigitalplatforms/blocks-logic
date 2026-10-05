@@ -1,34 +1,51 @@
 import { Page, expect, test } from "@playwright/test"
 import { e2eBaseUrl, e2eOsBaseUrl, e2eProjectId } from "./env"
-import { ensureAuthenticated, ensureAuthenticatedOnCurrentOrigin } from "./login-helper"
+import {
+  dismissSingleSessionTakeover,
+  ensureAuthenticated,
+  ensureAuthenticatedOnCurrentOrigin,
+  isLoginSurface,
+} from "./login-helper"
 
 const ENV_BUTTON =
-  /Development|Testing|Staging|IAT|UAT|Production|Pre-Prod|Prod Shadow/
+  /Development|Testing|Staging|IAT|UAT|Production|Pre-Prod|Prod Shadow|^dev$/i
 
 const isVisibleNow = async (locator: { isVisible: (opts: { timeout: number }) => Promise<boolean> }) =>
   locator.isVisible({ timeout: 500 }).catch(() => false)
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-}
-
 /** Match e2e-created names: `Test Project 123` and `${PROJECT_NAME} 123`. */
-function orphanProjectPatterns(): RegExp[] {
+function orphanProjectPrefixes(): string[] {
   const prefixes = new Set(["Test Project"])
   const configured = process.env.PROJECT_NAME?.trim()
   if (configured) prefixes.add(configured)
-  return [...prefixes].map((prefix) => new RegExp(`${escapeRegExp(prefix)} \\d+`, "g"))
+  return [...prefixes]
+}
+
+function collectOrphanNames(bodyText: string, prefixes: string[]): string[] {
+  const names = new Set<string>()
+  for (const prefix of prefixes) {
+    let from = 0
+    while (from < bodyText.length) {
+      const at = bodyText.indexOf(prefix, from)
+      if (at < 0) break
+      let i = at + prefix.length
+      if (i >= bodyText.length || bodyText[i] !== " ") {
+        from = at + 1
+        continue
+      }
+      i += 1
+      const digitStart = i
+      while (i < bodyText.length && bodyText[i] >= "0" && bodyText[i] <= "9") i += 1
+      if (i > digitStart) names.add(bodyText.slice(at, i))
+      from = i
+    }
+  }
+  return [...names]
 }
 
 async function listOrphanProjectNames(page: Page): Promise<string[]> {
   const bodyText = await page.locator("body").innerText().catch(() => "")
-  const names = new Set<string>()
-  for (const pattern of orphanProjectPatterns()) {
-    for (const match of bodyText.matchAll(pattern)) {
-      names.add(match[0])
-    }
-  }
-  return [...names]
+  return collectOrphanNames(bodyText, orphanProjectPrefixes())
 }
 
 function addProjectControl(page: Page) {
@@ -156,10 +173,42 @@ async function readProjectNameFromDashboard(page: Page): Promise<string> {
 }
 
 async function openProjectById(page: Page, projectId: string) {
-  await page.goto(`${e2eBaseUrl()}/app/${projectId}/dashboard`, { waitUntil: "domcontentloaded" })
-  const projectName = await readProjectNameFromDashboard(page)
-  await expect(page.getByRole("link", { name: "Workflow" })).toBeVisible({ timeout: 20_000 })
-  return { projectName, dashboardUrl: page.url(), itemId: projectId }
+  const target = `${e2eBaseUrl()}/app/${projectId}/dashboard`
+  const reuseName = process.env.E2E_REUSE_PROJECT_NAME?.trim()
+  for (let attempt = 0; attempt < 4; attempt++) {
+    await page.goto(target, { waitUntil: "domcontentloaded" })
+    await dismissSingleSessionTakeover(page)
+
+    if (await isLoginSurface(page)) {
+      await ensureAuthenticated(page)
+      continue
+    }
+
+    const workflow = page.getByRole("link", { name: "Workflow" })
+    const projectBtn = page.getByRole("button", { name: /^Project / })
+    const ready = await Promise.race([
+      workflow.waitFor({ state: "visible", timeout: 45_000 }).then(() => true),
+      projectBtn.waitFor({ state: "visible", timeout: 45_000 }).then(() => true),
+    ]).catch(() => false)
+
+    if (ready) {
+      let projectName = reuseName || ""
+      try {
+        projectName = await readProjectNameFromDashboard(page)
+      } catch {
+        if (!projectName) {
+          throw new Error(`Could not read project name from dashboard: ${page.url()}`)
+        }
+      }
+      await expect(workflow).toBeVisible({ timeout: 20_000 })
+      return { projectName, dashboardUrl: page.url(), itemId: projectId }
+    }
+
+    // Hard reload next attempt — blank SPA shells are common right after OIDC.
+    await page.reload({ waitUntil: "domcontentloaded" }).catch(() => {})
+  }
+
+  throw new Error(`Dashboard did not become ready for project ${projectId}: ${page.url()}`)
 }
 
 export async function openNamedProjectDashboard(
@@ -295,8 +344,11 @@ export async function createProject(page: Page) {
     const nameInput = page.locator('[placeholder="Enter your project name"]:visible')
     await nameInput.fill(projectName)
 
-    await page.getByRole("checkbox", { name: "I confirm that I will use" }).click()
-    await page.getByRole("checkbox", { name: "I accept the Terms of services" }).click()
+    // OS create wizard checkboxes are sometimes not exposed as role=checkbox.
+    const confirm = page.getByText(/I confirm that I will use Blocks exclusively/i).first()
+    const terms = page.getByText(/I accept the Terms of services/i).first()
+    await confirm.click({ timeout: 15_000 })
+    await terms.click({ timeout: 15_000 })
 
     const continueButton = page.getByRole("button", { name: "Continue", exact: true })
     await expect(continueButton).toBeEnabled()
@@ -412,7 +464,7 @@ export async function deleteCreatedProject(
       }
       return deleted
     } catch (error) {
-      console.warn(`[e2e] Failed to delete project "${projectName}" on OS:`, error)
+      console.warn("[e2e] Failed to delete project on OS:", projectName, error)
       return false
     }
   })

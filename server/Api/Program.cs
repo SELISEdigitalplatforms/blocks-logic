@@ -3,6 +3,7 @@ using Blocks.Extensions.DependencyInjection;
 using Blocks.Genesis;
 using Blocks.Secrets;
 using BlocksTemplate.Api;
+using BlocksTemplate.Api.Middleware;
 using CloudConfiguration.DomainService.Shared.Utilities;
 using Common.InternalService.Shared.Utilities;
 using DomainService.Notification;
@@ -88,6 +89,7 @@ await services.RegisterBlocksDeploymentServicesAsync(vaultType);
 
 var app = builder.Build();
 
+app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 

@@ -38,6 +38,50 @@ export async function isLoginSurface(page: Page): Promise<boolean> {
   return false
 }
 
+
+/** Claim this tab when another window holds the project session. */
+export async function dismissSingleSessionTakeover(page: Page) {
+  const leave = page.getByRole("button", { name: /Leave /i })
+  const heading = page.getByRole("heading", { name: /Your session is in /i })
+  // Full-page takeover often paints after SPA hydrate / SignalR claim.
+  for (let i = 0; i < 20; i++) {
+    const leaveVisible = await leave.first().isVisible({ timeout: 1_200 }).catch(() => false)
+    const headingVisible = await heading.isVisible({ timeout: 300 }).catch(() => false)
+    if (!leaveVisible && !headingVisible) {
+      continue
+    }
+    if (!leaveVisible) {
+      await page.waitForTimeout(400)
+      continue
+    }
+    await leave.first().click({ timeout: 10_000 })
+    await Promise.race([
+      heading.waitFor({ state: "hidden", timeout: 20_000 }).catch(() => {}),
+      leave.first().waitFor({ state: "hidden", timeout: 20_000 }).catch(() => {}),
+    ])
+    await page.waitForTimeout(500)
+    if (await heading.isVisible({ timeout: 1_500 }).catch(() => false)) {
+      continue
+    }
+    return
+  }
+}
+
+async function safeGoto(page: Page, url: string) {
+  for (let i = 0; i < 3; i++) {
+    try {
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 })
+      return
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (!/ERR_ABORTED|interrupted|navigating/i.test(message) || i === 2) {
+        throw error
+      }
+      await page.waitForTimeout(1_000)
+    }
+  }
+}
+
 async function fillCredentialsAndSubmit(page: Page) {
   const { email, password } = e2eCredentials()
   const emailField = oidcEmailField(page)
@@ -45,14 +89,36 @@ async function fillCredentialsAndSubmit(page: Page) {
   const passwordField = oidcPasswordField(page)
   await expect(passwordField).toBeVisible({ timeout: 10_000 })
   await passwordField.fill(password)
+
+  // IAM returns JSON { redirect_uri }; SPA navigates client-side. On PR previews
+  // that hop can stall on AUTHENTICATING — follow the URI explicitly when needed.
+  const loginRespPromise = page.waitForResponse(
+    (r) => /\/api\/oidc\/login\/?$/.test(r.url()) && r.request().method() === "POST",
+    { timeout: 90_000 },
+  )
   await page.getByRole("button", { name: "Login", exact: true }).click()
+  const loginResp = await loginRespPromise
+  if (loginResp.ok()) {
+    try {
+      const body = (await loginResp.json()) as { redirect_uri?: string }
+      if (body.redirect_uri) {
+        // Give the SPA a moment to navigate itself; only force when still on IAM.
+        await page.waitForTimeout(1_500)
+        if (/dev-iam|\/oidc\/login/i.test(page.url())) {
+          await safeGoto(page, body.redirect_uri)
+        }
+      }
+    } catch {
+      // non-JSON body — let waitForURL below handle navigation
+    }
+  }
 }
 
 export async function loginThroughOidc(page: Page, options?: { loginPath?: string }) {
   const base = e2eBaseUrl()
   const loginPath = options?.loginPath ?? `${base}/login`
 
-  await page.goto(loginPath, { waitUntil: "domcontentloaded" })
+  await safeGoto(page, loginPath)
 
   for (let attempt = 0; attempt < 3; attempt++) {
     if (await consoleHeading(page).isVisible({ timeout: 3_000 }).catch(() => false)) {
@@ -65,7 +131,7 @@ export async function loginThroughOidc(page: Page, options?: { loginPath?: strin
         await loginButton.click({ timeout: 8_000 })
       } catch {
         if (await consoleHeading(page).isVisible({ timeout: 3_000 }).catch(() => false)) return
-        await page.goto(`${base}/app/console`, { waitUntil: "domcontentloaded" })
+        await safeGoto(page, `${base}/app/console`)
         continue
       }
 
@@ -82,18 +148,27 @@ export async function loginThroughOidc(page: Page, options?: { loginPath?: strin
 
       if (await emailField.isVisible().catch(() => false)) {
         await fillCredentialsAndSubmit(page)
-        await page.waitForURL(/\/app\/console/, { timeout: 45_000 })
+        await page.waitForURL(/\/app\/console/, { timeout: 90_000 })
+        await expect(consoleHeading(page)).toBeVisible({ timeout: 30_000 })
         return
       }
 
-      await page.goto(`${base}/app/console`, { waitUntil: "domcontentloaded" })
+      await safeGoto(page, `${base}/app/console`)
       continue
     }
 
-    await page.goto(`${base}/app/console`, { waitUntil: "domcontentloaded" })
+    // Already on IAM credential form without the product login gate.
+    if (await oidcEmailField(page).isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await fillCredentialsAndSubmit(page)
+      await page.waitForURL(/\/app\/console/, { timeout: 90_000 })
+      await expect(consoleHeading(page)).toBeVisible({ timeout: 30_000 })
+      return
+    }
+
+    await safeGoto(page, `${base}/app/console`)
   }
 
-  await page.goto(`${base}/app/console`, { waitUntil: "domcontentloaded" })
+  await safeGoto(page, `${base}/app/console`)
   await expect(consoleHeading(page)).toBeVisible({ timeout: 30_000 })
 }
 
@@ -103,13 +178,15 @@ export async function loginThroughOidc(page: Page, options?: { loginPath?: strin
  */
 export async function ensureAuthenticated(page: Page) {
   const base = e2eBaseUrl()
-  await page.goto(`${base}/app/console`, { waitUntil: "domcontentloaded" })
+  await safeGoto(page, `${base}/app/console`)
+  await dismissSingleSessionTakeover(page)
 
   if (await consoleHeading(page).isVisible({ timeout: 15_000 }).catch(() => false)) {
     return
   }
 
   await loginThroughOidc(page)
+  await dismissSingleSessionTakeover(page)
   await expect(consoleHeading(page)).toBeVisible({ timeout: 30_000 })
 }
 
@@ -121,13 +198,15 @@ export async function ensureAuthenticatedOnCurrentOrigin(page: Page) {
   }
 
   const origin = new URL(href).origin
-  await page.goto(`${origin}/app/console`, { waitUntil: "domcontentloaded" })
+  await safeGoto(page, `${origin}/app/console`)
+  await dismissSingleSessionTakeover(page)
 
   if (await consoleHeading(page).isVisible({ timeout: 15_000 }).catch(() => false)) {
     return
   }
 
   await loginThroughOidc(page, { loginPath: `${origin}/login` })
+  await dismissSingleSessionTakeover(page)
   await expect(consoleHeading(page)).toBeVisible({ timeout: 30_000 })
 }
 

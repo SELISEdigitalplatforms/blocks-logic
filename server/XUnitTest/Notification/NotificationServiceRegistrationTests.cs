@@ -36,6 +36,8 @@ namespace XUnitTest.Notification
         [InlineData(typeof(IStrategicClientProviderFactory), typeof(StrategicClientProviderFactory))]
         [InlineData(typeof(IConfigurationService), typeof(ConfigurationService))]
         [InlineData(typeof(IConfigurationRepository), typeof(ConfigurationRepository))]
+        [InlineData(typeof(IWebPushDeliveryService), typeof(WebPushDeliveryService))]
+        [InlineData(typeof(IWebPushDeliveryDispatcher), typeof(WebPushDeliveryDispatcher))]
         public void RegisterAllNotificationApplicationServices_RegistersTheServicesAsSingletons(
             Type service, Type implementation)
         {
@@ -48,6 +50,7 @@ namespace XUnitTest.Notification
         [Theory]
         [InlineData(typeof(SignalRNotificationServiceProvider))]
         [InlineData(typeof(FirebaseNotificationServiceProvider))]
+        [InlineData(typeof(WebPushNotificationServiceProvider))]
         [InlineData(typeof(BroadcastReceiver))]
         [InlineData(typeof(UserSpecificReceiver))]
         [InlineData(typeof(FilterSpecificReceiver))]

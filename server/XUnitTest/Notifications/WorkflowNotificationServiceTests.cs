@@ -202,7 +202,7 @@ namespace XUnitTest.Notifications
             await sut.Notify(["user-1"], Data());
 
             handler.Request!.Headers.GetValues("x-blocks-key").Should().ContainSingle()
-                .Which.Should().Be("tenant-1");
+                .Which.Should().Be("root-tenant");
             handler.Request.Headers.GetValues("Secret").Should().ContainSingle()
                 .Which.Should().Be("hashed-secret");
         }

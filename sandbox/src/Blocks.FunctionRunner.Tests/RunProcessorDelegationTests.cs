@@ -19,9 +19,10 @@ namespace Blocks.FunctionRunner.Tests
     /// faked: when the runner redeems the grant beside the envelope, what the sandbox is handed,
     /// that the token never reaches Redis or a log, and that no token never fails a run.
     /// </summary>
+    [Collection("FunctionRunner.Redis.Serial")]
     public sealed class RunProcessorDelegationTests : IAsyncLifetime
     {
-        private const string Tenant = "tenant_delegation_test";
+        private readonly string _tenant = $"tenant_del_{Guid.NewGuid():N}";
         private const string Token = "eyJhbGciOi.delegated_RUNNER.sig7";
         private static readonly string Grant = "dg_" + new string('b', 64);
 
@@ -59,7 +60,7 @@ namespace Blocks.FunctionRunner.Tests
                 await _db.KeyDeleteAsync(
                 [
                     RedisKeys.Run(_runId), RedisKeys.Lease(_runId), RedisKeys.Concurrency(_functionId),
-                    RedisKeys.Result(_runId), RedisKeys.Logs(_runId), RedisKeys.TenantSlots(Tenant),
+                    RedisKeys.Result(_runId), RedisKeys.Logs(_runId), RedisKeys.TenantSlots(_tenant),
                 ]);
             }
             if (_redis is not null) await _redis.DisposeAsync();
@@ -97,9 +98,9 @@ namespace Blocks.FunctionRunner.Tests
         {
             public double Cores => 8;
 
-            public long TotalMemoryBytes => 64L * 1024 * 1024 * 1024;
+            public long TotalMemoryBytes => 1L << 50; // 1 PiB — HostBudget arithmetic must never refuse tests
 
-            public HostSignalSample Sample() => new(0, 0, 0, 64L * 1024 * 1024 * 1024);
+            public HostSignalSample Sample() => new(0, 0, 0, long.MaxValue);
         }
 
         private RunProcessor Processor(ISandbox sandbox, IRunAccessTokenResolver tokens)
@@ -108,7 +109,9 @@ namespace Blocks.FunctionRunner.Tests
             {
                 RunnerId = "test-runner",
                 RunsDir = _runsDir,
-                MaxActiveSandboxes = 4,
+                MaxActiveSandboxes = 32,
+                MaxSandboxesPerTenant = 64,
+                ReservedHostMemoryMb = 0,
             });
             var budget = new HostBudget(options, new RoomyHost(), new SandboxFootprint(), NullLogger<HostBudget>.Instance);
 
@@ -120,13 +123,13 @@ namespace Blocks.FunctionRunner.Tests
             };
         }
 
-        private static string Envelope(
-            string tenant = Tenant, string? userId = "user_1", bool authenticated = true, object? blocks = null)
+        private string Envelope(
+            string? tenant = null, string? userId = "user_1", bool authenticated = true, object? blocks = null)
         {
             var doc = new Dictionary<string, object?>
             {
                 ["run"] = new { id = "r", attempt = 1 },
-                ["context"] = new { tenantId = tenant, userId, isAuthenticated = authenticated },
+                ["context"] = new { tenantId = tenant ?? _tenant, userId, isAuthenticated = authenticated },
                 ["env"] = new { KEY = "{{secret.sec_1}}" },
                 ["maskedEnv"] = new[] { "KEY" },
                 ["input"] = new { },
@@ -136,8 +139,9 @@ namespace Blocks.FunctionRunner.Tests
             return JsonSerializer.Serialize(doc);
         }
 
-        private async Task<RunJob> QueueAsync(string envelope, string? grant, string? tenant = Tenant)
+        private async Task<RunJob> QueueAsync(string envelope, string? grant, string? tenant = null)
         {
+            tenant ??= _tenant;
             var fields = new List<HashEntry>
             {
                 new("envelope", envelope),
@@ -160,8 +164,14 @@ namespace Blocks.FunctionRunner.Tests
 
         private async Task<NameValueEntry[]> ResultEntryAsync()
         {
-            var entries = await _db!.StreamRangeAsync(RedisKeys.ResultsStream, "-", "+");
-            return entries.Select(e => e.Values).Last(v => v.Any(f => f.Name == "runId" && f.Value == _runId));
+            var entries = await _db!.StreamRangeAsync(
+                RedisKeys.ResultsStream, "-", "+", count: 500, messageOrder: Order.Descending);
+            var match = entries
+                .Select(e => e.Values)
+                .FirstOrDefault(v => v.Any(f => f.Name == "runId" && f.Value == _runId));
+            if (match is null)
+                throw new InvalidOperationException($"no results-stream entry for run {_runId}");
+            return match;
         }
 
         private static string? Field(NameValueEntry[] entry, string name) =>
@@ -187,7 +197,7 @@ namespace Blocks.FunctionRunner.Tests
             var disposition = await Processor(sandbox, tokens).ProcessAsync(await QueueAsync(Envelope(), Grant), CancellationToken.None);
 
             disposition.Should().Be(RunProcessor.Disposition.Complete);
-            tokens.Calls.Should().Equal((Tenant, Grant));
+            tokens.Calls.Should().Equal((_tenant, Grant));
             SeenToken(sandbox.EnvelopeContentSeen!).Should().Be(Token);
 
             using var seen = JsonDocument.Parse(sandbox.EnvelopeContentSeen!);

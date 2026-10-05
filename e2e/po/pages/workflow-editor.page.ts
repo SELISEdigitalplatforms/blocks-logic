@@ -47,11 +47,15 @@ export class WorkflowEditorPage {
 
   // ---- Editor view content -------------------------------------------------
 
-  /** Either "Published" or "Unpublished" badge visible. */
+  /**
+   * Editor header publish state. The literal Published/Unpublished label was
+   * removed from the details chrome; the Publish control covers the same area.
+   */
   get statusBadge(): Locator {
     return this.page
-      .getByText("Published", { exact: true })
-      .or(this.page.getByText("Unpublished", { exact: true }));
+      .locator("main, body")
+      .getByRole("button", { name: /^Publish/ })
+      .first();
   }
 
   /** "Last saved: …" label or "Not saved yet" placeholder. */

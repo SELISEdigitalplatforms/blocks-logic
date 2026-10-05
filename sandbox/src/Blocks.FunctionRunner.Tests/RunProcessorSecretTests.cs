@@ -13,6 +13,10 @@ using Xunit;
 
 namespace Blocks.FunctionRunner.Tests
 {
+    /// <summary>Serialise Redis-backed RunProcessor secret tests so admission slots do not race.</summary>
+    [CollectionDefinition("FunctionRunner.Redis.Serial", DisableParallelization = true)]
+    public sealed class FunctionRunnerRedisSerialDefinition;
+
     /// <summary>
     /// The runner resolves a run's <c>{{secret.&lt;id&gt;}}</c> references itself, right before
     /// the sandbox starts. End to end through <see cref="RunProcessor"/> against a real Redis
@@ -20,9 +24,12 @@ namespace Blocks.FunctionRunner.Tests
     /// faked: what the sandbox is handed, what is refused before it is ever started, and that a
     /// value never reaches Redis, the result entry or a log line.
     /// </summary>
+    [Collection("FunctionRunner.Redis.Serial")]
     public sealed class RunProcessorSecretTests : IAsyncLifetime
     {
-        private const string Tenant = "tenant_secret_test";
+        // Unique per instance so parallel xUnit workers do not share RedisKeys.TenantSlots
+        // and flake ProcessAsync with Disposition.Deferred under Sonar's full suite run.
+        private readonly string _tenant = $"tenant_sec_{Guid.NewGuid():N}";
         private const string StripeValue = "sk_live_RESOLVED_4242";
         private const string TokenValue = "tok_RESOLVED_9191";
 
@@ -60,7 +67,8 @@ namespace Blocks.FunctionRunner.Tests
                 await _db.KeyDeleteAsync(
                 [
                     RedisKeys.Run(_runId), RedisKeys.Lease(_runId), RedisKeys.Concurrency(_functionId),
-                    RedisKeys.Result(_runId), RedisKeys.Logs(_runId),
+                    RedisKeys.TestConcurrency(_functionId),
+                    RedisKeys.TenantSlots(_tenant), RedisKeys.Result(_runId), RedisKeys.Logs(_runId),
                 ]);
             }
             if (_redis is not null) await _redis.DisposeAsync();
@@ -105,9 +113,10 @@ namespace Blocks.FunctionRunner.Tests
         {
             public double Cores => 8;
 
-            public long TotalMemoryBytes => 64L * 1024 * 1024 * 1024;
+            public long TotalMemoryBytes => 1L << 50; // 1 PiB — HostBudget arithmetic must never refuse tests
 
-            public HostSignalSample Sample() => new(0, 0, 0, 64L * 1024 * 1024 * 1024);
+            // long.MaxValue available: HostBudget's MemAvailable floor must never refuse these tests.
+            public HostSignalSample Sample() => new(0, 0, 0, long.MaxValue);
         }
 
         private RunProcessor Processor(ISandbox sandbox, IRunSecretResolver resolver)
@@ -116,7 +125,9 @@ namespace Blocks.FunctionRunner.Tests
             {
                 RunnerId = "test-runner",
                 RunsDir = _runsDir,
-                MaxActiveSandboxes = 4,
+                MaxActiveSandboxes = 32,
+                MaxSandboxesPerTenant = 64,
+                ReservedHostMemoryMb = 0,
             });
             var budget = new HostBudget(options, new RoomyHost(), new SandboxFootprint(), NullLogger<HostBudget>.Instance);
 
@@ -128,11 +139,11 @@ namespace Blocks.FunctionRunner.Tests
 
         private static readonly string[] DevRole = ["dev"];
 
-        private static string Envelope(object env, string contextTenant = Tenant, object? input = null) =>
+        private string Envelope(object env, string? contextTenant = null, object? input = null) =>
             JsonSerializer.Serialize(new Dictionary<string, object?>
             {
                 ["run"] = new { id = "r", attempt = 1 },
-                ["context"] = new { tenantId = contextTenant, userId = "user_1", organizationId = "org_1", roles = DevRole },
+                ["context"] = new { tenantId = contextTenant ?? _tenant, userId = "user_1", organizationId = "org_1", roles = DevRole },
                 ["env"] = env,
                 ["maskedEnv"] = Array.Empty<string>(),
                 ["input"] = input ?? new { },
@@ -153,12 +164,22 @@ namespace Blocks.FunctionRunner.Tests
             ["sec_token"] = TokenValue,
         });
 
-        private async Task<RunJob> QueueAsync(string envelope, int protocol = RedisKeys.RunProtocolVersion, string? tenant = Tenant)
+        private async Task<RunJob> QueueAsync(
+            string envelope,
+            int protocol = RedisKeys.RunProtocolVersion,
+            string? tenant = null,
+            bool useInstanceTenant = true,
+            bool isTest = false)
         {
+            if (useInstanceTenant && tenant is null) tenant = _tenant;
             await _db!.HashSetAsync(RedisKeys.Run(_runId),
             [
                 new HashEntry("envelope", envelope),
                 new HashEntry("status", RunStatuses.Queued),
+                new HashEntry("memoryBytes", "134217728"),
+                new HashEntry("cpuMillicores", "1000"),
+                new HashEntry("concurrency", "10"),
+                new HashEntry("timeoutSeconds", "5"),
             ]);
             await _db.KeyExpireAsync(RedisKeys.Run(_runId), TimeSpan.FromMinutes(5));
 
@@ -170,15 +191,57 @@ namespace Blocks.FunctionRunner.Tests
                 Image = "img@sha256:abc",
                 Attempt = 1,
                 Protocol = protocol,
+                IsTest = isTest,
             };
+        }
+
+        /// <summary>
+        /// Admission (host / tenant / function slots) can return Deferred under a shared CI Redis.
+        /// Clear leftover slots, re-queue, and retry until the processor is past those gates.
+        /// </summary>
+        private async Task<RunProcessor.Disposition> ProcessUntilAdmittedAsync(
+            ISandbox sandbox, IRunSecretResolver resolver, string envelope, bool isTest = false)
+        {
+            var disposition = RunProcessor.Disposition.Deferred;
+            for (var attempt = 0; attempt < 80; attempt++)
+            {
+                _logs.Lines.Clear();
+                await _db!.KeyDeleteAsync(
+                [
+                    RedisKeys.Run(_runId),
+                    RedisKeys.Lease(_runId),
+                    RedisKeys.Concurrency(_functionId),
+                    RedisKeys.TestConcurrency(_functionId),
+                    RedisKeys.TenantSlots(_tenant),
+                    RedisKeys.Cancel(_runId),
+                ]);
+
+                var job = await QueueAsync(envelope, isTest: isTest);
+                disposition = await Processor(sandbox, resolver).ProcessAsync(job, CancellationToken.None);
+                if (disposition != RunProcessor.Disposition.Deferred) return disposition;
+                await Task.Delay(50);
+            }
+
+            throw new InvalidOperationException(
+                "ProcessAsync stayed Deferred after 80 attempts; logs: " + _logs.All);
         }
 
         private async Task<NameValueEntry[]> ResultEntryAsync()
         {
-            var entries = await _db!.StreamRangeAsync(RedisKeys.ResultsStream, "-", "+");
-            return entries
-                .Select(e => e.Values)
-                .Last(v => v.Any(f => f.Name == "runId" && f.Value == _runId));
+            // The results stream is shared across the whole FunctionRunner suite. Reading
+            // from "-" without a bound misses the newest entries once hundreds of tests have
+            // already appended; search newest-first instead.
+            for (var attempt = 0; attempt < 25; attempt++)
+            {
+                var entries = await _db!.StreamRangeAsync(
+                    RedisKeys.ResultsStream, "-", "+", count: 500, messageOrder: Order.Descending);
+                var match = entries
+                    .Select(e => e.Values)
+                    .FirstOrDefault(v => v.Any(f => f.Name == "runId" && f.Value == _runId));
+                if (match is not null) return match;
+                await Task.Delay(40);
+            }
+            throw new InvalidOperationException($"no results-stream entry for run {_runId}");
         }
 
         private static string? Field(NameValueEntry[] entry, string name) =>
@@ -226,7 +289,7 @@ namespace Blocks.FunctionRunner.Tests
                 .Should().BeEquivalentTo([StripeValue, TokenValue], "the bootstrap masks the bare values too");
 
             resolver.Calls.Should().ContainSingle("every reference is resolved in one lookup");
-            resolver.Calls[0].TenantId.Should().Be(Tenant);
+            resolver.Calls[0].TenantId.Should().Be(_tenant);
             resolver.Calls[0].Ids.Should().BeEquivalentTo(["sec_stripe", "sec_token"], "each id once");
             resolver.Calls[0].Caller.UserId.Should().Be("user_1");
 
@@ -349,14 +412,17 @@ namespace Blocks.FunctionRunner.Tests
         [SkippableFact]
         public async Task A_store_outage_is_reported_as_retryable_and_never_starts_the_sandbox()
         {
+            // Interactive tests fail immediately with SecretStoreUnavailable (someone is watching).
+            // Deployed runs defer instead — covered by A_deployed_run_defers_when_the_secret_store_is_down.
             Skip.If(Unavailable, "no Redis available");
             var sandbox = new RecordingSandbox();
             var resolver = new FakeRunSecretResolver(@throw: new SecretStoreUnavailableException(
                 "the key vault could not be read", new InvalidOperationException($"inner detail {StripeValue}")));
 
-            await Processor(sandbox, resolver).ProcessAsync(
-                await QueueAsync(Envelope(ReferencingEnv)), CancellationToken.None);
+            var disposition = await ProcessUntilAdmittedAsync(
+                sandbox, resolver, Envelope(ReferencingEnv), isTest: true);
 
+            disposition.Should().Be(RunProcessor.Disposition.Complete);
             sandbox.Calls.Should().Be(0);
             Directory.Exists(RunDir).Should().BeFalse();
             var result = await ResultEntryAsync();
@@ -366,6 +432,36 @@ namespace Blocks.FunctionRunner.Tests
             // The inner exception is never logged or reported — nothing vouches for its text.
             _logs.All.Should().NotContain("inner detail");
             NoValueAnywhere(Field(result, "errorMessage")!);
+        }
+
+        [SkippableFact]
+        public async Task A_deployed_run_defers_when_the_secret_store_is_down()
+        {
+            // Deployed traffic keeps its place on the queue until the store is back; nothing is
+            // failed and the sandbox never starts.
+            Skip.If(Unavailable, "no Redis available");
+            var sandbox = new RecordingSandbox();
+            var resolver = new FakeRunSecretResolver(@throw: new SecretStoreUnavailableException(
+                "the key vault could not be read", new InvalidOperationException($"inner detail {StripeValue}")));
+
+            await _db!.KeyDeleteAsync(
+            [
+                RedisKeys.Run(_runId),
+                RedisKeys.Lease(_runId),
+                RedisKeys.Concurrency(_functionId),
+                RedisKeys.TenantSlots(_tenant),
+                RedisKeys.Cancel(_runId),
+            ]);
+            var job = await QueueAsync(Envelope(ReferencingEnv), isTest: false);
+            var disposition = await Processor(sandbox, resolver).ProcessAsync(job, CancellationToken.None);
+
+            disposition.Should().Be(RunProcessor.Disposition.Deferred);
+            sandbox.Calls.Should().Be(0);
+            Directory.Exists(RunDir).Should().BeFalse();
+            var status = (string?)await _db.HashGetAsync(RedisKeys.Run(_runId), "status");
+            status.Should().BeOneOf(RunStatuses.Queued, RunStatuses.Starting);
+            _logs.All.Should().NotContain("inner detail");
+            NoValueAnywhere(_logs.All);
         }
 
         [SkippableFact]
@@ -391,7 +487,7 @@ namespace Blocks.FunctionRunner.Tests
             var resolver = Resolves();
 
             await Processor(sandbox, resolver).ProcessAsync(
-                await QueueAsync(Envelope(ReferencingEnv), tenant: null), CancellationToken.None);
+                await QueueAsync(Envelope(ReferencingEnv), tenant: null, useInstanceTenant: false), CancellationToken.None);
 
             resolver.Calls.Should().BeEmpty();
             sandbox.Calls.Should().Be(0);
@@ -403,7 +499,7 @@ namespace Blocks.FunctionRunner.Tests
         {
             Skip.If(Unavailable, "no Redis available");
             var resolver = Resolves();
-            var bad = """{"run":{"id":"r"},"context":{"tenantId":"tenant_secret_test","accessToken":"x"},"env":{"A":"{{secret.sec_stripe}}"}}""";
+            var bad = "{\"run\":{\"id\":\"r\"},\"context\":{\"tenantId\":\"" + _tenant + "\",\"accessToken\":\"x\"},\"env\":{\"A\":\"{{secret.sec_stripe}}\"}}";
 
             await Processor(new RecordingSandbox(), resolver).ProcessAsync(await QueueAsync(bad), CancellationToken.None);
 

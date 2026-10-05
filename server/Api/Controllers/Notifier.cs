@@ -1,4 +1,4 @@
-﻿using Blocks.Genesis;
+using Blocks.Genesis;
 using DomainService.Notification;
 using DomainService.Shared;
 using Microsoft.AspNetCore.Authorization;
@@ -85,6 +85,38 @@ namespace Api.Controllers
         public async Task<GetNotificationsResponse> GetNotifications([FromQuery] GetNotificationsRequest request)
         {
             return await _notificationService.GetNotificationsAsync(request);
+        }
+
+        /// <summary><c>POST</c> — registers (upserts) a browser Web Push subscription for the caller.</summary>
+        [HttpPost]
+        [Authorize]
+        public async Task<BaseResponse> RegisterWebPushSubscription([FromBody] RegisterWebPushSubscriptionRequest request)
+        {
+            return await _notificationService.RegisterWebPushSubscriptionAsync(request);
+        }
+
+        /// <summary><c>POST</c> — removes a browser Web Push subscription for the caller (no-op if missing).</summary>
+        [HttpPost]
+        [Authorize]
+        public async Task<BaseResponse> UnregisterWebPushSubscription([FromBody] UnregisterWebPushSubscriptionRequest request)
+        {
+            return await _notificationService.UnregisterWebPushSubscriptionAsync(request);
+        }
+
+        /// <summary><c>GET</c> — returns the tenant VAPID public key, creating a keypair on first call.</summary>
+        [HttpGet]
+        [Authorize]
+        public async Task<GetWebPushPublicKeyResponse> GetWebPushPublicKey()
+        {
+            return await _notificationService.GetWebPushPublicKeyAsync();
+        }
+
+        /// <summary><c>POST</c> — rotates the tenant VAPID keypair and clears all Web Push subscriptions.</summary>
+        [HttpPost]
+        [Authorize]
+        public async Task<BaseResponse> RotateWebPushVapidKeys()
+        {
+            return await _notificationService.RotateWebPushVapidKeysAsync();
         }
     }
 }

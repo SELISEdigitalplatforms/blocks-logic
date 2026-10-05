@@ -13,6 +13,7 @@ FROM node:22-alpine AS client
 WORKDIR /src
 
 COPY client/package.json client/package-lock.json ./client/
+COPY client/vendor ./client/vendor
 RUN cd client && npm ci --no-audit --no-fund
 
 COPY client ./client
@@ -64,3 +65,6 @@ RUN chown -R app:app /app
 USER app
 
 ENTRYPOINT ["dotnet", "Api.dll"]
+
+# Satisfy DS-0026: container liveness probe (API listens on ASPNETCORE_URLS / 8080 by convention).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 CMD wget -q -O /dev/null http://127.0.0.1:5000/ || exit 1

@@ -14,22 +14,29 @@ namespace DomainService.Notification
         private readonly INotificationRepository _notificationRepository;
         private readonly IValidator<Subscription> _subscriptionValidator;
         private readonly IValidator<NotifyRequest> _notifyRequestValidator;
+        private readonly IValidator<RegisterWebPushSubscriptionRequest> _registerWebPushValidator;
+        private readonly IValidator<UnregisterWebPushSubscriptionRequest> _unregisterWebPushValidator;
         private readonly ILogger<NotificationService> _logger;
         private readonly INotifierServiceFactory _notifierFactory;
         private readonly IConfigurationRepository _configurationRepository;
+        private readonly IWebPushVapidKeyService _vapidKeyService;
 
-        public NotificationService(INotificationRepository notificationRepository,
-                                   IValidator<Subscription> validator,
-                                   IValidator<NotifyRequest> notifyRequestValidator,
-                                   ILogger<NotificationService> logger,
-                                   INotifierServiceFactory notifierFactory,
-                                   IConfigurationRepository configurationRepository)
+        public NotificationService(
+            INotificationRepository notificationRepository,
+            NotificationServiceValidators validators,
+            ILogger<NotificationService> logger,
+            INotifierServiceFactory notifierFactory,
+            IConfigurationRepository configurationRepository,
+            IWebPushVapidKeyService vapidKeyService)
         {
             _notificationRepository = notificationRepository;
-            _subscriptionValidator = validator;
-            _notifyRequestValidator = notifyRequestValidator;
+            _subscriptionValidator = validators.Subscription;
+            _notifyRequestValidator = validators.NotifyRequest;
+            _registerWebPushValidator = validators.RegisterWebPush;
+            _unregisterWebPushValidator = validators.UnregisterWebPush;
             _notifierFactory = notifierFactory;
             _configurationRepository = configurationRepository;
+            _vapidKeyService = vapidKeyService;
             _logger = logger;
         }
 
@@ -84,7 +91,27 @@ namespace DomainService.Notification
             }
 
             var configuration = await _configurationRepository.GetByNameAsync(notifyRequest.ConfigurationName);
-            await SendNotificationAsync(configuration, notifyRequest);
+            if (configuration is null)
+            {
+                return new BaseResponse
+                {
+                    IsSuccess = false,
+                    Errors = new Dictionary<string, string> { { "configurationName", "Configuration not found." } }
+                };
+            }
+
+            try
+            {
+                await SendNotificationAsync(configuration, notifyRequest);
+            }
+            catch (WebPushQueueUnavailableException)
+            {
+                return new BaseResponse
+                {
+                    IsSuccess = false,
+                    Errors = new Dictionary<string, string> { { WebPushConstants.QueueErrorKey, WebPushConstants.QueueErrorMessage } }
+                };
+            }
 
             //TODO
             //await PublishEventForNotification(notifyRequest);
@@ -247,6 +274,84 @@ namespace DomainService.Notification
         public async Task<GetNotificationsResponse> GetNotificationsAsync(GetNotificationsRequest request)
         {
             return await _notificationRepository.GetNotificationsAsync(request);
+        }
+
+        public async Task<BaseResponse> RegisterWebPushSubscriptionAsync(RegisterWebPushSubscriptionRequest request)
+        {
+            var validationResult = await _registerWebPushValidator.ValidateAsync(request);
+            if (!validationResult.IsValid)
+            {
+                return new BaseResponse
+                {
+                    IsSuccess = false,
+                    Errors = validationResult.Errors.ToDictionary(e => e.PropertyName, e => e.ErrorMessage)
+                };
+            }
+
+            var userId = BlocksContext.GetContext()?.UserId ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return new BaseResponse
+                {
+                    IsSuccess = false,
+                    Errors = new Dictionary<string, string> { { "userId", "User context is required." } }
+                };
+            }
+
+            await _notificationRepository.DeleteAsync<WebPushSubscription>(
+                s => s.UserId == userId && s.Endpoint == request.Endpoint);
+
+            await _notificationRepository.SaveAsync(new WebPushSubscription
+            {
+                Id = Guid.NewGuid().ToString(),
+                UserId = userId,
+                Endpoint = request.Endpoint,
+                Keys = new WebPushSubscriptionKeys
+                {
+                    P256dh = request.Keys.P256dh,
+                    Auth = request.Keys.Auth,
+                },
+                ExpirationTime = request.ExpirationTime,
+                UserAgent = request.UserAgent,
+                CreatedTime = DateTime.UtcNow,
+            });
+
+            return new BaseResponse { IsSuccess = true };
+        }
+
+        public async Task<BaseResponse> UnregisterWebPushSubscriptionAsync(UnregisterWebPushSubscriptionRequest request)
+        {
+            var validationResult = await _unregisterWebPushValidator.ValidateAsync(request);
+            if (!validationResult.IsValid)
+            {
+                return new BaseResponse
+                {
+                    IsSuccess = false,
+                    Errors = validationResult.Errors.ToDictionary(e => e.PropertyName, e => e.ErrorMessage)
+                };
+            }
+
+            var userId = BlocksContext.GetContext()?.UserId ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(userId))
+            {
+                await _notificationRepository.DeleteAsync<WebPushSubscription>(
+                    s => s.UserId == userId && s.Endpoint == request.Endpoint);
+            }
+
+            return new BaseResponse { IsSuccess = true };
+        }
+
+        public async Task<GetWebPushPublicKeyResponse> GetWebPushPublicKeyAsync()
+        {
+            var publicKey = await _vapidKeyService.GetOrCreatePublicKeyAsync();
+            return new GetWebPushPublicKeyResponse { PublicKey = publicKey };
+        }
+
+        public async Task<BaseResponse> RotateWebPushVapidKeysAsync()
+        {
+            await _vapidKeyService.RotateAsync();
+            await _notificationRepository.DeleteAsync<WebPushSubscription>(_ => true);
+            return new BaseResponse { IsSuccess = true };
         }
     }
 }

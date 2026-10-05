@@ -1,4 +1,4 @@
-﻿using DomainService.Configuration.Services;
+using DomainService.Configuration.Services;
 using DomainService.Configuration.Validators;
 using DomainService.Notification;
 using DomainService.Shared;
@@ -14,6 +14,7 @@ namespace DomainService.Utilities
             #region Services
             serviceCollection.AddSignalR(); 
 
+            serviceCollection.AddSingleton<NotificationServiceValidators>();
             serviceCollection.AddSingleton<INotificationService, NotificationService>();
             serviceCollection.AddSingleton<INotificationRepository, NotificationRepository>();
             serviceCollection.AddSingleton<INotifierServiceFactory, NotifierServiceFactory>();
@@ -23,6 +24,11 @@ namespace DomainService.Utilities
 
             serviceCollection.AddSingleton<FirebaseNotificationServiceProvider>();
             serviceCollection.AddSingleton<SignalRNotificationServiceProvider>();
+            serviceCollection.AddSingleton<WebPushNotificationServiceProvider>();
+            serviceCollection.AddSingleton<IWebPushVapidKeyService, WebPushVapidKeyService>();
+            serviceCollection.AddSingleton<IWebPushSender, WebPushSender>();
+            serviceCollection.AddSingleton<IWebPushDeliveryService, WebPushDeliveryService>();
+            serviceCollection.AddSingleton<IWebPushDeliveryDispatcher, WebPushDeliveryDispatcher>();
             serviceCollection.AddSingleton<BroadcastReceiver>();
             serviceCollection.AddSingleton<UserSpecificReceiver>();
             serviceCollection.AddSingleton<FilterSpecificReceiver>();
@@ -33,6 +39,8 @@ namespace DomainService.Utilities
             serviceCollection.AddTransient<IValidator<Subscription>, AddSubscriptionRequestValidator>();
             serviceCollection.AddTransient<IValidator<NotifyRequest>, NotifyRequestValidator>();
             serviceCollection.AddTransient<IValidator<Configuration.SaveConfigurationRequest>, ConfigurationValidator>();
+            serviceCollection.AddTransient<IValidator<RegisterWebPushSubscriptionRequest>, RegisterWebPushSubscriptionRequestValidator>();
+            serviceCollection.AddTransient<IValidator<UnregisterWebPushSubscriptionRequest>, UnregisterWebPushSubscriptionRequestValidator>();
             #endregion
         }
     }

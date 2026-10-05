@@ -38,8 +38,10 @@ export function deriveOsBaseUrlFromLogic(logicBaseUrl: string): string | undefin
     return undefined
   }
 
-  if (/^dev-logic\./i.test(url.hostname)) {
-    url.hostname = url.hostname.replace(/^dev-logic\./i, "dev-os.")
+  // Shared Blocks OS for both `dev-logic.` and PR hosts `dev-logic-{n}.`
+  // (PR OS previews like dev-os-293 are not always provisioned.)
+  if (/^dev-logic(-\d+)?\./i.test(url.hostname)) {
+    url.hostname = url.hostname.replace(/^dev-logic(-\d+)?\./i, "dev-os.")
     return stripTrailingSlash(url.origin)
   }
 

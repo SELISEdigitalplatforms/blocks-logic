@@ -1,4 +1,5 @@
 using Blocks.Genesis;
+using DomainService.Notification;
 using Mail.DomainService.Utilities;
 using Scheduler.DomainService.Utils;
 
@@ -59,7 +60,8 @@ namespace Workflow.DomainService.Utils
                                              ConsumerSubscription.BindToQueue(LogicMailQueueName),
                                              ConsumerSubscription.BindToQueue(CommunicationConstants.MailStatusQueueName),
                                              ConsumerSubscription.BindToQueue(MigrationCompletionTopic),
-                                             ConsumerSubscription.BindToQueue(SchedulerConstants.ScheduleJobRegistryQueueName)],
+                                             ConsumerSubscription.BindToQueue(SchedulerConstants.ScheduleJobRegistryQueueName),
+                                             ConsumerSubscription.BindToQueue(WebPushConstants.DeliveryQueueName)],
 
                 }
             };
@@ -71,7 +73,7 @@ namespace Workflow.DomainService.Utils
             {
                 AzureServiceBusConfiguration = new AzureServiceBusConfiguration
                 {
-                    Queues = [NodeExecutionQueue, EmailTriggerQueue, DataTriggerQueue, SchedulerTriggerQueue, WorkflowImportQueue, LogicMailQueueName, CommunicationConstants.MailStatusQueueName, SchedulerConstants.ScheduleJobRegistryQueueName],
+                    Queues = [NodeExecutionQueue, EmailTriggerQueue, DataTriggerQueue, SchedulerTriggerQueue, WorkflowImportQueue, LogicMailQueueName, CommunicationConstants.MailStatusQueueName, SchedulerConstants.ScheduleJobRegistryQueueName, WebPushConstants.DeliveryQueueName],
                     Topics = [MigrationCompletionTopic]
                 }
             };

@@ -18,10 +18,13 @@ namespace Blocks.FunctionRunner.Tests
     /// sandbox and image resolver faked, because the lease and concurrency Lua are part of the
     /// path and a fake Redis would only re-implement them.
     /// </summary>
+    [Collection("FunctionRunner.Redis.Serial")]
     public sealed class RunProcessorEnvelopeTests : IAsyncLifetime
     {
         private ConnectionMultiplexer? _redis;
         private IDatabase? _db;
+        // Unique per instance: shared "tenant_test" filled TenantSlots under parallel CI.
+        private readonly string _tenant = $"tenant_env_{Guid.NewGuid():N}";
         private readonly string _runsDir = Path.Combine(Path.GetTempPath(), $"fn-runs-{Guid.NewGuid():N}");
         private readonly string _runId = $"run_test_{Guid.NewGuid():N}";
         private readonly string _functionId = $"fn_test_{Guid.NewGuid():N}";
@@ -53,7 +56,7 @@ namespace Blocks.FunctionRunner.Tests
                 await _db.KeyDeleteAsync(
                 [
                     RedisKeys.Run(_runId), RedisKeys.Lease(_runId), RedisKeys.Concurrency(_functionId),
-                    RedisKeys.Result(_runId), RedisKeys.Logs(_runId),
+                    RedisKeys.TenantSlots(_tenant), RedisKeys.Result(_runId), RedisKeys.Logs(_runId),
                 ]);
             }
             if (_redis is not null) await _redis.DisposeAsync();
@@ -94,9 +97,9 @@ namespace Blocks.FunctionRunner.Tests
         {
             public double Cores => 8;
 
-            public long TotalMemoryBytes => 64L * 1024 * 1024 * 1024;
+            public long TotalMemoryBytes => 1L << 50; // 1 PiB — HostBudget arithmetic must never refuse tests
 
-            public HostSignalSample Sample() => new(0, 0, 0, 64L * 1024 * 1024 * 1024);
+            public HostSignalSample Sample() => new(0, 0, 0, long.MaxValue);
         }
 
         private RunProcessor Processor(ISandbox sandbox, Action<string, int>? handoff = null)
@@ -105,7 +108,9 @@ namespace Blocks.FunctionRunner.Tests
             {
                 RunnerId = "test-runner",
                 RunsDir = _runsDir,
-                MaxActiveSandboxes = 4,
+                MaxActiveSandboxes = 32,
+                MaxSandboxesPerTenant = 64,
+                ReservedHostMemoryMb = 0,
             });
             var budget = new HostBudget(options, new RoomyHost(), new SandboxFootprint(), NullLogger<HostBudget>.Instance);
 
@@ -130,7 +135,7 @@ namespace Blocks.FunctionRunner.Tests
             {
                 RunId = _runId,
                 FunctionId = _functionId,
-                TenantId = "tenant_test",
+                TenantId = _tenant,
                 Image = "img@sha256:abc",
                 Attempt = 3,
                 Deliveries = 2,
@@ -148,10 +153,14 @@ namespace Blocks.FunctionRunner.Tests
 
         private async Task<NameValueEntry[]> ResultEntryAsync()
         {
-            var entries = await _db!.StreamRangeAsync(RedisKeys.ResultsStream, "-", "+");
-            return entries
+            var entries = await _db!.StreamRangeAsync(
+                RedisKeys.ResultsStream, "-", "+", count: 500, messageOrder: Order.Descending);
+            var match = entries
                 .Select(e => e.Values)
-                .Last(v => v.Any(f => f.Name == "runId" && f.Value == _runId));
+                .FirstOrDefault(v => v.Any(f => f.Name == "runId" && f.Value == _runId));
+            if (match is null)
+                throw new InvalidOperationException($"no results-stream entry for run {_runId}");
+            return match;
         }
 
         private static string? Field(NameValueEntry[] entry, string name) =>

@@ -1,6 +1,11 @@
+const FORBIDDEN_PATH_KEYS = new Set(["__proto__", "prototype", "constructor"])
+
+const isSafePathPart = (part: string): boolean => part.length > 0 && !FORBIDDEN_PATH_KEYS.has(part)
+
 export const getValueByPath = (data: Record<string, unknown>, path: string): unknown => {
   return path.split(".").reduce<unknown>((acc, part) => {
-    if (acc && typeof acc === "object" && part in acc) {
+    if (!isSafePathPart(part)) return undefined;
+    if (acc && typeof acc === "object" && Object.hasOwn(acc, part)) {
       return (acc as Record<string, unknown>)[part];
     }
     return undefined;
@@ -18,10 +23,16 @@ export const setValueByPath = (
 
   for (let i = 0; i < keys.length - 1; i++) {
     const key = keys[i];
-    current[key] = { ...(current[key] || {}) } as Record<string, unknown>;
-    current = current[key] as Record<string, unknown>;
+    if (!isSafePathPart(key)) return data;
+    const next = (current[key] && typeof current[key] === "object"
+      ? { ...(current[key] as Record<string, unknown>) }
+      : {}) as Record<string, unknown>;
+    current[key] = next;
+    current = next;
   }
 
-  current[keys[keys.length - 1]] = value;
+  const last = keys.at(-1);
+  if (last === undefined || !isSafePathPart(last)) return data;
+  current[last] = value;
   return result;
 };

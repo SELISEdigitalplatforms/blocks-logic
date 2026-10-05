@@ -46,11 +46,15 @@ namespace XUnitTest.Notifications
 
             _sut = new NotificationService(
                 _repo.Object,
-                _subscriptionValidator.Object,
-                _notifyValidator.Object,
+                new NotificationServiceValidators(
+                    _subscriptionValidator.Object,
+                    _notifyValidator.Object,
+                    new RegisterWebPushSubscriptionRequestValidator(),
+                    new UnregisterWebPushSubscriptionRequestValidator()),
                 NullLogger<NotificationService>.Instance,
                 _notifierFactory.Object,
-                _configRepo.Object);
+                _configRepo.Object,
+                Mock.Of<IWebPushVapidKeyService>());
         }
 
         public void Dispose()
@@ -156,6 +160,30 @@ namespace XUnitTest.Notifications
             _configRepo.Verify(c => c.GetByNameAsync("welcome-email"), Times.Once);
             _notifierFactory.Verify(f => f.GetNotifierServiceProvider(NotifierTypes.SignalR), Times.Once);
             _notifier.Verify(n => n.Notify(request, It.IsAny<NotificationConfiguration>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task NotifyAsync_WhenTheDeliveryQueueIsUnavailable_ReturnsTheQueueError_C2()
+        {
+            _notifier.Setup(n => n.Notify(It.IsAny<NotifyRequest>(), It.IsAny<NotificationConfiguration>()))
+                     .ThrowsAsync(new WebPushQueueUnavailableException());
+
+            var result = await _sut.NotifyAsync(new NotifyRequest { ConfigurationName = "web-push" });
+
+            result.IsSuccess.Should().BeFalse();
+            result.Errors.Should().ContainKey("delivery")
+                  .WhoseValue.Should().Be("Unable to queue notification for delivery.");
+        }
+
+        [Fact]
+        public async Task NotifyAsync_DoesNotSwallowOtherProviderExceptions()
+        {
+            _notifier.Setup(n => n.Notify(It.IsAny<NotifyRequest>(), It.IsAny<NotificationConfiguration>()))
+                     .ThrowsAsync(new InvalidOperationException("boom"));
+
+            var act = () => _sut.NotifyAsync(new NotifyRequest { ConfigurationName = "cfg" });
+
+            await act.Should().ThrowAsync<InvalidOperationException>();
         }
 
         [Fact]
