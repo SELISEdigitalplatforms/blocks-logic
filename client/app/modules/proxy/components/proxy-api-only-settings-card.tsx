@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { type UseFormReturn, useWatch } from "react-hook-form";
+import { type FieldPathValue, type UseFormReturn, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui-kits/button/button";
 import { Card, CardContent } from "@/components/ui-kits/card/card";
 import { ProxyFormValues } from "../types";
@@ -7,6 +7,8 @@ import { ProxyFormValues } from "../types";
 type Props = {
   form: UseFormReturn<ProxyFormValues>;
 };
+
+type ApiOnlyField = "responseMode" | "responseInclude" | "bodyMerge" | "bodyMode" | "methodConfigs";
 
 const Codes = ({ items }: { items: string[] }) => (
   <>
@@ -56,9 +58,9 @@ export const ProxyApiOnlySettingsCard = ({ form }: Props) => {
   const filterOn = responseMode === "select";
   if (!filterOn && !bodyKeys.length && !overrides.length) return null;
 
-  const clear = <K extends "responseMode" | "responseInclude" | "bodyMerge" | "bodyMode" | "methodConfigs">(
+  const clear = <K extends ApiOnlyField>(
     name: K,
-    value: ProxyFormValues[K],
+    value: FieldPathValue<ProxyFormValues, K>,
   ) => form.setValue(name, value, { shouldDirty: true });
 
   return (
