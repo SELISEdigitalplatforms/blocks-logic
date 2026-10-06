@@ -114,6 +114,14 @@ function describe(err) {
 
 // --------------------------------------------------------------------- ctx ----
 
+/**
+ * Work handed to ctx.waitUntil in single-run mode. Reuse mode has its own (reuse.mjs); this keeps
+ * the same API in every mode — Test runs and workflow steps run single-run, and code written for a
+ * reused sandbox must not throw "ctx.waitUntil is not a function" there. The answer is written
+ * first; the process then waits for these, within what is left of the time limit, before it exits.
+ */
+const pendingWaits = [];
+
 function buildContext(envelope) {
   const log = Object.freeze({
     debug: (msg, data) => writer.log('debug', msg, data),
@@ -128,6 +136,9 @@ function buildContext(envelope) {
     env: envelope.env,
     run: envelope.run,
     log,
+    waitUntil(promise) {
+      pendingWaits.push(Promise.resolve(promise));
+    },
   });
 }
 
@@ -251,6 +262,7 @@ async function main() {
   writer.started();
 
   const timeoutMs = envelope.limits.timeoutMs;
+  const handlerStartedAt = Date.now();
   let timer = null;
   const deadline = timeoutMs
     ? new Promise((_, reject) => {
@@ -289,6 +301,29 @@ async function main() {
       code: CODE.RESULT_NOT_SERIALIZABLE,
       message: 'the returned value cannot be serialized to JSON (circular reference, BigInt or a throwing toJSON)',
     });
+  }
+
+  // ctx.waitUntil work: the answer is already out; give it what is left of the time limit,
+  // including work added from inside it, then leave. A rejection is the function's own concern —
+  // the answer stands — so it is logged, not turned into a failure.
+  let settled = 0;
+  while (settled < pendingWaits.length) {
+    const batch = pendingWaits.slice(settled);
+    settled = pendingWaits.length;
+    const all = Promise.allSettled(batch).then((outcomes) => {
+      for (const o of outcomes) {
+        if (o.status === 'rejected') writer.log('warn', `ctx.waitUntil work failed: ${describe(o.reason).message}`);
+      }
+      return 'done';
+    });
+    const rest = timeoutMs ? timeoutMs - (Date.now() - handlerStartedAt) : null;
+    const outcome = rest === null
+      ? await all
+      : await Promise.race([all, new Promise((r) => { const t = _setTimeout(() => r('late'), Math.max(0, rest)); t.unref?.(); })]);
+    if (outcome === 'late') {
+      writer.log('warn', 'ctx.waitUntil work did not finish within the time limit and was stopped');
+      break;
+    }
   }
   return finish(EXIT.OK);
 }

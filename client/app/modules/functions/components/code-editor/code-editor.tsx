@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type MutableRefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import Editor, { useMonaco, type Monaco, type OnMount } from "@monaco-editor/react";
 import { useTheme } from "@seliseblocks/genesis-os/hooks";
 import {
@@ -6,6 +6,10 @@ import {
   buildCtxCompletions,
   buildFunctionTypeDefs,
 } from "../../utils/function-types";
+import { findReuseHints } from "../../utils/reuse-hints";
+
+/** Owner id for the reuse warnings, so they replace each other and never touch other markers. */
+const REUSE_HINT_OWNER = "blocks-reuse-hints";
 
 // Per @monaco-editor/react docs, Monaco is loaded from CDN by default — no bundling, no worker
 // setup, no direct `monaco-editor` import (importing it in a Vite project makes Vite transform
@@ -179,6 +183,9 @@ export const CodeEditor = ({
   const envKey = useMemo(() => (envKeys ?? []).join(","), [envKeys]);
 
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
+  // Set on mount so effects that need the model (the reuse warnings) run for the code the editor
+  // opens with, not only after the first change.
+  const [isMounted, setIsMounted] = useState(false);
   const libRef = useRef<{ dispose: () => void } | null>(null);
   const completionRef = useRef<{ dispose: () => void } | null>(null);
 
@@ -244,6 +251,27 @@ export const CodeEditor = ({
     };
   }, [monaco, isJavaScript, envKey]);
 
+  // Reuse warnings, recomputed as the code changes: yellow squiggles for the mistakes that break a
+  // reused sandbox (utils/reuse-hints). Hints only — saving, testing and deploying are unaffected.
+  useEffect(() => {
+    const model = editorRef.current?.getModel();
+    if (!monaco || !model) return;
+    if (!isJavaScript || readOnly) {
+      monaco.editor.setModelMarkers(model, REUSE_HINT_OWNER, []);
+      return;
+    }
+    const markers = findReuseHints(value).map((hint) => ({
+      severity: monaco.MarkerSeverity.Warning,
+      message: hint.message,
+      startLineNumber: hint.line,
+      endLineNumber: hint.line,
+      startColumn: hint.startColumn,
+      endColumn: hint.endColumn,
+      source: "Blocks",
+    }));
+    monaco.editor.setModelMarkers(model, REUSE_HINT_OWNER, markers);
+  }, [monaco, isJavaScript, readOnly, value, isMounted]);
+
   // `updateOptions` rather than a remount: the editor keeps the cursor, the selection and the
   // undo stack, which a changed `options` object on the React component would not.
   useEffect(() => {
@@ -252,6 +280,7 @@ export const CodeEditor = ({
 
   const handleMount: OnMount = (editor, monacoInstance) => {
     editorRef.current = editor;
+    setIsMounted(true);
     if (actionsRef) {
       actionsRef.current = {
         format: () => void editor.getAction("editor.action.formatDocument")?.run(),
@@ -316,6 +345,7 @@ export const CodeEditor = ({
         container.removeEventListener(type, suppressCloseTooltip, true),
       );
       editorRef.current = null;
+      setIsMounted(false);
       if (actionsRef) actionsRef.current = null;
     });
   };

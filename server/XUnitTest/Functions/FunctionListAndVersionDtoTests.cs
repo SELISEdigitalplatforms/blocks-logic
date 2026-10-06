@@ -100,6 +100,7 @@ namespace XUnitTest.Functions
                 FunctionStarterTemplates.Minimal,
                 FunctionStarterTemplates.HttpEcho,
                 FunctionStarterTemplates.FetchTransform,
+                FunctionStarterTemplates.ReusedConnection,
             })
             {
                 FunctionStarterTemplates.For(template).IndexJs
@@ -111,12 +112,23 @@ namespace XUnitTest.Functions
         [InlineData(FunctionStarterTemplates.Minimal, "return { received: input.body }")]
         [InlineData(FunctionStarterTemplates.HttpEcho, "isAuthenticated")]
         [InlineData(FunctionStarterTemplates.FetchTransform, "await fetch(")]
+        [InlineData(FunctionStarterTemplates.ReusedConnection, "ctx.waitUntil(")]
         public void Each_starter_template_seeds_its_own_handler(string template, string marker)
         {
             var source = FunctionStarterTemplates.For(template);
 
             source.IndexJs.Should().Contain(marker);
             source.PackageJson.Should().Contain("\"type\": \"module\"");
+        }
+
+        [Fact]
+        public void The_reused_connection_starter_declares_its_driver_and_connects_at_module_level()
+        {
+            var source = FunctionStarterTemplates.For(FunctionStarterTemplates.ReusedConnection);
+
+            source.PackageJson.Should().Contain("\"mongodb\"");
+            source.IndexJs.Should().Contain("let client;");
+            source.IndexJs.Should().Contain("new MongoClient(");
         }
 
         [Theory]

@@ -218,6 +218,10 @@ namespace Functions.DomainService.Models
         /// on in the editor changes nothing until the next deploy. Only HTTP invocations use it
         /// (see <c>FunctionInvocationService</c>). Not written while false.
         /// </summary>
+        /// <remarks>
+        /// IGNORED since 2026-10-06: reuse is always on for HTTP runs of a deployed function. Kept
+        /// only so documents and requests that carry it still read.
+        /// </remarks>
         [BsonIgnoreIfDefault]
         public bool ReuseSandbox { get; set; }
 

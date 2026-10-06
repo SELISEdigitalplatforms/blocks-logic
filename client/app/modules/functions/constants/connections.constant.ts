@@ -125,7 +125,7 @@ export default async function (input, ctx) {
     label: "PostgreSQL",
     description: "Any Postgres with a public endpoint — Neon, Supabase, Azure, RDS.",
     packageName: "pg",
-    version: "8.23.0",
+    version: "8.23.1",
     variables: [
       {
         key: "PG_URL",
@@ -151,7 +151,7 @@ export default async function (input, ctx) {
     label: "MySQL",
     description: "Any MySQL or MariaDB with a public endpoint — PlanetScale, Azure, RDS.",
     packageName: "mysql2",
-    version: "3.24.4",
+    version: "3.24.5",
     variables: [{ key: "MYSQL_URL", secret: true, hint: "mysql://user:password@host:3306/db" }],
     snippet: `import mysql from "mysql2/promise";
 
@@ -219,7 +219,7 @@ export default async function (input, ctx) {
     label: "Azure Service Bus",
     description: "Send to your own Service Bus namespace.",
     packageName: "@azure/service-bus",
-    version: "7.9.5",
+    version: "7.10.0",
     variables: [
       {
         key: "SERVICEBUS_CONNECTION",
@@ -247,7 +247,7 @@ export default async function (input, ctx) {
     label: "Amazon SQS",
     description: "Send to an SQS queue with an IAM user's access key.",
     packageName: "@aws-sdk/client-sqs",
-    version: "3.1142.0",
+    version: "3.1146.0",
     variables: [
       { key: "AWS_REGION", secret: false, hint: "The queue's region, e.g. eu-west-1" },
       {

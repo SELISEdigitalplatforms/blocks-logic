@@ -461,6 +461,7 @@ namespace Blocks.FunctionRunner.Sandbox
             var clean = false;
             var late = false;
             IReadOnlyList<string> leftovers = [];
+            long? handlerCpuMs = null;
             var ended = false;   // the stream ended: the sandbox exited
 
             try
@@ -513,6 +514,7 @@ namespace Blocks.FunctionRunner.Sandbox
                             clean = evt.Clean;
                             late = evt.Late;
                             leftovers = evt.Leftovers;
+                            handlerCpuMs = evt.CpuMs;
                             if (!clean) discard = DirtyReason(leftovers, late);
                             break;
 
@@ -565,6 +567,13 @@ namespace Blocks.FunctionRunner.Sandbox
             {
                 // Still alive, and clean so far: measure it — the pool decides on memory.
                 (memoryBytes, cpuUsageMs) = await MeasureAsync().ConfigureAwait(false);
+
+                // The runtime measures its own CPU over exactly the handler's window — the window
+                // the reported duration covers. Docker's figure is the container's total since the
+                // last call (unpause, envelope read, clean-up check included), so dividing it by the
+                // handler's duration overstated a warm call ("144 / 100 m"). Docker's stays the
+                // fallback for a runtime that does not report one.
+                if (handlerCpuMs is { } exact) cpuUsageMs = Math.Max(1, exact);
             }
             else
             {
@@ -725,7 +734,8 @@ namespace Blocks.FunctionRunner.Sandbox
 
         /// <summary>The fields of one reuse-protocol line this side acts on.</summary>
         internal readonly record struct ProtocolLine(
-            string? Type, string? Call, bool Late, bool Clean, IReadOnlyList<string> Leftovers, string? Code, string? Message)
+            string? Type, string? Call, bool Late, bool Clean, IReadOnlyList<string> Leftovers, string? Code, string? Message,
+            long? CpuMs = null)
         {
             /// <summary>Reads a line; anything that is not a JSON object with a string <c>t</c> has a null type.</summary>
             public static ProtocolLine Read(string line)
@@ -750,8 +760,13 @@ namespace Blocks.FunctionRunner.Sandbox
                         }
                     }
 
+                    long? cpuMs = root.TryGetProperty("cpuMs", out var c) && c.ValueKind == JsonValueKind.Number
+                        && c.TryGetInt64(out var cpu) && cpu >= 0
+                        ? cpu
+                        : null;
+
                     return new ProtocolLine(
-                        Str("t"), Str("call"), Bool("late"), Bool("clean"), leftovers, Str("code"), Str("message"));
+                        Str("t"), Str("call"), Bool("late"), Bool("clean"), leftovers, Str("code"), Str("message"), cpuMs);
                 }
                 catch (JsonException)
                 {

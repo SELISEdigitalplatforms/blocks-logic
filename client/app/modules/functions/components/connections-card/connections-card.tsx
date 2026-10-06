@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { Check, KeyRound, Loader2, Plug, TriangleAlert } from "lucide-react";
+import { ArrowUpCircle, Check, KeyRound, Loader2, Plug, TriangleAlert } from "lucide-react";
 import { Badge } from "@/components/ui-kits/badge/badge";
 import { Button } from "@/components/ui-kits/button/button";
 import { Card, CardContent } from "@/components/ui-kits/card/card";
@@ -19,7 +19,9 @@ import {
   applyPreset,
   checkSetup,
   fillKnownValues,
+  findUpdate,
   getDependencies,
+  pinVersion,
   presetForPackage,
   presetStatus,
   resolveLatestVersion,
@@ -68,6 +70,51 @@ export const ConnectionsCard = ({
     [variables, blocksApiHost],
   );
   const open = CONNECTION_PRESETS.find((preset) => preset.id === openId) ?? null;
+
+  // npm's latest stable for each catalog package the function already pins exactly, so an added
+  // service shows when a newer release exists. Asked once per package per mount; an npm failure
+  // just means no update is offered — the tested fallback is never shown as "latest".
+  const [latestVersions, setLatestVersions] = useState<Record<string, string>>({});
+  const asked = useRef(new Set<string>());
+  // Per mount, not per effect run: package.json changes on every keystroke, and an answer that
+  // lands after such a change is still the right answer.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    for (const preset of CONNECTION_PRESETS) {
+      if (!(preset.packageName in dependencies) || asked.current.has(preset.packageName)) continue;
+      asked.current.add(preset.packageName);
+      void resolveLatestVersion(preset).then((resolved) => {
+        if (mounted.current && resolved.source === "npm") {
+          setLatestVersions((prev) => ({ ...prev, [preset.packageName]: resolved.version }));
+        }
+      });
+    }
+  }, [dependencies]);
+  const updateFor = (preset: IConnectionPreset) =>
+    findUpdate(dependencies[preset.packageName], latestVersions[preset.packageName]);
+
+  const update = (preset: IConnectionPreset) => {
+    const target = updateFor(preset);
+    if (!target) return;
+    const result = pinVersion(latest.current.packageJson, preset.packageName, target.to);
+    if (!result.ok) {
+      showErrorToast({ title: `Could not update ${preset.packageName}`, errors: [result.reason] });
+      return;
+    }
+    onPackageJsonChange(result.packageJson);
+    showSuccessToast({
+      title: `${preset.packageName} updated`,
+      description: `${target.from} → ${target.to}.${
+        target.breaking ? " This is a breaking release — check its changelog and run a test." : ""
+      } Save to keep it.`,
+    });
+  };
 
   const add = async (preset: IConnectionPreset): Promise<boolean> => {
     if (pendingId) return false;
@@ -227,13 +274,17 @@ export const ConnectionsCard = ({
         <div className="flex flex-col">
           {CONNECTION_PRESETS.map((preset) => {
             const status = presetStatus(preset, dependencies, variables);
+            // A missing variable matters more than a newer release, so "Incomplete" wins.
+            const available = status === "added" ? updateFor(preset) : null;
             return (
               <button
                 key={preset.id}
                 type="button"
                 className="flex items-center justify-between gap-3 border-b py-2 text-left last:border-b-0 hover:bg-surface-app"
                 onClick={() => setOpenId(preset.id)}
-                aria-label={`${preset.label}: ${STATUS_LABEL[status]}`}
+                aria-label={`${preset.label}: ${
+                  available ? `update to ${available.to} available` : STATUS_LABEL[status]
+                }`}
               >
                 <span className="flex min-w-0 flex-col">
                   <span className="text-xs font-semibold">{preset.label}</span>
@@ -241,7 +292,16 @@ export const ConnectionsCard = ({
                     {preset.packageName}
                   </code>
                 </span>
-                {status === "added" ? (
+                {available ? (
+                  <Badge
+                    variant="info"
+                    className="gap-1"
+                    title={`${available.from} → ${available.to}`}
+                  >
+                    <ArrowUpCircle className="h-3 w-3" />
+                    Update
+                  </Badge>
+                ) : status === "added" ? (
                   <Badge variant="success" className="gap-1">
                     <Check className="h-3 w-3" />
                     Added
@@ -268,6 +328,8 @@ export const ConnectionsCard = ({
             preset={open}
             dependencies={dependencies}
             variables={variables}
+            update={updateFor(open)}
+            onUpdate={() => update(open)}
             onAdd={async () => {
               if (await add(open)) setOpenId(null);
             }}
@@ -293,6 +355,9 @@ type ConnectionDialogBodyProps = {
   preset: IConnectionPreset;
   dependencies: Record<string, string>;
   variables: IVariableBinding[];
+  /** A newer stable release than the exact version package.json pins. */
+  update: ReturnType<typeof findUpdate>;
+  onUpdate: () => void;
   onAdd: () => void;
   isAdding: boolean;
   blocksApiHost?: string;
@@ -302,6 +367,8 @@ const ConnectionDialogBody = ({
   preset,
   dependencies,
   variables,
+  update,
+  onUpdate,
   onAdd,
   isAdding,
   blocksApiHost,
@@ -344,7 +411,14 @@ const ConnectionDialogBody = ({
           <code className="font-mono text-xs">
             {preset.packageName}@{listed ?? "latest"}
           </code>
-          {listed !== undefined ? (
+          {update ? (
+            <span className="flex items-center gap-2">
+              <span className="text-xs text-medium-emphasis">{update.to} is the latest</span>
+              <Button type="button" size="sm" variant="outline" onClick={onUpdate}>
+                Update to {update.to}
+              </Button>
+            </span>
+          ) : listed !== undefined ? (
             <span className="text-xs text-medium-emphasis">in package.json — left as is</span>
           ) : (
             <span className="text-xs text-medium-emphasis">
@@ -352,6 +426,12 @@ const ConnectionDialogBody = ({
             </span>
           )}
         </div>
+        {update?.breaking && (
+          <span className="flex items-start gap-1.5 text-xs text-warning-800">
+            <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            {update.to} is a breaking release. Check its changelog and run a test before deploying.
+          </span>
+        )}
       </div>
 
       <div className="flex flex-col gap-1.5">

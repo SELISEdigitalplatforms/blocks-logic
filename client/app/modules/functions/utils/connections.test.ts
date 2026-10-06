@@ -11,6 +11,9 @@ import {
   presetForPackage,
   presetStatus,
   resolveLatestVersion,
+  compareVersions,
+  findUpdate,
+  pinVersion,
   toPackageName,
 } from "./connections";
 
@@ -41,7 +44,9 @@ describe("CONNECTION_PRESETS", () => {
     const snippet = preset("blocks").snippet;
     expect(snippet).toContain("ctx.blocks.accessToken");
     expect(snippet).not.toContain("ctx.context.accessToken");
-    const guard = snippet.indexOf('ctx.run.invokedBy.type === "http" && !ctx.context.isAuthenticated');
+    const guard = snippet.indexOf(
+      'ctx.run.invokedBy.type === "http" && !ctx.context.isAuthenticated',
+    );
     expect(guard).toBeGreaterThan(-1);
     expect(guard).toBeLessThan(snippet.indexOf("clientCredentials("));
   });
@@ -364,7 +369,12 @@ describe("applyPreset with a resolved version and prefills", () => {
 
   it("fills a blank BLOCKS_API_URL row it already has, but not a typed or bound one", () => {
     const host = { blocksApiHost: "https://blocksapi.acme.com" };
-    const blank = applyPreset(preset("blocks"), MANIFEST, [{ key: "BLOCKS_API_URL", value: " " }], host);
+    const blank = applyPreset(
+      preset("blocks"),
+      MANIFEST,
+      [{ key: "BLOCKS_API_URL", value: " " }],
+      host,
+    );
     expect(blank.ok && blank.variables[0]).toEqual({
       key: "BLOCKS_API_URL",
       value: "https://blocksapi.acme.com",
@@ -457,5 +467,60 @@ describe("fillKnownValues", () => {
     const result = fillKnownValues(rows, {});
     expect(result.variables).toEqual(rows);
     expect(result.filledKeys).toEqual([]);
+  });
+});
+
+describe("compareVersions", () => {
+  it("orders exact versions numerically, not as text", () => {
+    expect(compareVersions("8.9.0", "8.10.0")).toBeLessThan(0);
+    expect(compareVersions("10.0.0", "9.99.99")).toBeGreaterThan(0);
+    expect(compareVersions("1.2.3", "1.2.3")).toBe(0);
+  });
+
+  it.each([["^1.0.0"], ["latest"], ["1.0.0-beta.1"], ["1.0"], [undefined]])(
+    "does not compare %s",
+    (value) => expect(compareVersions(value, "1.0.0")).toBeNull(),
+  );
+});
+
+describe("findUpdate", () => {
+  it("offers a newer release and flags breaking ones", () => {
+    expect(findUpdate("8.23.0", "8.23.1")).toEqual({
+      from: "8.23.0",
+      to: "8.23.1",
+      breaking: false,
+    });
+    expect(findUpdate("5.4.0", "6.0.0")?.breaking).toBe(true);
+    expect(findUpdate("0.2.0", "0.3.0")?.breaking).toBe(true);
+    expect(findUpdate("0.2.0", "0.2.1")?.breaking).toBe(false);
+  });
+
+  it("offers nothing for the same, an older, or an unknown latest", () => {
+    expect(findUpdate("6.0.0", "6.0.0")).toBeNull();
+    expect(findUpdate("6.0.0", "5.0.0")).toBeNull();
+    expect(findUpdate("6.0.0", undefined)).toBeNull();
+    expect(findUpdate("^6.0.0", "7.0.0")).toBeNull();
+  });
+});
+
+describe("pinVersion", () => {
+  it("re-pins only the named package and keeps the rest", () => {
+    const result = pinVersion(
+      `{"type":"module","dependencies":{"pg":"8.0.0","x":"1.0.0"}}`,
+      "pg",
+      "8.23.1",
+    );
+    expect(result.ok && JSON.parse(result.packageJson)).toEqual({
+      type: "module",
+      dependencies: { pg: "8.23.1", x: "1.0.0" },
+    });
+  });
+
+  it.each([
+    ["broken JSON", "{", "8.23.1"],
+    ["a package no longer listed", `{"dependencies":{}}`, "8.23.1"],
+    ["a version that is not exact", `{"dependencies":{"pg":"8.0.0"}}`, "^8.23.1"],
+  ])("refuses %s", (_, manifest, version) => {
+    expect(pinVersion(manifest, "pg", version).ok).toBe(false);
   });
 });

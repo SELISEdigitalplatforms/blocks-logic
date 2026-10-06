@@ -77,6 +77,13 @@ namespace Blocks.FunctionRunner.Health
                     ]).ConfigureAwait(false);
 
                     await _db.KeyExpireAsync(key, RedisKeys.HeartbeatTtl).ConfigureAwait(false);
+
+                    // Which base image this host builds on, for the control plane's build cache. Old
+                    // entries (no runner announced them for a day) are dropped as we go.
+                    var nowSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                    await _db.SortedSetAddAsync(RedisKeys.BaseImages, _options.BaseImage, nowSeconds).ConfigureAwait(false);
+                    await _db.SortedSetRemoveRangeByScoreAsync(RedisKeys.BaseImages, double.NegativeInfinity, nowSeconds - 86_400)
+                        .ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {

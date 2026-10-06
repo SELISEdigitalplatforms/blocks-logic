@@ -586,11 +586,12 @@ namespace Functions.DomainService.Services
             };
             run.IdempotencyKey = $"{run.ItemId}-{run.Attempt}";
 
-            // Warm sandboxes serve public HTTP calls of a deployed version that opted in (and
-            // replays of such calls) — never a workflow step, whose behaviour must not change with
-            // a switch built for the HTTP route, and never a test, which has its own build path.
+            // Warm sandboxes serve every public HTTP call of a deployed version (and replays of such
+            // calls) — always on, like a serverless platform, decided 2026-10-06; the runner's
+            // RUNNER__SandboxReuse still gates it per host. Never a workflow step (Workflow is in
+            // production and its behaviour must not change) and never a test (own build path).
             run.ReuseRequested = test is null
-                && version?.Trigger is { ReuseSandbox: true }
+                && version is not null
                 && (invokedBy == InvokedByType.Http || (invokedBy == InvokedByType.Replay && replayOfHttp));
 
             // Secret-bound variables are NOT resolved here. The envelope keeps each one as its

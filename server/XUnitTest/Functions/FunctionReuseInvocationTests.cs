@@ -113,23 +113,15 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
-        public async Task A_version_that_did_not_opt_in_queues_the_entry_exactly_as_before()
+        public async Task Every_http_call_of_a_deployed_version_asks_for_a_warm_sandbox_switch_or_not()
         {
-            await Service().InvokeHttpAsync(Tenant, "fn-1", Call());
-
-            RunEntry().Select(e => e.Name.ToString()).Should().Equal(
-                "runId", "functionId", "versionId", "tenantId", "image", "attempt", "protocol");
-        }
-
-        [Fact]
-        public async Task The_editable_function_switch_does_nothing_until_it_is_deployed()
-        {
-            _function.Trigger.ReuseSandbox = true; // edited, not deployed
+            // Always on since 2026-10-06; the stored per-function flag is ignored either way.
+            _function.Trigger.ReuseSandbox = false;
             _version.Trigger.ReuseSandbox = false;
 
             await Service().InvokeHttpAsync(Tenant, "fn-1", Call());
 
-            RunEntry().Should().NotContain(e => e.Name == FunctionQueueKeys.RunReuseField);
+            RunEntry().Single(e => e.Name == FunctionQueueKeys.RunReuseField).Value.ToString().Should().Be("1");
         }
 
         [Fact]

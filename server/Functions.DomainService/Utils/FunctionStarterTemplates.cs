@@ -3,7 +3,7 @@ using Functions.DomainService.Models;
 namespace Functions.DomainService.Utils
 {
     /// <summary>
-    /// The three starters the create dialog offers (FEATURES-AND-UI §4.2). A missing name gives
+    /// The starters the create dialog offers (FEATURES-AND-UI §4.2). A missing name gives
     /// the minimal handler, so a client that sends nothing keeps working; an unknown one is
     /// rejected at validation rather than silently becoming Minimal — a caller who asked for
     /// "FetchTransfrom" and got an empty echo handler has no way to tell that it was a typo.
@@ -14,8 +14,14 @@ namespace Functions.DomainService.Utils
         public const string HttpEcho = "HttpEcho";
         public const string FetchTransform = "FetchTransform";
 
+        /// <summary>
+        /// A MongoDB client made once at module level and reused by every call the sandbox serves —
+        /// the pattern sandbox reuse (always on for HTTP calls, 2026-10-06) is built for.
+        /// </summary>
+        public const string ReusedConnection = "ReusedConnection";
+
         /// <summary>Every accepted template name, for validation and for the error message.</summary>
-        public static readonly IReadOnlyList<string> Names = [Minimal, HttpEcho, FetchTransform];
+        public static readonly IReadOnlyList<string> Names = [Minimal, HttpEcho, FetchTransform, ReusedConnection];
 
         /// <summary>
         /// True for a name <see cref="For"/> can honour. Null or blank is accepted — it means
@@ -31,9 +37,10 @@ namespace Functions.DomainService.Utils
             {
                 HttpEcho => HttpEchoIndexJs,
                 FetchTransform => FetchTransformIndexJs,
+                ReusedConnection => ReusedConnectionIndexJs,
                 _ => MinimalIndexJs,
             },
-            PackageJson = PackageJson,
+            PackageJson = template == ReusedConnection ? ReusedConnectionPackageJson : PackageJson,
         };
 
         // `input` is the request for an HTTP or Test run — { method, path, query, headers, body } —
@@ -99,6 +106,61 @@ namespace Functions.DomainService.Utils
               ctx.log.info("fetched rates", { count: Object.keys(payload.rates).length });
 
               return { base: payload.base, eur, requested: input.body };
+            }
+            """;
+
+        private const string ReusedConnectionIndexJs = """
+            import { MongoClient } from "mongodb";
+
+            // Made once per sandbox and reused by every call that lands in it: HTTP calls of a
+            // deployed function reuse a warm sandbox, and connecting is the slow part.
+            let client;
+            let ready;
+
+            async function database(url, name) {
+              if (!client) {
+                client = new MongoClient(url, { serverSelectionTimeoutMS: 5000, maxPoolSize: 4 });
+                ready = client.connect().catch((error) => {
+                  client = undefined; // the next call tries again
+                  throw error;
+                });
+              }
+              await ready;
+              return client.db(name);
+            }
+
+            /**
+             * @param {FunctionInput} input - the request: method, path, query, headers and body
+             * @param {FunctionContext} ctx - env, run, caller context, logger and waitUntil
+             */
+            export default async function handler(input, ctx) {
+              if (!ctx.env.MONGO_URL) {
+                return { error: "Add a MONGO_URL variable under Configuration." };
+              }
+
+              const items = (await database(ctx.env.MONGO_URL, ctx.env.MONGO_DB ?? "app")).collection("items");
+
+              // Request data stays inside the handler, never in a module-level variable:
+              // the next call — maybe another user's — runs in the same sandbox.
+              const { insertedId } = await items.insertOne({ body: input.body ?? null, at: new Date() });
+
+              // Work that may finish after the answer goes to ctx.waitUntil, never a bare promise.
+              ctx.waitUntil(items.countDocuments().then((count) => ctx.log.info("items stored", { count })));
+
+              return { id: String(insertedId) };
+            }
+            """;
+
+        private const string ReusedConnectionPackageJson = """
+            {
+              "name": "function",
+              "version": "1.0.0",
+              "private": true,
+              "type": "module",
+              "main": "index.js",
+              "dependencies": {
+                "mongodb": "^6.9.0"
+              }
             }
             """;
 

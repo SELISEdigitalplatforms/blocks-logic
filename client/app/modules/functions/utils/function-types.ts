@@ -28,7 +28,14 @@ const envMembers = (envKeys: string[]) => {
 export const FUNCTION_TYPES_PATH = "ts:blocks-functions/context.d.ts";
 
 export const buildFunctionTypeDefs = (envKeys: string[] = []): string => `
-/** Everything the sandbox hands a function. */
+/**
+ * Everything the sandbox hands a function, fresh for every call.
+ *
+ * HTTP calls of a deployed function reuse a warm sandbox: module-level code runs once and its
+ * variables live on to the next call — maybe another user's. Keep connections and caches at module
+ * level; keep request data (input, ctx, tokens) inside the handler. Await everything, or hand work
+ * that may finish after the answer to ctx.waitUntil().
+ */
 declare interface FunctionContext {
   /** Who invoked this run. Empty identity on a public call — never a privileged token. */
   readonly context: FunctionCallerContext;
@@ -40,6 +47,13 @@ declare interface FunctionContext {
   readonly run: FunctionRun;
   /** Structured log lines kept on the run; \`console\` is captured too. */
   readonly log: FunctionLogger;
+  /**
+   * Finish work after the answer is sent: the caller gets the result at once, the promise runs on
+   * (within the time limit) and the sandbox is not reused until it settles. Use it instead of a
+   * promise you do not await — work still running after the answer makes the sandbox be replaced.
+   * @example ctx.waitUntil(fetch(auditUrl, { method: "POST", body }));
+   */
+  waitUntil(promise: Promise<unknown>): void;
 }
 
 declare interface FunctionCallerContext {
@@ -89,8 +103,8 @@ declare interface FunctionLogger {
  * body arrives parsed when it is JSON. A workflow node passes the previous node's output instead.
  */
 declare interface FunctionInput {
-  /** The trigger's method — the other one never reaches the handler (405). */
-  readonly method: "GET" | "POST";
+  /** One of the trigger's accepted methods — any other is refused with 405 before the handler runs. */
+  readonly method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   /** \`orders/42\` for a call to \`…/fn/{id}/orders/42\`; \`\` for the root. */
   readonly path: string;
   /** A repeated key is an array. */
@@ -109,6 +123,28 @@ declare interface FunctionInput {
  * \`ctx\` there fails the run while the module is still loading, before the handler is called.
  */
 declare type FunctionHandler = (input: FunctionInput, ctx: FunctionContext) => unknown | Promise<unknown>;
+
+/**
+ * Return this from the handler to control the HTTP answer when the trigger's Response is
+ * "Wait for answer (API)". Anything else you return is sent as 200 + JSON.
+ *
+ * - \`statusCode\` 200–599 (1xx is refused). 204/205/304 never carry a body.
+ * - \`headers\`: only content and caching headers pass (content-type, content-language,
+ *   content-disposition, cache-control, expires, last-modified, etag, vary, retry-after),
+ *   \`location\` on a 3xx to an http(s) or relative URL, and \`x-*\` (except x-forwarded-*,
+ *   x-real-ip, x-original-*, x-blocks-*). At most 32 headers / 8 KB. \`set-cookie\` is always
+ *   dropped. X-Content-Type-Options: nosniff and Content-Security-Policy: sandbox are always added.
+ * - \`body\`: a string is sent as is; anything else as JSON.
+ *
+ * A failed run answers 502, a timed-out one 504 (\`{ error, runId }\`). A call that takes longer than
+ * the wait (30 s) gets 202 + a poll token instead — the run still finishes.
+ * @example return { statusCode: 404, body: { error: "order not found" } };
+ */
+declare interface FunctionHttpResponse {
+  statusCode: number;
+  headers?: Record<string, string | string[]>;
+  body?: unknown;
+}
 
 // Node globals the sandbox provides that the browser libs do not describe.
 declare const process: {
@@ -144,6 +180,12 @@ export const buildCtxCompletions = (envKeys: string[] = []) => {
       label: "blocks",
       detail: "FunctionBlocksAccess",
       documentation: "accessToken — the caller's Blocks token, or undefined.",
+    },
+    {
+      label: "waitUntil",
+      detail: "(promise: Promise<unknown>) => void",
+      documentation:
+        "Finish work after the answer is sent, without making the reused sandbox be replaced.",
     },
     ...keys.map((key) => ({
       label: `env.${key}`,

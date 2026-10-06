@@ -45,6 +45,7 @@ namespace Functions.DomainService.Services
         private readonly ICacheClient _cache;
         private readonly IConfiguration _configuration;
         private readonly ILogger<FunctionDeploymentService> _logger;
+        private readonly Storage.IFunctionArtifactStore? _artifacts;
 
         /// <summary>Warm sandboxes asked for per deploy when <c>Functions:PrewarmCount</c> is not set.</summary>
         internal const int DefaultPrewarmCount = 1;
@@ -69,8 +70,10 @@ namespace Functions.DomainService.Services
             IValidator<DeployFunctionRequestDto> deployValidator,
             ICacheClient cache,
             IConfiguration configuration,
-            ILogger<FunctionDeploymentService> logger)
+            ILogger<FunctionDeploymentService> logger,
+            Storage.IFunctionArtifactStore? artifacts = null)
         {
+            _artifacts = artifacts;
             _functionRepository = functionRepository;
             _versionRepository = versionRepository;
             _buildService = buildService;
@@ -223,32 +226,49 @@ namespace Functions.DomainService.Services
 
             try
             {
-                int count;
-                if (version.Trigger is { ReuseSandbox: true })
-                {
-                    count = Math.Max(0, _configuration.GetValue("Functions:PrewarmCount", DefaultPrewarmCount));
-                    if (count == 0 && drain.Length == 0) return;
-                }
-                else
-                {
-                    if (drain.Length == 0) return;
+                // Reuse is always on for deployed functions (2026-10-06), so every deploy pre-warms the
+                // new version and drains the one it replaced.
+                var count = Math.Max(0, _configuration.GetValue("Functions:PrewarmCount", DefaultPrewarmCount));
+                if (count == 0 && drain.Length == 0) return;
 
-                    // Only a version that could have warm sandboxes is worth a drain entry.
-                    var previous = await _versionRepository.GetByIdAsync(tenantId, drain, CancellationToken.None).ConfigureAwait(false);
-                    if (previous?.Trigger is not { ReuseSandbox: true }) return;
-                    count = 0;
+                var entry = new List<NameValueEntry>
+                {
+                    new("tenantId", tenantId),
+                    new("functionId", version.FunctionId),
+                    new("versionId", version.ItemId),
+                    new("image", FunctionRunImage.For(version)),
+                    new("count", count),
+                    new("drainVersionId", drain),
+                };
+
+                // An artifact-built version exists on no registry: without the artifact's address a
+                // runner cannot make its image ahead of the first call, and the pre-warm did nothing
+                // (seen 2026-10-06 — the first call after every deploy was cold). Same signed,
+                // read-only URL and hash a run carries. Best effort: no URL → no pre-warm, as before.
+                if (count > 0 && !string.IsNullOrEmpty(version.ArtifactId) && _artifacts is not null)
+                {
+                    try
+                    {
+                        var url = await _artifacts.CreateDownloadUrlAsync(
+                            tenantId, version.ArtifactId!, FunctionInvocationService.ArtifactDownloadWindow,
+                            CancellationToken.None).ConfigureAwait(false);
+                        if (!string.IsNullOrEmpty(url))
+                        {
+                            entry.Add(new NameValueEntry(FunctionQueueKeys.RunArtifactUrlField, url));
+                            entry.Add(new NameValueEntry(
+                                FunctionQueueKeys.RunArtifactSha256Field, version.ArtifactSha256 ?? string.Empty));
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning("No artifact URL for pre-warming version {VersionId} ({Type})",
+                            version.ItemId, ex.GetType().Name);
+                    }
                 }
 
                 await _cache.CacheDatabase().StreamAddAsync(
                     FunctionQueueKeys.WarmStream,
-                    [
-                        new NameValueEntry("tenantId", tenantId),
-                        new NameValueEntry("functionId", version.FunctionId),
-                        new NameValueEntry("versionId", version.ItemId),
-                        new NameValueEntry("image", FunctionRunImage.For(version)),
-                        new NameValueEntry("count", count),
-                        new NameValueEntry("drainVersionId", drain),
-                    ],
+                    [.. entry],
                     maxLength: WarmStreamMaxLength,
                     useApproximateMaxLength: true).ConfigureAwait(false);
             }

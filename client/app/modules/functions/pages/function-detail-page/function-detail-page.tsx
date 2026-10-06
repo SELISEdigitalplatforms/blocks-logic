@@ -45,6 +45,8 @@ import { DangerZoneCard } from "../../components/danger-zone-card";
 import { TriggerHttpCard } from "../../components/trigger-http-card";
 import { TriggerWorkflowCard } from "../../components/trigger-workflow-card";
 import { SandboxReuseCard } from "../../components/sandbox-reuse-card";
+import { SandboxRulesCard } from "../../components/sandbox-rules-card";
+import { FunctionGuide } from "../../components/function-guide";
 import { InstallScriptsToggle } from "../../components/install-scripts-toggle";
 import { InvokeSnippetCard } from "../../components/invoke-snippet-card";
 import { OutputActionsEditor } from "../../components/output-actions-editor";
@@ -97,11 +99,16 @@ const CODE_CARD_HEIGHT = "max(400px, calc(100dvh - 264px))";
 const CODE_CARD_MIN_HEIGHT = 400;
 const CODE_CARD_MAX_HEIGHT = 1600;
 
-/** The cards beside the editor, one at a time so none of them sits below the fold. */
+/**
+ * The cards beside the editor, one at a time so none of them sits below the fold. Labels stay one
+ * short word: four share a 340px column, and "Environment"/"Connections" ran into each other.
+ * `hint` is the tooltip that says what is behind the short word.
+ */
 const SIDE_PANELS = [
-  { value: "test", label: "Test" },
-  { value: "environment", label: "Environment" },
-  { value: "connections", label: "Connections" },
+  { value: "test", label: "Test", hint: "Run the function with a sample request" },
+  { value: "environment", label: "Runtime", hint: "Variables, limits and sandbox rules" },
+  { value: "connections", label: "Services", hint: "Connect MongoDB, Redis and Blocks APIs" },
+  { value: "guide", label: "Guide", hint: "How to write a handler" },
 ] as const;
 type SidePanel = (typeof SIDE_PANELS)[number]["value"];
 
@@ -212,7 +219,7 @@ export const FunctionDetailPage = () => {
   const outputActions = useFunctionEditorStore((s) => s.outputActions);
   const setOutputActions = useFunctionEditorStore((s) => s.setOutputActions);
   const variables = useFunctionEditorStore((s) => s.variables);
-  // What the Connections panel warns about, so its tab can flag it while another panel is open.
+  // What the Services panel warns about, so its tab can flag it while another panel is open.
   const setupIssueCount = useMemo(() => {
     const setup = checkSetup(indexJs, packageJson, variables);
     return (
@@ -606,7 +613,9 @@ export const FunctionDetailPage = () => {
               <p className="shrink-0 border-t bg-surface-app px-4 py-2.5 text-xs text-medium-emphasis">
                 Native <code className="font-mono">fetch()</code>, async/await and pinned npm
                 packages. Variables arrive as <code className="font-mono">ctx.env.NAME</code> —
-                inside the handler, where <code className="font-mono">ctx</code> exists.
+                inside the handler, where <code className="font-mono">ctx</code> exists. Calls reuse
+                the sandbox: open connections at module level, keep request data in the handler,
+                and await everything or use <code className="font-mono">ctx.waitUntil()</code>.
               </p>
               <ResizeHandle
                 targetRef={codeCardRef}
@@ -628,9 +637,15 @@ export const FunctionDetailPage = () => {
               onValueChange={(value) => setSidePanel(value as SidePanel)}
               className="flex min-w-0 flex-col gap-3 xl:h-[max(400px,calc(100dvh_-_264px))]"
             >
-              <TabsList className="grid h-10 w-full shrink-0 grid-cols-3">
+              {/* Same segmented pills as the page tabs above, so the two strips read as one family. */}
+              <TabsList className="grid h-[42px] w-full shrink-0 grid-cols-4 bg-blocks-primary-shades-300">
                 {SIDE_PANELS.map((panel) => (
-                  <TabsTrigger key={panel.value} value={panel.value} className="gap-1.5 text-xs">
+                  <TabsTrigger
+                    key={panel.value}
+                    value={panel.value}
+                    title={panel.hint}
+                    className="h-8 min-w-0 gap-1.5 px-2 text-sm font-medium"
+                  >
                     {panel.label}
                     {panel.value === "connections" && setupIssueCount > 0 && (
                       <span
@@ -663,6 +678,7 @@ export const FunctionDetailPage = () => {
                   onEditVariables={() => setQueryParams({ tab: "configuration" })}
                 />
                 <SandboxHelpCard limits={limits} />
+                <SandboxRulesCard />
               </TabsContent>
               <TabsContent
                 value="connections"
@@ -679,6 +695,13 @@ export const FunctionDetailPage = () => {
                   blocksApiHost={getProxyPublicHost(selectedProject)}
                 />
               </TabsContent>
+              <TabsContent
+                value="guide"
+                forceMount
+                className="mt-0 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto"
+              >
+                <FunctionGuide />
+              </TabsContent>
             </Tabs>
           </TabsContent>
 
@@ -688,7 +711,7 @@ export const FunctionDetailPage = () => {
             <div className="grid gap-4 xl:grid-cols-2">
               <div className="flex flex-col gap-4">
                 <TriggerWorkflowCard value={trigger} onChange={setTrigger} />
-                <SandboxReuseCard value={trigger} onChange={setTrigger} />
+                <SandboxReuseCard />
               </div>
               <InvokeSnippetCard functionId={fn.id} trigger={trigger} />
             </div>

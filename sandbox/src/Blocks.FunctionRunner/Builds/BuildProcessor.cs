@@ -926,6 +926,7 @@ namespace Blocks.FunctionRunner.Builds
                 new NameValueEntry("status", status),
                 new NameValueEntry("imageDigest", digest ?? string.Empty),
                 new NameValueEntry(RedisKeys.BuildArtifactSha256Field, artifactSha256 ?? string.Empty),
+                new NameValueEntry(RedisKeys.BuildBaseImageField, _options.BaseImage),
                 new NameValueEntry("packages", packages ?? "[]"),
                 new NameValueEntry("log", log ?? string.Empty),
                 new NameValueEntry("errorMessage", error ?? string.Empty),

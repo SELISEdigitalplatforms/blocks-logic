@@ -180,10 +180,14 @@ namespace Blocks.FunctionRunner.Runs
                 return;
             }
 
-            // The run entry's image reference, resolved the same way a run resolves it. A
-            // pre-warm carries no artifact URL, so a host that cannot get the image from its
-            // registry simply does not pre-warm it; its first run builds it as usual.
-            var resolved = await _images.EnsureAsync(image, token).ConfigureAwait(false);
+            // The run entry's image reference, resolved the same way a run resolves it — including
+            // building it from the version's artifact when the entry carries one (an artifact-built
+            // version is on no registry). Without either, this host does not pre-warm it and its
+            // first run builds it as usual.
+            var resolved = await _images.EnsureAsync(
+                image, token,
+                entry.Get(RedisKeys.RunArtifactUrlField),
+                entry.Get(RedisKeys.RunArtifactSha256Field)).ConfigureAwait(false);
             if (resolved is null)
             {
                 _logger.LogInformation("Not pre-warming function {FunctionId}: image {Image} is not available here",
