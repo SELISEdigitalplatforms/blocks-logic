@@ -47,9 +47,9 @@ export const SANDBOX_CTX_DOCS = [
       "tenantId, userId, roles, permissions, isAuthenticated. Empty identity on a public call — never a privileged token.",
   },
   {
-    name: "ctx.blocks.accessToken",
+    name: "await ctx.blocks.getAccessToken()",
     description:
-      "The caller's Blocks token, fresh for this run: pass it as accessToken to @seliseblocks/client, with ctx.context.tenantId as xBlocksKey. undefined on a public trigger, a schedule, a client-credentials or impersonated caller — check it before calling Blocks. Fetched only when index.js mentions accessToken or blocks, so read it by name. Masked in logs.",
+      "The caller's Blocks token, fetched only when you ask (one IAM round trip, once per call): pass it as accessToken to @seliseblocks/client, with ctx.context.tenantId as xBlocksKey. Ask only on the path that calls Blocks, so other calls pay nothing. undefined on a public trigger, a schedule, a client-credentials or impersonated caller — check it before calling Blocks. Masked in logs. ctx.blocks.accessToken was removed.",
   },
   {
     name: "ctx.run",
@@ -87,7 +87,7 @@ export const SANDBOX_CODE_RULES = [
     fixCode: "await new Promise((r) => setTimeout(r, 500));",
   },
   {
-    dont: "Keep ctx, ctx.log or ctx.blocks.accessToken for later — for example in a client's event listener.",
+    dont: "Keep ctx, ctx.log or a token from ctx.blocks.getAccessToken() for later — for example in a client's event listener or a module-level variable.",
     dontCode: 'redis.on("error", (e) => ctx.log.error("redis", e));',
     fix: "Read ctx only inside the handler. In listeners that outlive the call, use console.",
     fixCode: 'redis.on("error", (e) => console.error("redis", e.message));',

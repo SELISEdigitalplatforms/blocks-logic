@@ -67,7 +67,8 @@ export const FunctionGuide = () => (
                 </>,
                 <>
                   <Code>ctx</Code>: <Code>env</Code> (your variables), <Code>context</Code> (the
-                  caller), <Code>blocks.accessToken</Code> (call Blocks as the caller),{" "}
+                  caller), <Code>await blocks.getAccessToken()</Code> (call Blocks as the
+                  caller),{" "}
                   <Code>log</Code>, <Code>run</Code>, <Code>waitUntil()</Code>.
                 </>,
                 <>
@@ -75,10 +76,12 @@ export const FunctionGuide = () => (
                   the top of the file runs once, when the sandbox starts.
                 </>,
                 <>
-                  The caller&apos;s token costs time on every call, so Blocks fetches it only when
-                  your <Code>index.js</Code> mentions <Code>accessToken</Code> or{" "}
-                  <Code>blocks</Code>. Read it by name (<Code>ctx.blocks.accessToken</Code>) — a
-                  package you hand the whole <Code>ctx</Code> to cannot make Blocks fetch it.
+                  The caller&apos;s token is fetched only when your code asks:{" "}
+                  <Code>const token = await ctx.blocks.getAccessToken()</Code>. Ask on the path
+                  that calls Blocks, not at the top of every call — a call that never asks pays
+                  nothing. It is asked for once per call; asking again in the same call returns
+                  the same token. Never keep it outside the call (a module variable, a listener).{" "}
+                  <Code>ctx.blocks.accessToken</Code> was removed.
                 </>,
               ]}
             />

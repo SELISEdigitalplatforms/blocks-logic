@@ -62,6 +62,10 @@ namespace Blocks.FunctionRunner.Tests
         public (int ExitCode, bool OomKilled)? Exit { get; set; } = (137, false);
 
         public List<string> Written { get; } = [];
+
+        /// <summary>Answers (`give` lines) the runner wrote, and what the sandbox prints on each.</summary>
+        public List<string> Gives { get; } = [];
+        public Func<JsonElement, IEnumerable<string>> OnGive { get; set; } = _ => [];
         public int Pauses { get; private set; }
         public int Unpauses { get; private set; }
         public bool Paused { get; private set; }
@@ -92,6 +96,13 @@ namespace Blocks.FunctionRunner.Tests
             if (BlockWrites) await Task.Delay(Timeout.Infinite, token).ConfigureAwait(false);
             Written.Add(line);
             using var doc = JsonDocument.Parse(line);
+            if (doc.RootElement.TryGetProperty("t", out var t) && t.GetString() == "give")
+            {
+                // The runner's answer to a `need` line: what the sandbox does with it is scripted.
+                Gives.Add(line);
+                foreach (var output in OnGive(doc.RootElement)) _lines.Writer.TryWrite(output);
+                return;
+            }
             var id = doc.RootElement.GetProperty("run").GetProperty("id").GetString()!;
             foreach (var output in OnCall(id)) _lines.Writer.TryWrite(output);
         }

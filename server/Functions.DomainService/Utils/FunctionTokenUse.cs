@@ -4,7 +4,8 @@ using Functions.DomainService.Models;
 namespace Functions.DomainService.Utils
 {
     /// <summary>
-    /// Whether a deployed version's code can read <c>ctx.blocks.accessToken</c>.
+    /// Whether a deployed version's code can ask for the caller's token
+    /// (<c>await ctx.blocks.getAccessToken()</c>; the old <c>ctx.blocks.accessToken</c> counts too).
     /// <para>
     /// The caller's token costs a delegation grant on the way in and an IAM token exchange on the
     /// runner before every call — measured at 330–1280 ms per call on 2026-10-06, the largest
@@ -21,7 +22,7 @@ namespace Functions.DomainService.Utils
     /// </summary>
     public static partial class FunctionTokenUse
     {
-        [GeneratedRegex(@"accessToken|\bblocks\b", RegexOptions.CultureInvariant)]
+        [GeneratedRegex(@"[aA]ccessToken|\bblocks\b", RegexOptions.CultureInvariant)]
         private static partial Regex Mention();
 
         /// <summary>True when <paramref name="source"/> may read the caller's token (or is unknown).</summary>

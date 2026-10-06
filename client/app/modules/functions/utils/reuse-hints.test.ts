@@ -57,3 +57,16 @@ export default async function handler(input, ctx) {
     expect(findReuseHints("// setInterval(x)\n/* fetch(a)\n setInterval(b) */\nconst x = 1; // fetch(y)")).toEqual([]);
   });
 });
+
+describe("removed ctx.blocks.accessToken", () => {
+  it("is flagged with its replacement", () => {
+    const hints = findReuseHints(`export default async (input, ctx) => {\n  const t = ctx.blocks.accessToken;\n};`);
+    expect(hints.map((h) => h.message)).toContain(REUSE_HINT_MESSAGES.removedAccessToken);
+    expect(hints.find((h) => h.message === REUSE_HINT_MESSAGES.removedAccessToken)?.line).toBe(2);
+  });
+
+  it("is not flagged for the new call", () => {
+    const hints = findReuseHints(`export default async (input, ctx) => {\n  const t = await ctx.blocks.getAccessToken();\n};`);
+    expect(hints.map((h) => h.message)).not.toContain(REUSE_HINT_MESSAGES.removedAccessToken);
+  });
+});

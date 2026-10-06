@@ -16,7 +16,7 @@
 
 import { readFileSync } from 'node:fs';
 import { ProtocolWriter, LIMITS, EXIT, CODE } from './protocol.mjs';
-import { parseEnvelope, EnvelopeError } from './envelope.mjs';
+import { parseEnvelope, EnvelopeError, blocksWithToken } from './envelope.mjs';
 
 const ENVELOPE_PATH = process.env.BLOCKS_EXECUTION_FILE || '/run/blocks/execution.json';
 const FUNCTION_ENTRY = process.env.BLOCKS_FUNCTION_ENTRY || '/function/index.js';
@@ -132,7 +132,7 @@ function buildContext(envelope) {
 
   return Object.freeze({
     context: envelope.context,
-    blocks: envelope.blocks,
+    blocks: blocksWithToken(envelope.blocks.accessToken),
     env: envelope.env,
     run: envelope.run,
     log,

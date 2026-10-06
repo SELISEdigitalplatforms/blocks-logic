@@ -100,6 +100,9 @@ namespace Blocks.FunctionRunner.Sandbox
         /// </summary>
         internal bool Paused { get; private set; }
 
+        /// <summary>The sandbox's runtime asks for the caller's token on demand (see ReusableSandbox.CanAsk).</summary>
+        public bool CanAsk => Entry.Sandbox.CanAsk;
+
         public ReusableSandbox Sandbox => Entry.Sandbox;
 
         /// <summary>True the first time only.</summary>
@@ -111,7 +114,8 @@ namespace Blocks.FunctionRunner.Sandbox
         /// that never started, so the caller may serve the run elsewhere.
         /// </summary>
         public async Task<WarmCallResult> RunCallAsync(
-            string runId, string envelopeLine, RunLimits limits, Stopwatch? handover, CancellationToken token)
+            string runId, string envelopeLine, RunLimits limits, Stopwatch? handover, CancellationToken token,
+            Func<CancellationToken, Task<string?>>? accessToken = null)
         {
             if (Paused)
             {
@@ -135,7 +139,7 @@ namespace Blocks.FunctionRunner.Sandbox
                 Paused = false;
             }
 
-            return await Entry.Sandbox.RunCallAsync(runId, envelopeLine, limits, StartupMs, handover, token)
+            return await Entry.Sandbox.RunCallAsync(runId, envelopeLine, limits, StartupMs, handover, token, accessToken)
                 .ConfigureAwait(false);
         }
     }

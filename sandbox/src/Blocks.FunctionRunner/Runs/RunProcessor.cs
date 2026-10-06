@@ -394,7 +394,7 @@ namespace Blocks.FunctionRunner.Runs
         /// </summary>
         private async Task<PreparedRun> PrepareEnvelopeAsync(
             RunJob job, Dictionary<string, string> fields, string runKey, DateTimeOffset startedAt, CancellationToken token,
-            HandoverTimings? timings = null)
+            HandoverTimings? timings = null, bool eagerToken = true)
         {
             IReadOnlyList<string> resolvedValues = [];
             Task<string?>? tokenTask = null;
@@ -417,7 +417,7 @@ namespace Blocks.FunctionRunner.Runs
                 // run that is then deferred or failed costs one IAM call and nothing else; its
                 // token is dropped unread.
                 var queuedEnvelope = envelope;
-                tokenTask = Task.Run(async () =>
+                tokenTask = !eagerToken ? Task.FromResult<string?>(null) : Task.Run(async () =>
                 {
                     var sw = Stopwatch.StartNew();
                     try { return await RedeemAccessTokenAsync(job, fields, queuedEnvelope, token).ConfigureAwait(false); }
@@ -528,9 +528,15 @@ namespace Blocks.FunctionRunner.Runs
             timings.SandboxReady();
             WarmCallResult call;
             IReadOnlyList<string> resolvedValues;
+            string? redeemed = null;
             try
             {
-                var prepared = await PrepareEnvelopeAsync(job, fields, runKey, startedAt, token, timings).ConfigureAwait(false);
+                // A warm sandbox whose runtime asks on demand (`await ctx.blocks.getAccessToken()`)
+                // gets the caller's token only if its code asks, so it is not redeemed up front. An
+                // image built on an older runtime still reads it from the envelope: sent as before.
+                var onDemand = handle.CanAsk;
+                var prepared = await PrepareEnvelopeAsync(job, fields, runKey, startedAt, token, timings, eagerToken: !onDemand)
+                    .ConfigureAwait(false);
                 if (prepared.Done is { } done)
                 {
                     await _warm!.ReturnUnusedAsync(handle).ConfigureAwait(false);
@@ -554,7 +560,21 @@ namespace Blocks.FunctionRunner.Runs
                 resolvedValues = prepared.Values;
                 // Display only, and ordered ahead of the result on the same connection (see Starting).
                 _ = SetStatusQuietlyAsync(runKey, RunStatuses.Running, job.RunId);
-                call = await handle.RunCallAsync(job.RunId, line, limits, claimed, lease.Token).ConfigureAwait(false);
+
+                // The caller's token, redeemed only when the call asks for it: the same checks and
+                // the same redemption as up front (RedeemAccessTokenAsync), at most once per call.
+                // Whatever it returns is masked in everything recorded for the run below.
+                var queuedEnvelope = fields.TryGetValue("envelope", out var queued) ? queued : "{}";
+                Func<CancellationToken, Task<string?>> accessToken = async ct =>
+                {
+                    var watch = Stopwatch.StartNew();
+                    var value = await RedeemAccessTokenAsync(job, fields, queuedEnvelope, ct).ConfigureAwait(false);
+                    timings.TokenOnDemand(watch.ElapsedMilliseconds);
+                    Volatile.Write(ref redeemed, value);
+                    return value;
+                };
+
+                call = await handle.RunCallAsync(job.RunId, line, limits, claimed, lease.Token, onDemand ? accessToken : null).ConfigureAwait(false);
 
                 // A sandbox from the pool that died before this call's `started` line — it would
                 // not resume, would not take the envelope, or exited on the spot — failed nobody's
@@ -576,7 +596,7 @@ namespace Blocks.FunctionRunner.Runs
                     if (fresh is null) return freshEarly is null ? Disposition.Deferred : freshEarly;
 
                     handle = fresh;
-                    call = await handle.RunCallAsync(job.RunId, line, limits, claimed, lease.Token).ConfigureAwait(false);
+                    call = await handle.RunCallAsync(job.RunId, line, limits, claimed, lease.Token, onDemand ? accessToken : null).ConfigureAwait(false);
                 }
             }
             catch
@@ -588,6 +608,8 @@ namespace Blocks.FunctionRunner.Runs
             }
 
             var discard = await _warm!.ReleaseAsync(handle, call).ConfigureAwait(false);
+            // A token the call asked for is masked like a resolved secret in everything recorded below.
+            if (Volatile.Read(ref redeemed) is { } asked) resolvedValues = [.. resolvedValues, asked];
             timings.Log(_logger, job.RunId, call.HandoverMs, handle.Reused);
             var report = new WarmReport(handle.Reused, discard, call.HandoverMs);
             var result = call.Result;

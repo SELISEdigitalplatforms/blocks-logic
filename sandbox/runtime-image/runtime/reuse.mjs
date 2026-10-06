@@ -36,7 +36,7 @@ import { createInterface } from 'node:readline';
 import { dirname } from 'node:path';
 import { getCallSites } from 'node:util';
 import { ProtocolWriter, CODE, EXIT } from './protocol.mjs';
-import { parseEnvelope } from './envelope.mjs';
+import { parseEnvelope, ACCESS_TOKEN_REMOVED } from './envelope.mjs';
 
 // Captured before any tenant code is imported (see protocol.mjs): a function that later replaces
 // these cannot change what the runtime does with them.
@@ -125,6 +125,11 @@ function makeOwnCodeTest(functionRoot) {
   };
 }
 
+/** A runner answer on stdin starts exactly like this (the runner writes it so). */
+const GIVE_PREFIX = '{"t":"give"';
+/** How long a request to the runner may go unanswered (IAM's own timeout is 10 s). */
+const ASK_TIMEOUT_MS = 15_000;
+
 export async function runReuse({ functionEntry, describe, patchConsole }) {
   const als = new AsyncLocalStorage();
   const isOwnCode = makeOwnCodeTest(dirname(functionEntry));
@@ -144,6 +149,9 @@ export async function runReuse({ functionEntry, describe, patchConsole }) {
   /** Every secret value seen by this sandbox, for lines not tied to one call (fatal, late, idle). */
   const allMasked = new Set();
   let dying = false;
+  /** Requests to the runner awaiting its `give` line: n → { id (call), resolve }. */
+  const pendingAsks = new Map();
+  let asked = 0;
 
   const sandboxWriter = new ProtocolWriter(_stdoutWrite);
   const betweenCalls = new ProtocolWriter(_stdoutWrite, { call: 'none', late: true });
@@ -300,12 +308,38 @@ export async function runReuse({ functionEntry, describe, patchConsole }) {
     return fatal(CODE.USER_RUNTIME_ERROR,
       'the function must export a default function: export default async function (input, ctx) { … }');
   }
-  sandboxWriter.control({ t: 'ready', at: _now() });
+  // `can` tells the runner what this runtime understands beyond the base protocol: `need` = it
+  // asks for the caller's token on demand. An older runtime says nothing, and is sent the token up
+  // front as before.
+  sandboxWriter.control({ t: 'ready', at: _now(), can: ['need'] });
 
   // --- serve calls, one at a time -----------------------------------------------
+  // stdin carries two kinds of line: a call envelope (served one after another, as before) and the
+  // runner's answer to something the current call asked for (`{"t":"give",...}`, see `ask`). An
+  // answer must reach the code waiting for it while that call is still running, so lines are read
+  // as they arrive and only envelopes are queued — a loop that awaited each call before reading on
+  // would never see the answer the call is waiting for.
   const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
-  for await (const line of lines) {
-    if (dying) return;
+  const queued = [];
+  let stdinClosed = false;
+  let wake = null;
+  lines.on('line', (line) => {
+    if (line.startsWith(GIVE_PREFIX)) return deliver(line);
+    queued.push(line);
+    if (wake) { const w = wake; wake = null; w(); }
+  });
+  lines.on('close', () => {
+    stdinClosed = true;
+    if (wake) { const w = wake; wake = null; w(); }
+  });
+
+  while (!dying) {
+    if (queued.length === 0) {
+      if (stdinClosed) break;
+      await new _Promise((r) => { wake = r; });
+      continue;
+    }
+    const line = queued.shift();
     if (line.length === 0) continue;
     if (_byteLength(line, 'utf8') > MAX_LINE_BYTES) {
       return fatal(CODE.RUNTIME_START_FAILED, 'a call envelope exceeded the 1 MB ceiling');
@@ -319,7 +353,37 @@ export async function runReuse({ functionEntry, describe, patchConsole }) {
     const keepGoing = await serve(envelope);
     if (!keepGoing) return;
   }
+  if (dying) return;
   _exit(EXIT.OK);
+
+  /**
+   * Asks the runner for something only it can fetch — today the caller's token — on behalf of the
+   * call `id`, and resolves with its answer (`null` when it has none). The runner answers only the
+   * call it is serving, once per call and per thing, and never after the call ended; an answer that
+   * does not come within ASK_TIMEOUT_MS fails the request rather than hanging the call to its limit.
+   */
+  function ask(id, what) {
+    const n = ++asked;
+    return new _Promise((resolve, reject) => {
+      const timer = _setTimeout(() => {
+        pendingAsks.delete(n);
+        reject(new Error(`the platform did not answer the request for ${what} in time`));
+      }, ASK_TIMEOUT_MS);
+      timer.unref?.();
+      pendingAsks.set(n, { id, resolve: (v) => { _clearTimeout(timer); resolve(v); } });
+      sandboxWriter.control({ t: 'need', call: id, what, id: n });
+    });
+  }
+
+  /** A `give` line from the runner: settles the request it answers, if that call still waits. */
+  function deliver(line) {
+    let msg;
+    try { msg = JSON.parse(line); } catch { return; }
+    const pending = pendingAsks.get(msg?.id);
+    if (!pending || pending.id !== msg.call) return;
+    pendingAsks.delete(msg.id);
+    pending.resolve(typeof msg.value === 'string' && msg.value.length > 0 ? msg.value : null);
+  }
 
   /** Runs one call to its `idle` line. False when the sandbox must not serve another. */
   async function serve(envelope) {
@@ -335,18 +399,36 @@ export async function runReuse({ functionEntry, describe, patchConsole }) {
     let open = true;
     current = { tok, id, writer, answered: false };
 
-    const token = envelope.blocks.accessToken;
+    // The caller's token is fetched only when the function asks for it: most calls never do, and
+    // redeeming it is an IAM round trip (~70 ms, at times seconds). Asked once per call; a runner
+    // that still sends it in the envelope (an older one) is answered from there.
+    const preset = envelope.blocks.accessToken;
+    let tokenRequest = null;
     const blocks = _freeze(Object.create(Object.prototype, {
-      accessToken: {
+      getAccessToken: {
         enumerable: true,
-        get() {
+        value() {
           // One call runs at a time, so "this call is still open" is the whole rule. A ctx kept
-          // from an earlier call reads nothing, and its use is a sign that call left work behind.
-          if (open) return token;
-          if (current) lateActivity = true;
-          throw new Error('ctx.blocks.accessToken was read after its call ended');
+          // from an earlier call gets nothing, and its use is a sign that call left work behind.
+          if (!open) {
+            if (current) lateActivity = true;
+            return _Promise.reject(new Error('ctx.blocks.getAccessToken() was called after its call ended'));
+          }
+          if (tokenRequest) return tokenRequest;
+          tokenRequest = preset
+            ? _Promise.resolve(preset)
+            : ask(id, 'accessToken').then((value) => {
+                if (!value) return undefined;
+                // Masked from here on, in this call's lines and in every line not tied to a call.
+                allMasked.add(value);
+                armRedaction();
+                writer.useRedaction([...envelope.maskedValues, value]);
+                return value;
+              });
+          return tokenRequest;
         },
       },
+      accessToken: { enumerable: false, get() { throw new Error(ACCESS_TOKEN_REMOVED); } },
     }));
     /** ctx.log is bound to its own call, whatever async context it is called from. */
     const logTo = (level) => (msg, data) => {

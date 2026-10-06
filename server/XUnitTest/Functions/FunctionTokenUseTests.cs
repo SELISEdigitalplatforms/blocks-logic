@@ -22,6 +22,8 @@ namespace XUnitTest.Functions
         [InlineData("const t = ctx.blocks?.['accessToken'];")]
         [InlineData("// uses accessToken later")]
         [InlineData("const { accessToken } = ctx.blocks;")]
+        [InlineData("const t = await ctx.blocks.getAccessToken();")]
+        [InlineData("const get = c => c.getAccessToken();")]
         public void Code_that_can_reach_the_token_may_read_it(string code) =>
             FunctionTokenUse.MayRead(Source(code)).Should().BeTrue();
 

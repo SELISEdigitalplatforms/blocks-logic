@@ -61,7 +61,8 @@ describe("ctx.blocks typing", () => {
   it("declares the caller's access token as possibly undefined", () => {
     const defs = buildFunctionTypeDefs();
     expect(defs).toContain("readonly blocks: FunctionBlocksAccess;");
-    expect(defs).toContain("readonly accessToken: string | undefined;");
+    expect(defs).toContain("getAccessToken(): Promise<string | undefined>;");
+    expect(defs).not.toContain("readonly accessToken");
   });
 });
 

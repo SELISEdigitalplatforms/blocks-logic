@@ -20,6 +20,8 @@ export const REUSE_HINT_MESSAGES = {
     "Keeps this call's data in a module-level variable. The next call — maybe another user's — runs in the same sandbox and sees it. Use a variable inside the handler.",
   listenerCtx:
     "This listener outlives the call but uses ctx. Later events would run with an old call's ctx. Use console inside listeners.",
+  removedAccessToken:
+    "ctx.blocks.accessToken was removed. Use `await ctx.blocks.getAccessToken()` — the caller's token is now fetched only when your code asks for it.",
 } as const;
 
 /** The code part of a line: drops a trailing `// comment` (not inside a string — good enough here). */
@@ -95,6 +97,11 @@ export const findReuseHints = (source: string): ReuseHint[] => {
         const col = line.indexOf(assign[1], assign.index) + 1;
         hints.push({ line: lineNumber, startColumn: col, endColumn: col + name.length, message: REUSE_HINT_MESSAGES.moduleVariable });
       }
+    }
+
+    for (const match of line.matchAll(/\bblocks\.accessToken\b/g)) {
+      const col = match.index! + 1;
+      hints.push({ line: lineNumber, startColumn: col, endColumn: col + "blocks.accessToken".length, message: REUSE_HINT_MESSAGES.removedAccessToken });
     }
 
     const listener = /\.(?:on|once|addListener)\s*\(\s*["'`][^"'`]+["'`]\s*,.*\bctx\.(log|blocks|env|context|run)\b/.exec(line);

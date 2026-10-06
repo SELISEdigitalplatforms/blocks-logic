@@ -595,14 +595,15 @@ describe('secret redaction', () => {
     assert.match(r.result.message, /\[redacted\]/);
   });
 
-  test('end to end: ctx.blocks.accessToken reaches the handler and is masked in logs and errors', async () => {
+  test('end to end: ctx.blocks.getAccessToken() reaches the handler and is masked in logs and errors', async () => {
     // A successful return value is the author's own output and is not scrubbed — the same rule
     // as a secret-bound variable — so this run only logs the token and then fails with it.
     const token = 'eyJhbGciOi.delegated_end_to_end.sig99';
     const r = await runBootstrap(`export default async (i, ctx) => {
-      console.log('token is', ctx.blocks.accessToken);
-      ctx.log.info('header', { authorization: 'Bearer ' + ctx.blocks.accessToken });
-      throw new Error('Blocks API refused ' + ctx.blocks.accessToken);
+      const t = await ctx.blocks.getAccessToken();
+      console.log('token is', t);
+      ctx.log.info('header', { authorization: 'Bearer ' + t });
+      throw new Error('Blocks API refused ' + t);
     };`, { ...BASE_ENVELOPE, blocks: { accessToken: token } });
     const everything = JSON.stringify(r.events) + r.stderr;
     assert.ok(!everything.includes(token), everything);
@@ -612,10 +613,18 @@ describe('secret redaction', () => {
     assert.match(r.result.message, /\[redacted\]/);
   });
 
-  test('end to end: without a delegated token ctx.blocks.accessToken is undefined', async () => {
+  test('end to end: without a delegated token ctx.blocks.getAccessToken() gives undefined', async () => {
     const r = await runBootstrap(
-      'export default async (i, ctx) => ({ type: typeof ctx.blocks.accessToken, frozen: Object.isFrozen(ctx.blocks) });');
+      'export default async (i, ctx) => ({ type: typeof (await ctx.blocks.getAccessToken()), frozen: Object.isFrozen(ctx.blocks) });');
     assert.deepEqual(r.result.value, { type: 'undefined', frozen: true });
+  });
+
+  test('the removed ctx.blocks.accessToken fails with a message that names its replacement', async () => {
+    const r = await runBootstrap('export default async (i, ctx) => ctx.blocks.accessToken;',
+      { ...BASE_ENVELOPE, blocks: { accessToken: 'eyJhbGciOi.removed.sig' } });
+    assert.equal(r.result.ok, false);
+    assert.match(r.result.message, /getAccessToken\(\)/);
+    assert.ok(!JSON.stringify(r.events).includes('eyJhbGciOi.removed.sig'));
   });
 });
 

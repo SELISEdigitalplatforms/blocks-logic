@@ -299,6 +299,7 @@ namespace Blocks.FunctionRunner.Sandbox
                     {
                         case "ready":
                         {
+                            CanAsk = evt.CanAsk;
                             // The start-up boost ends here, before the sandbox can serve anyone:
                             // no call ever runs above the run limit. Not confirmed → not used.
                             var notDropped = await _container.DropToRunLimitAsync(token).ConfigureAwait(false);
@@ -424,7 +425,8 @@ namespace Blocks.FunctionRunner.Sandbox
             RunLimits limits,
             long? startupMs,
             Stopwatch? handover,
-            CancellationToken cancellation)
+            CancellationToken cancellation,
+            Func<CancellationToken, Task<string?>>? accessToken = null)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(runId);
             ArgumentException.ThrowIfNullOrWhiteSpace(envelopeLine);
@@ -454,7 +456,17 @@ namespace Blocks.FunctionRunner.Sandbox
                 writeDeadline.CancelAfter(TimeSpan.FromMilliseconds(_options.WarmWriteTimeoutMs));
                 try
                 {
-                    await _container.WriteLineAsync(envelopeLine, writeDeadline.Token).ConfigureAwait(false);
+                    // Behind the same lock as answers (AnswerAsync): an answer for the previous call
+                    // still being written must not interleave its bytes with this envelope.
+                    await _stdinWrite.WaitAsync(writeDeadline.Token).ConfigureAwait(false);
+                    try
+                    {
+                        await _container.WriteLineAsync(envelopeLine, writeDeadline.Token).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        _stdinWrite.Release();
+                    }
                     handoverMs = handover?.ElapsedMilliseconds;
                 }
                 catch (Exception ex)
@@ -497,6 +509,10 @@ namespace Blocks.FunctionRunner.Sandbox
             long? handlerCpuMs = null;
             long? hostCpuAtStart = null, hostCpuAtAnswer = null;
             var ended = false;   // the stream ended: the sandbox exited
+            // The caller's token, fetched once when the call first asks for it (`need`), then the
+            // same answer for any later ask of this call. Never for another call, never after it.
+            Task<string?>? tokenFetch = null;
+            var answers = new List<Task>();
 
             try
             {
@@ -544,6 +560,23 @@ namespace Blocks.FunctionRunner.Sandbox
                                 hostCpuAtAnswer ??= _container.HostCpuMicroseconds();
                             }
                             _parser.Feed(output, line);
+                            break;
+
+                        case "need":
+                            if (evt.Late || !string.Equals(evt.Call, runId, StringComparison.Ordinal) || evt.AskId is null)
+                            {
+                                // Not this call's: unanswered. The asking code, if any, times out.
+                                break;
+                            }
+                            if (answers.Count >= MaxAsksPerCall)
+                            {
+                                discard = "protocol";
+                                break;
+                            }
+                            Task<string?> value = evt.What == "accessToken" && accessToken is not null
+                                ? tokenFetch ??= FetchQuietlyAsync(accessToken, deadline.Token)
+                                : Task.FromResult<string?>(null);
+                            answers.Add(AnswerAsync(runId, evt.AskId.Value, value, deadline.Token));
                             break;
 
                         case "idle":
@@ -782,10 +815,73 @@ namespace Blocks.FunctionRunner.Sandbox
             }
         }
 
+        /// <summary>
+        /// The runtime announced at <c>ready</c> that it asks for the caller's token on demand
+        /// (<c>can: ["need"]</c>). False for an image built on an older runtime, which is sent the
+        /// token up front instead, exactly as before.
+        /// </summary>
+        public bool CanAsk { get; private set; }
+
+        /// <summary>A call that asks for more than this many things is not following the protocol.</summary>
+        internal const int MaxAsksPerCall = 16;
+
+        private readonly SemaphoreSlim _stdinWrite = new(1, 1);
+
+        /// <summary>Whatever goes wrong fetching is an answer of "none", never an exception in the read loop.</summary>
+        private async Task<string?> FetchQuietlyAsync(Func<CancellationToken, Task<string?>> fetch, CancellationToken token)
+        {
+            try
+            {
+                return await fetch(token).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning("Warm sandbox {Name}: fetching an asked-for value failed ({ExceptionType})", Name, ex.GetType().Name);
+                return null;
+            }
+            catch (OperationCanceledException)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Writes <c>{"t":"give","call":…,"id":…,"value":…}</c> to the sandbox's stdin — the exact
+        /// prefix the runtime recognises an answer by. Serialized with every other stdin write.
+        /// </summary>
+        private async Task AnswerAsync(string runId, long askId, Task<string?> value, CancellationToken token)
+        {
+            string? v;
+            try { v = await value.ConfigureAwait(false); }
+            catch { v = null; }
+            var line = "{\"t\":\"give\",\"call\":" + JsonSerializer.Serialize(runId)
+                + ",\"id\":" + askId.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                + ",\"value\":" + (v is null ? "null" : JsonSerializer.Serialize(v)) + "}";
+            try
+            {
+                await _stdinWrite.WaitAsync(token).ConfigureAwait(false);
+                try
+                {
+                    using var writeDeadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+                    writeDeadline.CancelAfter(TimeSpan.FromMilliseconds(_options.WarmWriteTimeoutMs));
+                    await _container.WriteLineAsync(line, writeDeadline.Token).ConfigureAwait(false);
+                }
+                finally
+                {
+                    _stdinWrite.Release();
+                }
+            }
+            catch (Exception ex) when (ex is OperationCanceledException or IOException or ObjectDisposedException)
+            {
+                // The call is over or the sandbox is gone; the asking code times out on its own.
+                _logger.LogDebug("Warm sandbox {Name}: an answer could not be written ({Message})", Name, ex.Message);
+            }
+        }
+
         /// <summary>The fields of one reuse-protocol line this side acts on.</summary>
         internal readonly record struct ProtocolLine(
             string? Type, string? Call, bool Late, bool Clean, IReadOnlyList<string> Leftovers, string? Code, string? Message,
-            long? CpuMs = null)
+            long? CpuMs = null, string? What = null, long? AskId = null, bool CanAsk = false)
         {
             /// <summary>Reads a line; anything that is not a JSON object with a string <c>t</c> has a null type.</summary>
             public static ProtocolLine Read(string line)
@@ -815,8 +911,17 @@ namespace Blocks.FunctionRunner.Sandbox
                         ? cpu
                         : null;
 
+                    long? askId = root.TryGetProperty("id", out var i) && i.ValueKind == JsonValueKind.Number
+                        && i.TryGetInt64(out var n) && n > 0
+                        ? n
+                        : null;
+
+                    var canAsk = root.TryGetProperty("can", out var can) && can.ValueKind == JsonValueKind.Array
+                        && can.EnumerateArray().Any(x => x.ValueKind == JsonValueKind.String && x.GetString() == "need");
+
                     return new ProtocolLine(
-                        Str("t"), Str("call"), Bool("late"), Bool("clean"), leftovers, Str("code"), Str("message"), cpuMs);
+                        Str("t"), Str("call"), Bool("late"), Bool("clean"), leftovers, Str("code"), Str("message"), cpuMs,
+                        Str("what"), askId, canAsk);
                 }
                 catch (JsonException)
                 {

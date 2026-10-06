@@ -26,6 +26,11 @@ namespace Blocks.FunctionRunner.Runs
         public void Secrets(long durationMs) => Volatile.Write(ref _secrets, durationMs);
         public void Token(long durationMs) => Volatile.Write(ref _token, durationMs);
 
+        /// <summary>The caller's token, fetched while the code ran because it asked for it.</summary>
+        public void TokenOnDemand(long durationMs) => Volatile.Write(ref _tokenOnDemand, durationMs);
+
+        private long _tokenOnDemand = -1;
+
         /// <summary>One line per warm call. Each step is the time since the previous mark.</summary>
         public void Log(ILogger logger, string runId, long? handoverMs, bool reused)
         {
@@ -70,6 +75,9 @@ namespace Blocks.FunctionRunner.Runs
                 Add("secrets", Volatile.Read(ref handover._secrets));
                 Add("token", Volatile.Read(ref handover._token));
                 if (handoverMs is { } total) Add("total", total);
+                // Inside the function's own time, not the hand-over: shown under "Your code".
+                var onDemand = Volatile.Read(ref handover._tokenOnDemand);
+                if (onDemand >= 0) parts.Add($"code.token={onDemand}");
             }
             return string.Join(';', parts);
         }

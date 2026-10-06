@@ -50,6 +50,28 @@ function envMap(value) {
 }
 
 /** Parses and validates the envelope, returning the frozen pieces the bootstrap needs. */
+/**
+ * The message for code that still reads the removed `ctx.blocks.accessToken` (2026-10-06). The
+ * caller's token is now fetched only when the function asks for it, so it is a method that waits,
+ * not a property that is always there.
+ */
+export const ACCESS_TOKEN_REMOVED =
+  'ctx.blocks.accessToken was removed: use `await ctx.blocks.getAccessToken()` — the caller\'s token ' +
+  'is now fetched only when your code asks for it (undefined when there is no signed-in caller)';
+
+/**
+ * `ctx.blocks` for a run that already holds its token (single-run mode: the runner redeemed it
+ * before the sandbox started). Same shape as reuse mode, where the token is asked for on demand,
+ * so a function's code is identical in both.
+ */
+export function blocksWithToken(token) {
+  const value = typeof token === 'string' && token.length > 0 ? token : undefined;
+  return _freeze(Object.create(Object.prototype, {
+    getAccessToken: { enumerable: true, value: () => Promise.resolve(value) },
+    accessToken: { enumerable: false, get() { throw new Error(ACCESS_TOKEN_REMOVED); } },
+  }));
+}
+
 export function parseEnvelope(raw) {
   let doc;
   try {

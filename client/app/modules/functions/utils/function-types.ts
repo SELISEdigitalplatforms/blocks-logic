@@ -69,9 +69,11 @@ declare interface FunctionBlocksAccess {
   /**
    * A fresh, short-lived Blocks access token for the user who invoked this run — pass it as the
    * \`Authorization: Bearer\` of a Blocks API call, with \`ctx.context.tenantId\` as \`x-blocks-key\`.
+   * Fetched only when you call this (one IAM round trip, once per call; later calls in the same
+   * run get the same token), so a call that never needs it pays nothing. Resolves to
    * \`undefined\` on a public trigger, a schedule, or when none could be issued. Masked in logs.
    */
-  readonly accessToken: string | undefined;
+  getAccessToken(): Promise<string | undefined>;
 }
 
 declare interface FunctionEnv {
@@ -179,7 +181,7 @@ export const buildCtxCompletions = (envKeys: string[] = []) => {
     {
       label: "blocks",
       detail: "FunctionBlocksAccess",
-      documentation: "accessToken — the caller's Blocks token, or undefined.",
+      documentation: "getAccessToken() — the caller's Blocks token, fetched on demand (await it), or undefined.",
     },
     {
       label: "waitUntil",

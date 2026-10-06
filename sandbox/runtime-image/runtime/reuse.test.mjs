@@ -33,7 +33,7 @@ function envelope(id, overrides = {}) {
  * One reuse-mode sandbox. `files` maps paths under the function root to sources; `index.js` is
  * the entry. Returns helpers to send calls and read the protocol.
  */
-function sandbox(files, { env = {} } = {}) {
+function sandbox(files, { env = {}, answer } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'fnreuse-'));
   for (const [path, source] of Object.entries(files)) {
     const full = join(root, path);
@@ -57,7 +57,16 @@ function sandbox(files, { env = {} } = {}) {
       const line = buffer.slice(0, i);
       buffer = buffer.slice(i + 1);
       if (!line) continue;
-      try { events.push(JSON.parse(line)); } catch { events.push({ t: 'unparsed', raw: line }); }
+      let event;
+      try { event = JSON.parse(line); } catch { event = { t: 'unparsed', raw: line }; }
+      events.push(event);
+      // Plays the runner's part for `need` lines: answer the call that asked, as the runner does.
+      if (event.t === 'need' && answer) {
+        const value = answer(event);
+        if (value !== undefined) {
+          child.stdin.write(JSON.stringify({ t: 'give', call: event.call, id: event.id, value }) + '\n');
+        }
+      }
     }
     flush();
   });
@@ -90,6 +99,8 @@ function sandbox(files, { env = {} } = {}) {
       };
     },
     waitFor,
+    /** Writes a raw line to the sandbox's stdin, as anything other than the runner might. */
+    send: (line) => child.stdin.write(line + '\n'),
     async close() {
       child.stdin.end();
       await Promise.race([exited, new Promise((r) => setTimeout(r, 3000))]);
@@ -483,7 +494,7 @@ describe('reuse mode: one call cannot reach into another', () => {
       export default async function (input, ctx) {
         sock ??= await new Promise((ok) => { const c = net.connect(ctx.env.PORT, '127.0.0.1', () => ok(c)); });
         return await new Promise((ok) => {
-          sock.once('data', (d) => { console.log('echo for', input.call); ok({ echo: String(d), token: ctx.blocks.accessToken }); });
+          sock.once('data', async (d) => { console.log('echo for', input.call); ok({ echo: String(d), token: await ctx.blocks.getAccessToken() }); });
           sock.write(input.call);
         });
       }` });
@@ -498,13 +509,13 @@ describe('reuse mode: one call cannot reach into another', () => {
     } finally { await s.close(); server.close(); }
   });
 
-  test('ctx.blocks.accessToken works in its call and is refused from a late callback', async () => {
+  test('ctx.blocks.getAccessToken() works in its call and is refused from a late callback', async () => {
     const s = sandbox({ 'index.js': `
       let leaked;
       export default async function (input, ctx) {
         if (input.call === 'A') {
-          const now = ctx.blocks.accessToken;
-          setTimeout(() => { try { leaked = ctx.blocks.accessToken; } catch (e) { leaked = 'refused: ' + e.message; } }, 50).unref();
+          const now = await ctx.blocks.getAccessToken();
+          setTimeout(async () => { try { leaked = await ctx.blocks.getAccessToken(); } catch (e) { leaked = 'refused: ' + e.message; } }, 50).unref();
           await new Promise((r) => setTimeout(r, 120));
           return { now, leaked };
         }
@@ -519,7 +530,7 @@ describe('reuse mode: one call cannot reach into another', () => {
         let saved;
         export default async function (input, ctx) {
           if (input.call === 'A') { saved = ctx; return 'A'; }
-          try { return saved.blocks.accessToken; } catch (e) { return 'refused'; }
+          try { return await saved.blocks.getAccessToken(); } catch (e) { return 'refused'; }
         }` });
       try {
         await s2.ready();
@@ -592,6 +603,74 @@ describe('reuse mode: the sandbox ends itself when it cannot be trusted', () => 
       const f = await p;
       assert.equal(f.code, 'RUNTIME_START_FAILED');
       assert.equal(await s.exited, 20, 'a platform-side fault exits 20, like single-run');
+    } finally { await s.close(); }
+  });
+});
+
+describe('reuse mode: the caller token on demand', () => {
+  test('a call that never asks costs no request at all', async () => {
+    const s = sandbox({ 'index.js': 'export default async () => "no token needed";' }, { answer: () => 'tok-unused-0000' });
+    try {
+      await s.ready();
+      const a = await s.call('A');
+      assert.equal(a.result.value, 'no token needed');
+      assert.equal(s.events.filter((e) => e.t === 'need').length, 0);
+    } finally { await s.close(); }
+  });
+
+  test('asked from code: the runner is asked once per call, and the token is masked from then on', async () => {
+    const s = sandbox({ 'index.js': `
+      export default async function (input, ctx) {
+        const [a, b] = await Promise.all([ctx.blocks.getAccessToken(), ctx.blocks.getAccessToken()]);
+        console.log('using', a);
+        return { same: a === b, length: a.length };
+      }` }, { answer: (need) => (need.what === 'accessToken' ? 'tok-on-demand-' + need.call + '-9999' : null) });
+    try {
+      await s.ready();
+      const a = await s.call('A');
+      assert.deepEqual(a.result.value, { same: true, length: 'tok-on-demand-A-9999'.length });
+      const needs = s.events.filter((e) => e.t === 'need');
+      assert.equal(needs.length, 1, 'one request per call, however often the code asks');
+      assert.equal(needs[0].call, 'A');
+      assert.ok(a.logs.some((l) => l.msg.includes('[redacted]')), JSON.stringify(a.logs));
+      assert.ok(!JSON.stringify(s.events.filter((e) => e.t === 'log')).includes('tok-on-demand-A-9999'));
+
+      const b = await s.call('B');
+      assert.equal(b.result.value.length, 'tok-on-demand-B-9999'.length, 'call B gets its own caller token');
+      assert.equal(s.events.filter((e) => e.t === 'need').length, 2);
+    } finally { await s.close(); }
+  });
+
+  test('no caller token (public trigger, failed redemption) is undefined, not an error', async () => {
+    const s = sandbox({ 'index.js': 'export default async (i, ctx) => typeof (await ctx.blocks.getAccessToken());' },
+      { answer: () => null });
+    try {
+      await s.ready();
+      assert.equal((await s.call('A')).result.value, 'undefined');
+    } finally { await s.close(); }
+  });
+
+  test('an answer naming another call, or a request never made, is ignored', async () => {
+    const s = sandbox({ 'index.js': 'export default async (i, ctx) => await ctx.blocks.getAccessToken();' });
+    try {
+      await s.ready();
+      const call = s.call('A');
+      const need = await s.waitFor((e) => e.t === 'need');
+      s.send(JSON.stringify({ t: 'give', call: 'B', id: need.id, value: 'tok-for-the-wrong-call' }));
+      s.send(JSON.stringify({ t: 'give', call: 'A', id: need.id + 99, value: 'tok-for-no-request' }));
+      s.send(JSON.stringify({ t: 'give', call: 'A', id: need.id, value: 'tok-the-real-one-5678' }));
+      assert.equal((await call).result.value, 'tok-the-real-one-5678');
+    } finally { await s.close(); }
+  });
+
+  test('the removed ctx.blocks.accessToken fails with a message that names its replacement', async () => {
+    const s = sandbox({ 'index.js': 'export default async (i, ctx) => ctx.blocks.accessToken;' });
+    try {
+      await s.ready();
+      const a = await s.call('A', { blocks: { accessToken: 'tok-removed-1234' } });
+      assert.equal(a.result.ok, false);
+      assert.match(a.result.message, /getAccessToken\(\)/);
+      assert.ok(!JSON.stringify(s.events).includes('tok-removed-1234'));
     } finally { await s.close(); }
   });
 });

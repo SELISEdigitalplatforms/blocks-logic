@@ -69,9 +69,10 @@ export const CONNECTION_PRESETS: IConnectionPreset[] = [
 export default async function (input, ctx) {
   const base = { apiUrl: ctx.env.BLOCKS_API_URL, xBlocksKey: ctx.context.tenantId };
 
-  // The caller's own token: Blocks applies their roles and permissions. undefined on a public
-  // trigger, a schedule, or a client-credentials or impersonated caller.
-  let accessToken = ctx.blocks.accessToken;
+  // The caller's own token: Blocks applies their roles and permissions. Fetched only now, when
+  // this path needs it (one IAM round trip per call). undefined on a public trigger, a schedule,
+  // or a client-credentials or impersonated caller.
+  let accessToken = await ctx.blocks.getAccessToken();
 
   if (!accessToken) {
     // No caller token: act as a client-credentials client instead. That token is the client's,
