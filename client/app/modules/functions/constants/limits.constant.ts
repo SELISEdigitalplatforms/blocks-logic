@@ -49,7 +49,7 @@ export const SANDBOX_CTX_DOCS = [
   {
     name: "ctx.blocks.accessToken",
     description:
-      "The caller's Blocks token, fresh for this run: pass it as accessToken to @seliseblocks/client, with ctx.context.tenantId as xBlocksKey. undefined on a public trigger, a schedule, a client-credentials or impersonated caller — check it before calling Blocks. Masked in logs.",
+      "The caller's Blocks token, fresh for this run: pass it as accessToken to @seliseblocks/client, with ctx.context.tenantId as xBlocksKey. undefined on a public trigger, a schedule, a client-credentials or impersonated caller — check it before calling Blocks. Fetched only when index.js mentions accessToken or blocks, so read it by name. Masked in logs.",
   },
   {
     name: "ctx.run",

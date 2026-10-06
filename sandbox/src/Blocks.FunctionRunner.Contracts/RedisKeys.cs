@@ -78,6 +78,18 @@ namespace Blocks.FunctionRunner.Contracts
         /// <summary>Run results, written by runners, consumed by the logic Worker.</summary>
         public static string ResultsStream => _prefix + "functions:results";
 
+        /// <summary>
+        /// Pub/sub wake-ups for <see cref="RunsStream"/> and <see cref="ResultsStream"/>: the writer
+        /// publishes one right after its XADD, so an idle reader reads at once instead of on its
+        /// next 250 ms poll (StackExchange.Redis cannot block on XREADGROUP). Advisory only — the
+        /// poll stays, so a lost or unheard nudge costs exactly the old latency, and a side that
+        /// predates them neither sends nor listens. The payload means nothing.
+        /// </summary>
+        public static string RunsNudgeChannel => _prefix + "functions:runs:nudge";
+
+        /// <inheritdoc cref="RunsNudgeChannel" />
+        public static string ResultsNudgeChannel => _prefix + "functions:results:nudge";
+
         /// <summary>Build jobs, written by the control plane, consumed by runners.</summary>
         public static string BuildsStream => _prefix + "functions:builds";
 
@@ -109,6 +121,17 @@ namespace Blocks.FunctionRunner.Contracts
         /// means a fresh sandbox, which is also all a runner that predates it does.
         /// </summary>
         public const string RunReuseField = "reuse";
+
+        /// <summary>
+        /// Optional field of a run entry: the Api's step times (<see cref="RunJob.ApiTimings"/>).
+        /// Optional field of a result entry, <see cref="ResultTimingsField"/>: every step time of
+        /// the call so far — <c>api.*</c>, <c>queue</c>, <c>handover.*</c> — for the run record.
+        /// A side that predates them ignores them.
+        /// </summary>
+        public const string RunApiTimingsField = "apiTimings";
+
+        /// <inheritdoc cref="RunApiTimingsField" />
+        public const string ResultTimingsField = "timings";
 
         /// <summary>Entries that exhausted their retry budget.</summary>
         public static string DeadStream => _prefix + "functions:dead";

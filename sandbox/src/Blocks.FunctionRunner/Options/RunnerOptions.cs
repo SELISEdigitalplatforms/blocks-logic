@@ -186,6 +186,15 @@ namespace Blocks.FunctionRunner.Options
         /// <summary>How long a stream entry may sit idle before another runner may claim it.</summary>
         public int ClaimIdleMs => LeaseMs * 3;
 
+        /// <summary>
+        /// How many deployed runs this host works on at once. 0 (the default) follows the host
+        /// budget's capacity as it moves; admission still decides, per run, whether it may start.
+        /// 1 is the old behaviour — one run at a time, the next claimed only when it is over — kept
+        /// as a switch to fall back to without a redeploy.
+        /// </summary>
+        [Range(0, 256)]
+        public int MaxParallelRuns { get; set; }
+
         /// <summary>Delivery attempts before an entry is moved to functions:dead.</summary>
         [Range(1, 20)]
         public int MaxAttempts { get; set; } = 3;

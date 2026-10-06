@@ -121,7 +121,29 @@ namespace Functions.DomainService.Queue
         /// that never opted in is byte-identical to before. A runner without reuse ignores it.
         /// </summary>
         public const string RunReuseField = "reuse";
+
+        /// <summary>
+        /// Optional field of a run entry: the Api's step times for this call (<c>function=35;…</c>),
+        /// which the runner carries to the result entry's <see cref="ResultTimingsField"/> beside its
+        /// own. Mirrors <c>RedisKeys.RunApiTimingsField</c>.
+        /// </summary>
+        public const string RunApiTimingsField = "apiTimings";
+
+        /// <inheritdoc cref="RunApiTimingsField" />
+        public const string ResultTimingsField = "timings";
         public static string ResultsStream => _prefix + "functions:results";
+
+        /// <summary>
+        /// Mirrors <c>RedisKeys.RunsNudgeChannel</c> in the runner. Pub/sub wake-ups for <see cref="RunsStream"/> and <see cref="ResultsStream"/>: the writer
+        /// publishes one right after its XADD, so an idle reader reads at once instead of on its
+        /// next 250 ms poll (StackExchange.Redis cannot block on XREADGROUP). Advisory only — the
+        /// poll stays, so a lost or unheard nudge costs exactly the old latency, and a side that
+        /// predates them neither sends nor listens. The payload means nothing.
+        /// </summary>
+        public static string RunsNudgeChannel => _prefix + "functions:runs:nudge";
+
+        /// <inheritdoc cref="RunsNudgeChannel" />
+        public static string ResultsNudgeChannel => _prefix + "functions:results:nudge";
         public static string BuildsStream => _prefix + "functions:builds";
         public static string BuildResultsStream => _prefix + "functions:build-results";
 

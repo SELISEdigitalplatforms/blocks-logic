@@ -356,6 +356,45 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
+        public async Task A_version_whose_code_never_names_the_token_gets_no_grant()
+        {
+            GrantsAre(Grant);
+            _version.Trigger.AuthMode = AuthMode.Token;
+            _version.Source.IndexJs = "export default async function handler(ctx) { return { ok: ctx.input }; }";
+            using var cts = new CancellationTokenSource();
+            _runs
+                .Setup(r => r.CreateAsync(Tenant, It.IsAny<FunctionRunEntity>(), It.IsAny<CancellationToken>()))
+                .Callback((string _, FunctionRunEntity run, CancellationToken _) => { _created = run; cts.Cancel(); })
+                .Returns(Task.CompletedTask);
+
+            var act = () => Service().InvokeFromWorkflowAsync(Tenant, "fn-1", "{}", Caller, null, "wf-1", cts.Token);
+            await act.Should().ThrowAsync<OperationCanceledException>();
+
+            _delegation.Verify(
+                d => d.CreateGrantAsync(It.IsAny<string>(), It.IsAny<BlocksContext?>(), It.IsAny<AuthMode>()), Times.Never);
+            _redis.Fake.Calls("HashSetAsync").SelectMany(c => (HashEntry[])c[1]!)
+                .Should().NotContain(e => e.Name == FunctionQueueKeys.RunDelegationField);
+        }
+
+        [Fact]
+        public async Task A_version_whose_code_reads_the_token_still_gets_its_grant()
+        {
+            GrantsAre(Grant);
+            _version.Trigger.AuthMode = AuthMode.Token;
+            _version.Source.IndexJs = "export default async (ctx) => ctx.blocks.accessToken ? 1 : 0;";
+            using var cts = new CancellationTokenSource();
+            _runs
+                .Setup(r => r.CreateAsync(Tenant, It.IsAny<FunctionRunEntity>(), It.IsAny<CancellationToken>()))
+                .Callback((string _, FunctionRunEntity run, CancellationToken _) => { _created = run; cts.Cancel(); })
+                .Returns(Task.CompletedTask);
+
+            var act = () => Service().InvokeFromWorkflowAsync(Tenant, "fn-1", "{}", Caller, null, "wf-1", cts.Token);
+            await act.Should().ThrowAsync<OperationCanceledException>();
+
+            _delegation.Verify(d => d.CreateGrantAsync(Tenant, Caller, AuthMode.Token), Times.Once);
+        }
+
+        [Fact]
         public async Task A_run_without_a_grant_queues_no_delegation_field()
         {
             GrantsAre(null);

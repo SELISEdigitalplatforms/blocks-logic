@@ -44,6 +44,11 @@ namespace Blocks.FunctionRunner.Tests
         public bool FailUnpause { get; set; }
         public long? MemoryBytes { get; set; } = 40L * 1024 * 1024;
         public long CpuTotalMs { get; set; } = 100;
+
+        /// <summary>Host cgroup CPU readings handed out in order (null when empty), like cpu.stat.</summary>
+        public Queue<long?> HostCpu { get; } = new();
+
+        public long? HostCpuMicroseconds() => HostCpu.Count > 0 ? HostCpu.Dequeue() : null;
         public (int ExitCode, bool OomKilled)? Exit { get; set; } = (137, false);
 
         public List<string> Written { get; } = [];

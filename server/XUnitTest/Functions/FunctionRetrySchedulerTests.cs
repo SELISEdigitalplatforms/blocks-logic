@@ -35,11 +35,71 @@ namespace XUnitTest.Functions
             _runs.Setup(r => r.ResetForRetryAsync("t1", "run-1", 2, It.IsAny<CancellationToken>())).ReturnsAsync(true);
         }
 
+        private readonly Mock<global::Functions.DomainService.Storage.IFunctionArtifactStore> _artifacts = new();
+
         private FunctionRetryScheduler Scheduler()
         {
             var cache = new Mock<ICacheClient>();
             cache.Setup(c => c.CacheDatabase()).Returns(_redis.Database);
-            return new FunctionRetryScheduler(cache.Object, _runs.Object, _versions.Object, NullLogger<FunctionRetryScheduler>.Instance);
+            return new FunctionRetryScheduler(cache.Object, _runs.Object, _versions.Object,
+                NullLogger<FunctionRetryScheduler>.Instance, _artifacts.Object);
+        }
+
+        private void VersionIs(FunctionVersionEntity version) =>
+            _versions.Setup(v => v.GetByIdAsync("t1", "v-1", It.IsAny<CancellationToken>())).ReturnsAsync(version);
+
+        private static string? Field(NameValueEntry[] entry, string name) =>
+            entry.Any(e => e.Name == name) ? entry.First(e => e.Name == name).Value.ToString() : null;
+
+        [Fact]
+        public async Task An_artifact_only_version_is_retried_with_its_run_image_and_a_fresh_artifact_url()
+        {
+            VersionIs(new FunctionVersionEntity { ItemId = "v-1", ArtifactId = "ART-1", ArtifactSha256 = "deadbeef" });
+            _artifacts.Setup(a => a.CreateDownloadUrlAsync("t1", "ART-1", It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync("https://blob/art-1?sig=x");
+
+            await Scheduler().SweepOnceAsync(CancellationToken.None);
+
+            var entry = (NameValueEntry[])_redis.Fake.Calls("StreamAddAsync").Single()[1]!;
+            Field(entry, "image").Should().Be("blocks-fn-artifact/art-1:local");
+            Field(entry, FunctionQueueKeys.RunArtifactUrlField).Should().Be("https://blob/art-1?sig=x");
+            Field(entry, FunctionQueueKeys.RunArtifactSha256Field).Should().Be("deadbeef");
+        }
+
+        [Fact]
+        public async Task An_artifact_missing_from_the_store_still_retries_by_its_image_name()
+        {
+            VersionIs(new FunctionVersionEntity { ItemId = "v-1", ArtifactId = "ART-1" });
+            _artifacts.Setup(a => a.CreateDownloadUrlAsync("t1", "ART-1", It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((string?)null);
+
+            await Scheduler().SweepOnceAsync(CancellationToken.None);
+
+            var entry = (NameValueEntry[])_redis.Fake.Calls("StreamAddAsync").Single()[1]!;
+            Field(entry, "image").Should().Be("blocks-fn-artifact/art-1:local");
+            Field(entry, FunctionQueueKeys.RunArtifactUrlField).Should().BeNull();
+        }
+
+        [Fact]
+        public async Task A_version_with_neither_image_nor_artifact_is_not_retried_and_not_reset()
+        {
+            VersionIs(new FunctionVersionEntity { ItemId = "v-1" });
+
+            await Scheduler().SweepOnceAsync(CancellationToken.None);
+
+            _redis.Fake.Calls("StreamAddAsync").Should().BeEmpty();
+            _runs.Verify(r => r.ResetForRetryAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task A_registry_built_version_retries_exactly_as_before_without_artifact_fields()
+        {
+            await Scheduler().SweepOnceAsync(CancellationToken.None);
+
+            var entry = (NameValueEntry[])_redis.Fake.Calls("StreamAddAsync").Single()[1]!;
+            Field(entry, "image").Should().Be("sha256:abc");
+            Field(entry, FunctionQueueKeys.RunArtifactUrlField).Should().BeNull();
+            _artifacts.VerifyNoOtherCalls();
         }
 
         [Fact]

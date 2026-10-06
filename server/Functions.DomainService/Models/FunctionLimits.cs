@@ -304,6 +304,18 @@ namespace Functions.DomainService.Models
         public bool AllowInstallScripts { get; set; }
     }
 
+    /// <summary>
+    /// One step of where a call's time went, for the run's Timing group: <c>api</c> (the Api before
+    /// the run was queued), <c>queue</c> (waiting for a runner), <c>handover</c> (runner claim to the
+    /// sandbox), <c>result</c> (the Worker saving the answer). Times only, never values.
+    /// </summary>
+    public class RunTiming
+    {
+        public string Group { get; set; } = string.Empty;
+        public string Step { get; set; } = string.Empty;
+        public long Ms { get; set; }
+    }
+
     /// <summary>One observed stage of a run, for the timeline in the interface.</summary>
     public class RunStage
     {

@@ -65,6 +65,16 @@ namespace Blocks.FunctionRunner.Contracts
         /// </para>
         /// </summary>
         public string? ArtifactSha256 { get; init; }
+
+        /// <summary>
+        /// The Api's own step times for this call (<c>function=35;version=34;…</c>), carried from the
+        /// run entry to the result entry untouched, so the run record can show where all of a call's
+        /// time went. Times only. Null from a control plane that does not send them.
+        /// </summary>
+        public string? ApiTimings { get; init; }
+
+        /// <summary>How long the entry sat on the runs stream before this runner claimed it, in ms.</summary>
+        public long? QueuedMs { get; init; }
     }
 
     /// <summary>A result written to <see cref="RedisKeys.ResultsStream"/> for the logic Worker.</summary>

@@ -49,6 +49,41 @@ namespace Blocks.FunctionRunner.Tests
         }
 
         [Fact]
+        public async Task The_hosts_cgroup_cpu_over_the_handler_window_wins_over_the_runtimes_own()
+        {
+            // Under gVisor process.cpuUsage() counts throttled time as CPU used (480 ms "used" for
+            // 110 ms charged, measured), so a warm call read "192 / 100 m". The host's cgroup
+            // counter, read when `started` and `result` arrive, is what the limit is enforced on.
+            var (sandbox, container) = await ReadyAsync(c => c.OnCall = id =>
+            [
+                Lines.Started(id),
+                Lines.Result(id, "1"),
+                Lines.IdleWithCpu(id, cpuMs: 39),
+            ]);
+            container.HostCpu.Enqueue(5_000_000);
+            container.HostCpu.Enqueue(5_012_400);
+
+            var call = await CallAsync(sandbox, "run_hostcpu");
+
+            call.Result.CpuUsageMs.Should().Be(12);
+        }
+
+        [Fact]
+        public async Task Without_a_readable_cgroup_the_runtimes_figure_is_kept()
+        {
+            var (sandbox, _) = await ReadyAsync(c => c.OnCall = id =>
+            [
+                Lines.Started(id),
+                Lines.Result(id, "1"),
+                Lines.IdleWithCpu(id, cpuMs: 30),
+            ]);
+
+            var call = await CallAsync(sandbox, "run_nocgroup");
+
+            call.Result.CpuUsageMs.Should().Be(30);
+        }
+
+        [Fact]
         public async Task A_clean_call_returns_the_single_run_outcome_and_keeps_the_sandbox()
         {
             var (sandbox, container) = await ReadyAsync(c => c.OnCall = id =>

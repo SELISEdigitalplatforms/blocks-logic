@@ -30,6 +30,7 @@ import {
 } from "../../utils/format";
 import { explainDiscardReason } from "../../utils/trigger";
 import { RunStatusChip } from "../run-status-chip";
+import { RunTiming } from "../run-timing";
 
 const LOG_LEVEL_FILTERS = ["All", "Info", "Warn", "Error"] as const;
 
@@ -239,9 +240,9 @@ export const RunDetail = ({
     ...(run.reused != null && !neverGotSandbox
       ? [
           {
+            // Warm or cold only; how long the hand-over took is in the Timing group below.
             label: "Sandbox",
             value: run.reused ? "Warm (reused)" : "Cold start",
-            hint: run.handoverMs != null ? `${run.handoverMs} ms handover` : undefined,
           },
         ]
       : []),
@@ -386,6 +387,8 @@ export const RunDetail = ({
           </div>
         </CardContent>
       </Card>
+
+      <RunTiming run={run} />
 
       {run.discardReason && !neverGotSandbox && (
         <div

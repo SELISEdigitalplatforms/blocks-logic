@@ -48,6 +48,16 @@ namespace Blocks.FunctionRunner.Sandbox
         /// </summary>
         Task<(long? MemoryBytes, long? CpuTotalMs)> StatsAsync(CancellationToken token);
 
+        /// <summary>
+        /// The container's cumulative CPU time as the host kernel charges it (cgroup v2
+        /// <c>cpu.stat</c> <c>usage_usec</c>), read on the spot, or null when it cannot be read.
+        /// This is the counter the CPU limit is enforced against. The runtime's own
+        /// <c>process.cpuUsage()</c> is not: under gVisor it counts time the host throttled the
+        /// sandbox as CPU used — measured 2026-10-06 at 480 ms "used" for 110 ms really charged in a
+        /// 1 s busy loop at 0.1 CPU, which is how a warm call showed "192 / 100 m".
+        /// </summary>
+        long? HostCpuMicroseconds() => null;
+
         /// <summary>SIGKILL. Quiet when the container is already gone.</summary>
         Task KillAsync();
 
@@ -462,6 +472,7 @@ namespace Blocks.FunctionRunner.Sandbox
             var late = false;
             IReadOnlyList<string> leftovers = [];
             long? handlerCpuMs = null;
+            long? hostCpuAtStart = null, hostCpuAtAnswer = null;
             var ended = false;   // the stream ended: the sandbox exited
 
             try
@@ -499,8 +510,16 @@ namespace Blocks.FunctionRunner.Sandbox
                                 // runtime counts it against this call's cleanliness itself.
                                 break;
                             }
-                            if (evt.Type == "started") handlerStartedMs ??= call.ElapsedMilliseconds;
-                            if (evt.Type == "result") answeredMs ??= call.ElapsedMilliseconds;
+                            if (evt.Type == "started")
+                            {
+                                handlerStartedMs ??= call.ElapsedMilliseconds;
+                                hostCpuAtStart ??= _container.HostCpuMicroseconds();
+                            }
+                            if (evt.Type == "result")
+                            {
+                                answeredMs ??= call.ElapsedMilliseconds;
+                                hostCpuAtAnswer ??= _container.HostCpuMicroseconds();
+                            }
                             _parser.Feed(output, line);
                             break;
 
@@ -574,6 +593,14 @@ namespace Blocks.FunctionRunner.Sandbox
                 // handler's duration overstated a warm call ("144 / 100 m"). Docker's stays the
                 // fallback for a runtime that does not report one.
                 if (handlerCpuMs is { } exact) cpuUsageMs = Math.Max(1, exact);
+
+                // Better still, the host's own counter over the same window: it is what the limit
+                // is enforced against, so it is the figure that can be compared with the limit.
+                // The runtime's under gVisor includes time spent throttled (HostCpuMicroseconds).
+                if (hostCpuAtStart is { } from && hostCpuAtAnswer is { } to && to >= from)
+                {
+                    cpuUsageMs = Math.Max(1, (to - from + 500) / 1000);
+                }
             }
             else
             {
@@ -943,6 +970,35 @@ namespace Blocks.FunctionRunner.Sandbox
 
         public Task UnpauseAsync(CancellationToken token) =>
             _docker.Containers.UnpauseContainerAsync(RequireId(), token);
+
+        /// <inheritdoc />
+        public long? HostCpuMicroseconds()
+        {
+            if (_containerId is null) return null;
+            // systemd cgroup driver (this host), then the cgroupfs driver's layout.
+            foreach (var path in (string[])[
+                $"/sys/fs/cgroup/system.slice/docker-{_containerId}.scope/cpu.stat",
+                $"/sys/fs/cgroup/docker/{_containerId}/cpu.stat"])
+            {
+                try
+                {
+                    foreach (var line in File.ReadLines(path))
+                    {
+                        if (line.StartsWith("usage_usec ", StringComparison.Ordinal)
+                            && long.TryParse(line.AsSpan(11), System.Globalization.NumberStyles.None,
+                                System.Globalization.CultureInfo.InvariantCulture, out var usec))
+                        {
+                            return usec;
+                        }
+                    }
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // Not this layout, or not readable: try the next, else fall back.
+                }
+            }
+            return null;
+        }
 
         public async Task<(long? MemoryBytes, long? CpuTotalMs)> StatsAsync(CancellationToken token)
         {

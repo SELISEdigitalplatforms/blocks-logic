@@ -74,6 +74,12 @@ export const FunctionGuide = () => (
                   <Code>input</Code> and <Code>ctx</Code> exist only inside the handler. Code at
                   the top of the file runs once, when the sandbox starts.
                 </>,
+                <>
+                  The caller&apos;s token costs time on every call, so Blocks fetches it only when
+                  your <Code>index.js</Code> mentions <Code>accessToken</Code> or{" "}
+                  <Code>blocks</Code>. Read it by name (<Code>ctx.blocks.accessToken</Code>) — a
+                  package you hand the whole <Code>ctx</Code> to cannot make Blocks fetch it.
+                </>,
               ]}
             />
           </AccordionContent>

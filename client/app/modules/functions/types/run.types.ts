@@ -61,6 +61,13 @@ export interface IRunSummary {
   handoverMs?: number | null;
 }
 
+/** One step of a call's time: `api`, `queue`, `handover` or `result`, then the step's name. */
+export interface IRunTiming {
+  group: string;
+  step: string;
+  ms: number;
+}
+
 export interface IRunAttempt {
   number: number;
   status: RunStatus;
@@ -109,6 +116,8 @@ export interface IRunDetail {
   discardReason?: string | null;
   /** Reuse only: claim → input handed to the sandbox, in milliseconds. */
   handoverMs?: number | null;
+  /** Where the call's time went, step by step; null for a run from before timings existed. */
+  timings?: IRunTiming[] | null;
   attempts: IRunAttempt[];
   outputResults: IOutputActionResult[];
 }
