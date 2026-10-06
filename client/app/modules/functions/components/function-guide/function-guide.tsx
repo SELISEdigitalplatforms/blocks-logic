@@ -1,0 +1,194 @@
+import { ReactNode } from "react";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui-kits/accordion/accordion";
+import { Card, CardContent } from "@/components/ui-kits/card/card";
+import { SANDBOX_CODE_RULES } from "../../constants/limits.constant";
+
+/**
+ * Everything someone writing a function needs, in one place beside the editor. The numbers are the
+ * platform's fixed profile (FunctionLimits.Ceiling, protocol.mjs, the sandbox profile and
+ * FunctionHttpResponseMapper) — keep them in step when those change.
+ */
+const Code = ({ children }: { children: ReactNode }) => (
+  <code className="font-mono text-[11px]">{children}</code>
+);
+
+const Block = ({ children }: { children: string }) => (
+  <pre className="overflow-x-auto whitespace-pre rounded-md bg-surface-app p-2 font-mono text-[11px] leading-relaxed text-medium-emphasis">
+    {children}
+  </pre>
+);
+
+const P = ({ children }: { children: ReactNode }) => (
+  <p className="text-xs leading-relaxed text-medium-emphasis">{children}</p>
+);
+
+const Items = ({ items }: { items: ReactNode[] }) => (
+  <ul className="flex list-disc flex-col gap-1 pl-4">
+    {items.map((item, index) => (
+      <li key={index} className="text-xs leading-relaxed text-medium-emphasis">
+        {item}
+      </li>
+    ))}
+  </ul>
+);
+
+export const GUIDE_SECTIONS = [
+  "handler",
+  "speed",
+  "rules",
+  "api",
+  "limits",
+  "network",
+  "packages",
+  "debugging",
+] as const;
+
+export const FunctionGuide = () => (
+  <Card>
+    <CardContent className="p-2">
+      <Accordion type="multiple" defaultValue={["handler", "speed"]} data-testid="function-guide">
+        <AccordionItem value="handler">
+          <AccordionTrigger className="px-2 text-sm">The handler</AccordionTrigger>
+          <AccordionContent className="flex flex-col gap-2 px-2">
+            <Block>{`export default async function handler(input, ctx) {
+  return { ok: true }; // becomes the run's result
+}`}</Block>
+            <Items
+              items={[
+                <>
+                  <Code>input</Code>: <Code>method</Code>, <Code>path</Code>, <Code>query</Code>,{" "}
+                  <Code>headers</Code>, <Code>body</Code> (a workflow step passes the previous
+                  step&apos;s output instead).
+                </>,
+                <>
+                  <Code>ctx</Code>: <Code>env</Code> (your variables), <Code>context</Code> (the
+                  caller), <Code>blocks.accessToken</Code> (call Blocks as the caller),{" "}
+                  <Code>log</Code>, <Code>run</Code>, <Code>waitUntil()</Code>.
+                </>,
+                <>
+                  <Code>input</Code> and <Code>ctx</Code> exist only inside the handler. Code at
+                  the top of the file runs once, when the sandbox starts.
+                </>,
+              ]}
+            />
+          </AccordionContent>
+        </AccordionItem>
+
+        <AccordionItem value="speed">
+          <AccordionTrigger className="px-2 text-sm">Speed: the sandbox is reused</AccordionTrigger>
+          <AccordionContent className="flex flex-col gap-2 px-2">
+            <Items
+              items={[
+                "HTTP calls of a deployed function reuse a warm sandbox: your module stays loaded and open connections stay open. A warm call costs your handler's own time.",
+                "Create database and HTTP clients once, at module level. Never connect and close per call.",
+                "Every deploy prepares a warm sandbox, so the first call after it is fast too.",
+                "Test runs and workflow steps always start a fresh sandbox — don't judge speed by Test.",
+                "A sandbox idle for 10 minutes, older than 1 hour, after 1 000 calls or close to its memory limit is replaced; the next call starts cold.",
+              ]}
+            />
+            <Block>{`let client; // module level: reused by every call
+export default async function handler(input, ctx) {
+  client ??= await connect(ctx.env.DB_URL);
+  return client.find(input.body); // request data stays in here
+}`}</Block>
+          </AccordionContent>
+        </AccordionItem>
+
+        <AccordionItem value="rules">
+          <AccordionTrigger className="px-2 text-sm">Rules that keep it correct</AccordionTrigger>
+          <AccordionContent className="flex flex-col gap-2 px-2">
+            <P>
+              The next call in the sandbox may be another user&apos;s. Breaking a rule replaces the
+              sandbox after the call (the run says why).
+            </P>
+            <Items items={SANDBOX_CODE_RULES.map((rule) => `Don't ${rule.dont.charAt(0).toLowerCase()}${rule.dont.slice(1)} ${rule.fix}`)} />
+          </AccordionContent>
+        </AccordionItem>
+
+        <AccordionItem value="api">
+          <AccordionTrigger className="px-2 text-sm">Answering as an API</AccordionTrigger>
+          <AccordionContent className="flex flex-col gap-2 px-2">
+            <P>
+              With Response = <strong>Wait for answer</strong> (Trigger tab), the caller gets your
+              result directly. Return this shape to control the HTTP answer:
+            </P>
+            <Block>{`return {
+  statusCode: 201,
+  headers: { "content-type": "application/json" },
+  body: { id: order.id },
+};`}</Block>
+            <Items
+              items={[
+                "Anything else you return is sent as 200 + JSON.",
+                "Headers that pass: content-type, content-language, content-disposition, cache-control, expires, last-modified, etag, vary, retry-after; location on a 3xx; x-* except x-forwarded-*, x-real-ip, x-original-*, x-blocks-*. At most 32 headers / 8 KB. set-cookie is always dropped.",
+                "A failed run answers 502, a timed-out run 504. A call that takes longer than 30 s gets 202 + a poll token — the run still finishes.",
+                "Accepted methods (GET, POST, PUT, PATCH, DELETE) are set on the Trigger tab; any other gets 405.",
+              ]}
+            />
+          </AccordionContent>
+        </AccordionItem>
+
+        <AccordionItem value="limits">
+          <AccordionTrigger className="px-2 text-sm">Limits</AccordionTrigger>
+          <AccordionContent className="px-2">
+            <Items
+              items={[
+                "30 s run time per call (work passed to ctx.waitUntil included).",
+                "128 MB memory, 0.1 CPU. Node 24.",
+                "Request body ~960 KB; result 5 MB; logs 1 MB or 10 000 lines per call.",
+                "Read-only filesystem except /tmp (64 MB, files can't be executed).",
+                "At most 64 processes per sandbox; 10 calls of one function at the same time.",
+                "API mode waits at most 30 s for the answer.",
+              ]}
+            />
+          </AccordionContent>
+        </AccordionItem>
+
+        <AccordionItem value="network">
+          <AccordionTrigger className="px-2 text-sm">Network</AccordionTrigger>
+          <AccordionContent className="px-2">
+            <Items
+              items={[
+                "Outbound calls go to public internet addresses only (fetch over HTTPS, hosted databases such as MongoDB Atlas or Redis Cloud). Which other ports are open is set by the host's egress rules — ask your platform team if a connection times out.",
+                "Private and internal addresses are blocked: 10.x, 172.16–31.x, 192.168.x, 127.x, 169.254.x, 100.64–127.x and the host itself. A database inside a company network is not reachable from a function.",
+                "Use a public endpoint for anything the function must reach.",
+              ]}
+            />
+          </AccordionContent>
+        </AccordionItem>
+
+        <AccordionItem value="packages">
+          <AccordionTrigger className="px-2 text-sm">Packages and variables</AccordionTrigger>
+          <AccordionContent className="px-2">
+            <Items
+              items={[
+                "Add npm packages to package.json. They install when you Test or Deploy.",
+                'Native packages (bcrypt, sharp, …) need "Allow package install scripts" under package.json.',
+                "Variables arrive in ctx.env. Secret-backed values are masked in logs.",
+                "Use import (ES modules): package.json has \"type\": \"module\".",
+              ]}
+            />
+          </AccordionContent>
+        </AccordionItem>
+
+        <AccordionItem value="debugging">
+          <AccordionTrigger className="px-2 text-sm">Debugging</AccordionTrigger>
+          <AccordionContent className="px-2">
+            <Items
+              items={[
+                "ctx.log.info(message, data) and console.log both land on the run's log.",
+                "Run details show Warm (reused) or Cold start, and why a sandbox was replaced after a call (e.g. a timer or request left running).",
+                "Use Replay on a run to repeat it with the same input.",
+              ]}
+            />
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
+    </CardContent>
+  </Card>
+);

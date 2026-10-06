@@ -32,6 +32,23 @@ namespace Blocks.FunctionRunner.Tests
             => sandbox.RunCallAsync(id, Lines.Envelope(id), RunLimits.Default, startupMs, null, token);
 
         [Fact]
+        public async Task A_call_reports_the_runtimes_own_cpu_for_the_handler_window_not_dockers_total()
+        {
+            // Docker's figure is the container's total since the last call (unpause, envelope read,
+            // clean-up check) and overstated a warm call against its handler-only duration.
+            var (sandbox, _) = await ReadyAsync(c => c.OnCall = id =>
+            [
+                Lines.Started(id),
+                Lines.Result(id, "1"),
+                Lines.IdleWithCpu(id, cpuMs: 30),
+            ]);
+
+            var call = await CallAsync(sandbox, "run_cpu");
+
+            call.Result.CpuUsageMs.Should().Be(30);
+        }
+
+        [Fact]
         public async Task A_clean_call_returns_the_single_run_outcome_and_keeps_the_sandbox()
         {
             var (sandbox, container) = await ReadyAsync(c => c.OnCall = id =>

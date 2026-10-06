@@ -619,3 +619,34 @@ describe('secret redaction', () => {
   });
 });
 
+describe('ctx.waitUntil in single-run mode (tests, workflow steps)', () => {
+  test('exists, answers first, and runs the work before the sandbox exits', async () => {
+    const r = await runBootstrap(`
+      export default async function (input, ctx) {
+        ctx.waitUntil(new Promise((ok) => setTimeout(() => { console.log('after the answer'); ok(); }, 50)));
+        return 'answered';
+      }`);
+    assert.equal(r.code, 0);
+    assert.equal(r.result.value, 'answered');
+    const resultAt = r.events.indexOf(r.result);
+    const lateLog = r.events.findIndex((e) => e.t === 'log' && e.msg === 'after the answer');
+    assert.ok(lateLog > resultAt, 'the work ran, after the answer was written');
+  });
+
+  test('a rejected waitUntil promise is logged, the answer stands', async () => {
+    const r = await runBootstrap(`
+      export default async function (input, ctx) { ctx.waitUntil(Promise.reject(new Error('audit down'))); return 1; }`);
+    assert.equal(r.code, 0);
+    assert.equal(r.result.ok, true);
+    assert.ok(r.logs.some((l) => /audit down/.test(l.msg)));
+  });
+
+  test('waitUntil work past the time limit is stopped, the answer stands', async () => {
+    const r = await runBootstrap(`
+      export default async function (input, ctx) { ctx.waitUntil(new Promise((r) => setTimeout(r, 60000))); return 1; }`,
+      { ...BASE_ENVELOPE, limits: { timeoutMs: 300 } });
+    assert.equal(r.code, 0);
+    assert.equal(r.result.ok, true);
+    assert.ok(r.logs.some((l) => /did not finish within the time limit/.test(l.msg)));
+  });
+});

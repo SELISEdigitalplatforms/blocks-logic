@@ -145,6 +145,9 @@ namespace Blocks.FunctionRunner.Tests
         public static string Idle(string id, bool clean, string[]? leftovers = null, bool late = false) =>
             JsonSerializer.Serialize(new { t = "idle", call = id, clean, leftovers = leftovers ?? [], late, rssBytes = 1 });
 
+        public static string IdleWithCpu(string id, long cpuMs) =>
+            JsonSerializer.Serialize(new { t = "idle", call = id, clean = true, leftovers = Array.Empty<string>(), late = false, rssBytes = 1, cpuMs });
+
         public static string Fatal(string code, string message) =>
             JsonSerializer.Serialize(new { t = "fatal", code, message });
 

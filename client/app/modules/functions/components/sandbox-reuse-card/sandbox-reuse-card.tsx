@@ -1,11 +1,4 @@
 import { Card, CardContent } from "@/components/ui-kits/card/card";
-import { Switch } from "@/components/ui-kits/switch/switch";
-import { ITriggerConfig } from "../../types/function.types";
-
-type SandboxReuseCardProps = {
-  value: ITriggerConfig;
-  onChange: (value: ITriggerConfig) => void;
-};
 
 /** The rules a reused sandbox holds the function to — short, because each one is a bug if broken. */
 const REUSE_RULES = [
@@ -16,41 +9,30 @@ const REUSE_RULES = [
 ];
 
 /**
- * "Reuse sandbox (faster)": keep the function loaded between calls. Same row idiom as the
- * workflow card beside it. Applies to every trigger, so it is not part of the HTTP card. Takes
- * effect from the next deploy, like the other trigger settings.
+ * Sandbox reuse is always on for HTTP calls of a deployed function (2026-10-06), like a serverless
+ * platform — so this is information, not a setting: the function stays loaded between calls, and
+ * these are the rules that keeps it correct. Workflow steps and test runs use a fresh sandbox.
  */
-export const SandboxReuseCard = ({ value, onChange }: SandboxReuseCardProps) => (
+export const SandboxReuseCard = () => (
   <Card>
     <CardContent className="flex flex-col gap-3 p-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="text-base font-semibold">Reuse sandbox (faster)</span>
-          <span className="text-xs leading-relaxed text-medium-emphasis">
-            Keeps the function loaded between calls, so calls are much faster. Applies from the next
-            deploy.
-          </span>
-        </div>
-        <Switch
-          aria-label="Reuse sandbox"
-          checked={value.reuseSandbox}
-          onCheckedChange={(checked) => onChange({ ...value, reuseSandbox: checked })}
-          className="flex-shrink-0"
-        />
+      <div className="flex min-w-0 flex-col gap-1">
+        <span className="text-base font-semibold">Fast calls: the sandbox is reused</span>
+        <span className="text-xs leading-relaxed text-medium-emphasis">
+          Your function stays loaded between HTTP calls, so database connections and caches made at
+          module level are reused. Test runs and workflow steps always use a fresh sandbox.
+        </span>
       </div>
-
-      {value.reuseSandbox && (
-        <ul
-          className="flex list-disc flex-col gap-1 rounded-lg border bg-surface-app py-3 pl-8 pr-4"
-          data-testid="reuse-rules"
-        >
-          {REUSE_RULES.map((rule) => (
-            <li key={rule} className="text-xs leading-relaxed text-medium-emphasis">
-              {rule}
-            </li>
-          ))}
-        </ul>
-      )}
+      <ul
+        className="flex list-disc flex-col gap-1 rounded-lg border bg-surface-app py-3 pl-8 pr-4"
+        data-testid="reuse-rules"
+      >
+        {REUSE_RULES.map((rule) => (
+          <li key={rule} className="text-xs leading-relaxed text-medium-emphasis">
+            {rule}
+          </li>
+        ))}
+      </ul>
     </CardContent>
   </Card>
 );

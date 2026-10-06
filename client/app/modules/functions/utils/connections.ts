@@ -213,6 +213,73 @@ export const resolveLatestVersion = async (
   }
 };
 
+const toParts = (version: string | undefined): number[] | null =>
+  version !== undefined && EXACT_VERSION.test(version) ? version.split(".").map(Number) : null;
+
+/**
+ * Orders two exact `x.y.z` versions (negative when `a` is older). Null when either is not one — a
+ * range, a tag or a pre-release is the user's own choice and is never compared or replaced.
+ */
+export const compareVersions = (a: string | undefined, b: string | undefined): number | null => {
+  const left = toParts(a);
+  const right = toParts(b);
+  if (!left || !right) return null;
+  for (let i = 0; i < 3; i++) if (left[i] !== right[i]) return left[i] - right[i];
+  return 0;
+};
+
+export type VersionUpdate = {
+  from: string;
+  to: string;
+  /** Semver says it can break the code: a new major, or a new minor while still on 0.x. */
+  breaking: boolean;
+};
+
+/** A newer stable release than the exact version pinned, or null when there is nothing to offer. */
+export const findUpdate = (
+  pinned: string | undefined,
+  latest: string | undefined,
+): VersionUpdate | null => {
+  const order = compareVersions(pinned, latest);
+  if (order === null || order >= 0) return null;
+  const [fromMajor, fromMinor] = toParts(pinned)!;
+  const [toMajor, toMinor] = toParts(latest)!;
+  return {
+    from: pinned!,
+    to: latest!,
+    breaking: fromMajor !== toMajor || (fromMajor === 0 && fromMinor !== toMinor),
+  };
+};
+
+/**
+ * Re-pins a package that package.json already lists to another exact version. Refuses rather than
+ * rewrites when the manifest does not parse, the package is gone, or the version is not exact.
+ */
+export const pinVersion = (
+  packageJson: string,
+  packageName: string,
+  version: string,
+): { ok: true; packageJson: string } | { ok: false; reason: string } => {
+  if (!EXACT_VERSION.test(version))
+    return { ok: false, reason: `${version} is not an exact version.` };
+  const manifest = parseManifest(packageJson);
+  if (!manifest) {
+    return { ok: false, reason: "package.json is not valid JSON — fix it first, then update." };
+  }
+  const dependencies = manifest.dependencies;
+  if (!isPlainObject(dependencies) || typeof dependencies[packageName] !== "string") {
+    return { ok: false, reason: `${packageName} is no longer in package.json.` };
+  }
+  return {
+    ok: true,
+    packageJson: `${JSON.stringify(
+      { ...manifest, dependencies: { ...dependencies, [packageName]: version } },
+      null,
+      2,
+    )}\n`,
+  };
+};
+
 /**
  * What a preset variable can start as: the project's own value when the console knows it, else the
  * catalog default. A secret has neither, so it is always left for the user to bind.

@@ -50,6 +50,7 @@ const _getCallSites = getCallSites;
 const _freeze = Object.freeze;
 const _defineProperty = Object.defineProperty;
 const _memoryUsage = process.memoryUsage.bind(process);
+const _cpuUsage = process.cpuUsage.bind(process);
 const _fetch = typeof globalThis.fetch === 'function' ? globalThis.fetch : null;
 const _Promise = Promise;
 const _allSettled = Promise.allSettled.bind(Promise);
@@ -169,6 +170,13 @@ export async function runReuse({ functionEntry, describe, patchConsole }) {
       try {
         const tok = als.getStore();
         if (tok === undefined) return;
+        // Created under an earlier call's context while another call (or none) is current: that is
+        // a continuation of long-lived work the earlier call started — typically a driver's pool
+        // heartbeat writing on a socket that call opened. Not the current call's work, and not a
+        // leftover of the earlier one to blame on it: tracking it made every MongoDB sandbox
+        // "dirty: late" after 2–3 calls (seen 2026-10-06). An earlier call's own leftover timer is
+        // still caught: the timer itself was tracked when created, and `before` fires when it runs.
+        if (current?.tok !== tok) return;
         if (OWN_CODE_ONLY.has(type)) {
           if (!isOwnCode()) return;
         } else if (!ALWAYS_UNFINISHED.has(type)) {
@@ -372,9 +380,23 @@ export async function runReuse({ functionEntry, describe, patchConsole }) {
       : null;
 
     writer.started();
+    // CPU of this process over exactly the handler's window (started → answer), so the runner can
+    // report it against the same duration. The container-wide counter also holds the unpause, the
+    // envelope read and the clean-up check between calls, which made a warm call read as more CPU
+    // than its limit (e.g. 30 ms over a 209 ms handler = "144 / 100 m").
+    const cpuAtStart = _cpuUsage();
+    let handlerCpuMs = null;
+    const measureCpu = () => {
+      if (handlerCpuMs !== null) return;
+      try {
+        const d = _cpuUsage(cpuAtStart);
+        handlerCpuMs = Math.max(0, Math.round((d.user + d.system) / 1000));
+      } catch { /* reported as null */ }
+    };
     try {
       const run = als.run(tok, () => handler(envelope.input, ctx));
       const value = deadline ? await _race([run, deadline]) : await run;
+      measureCpu();
       const problem = writer.result(value);
       if (problem === CODE.RESULT_TOO_LARGE) {
         writer.failure(CODE.RESULT_TOO_LARGE, 'the result exceeds the 5242880 byte ceiling');
@@ -383,6 +405,7 @@ export async function runReuse({ functionEntry, describe, patchConsole }) {
           'the returned value cannot be serialized to JSON (circular reference, BigInt or a throwing toJSON)');
       }
     } catch (err) {
+      measureCpu();
       const d = describe(err);
       writer.failure(err?.__timeout ? CODE.TIMED_OUT : CODE.USER_RUNTIME_ERROR, d.message,
         err?.__timeout ? undefined : d.stack);
@@ -422,7 +445,7 @@ export async function runReuse({ functionEntry, describe, patchConsole }) {
     const clean = leftovers.length === 0 && !lateActivity;
     let rssBytes = null;
     try { rssBytes = _memoryUsage().rss; } catch { /* reported as null */ }
-    sandboxWriter.control({ t: 'idle', call: id, clean, leftovers, late: lateActivity, rssBytes });
+    sandboxWriter.control({ t: 'idle', call: id, clean, leftovers, late: lateActivity, rssBytes, cpuMs: handlerCpuMs });
     // A dirty sandbox is destroyed by the runner; a clean one starts the next call from scratch.
     lateActivity = false;
     return true;

@@ -268,6 +268,14 @@ namespace Functions.DomainService.Entities
         /// </para>
         /// </summary>
         public string? ArtifactSha256 { get; set; }
+
+        /// <summary>
+        /// The base image the runner built this FROM, as it reported it. A cached build is reused only
+        /// while a live runner still builds on this base (FunctionBuildService) — so a base image
+        /// upgrade rebuilds functions whose code did not change. Null on builds from before this field.
+        /// </summary>
+        [MongoDB.Bson.Serialization.Attributes.BsonIgnoreIfNull]
+        public string? BaseImage { get; set; }
         public string? Packages { get; set; }
         public string? Log { get; set; }
         public string? ErrorMessage { get; set; }

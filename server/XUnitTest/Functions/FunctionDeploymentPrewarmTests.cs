@@ -50,6 +50,8 @@ namespace XUnitTest.Functions
                 .ReturnsAsync(new ValidationResult());
         }
 
+        private global::Functions.DomainService.Storage.IFunctionArtifactStore? _artifactStore;
+
         private FunctionDeploymentService Service(params (string Key, string Value)[] settings)
         {
             var cache = new Mock<ICacheClient>();
@@ -64,7 +66,26 @@ namespace XUnitTest.Functions
                 new Mock<IFunctionImagePinService>().Object,
                 new Mock<IFunctionAuditService>().Object,
                 _validator.Object, cache.Object, configuration,
-                NullLogger<FunctionDeploymentService>.Instance);
+                NullLogger<FunctionDeploymentService>.Instance, _artifactStore);
+        }
+
+        [Fact]
+        public async Task A_prewarm_of_an_artifact_built_version_carries_the_artifact_url_and_hash()
+        {
+            _function.Trigger.ReuseSandbox = true;
+            _builds.Setup(b => b.EnsureImageAsync(Tenant, It.IsAny<FunctionEntity>(), It.IsAny<CancellationToken>(), It.IsAny<int?>(), It.IsAny<bool>()))
+                .ReturnsAsync(new FunctionBuildEntity { ItemId = "b-art", Status = BuildStatus.Succeeded, ArtifactSha256 = "abc123" });
+            var store = new Mock<global::Functions.DomainService.Storage.IFunctionArtifactStore>();
+            store.Setup(s => s.CreateDownloadUrlAsync(Tenant, "b-art", It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync("https://blob/b-art.tar?sig=1");
+            _artifactStore = store.Object;
+
+            await DeployAsync(Service());
+
+            var entry = WarmEntries().Should().ContainSingle().Subject;
+            Field(entry, "image").Should().Be("blocks-fn-artifact/b-art:local");
+            Field(entry, FunctionQueueKeys.RunArtifactUrlField).Should().Be("https://blob/b-art.tar?sig=1");
+            Field(entry, FunctionQueueKeys.RunArtifactSha256Field).Should().Be("abc123");
         }
 
         private Task<global::Functions.DomainService.Dtos.Responses.FunctionVersionSummaryDto> DeployAsync(FunctionDeploymentService service) =>
@@ -115,14 +136,16 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
-        public async Task A_version_that_did_not_opt_in_publishes_nothing()
+        public async Task Every_deploy_prewarms_even_without_the_old_per_function_switch()
         {
+            // Reuse is always on (2026-10-06): the stored ReuseSandbox flag is ignored.
+            _function.Trigger.ReuseSandbox = false;
+
             await DeployAsync(Service());
 
-            WarmEntries().Should().BeEmpty();
-            _redis.Fake.CallNames.Should().BeEmpty("a deploy without reuse touches Redis exactly as before");
-            _versions.Verify(v => v.GetByIdAsync(Tenant, "v-old", It.IsAny<CancellationToken>()), Times.Once,
-                "the previous version is read only to see whether it needs a drain");
+            var entry = WarmEntries().Should().ContainSingle().Subject;
+            Field(entry, "count").Should().Be("1");
+            Field(entry, "drainVersionId").Should().Be("v-old");
         }
 
         [Fact]
@@ -135,31 +158,6 @@ namespace XUnitTest.Functions
             var entry = WarmEntries().Single();
             Field(entry, "count").Should().Be("0");
             Field(entry, "drainVersionId").Should().Be("v-old");
-        }
-
-        [Fact]
-        public async Task Turning_reuse_off_drains_the_previous_versions_warm_sandboxes()
-        {
-            _versions.Setup(v => v.GetByIdAsync(Tenant, "v-old", It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new FunctionVersionEntity { ItemId = "v-old", Trigger = new() { ReuseSandbox = true } });
-
-            await DeployAsync(Service());
-
-            var entry = WarmEntries().Should().ContainSingle().Subject;
-            Field(entry, "count").Should().Be("0");
-            Field(entry, "drainVersionId").Should().Be("v-old");
-            Field(entry, "versionId").Should().Be(_created!.ItemId);
-        }
-
-        [Fact]
-        public async Task Neither_version_reusing_publishes_nothing()
-        {
-            _versions.Setup(v => v.GetByIdAsync(Tenant, "v-old", It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new FunctionVersionEntity { ItemId = "v-old" });
-
-            await DeployAsync(Service());
-
-            WarmEntries().Should().BeEmpty();
         }
 
         [Fact]

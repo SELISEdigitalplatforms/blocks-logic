@@ -216,5 +216,66 @@ namespace XUnitTest.Functions
 
             QueuedBuildEntry().Single(e => e.Name == "allowScripts").Value.ToString().Should().Be("true");
         }
+
+        // ---- base image changes (the cache is keyed by source, the image also by its base) ----
+
+        private void LiveBases(params string[] bases) =>
+            _database.Setup(d => d.SortedSetRangeByScoreAsync(
+                    FunctionQueueKeys.BaseImages, It.IsAny<double>(), It.IsAny<double>(),
+                    It.IsAny<Exclude>(), It.IsAny<Order>(), It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CommandFlags>()))
+                .ReturnsAsync(bases.Select(b => (RedisValue)b).ToArray());
+
+        private static FunctionBuildEntity SucceededOn(string? baseImage)
+        {
+            var build = Succeeded();
+            build.BaseImage = baseImage;
+            return build;
+        }
+
+        [Fact]
+        public async Task A_cached_build_on_the_base_runners_use_now_is_reused()
+        {
+            LiveBases("reg/functions-node@sha256:v2");
+
+            var build = await Service(succeeded: SucceededOn("reg/functions-node@sha256:v2"))
+                .EnsureImageAsync(Tenant, Function(), default, waitSecondsOverride: 0);
+
+            build.ItemId.Should().Be("build_old");
+            _created.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task A_cached_build_on_a_base_no_runner_uses_any_more_is_built_again()
+        {
+            LiveBases("reg/functions-node@sha256:v2");
+
+            await Service(succeeded: SucceededOn("reg/functions-node@sha256:v1"))
+                .EnsureImageAsync(Tenant, Function(), default, waitSecondsOverride: 0);
+
+            _created.Should().ContainSingle().Which.SourceHash.Should().Be("hash_1");
+        }
+
+        [Fact]
+        public async Task A_cached_build_from_before_bases_were_recorded_is_built_again_once_runners_announce_one()
+        {
+            LiveBases("reg/functions-node@sha256:v2");
+
+            await Service(succeeded: SucceededOn(null))
+                .EnsureImageAsync(Tenant, Function(), default, waitSecondsOverride: 0);
+
+            _created.Should().ContainSingle();
+        }
+
+        [Fact]
+        public async Task With_no_base_announced_the_cached_build_is_reused_as_before()
+        {
+            LiveBases();
+
+            var build = await Service(succeeded: SucceededOn(null))
+                .EnsureImageAsync(Tenant, Function(), default, waitSecondsOverride: 0);
+
+            build.ItemId.Should().Be("build_old");
+            _created.Should().BeEmpty();
+        }
     }
 }

@@ -149,7 +149,7 @@ export interface IFunctionAuditEvent {
 
 // ─── request/response payloads ──────────────────────────────────────────────
 
-export type FunctionTemplate = "Minimal" | "HttpEcho" | "FetchTransform";
+export type FunctionTemplate = "Minimal" | "HttpEcho" | "FetchTransform" | "ReusedConnection";
 
 export interface ICreateFunctionPayload {
   name: string;

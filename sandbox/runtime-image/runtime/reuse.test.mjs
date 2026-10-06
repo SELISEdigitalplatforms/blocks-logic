@@ -142,6 +142,26 @@ describe('reuse mode: one sandbox, many calls', () => {
   });
 });
 
+describe('reuse mode: per-call CPU', () => {
+  test('the idle line carries the CPU used in the handler window, not more than its wall time allows', async () => {
+    const s = sandbox({ 'index.js': `
+      export default async function () {
+        const until = Date.now() + 120;
+        let x = 0; while (Date.now() < until) x += Math.sqrt(x + 1);   // ~120 ms of CPU
+        return x > 0;
+      }` });
+    try {
+      await s.ready();
+      const a = await s.call('A');
+      assert.equal(typeof a.idle.cpuMs, 'number');
+      assert.ok(a.idle.cpuMs >= 60, `cpuMs ${a.idle.cpuMs} should reflect the busy loop`);
+      const started = s.events.find((e) => e.t === 'started' && e.call === 'A');
+      const answeredWithin = Date.now() - started.at;
+      assert.ok(a.idle.cpuMs <= answeredWithin + 50, 'CPU in the window cannot exceed the window by much');
+    } finally { await s.close(); }
+  });
+});
+
 describe('reuse mode: leftover work makes a call dirty', () => {
   const cases = [
     ['an un-awaited setTimeout', `setTimeout(() => {}, 5000);`, 'Timeout'],
@@ -306,6 +326,42 @@ describe('reuse mode: ctx.waitUntil', () => {
       assert.equal(a.idle.clean, true, JSON.stringify(a.idle));
       assert.equal((await s.call('B')).result.value, 'A-late', 'the nested work finished inside A');
     } finally { await s.close(); }
+  });
+});
+
+describe('reuse mode: library background on a connection an earlier call opened', () => {
+  test('a pool heartbeat writing on its socket during a later call does not make that call dirty', async () => {
+    const { createServer: tcp } = await import('node:net');
+    const server = tcp((c) => c.on('data', () => {})).listen(0, '127.0.0.1');
+    await new Promise((r) => server.once('listening', r));
+    const s = sandbox({
+      'node_modules/fake-driver/index.js': `
+        import net from 'node:net';
+        let sock;
+        export async function connect(port) {
+          if (sock) return;
+          sock = await new Promise((ok) => { const c = net.connect(port, '127.0.0.1', () => ok(c)); });
+          // the driver's own heartbeat: started inside the first call, ticks forever
+          setInterval(() => sock.write('ping'), 30);
+        }`,
+      'index.js': `
+        import { connect } from './node_modules/fake-driver/index.js';
+        export default async function (input, ctx) {
+          await connect(Number(ctx.env.PORT));
+          await new Promise((r) => setTimeout(r, 200));   // heartbeats tick during this call
+          return input.call;
+        }`,
+    });
+    try {
+      await s.ready();
+      const env = { PORT: String(server.address().port) };
+      const a = await s.call('A', { env });
+      const b = await s.call('B', { env });
+      const c = await s.call('C', { env });
+      assert.equal(a.idle.clean, true, JSON.stringify(a.idle));
+      assert.equal(b.idle.clean, true, JSON.stringify(b.idle));
+      assert.equal(c.idle.clean, true, JSON.stringify(c.idle));
+    } finally { await s.close(); server.close(); }
   });
 });
 

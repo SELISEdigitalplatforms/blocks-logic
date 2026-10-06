@@ -92,7 +92,9 @@ describe("ConnectionsCard", () => {
       { key: "MONGO_URL", value: "" },
     ]);
     expect(toast.success).toHaveBeenCalledWith(
-      expect.objectContaining({ description: expect.stringContaining("Bind MONGO_URL to a configuration variable") }),
+      expect.objectContaining({
+        description: expect.stringContaining("Bind MONGO_URL to a configuration variable"),
+      }),
     );
     expect(screen.queryByRole("dialog")).toBeNull();
   });
@@ -147,24 +149,70 @@ describe("ConnectionsCard", () => {
 
     await waitFor(() => expect(handlers.onPackageJsonChange).toHaveBeenCalled());
     expect(JSON.parse(handlers.onPackageJsonChange.mock.calls[0][0]).dependencies).toEqual({
-      pg: "8.23.0",
+      pg: "8.23.1",
     });
     expect(toast.success).toHaveBeenCalledWith(
       expect.objectContaining({ description: expect.stringContaining("npm was unreachable") }),
     );
   });
 
-  it("does not ask npm for a package that is already listed, and keeps its version", async () => {
+  it("does not re-ask npm when adding a listed package, and keeps its version", async () => {
     const handlers = setup({ packageJson: `{"type":"module","dependencies":{"ioredis":"5.4.0"}}` });
     await userEvent.click(screen.getByRole("button", { name: /^Redis: incomplete/ }));
     await userEvent.click(await screen.findByRole("button", { name: /add to function/i }));
 
     await waitFor(() => expect(handlers.onVariablesChange).toHaveBeenCalled());
-    expect(npm).not.toHaveBeenCalled();
+    // Only the update check on mount; adding does not ask again or change the pin.
+    expect(npm).toHaveBeenCalledTimes(1);
     expect(handlers.onPackageJsonChange).not.toHaveBeenCalled();
     expect(toast.success).toHaveBeenCalledWith(
       expect.objectContaining({ description: expect.stringContaining("already listed (5.4.0)") }),
     );
+  });
+
+  const REDIS_ADDED = {
+    packageJson: `{"type":"module","dependencies":{"ioredis":"6.0.0"}}`,
+    variables: [{ key: "REDIS_URL", value: "" }],
+  };
+
+  it("offers npm's newer stable release for an added service and pins it on update", async () => {
+    const handlers = setup(REDIS_ADDED);
+    const row = await screen.findByRole("button", { name: "Redis: update to 9.9.9 available" });
+    expect(npm).toHaveBeenCalledWith(
+      "https://registry.npmjs.org/ioredis/latest",
+      expect.anything(),
+    );
+
+    await userEvent.click(row);
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toMatch(/breaking release/);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Update to 9.9.9" }));
+
+    expect(JSON.parse(handlers.onPackageJsonChange.mock.calls[0][0]).dependencies).toEqual({
+      ioredis: "9.9.9",
+    });
+    expect(toast.success).toHaveBeenCalledWith(
+      expect.objectContaining({ description: expect.stringContaining("6.0.0 → 9.9.9") }),
+    );
+  });
+
+  it.each([
+    ["the pin is already the latest", { version: "6.0.0" }, true],
+    ["npm answers with an older release", { version: "5.9.0" }, true],
+    ["npm answers with a pre-release", { version: "7.0.0-rc.1" }, true],
+    ["npm fails", {}, false],
+  ])("offers no update when %s", async (_, body, ok) => {
+    npm.mockResolvedValue({ ok, json: () => Promise.resolve(body) });
+    setup(REDIS_ADDED);
+    await waitFor(() => expect(npm).toHaveBeenCalled());
+    await screen.findByRole("button", { name: "Redis: added" });
+    expect(screen.queryByText("Update")).toBeNull();
+  });
+
+  it("leaves a range pin alone: it is the user's choice", async () => {
+    setup({ ...REDIS_ADDED, packageJson: `{"type":"module","dependencies":{"ioredis":"^6.0.0"}}` });
+    await waitFor(() => expect(npm).toHaveBeenCalled());
+    await screen.findByRole("button", { name: "Redis: added" });
   });
 
   it("fills BLOCKS_API_URL with the project's blocksapi host", async () => {

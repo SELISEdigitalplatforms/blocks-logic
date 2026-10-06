@@ -13,7 +13,11 @@ describe("buildFunctionTypeDefs", () => {
     expect(dts).toContain("info(message: string, data?: unknown): void");
     // The HTTP route is a catch-all on every method, so the handler is told which was called.
     expect(dts).toContain("declare interface FunctionInput");
-    expect(dts).toContain('readonly method: "GET" | "POST"');
+    expect(dts).toContain('readonly method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"');
+    expect(dts).toContain("waitUntil(promise: Promise<unknown>): void");
+    expect(dts).toContain("declare interface FunctionHttpResponse");
+    expect(dts).toMatch(/set-cookie\W{0,2} is always\s+\*\s+dropped/);
+    expect(dts).toContain("keep request data (input, ctx, tokens) inside the handler");
     expect(dts).toContain("(input: FunctionInput, ctx: FunctionContext)");
     // The scope rule travels with the type, so hovering the handler explains it.
     expect(dts).toContain("they exist only inside the handler");
@@ -69,6 +73,7 @@ describe("buildCtxCompletions", () => {
       "run",
       "context",
       "blocks",
+      "waitUntil",
     ]);
   });
 

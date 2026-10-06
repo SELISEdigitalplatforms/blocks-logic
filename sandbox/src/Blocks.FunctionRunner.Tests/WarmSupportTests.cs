@@ -30,10 +30,12 @@ namespace Blocks.FunctionRunner.Tests
         private sealed class Resolves(string? to) : IImageResolver
         {
             public List<string> Asked { get; } = [];
+            public List<(string? Url, string? Sha)> Artifacts { get; } = [];
 
             public Task<string?> EnsureAsync(string reference, CancellationToken token, string? artifactUrl = null, string? artifactSha256 = null)
             {
                 Asked.Add(reference);
+                Artifacts.Add((artifactUrl, artifactSha256));
                 return Task.FromResult(to);
             }
         }
@@ -70,6 +72,21 @@ namespace Blocks.FunctionRunner.Tests
             // A run of that version, on the same resolved image, finds them.
             var handle = (await pool.AcquireAsync(new WarmKey("t1", "fn", "v2", "img@sha256:resolved"), RunLimits.Default, default)).Handle!;
             handle.Reused.Should().BeTrue();
+        }
+
+        [Fact]
+        public async Task A_prewarm_of_an_artifact_built_version_builds_its_image_from_the_artifact()
+        {
+            var (pool, factory) = Pool();
+            await using var _ = pool;
+            var images = new Resolves("blocks-fn-artifact/b1:local");
+
+            await Consumer(pool, images).HandleAsync(Entry(
+                ("tenantId", "t1"), ("functionId", "fn"), ("versionId", "v2"), ("image", "blocks-fn-artifact/b1:local"),
+                ("count", "1"), ("artifactUrl", "https://blob/b1.tar?sig=x"), ("artifactSha256", "abc")), default);
+
+            images.Artifacts.Should().ContainSingle().Which.Should().Be(("https://blob/b1.tar?sig=x", "abc"));
+            factory.Created.Should().ContainSingle();
         }
 
         [Fact]

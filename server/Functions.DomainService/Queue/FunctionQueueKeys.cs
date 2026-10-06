@@ -126,6 +126,15 @@ namespace Functions.DomainService.Queue
         public static string BuildResultsStream => _prefix + "functions:build-results";
 
         /// <summary>
+        /// Sorted set of base images live runners build on (member = reference, score = unix seconds
+        /// last announced). Mirrors <c>RedisKeys.BaseImages</c>; read by the build cache.
+        /// </summary>
+        public static string BaseImages => _prefix + "functions:base-images";
+
+        /// <summary>Build result field: the base image a build was made FROM.</summary>
+        public const string BuildBaseImageField = "baseImage";
+
+        /// <summary>
         /// Test runs: one entry builds the current source on the runner that claims it, runs it
         /// there once and deletes the image. Mirrors <c>RedisKeys.TestsStream</c>. Separate from
         /// <see cref="RunsStream"/> so a runner that predates it never takes one.

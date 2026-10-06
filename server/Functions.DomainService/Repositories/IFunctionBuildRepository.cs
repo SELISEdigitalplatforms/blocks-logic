@@ -62,6 +62,7 @@ namespace Functions.DomainService.Repositories
             Enums.BuildStatus status,
             string? imageDigest,
             string? artifactSha256,
+            string? baseImage,
             string? packages,
             string? log,
             string? errorMessage,

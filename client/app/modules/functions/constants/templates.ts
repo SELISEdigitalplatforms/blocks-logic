@@ -25,4 +25,10 @@ export const FUNCTION_TEMPLATES: {
     label: "Fetch & transform",
     description: "Calls an HTTP API with fetch(), reshapes the response and returns it.",
   },
+  {
+    value: "ReusedConnection",
+    label: "Database (reused connection)",
+    description:
+      "Connects to MongoDB once at module level and reuses it on every call — the fast pattern.",
+  },
 ];

@@ -158,6 +158,13 @@ namespace Blocks.FunctionRunner.Contracts
         /// </summary>
         public const string BuildArtifactSha256Field = "artifactSha256";
 
+        /// <summary>
+        /// Build result field: the base image the build was made FROM. The control plane reuses a
+        /// cached build only while a live runner still builds on that base — otherwise a base image
+        /// upgrade (e.g. to one with the reuse runtime) never reached functions whose code did not change.
+        /// </summary>
+        public const string BuildBaseImageField = "baseImage";
+
         /// <summary>The serialized result of a run. TTL 24 h.</summary>
         public static string Result(string runId) => $"{_prefix}function:result:{runId}";
 
@@ -188,6 +195,12 @@ namespace Blocks.FunctionRunner.Contracts
         /// every other tenant waited behind it; this is the cap that makes the share fair.
         /// </summary>
         public static string TenantSlots(string tenantId) => $"{_prefix}function:tenant-slots:{tenantId}";
+
+        /// <summary>
+        /// Sorted set of the base images live runners build on: member = base image reference, score =
+        /// unix seconds it was last announced (every heartbeat). Read by the control plane's build cache.
+        /// </summary>
+        public static string BaseImages => _prefix + "functions:base-images";
 
         /// <summary>Runner heartbeat hash. TTL 15 s, so a dead runner disappears quickly.</summary>
         public static string Runner(string runnerId) => $"{_prefix}function:runner:{runnerId}";

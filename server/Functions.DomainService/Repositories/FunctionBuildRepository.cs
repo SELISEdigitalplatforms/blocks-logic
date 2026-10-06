@@ -156,6 +156,7 @@ namespace Functions.DomainService.Repositories
             BuildStatus status,
             string? imageDigest,
             string? artifactSha256,
+            string? baseImage,
             string? packages,
             string? log,
             string? errorMessage,
@@ -166,6 +167,7 @@ namespace Functions.DomainService.Repositories
                 .Set(b => b.Status, status)
                 .Set(b => b.ImageDigest, imageDigest)
                 .Set(b => b.ArtifactSha256, artifactSha256)
+                .Set(b => b.BaseImage, string.IsNullOrWhiteSpace(baseImage) ? null : baseImage)
                 .Set(b => b.Packages, packages)
                 .Set(b => b.Log, log)
                 .Set(b => b.ErrorMessage, errorMessage)

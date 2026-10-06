@@ -60,6 +60,50 @@ export const SANDBOX_CTX_DOCS = [
     name: "ctx.log.info / warn / error",
     description: "Structured lines kept on the run. console.log is captured too.",
   },
+  {
+    name: "ctx.waitUntil(promise)",
+    description:
+      "Finish work after the answer is sent, within the time limit — in every mode (reused sandbox, Test run, workflow step).",
+  },
+] as const;
+
+/**
+ * The "Don't / Do instead" list in the Code tab's right rail and the Guide. Each row is a mistake the reuse
+ * runtime catches (reuse.mjs: leftover work, late activity, a kept ctx) or one it cannot catch
+ * (request data in module variables). Breaking one replaces the warm sandbox after the call —
+ * the run shows it as "Sandbox replaced after this call: dirty:…".
+ */
+export const SANDBOX_CODE_RULES = [
+  {
+    dont: "Start work and return without waiting for it.",
+    dontCode: "saveAudit(entry); // no await",
+    fix: "Await it. If it may finish after the answer, pass it to ctx.waitUntil.",
+    fixCode: "ctx.waitUntil(saveAudit(entry));",
+  },
+  {
+    dont: "Leave a setTimeout or setInterval running after the handler returns.",
+    dontCode: "setInterval(refreshCache, 60_000);",
+    fix: "Await a delay inside the handler, or clear the timer before you return. Use a schedule trigger for repeating work.",
+    fixCode: "await new Promise((r) => setTimeout(r, 500));",
+  },
+  {
+    dont: "Keep ctx, ctx.log or ctx.blocks.accessToken for later — for example in a client's event listener.",
+    dontCode: 'redis.on("error", (e) => ctx.log.error("redis", e));',
+    fix: "Read ctx only inside the handler. In listeners that outlive the call, use console.",
+    fixCode: 'redis.on("error", (e) => console.error("redis", e.message));',
+  },
+  {
+    dont: "Store request data in module-level variables — the next caller can see it.",
+    dontCode: "let lastUser; // set from input.body",
+    fix: "Keep per-call data in local variables. Module level is for clients, constants and caches keyed by tenant.",
+    fixCode: "const user = input.body.user; // inside the handler",
+  },
+  {
+    dont: "Connect and close a database client on every call.",
+    dontCode: "const db = await MongoClient.connect(url); /* … */ await db.close();",
+    fix: "Create the client once at module level and reuse it. Don't close it per call.",
+    fixCode: "let client; // module level\nclient ??= await MongoClient.connect(url);",
+  },
 ] as const;
 
 export const BACKOFF_KIND_OPTIONS = [

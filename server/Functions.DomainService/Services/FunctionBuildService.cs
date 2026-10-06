@@ -120,7 +120,18 @@ namespace Functions.DomainService.Services
             {
                 var succeeded = await _buildRepository.GetSucceededBySourceHashAsync(
                     tenantId, function.ItemId, sourceHash, cancellationToken);
-                if (succeeded is not null) return succeeded;
+                if (succeeded is not null)
+                {
+                    if (await IsOnCurrentBaseAsync(succeeded))
+                    {
+                        return succeeded;
+                    }
+
+                    _logger.LogInformation(
+                        "Build {BuildId} of function {FunctionId} was made FROM base image {BaseImage}, which no " +
+                        "live runner builds on any more; building the same source again on the current base",
+                        succeeded.ItemId, function.ItemId, succeeded.BaseImage ?? "(unrecorded)");
+                }
             }
 
             var inProgress = await _buildRepository.GetInProgressBySourceHashAsync(
@@ -145,6 +156,7 @@ namespace Functions.DomainService.Services
                     BuildStatus.Failed,
                     imageDigest: null,
                     artifactSha256: null,
+                    baseImage: null,
                     packages: null,
                     log: null,
                     errorMessage: "the build was never picked up by a runner and has been retired",
@@ -181,6 +193,38 @@ namespace Functions.DomainService.Services
                 FunctionQueueKeys.SourceTtl);
 
             return (build, sourceKey);
+        }
+
+        /// <summary>How long a runner's base image announcement counts as live (heartbeats are every few seconds).</summary>
+        private static readonly TimeSpan BaseImageLiveWindow = TimeSpan.FromMinutes(2);
+
+        /// <summary>
+        /// Whether a cached build was made FROM a base image a live runner still builds on. The cache
+        /// is keyed by source hash, so without this a base image upgrade (say, to the one carrying the
+        /// reuse runtime) never reached a function whose code had not changed: every deploy handed back
+        /// the old build. When no runner has announced a base (an older runner, or Redis unavailable)
+        /// nothing is known and the build is reused as before. A build from before builds recorded
+        /// their base counts as stale once runners do announce one, so it is rebuilt once.
+        /// </summary>
+        private async Task<bool> IsOnCurrentBaseAsync(FunctionBuildEntity build)
+        {
+            string[] live;
+            try
+            {
+                var since = DateTimeOffset.UtcNow.Subtract(BaseImageLiveWindow).ToUnixTimeSeconds();
+                var members = await _cache.CacheDatabase().SortedSetRangeByScoreAsync(
+                    FunctionQueueKeys.BaseImages, since, double.PositiveInfinity);
+                live = members.Select(m => m.ToString()).Where(m => m.Length > 0).ToArray();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Could not read the runners' base images ({Type}); reusing the cached build",
+                    ex.GetType().Name);
+                return true;
+            }
+
+            if (live.Length == 0) return true;
+            return build.BaseImage is not null && live.Contains(build.BaseImage, StringComparer.Ordinal);
         }
 
         private async Task<FunctionBuildEntity> QueueBuildAsync(
