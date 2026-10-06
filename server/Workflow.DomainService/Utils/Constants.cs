@@ -51,7 +51,7 @@ namespace Workflow.DomainService.Utils
             {
                 RabbitMqConfiguration = new RabbitMqConfiguration
                 {
-                    ConsumerSubscriptions = [ConsumerSubscription.BindToQueue(NodeExecutionQueue,20),
+                    ConsumerSubscriptions = [ConsumerSubscription.BindToQueue(NodeExecutionQueue,40),
                                              ConsumerSubscription.BindToQueue(EmailTriggerQueue),
                                              ConsumerSubscription.BindToQueue(DataTriggerQueue,10),
                                              ConsumerSubscription.BindToQueue(SchedulerTriggerQueue,10),
@@ -73,7 +73,8 @@ namespace Workflow.DomainService.Utils
                 {
                     Queues = [NodeExecutionQueue, EmailTriggerQueue, DataTriggerQueue, SchedulerTriggerQueue, WorkflowImportQueue, LogicMailQueueName, CommunicationConstants.MailStatusQueueName, SchedulerConstants.ScheduleJobRegistryQueueName],
                     Topics = [MigrationCompletionTopic],
-                    QueuePrefetchCount = 20
+                    QueuePrefetchCount = 40,
+                    MaxConcurrentCalls = 40
                 }
             };
         }
