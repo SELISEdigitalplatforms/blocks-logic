@@ -51,10 +51,10 @@ namespace Workflow.DomainService.Utils
             {
                 RabbitMqConfiguration = new RabbitMqConfiguration
                 {
-                    ConsumerSubscriptions = [ConsumerSubscription.BindToQueue(NodeExecutionQueue),
+                    ConsumerSubscriptions = [ConsumerSubscription.BindToQueue(NodeExecutionQueue,20),
                                              ConsumerSubscription.BindToQueue(EmailTriggerQueue),
-                                             ConsumerSubscription.BindToQueue(DataTriggerQueue),
-                                             ConsumerSubscription.BindToQueue(SchedulerTriggerQueue),
+                                             ConsumerSubscription.BindToQueue(DataTriggerQueue,10),
+                                             ConsumerSubscription.BindToQueue(SchedulerTriggerQueue,10),
                                              ConsumerSubscription.BindToQueue(WorkflowImportQueue),
                                              ConsumerSubscription.BindToQueue(LogicMailQueueName),
                                              ConsumerSubscription.BindToQueue(CommunicationConstants.MailStatusQueueName),
@@ -72,7 +72,8 @@ namespace Workflow.DomainService.Utils
                 AzureServiceBusConfiguration = new AzureServiceBusConfiguration
                 {
                     Queues = [NodeExecutionQueue, EmailTriggerQueue, DataTriggerQueue, SchedulerTriggerQueue, WorkflowImportQueue, LogicMailQueueName, CommunicationConstants.MailStatusQueueName, SchedulerConstants.ScheduleJobRegistryQueueName],
-                    Topics = [MigrationCompletionTopic]
+                    Topics = [MigrationCompletionTopic],
+                    QueuePrefetchCount = 20
                 }
             };
         }
