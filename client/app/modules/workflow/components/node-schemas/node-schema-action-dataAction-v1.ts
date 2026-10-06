@@ -57,6 +57,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
         key: "authenticationType",
         required: false,
         options: [
+          { label: "None", value: "" },
           { label: "Client Credential", value: "clientCredential" },
           { label: "Blocks Authentication", value: "blocksAuthentication" },
           // { label: "Trigger Node Cookie", value: "triggerNodeCookie" },
