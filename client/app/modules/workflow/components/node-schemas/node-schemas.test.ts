@@ -732,11 +732,11 @@ describe("data action v1", () => {
     });
   });
 
-  it("offers Blocks Authentication and keeps the credential dropdown on Client Credential", () => {
+  it("offers no authentication, Blocks Authentication, and keeps the credential dropdown on Client Credential", () => {
     const authType = field(NodeSchemaActionDataActionV1, "authenticationType");
     const values = (authType.options as { value: string }[]).map((option) => option.value);
     expect(values).toEqual(
-      expect.arrayContaining(["clientCredential", "blocksAuthentication"]),
+      expect.arrayContaining(["", "clientCredential", "blocksAuthentication"]),
     );
     expect(field(NodeSchemaActionDataActionV1, "clientCredential_composite").dependsOn).toEqual({
       key: "authenticationType",
