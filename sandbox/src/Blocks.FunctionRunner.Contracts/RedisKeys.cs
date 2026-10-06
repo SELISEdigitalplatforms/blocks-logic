@@ -122,6 +122,17 @@ namespace Blocks.FunctionRunner.Contracts
         /// </summary>
         public const string RunReuseField = "reuse";
 
+        /// <summary>
+        /// Optional field of a run entry: the Api's step times (<see cref="RunJob.ApiTimings"/>).
+        /// Optional field of a result entry, <see cref="ResultTimingsField"/>: every step time of
+        /// the call so far — <c>api.*</c>, <c>queue</c>, <c>handover.*</c> — for the run record.
+        /// A side that predates them ignores them.
+        /// </summary>
+        public const string RunApiTimingsField = "apiTimings";
+
+        /// <inheritdoc cref="RunApiTimingsField" />
+        public const string ResultTimingsField = "timings";
+
         /// <summary>Entries that exhausted their retry budget.</summary>
         public static string DeadStream => _prefix + "functions:dead";
 

@@ -5,6 +5,7 @@ using Functions.DomainService.Enums;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Services;
+using Functions.DomainService.Utils;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
@@ -241,8 +242,14 @@ namespace Functions.DomainService.Consumers
                 return ResultOutcome.Rejected($"logsKey '{logsKey}' does not belong to run {runId}");
             }
 
+            // Where this result's time goes, logged once it is published (StepTimer). "queued" is
+            // how long the entry sat on the stream before this Worker picked it up.
+            var timer = new StepTimer();
+            var queuedMs = StreamEntryAgeMs(entry.Id);
+
             // --- the run record is the authority on everything the entry claims -------------
             var run = await _runRepository.GetByIdAsync(tenantId, runId, cancellationToken);
+            timer.Mark("read");
             if (run is null)
             {
                 return ResultOutcome.Rejected($"no run {runId} exists in tenant {tenantId}");
@@ -272,6 +279,7 @@ namespace Functions.DomainService.Consumers
             if (AcceptsResult(run))
             {
                 await CopyLogsAsync(tenantId, run.FunctionId, runId, attempt, logsKey, cancellationToken);
+                timer.Mark("logs");
 
                 string? result = null;
                 if (!string.IsNullOrEmpty(resultKey))
@@ -289,6 +297,7 @@ namespace Functions.DomainService.Consumers
                     ParseNullableLong(entry.Get("peakMemoryBytes")), ParseNullableLong(entry.Get("cpuUsageMs")),
                     entry.Get("runnerId"), startedAt, completedAt,
                     entry.GetBool("truncated"), SandboxReport(entry), cancellationToken);
+                timer.Mark("result+apply");
 
                 switch (written)
                 {
@@ -310,6 +319,7 @@ namespace Functions.DomainService.Consumers
                 }
 
                 run = await _runRepository.GetByIdAsync(tenantId, runId, cancellationToken);
+                timer.Mark("reread");
                 if (run is null || run.Attempt != attempt)
                 {
                     return ResultOutcome.Ignored($"run {runId} moved on while its result was being applied");
@@ -324,9 +334,31 @@ namespace Functions.DomainService.Consumers
             // Everything below is safe to repeat, and is repeated on a redelivery: that is what
             // finishes the job when a Worker died between writing the result and acknowledging it.
             await FollowUpAsync(tenantId, run, cancellationToken);
+            timer.Mark("followup");
 
             await _db.PublishAsync(
                 RedisChannel.Literal(FunctionQueueKeys.SyncChannel(runId)), FunctionWireMapping.ToWire(run.Status));
+            timer.Mark("publish");
+            _logger.LogInformation(
+                "Result of run {RunId} published {TotalMs} ms after pick-up (queued {QueuedMs} ms): {Steps}",
+                runId, timer.ElapsedMs, queuedMs, timer.ToString());
+
+            // After the publish, so the caller already has the answer: where this call's time went,
+            // for the run's Timing group. Best effort — a run is never failed over its timings.
+            if (applied)
+            {
+                try
+                {
+                    var timings = StepTimer.ParseCompact(entry.Get(FunctionQueueKeys.ResultTimingsField));
+                    timings.Add(new Models.RunTiming { Group = "result", Step = "queued", Ms = Math.Max(0, queuedMs) });
+                    timings.AddRange(timer.ToTimings("result"));
+                    await _runRepository.SetTimingsAsync(tenantId, runId, attempt, timings, CancellationToken.None);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogWarning("Could not record the timings of run {RunId} ({ExceptionType})", runId, ex.GetType().Name);
+                }
+            }
 
             return applied
                 ? ResultOutcome.Applied
@@ -343,6 +375,16 @@ namespace Functions.DomainService.Consumers
                 : IsPlatformDetermined(run.ErrorCode);
 
         private static bool IsPlatformDetermined(RunErrorCode code) => FunctionWireMapping.IsPlatformDetermined(code);
+
+        /// <summary>Milliseconds since a stream entry was added, from its id (<c>ms-seq</c>); -1 if unreadable.</summary>
+        private static long StreamEntryAgeMs(RedisValue id)
+        {
+            var text = id.ToString();
+            var dash = text.IndexOf('-', StringComparison.Ordinal);
+            return long.TryParse(dash > 0 ? text[..dash] : text, NumberStyles.None, CultureInfo.InvariantCulture, out var ms)
+                ? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - ms
+                : -1;
+        }
 
         private async Task FollowUpAsync(string tenantId, FunctionRunEntity run, CancellationToken cancellationToken)
         {

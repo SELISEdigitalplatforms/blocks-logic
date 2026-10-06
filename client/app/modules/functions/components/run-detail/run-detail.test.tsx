@@ -116,14 +116,61 @@ describe("RunDetail", () => {
     expect(screen.queryByText(/UserRuntimeError/)).toBeNull();
   });
 
-  it("says a reused run was warm, with its handover time", async () => {
+  it("says a reused run was warm, and keeps its handover time in the Timing group", async () => {
     getRun.mockResolvedValue(run({ status: "Succeeded", reused: true, handoverMs: 4 }));
 
     renderWithProviders(<RunDetail runId="run_1" />);
 
     await waitFor(() => expect(screen.getByText("Warm (reused)")).toBeTruthy());
-    expect(screen.getByText("4 ms handover")).toBeTruthy();
+    expect(screen.queryByText("4 ms handover")).toBeNull();
+    const timing = screen.getByTestId("run-timing");
+    expect(timing.textContent).toContain("Handover to sandbox");
+    expect(timing.textContent).toContain("4 ms");
     expect(screen.queryByTestId("discard-reason")).toBeNull();
+  });
+
+  it("shows every stage of the call's time with its steps", async () => {
+    getRun.mockResolvedValue(
+      run({
+        status: "Succeeded",
+        reused: true,
+        durationMs: 120,
+        timings: [
+          { group: "api", step: "function", ms: 35 },
+          { group: "api", step: "insert", ms: 40 },
+          { group: "queue", step: "queue", ms: 12 },
+          { group: "handover", step: "secrets", ms: 170 },
+          { group: "handover", step: "token", ms: 70 },
+          { group: "handover", step: "total", ms: 300 },
+          { group: "result", step: "queued", ms: 5 },
+          { group: "result", step: "publish", ms: 30 },
+        ],
+      }),
+    );
+
+    renderWithProviders(<RunDetail runId="run_1" />);
+
+    const timing = await screen.findByTestId("run-timing");
+    const text = timing.textContent ?? "";
+    expect(text).toContain("Api, before queue");
+    expect(text).toContain("75 ms");
+    expect(text).toContain("function 35 ms · insert 40 ms");
+    expect(text).toContain("Waiting for a runner");
+    // The runner's own total, not the overlapping steps added up.
+    expect(text).toContain("300 ms");
+    expect(text).toContain("secrets 170 ms · token 70 ms");
+    expect(text).toContain("Your code");
+    expect(text).toContain("Saving the result");
+    expect(text).toContain("35 ms");
+  });
+
+  it("shows no Timing group for a run with no timings at all", async () => {
+    getRun.mockResolvedValue(run({ status: "Queued", durationMs: null, handoverMs: null, timings: null }));
+
+    renderWithProviders(<RunDetail runId="run_1" />);
+
+    await waitFor(() => expect(screen.getByText("No logs recorded.")).toBeTruthy());
+    expect(screen.queryByTestId("run-timing")).toBeNull();
   });
 
   it("says cold start when the run started a fresh sandbox", async () => {

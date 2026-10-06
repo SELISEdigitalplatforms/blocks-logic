@@ -201,11 +201,20 @@ namespace Functions.DomainService.Services
             var httpRequest = _httpContextAccessor.HttpContext?.Request
                 ?? throw new InvalidOperationException("InvokeHttpAsync requires an active HTTP request");
 
+            // Where this call's time goes, logged once at the end (StepTimer).
+            var timer = new StepTimer();
+            StepTimer.Current.Value = timer;
+            string? timedRunId = null;
+            try
+            {
+
             var function = await _functionRepository.GetByIdAsync(tenantId, functionId, cancellationToken);
+            timer.Mark("function");
             FunctionVersionEntity? version = null;
             if (function is { Status: FunctionStatus.Live } && !string.IsNullOrEmpty(function.ActiveVersionId))
             {
                 version = await _versionRepository.GetByIdAsync(tenantId, function.ActiveVersionId, cancellationToken);
+                timer.Mark("version");
             }
 
             if (function is null || version is null)
@@ -234,6 +243,7 @@ namespace Functions.DomainService.Services
             // sandbox sees (null for public — the envelope builder strips it regardless).
             var policy = TriggerAccessPolicy.From(version.Trigger);
             var decision = await _accessAuthorizer.AuthorizeAsync(httpRequest, tenantId, policy, cancellationToken);
+            timer.Mark("auth");
             switch (decision.Status)
             {
                 case EndpointAccessStatus.Unauthenticated:
@@ -280,6 +290,7 @@ namespace Functions.DomainService.Services
                     InvokedByType.Http, invokedById: null, inputJson, request.Wait || syncWait is not null,
                     waitTimeoutSeconds: null, cancellationToken, httpWaitSeconds: syncWait,
                     finishedOnlyWithoutRetry: syncWait is not null);
+                timedRunId = result.RunId;
 
                 if (syncWait is null) return result;
 
@@ -300,6 +311,15 @@ namespace Functions.DomainService.Services
             finally
             {
                 if (holdsSlot) _syncWaits.Release();
+            }
+
+            }
+            finally
+            {
+                _logger.LogInformation(
+                    "Function {FunctionId} HTTP call {RunId} took {TotalMs} ms in the Api: {Steps}",
+                    functionId, timedRunId ?? "-", timer.ElapsedMs, timer.ToString());
+                StepTimer.Current.Value = null;
             }
         }
 
@@ -559,6 +579,7 @@ namespace Functions.DomainService.Services
             bool replayOfHttp = false)
         {
             var admission = await _admissionService.AdmitAsync(function, tenantId, inputJson, cancellationToken);
+            StepTimer.Current.Value?.Mark("admission");
             if (!admission.IsAdmitted)
             {
                 throw new FunctionValidationException(admission.Message ?? "the request was not admitted");
@@ -626,6 +647,7 @@ namespace Functions.DomainService.Services
             var delegationGrantId = mayReadToken
                 ? await _delegation.CreateGrantAsync(tenantId, context, grantAuthMode)
                 : null;
+            StepTimer.Current.Value?.Mark(mayReadToken ? "grant" : "no-grant");
 
             // Last point at which the caller going away may stop anything. From the insert on, the
             // record exists, and a cancelled enqueue would strand it QUEUED with nothing queued —
@@ -636,14 +658,17 @@ namespace Functions.DomainService.Services
                 cancellationToken.ThrowIfCancellationRequested();
             }
             await _runRepository.CreateAsync(tenantId, run, CancellationToken.None);
+            StepTimer.Current.Value?.Mark("insert");
 
             // Counted whether or not the enqueue succeeds: the record exists either way and shows
             // in the runs list, so the counter and the list agree.
             await _functionRepository.RecordRunStartedAsync(tenantId, function.ItemId, run.CreatedDate, CancellationToken.None);
+            StepTimer.Current.Value?.Mark("counter");
 
             try
             {
                 await EnqueueAsync(tenantId, function, version, run, image, envelopeJson, delegationGrantId, limits, test);
+                StepTimer.Current.Value?.Mark("enqueue");
             }
             catch (Exception ex)
             {
@@ -784,6 +809,7 @@ namespace Functions.DomainService.Services
             {
                 var artifactUrl = await ArtifactUrlOrNullAsync(tenantId, function, version, run)
                     .ConfigureAwait(false);
+                StepTimer.Current.Value?.Mark("artifact-url");
 
                 if (artifactUrl is not null)
                 {
@@ -799,6 +825,12 @@ namespace Functions.DomainService.Services
             if (run.ReuseRequested)
             {
                 entry.Add(new NameValueEntry(FunctionQueueKeys.RunReuseField, "1"));
+            }
+
+            // This call's Api steps so far, for the run's Timing group (carried by the runner).
+            if (StepTimer.Current.Value is { } timer)
+            {
+                entry.Add(new NameValueEntry(FunctionQueueKeys.RunApiTimingsField, timer.ToCompact()));
             }
 
             await database.StreamAddAsync(FunctionQueueKeys.RunsStream, [.. entry]);
@@ -897,6 +929,9 @@ namespace Functions.DomainService.Services
             // Subscribed before the first read, so a completion between the read and the
             // subscription cannot be missed.
             var subscriber = await TrySubscribeAsync(channel, onNotified);
+            var timer = StepTimer.Current.Value;
+            timer?.Mark("subscribe");
+            var reads = 0;
             var delay = subscriber is null ? PollInitial : SubscribedPollInitial;
             var cap = subscriber is null ? PollCap : SubscribedPollCap;
 
@@ -907,6 +942,11 @@ namespace Functions.DomainService.Services
                     cancellationToken.ThrowIfCancellationRequested();
 
                     var run = await _runRepository.GetByIdAsync(tenantId, runId, cancellationToken);
+                    reads++;
+                    if (run is not null && FunctionWireMapping.IsTerminal(run.Status))
+                    {
+                        timer?.Mark($"wait+read#{reads}");
+                    }
                     if (run is not null)
                     {
                         lastStatus = run.Status;
@@ -967,6 +1007,7 @@ namespace Functions.DomainService.Services
                     if (remaining < MinWaitSlice) break;
 
                     var notified = await signal.WaitAsync(remaining < delay ? remaining : delay, cancellationToken);
+                    if (notified) timer?.Mark("notified");
                     delay = notified ? delay : TimeSpan.FromTicks(Math.Min(delay.Ticks * 2, cap.Ticks));
                 }
             }

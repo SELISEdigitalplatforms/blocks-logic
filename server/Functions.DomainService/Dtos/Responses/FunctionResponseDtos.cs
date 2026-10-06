@@ -184,6 +184,9 @@ namespace Functions.DomainService.Dtos.Responses
         /// <summary>Claim to envelope-on-stdin of a warm sandbox, in milliseconds; null when not reported.</summary>
         public long? HandoverMs { get; set; }
 
+        /// <summary>Where the call's time went, step by step; null for a run from before timings existed.</summary>
+        public List<RunTiming>? Timings { get; set; }
+
         public static RunDetailDto From(FunctionRunEntity run) => new()
         {
             Id = run.ItemId,
@@ -211,6 +214,7 @@ namespace Functions.DomainService.Dtos.Responses
             Reused = run.Reused,
             DiscardReason = run.DiscardReason,
             HandoverMs = run.HandoverMs,
+            Timings = run.Timings,
         };
     }
 

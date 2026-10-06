@@ -156,6 +156,13 @@ namespace Functions.DomainService.Repositories
             DateTime completedAt,
             CancellationToken cancellationToken = default);
 
+        /// <summary>
+        /// Records where <paramref name="attempt"/>'s time went. Only while the run is still on that
+        /// attempt, so a late write never lands on a retry's record.
+        /// </summary>
+        Task SetTimingsAsync(
+            string tenantId, string runId, int attempt, List<Models.RunTiming> timings, CancellationToken cancellationToken = default);
+
         /// <summary>Flips only the status — used for the transient OUTPUT_PROCESSING step between a successful run and output delivery.</summary>
         Task ApplyStatusOnlyAsync(string tenantId, string runId, RunStatus status, CancellationToken cancellationToken = default);
 

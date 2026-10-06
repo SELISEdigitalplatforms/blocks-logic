@@ -121,6 +121,16 @@ namespace Functions.DomainService.Queue
         /// that never opted in is byte-identical to before. A runner without reuse ignores it.
         /// </summary>
         public const string RunReuseField = "reuse";
+
+        /// <summary>
+        /// Optional field of a run entry: the Api's step times for this call (<c>function=35;…</c>),
+        /// which the runner carries to the result entry's <see cref="ResultTimingsField"/> beside its
+        /// own. Mirrors <c>RedisKeys.RunApiTimingsField</c>.
+        /// </summary>
+        public const string RunApiTimingsField = "apiTimings";
+
+        /// <inheritdoc cref="RunApiTimingsField" />
+        public const string ResultTimingsField = "timings";
         public static string ResultsStream => _prefix + "functions:results";
 
         /// <summary>

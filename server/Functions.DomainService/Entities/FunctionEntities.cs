@@ -218,6 +218,14 @@ namespace Functions.DomainService.Entities
         [BsonIgnoreIfDefault]
         public bool ReuseRequested { get; set; }
 
+        /// <summary>
+        /// Where this attempt's time went, step by step (<see cref="RunTiming"/>): written by the
+        /// Worker after the answer is published, so recording it never delays a caller. Null for a
+        /// run from before timings existed, and not written while null.
+        /// </summary>
+        [BsonIgnoreIfNull]
+        public List<RunTiming>? Timings { get; set; }
+
         public List<RunStage> Stages { get; set; } = [];
         public List<RunAttempt> Attempts { get; set; } = [];
         public List<OutputActionResult> OutputResults { get; set; } = [];

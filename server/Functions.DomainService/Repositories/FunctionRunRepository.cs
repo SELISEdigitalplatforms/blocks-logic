@@ -333,6 +333,7 @@ namespace Functions.DomainService.Repositories
                 .Unset(r => r.Reused)
                 .Unset(r => r.DiscardReason)
                 .Unset(r => r.HandoverMs)
+                .Unset(r => r.Timings)
                 .Set(r => r.OutputResults, new List<Models.OutputActionResult>())
                 .Set(r => r.IdempotencyKey, $"{runId}-{attempt}")
                 .Set(r => r.LastUpdatedDate, DateTime.UtcNow);
@@ -390,6 +391,15 @@ namespace Functions.DomainService.Repositories
             // message matches the filter and changes nothing, and reporting that as "this call
             // failed it" would write a duplicate audit record on every redelivery.
             return result.ModifiedCount > 0;
+        }
+
+        public Task SetTimingsAsync(
+            string tenantId, string runId, int attempt, List<Models.RunTiming> timings, CancellationToken cancellationToken = default)
+        {
+            var f = Builders<FunctionRunEntity>.Filter;
+            var update = Builders<FunctionRunEntity>.Update.Set(r => r.Timings, timings);
+            return Collection(tenantId).UpdateOneAsync(
+                f.Eq(r => r.ItemId, runId) & f.Eq(r => r.Attempt, attempt), update, cancellationToken: cancellationToken);
         }
 
         public Task ApplyStatusOnlyAsync(

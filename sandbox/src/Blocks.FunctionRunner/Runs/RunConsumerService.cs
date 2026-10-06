@@ -146,6 +146,16 @@ namespace Blocks.FunctionRunner.Runs
             _logger.LogInformation("Run loop stopped");
         }
 
+        /// <summary>Milliseconds since a stream entry was added, from its id (<c>ms-seq</c>); null if unreadable.</summary>
+        internal static long? StreamEntryAgeMs(RedisValue id)
+        {
+            var text = id.ToString();
+            var dash = text.IndexOf('-', StringComparison.Ordinal);
+            return long.TryParse(dash > 0 ? text[..dash] : text, NumberStyles.None, CultureInfo.InvariantCulture, out var ms)
+                ? Math.Max(0, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - ms)
+                : null;
+        }
+
         /// <summary>The cap on runs in progress: the configured one, else the host's current capacity.</summary>
         private int ParallelLimit() =>
             _options.MaxParallelRuns > 0 ? _options.MaxParallelRuns : Math.Max(1, _budget.Capacity);
@@ -214,6 +224,8 @@ namespace Blocks.FunctionRunner.Runs
                 // The function's opt-in only; whether this host does reuse at all is RunProcessor's
                 // question (RunnerOptions.SandboxReuse).
                 Reuse = string.Equals(entry.Get(RedisKeys.RunReuseField), "1", StringComparison.Ordinal),
+                ApiTimings = entry.Get(RedisKeys.RunApiTimingsField),
+                QueuedMs = StreamEntryAgeMs(entry.Id),
             };
 
             if (deliveries > 1)

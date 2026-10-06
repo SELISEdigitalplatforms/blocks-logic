@@ -40,5 +40,38 @@ namespace Blocks.FunctionRunner.Runs
         }
 
         private static long Step(long from, long to) => from < 0 || to < 0 ? -1 : to - from;
+
+        /// <summary>
+        /// Every step time of the call up to the hand-over, for the result entry
+        /// (<see cref="Contracts.RedisKeys.ResultTimingsField"/>): the Api's, the time on the queue,
+        /// then this runner's. A step never reached is left out rather than sent as -1.
+        /// </summary>
+        public static string Compose(string? apiTimings, long? queuedMs, HandoverTimings? handover, long? handoverMs)
+        {
+            var parts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(apiTimings))
+            {
+                foreach (var part in apiTimings.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    var eq = part.IndexOf('=');
+                    // Only well-formed name=number pairs are carried on; the field is not trusted.
+                    if (eq > 0 && eq < 40 && long.TryParse(part.AsSpan(eq + 1), out _)) parts.Add("api." + part);
+                }
+            }
+            if (queuedMs is { } q) parts.Add($"queue={q}");
+            if (handover is not null)
+            {
+                long image = Volatile.Read(ref handover._image), admitted = Volatile.Read(ref handover._admitted),
+                    sandbox = Volatile.Read(ref handover._sandbox);
+                void Add(string name, long ms) { if (ms >= 0) parts.Add($"handover.{name}={ms}"); }
+                Add("image", image);
+                Add("admission", Step(image, admitted));
+                Add("sandbox", Step(admitted, sandbox));
+                Add("secrets", Volatile.Read(ref handover._secrets));
+                Add("token", Volatile.Read(ref handover._token));
+                if (handoverMs is { } total) Add("total", total);
+            }
+            return string.Join(';', parts);
+        }
     }
 }

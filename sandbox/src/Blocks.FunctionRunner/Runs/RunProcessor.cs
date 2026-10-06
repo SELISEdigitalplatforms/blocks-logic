@@ -366,7 +366,7 @@ namespace Blocks.FunctionRunner.Runs
                     result.PeakMemoryBytes, result.CpuUsageMs, result.Output.ResultJson,
                     WithFailureLine(result.Output, errorCode, errorMessage, resolvedValues),
                     result.Output.Truncated,
-                    startupMs: result.StartupMs, executionMs: result.ExecutionMs)
+                    startupMs: result.StartupMs, executionMs: result.ExecutionMs, timings: timings)
                     .ConfigureAwait(false);
 
                 return Disposition.Complete;
@@ -623,7 +623,7 @@ namespace Blocks.FunctionRunner.Runs
                 result.PeakMemoryBytes, result.CpuUsageMs, result.Output.ResultJson,
                 WithFailureLine(result.Output, errorCode, errorMessage, resolvedValues),
                 result.Output.Truncated,
-                startupMs: result.StartupMs, executionMs: result.ExecutionMs, warm: report)
+                startupMs: result.StartupMs, executionMs: result.ExecutionMs, warm: report, timings: timings)
                 .ConfigureAwait(false);
 
             return Disposition.Complete;
@@ -915,16 +915,22 @@ namespace Blocks.FunctionRunner.Runs
             string status, string? errorCode, string? errorMessage,
             int? exitCode, long durationMs, long? peakMemory, long? cpuUsageMs,
             string? resultJson, List<string>? logs, bool truncated,
-            long? startupMs = null, long? executionMs = null, WarmReport? warm = null)
+            long? startupMs = null, long? executionMs = null, WarmReport? warm = null, HandoverTimings? timings = null)
         {
             var completedAt = DateTimeOffset.UtcNow;
             string? resultKey = null;
             string? logsKey = null;
 
+            // The result, the logs and the status are written together — sent back to back on the
+            // one connection, so Redis applies them in this order, and waited for as one round
+            // trip instead of five one after another (each a remote call on the answer's path).
+            // All of them land before the stream entry below, as before: a crash in between still
+            // replays the run rather than losing it.
+            var writes = new List<Task>(5);
             if (resultJson is not null)
             {
                 resultKey = RedisKeys.Result(job.RunId);
-                await _db.StringSetAsync(resultKey, resultJson, RedisKeys.ResultTtl).ConfigureAwait(false);
+                writes.Add(_db.StringSetAsync(resultKey, resultJson, RedisKeys.ResultTtl));
             }
 
             if (logs is { Count: > 0 })
@@ -932,12 +938,13 @@ namespace Blocks.FunctionRunner.Runs
                 logsKey = RedisKeys.Logs(job.RunId);
                 var values = new RedisValue[logs.Count];
                 for (var i = 0; i < logs.Count; i++) values[i] = logs[i];
-                await _db.KeyDeleteAsync(logsKey).ConfigureAwait(false);
-                await _db.ListRightPushAsync(logsKey, values).ConfigureAwait(false);
-                await _db.KeyExpireAsync(logsKey, RedisKeys.LogsTtl).ConfigureAwait(false);
+                writes.Add(_db.KeyDeleteAsync(logsKey));
+                writes.Add(_db.ListRightPushAsync(logsKey, values));
+                writes.Add(_db.KeyExpireAsync(logsKey, RedisKeys.LogsTtl));
             }
 
-            await SetStatusAsync(runKey, status).ConfigureAwait(false);
+            writes.Add(SetStatusAsync(runKey, status));
+            await Task.WhenAll(writes).ConfigureAwait(false);
 
             var entry = new NameValueEntry[]
             {
@@ -979,6 +986,14 @@ namespace Blocks.FunctionRunner.Runs
                     new("discard", warm.Discard),
                     new("handoverMs", warm.HandoverMs?.ToString(CultureInfo.InvariantCulture) ?? string.Empty),
                 ];
+            }
+
+            // Every step time so far (Api, queue, hand-over), for the run record. Optional: a
+            // consumer that predates it ignores it.
+            var composed = HandoverTimings.Compose(job.ApiTimings, job.QueuedMs, timings, warm?.HandoverMs);
+            if (composed.Length > 0)
+            {
+                entry = [.. entry, new(RedisKeys.ResultTimingsField, composed)];
             }
 
             await _db.StreamAddAsync(RedisKeys.ResultsStream, entry).ConfigureAwait(false);
