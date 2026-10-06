@@ -6,6 +6,7 @@ using Blocks.FunctionRunner.Options;
 using Blocks.FunctionRunner.Protocol;
 using Blocks.FunctionRunner.Runs;
 using Blocks.FunctionRunner.Sandbox;
+using Blocks.FunctionRunner.SecretStore;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using StackExchange.Redis;
@@ -102,7 +103,7 @@ namespace Blocks.FunctionRunner.Tests
             public HostSignalSample Sample() => new(0, 0, 0, 64L * 1024 * 1024 * 1024);
         }
 
-        private RunProcessor Processor(ISandbox sandbox, IRunAccessTokenResolver tokens)
+        private RunProcessor Processor(ISandbox sandbox, IRunAccessTokenResolver tokens, IRunSecretResolver? secrets = null)
         {
             var options = Microsoft.Extensions.Options.Options.Create(new RunnerOptions
             {
@@ -113,7 +114,7 @@ namespace Blocks.FunctionRunner.Tests
             var budget = new HostBudget(options, new RoomyHost(), new SandboxFootprint(), NullLogger<HostBudget>.Instance);
 
             return new RunProcessor(_db!, sandbox, new ResolvesAnything(), budget,
-                new FakeRunSecretResolver(new Dictionary<string, string> { ["sec_1"] = "sk_live_SECRET_55" }),
+                secrets ?? new FakeRunSecretResolver(new Dictionary<string, string> { ["sec_1"] = "sk_live_SECRET_55" }),
                 tokens, options, _logs.For<RunProcessor>())
             {
                 EnvelopeGroupHandoff = (_, _) => { },
@@ -317,6 +318,152 @@ namespace Blocks.FunctionRunner.Tests
             var result = await ResultEntryAsync();
             Field(result, "errorCode").Should().Be(ErrorCodes.RuntimeStartFailed);
             Field(result, "errorMessage").Should().Contain("blocks.accessToken");
+        }
+
+        // ---------- the hand-over: token beside the secrets, slots side by side ----------
+
+        /// <summary>Waits <paramref name="delay"/> before answering, like a remote store.</summary>
+        private sealed class SlowSecrets(TimeSpan delay, bool resolve = true) : IRunSecretResolver
+        {
+            public async Task<SecretLookup> ResolveAsync(
+                string tenantId, EnvSecretReferences.Caller caller, IReadOnlyCollection<string> secretIds, CancellationToken cancellationToken)
+            {
+                await Task.Delay(delay, cancellationToken);
+                return await new FakeRunSecretResolver(resolve
+                        ? new Dictionary<string, string> { ["sec_1"] = "sk_live_SECRET_55" }
+                        : [])
+                    .ResolveAsync(tenantId, caller, secretIds, cancellationToken);
+            }
+        }
+
+        /// <summary>Waits <paramref name="delay"/> before answering, like IAM.</summary>
+        private sealed class SlowTokens(TimeSpan delay, string? token) : IRunAccessTokenResolver
+        {
+            public int Calls;
+
+            public async Task<string?> RedeemAsync(string tenantId, string grantId, CancellationToken cancellationToken)
+            {
+                Interlocked.Increment(ref Calls);
+                await Task.Delay(delay, cancellationToken);
+                return token;
+            }
+        }
+
+        [SkippableFact]
+        public async Task The_token_is_redeemed_while_the_secrets_resolve_not_after_them()
+        {
+            Skip.If(Unavailable, "no Redis available");
+            var sandbox = new RecordingSandbox();
+            var step = TimeSpan.FromMilliseconds(400);
+            var processor = Processor(sandbox, new SlowTokens(step, Token), new SlowSecrets(step));
+            var job = await QueueAsync(Envelope(), Grant);
+
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            var disposition = await processor.ProcessAsync(job, CancellationToken.None);
+            watch.Stop();
+
+            disposition.Should().Be(RunProcessor.Disposition.Complete);
+            SeenToken(sandbox.EnvelopeContentSeen!).Should().Be(Token);
+            using var seen = JsonDocument.Parse(sandbox.EnvelopeContentSeen!);
+            seen.RootElement.GetProperty("env").GetProperty("KEY").GetString().Should().Be("sk_live_SECRET_55");
+            // One after the other would be at least 800 ms; side by side is one step plus Redis.
+            watch.Elapsed.Should().BeLessThan(step * 2 - TimeSpan.FromMilliseconds(100));
+        }
+
+        [SkippableFact]
+        public async Task A_run_failed_on_its_secrets_drops_a_token_still_in_flight_unread()
+        {
+            Skip.If(Unavailable, "no Redis available");
+            var sandbox = new RecordingSandbox();
+            var tokens = new SlowTokens(TimeSpan.FromMilliseconds(300), Token);
+
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            var disposition = await Processor(sandbox, tokens, new SlowSecrets(TimeSpan.Zero, resolve: false))
+                .ProcessAsync(await QueueAsync(Envelope(), Grant), CancellationToken.None);
+            watch.Stop();
+
+            disposition.Should().Be(RunProcessor.Disposition.Complete);
+            sandbox.Calls.Should().Be(0);
+            Field(await ResultEntryAsync(), "errorCode").Should().Be(ErrorCodes.SecretUnresolved);
+            // The failure is reported without waiting for IAM.
+            watch.Elapsed.Should().BeLessThan(TimeSpan.FromMilliseconds(300));
+
+            await Task.Delay(400); // let the abandoned redemption finish
+            tokens.Calls.Should().Be(1);
+            var record = await _db!.HashGetAllAsync(RedisKeys.Run(_runId));
+            string.Join("\n", record.Select(e => $"{e.Name}={e.Value}")).Should().NotContain(Token);
+            _logs.All.Should().NotContain(Token);
+        }
+
+        [SkippableFact]
+        public async Task A_function_at_its_limit_defers_and_leaves_no_tenant_slot_behind()
+        {
+            Skip.If(Unavailable, "no Redis available");
+            // The function limit is fixed (Limits: FunctionConcurrency = MaxFunctionConcurrency).
+            var held = new List<FunctionConcurrency>();
+            for (var i = 0; i < Ceilings.MaxFunctionConcurrency; i++)
+            {
+                held.Add((await FunctionConcurrency.TryEnterAsync(_db!, _functionId, $"run_other_{i}", Ceilings.MaxFunctionConcurrency))!);
+            }
+            var sandbox = new RecordingSandbox();
+            var tokens = new FakeRunAccessTokenResolver(Token);
+
+            try
+            {
+                var disposition = await Processor(sandbox, tokens)
+                    .ProcessAsync(await QueueAsync(Envelope(), Grant), CancellationToken.None);
+
+                disposition.Should().Be(RunProcessor.Disposition.Deferred);
+                sandbox.Calls.Should().Be(0);
+                tokens.Calls.Should().BeEmpty("a deferred run redeems nothing");
+                (await _db!.SortedSetScoreAsync(RedisKeys.TenantSlots(Tenant), _runId)).Should().BeNull();
+                (await _db.KeyExistsAsync(RedisKeys.Lease(_runId))).Should().BeFalse();
+            }
+            finally
+            {
+                foreach (var slot in held) await slot.DisposeAsync();
+            }
+        }
+
+        [SkippableFact]
+        public async Task A_tenant_at_its_share_defers_and_leaves_no_function_slot_behind()
+        {
+            Skip.If(Unavailable, "no Redis available");
+            var options = new RunnerOptions { RunnerId = "test-runner", RunsDir = _runsDir, MaxActiveSandboxes = 4 };
+            var budget = new HostBudget(Microsoft.Extensions.Options.Options.Create(options), new RoomyHost(),
+                new SandboxFootprint(), NullLogger<HostBudget>.Instance);
+            var share = options.TenantSlotLimit(budget.Capacity);
+            var held = new List<FunctionConcurrency>();
+            for (var i = 0; i < share; i++)
+            {
+                held.Add((await FunctionConcurrency.TryEnterTenantAsync(_db!, Tenant, $"run_other_{i}", share))!);
+            }
+
+            try
+            {
+                var disposition = await Processor(new RecordingSandbox(), new FakeRunAccessTokenResolver(Token))
+                    .ProcessAsync(await QueueAsync(Envelope(), Grant), CancellationToken.None);
+
+                disposition.Should().Be(RunProcessor.Disposition.Deferred);
+                (await _db!.SortedSetScoreAsync(RedisKeys.Concurrency(_functionId), _runId)).Should().BeNull();
+                (await _db.KeyExistsAsync(RedisKeys.Lease(_runId))).Should().BeFalse();
+            }
+            finally
+            {
+                foreach (var slot in held) await slot.DisposeAsync();
+            }
+        }
+
+        [SkippableFact]
+        public async Task The_status_still_reads_finished_after_the_quiet_status_writes()
+        {
+            Skip.If(Unavailable, "no Redis available");
+
+            await Processor(new RecordingSandbox(), new FakeRunAccessTokenResolver(Token))
+                .ProcessAsync(await QueueAsync(Envelope(), Grant), CancellationToken.None);
+
+            ((string?)await _db!.HashGetAsync(RedisKeys.Run(_runId), "status"))
+                .Should().NotBe(RunStatuses.Starting).And.NotBe(RunStatuses.Running);
         }
     }
 }

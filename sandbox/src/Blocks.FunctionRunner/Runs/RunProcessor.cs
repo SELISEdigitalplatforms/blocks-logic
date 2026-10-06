@@ -133,6 +133,7 @@ namespace Blocks.FunctionRunner.Runs
 
             // The claim, for a warm run's handoverMs (claim → envelope on the sandbox's stdin).
             var claimed = Stopwatch.StartNew();
+            var timings = new HandoverTimings(claimed);
 
             // --- image, before any slot is taken ------------------------------------
             // Producing the image can mean downloading an artifact and building it, which is
@@ -149,6 +150,7 @@ namespace Blocks.FunctionRunner.Runs
             // fails still counts as use — the image was wanted, which is the question the cache is
             // asking.
             if (image is not null) _usage?.Touch(image);
+            timings.ImageReady();
             if (image is null)
             {
                 await CompleteAsync(job, runKey, startedAt, RunStatuses.Failed, ErrorCodes.ImagePullFailed,
@@ -201,13 +203,33 @@ namespace Blocks.FunctionRunner.Runs
                 return Disposition.Deferred;
             }
 
-            // A tenant's share of the fleet, before anything function-specific. The host budget
-            // above is first-come-first-served, so without this one tenant's burst could hold
-            // every slot on a runner and every other tenant waited behind it.
-            await using var tenantSlot = string.IsNullOrEmpty(job.TenantId)
-                ? null
-                : await FunctionConcurrency.TryEnterTenantAsync(
-                    _db, job.TenantId, job.RunId, _options.TenantSlotLimit(_budget.Capacity)).ConfigureAwait(false);
+            // A tenant's share of the fleet, and the function's own limit. The host budget above is
+            // first-come-first-served, so without the tenant gate one tenant's burst could hold
+            // every slot on a runner and every other tenant waited behind it. A test draws on its
+            // own budget, never the function's: clicking Test must not be able to delay the traffic
+            // that function's deployed version is serving.
+            //
+            // Both are taken at once — two independent keys, pipelined into one Redis round trip
+            // instead of two (each is a remote call on the hot path of every run). Whichever was
+            // taken is released by its `await using` when the other refuses, so the outcome is
+            // the same as taking them one after the other.
+            var tenantSlotTask = string.IsNullOrEmpty(job.TenantId)
+                ? Task.FromResult<FunctionConcurrency?>(null)
+                : FunctionConcurrency.TryEnterTenantAsync(
+                    _db, job.TenantId, job.RunId, _options.TenantSlotLimit(_budget.Capacity));
+            var slotTask = job.IsTest
+                ? FunctionConcurrency.TryEnterTestAsync(_db, job.FunctionId, job.RunId)
+                : FunctionConcurrency.TryEnterAsync(_db, job.FunctionId, job.RunId, limits.FunctionConcurrency);
+            await Task.WhenAll(
+                tenantSlotTask.ContinueWith(static _ => { }, TaskScheduler.Default),
+                slotTask.ContinueWith(static _ => { }, TaskScheduler.Default)).ConfigureAwait(false);
+            // Both settled, so a fault in one cannot leave the other's slot held: register both
+            // for release before either result is read (a faulted one rethrows on its own await).
+            await using var tenantSlot = tenantSlotTask.IsCompletedSuccessfully ? tenantSlotTask.Result : null;
+            await using var slot = slotTask.IsCompletedSuccessfully ? slotTask.Result : null;
+            await tenantSlotTask.ConfigureAwait(false);
+            await slotTask.ConfigureAwait(false);
+
             if (tenantSlot is null && !string.IsNullOrEmpty(job.TenantId))
             {
                 _logger.LogDebug(
@@ -216,12 +238,6 @@ namespace Blocks.FunctionRunner.Runs
                 return Disposition.Deferred;
             }
 
-            // A test draws on its own budget, never the function's: clicking Test must not be
-            // able to delay the traffic that function's deployed version is serving.
-            await using var slot = job.IsTest
-                ? await FunctionConcurrency.TryEnterTestAsync(_db, job.FunctionId, job.RunId).ConfigureAwait(false)
-                : await FunctionConcurrency.TryEnterAsync(
-                    _db, job.FunctionId, job.RunId, limits.FunctionConcurrency).ConfigureAwait(false);
             if (slot is null)
             {
                 _logger.LogDebug("Function {FunctionId} is at its {Kind} concurrency limit; deferring run {RunId}",
@@ -229,6 +245,8 @@ namespace Blocks.FunctionRunner.Runs
                 return Disposition.Deferred;
             }
 
+            // After the slots, not beside them: a run that is only deferred must never hold the
+            // lease, or a second runner handed the same entry would read it as someone else's.
             await using var lease = await RunLease.TryAcquireAsync(
                 _db, _logger, job.RunId, TimeSpan.FromMilliseconds(_options.LeaseMs), token).ConfigureAwait(false);
             if (lease is null)
@@ -236,12 +254,16 @@ namespace Blocks.FunctionRunner.Runs
                 _logger.LogInformation("Run {RunId} is already leased by another runner", job.RunId);
                 return Disposition.NotOurs;
             }
+            timings.Admitted();
 
-            await SetStatusAsync(runKey, RunStatuses.Starting).ConfigureAwait(false);
+            // A display status for the run list, so not waited for here: it travels on the same
+            // connection as the commands after it, and Redis applies one connection's commands in
+            // order, so it still lands before Running and before the result.
+            _ = SetStatusQuietlyAsync(runKey, RunStatuses.Starting, job.RunId);
 
             if (useWarm)
             {
-                var served = await ProcessWarmAsync(job, fields, runKey, startedAt, claimed, image, limits, lease, token)
+                var served = await ProcessWarmAsync(job, fields, runKey, startedAt, claimed, timings, image, limits, lease, token)
                     .ConfigureAwait(false);
                 if (served is { } disposition) return disposition;
 
@@ -267,7 +289,7 @@ namespace Blocks.FunctionRunner.Runs
                 // never written back to the run record: a retry re-reads the references and
                 // resolves them afresh, which is also what makes a rotated secret take effect on
                 // the very next attempt.
-                var prepared = await PrepareEnvelopeAsync(job, fields, runKey, startedAt, token).ConfigureAwait(false);
+                var prepared = await PrepareEnvelopeAsync(job, fields, runKey, startedAt, token, timings).ConfigureAwait(false);
                 if (prepared.Done is { } done) return done;
 
                 string envelopePath;
@@ -366,9 +388,11 @@ namespace Blocks.FunctionRunner.Runs
         /// (or the run deferred) and <see cref="PreparedRun.Done"/> says how to dispose of the entry.
         /// </summary>
         private async Task<PreparedRun> PrepareEnvelopeAsync(
-            RunJob job, Dictionary<string, string> fields, string runKey, DateTimeOffset startedAt, CancellationToken token)
+            RunJob job, Dictionary<string, string> fields, string runKey, DateTimeOffset startedAt, CancellationToken token,
+            HandoverTimings? timings = null)
         {
             IReadOnlyList<string> resolvedValues = [];
+            Task<string?>? tokenTask = null;
             try
             {
                 var envelope = fields.TryGetValue("envelope", out var e) ? e : "{}";
@@ -377,9 +401,29 @@ namespace Blocks.FunctionRunner.Runs
                 // refuse anyway never causes a secret to be read.
                 ExecutionEnvelope.Screen(envelope);
 
+                // The caller's token is redeemed while the secrets resolve, not after them: two
+                // independent remote calls (IAM, and the secret store), each a few hundred ms, that
+                // used to be paid one after the other on every run. After the screen, deliberately:
+                // it refuses an `accessToken` key, and this one is added by the runner from a grant,
+                // never carried by the queue. The caller is read from the envelope as queued —
+                // resolving secrets changes variables, never the caller.
+                //
+                // A redemption is not single-use (every attempt redeems afresh), so one made for a
+                // run that is then deferred or failed costs one IAM call and nothing else; its
+                // token is dropped unread.
+                var queuedEnvelope = envelope;
+                tokenTask = Task.Run(async () =>
+                {
+                    var sw = Stopwatch.StartNew();
+                    try { return await RedeemAccessTokenAsync(job, fields, queuedEnvelope, token).ConfigureAwait(false); }
+                    finally { timings?.Token(sw.ElapsedMilliseconds); }
+                }, CancellationToken.None);
+
                 if (job.Protocol >= RedisKeys.RunProtocolVersion)
                 {
+                    var secretsWatch = Stopwatch.StartNew();
                     var prepared = await ResolveSecretsAsync(job, envelope, token).ConfigureAwait(false);
+                    timings?.Secrets(secretsWatch.ElapsedMilliseconds);
                     if (prepared.Failure is { } failure)
                     {
                         // An unreachable store is not this function's failure — nothing ran, and
@@ -425,9 +469,8 @@ namespace Blocks.FunctionRunner.Runs
                     resolvedValues = prepared.Values;
                 }
 
-                // After the screen, deliberately: it refuses an `accessToken` key, and this
-                // one is added by the runner from a grant, never carried by the queue.
-                var accessToken = await RedeemAccessTokenAsync(job, fields, envelope, token).ConfigureAwait(false);
+                var accessToken = await tokenTask.ConfigureAwait(false);
+                tokenTask = null;
                 if (accessToken is not null)
                 {
                     envelope = RunDelegation.Apply(envelope, accessToken);
@@ -444,6 +487,16 @@ namespace Blocks.FunctionRunner.Runs
                     ex.Message, null, 0, null, null, null, null, false).ConfigureAwait(false);
                 return new PreparedRun(null, [], false, Disposition.Complete);
             }
+            finally
+            {
+                // Any path that did not use the token leaves it to finish on its own, its result
+                // (and any fault) observed and dropped — never awaited, so a slow IAM cannot hold
+                // a run that has already been deferred or failed.
+                if (tokenTask is not null)
+                {
+                    _ = tokenTask.ContinueWith(static t => _ = t.Exception, TaskScheduler.Default);
+                }
+            }
         }
 
         /// <summary>
@@ -458,7 +511,7 @@ namespace Blocks.FunctionRunner.Runs
         /// </summary>
         private async Task<Disposition?> ProcessWarmAsync(
             RunJob job, Dictionary<string, string> fields, string runKey, DateTimeOffset startedAt,
-            Stopwatch claimed, string image, RunLimits limits, RunLease lease, CancellationToken token)
+            Stopwatch claimed, HandoverTimings timings, string image, RunLimits limits, RunLease lease, CancellationToken token)
         {
             var key = new WarmKey(job.TenantId ?? string.Empty, job.FunctionId, job.VersionId ?? string.Empty, image);
 
@@ -467,11 +520,12 @@ namespace Blocks.FunctionRunner.Runs
             if (acquired is null) return early;
 
             var handle = acquired;
+            timings.SandboxReady();
             WarmCallResult call;
             IReadOnlyList<string> resolvedValues;
             try
             {
-                var prepared = await PrepareEnvelopeAsync(job, fields, runKey, startedAt, token).ConfigureAwait(false);
+                var prepared = await PrepareEnvelopeAsync(job, fields, runKey, startedAt, token, timings).ConfigureAwait(false);
                 if (prepared.Done is { } done)
                 {
                     await _warm!.ReturnUnusedAsync(handle).ConfigureAwait(false);
@@ -493,7 +547,8 @@ namespace Blocks.FunctionRunner.Runs
                 }
 
                 resolvedValues = prepared.Values;
-                await SetStatusAsync(runKey, RunStatuses.Running).ConfigureAwait(false);
+                // Display only, and ordered ahead of the result on the same connection (see Starting).
+                _ = SetStatusQuietlyAsync(runKey, RunStatuses.Running, job.RunId);
                 call = await handle.RunCallAsync(job.RunId, line, limits, claimed, lease.Token).ConfigureAwait(false);
 
                 // A sandbox from the pool that died before this call's `started` line — it would
@@ -528,6 +583,7 @@ namespace Blocks.FunctionRunner.Runs
             }
 
             var discard = await _warm!.ReleaseAsync(handle, call).ConfigureAwait(false);
+            timings.Log(_logger, job.RunId, call.HandoverMs, handle.Reused);
             var report = new WarmReport(handle.Reused, discard, call.HandoverMs);
             var result = call.Result;
 
@@ -926,6 +982,7 @@ namespace Blocks.FunctionRunner.Runs
             }
 
             await _db.StreamAddAsync(RedisKeys.ResultsStream, entry).ConfigureAwait(false);
+            StreamWakeup.Publish(_db, RedisKeys.ResultsNudgeChannel);
 
             // Wake anyone waiting synchronously on this run.
             await _db.PublishAsync(
@@ -941,6 +998,25 @@ namespace Blocks.FunctionRunner.Runs
         /// on a key that has gone (expired, or withdrawn by the control plane because the function
         /// was deleted) would create a two-field hash with no TTL, which nothing ever removes.
         /// </summary>
+        /// <summary>
+        /// <see cref="SetStatusAsync"/> for a status that is only shown, never decided on: not
+        /// awaited by the caller, and a failure is logged rather than thrown, because failing a run
+        /// over its display status — after its sandbox may already have the envelope — would run it
+        /// twice. Commands on one multiplexed connection reach Redis in the order they were issued,
+        /// so a status sent first still lands before anything sent after it.
+        /// </summary>
+        private async Task SetStatusQuietlyAsync(string runKey, string status, string runId)
+        {
+            try
+            {
+                await SetStatusAsync(runKey, status).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Could not mark run {RunId} {Status} ({ExceptionType})", runId, status, ex.GetType().Name);
+            }
+        }
+
         private Task<RedisResult> SetStatusAsync(string runKey, string status)
             => _db.ScriptEvaluateAsync(SetStatusIfExistsScript, [runKey],
                 [status, DateTimeOffset.UtcNow.ToString("O")]);

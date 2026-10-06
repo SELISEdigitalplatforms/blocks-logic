@@ -63,13 +63,23 @@ namespace Blocks.FunctionRunner.Runs
                 RedisKeys.RunsStream, _options.RunnerId, _budget.Capacity);
 
             var idleDelay = TimeSpan.FromMilliseconds(250);
+            // Wakes the idle wait below the moment the control plane queues a run.
+            using var wakeup = await StreamWakeup.SubscribeAsync(_db, RedisKeys.RunsNudgeChannel).ConfigureAwait(false);
             var reclaimEvery = TimeSpan.FromSeconds(30);
             var nextReclaim = DateTimeOffset.UtcNow.Add(reclaimEvery);
+
+            // Runs in progress on this host. Each claimed entry is handled on its own task, so a
+            // run that takes 20 s no longer holds up every run queued behind it: the loop used to
+            // await each run before claiming the next, so a host of capacity 10 ran one run at a
+            // time. Only this loop touches the list.
+            var running = new List<Task>();
 
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
                 {
+                    running.RemoveAll(static t => t.IsCompleted);
+
                     // Never claim work this host cannot safely execute.
                     var readiness = _heartbeat.Latest;
                     if (readiness is { Healthy: false })
@@ -79,24 +89,34 @@ namespace Blocks.FunctionRunner.Runs
                         continue;
                     }
 
+                    // Claim only what this host has room to work on. An entry claimed beyond that
+                    // would only be deferred, and a deferred entry waits for the reclaim sweep —
+                    // left on the stream, another runner with room takes it at once.
+                    var room = ParallelLimit() - running.Count;
+                    if (room <= 0)
+                    {
+                        await Task.WhenAny([.. running, Task.Delay(idleDelay, stoppingToken)]).ConfigureAwait(false);
+                        continue;
+                    }
+
                     var entries = await consumer.ReadNewAsync(count: 1, stoppingToken).ConfigureAwait(false);
 
                     if (entries.Count == 0 && DateTimeOffset.UtcNow >= nextReclaim)
                     {
                         nextReclaim = DateTimeOffset.UtcNow.Add(reclaimEvery);
                         entries = await consumer.ReclaimAbandonedAsync(
-                            TimeSpan.FromMilliseconds(_options.ClaimIdleMs), count: 5).ConfigureAwait(false);
+                            TimeSpan.FromMilliseconds(_options.ClaimIdleMs), count: Math.Min(5, room)).ConfigureAwait(false);
                     }
 
                     if (entries.Count == 0)
                     {
-                        await Task.Delay(idleDelay, stoppingToken).ConfigureAwait(false);
+                        await wakeup.WaitAsync(idleDelay, stoppingToken).ConfigureAwait(false);
                         continue;
                     }
 
                     foreach (var entry in entries)
                     {
-                        await HandleAsync(consumer, entry, stoppingToken).ConfigureAwait(false);
+                        running.Add(HandleGuardedAsync(consumer, entry, stoppingToken));
                     }
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -112,8 +132,45 @@ namespace Blocks.FunctionRunner.Runs
                 }
             }
 
+            // A stopping host finishes what it started (each run sees the same token) before it
+            // reports the loop stopped; what it never claimed stays on the stream for others.
+            try
+            {
+                await Task.WhenAll(running).ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                // Each task logs its own failure.
+            }
+
             _logger.LogInformation("Run loop stopped");
         }
+
+        /// <summary>The cap on runs in progress: the configured one, else the host's current capacity.</summary>
+        private int ParallelLimit() =>
+            _options.MaxParallelRuns > 0 ? _options.MaxParallelRuns : Math.Max(1, _budget.Capacity);
+
+        /// <summary>
+        /// One claimed entry, handled off the loop. Whatever goes wrong stays with this run: it is
+        /// logged, the entry is left unacknowledged, and whoever claims it next retries it — the
+        /// loop and every other run go on.
+        /// </summary>
+        private Task HandleGuardedAsync(GroupConsumer consumer, ClaimedEntry entry, CancellationToken token) =>
+            Task.Run(async () =>
+            {
+                try
+                {
+                    await HandleAsync(consumer, entry, token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                    // Shutting down; the entry stays pending for another runner.
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Run entry {EntryId} hit an unexpected error", entry.Id);
+                }
+            }, CancellationToken.None);
 
         private async Task HandleAsync(GroupConsumer consumer, ClaimedEntry entry, CancellationToken token)
         {

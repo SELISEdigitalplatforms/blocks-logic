@@ -100,6 +100,8 @@ namespace Functions.DomainService.Consumers
             await consumer.EnsureGroupAsync();
 
             using var gate = new SemaphoreSlim(MaxConcurrentResults);
+            // Wakes the idle wait below the moment a runner reports a result.
+            using var wakeup = await StreamWakeup.SubscribeAsync(_db, FunctionQueueKeys.ResultsNudgeChannel);
             var nextReclaim = DateTimeOffset.UtcNow;
 
             _logger.LogInformation("Consuming {Stream} as {Consumer}", FunctionQueueKeys.ResultsStream, consumerName);
@@ -118,7 +120,7 @@ namespace Functions.DomainService.Consumers
 
                     if (entries.Count == 0)
                     {
-                        await Task.Delay(TimeSpan.FromMilliseconds(250), stoppingToken);
+                        await wakeup.WaitAsync(TimeSpan.FromMilliseconds(250), stoppingToken);
                         continue;
                     }
 

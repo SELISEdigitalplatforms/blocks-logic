@@ -12,6 +12,7 @@ namespace Blocks.FunctionRunner.Tests
     /// functions are serving, and cannot crowd out another tenant".
     /// </para>
     /// </summary>
+    [Collection("redis-key-prefix")]
     public class TestRunIsolationTests
     {
         [Fact]

@@ -619,7 +619,13 @@ namespace Functions.DomainService.Services
             var grantAuthMode = invokedBy == InvokedByType.Test
                 ? AuthMode.Token
                 : (version?.Trigger ?? function.Trigger).AuthMode;
-            var delegationGrantId = await _delegation.CreateGrantAsync(tenantId, context, grantAuthMode);
+            // No grant for a deployed version whose code never names the token: nothing would read
+            // it, and redeeming it is an IAM round trip on every call (FunctionTokenUse). A test
+            // always gets one — it runs the draft, not this version.
+            var mayReadToken = test is not null || version is null || FunctionTokenUse.MayRead(version.Source);
+            var delegationGrantId = mayReadToken
+                ? await _delegation.CreateGrantAsync(tenantId, context, grantAuthMode)
+                : null;
 
             // Last point at which the caller going away may stop anything. From the insert on, the
             // record exists, and a cancelled enqueue would strand it QUEUED with nothing queued —
@@ -796,6 +802,7 @@ namespace Functions.DomainService.Services
             }
 
             await database.StreamAddAsync(FunctionQueueKeys.RunsStream, [.. entry]);
+            StreamWakeup.Publish(database, FunctionQueueKeys.RunsNudgeChannel);
         }
 
         /// <summary>

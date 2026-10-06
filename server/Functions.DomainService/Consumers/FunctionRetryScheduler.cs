@@ -4,6 +4,8 @@ using Blocks.Genesis;
 using Functions.DomainService.Enums;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Repositories;
+using Functions.DomainService.Services;
+using Functions.DomainService.Utils;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
@@ -47,17 +49,57 @@ namespace Functions.DomainService.Consumers
         private readonly IFunctionRunRepository _runRepository;
         private readonly IFunctionVersionRepository _versionRepository;
         private readonly ILogger<FunctionRetryScheduler> _logger;
+        private readonly Storage.IFunctionArtifactStore? _artifacts;
 
         public FunctionRetryScheduler(
             ICacheClient cache,
             IFunctionRunRepository runRepository,
             IFunctionVersionRepository versionRepository,
-            ILogger<FunctionRetryScheduler> logger)
+            ILogger<FunctionRetryScheduler> logger,
+            Storage.IFunctionArtifactStore? artifacts = null)
         {
             _db = cache.CacheDatabase();
             _runRepository = runRepository;
             _versionRepository = versionRepository;
             _logger = logger;
+            _artifacts = artifacts;
+        }
+
+        /// <summary>
+        /// The artifact URL and hash for a retry of an artifact-built version, signed now (a retry can
+        /// come long after the first attempt's URL expired), or none — a version built the registry
+        /// way, an artifact gone from the store, or storage that cannot sign. With none, the runner
+        /// uses the image reference, exactly as a first attempt does in the same situation.
+        /// </summary>
+        private async Task<NameValueEntry[]> ArtifactFieldsAsync(string tenantId, Entities.FunctionVersionEntity version, string runId)
+        {
+            if (_artifacts is null || string.IsNullOrEmpty(version.ArtifactId)) return [];
+
+            string? url;
+            try
+            {
+                url = await _artifacts.CreateDownloadUrlAsync(
+                    tenantId, version.ArtifactId, FunctionInvocationService.ArtifactDownloadWindow, CancellationToken.None);
+            }
+            catch (Storage.FunctionArtifactStoreUnavailableException ex)
+            {
+                _logger.LogError("Retry for run {RunId} falls back to the image reference: {Reason}", runId, ex.Message);
+                return [];
+            }
+
+            if (string.IsNullOrEmpty(url))
+            {
+                _logger.LogError(
+                    "Artifact {ArtifactId} for retry of run {RunId} is missing from the store; falling back to the image reference",
+                    version.ArtifactId, runId);
+                return [];
+            }
+
+            return
+            [
+                new NameValueEntry(FunctionQueueKeys.RunArtifactUrlField, url),
+                new NameValueEntry(FunctionQueueKeys.RunArtifactSha256Field, version.ArtifactSha256 ?? string.Empty),
+            ];
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -141,15 +183,28 @@ namespace Functions.DomainService.Consumers
             var version = string.IsNullOrEmpty(entry.VersionId)
                 ? null
                 : await _versionRepository.GetByIdAsync(entry.TenantId, entry.VersionId, cancellationToken);
-            // An artifact-built version has no digest, and this entry cannot carry the signed
-            // artifact URL the runner would need to build it (see FunctionRunImage), so such a run
-            // is not retried here — the same as before artifact builds got a run image.
-            if (version is null || string.IsNullOrEmpty(version.ImageDigest))
+            if (version is null)
             {
                 _logger.LogWarning(
                     "Retry for run {RunId} skipped: version '{VersionId}' is no longer available", entry.RunId, entry.VersionId);
                 return;
             }
+
+            // The same image and artifact fields the first attempt was queued with
+            // (FunctionInvocationService.EnqueueAsync): an artifact-built version has no digest, so
+            // its run image is the local name the runner builds from the artifact, and the entry
+            // carries a freshly signed URL to build it from on a host that does not have it yet.
+            // Worked out before the run is reset, so a version that cannot run leaves the run as it
+            // finished rather than QUEUED with nothing queued.
+            var image = FunctionRunImage.For(version);
+            if (string.IsNullOrEmpty(image))
+            {
+                _logger.LogWarning(
+                    "Retry for run {RunId} skipped: version '{VersionId}' has neither an image nor an artifact",
+                    entry.RunId, entry.VersionId);
+                return;
+            }
+            var artifactFields = await ArtifactFieldsAsync(entry.TenantId, version, entry.RunId);
 
             var runKey = FunctionQueueKeys.Run(entry.RunId);
             var envelopeJson = await _db.HashGetAsync(runKey, "envelope");
@@ -201,8 +256,9 @@ namespace Functions.DomainService.Consumers
                     new NameValueEntry("functionId", entry.FunctionId),
                     new NameValueEntry("versionId", entry.VersionId ?? string.Empty),
                     new NameValueEntry("tenantId", entry.TenantId),
-                    new NameValueEntry("image", version.ImageDigest),
+                    new NameValueEntry("image", image),
                     new NameValueEntry("attempt", entry.Attempt),
+                    .. artifactFields,
                     // The reused envelope still holds references only, so the runner resolves
                     // them afresh for this attempt — a secret rotated since is picked up.
                     new NameValueEntry("protocol", FunctionQueueKeys.RunProtocolVersion),
@@ -212,6 +268,7 @@ namespace Functions.DomainService.Consumers
                         ? new[] { new NameValueEntry(FunctionQueueKeys.RunReuseField, "1") }
                         : []),
                 ]);
+                StreamWakeup.Publish(_db, FunctionQueueKeys.RunsNudgeChannel);
             }
             catch (Exception ex)
             {
