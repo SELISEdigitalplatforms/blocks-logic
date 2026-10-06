@@ -58,6 +58,13 @@ namespace Blocks.FunctionRunner.Sandbox
         /// </summary>
         long? HostCpuMicroseconds() => null;
 
+        /// <summary>
+        /// Drops a sandbox created with the start-up CPU boost to its run limit and confirms it, or
+        /// says why not (null = done, or there was no boost). Called at <c>ready</c>, before the
+        /// sandbox can serve anyone; a sandbox that cannot be dropped is destroyed instead.
+        /// </summary>
+        Task<string?> DropToRunLimitAsync(CancellationToken token) => Task.FromResult<string?>(null);
+
         /// <summary>SIGKILL. Quiet when the container is already gone.</summary>
         Task KillAsync();
 
@@ -291,8 +298,24 @@ namespace Blocks.FunctionRunner.Sandbox
                     switch (evt.Type)
                     {
                         case "ready":
+                        {
+                            // The start-up boost ends here, before the sandbox can serve anyone:
+                            // no call ever runs above the run limit. Not confirmed → not used.
+                            var notDropped = await _container.DropToRunLimitAsync(token).ConfigureAwait(false);
+                            if (notDropped is not null)
+                            {
+                                _logger.LogError("Destroying warm sandbox {Name}: {Reason}", Name, notDropped);
+                                await KillAsync().ConfigureAwait(false);
+                                return new WarmStartResult
+                                {
+                                    Status = WarmStartStatus.HostFailure,
+                                    StartupMs = started.ElapsedMilliseconds,
+                                    HostFailure = notDropped,
+                                };
+                            }
                             _startupOutput = output;
                             return new WarmStartResult { Status = WarmStartStatus.Ready, StartupMs = started.ElapsedMilliseconds };
+                        }
 
                         case "fatal":
                             fatalCode = evt.Code;
@@ -863,7 +886,8 @@ namespace Blocks.FunctionRunner.Sandbox
             }
 
             var inspect = await _docker.Containers.InspectContainerAsync(_containerId, token).ConfigureAwait(false);
-            var discrepancy = SandboxProfile.Validate(inspect, _limits, _options, reuse: true);
+            var discrepancy = SandboxProfile.Validate(
+                inspect, _limits, _options, reuse: true, SandboxProfile.StartNanoCpus(_limits, _options));
             if (discrepancy is not null)
             {
                 _logger.LogError(
@@ -970,6 +994,24 @@ namespace Blocks.FunctionRunner.Sandbox
 
         public Task UnpauseAsync(CancellationToken token) =>
             _docker.Containers.UnpauseContainerAsync(RequireId(), token);
+
+        /// <inheritdoc />
+        public async Task<string?> DropToRunLimitAsync(CancellationToken token)
+        {
+            if (SandboxProfile.StartNanoCpus(_limits, _options) == _limits.NanoCpus) return null;
+            try
+            {
+                await _docker.Containers.UpdateContainerAsync(
+                    RequireId(), new ContainerUpdateParameters { NanoCPUs = _limits.NanoCpus }, token).ConfigureAwait(false);
+                // Confirmed, not assumed: the engine's view and the profile check, as at create.
+                var inspect = await _docker.Containers.InspectContainerAsync(RequireId(), token).ConfigureAwait(false);
+                return SandboxProfile.Validate(inspect, _limits, _options, reuse: true);
+            }
+            catch (Exception ex) when (ex is DockerApiException or HttpRequestException or IOException or TimeoutException)
+            {
+                return $"the start-up CPU could not be dropped: {ex.Message}";
+            }
+        }
 
         /// <inheritdoc />
         public long? HostCpuMicroseconds()

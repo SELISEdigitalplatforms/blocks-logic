@@ -278,13 +278,15 @@ namespace Functions.DomainService.Consumers
             var applied = false;
             if (AcceptsResult(run))
             {
+                // The result is read while the logs are copied: two independent reads.
+                var resultRead = string.IsNullOrEmpty(resultKey) ? null : _db.StringGetAsync(resultKey);
                 await CopyLogsAsync(tenantId, run.FunctionId, runId, attempt, logsKey, cancellationToken);
                 timer.Mark("logs");
 
                 string? result = null;
-                if (!string.IsNullOrEmpty(resultKey))
+                if (resultRead is not null)
                 {
-                    RedisValue value = await _db.StringGetAsync(resultKey);
+                    RedisValue value = await resultRead;
                     result = value.IsNullOrEmpty ? null : (string?)value;
                 }
 
@@ -434,10 +436,15 @@ namespace Functions.DomainService.Consumers
 
             // A redelivery must not insert every line a second time. The marker is written after
             // the insert, so a crash in between can still duplicate — but only then.
+            // The marker and the lines are read together — one round trip, not two; the lines are
+            // simply not used when the marker says they were already copied.
             var copiedKey = FunctionWorkerQueueKeys.LogsCopied(runId, attempt);
-            if (await _db.KeyExistsAsync(copiedKey)) return;
+            var copied = _db.KeyExistsAsync(copiedKey);
+            var range = _db.ListRangeAsync(logsKey);
+            await Task.WhenAll(copied, range);
+            if (copied.Result) return;
 
-            var lines = await _db.ListRangeAsync(logsKey);
+            var lines = range.Result;
             if (lines.Length == 0) return;
 
             var logs = new List<FunctionRunLogEntity>(lines.Length);
@@ -462,7 +469,9 @@ namespace Functions.DomainService.Consumers
             }
 
             await _logRepository.InsertManyAsync(tenantId, logs, cancellationToken);
-            await _db.StringSetAsync(copiedKey, "1", FunctionWorkerQueueKeys.LogsCopiedTtl);
+            // Not waited for: the marker only guards a redelivery against copying twice, and losing
+            // it costs exactly what the crash window above already allows — never a lost line.
+            _db.StringSet(copiedKey, "1", FunctionWorkerQueueKeys.LogsCopiedTtl, flags: CommandFlags.FireAndForget);
         }
 
         private static (string Level, string Message, DateTime Timestamp, string? Data) ParseLogLine(string line)

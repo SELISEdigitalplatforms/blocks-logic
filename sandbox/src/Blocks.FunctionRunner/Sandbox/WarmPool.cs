@@ -185,7 +185,8 @@ namespace Blocks.FunctionRunner.Sandbox
             HostBudget budget,
             IOptions<RunnerOptions> options,
             ILogger<WarmPool> logger,
-            TimeProvider? time = null)
+            TimeProvider? time = null,
+            WarmKeyJournal? journal = null)
         {
             ArgumentNullException.ThrowIfNull(options);
             _factory = factory;
@@ -193,6 +194,21 @@ namespace Blocks.FunctionRunner.Sandbox
             _options = options.Value;
             _logger = logger;
             _time = time ?? TimeProvider.System;
+            _journal = journal;
+        }
+
+        private readonly WarmKeyJournal? _journal;
+
+        /// <summary>The versions with a sandbox here, for <see cref="WarmKeyJournal"/>. Taken under the lock.</summary>
+        private List<WarmKey> LiveKeysLocked() => [.. _entries.Keys];
+
+        /// <summary>
+        /// Records the versions kept warm — not while shutting down, when the pool empties itself
+        /// and the list must survive for the restart.
+        /// </summary>
+        private void Remember(List<WarmKey>? keys)
+        {
+            if (keys is not null) _journal?.Save(keys);
         }
 
         /// <summary>One sandbox and its bookkeeping. Mutated only under the pool's lock.</summary>
@@ -221,6 +237,19 @@ namespace Blocks.FunctionRunner.Sandbox
                     var busy = all.Count(e => e.Busy);
                     return (all.Count, busy, all.Count - busy);
                 }
+            }
+        }
+
+        /// <summary>
+        /// Whether a sandbox of this key is alive here (busy or not). If so its image is on this
+        /// host — Docker will not remove an image a container uses — so a warm call need not ask
+        /// Docker for it again (one engine round trip per call, ~40 ms measured).
+        /// </summary>
+        public bool HasLive(WarmKey key)
+        {
+            lock (_gate)
+            {
+                return _entries.TryGetValue(key, out var list) && list.Any(e => !e.Removed);
             }
         }
 
@@ -282,6 +311,7 @@ namespace Blocks.FunctionRunner.Sandbox
         /// <summary>Starts one sandbox for <paramref name="key"/>, busy (for a caller) or idle (pre-warm).</summary>
         private async Task<WarmAcquireResult> StartNewAsync(WarmKey key, RunLimits limits, bool busy, CancellationToken token)
         {
+            List<WarmKey>? added = null;
             // --- a place under the version's cap, taken under the lock that counts --------
             lock (_gate)
             {
@@ -329,7 +359,11 @@ namespace Blocks.FunctionRunner.Sandbox
                         // for a pre-warm, until it is paused.
                         Busy = true,
                     };
-                    if (!_entries.TryGetValue(key, out var list)) _entries[key] = list = [];
+                    if (!_entries.TryGetValue(key, out var list))
+                    {
+                        _entries[key] = list = [];
+                        added = LiveKeysLocked();
+                    }
                     list.Add(entry);
                 }
             }
@@ -341,6 +375,8 @@ namespace Blocks.FunctionRunner.Sandbox
                     if (left <= 0) _starting.Remove(key); else _starting[key] = left;
                 }
             }
+
+            Remember(added);
 
             WarmStartResult started;
             try
@@ -639,6 +675,7 @@ namespace Blocks.FunctionRunner.Sandbox
         /// <summary>Removes the entry, kills and removes its container, and frees its memory.</summary>
         private async Task DestroyAsync(Entry entry, string? reason)
         {
+            List<WarmKey>? remaining = null;
             lock (_gate)
             {
                 if (entry.Removed) return;
@@ -646,9 +683,14 @@ namespace Blocks.FunctionRunner.Sandbox
                 if (_entries.TryGetValue(entry.Key, out var list))
                 {
                     list.Remove(entry);
-                    if (list.Count == 0) _entries.Remove(entry.Key);
+                    if (list.Count == 0)
+                    {
+                        _entries.Remove(entry.Key);
+                        if (!_disposed) remaining = LiveKeysLocked();
+                    }
                 }
             }
+            Remember(remaining);
 
             if (reason is not null)
             {

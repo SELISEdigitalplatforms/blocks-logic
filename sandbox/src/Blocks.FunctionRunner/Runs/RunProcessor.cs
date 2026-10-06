@@ -142,9 +142,14 @@ namespace Blocks.FunctionRunner.Runs
             // a busy host that is capacity the deployed version wanted. Nothing here needs a slot:
             // a slot is for running. The work is also cached and idempotent, so preparing for a run
             // that is then deferred costs nothing the next attempt does not reuse.
-            var image = await _images
-                .EnsureAsync(job.Image, token, job.ArtifactUrl, job.ArtifactSha256)
-                .ConfigureAwait(false);
+            // A warm call whose version already has a live sandbox here skips the Docker check: the
+            // sandbox proves the image is on this host (WarmPool.HasLive).
+            var image = _options.SandboxReuse && job.Reuse && !job.IsTest && _warm is not null
+                    && _warm.HasLive(new WarmKey(job.TenantId ?? string.Empty, job.FunctionId, job.VersionId ?? string.Empty, job.Image))
+                ? job.Image
+                : await _images
+                    .EnsureAsync(job.Image, token, job.ArtifactUrl, job.ArtifactSha256)
+                    .ConfigureAwait(false);
 
             // What the cache evicts by. Stamped on resolve rather than on completion so a run that
             // fails still counts as use — the image was wanted, which is the question the cache is

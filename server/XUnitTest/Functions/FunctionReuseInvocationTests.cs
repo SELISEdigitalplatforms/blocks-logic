@@ -219,6 +219,80 @@ namespace XUnitTest.Functions
             _runs.Verify(r => r.GetByIdAsync(Tenant, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         }
 
+        /// <summary>Pub/sub available, with the runner's or Worker's notification fired by the test.</summary>
+        private Func<Action<RedisChannel, RedisValue>?> WithPubSub()
+        {
+            Action<RedisChannel, RedisValue>? notify = null;
+            var subscriber = new Mock<ISubscriber>();
+            subscriber
+                .Setup(s => s.SubscribeAsync(It.IsAny<RedisChannel>(), It.IsAny<Action<RedisChannel, RedisValue>>(), It.IsAny<CommandFlags>()))
+                .Callback((RedisChannel _, Action<RedisChannel, RedisValue> handler, CommandFlags _) => notify = handler)
+                .Returns(Task.CompletedTask);
+            var multiplexer = new Mock<IConnectionMultiplexer>();
+            multiplexer.Setup(m => m.GetSubscriber(It.IsAny<object?>())).Returns(subscriber.Object);
+            _redis.Fake.On("get_Multiplexer", _ => multiplexer.Object);
+            return () => notify;
+        }
+
+        private static async Task<Action<RedisChannel, RedisValue>> SubscribedAsync(Func<Action<RedisChannel, RedisValue>?> notify)
+        {
+            for (var i = 0; i < 200 && notify() is null; i++) await Task.Delay(10);
+            return notify() ?? throw new InvalidOperationException("the wait never subscribed");
+        }
+
+        [Fact]
+        public async Task A_sync_success_is_answered_from_the_runners_result_without_waiting_for_the_record()
+        {
+            _version.Trigger.ResponseMode = "sync";
+            RunIs(RunStatus.Running); // the Worker has not written the record yet
+            var notify = WithPubSub();
+            _redis.Fake.On("HashGetAsync", _ => (RedisValue)FunctionQueueKeys.Wire.Succeeded);
+            _redis.Fake.On("StringGetAsync", _ => (RedisValue)"{\"from\":\"runner\"}");
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+
+            var call = Service().InvokeHttpAsync(Tenant, "fn-1", Call(preferWait: 20));
+            (await SubscribedAsync(notify))(RedisChannel.Literal("x"), FunctionQueueKeys.Wire.Succeeded);
+            var result = await call;
+
+            clock.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(5));
+            result.Status.Should().Be(FunctionQueueKeys.Wire.Succeeded);
+            result.Result.Should().Be("{\"from\":\"runner\"}");
+            result.RespondSynchronously.Should().BeTrue();
+        }
+
+        [Fact]
+        public async Task A_function_with_output_actions_still_waits_for_the_record()
+        {
+            _version.Trigger.ResponseMode = "sync";
+            _version.OutputActions = [new OutputAction()];
+            RunIs(RunStatus.Running);
+            var notify = WithPubSub();
+            _redis.Fake.On("HashGetAsync", _ => (RedisValue)FunctionQueueKeys.Wire.Succeeded);
+            _redis.Fake.On("StringGetAsync", _ => (RedisValue)"{\"from\":\"runner\"}");
+
+            var call = Service().InvokeHttpAsync(Tenant, "fn-1", Call(preferWait: 1));
+            (await SubscribedAsync(notify))(RedisChannel.Literal("x"), FunctionQueueKeys.Wire.Succeeded);
+            var result = await call;
+
+            result.Status.Should().Be(FunctionQueueKeys.Wire.Queued, "the record never finished, so the caller gets the 202");
+        }
+
+        [Fact]
+        public async Task A_failure_is_never_answered_from_the_runner_it_waits_for_the_retry_decision()
+        {
+            _version.Trigger.ResponseMode = "sync";
+            RunIs(RunStatus.Running);
+            var notify = WithPubSub();
+            _redis.Fake.On("HashGetAsync", _ => (RedisValue)FunctionQueueKeys.Wire.Failed);
+
+            var call = Service().InvokeHttpAsync(Tenant, "fn-1", Call(preferWait: 1));
+            (await SubscribedAsync(notify))(RedisChannel.Literal("x"), FunctionQueueKeys.Wire.Failed);
+            var result = await call;
+
+            result.Status.Should().Be(FunctionQueueKeys.Wire.Queued);
+            _redis.Fake.Calls("StringGetAsync").Should().BeEmpty("a failure's result is never read from the runner");
+        }
+
         [Fact]
         public async Task A_sync_trigger_waits_and_returns_the_finished_run_flagged_for_mapping()
         {

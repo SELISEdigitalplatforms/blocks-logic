@@ -178,7 +178,9 @@ namespace Blocks.FunctionRunner.Tests
             warm.HostConfig.CapDrop.Should().Equal("ALL");
             warm.HostConfig.SecurityOpt.Should().Equal(single.HostConfig.SecurityOpt);
             warm.HostConfig.PidsLimit.Should().Be(single.HostConfig.PidsLimit);
-            warm.HostConfig.NanoCPUs.Should().Be(single.HostConfig.NanoCPUs);
+            // Created with the start-up boost; dropped to the single run's CPU at `ready`, before any
+            // call (StartBoostTests).
+            warm.HostConfig.NanoCPUs.Should().Be(SandboxProfile.StartNanoCpus(limits, Options));
             warm.HostConfig.Memory.Should().Be(single.HostConfig.Memory);
             warm.HostConfig.NetworkMode.Should().Be(single.HostConfig.NetworkMode);
             warm.HostConfig.Binds.Should().ContainSingle().Which.Should().EndWith("/etc/resolv.conf:ro");
@@ -205,11 +207,12 @@ namespace Blocks.FunctionRunner.Tests
                 Config = new Docker.DotNet.Models.Config { User = warm.User, Env = warm.Env },
             };
 
-            SandboxProfile.Validate(inspect, limits, Options, reuse: true).Should().BeNull();
-            SandboxProfile.Validate(inspect, limits, Options).Should().Contain("two read-only binds");
+            var boosted = SandboxProfile.StartNanoCpus(limits, Options);
+            SandboxProfile.Validate(inspect, limits, Options, reuse: true, boosted).Should().BeNull();
+            SandboxProfile.Validate(inspect, limits, Options, reuse: false, boosted).Should().Contain("two read-only binds");
 
             inspect.Config.Env = [.. warm.Env.Where(e => e != "BLOCKS_RUNTIME_MODE=reuse")];
-            SandboxProfile.Validate(inspect, limits, Options, reuse: true).Should().Contain("reuse mode");
+            SandboxProfile.Validate(inspect, limits, Options, reuse: true, boosted).Should().Contain("reuse mode");
         }
 
         // ---- envelope framing ------------------------------------------------------------

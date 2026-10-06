@@ -644,6 +644,15 @@ namespace Functions.DomainService.Services
             // it, and redeeming it is an IAM round trip on every call (FunctionTokenUse). A test
             // always gets one — it runs the draft, not this version.
             var mayReadToken = test is not null || version is null || FunctionTokenUse.MayRead(version.Source);
+
+            // Signing the artifact's download URL is a call to the tenant's storage (~170 ms
+            // measured), independent of everything below, so it runs beside the grant, the insert
+            // and the counter instead of after them. It never throws (null = go by image), so if
+            // the call stops before the enqueue the task just finishes unread.
+            var artifactUrl = test is null && version is not null && !string.IsNullOrEmpty(version.ArtifactId)
+                ? SignArtifactQuietlyAsync(tenantId, function, version, run)
+                : null;
+
             var delegationGrantId = mayReadToken
                 ? await _delegation.CreateGrantAsync(tenantId, context, grantAuthMode)
                 : null;
@@ -661,17 +670,21 @@ namespace Functions.DomainService.Services
             StepTimer.Current.Value?.Mark("insert");
 
             // Counted whether or not the enqueue succeeds: the record exists either way and shows
-            // in the runs list, so the counter and the list agree.
-            await _functionRepository.RecordRunStartedAsync(tenantId, function.ItemId, run.CreatedDate, CancellationToken.None);
-            StepTimer.Current.Value?.Mark("counter");
+            // in the runs list, so the counter and the list agree. Beside the enqueue rather than
+            // before it — a separate document, nothing the queue waits on — and a statistic, so a
+            // failure is logged, never a reason to fail a call whose run is already recorded.
+            var counter = RecordRunStartedQuietlyAsync(tenantId, function.ItemId, run);
 
             try
             {
-                await EnqueueAsync(tenantId, function, version, run, image, envelopeJson, delegationGrantId, limits, test);
-                StepTimer.Current.Value?.Mark("enqueue");
+                await EnqueueAsync(tenantId, function, version, run, image, envelopeJson, delegationGrantId, limits, test,
+                    artifactUrl);
+                await counter;
+                StepTimer.Current.Value?.Mark("enqueue+counter");
             }
             catch (Exception ex)
             {
+                await counter;
                 await CompensateFailedEnqueueAsync(tenantId, run, ex);
                 await _delegation.DeleteGrantAsync(delegationGrantId);
                 throw new FunctionUnavailableException(
@@ -698,8 +711,43 @@ namespace Functions.DomainService.Services
             }
             var executionWaitSeconds = Math.Min(
                 maxSyncWaitSeconds, (waitTimeoutSeconds ?? limits.TimeoutSeconds) + SyncGraceSeconds);
+            // A sync HTTP caller of a deployed version with no output actions can be answered from
+            // the runner's own report, without waiting for the Worker to record it (~0.4 s measured
+            // 2026-10-06): a success is never retried, and with no output actions there is nothing
+            // after it that the answer would have waited for. Everything else waits for the record.
+            var answerFromRunner = finishedOnlyWithoutRetry && test is null && version is not null
+                && (version.OutputActions?.Count ?? 0) == 0;
             return await WaitForResultAsync(
-                tenantId, run.ItemId, executionWaitSeconds, maxSyncWaitSeconds, cancellationToken, finishedOnlyWithoutRetry);
+                tenantId, run.ItemId, executionWaitSeconds, maxSyncWaitSeconds, cancellationToken, finishedOnlyWithoutRetry,
+                answerFromRunner);
+        }
+
+        /// <summary>
+        /// The answer of a run the runner reported as SUCCEEDED, read from what the runner wrote to
+        /// Redis before it said so: the run hash's status and the result key. Null when either is
+        /// not what a success leaves (or Redis cannot be read) — the caller then waits for the
+        /// record exactly as before.
+        /// </summary>
+        private async Task<InvokeResultDto?> TryReadRunnerSuccessAsync(string runId)
+        {
+            try
+            {
+                var database = _cache.CacheDatabase();
+                var statusTask = database.HashGetAsync(FunctionQueueKeys.Run(runId), "status");
+                var resultTask = database.StringGetAsync(FunctionQueueKeys.Result(runId));
+                await Task.WhenAll(statusTask, resultTask);
+                if (statusTask.Result != FunctionQueueKeys.Wire.Succeeded) return null;
+                return new InvokeResultDto
+                {
+                    RunId = runId,
+                    Status = FunctionQueueKeys.Wire.Succeeded,
+                    Result = resultTask.Result.IsNullOrEmpty ? null : (string?)resultTask.Result,
+                };
+            }
+            catch (Exception ex) when (ex is RedisException or TimeoutException)
+            {
+                return null;
+            }
         }
 
         /// <summary>
@@ -747,7 +795,8 @@ namespace Functions.DomainService.Services
         private async Task EnqueueAsync(
             string tenantId, FunctionEntity function, FunctionVersionEntity? version,
             FunctionRunEntity run, string image, string envelopeJson,
-            string? delegationGrantId, FunctionLimits limits, TestBuild? test = null)
+            string? delegationGrantId, FunctionLimits limits, TestBuild? test = null,
+            Task<string?>? signedArtifactUrl = null)
         {
             var database = _cache.CacheDatabase();
             var runKey = FunctionQueueKeys.Run(run.ItemId);
@@ -758,7 +807,10 @@ namespace Functions.DomainService.Services
                 ? []
                 : [new HashEntry(FunctionQueueKeys.RunDelegationField, delegationGrantId)];
 
-            await database.HashSetAsync(runKey,
+            // The payload and its expiry are sent back to back on the one connection (so Redis
+            // applies them in that order) and waited for as one round trip; both land before the
+            // stream entry below, as before, so a runner never claims a run with no payload.
+            var payload = database.HashSetAsync(runKey,
             [
                 .. delegation,
                 new HashEntry("envelope", envelopeJson),
@@ -769,7 +821,8 @@ namespace Functions.DomainService.Services
                 new HashEntry("concurrency", limits.Concurrency),
                 new HashEntry("queuedAt", DateTimeOffset.UtcNow.ToString("O")),
             ]);
-            await database.KeyExpireAsync(runKey, FunctionQueueKeys.RunTtl);
+            var expiry = database.KeyExpireAsync(runKey, FunctionQueueKeys.RunTtl);
+            await Task.WhenAll(payload, expiry);
 
             if (test is not null)
             {
@@ -807,8 +860,9 @@ namespace Functions.DomainService.Services
             // ignores them and pulls the image as before, so both paths coexist during the cutover.
             if (version is not null && !string.IsNullOrEmpty(version.ArtifactId))
             {
-                var artifactUrl = await ArtifactUrlOrNullAsync(tenantId, function, version, run)
-                    .ConfigureAwait(false);
+                var artifactUrl = signedArtifactUrl is not null
+                    ? await signedArtifactUrl.ConfigureAwait(false)
+                    : await ArtifactUrlOrNullAsync(tenantId, function, version, run).ConfigureAwait(false);
                 StepTimer.Current.Value?.Mark("artifact-url");
 
                 if (artifactUrl is not null)
@@ -835,6 +889,36 @@ namespace Functions.DomainService.Services
 
             await database.StreamAddAsync(FunctionQueueKeys.RunsStream, [.. entry]);
             StreamWakeup.Publish(database, FunctionQueueKeys.RunsNudgeChannel);
+        }
+
+        /// <summary><see cref="ArtifactUrlOrNullAsync"/>, with any failure logged and read as "go by image".</summary>
+        private async Task<string?> SignArtifactQuietlyAsync(
+            string tenantId, FunctionEntity function, FunctionVersionEntity version, FunctionRunEntity run)
+        {
+            try
+            {
+                return await ArtifactUrlOrNullAsync(tenantId, function, version, run).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Run {RunId} falls back to the image reference: signing its artifact URL failed ({ExceptionType})",
+                    run.ItemId, ex.GetType().Name);
+                return null;
+            }
+        }
+
+        /// <summary>The run counter, best effort: a failure is logged, never thrown.</summary>
+        private async Task RecordRunStartedQuietlyAsync(string tenantId, string functionId, FunctionRunEntity run)
+        {
+            try
+            {
+                await _functionRepository.RecordRunStartedAsync(tenantId, functionId, run.CreatedDate, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Could not count run {RunId} on function {FunctionId} ({ExceptionType})",
+                    run.ItemId, functionId, ex.GetType().Name);
+            }
         }
 
         /// <summary>
@@ -907,7 +991,8 @@ namespace Functions.DomainService.Services
             int executionWaitSeconds,
             int absoluteMaxSeconds,
             CancellationToken cancellationToken,
-            bool finishedOnlyWithoutRetry = false)
+            bool finishedOnlyWithoutRetry = false,
+            bool answerFromRunner = false)
         {
             var hardDeadline = DateTime.UtcNow.AddSeconds(absoluteMaxSeconds);
             var deadline = DateTime.UtcNow.AddSeconds(executionWaitSeconds);
@@ -919,8 +1004,13 @@ namespace Functions.DomainService.Services
             // Capacity 1: any number of notifications between two reads mean one re-read.
             using var signal = new SemaphoreSlim(0, 1);
             var channel = RedisChannel.Literal(FunctionQueueKeys.SyncChannel(runId));
-            Action<RedisChannel, RedisValue> onNotified = (_, _) =>
+            // Set when any notification said the run SUCCEEDED. The runner publishes its final
+            // status here right after writing the result to Redis (the Worker publishes again once
+            // the record holds it), so by the time this is seen the result can be read.
+            var succeeded = 0;
+            Action<RedisChannel, RedisValue> onNotified = (_, value) =>
             {
+                if (value == FunctionQueueKeys.Wire.Succeeded) Volatile.Write(ref succeeded, 1);
                 try { signal.Release(); }
                 catch (SemaphoreFullException) { /* a re-read is already due */ }
                 catch (ObjectDisposedException) { /* the wait already ended */ }
@@ -1008,6 +1098,17 @@ namespace Functions.DomainService.Services
 
                     var notified = await signal.WaitAsync(remaining < delay ? remaining : delay, cancellationToken);
                     if (notified) timer?.Mark("notified");
+
+                    if (answerFromRunner && Volatile.Read(ref succeeded) == 1)
+                    {
+                        var fromRunner = await TryReadRunnerSuccessAsync(runId);
+                        if (fromRunner is not null)
+                        {
+                            timer?.Mark("runner-result");
+                            return fromRunner;
+                        }
+                        // Not readable (expired, Redis blip): the record is the answer, as before.
+                    }
                     delay = notified ? delay : TimeSpan.FromTicks(Math.Min(delay.Ticks * 2, cap.Ticks));
                 }
             }

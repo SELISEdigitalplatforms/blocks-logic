@@ -398,6 +398,20 @@ namespace Blocks.FunctionRunner.Options
         public int StartCostCpuMs { get; set; } = 800;
 
         /// <summary>
+        /// CPU a warm sandbox gets while it starts — Node, the runtime and the function's own
+        /// imports — before it is dropped to the run limit at <c>ready</c>, ahead of its first call.
+        /// The work is the same ~0.9 CPU-seconds either way, done in ~1 s instead of ~9.5 s at the
+        /// 100m limit (measured 2026-10-06 on a real function under gVisor: 0.1 CPU 9.2–9.9 s,
+        /// 1 CPU 0.92–1.0 s, 2 CPU 0.74–0.83 s). No call ever runs boosted: a sandbox whose drop
+        /// cannot be confirmed is destroyed. Starts stay admitted by the host budget
+        /// (<see cref="StartCostCpuMs"/>, <see cref="StartsPerSecondPerCore"/>), so a host without
+        /// room queues the start like any other. <c>RUNNER__StartBoostMillicores</c>; 0 turns it off.
+        /// Decided 2026-10-06 (start-up only; every call stays at the run limit).
+        /// </summary>
+        [Range(0, 8000)]
+        public int StartBoostMillicores { get; set; } = 1000;
+
+        /// <summary>
         /// Container starts per second per core this host may make, as
         /// <c>RUNNER__StartsPerSecondPerCore</c>. Together with <see cref="StartCostCpuMs"/> this
         /// is the CPU admission sets aside for starting sandboxes; a start over the rate waits on

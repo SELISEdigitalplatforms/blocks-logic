@@ -105,6 +105,7 @@ namespace Blocks.FunctionRunner.Utils
             // Reusable sandboxes (sandbox/REUSE.md). Registered always — it is empty and costs
             // nothing unless RUNNER__SandboxReuse is on and a run asks for reuse.
             services.AddSingleton<IReusableSandboxFactory, DockerReusableSandboxFactory>();
+            services.AddSingleton<WarmKeyJournal>();
             services.AddSingleton<WarmPool>();
             services.AddSingleton<RunProcessor>();
             services.AddSingleton<BuildProcessor>();

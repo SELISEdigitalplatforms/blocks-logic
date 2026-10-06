@@ -46,13 +46,50 @@ namespace Blocks.FunctionRunner.Runs
             WarmPool pool,
             IImageResolver images,
             IOptions<RunnerOptions> options,
-            ILogger<WarmConsumerService> logger)
+            ILogger<WarmConsumerService> logger,
+            WarmKeyJournal? journal = null)
         {
             _db = db;
             _pool = pool;
             _images = images;
             _options = options.Value;
             _logger = logger;
+            _journal = journal;
+        }
+
+        private readonly WarmKeyJournal? _journal;
+
+        /// <summary>
+        /// Warms again, one sandbox each, the versions this host kept warm before it restarted
+        /// (<see cref="WarmKeyJournal"/>) — so a runner restart or deploy does not hand each one's
+        /// next caller a ~10 s cold start. Nothing is built for it: an artifact-built image no longer
+        /// on this host is skipped (its next call brings the artifact), a registry image is pulled as
+        /// a call would pull it, and a version retired meanwhile is drained by its pending warm entry
+        /// like any other. Capacity is the pool's own (host budget), so it never crowds out
+        /// real calls.
+        /// </summary>
+        internal async Task<int> RewarmAsync(CancellationToken token)
+        {
+            if (_journal is null) return 0;
+            var warmed = 0;
+            foreach (var key in _journal.Load())
+            {
+                if (token.IsCancellationRequested) break;
+                try
+                {
+                    // No artifact URL, so never a download or a build.
+                    var image = await _images.EnsureAsync(key.Image, token).ConfigureAwait(false);
+                    if (image is null) continue;
+                    warmed += await _pool.PrewarmAsync(key, RunLimits.Default, 1, token).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogWarning("Could not warm function {FunctionId} version {VersionId} again after the restart ({ExceptionType})",
+                        key.FunctionId, key.VersionId, ex.GetType().Name);
+                }
+            }
+            if (warmed > 0) _logger.LogInformation("Warmed {Count} sandbox(es) again after the restart", warmed);
+            return warmed;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -68,6 +105,9 @@ namespace Blocks.FunctionRunner.Runs
             await EnsureGroupAsync(group).ConfigureAwait(false);
 
             _logger.LogInformation("Consuming {Stream} as {Group}", RedisKeys.WarmStream, group);
+
+            // Beside the loop, not before it: the warm stream (drains included) is read meanwhile.
+            _ = Task.Run(() => RewarmAsync(stoppingToken), CancellationToken.None);
 
             var nextSweep = DateTimeOffset.UtcNow.Add(SweepInterval);
             while (!stoppingToken.IsCancellationRequested)

@@ -49,6 +49,16 @@ namespace Blocks.FunctionRunner.Tests
         public Queue<long?> HostCpu { get; } = new();
 
         public long? HostCpuMicroseconds() => HostCpu.Count > 0 ? HostCpu.Dequeue() : null;
+
+        /// <summary>Why dropping the start-up CPU fails (null = it succeeds), and how often it was asked.</summary>
+        public string? DropFailure { get; set; }
+        public int Drops { get; private set; }
+
+        public Task<string?> DropToRunLimitAsync(CancellationToken token)
+        {
+            Drops++;
+            return Task.FromResult(DropFailure);
+        }
         public (int ExitCode, bool OomKilled)? Exit { get; set; } = (137, false);
 
         public List<string> Written { get; } = [];

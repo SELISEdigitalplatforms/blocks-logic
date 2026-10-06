@@ -305,10 +305,12 @@ namespace XUnitTest.Functions
         public async Task Logs_already_copied_for_the_attempt_are_not_copied_again()
         {
             _redis.Fake.On("KeyExistsAsync", a => a[0]!.ToString() == FunctionWorkerQueueKeys.LogsCopied(RunId, 1));
+            // The lines are read beside the marker (one round trip); they must not be inserted.
+            _redis.Fake.On("ListRangeAsync", _ => new RedisValue[] { "{\"level\":\"info\",\"msg\":\"hi\"}" });
 
             await Consumer().ProcessAsync(Entry(("logsKey", FunctionQueueKeys.Logs(RunId))), CancellationToken.None);
 
-            _redis.Fake.Calls("ListRangeAsync").Should().BeEmpty();
+            _logs.Verify(l => l.InsertManyAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<FunctionRunLogEntity>>(), It.IsAny<CancellationToken>()), Times.Never);
         }
 
         [Fact]
@@ -319,7 +321,8 @@ namespace XUnitTest.Functions
             await Consumer().ProcessAsync(Entry(("logsKey", FunctionQueueKeys.Logs(RunId))), CancellationToken.None);
 
             _logs.Verify(l => l.InsertManyAsync(Tenant, It.Is<IReadOnlyList<FunctionRunLogEntity>>(x => x.Count == 1 && x[0].FunctionId == "fn-1"), It.IsAny<CancellationToken>()), Times.Once);
-            _redis.Fake.Calls("StringSetAsync").Should().Contain(a => a[0]!.ToString() == FunctionWorkerQueueKeys.LogsCopied(RunId, 1));
+            // Sent without waiting for it (it only guards a redelivery), so it is the synchronous call.
+            _redis.Fake.Calls("StringSet").Should().Contain(a => a[0]!.ToString() == FunctionWorkerQueueKeys.LogsCopied(RunId, 1));
         }
 
         // ---- the entry is not trusted ------------------------------------------------------

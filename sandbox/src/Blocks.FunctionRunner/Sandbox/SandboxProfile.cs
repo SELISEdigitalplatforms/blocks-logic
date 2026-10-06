@@ -100,7 +100,21 @@ namespace Blocks.FunctionRunner.Sandbox
             ArgumentNullException.ThrowIfNull(limits);
             ArgumentNullException.ThrowIfNull(options);
 
-            return Build(containerName, image, envelopeHostPath: null, limits, options);
+            return Build(containerName, image, envelopeHostPath: null, limits, options, StartNanoCpus(limits, options));
+        }
+
+        /// <summary>
+        /// The CPU a warm sandbox is created with: the start-up boost when one is configured above
+        /// the run limit (<see cref="RunnerOptions.StartBoostMillicores"/>), else the run limit.
+        /// Every other limit is the run's from the start.
+        /// </summary>
+        public static long StartNanoCpus(RunLimits limits, RunnerOptions options)
+        {
+            ArgumentNullException.ThrowIfNull(limits);
+            ArgumentNullException.ThrowIfNull(options);
+            return options.StartBoostMillicores > limits.CpuMillicores
+                ? options.StartBoostMillicores * 1_000_000L
+                : limits.NanoCpus;
         }
 
         private static CreateContainerParameters Build(
@@ -108,7 +122,8 @@ namespace Blocks.FunctionRunner.Sandbox
             string image,
             string? envelopeHostPath,
             RunLimits limits,
-            RunnerOptions options)
+            RunnerOptions options,
+            long? nanoCpus = null)
         {
             var reuse = envelopeHostPath is null;
 
@@ -175,7 +190,7 @@ namespace Blocks.FunctionRunner.Sandbox
                     NetworkMode = options.Network,
 
                     // --- ceilings -------------------------------------------------------
-                    NanoCPUs = limits.NanoCpus,
+                    NanoCPUs = nanoCpus ?? limits.NanoCpus,
                     Memory = limits.MemoryBytes,
                     MemorySwap = limits.MemorySwapBytes,
                     MemorySwappiness = 0,
@@ -230,7 +245,8 @@ namespace Blocks.FunctionRunner.Sandbox
         /// mode. A reusable sandbox has one bind fewer (no execution.json), and must actually be in
         /// reuse mode — otherwise its runtime would look for an execution.json that is not there.
         /// </summary>
-        public static string? Validate(ContainerInspectResponse inspect, RunLimits limits, RunnerOptions options, bool reuse)
+        public static string? Validate(
+            ContainerInspectResponse inspect, RunLimits limits, RunnerOptions options, bool reuse, long? expectedNanoCpus = null)
         {
             ArgumentNullException.ThrowIfNull(inspect);
             ArgumentNullException.ThrowIfNull(limits);
@@ -239,10 +255,13 @@ namespace Blocks.FunctionRunner.Sandbox
             var host = inspect.HostConfig;
             if (host is null) return "the container has no host configuration";
 
+            // A warm sandbox is checked against the CPU it was created with (the start-up boost),
+            // then again against the run limit once it has been dropped (ReusableSandbox).
+            var nanoCpus = expectedNanoCpus ?? limits.NanoCpus;
             if (!string.Equals(host.Runtime, Ceilings.SandboxRuntime, StringComparison.Ordinal))
                 return $"runtime is '{host.Runtime}', expected '{Ceilings.SandboxRuntime}'";
-            if (host.NanoCPUs != limits.NanoCpus)
-                return $"NanoCPUs is {host.NanoCPUs}, expected {limits.NanoCpus}";
+            if (host.NanoCPUs != nanoCpus)
+                return $"NanoCPUs is {host.NanoCPUs}, expected {nanoCpus}";
             if (host.Memory != limits.MemoryBytes)
                 return $"memory is {host.Memory}, expected {limits.MemoryBytes}";
             if (host.MemorySwap != limits.MemorySwapBytes)

@@ -94,10 +94,17 @@ namespace Blocks.FunctionRunner.Tests
 
         private sealed class ResolvesAnything : IImageResolver
         {
+            public int Calls;
+
             public Task<string?> EnsureAsync(
-                string reference, CancellationToken token, string? artifactUrl = null, string? artifactSha256 = null) =>
-                Task.FromResult<string?>(reference);
+                string reference, CancellationToken token, string? artifactUrl = null, string? artifactSha256 = null)
+            {
+                Interlocked.Increment(ref Calls);
+                return Task.FromResult<string?>(reference);
+            }
         }
+
+        private readonly ResolvesAnything _resolver = new();
 
         /// <summary>The footprint of the last processor built, to check what was fed to it.</summary>
         private SandboxFootprint _footprint = new();
@@ -118,7 +125,7 @@ namespace Blocks.FunctionRunner.Tests
             _pools.Add(new WarmPool(factory, budget, options, NullLogger<WarmPool>.Instance));
 
             var processor = new RunProcessor(
-                _db!, sandbox, new ResolvesAnything(), budget, new FakeRunSecretResolver(), new FakeRunAccessTokenResolver(),
+                _db!, sandbox, _resolver, budget, new FakeRunSecretResolver(), new FakeRunAccessTokenResolver(),
                 options, NullLogger<RunProcessor>.Instance, warmPool: Pool)
             {
                 EnvelopeGroupHandoff = (_, _) => { },
@@ -222,6 +229,11 @@ namespace Blocks.FunctionRunner.Tests
             Field(r2, "reused").Should().Be("1");
             Field(r2, "startupMs").Should().Be("0", "a reused sandbox has no startup");
             ((string)(await _db!.StringGetAsync(RedisKeys.Result(second.RunId)))!).Should().Be("\"ok\"");
+
+            // The live sandbox proved the image is here, so the second call never asked Docker.
+            _resolver.Calls.Should().Be(1);
+            // Every step time of the call rides on the result entry, for the run's Timing group.
+            Field(r2, RedisKeys.ResultTimingsField).Should().Contain("handover.admission=").And.Contain("handover.total=");
         }
 
         [SkippableFact]
