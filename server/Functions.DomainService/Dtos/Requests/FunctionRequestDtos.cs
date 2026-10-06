@@ -31,6 +31,8 @@ namespace Functions.DomainService.Dtos.Requests
         public string IndexJs { get; set; } = string.Empty;
         public string PackageJson { get; set; } = string.Empty;
         public string? LockJson { get; set; }
+        /// <summary>See <see cref="Models.FunctionSource.AllowInstallScripts"/>. Absent = off.</summary>
+        public bool AllowInstallScripts { get; set; }
         public FunctionLimits Limits { get; set; } = new();
         public RetryPolicy Retry { get; set; } = new();
         public TriggerConfig Trigger { get; set; } = new();
@@ -113,5 +115,20 @@ namespace Functions.DomainService.Dtos.Requests
 
         /// <summary>Sync up to min(timeout+5s, Functions:HttpSyncWaitMaxSeconds — 30s by default, under typical ingress idle timeouts); otherwise 202 immediately (DECISIONS D5).</summary>
         public bool Wait { get; set; }
+
+        /// <summary>
+        /// <c>Prefer: wait=&lt;seconds&gt;</c> from the caller (RFC 7240), parsed by the controller:
+        /// ask for a synchronous answer, waiting at most this long — and never longer than
+        /// <c>Functions:HttpSyncWaitMaxSeconds</c>. Null when the header did not ask. Kept apart
+        /// from <see cref="Wait"/> so the decision stays with the service, which is the one that
+        /// knows the deployed trigger's response mode.
+        /// </summary>
+        public int? PreferWaitSeconds { get; set; }
+
+        /// <summary>
+        /// <c>Prefer: respond-async</c>: the caller wants the 202 + poll token whatever the
+        /// trigger's response mode says, and whatever <c>wait=</c> also appears in the header.
+        /// </summary>
+        public bool PreferAsync { get; set; }
     }
 }

@@ -41,9 +41,9 @@ namespace XUnitTest.Functions
             _runs.Setup(r => r.ApplyResultAsync(
                     Tenant, RunId, It.IsAny<int>(), It.IsAny<RunStatus>(), It.IsAny<RunErrorCode>(), It.IsAny<string?>(),
                     It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<long?>(),
-                    It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<DateTime>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                    It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<DateTime>(), It.IsAny<bool>(), It.IsAny<RunSandboxReport?>(), It.IsAny<CancellationToken>()))
                 .Callback((string _, string _, int _, RunStatus status, RunErrorCode code, string? _, string? result,
-                    int? _, long? _, long? _, long? _, string? _, DateTime? _, DateTime _, bool _, CancellationToken _) =>
+                    int? _, long? _, long? _, long? _, string? _, DateTime? _, DateTime _, bool _, RunSandboxReport? _, CancellationToken _) =>
                 {
                     _record.Status = status;
                     _record.ErrorCode = code;
@@ -105,7 +105,7 @@ namespace XUnitTest.Functions
             _runs.Verify(r => r.ApplyResultAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<RunStatus>(), It.IsAny<RunErrorCode>(), It.IsAny<string?>(),
                 It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<long?>(),
-                It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<DateTime>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+                It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<DateTime>(), It.IsAny<bool>(), It.IsAny<RunSandboxReport?>(), It.IsAny<CancellationToken>()), Times.Never);
             _logs.Verify(l => l.InsertManyAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<FunctionRunLogEntity>>(), It.IsAny<CancellationToken>()), Times.Never);
         }
 
@@ -126,7 +126,7 @@ namespace XUnitTest.Functions
             _runs.Verify(r => r.ApplyResultAsync(
                 Tenant, RunId, 2, RunStatus.Succeeded, RunErrorCode.None, It.IsAny<string?>(), "{\"v\":1}",
                 It.IsAny<int?>(), It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<string?>(),
-                It.IsAny<DateTime?>(), It.IsAny<DateTime>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Once);
+                It.IsAny<DateTime?>(), It.IsAny<DateTime>(), It.IsAny<bool>(), It.IsAny<RunSandboxReport?>(), It.IsAny<CancellationToken>()), Times.Once);
             _redis.Fake.Calls("PublishAsync").Should().ContainSingle();
         }
 
@@ -276,7 +276,7 @@ namespace XUnitTest.Functions
             _runs.Setup(r => r.ApplyResultAsync(
                     Tenant, RunId, It.IsAny<int>(), It.IsAny<RunStatus>(), It.IsAny<RunErrorCode>(), It.IsAny<string?>(),
                     It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<long?>(),
-                    It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<DateTime>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                    It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<DateTime>(), It.IsAny<bool>(), It.IsAny<RunSandboxReport?>(), It.IsAny<CancellationToken>()))
                 .Callback(() => _record.Status = RunStatus.Succeeded)
                 .ReturnsAsync(ApplyResultOutcome.Duplicate);
 
@@ -292,7 +292,7 @@ namespace XUnitTest.Functions
             _runs.Setup(r => r.ApplyResultAsync(
                     Tenant, RunId, It.IsAny<int>(), It.IsAny<RunStatus>(), It.IsAny<RunErrorCode>(), It.IsAny<string?>(),
                     It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<long?>(),
-                    It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<DateTime>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                    It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<DateTime>(), It.IsAny<bool>(), It.IsAny<RunSandboxReport?>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(ApplyResultOutcome.StaleAttempt);
 
             var outcome = await Consumer().ProcessAsync(Entry(), CancellationToken.None);
@@ -386,5 +386,45 @@ namespace XUnitTest.Functions
             outcome.Disposition.Should().Be(ResultDisposition.Rejected);
             _runs.Verify(r => r.GetByIdAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         }
-    }
+    
+        // ---- warm-sandbox fields (sandbox/REUSE.md) -----------------------------------
+
+        private void VerifySandboxReport(Func<RunSandboxReport?, bool> expected) =>
+            _runs.Verify(r => r.ApplyResultAsync(
+                Tenant, RunId, It.IsAny<int>(), It.IsAny<RunStatus>(), It.IsAny<RunErrorCode>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<long?>(),
+                It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<DateTime>(), It.IsAny<bool>(),
+                It.Is<RunSandboxReport?>(s => expected(s)), It.IsAny<CancellationToken>()), Times.Once);
+
+        [Fact]
+        public async Task The_runners_reuse_fields_are_recorded_on_the_run()
+        {
+            await Consumer().ProcessAsync(Entry(("reused", "1"), ("discard", "dirty:timer"), ("handoverMs", "4")), CancellationToken.None);
+
+            VerifySandboxReport(s => s == new RunSandboxReport(true, "dirty:timer", 4));
+        }
+
+        [Fact]
+        public async Task A_fresh_sandbox_that_was_kept_reports_false_and_no_discard()
+        {
+            await Consumer().ProcessAsync(Entry(("reused", "0"), ("discard", ""), ("handoverMs", "0")), CancellationToken.None);
+
+            VerifySandboxReport(s => s == new RunSandboxReport(false, null, 0));
+        }
+
+        [Fact]
+        public async Task An_older_runner_without_the_fields_leaves_them_null()
+        {
+            await Consumer().ProcessAsync(Entry(), CancellationToken.None);
+
+            VerifySandboxReport(s => s == new RunSandboxReport(null, null, null));
+        }
+
+        [Theory]
+        [InlineData("yes")]
+        [InlineData("2")]
+        public void An_unrecognised_reused_value_is_not_guessed(string value)
+            => SandboxReport(new ResultStreamEntry("1-0", new Dictionary<string, string> { ["reused"] = value, ["handoverMs"] = "x" }))
+                .Should().Be(new RunSandboxReport(null, null, null));
+}
 }

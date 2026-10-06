@@ -154,6 +154,21 @@ namespace Functions.DomainService.Validation
         {
             RuleForEach(x => x.Roles).NotEmpty().MaximumLength(200);
             RuleForEach(x => x.Permissions).NotEmpty().MaximumLength(200);
+
+            // The five verbs the public route is registered for; anything else could never be
+            // reached, so storing it would only make the editor show a verb that 405s.
+            RuleForEach(x => x.HttpMethods)
+                .Must(m => m is not null && FunctionValidationRules.AllowedHttpMethods.Contains(m.Trim(), StringComparer.OrdinalIgnoreCase))
+                .WithMessage($"HTTP methods must be among: {string.Join(", ", FunctionValidationRules.AllowedHttpMethods)}.");
+            RuleFor(x => x.HttpMethods)
+                .Must(list => list is null
+                    || list.Where(m => m is not null).Select(m => m.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count()
+                        == list.Count(m => m is not null))
+                .WithMessage("Each HTTP method may be listed only once.");
+
+            RuleFor(x => x.ResponseMode)
+                .Must(m => m is null or TriggerConfig.ResponseModes.Async or TriggerConfig.ResponseModes.Sync)
+                .WithMessage($"Response mode must be \"{TriggerConfig.ResponseModes.Async}\" or \"{TriggerConfig.ResponseModes.Sync}\".");
         }
     }
 

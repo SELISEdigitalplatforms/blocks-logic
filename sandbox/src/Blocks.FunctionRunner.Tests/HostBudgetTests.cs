@@ -67,6 +67,9 @@ namespace Blocks.FunctionRunner.Tests
             {
                 MaxActiveSandboxes = pinned,
                 ReservedHostMemoryMb = 2048,
+                // These tests are about the PSI loop and the memory bound. The start charge and
+                // its rate limit are off here and pinned down in HostBudgetStartCostTests.
+                StartCostCpuMs = 0,
             });
 
             return new HostBudget(

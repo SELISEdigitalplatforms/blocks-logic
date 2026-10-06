@@ -84,7 +84,7 @@ namespace Blocks.FunctionRunner.Builds
                 await RemoveOrphanAsync(containerName).ConfigureAwait(false);
 
                 var parameters = BuildSandboxProfile.Create(
-                    containerName, _options.BaseImage, workHostPath, script, _options);
+                    containerName, _options.EffectiveBuildImage, workHostPath, script, _options);
 
                 CreateContainerResponse created;
                 try

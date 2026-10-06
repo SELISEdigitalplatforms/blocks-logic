@@ -9,6 +9,9 @@ import { ITriggerConfig } from "../../types/function.types";
 const trigger: ITriggerConfig = {
   httpEnabled: true,
   httpMethod: "Post",
+  httpMethods: [],
+  reuseSandbox: false,
+  responseMode: "async",
   authMode: "Token",
   roles: [],
   permissions: [],
@@ -39,6 +42,26 @@ describe("InvokeSnippetCard", () => {
       <InvokeSnippetCard functionId="fn-1" trigger={{ ...trigger, httpMethod: "Get" }} />,
     );
     expect(snippetText()).toContain('-H "x-blocks-key: A1B2C3D4E5F6"');
+  });
+
+  it("uses an accepted verb other than GET or POST with a body", () => {
+    renderWithProviders(
+      <InvokeSnippetCard
+        functionId="fn-1"
+        trigger={{ ...trigger, httpMethods: ["PUT", "DELETE"] }}
+      />,
+    );
+    expect(snippetText()).toContain("curl -X PUT");
+    expect(screen.getByText(/"method": "PUT"/)).toBeTruthy();
+  });
+
+  it("shows the function's own answer in sync mode, with the 202 fallback", () => {
+    renderWithProviders(
+      <InvokeSnippetCard functionId="fn-1" trigger={{ ...trigger, responseMode: "sync" }} />,
+    );
+    expect(screen.getByText(/200 OK/)).toBeTruthy();
+    expect(screen.getByText(/statusCode, headers, body/)).toBeTruthy();
+    expect(screen.queryByText(/202 Accepted/)).toBeNull();
   });
 
   it("keeps the placeholder when no environment is selected", () => {

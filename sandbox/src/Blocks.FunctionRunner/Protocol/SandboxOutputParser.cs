@@ -90,6 +90,20 @@ namespace Blocks.FunctionRunner.Protocol
             return output;
         }
 
+        /// <summary>
+        /// Folds one already-split line into <paramref name="output"/>, under the same ceilings as
+        /// <see cref="Parse"/>. A reusable sandbox's stdout never ends between calls, so its lines
+        /// are routed one at a time — each call's own lines into that call's output.
+        /// </summary>
+        public void Feed(SandboxOutput output, string line)
+        {
+            ArgumentNullException.ThrowIfNull(output);
+            if (string.IsNullOrEmpty(line)) return;
+            line = line.TrimEnd('\r');
+            if (line.Length == 0) return;
+            Consume(output, line);
+        }
+
         private void Consume(SandboxOutput output, string line)
         {
             // A single absurd line is clipped before anything tries to parse it.

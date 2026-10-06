@@ -1,3 +1,4 @@
+using MongoDB.Bson.Serialization.Attributes;
 using Functions.DomainService.Enums;
 
 namespace Functions.DomainService.Models
@@ -161,6 +162,15 @@ namespace Functions.DomainService.Models
     }
 
     /// <summary>HTTP trigger configuration.</summary>
+    /// <remarks>
+    /// <b>Rolling-deploy safety.</b> Extra elements are ignored, and every field added after the
+    /// first release is written only when it differs from its default
+    /// (<c>[BsonIgnoreIfDefault]</c> / <c>[BsonIgnoreIfNull]</c>). An untouched function's stored
+    /// document therefore stays byte-identical, and an Api or Worker pod still running the previous
+    /// build — during a rolling deploy, or after a rollback — keeps reading it instead of throwing
+    /// on an element its class map does not know (which would fail production workflow steps).
+    /// </remarks>
+    [BsonIgnoreExtraElements]
     public class TriggerConfig
     {
         public bool HttpEnabled { get; set; } = true;
@@ -187,6 +197,50 @@ namespace Functions.DomainService.Models
 
         /// <summary>Invocable from a workflow node.</summary>
         public bool WorkflowEnabled { get; set; } = true;
+
+        /// <summary>
+        /// The verbs the public route answers, from GET, POST, PUT, PATCH and DELETE. Null — what
+        /// every document stored before this field existed reads as, and what an empty list is
+        /// normalised to on save — means the single legacy <see cref="HttpMethod"/>, so a function
+        /// nobody has touched keeps answering exactly the one verb it always did. Never written to
+        /// Mongo while null. Read the effective set through
+        /// <c>FunctionHttpInputBuilder.AllowedVerbs</c>, never this list directly.
+        /// </summary>
+        [BsonIgnoreIfNull]
+        public List<string>? HttpMethods { get; set; }
+
+        /// <summary>
+        /// Opt-in to running this version in a reused ("warm") sandbox — same tenant, function and
+        /// version only, one call at a time (sandbox/REUSE.md). Off by default: module-level state
+        /// surviving between calls is a contract the tenant has to accept knowingly, and a run
+        /// entry without <c>reuse=1</c> takes exactly the one-sandbox-per-run path it always has.
+        /// Snapshotted into the version on deploy like every other trigger setting, so turning it
+        /// on in the editor changes nothing until the next deploy. Only HTTP invocations use it
+        /// (see <c>FunctionInvocationService</c>). Not written while false.
+        /// </summary>
+        [BsonIgnoreIfDefault]
+        public bool ReuseSandbox { get; set; }
+
+        /// <summary>
+        /// <see cref="ResponseModes.Sync"/> holds a public HTTP request for a bounded time and answers
+        /// with the function's own result. Anything else — null above all, which is the stored
+        /// default and what "async" is normalised to on save — is today's 202 + poll token. A
+        /// string rather than an enum so the wire value is exactly what the console sends. Not
+        /// written while null.
+        /// </summary>
+        [BsonIgnoreIfNull]
+        public string? ResponseMode { get; set; }
+
+        /// <summary>True only for <see cref="ResponseModes.Sync"/>; null and "async" both mean async.</summary>
+        public static bool IsSync(string? responseMode) =>
+            string.Equals(responseMode, ResponseModes.Sync, StringComparison.Ordinal);
+
+        /// <summary>The two values <see cref="ResponseMode"/> may hold.</summary>
+        public static class ResponseModes
+        {
+            public const string Async = "async";
+            public const string Sync = "sync";
+        }
     }
 
     /// <summary>Something to do with a successful run's result.</summary>
@@ -218,6 +272,8 @@ namespace Functions.DomainService.Models
     }
 
     /// <summary>The tenant's editable source. Hashed to decide whether a rebuild is needed.</summary>
+    /// <remarks>Rolling-deploy safe the same way as <see cref="TriggerConfig"/>.</remarks>
+    [BsonIgnoreExtraElements]
     public class FunctionSource
     {
         public string IndexJs { get; set; } = string.Empty;
@@ -230,6 +286,18 @@ namespace Functions.DomainService.Models
         /// change every existing hash and show every function as having unsaved changes.
         /// </summary>
         public string? LockJson { get; set; }
+
+        /// <summary>
+        /// Lets the dependency install run npm lifecycle scripts (install / postinstall), which
+        /// native packages such as bcrypt or sharp need to compile or fetch their binary. Off by
+        /// default: dependencies install with --ignore-scripts, as before. On is safe in the same
+        /// way running the function is: the install happens inside a gVisor sandbox, and a runner
+        /// operator can still refuse it host-wide (RUNNER__DenyPrivateScriptsOnBuild). Part of the
+        /// source, not of the trigger, because it changes what the build produces — so it is in
+        /// the source and manifest hashes (only when on, so no existing hash changes).
+        /// </summary>
+        [BsonIgnoreIfDefault]
+        public bool AllowInstallScripts { get; set; }
     }
 
     /// <summary>One observed stage of a run, for the timeline in the interface.</summary>

@@ -20,7 +20,9 @@ namespace Blocks.FunctionRunner.Sandbox
     /// <item>the environment is an allowlist, not a filter: nothing is inherited from the
     /// runner process, so no connection string can leak in by accident;</item>
     /// <item>the only writable path is a 64 MB noexec tmpfs at /tmp;</item>
-    /// <item>the only mounts are the read-only execution envelope and resolv.conf.</item>
+    /// <item>the only mounts are the read-only execution envelope and resolv.conf — and for a
+    /// reusable sandbox (<see cref="CreateReusable"/>) resolv.conf alone, its envelopes arriving
+    /// on stdin.</item>
     /// </list>
     /// </para>
     /// </summary>
@@ -59,6 +61,82 @@ namespace Blocks.FunctionRunner.Sandbox
             ArgumentNullException.ThrowIfNull(limits);
             ArgumentNullException.ThrowIfNull(options);
 
+            return Build(containerName, image, envelopeHostPath, limits, options);
+        }
+
+        // ---- reuse mode (sandbox/REUSE.md) ---------------------------------------------
+
+        /// <summary>Label marking a sandbox as a long-lived, reusable one; the value is the owning runner's id.</summary>
+        public const string WarmLabel = "dev.selise.blocks.warm";
+
+        /// <summary>
+        /// Prefix of every warm sandbox's name. Deliberately not <see cref="ContainerPrefix"/>
+        /// followed by anything: a warm sandbox belongs to no single run, so the lease-based reaper
+        /// for run sandboxes must never read its name as a run id.
+        /// </summary>
+        public const string WarmContainerPrefix = "blocks-fnwarm-";
+
+        /// <summary>
+        /// The parameters for a reusable sandbox: the same profile as <see cref="Create"/>, field
+        /// for field, with exactly three differences, all forced by serving calls over stdin:
+        /// <list type="bullet">
+        /// <item>stdin is open and attached, because that is where each call's envelope arrives;</item>
+        /// <item>there is no execution.json bind — no envelope exists when the sandbox starts, and
+        /// one file per call could not be swapped into a running container anyway;</item>
+        /// <item>the environment says <c>BLOCKS_RUNTIME_MODE=reuse</c> and carries the clean grace.</item>
+        /// </list>
+        /// Same user, same read-only root and tmpfs, same caps, PIDs, network, runtime and limits.
+        /// Both modes are built by one private builder precisely so a change to the profile cannot
+        /// reach one mode and miss the other.
+        /// </summary>
+        public static CreateContainerParameters CreateReusable(
+            string containerName,
+            string image,
+            RunLimits limits,
+            RunnerOptions options)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(containerName);
+            ArgumentException.ThrowIfNullOrWhiteSpace(image);
+            ArgumentNullException.ThrowIfNull(limits);
+            ArgumentNullException.ThrowIfNull(options);
+
+            return Build(containerName, image, envelopeHostPath: null, limits, options);
+        }
+
+        private static CreateContainerParameters Build(
+            string containerName,
+            string image,
+            string? envelopeHostPath,
+            RunLimits limits,
+            RunnerOptions options)
+        {
+            var reuse = envelopeHostPath is null;
+
+            List<string> env = reuse
+                ?
+                [
+                    "NODE_ENV=production",
+                    "BLOCKS_RUNTIME_MODE=reuse",
+                    $"BLOCKS_CLEAN_GRACE_MS={options.CleanGraceMs}",
+                    "BLOCKS_RUNTIME_VERSION=1",
+                    $"NODE_OPTIONS=--max-old-space-size={limits.MaxOldSpaceMb}",
+                ]
+                :
+                [
+                    "NODE_ENV=production",
+                    $"BLOCKS_EXECUTION_FILE={EnvelopePath}",
+                    "BLOCKS_RUNTIME_VERSION=1",
+                    $"NODE_OPTIONS=--max-old-space-size={limits.MaxOldSpaceMb}",
+                ];
+
+            var resolvBind = $"{options.ResolvConf}:/etc/resolv.conf:ro";
+            List<string> binds = reuse
+                ? [resolvBind]
+                : [$"{envelopeHostPath}:{EnvelopePath}:ro", resolvBind];
+
+            var labels = new Dictionary<string, string> { [SandboxLabel] = "true" };
+            if (reuse) labels[WarmLabel] = options.RunnerId;
+
             return new CreateContainerParameters
             {
                 Name = containerName,
@@ -75,23 +153,15 @@ namespace Blocks.FunctionRunner.Sandbox
 
                 // The complete environment. An allowlist, so nothing the runner process holds
                 // can reach the sandbox.
-                Env =
-                [
-                    "NODE_ENV=production",
-                    $"BLOCKS_EXECUTION_FILE={EnvelopePath}",
-                    "BLOCKS_RUNTIME_VERSION=1",
-                    $"NODE_OPTIONS=--max-old-space-size={limits.MaxOldSpaceMb}",
-                ],
+                Env = env,
 
-                Labels = new Dictionary<string, string>
-                {
-                    [SandboxLabel] = "true",
-                },
+                Labels = labels,
 
                 AttachStdout = true,
                 AttachStderr = true,
-                AttachStdin = false,
-                OpenStdin = false,
+                AttachStdin = reuse,
+                OpenStdin = reuse,
+                StdinOnce = false,
                 Tty = false,
                 NetworkDisabled = false,
 
@@ -117,11 +187,7 @@ namespace Blocks.FunctionRunner.Sandbox
                     {
                         [ "/tmp" ] = $"rw,noexec,nosuid,nodev,size={limits.TmpfsBytes}",
                     },
-                    Binds =
-                    [
-                        $"{envelopeHostPath}:{EnvelopePath}:ro",
-                        $"{options.ResolvConf}:/etc/resolv.conf:ro",
-                    ],
+                    Binds = binds,
 
                     // --- privileges -----------------------------------------------------
                     CapDrop = ["ALL"],
@@ -157,6 +223,14 @@ namespace Blocks.FunctionRunner.Sandbox
         /// </summary>
         /// <returns>null when the container matches, otherwise the first discrepancy found.</returns>
         public static string? Validate(ContainerInspectResponse inspect, RunLimits limits, RunnerOptions options)
+            => Validate(inspect, limits, options, reuse: false);
+
+        /// <summary>
+        /// <see cref="Validate(ContainerInspectResponse, RunLimits, RunnerOptions)"/> for either
+        /// mode. A reusable sandbox has one bind fewer (no execution.json), and must actually be in
+        /// reuse mode — otherwise its runtime would look for an execution.json that is not there.
+        /// </summary>
+        public static string? Validate(ContainerInspectResponse inspect, RunLimits limits, RunnerOptions options, bool reuse)
         {
             ArgumentNullException.ThrowIfNull(inspect);
             ArgumentNullException.ThrowIfNull(limits);
@@ -189,8 +263,13 @@ namespace Blocks.FunctionRunner.Sandbox
                 return $"user is '{inspect.Config?.User}', expected {Ceilings.SandboxUid}:{Ceilings.SandboxUid}";
             if (!string.Equals(host.NetworkMode, options.Network, StringComparison.Ordinal))
                 return $"network is '{host.NetworkMode}', expected '{options.Network}'";
-            if (host.Binds is null || host.Binds.Count != 2)
-                return $"expected exactly two read-only binds, found {host.Binds?.Count ?? 0}";
+            var expectedBinds = reuse ? 1 : 2;
+            if (host.Binds is null || host.Binds.Count != expectedBinds)
+            {
+                return reuse
+                    ? $"expected exactly one read-only bind, found {host.Binds?.Count ?? 0}"
+                    : $"expected exactly two read-only binds, found {host.Binds?.Count ?? 0}";
+            }
             foreach (var bind in host.Binds)
             {
                 if (!bind.EndsWith(":ro", StringComparison.Ordinal))
@@ -198,6 +277,8 @@ namespace Blocks.FunctionRunner.Sandbox
             }
             if (!string.Equals(host.IpcMode, "private", StringComparison.Ordinal))
                 return $"IPC mode is '{host.IpcMode}', expected 'private'";
+            if (reuse && inspect.Config?.Env?.Contains("BLOCKS_RUNTIME_MODE=reuse") != true)
+                return "the reusable sandbox is not in reuse mode";
 
             return ValidateTmpfs(host.Tmpfs, limits.TmpfsBytes);
         }

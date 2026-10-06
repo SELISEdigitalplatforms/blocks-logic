@@ -141,6 +141,9 @@ namespace Functions.DomainService.Consumers
             var version = string.IsNullOrEmpty(entry.VersionId)
                 ? null
                 : await _versionRepository.GetByIdAsync(entry.TenantId, entry.VersionId, cancellationToken);
+            // An artifact-built version has no digest, and this entry cannot carry the signed
+            // artifact URL the runner would need to build it (see FunctionRunImage), so such a run
+            // is not retried here — the same as before artifact builds got a run image.
             if (version is null || string.IsNullOrEmpty(version.ImageDigest))
             {
                 _logger.LogWarning(
@@ -203,6 +206,11 @@ namespace Functions.DomainService.Consumers
                     // The reused envelope still holds references only, so the runner resolves
                     // them afresh for this attempt — a secret rotated since is picked up.
                     new NameValueEntry("protocol", FunctionQueueKeys.RunProtocolVersion),
+                    // The first attempt's warm-sandbox opt-in, carried over (only when it had it,
+                    // so every other retry entry is unchanged).
+                    .. (run.ReuseRequested
+                        ? new[] { new NameValueEntry(FunctionQueueKeys.RunReuseField, "1") }
+                        : []),
                 ]);
             }
             catch (Exception ex)

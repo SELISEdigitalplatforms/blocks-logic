@@ -166,13 +166,14 @@ namespace Functions.DomainService.Services
                 IndexJs = request.IndexJs,
                 PackageJson = request.PackageJson,
                 LockJson = request.LockJson,
+                AllowInstallScripts = request.AllowInstallScripts,
             };
             function.SourceHash = FunctionHashing.SourceHash(function.Source);
             // Stored as the platform profile, not as sent. The values are fixed, so keeping a
             // caller's numbers would make the saved document disagree with what actually runs.
             function.Limits = request.Limits.Clamp();
             function.Retry = RetryPolicy.Fixed;
-            function.Trigger = request.Trigger;
+            function.Trigger = NormalizeForStorage(request.Trigger);
             function.OutputActions = request.OutputActions;
             function.Variables = request.Variables;
             function.LastUpdatedDate = DateTime.UtcNow;
@@ -346,6 +347,27 @@ namespace Functions.DomainService.Services
 
             return FunctionHashing.CodeHash(function.Source) != activeVersion.CodeHash
                 || FunctionHashing.ManifestHash(function.Source) != activeVersion.ManifestHash;
+        }
+
+        /// <summary>
+        /// Stores the newer trigger settings only when they say something: an empty verb list
+        /// becomes null (the legacy single method) and "async" becomes null (the default). Both
+        /// fields are skipped by the BSON map while null, so a function whose owner never touched
+        /// them saves exactly the document an older Api or Worker pod can read — which keeps a
+        /// rolling deploy or a rollback from failing workflow steps on an unknown element.
+        /// </summary>
+        internal static TriggerConfig NormalizeForStorage(TriggerConfig? trigger)
+        {
+            trigger ??= new TriggerConfig();
+
+            var verbs = (trigger.HttpMethods ?? [])
+                .Where(m => !string.IsNullOrWhiteSpace(m))
+                .Select(m => m.Trim().ToUpperInvariant())
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            trigger.HttpMethods = verbs.Count == 0 ? null : verbs;
+            trigger.ResponseMode = TriggerConfig.IsSync(trigger.ResponseMode) ? TriggerConfig.ResponseModes.Sync : null;
+            return trigger;
         }
 
         private static async Task ValidateAsync<T>(IValidator<T> validator, T instance)

@@ -5,6 +5,9 @@ import { ITriggerConfig } from "../types/function.types";
 const token: ITriggerConfig = {
   httpEnabled: true,
   httpMethod: "Post",
+  httpMethods: [],
+  reuseSandbox: false,
+  responseMode: "async",
   authMode: "Token",
   roles: [],
   permissions: [],

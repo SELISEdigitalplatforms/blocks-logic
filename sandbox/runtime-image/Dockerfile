@@ -1,4 +1,5 @@
-# blocks-functions-node:24-v1 — the base image every tenant function image is built FROM.
+# blocks-functions-node:24-v2 — the base image every tenant function image is built FROM.
+# v2 = v1 + reuse mode (runtime/reuse.mjs, sandbox/REUSE.md) + HOME and cache dirs under /tmp.
 #
 # It contributes the trusted runtime and the security-relevant image metadata; the
 # per-execution ceilings (CPU, memory, PIDs, /tmp, network, capabilities) are applied by the
@@ -19,7 +20,7 @@ RUN set -eux; \
 
 # The trusted runtime: root-owned, world-readable, not writable by anyone. The rootfs is
 # read-only at run time as well; this is the second lock on the same door.
-COPY runtime/bootstrap.mjs runtime/protocol.mjs runtime/envelope.mjs /runtime/
+COPY runtime/bootstrap.mjs runtime/protocol.mjs runtime/envelope.mjs runtime/reuse.mjs /runtime/
 RUN set -eux; \
     chown -R root:root /runtime; \
     chmod 0555 /runtime; \
@@ -36,10 +37,16 @@ ENV NODE_ENV=production \
     BLOCKS_EXECUTION_FILE=/run/blocks/execution.json \
     BLOCKS_RUNTIME_VERSION=1 \
     NPM_CONFIG_UPDATE_NOTIFIER=false \
-    NODE_OPTIONS=--max-old-space-size=225
+    NODE_OPTIONS=--max-old-space-size=225 \
+    HOME=/tmp \
+    XDG_CACHE_HOME=/tmp/.cache \
+    NPM_CONFIG_CACHE=/tmp/.npm
+# HOME and the cache dirs point at /tmp, the only writable path at run time: packages that write
+# a cache or a config file under $HOME (many do on first use) would otherwise crash on the
+# read-only root. /tmp is per sandbox and noexec, so nothing written there can be run.
 
 LABEL org.opencontainers.image.title="Blocks Functions Node runtime" \
-      org.opencontainers.image.version="24-v1" \
+      org.opencontainers.image.version="24-v2" \
       dev.selise.blocks.runtime="node24" \
       dev.selise.blocks.runtime-version="1"
 
@@ -50,11 +57,27 @@ LABEL org.opencontainers.image.title="Blocks Functions Node runtime" \
 # /tmp needs exec here because node:test spawns the bootstrap from a temporary directory.
 # ---------------------------------------------------------------------------------------
 FROM base AS test
-COPY runtime/bootstrap.test.mjs /runtime/
-RUN chmod 0444 /runtime/bootstrap.test.mjs
+COPY runtime/bootstrap.test.mjs runtime/reuse.test.mjs /runtime/
+RUN chmod 0444 /runtime/bootstrap.test.mjs /runtime/reuse.test.mjs
 USER 10001:10001
 ENTRYPOINT ["node", "--test"]
-CMD ["/runtime/bootstrap.test.mjs"]
+CMD ["/runtime/bootstrap.test.mjs", "/runtime/reuse.test.mjs"]
+
+# ---------------------------------------------------------------------------------------
+# Build image: the dependency install (`npm install` in the build sandbox) runs FROM this, never a
+# function. Same pinned Node and Debian as the runtime, so a native add-on compiled here loads in
+# the runtime; plus the toolchain node-gyp needs (python3, make, g++) and CA certificates for
+# add-ons that download a prebuilt binary. The runtime image below stays toolchain-free.
+#   docker build --target build -t blocks-functions-node:24-v2-build .
+# ---------------------------------------------------------------------------------------
+FROM base AS build
+USER root
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends python3 make g++ ca-certificates; \
+    rm -rf /var/lib/apt/lists/*
+USER 10001:10001
+ENTRYPOINT ["node", "/runtime/bootstrap.mjs"]
 
 # ---------------------------------------------------------------------------------------
 # The shipping runtime. No test file, no shell in the entrypoint, no CMD to override.

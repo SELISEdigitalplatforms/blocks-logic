@@ -86,6 +86,42 @@ namespace Functions.DomainService.Services
         public static string Verb(HttpTriggerMethod method) =>
             method == HttpTriggerMethod.Get ? "GET" : "POST";
 
+        /// <summary>Every verb the public route is registered for, and so every verb a trigger may list.</summary>
+        public static readonly IReadOnlyList<string> RoutableVerbs = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+
+        /// <summary>
+        /// The verbs a trigger answers: its <see cref="TriggerConfig.HttpMethods"/> list, upper-cased
+        /// and de-duplicated, in the order the tenant chose; or, when that list is empty (every
+        /// document stored before the list existed), the single legacy <see cref="TriggerConfig.HttpMethod"/>.
+        /// Anything outside <see cref="RoutableVerbs"/> is dropped rather than trusted — the
+        /// validator refuses it on save, and a stored stray value must not widen the route.
+        /// </summary>
+        public static IReadOnlyList<string> AllowedVerbs(TriggerConfig trigger)
+        {
+            ArgumentNullException.ThrowIfNull(trigger);
+
+            var listed = (trigger.HttpMethods ?? [])
+                .Where(m => !string.IsNullOrWhiteSpace(m))
+                .Select(m => m.Trim().ToUpperInvariant())
+                .Where(m => RoutableVerbs.Contains(m))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
+            return listed.Count > 0 ? listed : [Verb(trigger.HttpMethod)];
+        }
+
+        /// <summary>
+        /// The verb an editor test simulates: the legacy method when the list still includes it
+        /// (so a function that only gained extra verbs tests exactly as before), otherwise the
+        /// first verb the tenant listed.
+        /// </summary>
+        public static string TestVerb(TriggerConfig trigger)
+        {
+            var allowed = AllowedVerbs(trigger);
+            var legacy = Verb(trigger.HttpMethod);
+            return allowed.Contains(legacy) ? legacy : allowed[0];
+        }
+
         /// <summary>
         /// The input for an editor test run, shaped as a real call to the function's root with the
         /// trigger's own method, so <c>handler(input)</c> reads identically in the editor and in
@@ -95,13 +131,21 @@ namespace Functions.DomainService.Services
         /// to go on a GET and yields an empty query.
         /// </summary>
         public static string ForTest(string? inputJson, HttpTriggerMethod method = HttpTriggerMethod.Post)
+            => ForTest(inputJson, Verb(method));
+
+        /// <summary>
+        /// <see cref="ForTest(string?, HttpTriggerMethod)"/> for any routable verb: GET carries the
+        /// payload as the query, every other verb (POST, PUT, PATCH, DELETE) as the body.
+        /// </summary>
+        public static string ForTest(string? inputJson, string verb)
         {
             var payload = ParseBodyText(inputJson);
-            var isGet = method == HttpTriggerMethod.Get;
+            var normalised = string.IsNullOrWhiteSpace(verb) ? "POST" : verb.Trim().ToUpperInvariant();
+            var isGet = normalised == "GET";
 
             var input = new JsonObject
             {
-                ["method"] = Verb(method),
+                ["method"] = normalised,
                 ["path"] = string.Empty,
                 ["query"] = isGet ? QueryFromPayload(payload) : new JsonObject(),
                 ["headers"] = isGet

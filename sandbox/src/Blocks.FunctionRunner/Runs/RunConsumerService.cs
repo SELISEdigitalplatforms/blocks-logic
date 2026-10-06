@@ -99,7 +99,7 @@ namespace Blocks.FunctionRunner.Runs
                         await HandleAsync(consumer, entry, stoppingToken).ConfigureAwait(false);
                     }
                 }
-                catch (OperationCanceledException)
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                 {
                     break;
                 }
@@ -154,6 +154,9 @@ namespace Blocks.FunctionRunner.Runs
                 Attempt = ReadAttempt(entry),
                 Deliveries = deliveries,
                 Protocol = protocol,
+                // The function's opt-in only; whether this host does reuse at all is RunProcessor's
+                // question (RunnerOptions.SandboxReuse).
+                Reuse = string.Equals(entry.Get(RedisKeys.RunReuseField), "1", StringComparison.Ordinal),
             };
 
             if (deliveries > 1)
@@ -172,7 +175,8 @@ namespace Blocks.FunctionRunner.Runs
                 return;
             }
 
-            var disposition = await _processor.ProcessAsync(job, token).ConfigureAwait(false);
+            var disposition = await GuardAsync(() => _processor.ProcessAsync(job, token), runId, _logger, token)
+                .ConfigureAwait(false);
 
             switch (disposition)
             {
@@ -192,6 +196,29 @@ namespace Blocks.FunctionRunner.Runs
 
                 default:
                     break;
+            }
+        }
+
+        /// <summary>
+        /// Runs one entry so that only a real shutdown can stop the loop. A cancellation nobody
+        /// asked this loop for — a Docker call timing out inside HttpClient, a run's lease token —
+        /// used to escape into the loop's shutdown handler and end the run loop for good, with the
+        /// process still looking healthy. Such a run is left pending: the stream hands it out again.
+        /// </summary>
+        internal static async Task<RunProcessor.Disposition> GuardAsync(
+            Func<Task<RunProcessor.Disposition>> process, string runId, ILogger logger, CancellationToken token)
+        {
+            ArgumentNullException.ThrowIfNull(process);
+            try
+            {
+                return await process().ConfigureAwait(false);
+            }
+            catch (OperationCanceledException ex) when (!token.IsCancellationRequested)
+            {
+                logger.LogWarning(
+                    "Run {RunId} was interrupted by a cancellation that was not a shutdown ({Message}); leaving it pending",
+                    runId, ex.Message);
+                return RunProcessor.Disposition.Deferred;
             }
         }
 

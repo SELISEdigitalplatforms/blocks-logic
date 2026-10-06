@@ -443,8 +443,13 @@ namespace Blocks.FunctionRunner.Maintenance
         }
 
         private bool IsBaseImage(ImagesListResponse image)
+            => IsOfRepository(image, _options.BaseImage)
+            // The build image (RUNNER__BuildImage) is FROM-equivalent for the install sandbox:
+            // pruning it would fail every build that has to install dependencies.
+            || (!string.IsNullOrWhiteSpace(_options.BuildImage) && IsOfRepository(image, _options.BuildImage));
+
+        private static bool IsOfRepository(ImagesListResponse image, string baseImage)
         {
-            var baseImage = _options.BaseImage;
             if (string.IsNullOrWhiteSpace(baseImage)) return false;
 
             // Compare on the repository, not the full reference: the base image is pinned by

@@ -83,7 +83,7 @@ namespace Blocks.FunctionRunner.Builds
                         await HandleAsync(consumer, entry, stoppingToken).ConfigureAwait(false);
                     }
                 }
-                catch (OperationCanceledException)
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                 {
                     break;
                 }

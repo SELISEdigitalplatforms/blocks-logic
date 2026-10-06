@@ -80,12 +80,12 @@ namespace XUnitTest.Functions
         [Fact]
         public void InvokeIsAGatewayStyleCatchAllOnEveryMethod()
         {
-            // The proxy gateway's shape, deliberately: the two methods a trigger can pick from,
+            // The proxy gateway's shape, deliberately: the five verbs a trigger can list from,
             // anything after the id is the handler's input.path, and a body cap enforced before
             // Kestrel's generic 413. The trigger's own method is enforced inside the service.
             var verbs = Action(nameof(FunctionsController.Invoke)).GetCustomAttribute<AcceptVerbsAttribute>();
             verbs.Should().NotBeNull();
-            verbs!.HttpMethods.Should().BeEquivalentTo(["GET", "POST"]);
+            verbs!.HttpMethods.Should().BeEquivalentTo(["GET", "POST", "PUT", "PATCH", "DELETE"]);
             verbs.Route.Should().Be("~/api/fn/{functionId}/{**path}");
 
             Action(nameof(FunctionsController.Invoke)).GetCustomAttribute<RequestSizeLimitAttribute>().Should().NotBeNull();

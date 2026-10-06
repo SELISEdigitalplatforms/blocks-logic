@@ -92,6 +92,24 @@ namespace Blocks.FunctionRunner.Contracts
         /// </summary>
         public static string TestsStream => _prefix + "functions:tests";
 
+        /// <summary>
+        /// Pre-warm requests (sandbox/REUSE.md): <c>{tenantId, functionId, versionId, image,
+        /// count, drainVersionId?}</c>. Every runner reads every entry through a consumer group of
+        /// its own (<see cref="WarmGroup"/>), because a drain must reach each host that may hold a
+        /// sandbox of the old version, not just whichever runner claimed it first.
+        /// </summary>
+        public static string WarmStream => _prefix + "functions:warm";
+
+        /// <summary>This runner's own consumer group on <see cref="WarmStream"/>.</summary>
+        public static string WarmGroup(string runnerId) => $"warm:{runnerId}";
+
+        /// <summary>
+        /// Optional field of a runs entry: <c>"1"</c> when the function opted in to sandbox reuse.
+        /// Mirrors the control plane's <c>TriggerConfig.ReuseSandbox</c>. Absent or anything else
+        /// means a fresh sandbox, which is also all a runner that predates it does.
+        /// </summary>
+        public const string RunReuseField = "reuse";
+
         /// <summary>Entries that exhausted their retry budget.</summary>
         public static string DeadStream => _prefix + "functions:dead";
 

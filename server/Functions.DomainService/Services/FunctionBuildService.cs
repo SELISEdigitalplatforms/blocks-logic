@@ -259,7 +259,9 @@ namespace Functions.DomainService.Services
                 new("tenantId", tenantId),
                 new("sourceKey", sourceKey),
                 new("imageRef", imageRef),
-                new("allowScripts", "false"),
+                // The function's own opt-in (FunctionSource.AllowInstallScripts); the runner may
+                // still refuse it host-wide.
+                new("allowScripts", function.Source.AllowInstallScripts ? "true" : "false"),
                 new("protocol", FunctionQueueKeys.ProtocolVersion),
             };
             if (artifactUploadUrl is not null)

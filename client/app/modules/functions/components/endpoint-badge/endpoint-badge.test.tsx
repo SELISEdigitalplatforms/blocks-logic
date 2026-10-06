@@ -38,4 +38,15 @@ describe("EndpointBadge", () => {
     await user.click(screen.getByRole("button", { name: "Copy endpoint" }));
     expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining("/fn/fn-1"));
   });
+
+  it("shows every accepted verb when the trigger lists several", () => {
+    renderWithProviders(
+      <EndpointBadge functionId="fn-1" method="Post" methods={["GET", "PUT", "DELETE"]} />,
+    );
+    expect(screen.getByText("GET")).toBeTruthy();
+    expect(screen.getByText("PUT")).toBeTruthy();
+    expect(screen.getByText("DELETE")).toBeTruthy();
+    expect(screen.queryByText("POST")).toBeNull();
+    expect(screen.getByText(/Any other method/)).toBeTruthy();
+  });
 });

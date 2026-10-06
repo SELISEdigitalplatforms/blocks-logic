@@ -78,6 +78,30 @@ namespace Functions.DomainService.Queue
             RunStatus.Cancelled or RunStatus.ResourceExceeded or RunStatus.OutputFailed;
 
         /// <summary>
+        /// Outcomes the platform recorded itself (never ran, or never answered). A real result may
+        /// still replace them, so they are never the trigger for a retry of their own.
+        /// </summary>
+        public static bool IsPlatformDetermined(RunErrorCode code) =>
+            code is RunErrorCode.Undeliverable or RunErrorCode.EnqueueFailed or RunErrorCode.Abandoned;
+
+        /// <summary>
+        /// The result consumer's test for "this finished run is one a retry may be scheduled for":
+        /// terminal, reported by a runner (not platform-determined) and of a retryable kind. The
+        /// consumer then still checks the attempt budget and the version (<see cref="WillBeRetried"/>).
+        /// </summary>
+        public static bool IsRetryCandidate(Entities.FunctionRunEntity run) =>
+            IsTerminal(run.Status) && !IsPlatformDetermined(run.ErrorCode) && IsRetryable(run.Status, run.ErrorCode);
+
+        /// <summary>
+        /// True when the result consumer will schedule another attempt for this finished run: a
+        /// <see cref="IsRetryCandidate"/> of a deployed version with attempts left. The same
+        /// predicate the consumer applies, so a synchronous HTTP caller is never handed a failure
+        /// that a retry is about to replace.
+        /// </summary>
+        public static bool WillBeRetried(Entities.FunctionRunEntity run) =>
+            IsRetryCandidate(run) && !string.IsNullOrEmpty(run.VersionId) && run.Attempt < run.MaxAttempts;
+
+        /// <summary>
         /// True when a failed run is worth retrying. A run that broke because the tenant's code
         /// threw, or returned something unserializable, will do exactly the same thing again —
         /// only infrastructure and resource failures are worth another attempt.

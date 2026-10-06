@@ -42,6 +42,7 @@ describe("functionService", () => {
       functionId: "fn_1",
       indexJs: "",
       packageJson: "",
+      allowInstallScripts: false,
       limits: {} as never,
       retry: {} as never,
       trigger: {} as never,

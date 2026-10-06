@@ -192,6 +192,32 @@ namespace Functions.DomainService.Entities
         /// <summary>True when the log stream hit a ceiling and was cut short.</summary>
         public bool LogsTruncated { get; set; }
 
+        /// <summary>
+        /// Warm-sandbox report from the runner's result entry (sandbox/REUSE.md): whether an
+        /// already-running sandbox served the run, why the sandbox was destroyed afterwards
+        /// (<c>dirty:…</c>, <c>timeout</c>, <c>crash</c>, <c>maxCalls</c>, <c>maxAge</c>,
+        /// <c>memory</c>, <c>protocol</c>; null when it was kept), and the claim-to-stdin hand-over
+        /// time. All three stay null for a runner that predates reuse, so "not reported" is never
+        /// mistaken for "fresh sandbox".
+        /// </summary>
+        public bool? Reused { get; set; }
+
+        /// <inheritdoc cref="Reused" />
+        public string? DiscardReason { get; set; }
+
+        /// <inheritdoc cref="Reused" />
+        public long? HandoverMs { get; set; }
+
+        /// <summary>
+        /// The run's stream entry carried <c>reuse=1</c> (an HTTP call, or a replay of one, of a
+        /// version that opted into <c>ReuseSandbox</c>). Recorded so a retry re-queues the next
+        /// attempt the same way — without it, the retry scheduler rebuilds the entry from the
+        /// version and every retry would fall back to a cold sandbox. Not written while false, so
+        /// every other run document is exactly what it was.
+        /// </summary>
+        [BsonIgnoreIfDefault]
+        public bool ReuseRequested { get; set; }
+
         public List<RunStage> Stages { get; set; } = [];
         public List<RunAttempt> Attempts { get; set; } = [];
         public List<OutputActionResult> OutputResults { get; set; } = [];

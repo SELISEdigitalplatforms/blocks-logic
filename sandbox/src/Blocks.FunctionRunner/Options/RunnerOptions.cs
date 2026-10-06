@@ -302,6 +302,120 @@ namespace Blocks.FunctionRunner.Options
         /// </summary>
         public bool DenyPrivateScriptsOnBuild { get; set; }
 
+        /// <summary>
+        /// The image the dependency install runs in, as <c>RUNNER__BuildImage</c>. Empty — the
+        /// default — means <see cref="BaseImage"/>, which is what every build used before this
+        /// option existed.
+        /// <para>
+        /// It exists for native add-ons. The run image is deliberately bare: no compiler, no
+        /// Python, no make, because nothing at run time should be able to build code. An add-on
+        /// without a prebuilt binary for this platform compiles during <c>npm install</c>
+        /// (node-gyp), so the install needs that toolchain — and only the install. Point this at a
+        /// build image that is the run image plus the toolchain (same Debian release, same Node,
+        /// so what compiles here loads there) and the toolchain stays out of every sandbox that
+        /// runs tenant code. The install sandbox's profile does not change with it.
+        /// </para>
+        /// </summary>
+        public string BuildImage { get; set; } = string.Empty;
+
+        /// <summary>The effective value of <see cref="BuildImage"/>.</summary>
+        public string EffectiveBuildImage => string.IsNullOrWhiteSpace(BuildImage) ? BaseImage : BuildImage;
+
+        // ---- sandbox reuse (sandbox/REUSE.md) -----------------------------------------
+        /// <summary>
+        /// Lets a run be served by a warm, reused sandbox, as <c>RUNNER__SandboxReuse</c>.
+        /// <para>
+        /// Off by default, and off means exactly the old path: one fresh sandbox per run. On, a run
+        /// still uses the old path unless its own entry carries <c>reuse=1</c> — the function opted
+        /// in. Two keys on purpose: the tenant decides whether its code tolerates living on between
+        /// calls, and the operator decides whether this host does reuse at all.
+        /// </para>
+        /// </summary>
+        public bool SandboxReuse { get; set; }
+
+        /// <summary>
+        /// How long a warm sandbox may sit idle (paused) before it is destroyed, as
+        /// <c>RUNNER__WarmIdleSeconds</c>. An idle sandbox costs memory and nothing else — paused,
+        /// it gets no CPU — so this is the memory a quiet function is allowed to keep.
+        /// </summary>
+        [Range(5, 86_400)]
+        public int WarmIdleSeconds { get; set; } = 600;
+
+        /// <summary>
+        /// Calls one sandbox serves before it is recycled, as <c>RUNNER__WarmMaxCalls</c>. A bound
+        /// on whatever slowly accumulates in a long-lived process that "clean" cannot see — a cache
+        /// that only grows, a leak in a library.
+        /// </summary>
+        [Range(1, 1_000_000)]
+        public int WarmMaxCalls { get; set; } = 1000;
+
+        /// <summary>
+        /// Oldest a warm sandbox may become, busy or not, as <c>RUNNER__WarmMaxAgeSeconds</c>. The
+        /// same bound as <see cref="WarmMaxCalls"/> in time rather than calls, and the reason no
+        /// tenant process on this host is ever older than this.
+        /// </summary>
+        [Range(10, 86_400)]
+        public int WarmMaxAgeSeconds { get; set; } = 3600;
+
+        /// <summary>
+        /// Memory use, as a percentage of the sandbox's own limit, above which a sandbox is not
+        /// reused after its call, as <c>RUNNER__WarmMemoryHighWaterPercent</c>. Read from Docker's
+        /// cgroup stats, never from the runtime's own rssBytes — under gVisor that figure is the
+        /// sentry's view and does not track what the cgroup will kill at.
+        /// </summary>
+        [Range(10, 100)]
+        public int WarmMemoryHighWaterPercent { get; set; } = 90;
+
+        /// <summary>
+        /// Most warm sandboxes one function version may have on this host, as
+        /// <c>RUNNER__WarmMaxPerVersion</c>. Zero (the default) uses the function's own concurrency
+        /// limit, which is the most that could ever be busy at once anyway.
+        /// </summary>
+        [Range(0, 1000)]
+        public int WarmMaxPerVersion { get; set; }
+
+        /// <summary>
+        /// CPU the host spends starting one sandbox, outside the sandbox's own quota, as
+        /// <c>RUNNER__StartCostCpuMs</c>.
+        /// <para>
+        /// Docker, containerd and gVisor setting up a container cost ~0.7–1.0 CPU-seconds on this
+        /// host (measured, sandbox/REUSE.md) — about eight seconds of a sandbox's whole 0.1-CPU
+        /// quota, paid by nobody's cgroup. Admission charges it on every start, single or warm,
+        /// and plans its initial slot count around it. Zero turns the charge, and the start rate
+        /// limit derived from it, off.
+        /// </para>
+        /// </summary>
+        [Range(0, 10_000)]
+        public int StartCostCpuMs { get; set; } = 800;
+
+        /// <summary>
+        /// Container starts per second per core this host may make, as
+        /// <c>RUNNER__StartsPerSecondPerCore</c>. Together with <see cref="StartCostCpuMs"/> this
+        /// is the CPU admission sets aside for starting sandboxes; a start over the rate waits on
+        /// the queue like any other work that cannot run yet.
+        /// </summary>
+        [Range(0.01, 100.0)]
+        public double StartsPerSecondPerCore { get; set; } = 1.0;
+
+        /// <summary>
+        /// How long after a call's answer leftover work may still finish before the call counts as
+        /// dirty, as <c>RUNNER__CleanGraceMs</c>. Passed into the sandbox as
+        /// <c>BLOCKS_CLEAN_GRACE_MS</c>. A clean call does not wait for it at all; only a call that
+        /// left something running pays it, once, before its sandbox is judged.
+        /// </summary>
+        [Range(1, 10_000)]
+        public int CleanGraceMs { get; set; } = 200;
+
+        /// <summary>
+        /// How long handing a call's envelope to a warm sandbox's stdin may take, as
+        /// <c>RUNNER__WarmWriteTimeoutMs</c>. A healthy sandbox takes it in well under a
+        /// millisecond; one whose event loop the tenant wedged stops reading, and without this
+        /// bound the write — and with it this runner's whole run loop — would wait for ever. On
+        /// expiry the sandbox is killed and the run served on a fresh one.
+        /// </summary>
+        [Range(100, 60_000)]
+        public int WarmWriteTimeoutMs { get; set; } = 5000;
+
         /// <summary>Consume run jobs. Off turns this host into a build-only runner.</summary>
         public bool ProcessRuns { get; set; } = true;
 

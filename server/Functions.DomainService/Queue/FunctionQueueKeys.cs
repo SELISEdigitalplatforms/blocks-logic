@@ -102,6 +102,25 @@ namespace Functions.DomainService.Queue
 
         // ---- streams ------------------------------------------------------------
         public static string RunsStream => _prefix + "functions:runs";
+
+        /// <summary>
+        /// Pre-warm requests (sandbox/REUSE.md): one entry per deploy of a version whose trigger has
+        /// <c>ReuseSandbox</c> — <c>{tenantId, functionId, versionId, image, count, drainVersionId}</c>.
+        /// A runner with <c>RUNNER__SandboxReuse</c> starts <c>count</c> warm sandboxes for the
+        /// version (best effort, within its host budget) and destroys idle sandboxes of
+        /// <c>drainVersionId</c>. Purely advisory: a runner that predates it never reads the stream,
+        /// and a lost entry only means the first call pays a cold start. Same prefix rule as
+        /// <see cref="RunsStream"/>. Mirrors <c>RedisKeys.WarmStream</c> in the runner.
+        /// </summary>
+        public static string WarmStream => _prefix + "functions:warm";
+
+        /// <summary>
+        /// Optional field of a <see cref="RunsStream"/> entry: <c>"1"</c> when the deployed
+        /// version's trigger opted into <c>ReuseSandbox</c>. Absent otherwise — and always absent
+        /// on a test, which goes to <see cref="TestsStream"/> — so a run entry from a function
+        /// that never opted in is byte-identical to before. A runner without reuse ignores it.
+        /// </summary>
+        public const string RunReuseField = "reuse";
         public static string ResultsStream => _prefix + "functions:results";
         public static string BuildsStream => _prefix + "functions:builds";
         public static string BuildResultsStream => _prefix + "functions:build-results";

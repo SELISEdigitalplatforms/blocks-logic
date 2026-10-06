@@ -85,6 +85,14 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
+        public void A_run_row_says_warm_or_cold_only_when_the_run_used_sandbox_reuse()
+        {
+            RunSummaryDto.From(new FunctionRunEntity { ItemId = "r1", Reused = true }).Reused.Should().BeTrue();
+            RunSummaryDto.From(new FunctionRunEntity { ItemId = "r2", Reused = false }).Reused.Should().BeFalse();
+            RunSummaryDto.From(new FunctionRunEntity { ItemId = "r3" }).Reused.Should().BeNull();
+        }
+
+        [Fact]
         public void Every_starter_is_annotated_so_the_editor_can_type_its_parameters()
         {
             foreach (var template in new[]

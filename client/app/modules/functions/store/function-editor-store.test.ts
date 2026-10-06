@@ -4,6 +4,7 @@ import { useFunctionEditorStore } from "./function-editor-store";
 const snapshot = {
   indexJs: "export default async function handler() {}",
   packageJson: "{}",
+  allowInstallScripts: false,
   limits: {
     cpuMillicores: 100,
     memoryMb: 192,
@@ -16,6 +17,9 @@ const snapshot = {
   trigger: {
     httpEnabled: true,
     httpMethod: "Post" as const,
+    httpMethods: [],
+    reuseSandbox: false,
+    responseMode: "async" as const,
     authMode: "Token" as const,
     roles: [],
     permissions: [],
@@ -99,5 +103,13 @@ describe("useFunctionEditorStore", () => {
     expect(state.indexJs).toBe("");
     expect(state.isDirty).toBe(false);
     expect(state.savedSnapshot).toBeNull();
+  });
+
+  it("allowing install scripts marks the editor dirty, and turning it back off clears it", () => {
+    useFunctionEditorStore.getState().hydrate(snapshot);
+    useFunctionEditorStore.getState().setAllowInstallScripts(true);
+    expect(useFunctionEditorStore.getState().isDirty).toBe(true);
+    useFunctionEditorStore.getState().setAllowInstallScripts(false);
+    expect(useFunctionEditorStore.getState().isDirty).toBe(false);
   });
 });

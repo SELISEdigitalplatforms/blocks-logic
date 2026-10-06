@@ -20,6 +20,13 @@ namespace Functions.DomainService.Repositories
         string? IdPrefix = null,
         bool ActiveOnly = false);
 
+    /// <summary>
+    /// The runner's optional warm-sandbox fields from a result entry (sandbox/REUSE.md):
+    /// <c>reused</c>, <c>discard</c>, <c>handoverMs</c>. Every member is null when the runner did
+    /// not send it — an older runner sends none — and null is written as null, never as a guess.
+    /// </summary>
+    public sealed record RunSandboxReport(bool? Reused, string? DiscardReason, long? HandoverMs);
+
     /// <summary>What <see cref="IFunctionRunRepository.ApplyResultAsync"/> did with a result.</summary>
     public enum ApplyResultOutcome
     {
@@ -110,6 +117,7 @@ namespace Functions.DomainService.Repositories
             DateTime? startedAt,
             DateTime completedAt,
             bool logsTruncated,
+            RunSandboxReport? sandbox = null,
             CancellationToken cancellationToken = default);
 
         /// <summary>

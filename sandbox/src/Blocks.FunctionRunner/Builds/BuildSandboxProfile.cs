@@ -155,6 +155,15 @@ namespace Blocks.FunctionRunner.Builds
                     "NODE_ENV=production",
                     $"HOME={WorkPath}",
                     $"npm_config_cache={WorkPath}/.npm-cache",
+                    // The 24-v2 run image sets NPM_CONFIG_CACHE=/tmp/.npm for run time, and Docker
+                    // keeps both spellings; npm would then see two caches. Pinned to the same one,
+                    // so the trap below still finds and removes it.
+                    $"NPM_CONFIG_CACHE={WorkPath}/.npm-cache",
+                    // Native add-ons: node-gyp compiles against the headers the Node image already
+                    // ships (/usr/local/include/node) instead of downloading a header tarball from
+                    // nodejs.org, which the egress network may not reach and which would be a
+                    // second, unpinned copy of what is already in the image.
+                    "npm_config_nodedir=/usr/local",
                     "NPM_CONFIG_UPDATE_NOTIFIER=false",
                     // npm writes progress with escape codes when it thinks it has a terminal; the
                     // build log is read by people and parsed for the resolved-package block.

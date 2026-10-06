@@ -5,7 +5,7 @@ import {
   getProxyPublicHost,
 } from "@/modules/proxy/constants/proxy.constant";
 import type { ProxyMethod } from "@/modules/proxy/types";
-import type { HttpTriggerMethod } from "../types/function.types";
+import type { HttpTriggerMethod, HttpTriggerVerb, ITriggerConfig } from "../types/function.types";
 
 const FUNCTIONS_SUBPATH = "/Functions";
 
@@ -40,6 +40,39 @@ export const FUNCTION_HTTP_METHODS: HttpTriggerMethod[] = ["Get", "Post"];
 /** The trigger's method as the wire verb the badges and the snippet show. */
 export const toHttpVerb = (method: HttpTriggerMethod): ProxyMethod =>
   method === "Get" ? "GET" : "POST";
+
+/**
+ * Every verb the public route accepts once a trigger lists more than one (`httpMethods`). The
+ * route answers all five and refuses the ones the trigger does not list with 405 + `Allow`.
+ */
+export const FUNCTION_HTTP_VERBS: HttpTriggerVerb[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+
+/**
+ * The verbs a trigger actually accepts, in the fixed GET → DELETE order: its `httpMethods` when it
+ * has any, else the single legacy `httpMethod` — what every function saved before the list existed
+ * still answers.
+ */
+export const acceptedHttpVerbs = (
+  trigger: Pick<ITriggerConfig, "httpMethod" | "httpMethods">,
+): ProxyMethod[] => {
+  const listed = trigger.httpMethods ?? [];
+  if (listed.length === 0) return [toHttpVerb(trigger.httpMethod)];
+  return FUNCTION_HTTP_VERBS.filter((verb) => listed.includes(verb));
+};
+
+/**
+ * The verb a Test run is sent with — the client twin of the server's
+ * `FunctionHttpInputBuilder.TestVerb`: the legacy method when the list still contains it,
+ * otherwise the first accepted verb. Decides whether test input arrives as input.query (GET) or
+ * input.body (everything else).
+ */
+export const testHttpVerb = (
+  trigger: Pick<ITriggerConfig, "httpMethod" | "httpMethods">,
+): ProxyMethod => {
+  const accepted = acceptedHttpVerbs(trigger);
+  const legacy = toHttpVerb(trigger.httpMethod);
+  return accepted.includes(legacy) ? legacy : accepted[0];
+};
 
 /**
  * The data-plane path a tenant's client calls: `{METHOD} /logic/v4/fn/{id}/{**path}` on the public

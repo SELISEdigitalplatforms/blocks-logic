@@ -102,6 +102,10 @@ namespace Blocks.FunctionRunner.Utils
             // envelope. IDelegatedTokenProvider and the IAM endpoint come from Genesis's own
             // AddBlocksDelegation (ConfigureWorker), which already requires BLOCKS_IAM_BASE_URL.
             services.AddSingleton<IRunAccessTokenResolver, DelegatedRunAccessTokenResolver>();
+            // Reusable sandboxes (sandbox/REUSE.md). Registered always — it is empty and costs
+            // nothing unless RUNNER__SandboxReuse is on and a run asks for reuse.
+            services.AddSingleton<IReusableSandboxFactory, DockerReusableSandboxFactory>();
+            services.AddSingleton<WarmPool>();
             services.AddSingleton<RunProcessor>();
             services.AddSingleton<BuildProcessor>();
 
@@ -119,6 +123,9 @@ namespace Blocks.FunctionRunner.Utils
 
             services.AddHostedService(sp => sp.GetRequiredService<HeartbeatService>());
             services.AddHostedService<RunConsumerService>();
+            // Pre-warm and drain requests, and the idle sweep of the warm pool; idle unless
+            // RUNNER__SandboxReuse is on.
+            services.AddHostedService<WarmConsumerService>();
             services.AddHostedService<BuildConsumerService>();
             // Test runs: build, run and delete on one host (Runs/TestConsumerService).
             services.AddHostedService<TestConsumerService>();

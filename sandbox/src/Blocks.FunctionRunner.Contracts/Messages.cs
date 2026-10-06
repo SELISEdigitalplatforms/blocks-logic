@@ -39,6 +39,13 @@ namespace Blocks.FunctionRunner.Contracts
         public bool IsTest { get; init; }
 
         /// <summary>
+        /// The function opted in to sandbox reuse: the entry carried <c>reuse=1</c>
+        /// (<see cref="RedisKeys.RunReuseField"/>). Only a request — the run is served by a warm
+        /// sandbox only when this runner also has <c>SandboxReuse</c> on (sandbox/REUSE.md).
+        /// </summary>
+        public bool Reuse { get; init; }
+
+        /// <summary>
         /// A short-lived, read-only URL for this version's build artifact, when the control plane
         /// sent one.
         /// <para>
@@ -160,6 +167,15 @@ namespace Blocks.FunctionRunner.Contracts
         public int Capacity { get; init; }
         public bool GvisorOk { get; init; }
         public bool Healthy { get; init; }
+
+        /// <summary>Warm (reusable) sandboxes alive on this runner; 0 with reuse off.</summary>
+        public int WarmTotal { get; init; }
+
+        /// <summary>Warm sandboxes serving a call right now.</summary>
+        public int WarmBusy { get; init; }
+
+        /// <summary>Warm sandboxes paused and waiting for a call (or starting).</summary>
+        public int WarmIdle { get; init; }
         public string? Detail { get; init; }
         public required string ObservedAt { get; init; }
     }

@@ -44,6 +44,25 @@ describe("RunsTable", () => {
     expect(screen.getByText("3 min ago")).toBeTruthy();
   });
 
+  it("marks warm and cold runs of a reusing function, and nothing for the others", () => {
+    renderWithProviders(
+      <RunsTable
+        runs={[
+          { ...succeeded, reused: true },
+          { ...succeeded, id: "run_cold01", reused: false },
+          { ...succeeded, id: "run_plain1" },
+        ]}
+        isLoading={false}
+        memoryLimitMb={192}
+        onOpenRun={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("· warm", { exact: false })).toBeTruthy();
+    expect(screen.getByText("· cold", { exact: false })).toBeTruthy();
+    expect(screen.getAllByTitle(/Warm \(reused\)|Cold start/)).toHaveLength(2);
+  });
+
   it("opens a run when its row is clicked", async () => {
     const onOpenRun = vi.fn();
     renderWithProviders(<RunsTable runs={[succeeded]} isLoading={false} onOpenRun={onOpenRun} />);

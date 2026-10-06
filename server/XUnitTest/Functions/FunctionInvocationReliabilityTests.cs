@@ -219,6 +219,30 @@ namespace XUnitTest.Functions
         }
 
         /// <summary>
+        /// An artifact-only build has no registry digest. The run must still name an image — the
+        /// runner builds the artifact under that name and dead-letters an entry without one
+        /// ("the entry carries no image"), which is what every such run used to hit.
+        /// </summary>
+        [Fact]
+        public async Task An_artifact_only_version_queues_a_local_image_name_for_the_runner_to_build()
+        {
+            _version.ImageDigest = string.Empty;
+            _version.ArtifactId = "Build_1";
+            _version.ArtifactSha256 = "deadbeef";
+            _artifacts
+                .Setup(a => a.CreateDownloadUrlAsync(Tenant, "Build_1", It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(ArtifactSas);
+
+            await InvokeUntilQueuedAsync();
+
+            var entry = _redis.Fake.Calls("StreamAddAsync").Single()[1] as NameValueEntry[];
+            entry!.Single(e => e.Name == "image").Value.ToString()
+                .Should().Be("blocks-fn-artifact/build_1:local");
+            entry.Single(e => e.Name == FunctionQueueKeys.RunArtifactUrlField).Value.ToString()
+                .Should().Be(ArtifactSas);
+        }
+
+        /// <summary>
         /// The old path, untouched. A runner that predates these fields must see exactly what it saw
         /// before, which is what lets both run side by side through the cutover.
         /// </summary>

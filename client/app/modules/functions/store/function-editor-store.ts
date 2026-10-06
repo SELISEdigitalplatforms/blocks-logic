@@ -12,6 +12,8 @@ export type EditorFile = "index.js" | "package.json";
 export interface FunctionEditorSnapshot {
   indexJs: string;
   packageJson: string;
+  /** Lets the build run npm install scripts — what native packages (bcrypt, sharp…) need. */
+  allowInstallScripts: boolean;
   limits: IFunctionLimits;
   retry: IRetryPolicy;
   trigger: ITriggerConfig;
@@ -30,6 +32,7 @@ interface FunctionEditorState extends FunctionEditorSnapshot {
   setActiveFile: (file: EditorFile) => void;
   setIndexJs: (value: string) => void;
   setPackageJson: (value: string) => void;
+  setAllowInstallScripts: (value: boolean) => void;
   setLimits: (value: IFunctionLimits) => void;
   setRetry: (value: IRetryPolicy) => void;
   setTrigger: (value: ITriggerConfig) => void;
@@ -45,6 +48,7 @@ interface FunctionEditorState extends FunctionEditorSnapshot {
 const emptySnapshot: FunctionEditorSnapshot = {
   indexJs: "",
   packageJson: "",
+  allowInstallScripts: false,
   limits: {
     cpuMillicores: 100,
     memoryMb: 192,
@@ -57,6 +61,9 @@ const emptySnapshot: FunctionEditorSnapshot = {
   trigger: {
     httpEnabled: true,
     httpMethod: "Post",
+    httpMethods: [],
+    reuseSandbox: false,
+    responseMode: "async",
     authMode: "Token",
     roles: [],
     permissions: [],
@@ -75,6 +82,7 @@ const snapshotsEqual = (a: FunctionEditorSnapshot, b: FunctionEditorSnapshot) =>
 const currentSnapshot = (state: FunctionEditorState): FunctionEditorSnapshot => ({
   indexJs: state.indexJs,
   packageJson: state.packageJson,
+  allowInstallScripts: state.allowInstallScripts,
   limits: state.limits,
   retry: state.retry,
   trigger: state.trigger,
@@ -105,6 +113,14 @@ export const useFunctionEditorStore = create<FunctionEditorState>((set) => ({
       const next = { ...state, packageJson };
       return {
         packageJson,
+        isDirty: !snapshotsEqual(currentSnapshot(next), state.savedSnapshot ?? emptySnapshot),
+      };
+    }),
+  setAllowInstallScripts: (allowInstallScripts) =>
+    set((state) => {
+      const next = { ...state, allowInstallScripts };
+      return {
+        allowInstallScripts,
         isDirty: !snapshotsEqual(currentSnapshot(next), state.savedSnapshot ?? emptySnapshot),
       };
     }),

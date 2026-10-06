@@ -15,6 +15,7 @@ import { explainRunError } from "../../constants/run-error.constant";
 import { TERMINAL_RUN_STATUSES } from "../../types/run.types";
 import { formatDuration, formatMegabytes } from "../../utils/format";
 import { payloadOf } from "../../utils/test-input";
+import { testHttpVerb } from "../../constants/endpoint.constant";
 
 type TestPanelProps = {
   functionId: string;
@@ -57,6 +58,8 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
   const testInput = useFunctionEditorStore((s) => s.testInput);
   const setTestInput = useFunctionEditorStore((s) => s.setTestInput);
   const httpMethod = useFunctionEditorStore((s) => s.trigger.httpMethod);
+  const httpMethods = useFunctionEditorStore((s) => s.trigger.httpMethods);
+  const testVerb = testHttpVerb({ httpMethod, httpMethods });
   const [runId, setRunId] = useState<string | null>(null);
   // Set when Test came back with a build rather than a run: the image was not ready yet.
   const [buildId, setBuildId] = useState<string | null>(null);
@@ -173,7 +176,7 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
           <span className="text-sm font-semibold">Test input</span>
           <span className="text-xs text-low-emphasis">
             sent as{" "}
-            <code className="font-mono">{httpMethod === "Get" ? "input.query" : "input.body"}</code>{" "}
+            <code className="font-mono">{testVerb === "GET" ? "input.query" : "input.body"}</code>{" "}
             · same sandbox as production
           </span>
         </div>

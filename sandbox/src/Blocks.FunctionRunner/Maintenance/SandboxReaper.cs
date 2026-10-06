@@ -38,13 +38,17 @@ namespace Blocks.FunctionRunner.Maintenance
         private readonly IDatabase _db;
         private readonly RunnerOptions _options;
         private readonly ILogger<SandboxReaper> _logger;
+        private readonly WarmPool? _warm;
 
-        public SandboxReaper(IDockerClient docker, IDatabase db, IOptions<RunnerOptions> options, ILogger<SandboxReaper> logger)
+        public SandboxReaper(
+            IDockerClient docker, IDatabase db, IOptions<RunnerOptions> options, ILogger<SandboxReaper> logger,
+            WarmPool? warm = null)
         {
             _docker = docker;
             _db = db;
             _options = options.Value;
             _logger = logger;
+            _warm = warm;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -115,7 +119,9 @@ namespace Blocks.FunctionRunner.Maintenance
             }
 
             if (reaped > 0) _logger.LogInformation("Reaped {Count} orphaned sandbox(es)", reaped);
-            return reaped + await ReapBuildSandboxesAsync(token).ConfigureAwait(false);
+            return reaped
+                + await ReapBuildSandboxesAsync(token).ConfigureAwait(false)
+                + await ReapWarmSandboxesAsync(token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -171,6 +177,80 @@ namespace Blocks.FunctionRunner.Maintenance
 
             if (reaped > 0) _logger.LogInformation("Reaped {Count} abandoned build sandbox(es)", reaped);
             return reaped;
+        }
+
+        /// <summary>
+        /// Clears warm (reusable) sandboxes nobody is keeping any more.
+        /// <para>
+        /// A warm sandbox belongs to no run and holds no lease, so neither test above applies. It
+        /// is labelled at create time with the id of the runner that keeps it
+        /// (<see cref="SandboxProfile.WarmLabel"/>). Ours, and not in our pool: the pool was lost
+        /// with a previous process — a restart always starts with an empty pool — so the
+        /// container is an orphan, paused or not. Another runner's: left alone until it is older
+        /// than any runner keeps a warm sandbox (<see cref="RunnerOptions.WarmMaxAgeSeconds"/>)
+        /// plus a margin, which only an orphan can be.
+        /// </para>
+        /// </summary>
+        private async Task<int> ReapWarmSandboxesAsync(CancellationToken token)
+        {
+            var containers = await _docker.Containers.ListContainersAsync(new ContainersListParameters
+            {
+                All = true,
+                Filters = new Dictionary<string, IDictionary<string, bool>>
+                {
+                    ["label"] = new Dictionary<string, bool> { [SandboxProfile.WarmLabel] = true },
+                },
+            }, token).ConfigureAwait(false);
+
+            var reaped = 0;
+            foreach (var container in containers)
+            {
+                var name = container.Names?.FirstOrDefault()?.TrimStart('/');
+                if (name is null) continue;
+
+                var owner = container.Labels is not null && container.Labels.TryGetValue(SandboxProfile.WarmLabel, out var o) ? o : null;
+                if (!IsOrphanedWarm(name, owner, container.Created.ToUniversalTime(), DateTime.UtcNow, _options, _warm)) continue;
+
+                _logger.LogWarning(
+                    "Reaping orphaned warm sandbox {Name} ({Status}) of runner '{Owner}'; no pool keeps it",
+                    name, container.Status, owner);
+
+                try
+                {
+                    // Forced removal works on a paused container too: it is killed first.
+                    await _docker.Containers.RemoveContainerAsync(
+                        container.ID,
+                        new ContainerRemoveParameters { Force = true, RemoveVolumes = true },
+                        token).ConfigureAwait(false);
+                    reaped++;
+                }
+                catch (DockerApiException ex)
+                {
+                    _logger.LogWarning("Could not reap {Name}: {Message}", name, ex.Message);
+                }
+            }
+
+            if (reaped > 0) _logger.LogInformation("Reaped {Count} orphaned warm sandbox(es)", reaped);
+            return reaped;
+        }
+
+        /// <summary>The decision <see cref="ReapWarmSandboxesAsync"/> makes about one container.</summary>
+        internal static bool IsOrphanedWarm(
+            string name, string? owner, DateTime createdUtc, DateTime nowUtc, RunnerOptions options, WarmPool? pool)
+        {
+            ArgumentNullException.ThrowIfNull(options);
+
+            if (!name.StartsWith(SandboxProfile.WarmContainerPrefix, StringComparison.Ordinal)) return false;
+
+            if (string.Equals(owner, options.RunnerId, StringComparison.Ordinal))
+            {
+                // A sandbox the pool is starting right now is already tracked (the pool records it
+                // before the container is created), so "not tracked" really is "not ours any more".
+                return pool?.IsTracked(name) != true;
+            }
+
+            var margin = TimeSpan.FromSeconds(options.WarmMaxAgeSeconds) + TimeSpan.FromMinutes(10);
+            return nowUtc - createdUtc > margin;
         }
 
         /// <summary>

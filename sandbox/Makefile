@@ -57,7 +57,7 @@ test:
 	@docker run --rm --runtime=runsc --network=none --read-only \
 	  --tmpfs /tmp:rw,exec,nosuid,nodev,size=64m --memory=512m --pids-limit=128 \
 	  --cap-drop=ALL --security-opt no-new-privileges --user 10001:10001 \
-	  blocks-functions-node:24-v1-test | tail -10
+	  blocks-functions-node:24-v2-test | tail -10
 
 install: build
 	@echo "== publishing to $(APP_DIR)"

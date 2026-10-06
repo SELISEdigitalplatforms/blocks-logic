@@ -2,11 +2,15 @@ using FluentValidation;
 using Functions.DomainService.Dtos.Requests;
 using Functions.DomainService.Dtos.Responses;
 using Functions.DomainService.Entities;
+using Blocks.Genesis;
 using Functions.DomainService.Enums;
+using Functions.DomainService.Queue;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Utils;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
+using StackExchange.Redis;
 
 namespace Functions.DomainService.Services
 {
@@ -38,7 +42,22 @@ namespace Functions.DomainService.Services
         private readonly IFunctionImagePinService _imagePins;
         private readonly IFunctionAuditService _auditService;
         private readonly IValidator<DeployFunctionRequestDto> _deployValidator;
+        private readonly ICacheClient _cache;
+        private readonly IConfiguration _configuration;
         private readonly ILogger<FunctionDeploymentService> _logger;
+
+        /// <summary>Warm sandboxes asked for per deploy when <c>Functions:PrewarmCount</c> is not set.</summary>
+        internal const int DefaultPrewarmCount = 1;
+
+        /// <summary>
+        /// Upper bound on <see cref="FunctionQueueKeys.WarmStream"/>'s length, applied on every
+        /// write (approximate MAXLEN). This trim is the <b>only</b> one the stream gets: each runner
+        /// reads it through its own consumer group and only acknowledges — never deletes — so that
+        /// every host sees every drain. Without it the stream would grow for ever. An entry is
+        /// advisory and useful for seconds, so the last ~1000 deploys are far more than any runner
+        /// that is up needs; one that was down misses old pre-warms, which only costs a cold start.
+        /// </summary>
+        internal const int WarmStreamMaxLength = 1000;
 
         public FunctionDeploymentService(
             IFunctionRepository functionRepository,
@@ -48,6 +67,8 @@ namespace Functions.DomainService.Services
             IFunctionImagePinService imagePins,
             IFunctionAuditService auditService,
             IValidator<DeployFunctionRequestDto> deployValidator,
+            ICacheClient cache,
+            IConfiguration configuration,
             ILogger<FunctionDeploymentService> logger)
         {
             _functionRepository = functionRepository;
@@ -57,6 +78,8 @@ namespace Functions.DomainService.Services
             _imagePins = imagePins;
             _auditService = auditService;
             _deployValidator = deployValidator;
+            _cache = cache;
+            _configuration = configuration;
             _logger = logger;
         }
 
@@ -141,6 +164,10 @@ namespace Functions.DomainService.Services
             // before it got here would be rebuilt rather than lost.
             await _imagePins.PinAsync(created.ImageDigest, cancellationToken);
 
+            // Read before the pointer moves: the version this deploy replaces, whose idle warm
+            // sandboxes the runners can now let go of.
+            var previousVersionId = function.ActiveVersionId;
+
             function.ActiveVersionId = created.ItemId;
             function.LastVersionNumber = created.Number;
             function.Status = FunctionStatus.Live;
@@ -160,7 +187,78 @@ namespace Functions.DomainService.Services
             // adds a version, so it is the only moment the cap can be exceeded.
             await _retentionService.PruneAsync(tenantId, function.ItemId, created.ItemId, cancellationToken);
 
+            await TryPublishPrewarmAsync(tenantId, created, previousVersionId);
+
             return FunctionVersionSummaryDto.From(created);
+        }
+
+        /// <summary>
+        /// Tells the runners about a version that has just gone Live (sandbox/REUSE.md, "Pre-warm"):
+        /// start warm sandboxes for it when it opted into <c>ReuseSandbox</c>, and drain the idle
+        /// warm sandboxes of the version it replaced.
+        /// <list type="bullet">
+        /// <item>New version reuses → one entry, <c>count</c> = <c>Functions:PrewarmCount</c>
+        /// (default 1; ≤ 0 starts none but still drains), <c>drainVersionId</c> = the previous
+        /// version.</item>
+        /// <item>New version does not reuse, the previous one did → one entry with <c>count=0</c>
+        /// and <c>drainVersionId</c> = the previous version, so turning the switch off does not
+        /// leave its warm sandboxes idling until they age out.</item>
+        /// <item>Neither reuses → nothing at all: a function that never touches the switch deploys
+        /// exactly as before, without even the lookup of its previous version.</item>
+        /// </list>
+        /// <para>
+        /// <b>Best effort, never part of the deploy's outcome.</b> The version is already Live when
+        /// this runs; a pre-warm only saves the first caller a cold start, and a missed drain only
+        /// leaves idle sandboxes until their idle timeout. Failing the deploy for either — a Redis or
+        /// Mongo blip after the pointer moved — would report a deploy as failed that in fact
+        /// succeeded, so a failure is logged and swallowed. Not cancellable for the same reason.
+        /// </para>
+        /// </summary>
+        private async Task TryPublishPrewarmAsync(string tenantId, FunctionVersionEntity version, string? previousVersionId)
+        {
+            var drain = string.IsNullOrEmpty(previousVersionId)
+                || string.Equals(previousVersionId, version.ItemId, StringComparison.Ordinal)
+                ? string.Empty
+                : previousVersionId;
+
+            try
+            {
+                int count;
+                if (version.Trigger is { ReuseSandbox: true })
+                {
+                    count = Math.Max(0, _configuration.GetValue("Functions:PrewarmCount", DefaultPrewarmCount));
+                    if (count == 0 && drain.Length == 0) return;
+                }
+                else
+                {
+                    if (drain.Length == 0) return;
+
+                    // Only a version that could have warm sandboxes is worth a drain entry.
+                    var previous = await _versionRepository.GetByIdAsync(tenantId, drain, CancellationToken.None).ConfigureAwait(false);
+                    if (previous?.Trigger is not { ReuseSandbox: true }) return;
+                    count = 0;
+                }
+
+                await _cache.CacheDatabase().StreamAddAsync(
+                    FunctionQueueKeys.WarmStream,
+                    [
+                        new NameValueEntry("tenantId", tenantId),
+                        new NameValueEntry("functionId", version.FunctionId),
+                        new NameValueEntry("versionId", version.ItemId),
+                        new NameValueEntry("image", FunctionRunImage.For(version)),
+                        new NameValueEntry("count", count),
+                        new NameValueEntry("drainVersionId", drain),
+                    ],
+                    maxLength: WarmStreamMaxLength,
+                    useApproximateMaxLength: true).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Could not publish the pre-warm/drain request for function {FunctionId} version {VersionId}; "
+                    + "the deploy stands and the first call will start a sandbox cold",
+                    version.FunctionId, version.ItemId);
+            }
         }
 
         private static async Task ValidateAsync<T>(IValidator<T> validator, T instance)

@@ -14,11 +14,13 @@ load_facts
 need_root
 [ "${GVISOR_READY:-no}" = yes ] || die "run provision/20-gvisor.sh first"
 
-TAG="${TAG:-24-v1}"
+TAG="${TAG:-24-v2}"
 LOCAL="blocks-functions-node:$TAG"
 TEST_LOCAL="blocks-functions-node:$TAG-test"
+BUILD_LOCAL="blocks-functions-node:$TAG-build"
 REGISTRY="${REGISTRY_ADDR:-127.0.0.1:5000}"
 REMOTE="$REGISTRY/blocks/functions-node:$TAG"
+BUILD_REMOTE="$REGISTRY/blocks/functions-node:$TAG-build"
 PUSH=yes
 [ "${1:-}" = "--no-push" ] && PUSH=no
 
@@ -27,6 +29,8 @@ docker build --target runtime -t "$LOCAL" "$HERE" >/dev/null || die "runtime ima
 ok "$LOCAL"
 docker build --target test -t "$TEST_LOCAL" "$HERE" >/dev/null || die "test image build failed"
 ok "$TEST_LOCAL"
+docker build --target build -t "$BUILD_LOCAL" "$HERE" >/dev/null || die "build image build failed"
+ok "$BUILD_LOCAL"
 
 step "Runtime test suite (Node 24, under gVisor)"
 # /tmp is exec here because node:test spawns the bootstrap from a temporary directory; a
@@ -62,6 +66,12 @@ if [ "$PUSH" = yes ]; then
   fact RUNTIME_IMAGE_DIGEST "$DIGEST"
   fact RUNTIME_NODE_VERSION "$NODE_IN"
   ok "$DIGEST"
+  # The dependency-install image (toolchain for native add-ons). Pinned by digest the same way.
+  docker tag "$BUILD_LOCAL" "$BUILD_REMOTE"
+  docker push -q "$BUILD_REMOTE" >/dev/null || die "push to $BUILD_REMOTE failed"
+  BUILD_DIGEST="$(docker image inspect "$BUILD_REMOTE" --format '{{index .RepoDigests 0}}')"
+  fact BUILD_IMAGE_DIGEST "$BUILD_DIGEST"
+  ok "$BUILD_DIGEST"
 fi
 
 fact RUNTIME_IMAGE_READY yes

@@ -25,10 +25,16 @@ namespace Functions.DomainService.Utils
         {
             ArgumentNullException.ThrowIfNull(source);
 
-            return Sha256(
-                Normalise(source.IndexJs),
-                Normalise(source.PackageJson),
-                Normalise(source.LockJson ?? string.Empty));
+            return source.AllowInstallScripts
+                ? Sha256(
+                    Normalise(source.IndexJs),
+                    Normalise(source.PackageJson),
+                    Normalise(source.LockJson ?? string.Empty),
+                    InstallScriptsMarker)
+                : Sha256(
+                    Normalise(source.IndexJs),
+                    Normalise(source.PackageJson),
+                    Normalise(source.LockJson ?? string.Empty));
         }
 
         /// <summary>sha256 over the entry point alone.</summary>
@@ -42,8 +48,17 @@ namespace Functions.DomainService.Utils
         public static string ManifestHash(FunctionSource source)
         {
             ArgumentNullException.ThrowIfNull(source);
-            return Sha256(Normalise(source.PackageJson), Normalise(source.LockJson ?? string.Empty));
+            return source.AllowInstallScripts
+                ? Sha256(Normalise(source.PackageJson), Normalise(source.LockJson ?? string.Empty), InstallScriptsMarker)
+                : Sha256(Normalise(source.PackageJson), Normalise(source.LockJson ?? string.Empty));
         }
+
+        /// <summary>
+        /// Added to the source and manifest hashes only when install scripts are allowed: the same
+        /// package.json installs differently with them, so a build made without them must not be
+        /// reused for a function that has them on. Absent when off, so no existing hash changes.
+        /// </summary>
+        private const string InstallScriptsMarker = "allowInstallScripts";
 
         /// <summary>
         /// True when the editor's source differs from what the given version was built from.

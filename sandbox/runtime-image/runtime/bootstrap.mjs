@@ -136,7 +136,7 @@ function buildContext(envelope) {
  * Formatting mirrors what a developer expects from console.log while staying one JSON
  * object per line.
  */
-function patchConsole() {
+function patchConsole(writerFor = () => writer) {
   const format = (args) => {
     const parts = [];
     for (const a of args) {
@@ -159,7 +159,9 @@ function patchConsole() {
     return String(v);
   };
 
-  const bind = (level) => (...args) => writer.log(level, format(args));
+  // The writer is looked up per line, not bound once: in reuse mode it is the writer of whichever
+  // call the code that is logging belongs to, so one call's output never lands in the next one's.
+  const bind = (level) => (...args) => writerFor().log(level, format(args));
 
   const patched = {
     log: bind('info'),
@@ -291,9 +293,27 @@ async function main() {
   return finish(EXIT.OK);
 }
 
+// Reuse mode (BLOCKS_RUNTIME_MODE=reuse): one sandbox serves many calls of one function version, one
+// at a time, reading each call's envelope from stdin. Loaded only in that mode, so a single-run
+// sandbox never even parses it. Everything else in this file is the single-run path, unchanged.
+const MODE = process.env.BLOCKS_RUNTIME_MODE || 'single';
+
 // A failure in the bootstrap itself is a platform fault, never the tenant's.
-main().catch((err) => {
+(MODE === 'reuse'
+  ? import('./reuse.mjs').then((m) => m.runReuse({ functionEntry: FUNCTION_ENTRY, describe, patchConsole }))
+  : main()
+).catch((err) => {
   const d = describe(err);
+  if (MODE === 'reuse') {
+    // Reuse mode speaks in `fatal` lines, never a single-run `result` without a call id.
+    if (finished) return;
+    finished = true;
+    writer.control({ t: 'fatal', code: CODE.RUNTIME_START_FAILED,
+                     message: `runtime ${RUNTIME_VERSION} failed: ${d.message}` });
+    process.stdout.write('', () => _exit(EXIT.BOOTSTRAP_ERROR));
+    _setTimeout(() => _exit(EXIT.BOOTSTRAP_ERROR), 250).unref?.();
+    return;
+  }
   finish(EXIT.BOOTSTRAP_ERROR, {
     code: CODE.RUNTIME_START_FAILED,
     message: `runtime ${RUNTIME_VERSION} failed: ${d.message}`,

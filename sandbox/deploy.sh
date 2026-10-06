@@ -228,6 +228,23 @@ else
   fi
 fi
 
+# Same rule for the dependency-install image (sandbox/REUSE.md, "Any JS"). Without it the runner
+# installs dependencies FROM the base image, which has no toolchain, so add-ons that compile fail.
+if [ -f "$ENV_FILE" ] && [ -n "${BUILD_IMAGE_DIGEST:-}" ]; then
+  CURRENT_BUILD="$(env_val RUNNER__BuildImage)"
+  if [ -z "$CURRENT_BUILD" ] || [ "$(image_repo "$CURRENT_BUILD")" = "$(image_repo "$BUILD_IMAGE_DIGEST")" ]; then
+    if set_env_val RUNNER__BuildImage "$BUILD_IMAGE_DIGEST" \
+         "Written by deploy.sh from the build image it published."; then
+      ENV_CHANGED=yes
+      ok "build image pinned to $BUILD_IMAGE_DIGEST"
+    else
+      ok "build image already pinned to $BUILD_IMAGE_DIGEST"
+    fi
+  else
+    warn "RUNNER__BuildImage is '$CURRENT_BUILD', which is not this host's runtime repository — leaving it alone"
+  fi
+fi
+
 # -------------------------------------------------------------- 3. config ----
 # The one thing this repo cannot supply. A runner that starts without real credentials
 # does not fail loudly — it sits in a retry loop looking healthy — so the gate is here,

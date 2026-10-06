@@ -245,6 +245,7 @@ namespace Functions.DomainService.Repositories
             DateTime? startedAt,
             DateTime completedAt,
             bool logsTruncated,
+            RunSandboxReport? sandbox = null,
             CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(runId)) return ApplyResultOutcome.NotFound;
@@ -278,6 +279,19 @@ namespace Functions.DomainService.Repositories
             {
                 update = update.Set(r => r.StartedAt, startedAt.Value);
             }
+
+            // The warm-sandbox report is written only when the runner sent one, so a result from a
+            // runner without reuse leaves the run document exactly as before. Unset otherwise, so
+            // an attempt served without a report never shows an earlier attempt's values.
+            update = sandbox is { } report && (report.Reused is not null || report.DiscardReason is not null || report.HandoverMs is not null)
+                ? update
+                    .Set(r => r.Reused, report.Reused)
+                    .Set(r => r.DiscardReason, report.DiscardReason)
+                    .Set(r => r.HandoverMs, report.HandoverMs)
+                : update
+                    .Unset(r => r.Reused)
+                    .Unset(r => r.DiscardReason)
+                    .Unset(r => r.HandoverMs);
 
             // One conditional update: the attempt and status are both what is checked and what
             // is written, so a read-then-write would let two deliveries of the same result both
@@ -316,6 +330,9 @@ namespace Functions.DomainService.Repositories
                 .Set(r => r.StartedAt, (DateTime?)null)
                 .Set(r => r.CompletedAt, (DateTime?)null)
                 .Set(r => r.LogsTruncated, false)
+                .Unset(r => r.Reused)
+                .Unset(r => r.DiscardReason)
+                .Unset(r => r.HandoverMs)
                 .Set(r => r.OutputResults, new List<Models.OutputActionResult>())
                 .Set(r => r.IdempotencyKey, $"{runId}-{attempt}")
                 .Set(r => r.LastUpdatedDate, DateTime.UtcNow);

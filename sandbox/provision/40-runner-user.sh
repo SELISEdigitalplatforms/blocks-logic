@@ -182,6 +182,19 @@ RUNNER__ReservedHostMemoryMb=2048
 # install runs inside a gVisor sandbox like any other tenant code.
 # RUNNER__DenyPrivateScriptsOnBuild=false
 
+# --- Sandbox reuse (sandbox/REUSE.md). Off by default: one fresh sandbox per run, as before ---
+# RUNNER__BuildImage=
+# RUNNER__SandboxReuse=false
+# RUNNER__WarmIdleSeconds=600
+# RUNNER__WarmMaxCalls=1000
+# RUNNER__WarmMaxAgeSeconds=3600
+# RUNNER__WarmMemoryHighWaterPercent=90
+# RUNNER__WarmMaxPerVersion=0
+# RUNNER__StartCostCpuMs=800
+# RUNNER__StartsPerSecondPerCore=1.0
+# RUNNER__CleanGraceMs=200
+# RUNNER__WarmWriteTimeoutMs=5000
+
 # --- Egress ------------------------------------------------------------------
 # Informational: the enforced list lives in $CONF_DIR/deny-cidrs and is compiled
 # into the nftables table by provision/30-network.sh.

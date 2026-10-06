@@ -74,9 +74,27 @@ export class ProtocolWriter {
   #sink;
   /** `[{ raw, escaped }]` for every secret-backed value, longest first. */
   #secrets = [];
+  /**
+   * Reuse mode only: the call this writer speaks for, stamped on every line so the runner can
+   * tell one call's output from the next one's in a sandbox that serves many. `late` marks a
+   * writer for output that arrived after its call had already been answered. Both absent in
+   * single-run mode, so that protocol is byte-for-byte what it was.
+   */
+  #call;
+  #late;
 
-  constructor(sink = _stdoutWrite) {
+  constructor(sink = _stdoutWrite, { call, late } = {}) {
     this.#sink = sink;
+    this.#call = typeof call === 'string' && call.length > 0 ? call : undefined;
+    this.#late = late === true;
+  }
+
+  get call() { return this.#call; }
+
+  #tag(obj) {
+    if (this.#call !== undefined) obj.call = this.#call;
+    if (this.#late) obj.late = true;
+    return obj;
   }
 
   /**
@@ -138,7 +156,7 @@ export class ProtocolWriter {
     if (this.#truncated) return;
 
     const safeLevel = LEVELS.indexOf(level) >= 0 ? level : 'info';
-    const entry = { t: 'log', ts: isoNow(), level: safeLevel, msg: clip(msg, LIMITS.MESSAGE_CHARS) };
+    const entry = this.#tag({ t: 'log', ts: isoNow(), level: safeLevel, msg: clip(msg, LIMITS.MESSAGE_CHARS) });
     if (data !== undefined) entry.data = data;
 
     let line;
@@ -146,8 +164,8 @@ export class ProtocolWriter {
       line = _stringify(entry);
     } catch {
       // Unserializable data (BigInt, circular, a hostile toJSON): keep the message.
-      line = _stringify({ t: 'log', ts: entry.ts, level: safeLevel, msg: entry.msg,
-                          data: { _unserializable: true } });
+      line = _stringify(this.#tag({ t: 'log', ts: entry.ts, level: safeLevel, msg: entry.msg,
+                          data: { _unserializable: true } }));
     }
 
     // Scrub before measuring: the redacted line is the one that gets written, so it is the one
@@ -166,7 +184,7 @@ export class ProtocolWriter {
   #truncate(reason) {
     if (this.#truncated) return;
     this.#truncated = true;
-    this.#emit({ t: 'truncated', reason });
+    this.#emit(this.#tag({ t: 'truncated', reason }));
   }
 
   /**
@@ -184,7 +202,7 @@ export class ProtocolWriter {
   started() {
     if (this.#startedWritten) return;
     this.#startedWritten = true;
-    this.#sink(_stringify({ t: 'started', at: _now() }) + '\n');
+    this.#sink(_stringify(this.#tag({ t: 'started', at: _now() })) + '\n');
   }
 
   /** The single success line. Returns null on success, or an error code. */
@@ -193,7 +211,7 @@ export class ProtocolWriter {
 
     let payload;
     try {
-      payload = _stringify({ t: 'result', ok: true, value: value === undefined ? null : value });
+      payload = _stringify(this.#tag({ t: 'result', ok: true, value: value === undefined ? null : value }));
     } catch {
       // Circular structures, BigInt, or a toJSON that throws.
       return CODE.RESULT_NOT_SERIALIZABLE;
@@ -208,14 +226,25 @@ export class ProtocolWriter {
     return null;
   }
 
+  /**
+   * Reuse mode only: a control line (`ready`, `idle`, `fatal`) written as given — no call tag, no
+   * log budget — but through this writer's redaction, so a crash message that quotes a secret is
+   * masked like any log line would be.
+   */
+  control(obj) {
+    if (!this.#emit(obj)) {
+      this.#sink(_stringify({ t: obj?.t ?? 'fatal', message: 'unrepresentable control line' }) + '\n');
+    }
+  }
+
   /** The single failure line. Always written, even after the log budget is exhausted. */
   failure(code, message, stack) {
     if (this.#resultWritten) return;
     this.#resultWritten = true;
-    const entry = { t: 'result', ok: false, code, message: clip(String(message ?? ''), LIMITS.MESSAGE_CHARS) };
+    const entry = this.#tag({ t: 'result', ok: false, code, message: clip(String(message ?? ''), LIMITS.MESSAGE_CHARS) });
     if (stack) entry.stack = clip(String(stack), LIMITS.STACK_CHARS);
     if (!this.#emit(entry)) {
-      this.#sink(_stringify({ t: 'result', ok: false, code, message: 'unrepresentable error' }) + '\n');
+      this.#sink(_stringify(this.#tag({ t: 'result', ok: false, code, message: 'unrepresentable error' })) + '\n');
     }
   }
 }

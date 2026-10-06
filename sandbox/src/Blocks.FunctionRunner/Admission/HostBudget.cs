@@ -76,6 +76,19 @@ namespace Blocks.FunctionRunner.Admission
         private long _lastSampleTicks;
         private HostSignalSample _lastSample;
 
+        // ---- container starts ---------------------------------------------------------
+        // A token bucket in CPU-milliseconds. It refills at StartsPerSecondPerCore × cores ×
+        // StartCostCpuMs per second and each start takes StartCostCpuMs out, so the bucket is
+        // both the start charge and the start rate limit. Holds at most one second of refill (and
+        // never less than one start), so a quiet host can absorb a short burst and no more.
+        private readonly double _startBucketCapacity;
+        private readonly double _startRefillPerSecond;
+        private double _startTokens;
+        private long _startRefilledTicks;
+
+        /// <summary>Warm sandboxes alive right now, busy or idle; each holds a memory reservation.</summary>
+        private int _warm;
+
         public HostBudget(
             IOptions<RunnerOptions> options,
             IHostSignals signals,
@@ -94,6 +107,14 @@ namespace Blocks.FunctionRunner.Admission
 
             _slots = InitialSlots();
             _lastSampleTicks = long.MinValue;
+
+            if (_options.StartCostCpuMs > 0)
+            {
+                _startRefillPerSecond = _options.StartsPerSecondPerCore * _signals.Cores * _options.StartCostCpuMs;
+                _startBucketCapacity = Math.Max(_options.StartCostCpuMs, _startRefillPerSecond);
+                _startTokens = _startBucketCapacity;
+                _startRefilledTicks = _time.GetTimestamp();
+            }
 
             _logger.LogInformation(
                 "Admission starts at {Slots} sandboxes ({Mode}); host has {Cores:0.##} cores and {MemoryMb} MB",
@@ -116,28 +137,146 @@ namespace Blocks.FunctionRunner.Admission
         /// </summary>
         /// <param name="memoryBytes">The run's memory <i>limit</i>; what is reserved may be less.</param>
         /// <returns>A disposable that releases the reservation, or null when the host is full.</returns>
-        public IDisposable? TryReserve(long memoryBytes)
+        public HostReservation? TryReserve(long memoryBytes) => TryReserve(memoryBytes, out _);
+
+        /// <summary>
+        /// <see cref="TryReserve(long)"/>, saying why it refused. The caller acts on the reason:
+        /// only a refusal for <see cref="AdmissionRefusal.Memory"/> is worth freeing idle warm
+        /// sandboxes for — they hold memory, not slots, and not start tokens.
+        /// </summary>
+        public HostReservation? TryReserve(long memoryBytes, out AdmissionRefusal refusal)
         {
             lock (_gate)
             {
                 Retune();
 
-                if (_active >= _slots) return null;
+                if (_active >= _slots)
+                {
+                    refusal = AdmissionRefusal.Slots;
+                    return null;
+                }
 
                 // What this sandbox is expected to cost, from measurement where there is any.
                 var reserve = _footprint.ReservationFor(memoryBytes);
-                var floor = (long)_options.ReservedHostMemoryMb * 1024 * 1024;
 
                 // Two independent memory bounds, and both must hold. The first is arithmetic over
                 // what this runner has promised; the second is the kernel's own view, which also
                 // covers everything the runner did not promise — dockerd, the gVisor sentries,
                 // page cache the host actually needs.
-                if (_committedMemoryBytes + reserve > _signals.TotalMemoryBytes - floor) return null;
-                if (_lastSample.AvailableMemoryBytes - reserve < floor) return null;
+                if (!MemoryFits(reserve))
+                {
+                    refusal = AdmissionRefusal.Memory;
+                    return null;
+                }
+
+                // Every single run starts a container, so it pays the start charge — last, so a
+                // run refused for a slot or for memory does not spend a start it never made. A run
+                // that is then deferred without starting anything gets it back (HostReservation).
+                if (!TryTakeStart())
+                {
+                    refusal = AdmissionRefusal.StartRate;
+                    return null;
+                }
 
                 _active++;
                 _committedMemoryBytes += reserve;
-                return new Reservation(this, reserve);
+                refusal = AdmissionRefusal.None;
+                return new HostReservation(this, reserve, slot: true, warm: false, startCharged: true);
+            }
+        }
+
+        /// <summary>Warm sandboxes alive on this host, busy or idle.</summary>
+        public int Warm { get { lock (_gate) { return _warm; } } }
+
+        /// <summary>
+        /// Reserves the memory of one warm sandbox for as long as it lives, and charges its start.
+        /// No slot: a slot is CPU, and a paused warm sandbox uses none — each call it serves takes
+        /// one with <see cref="TryReserveSlot"/> instead. Memory is the opposite: a paused sandbox
+        /// keeps every page, so it holds its reservation from start to destruction, and the single
+        /// runs beside it see that much less room.
+        /// </summary>
+        /// <returns>The reservation, or null with the reason: memory, or the start rate.</returns>
+        public HostReservation? TryReserveWarm(long memoryBytes, out AdmissionRefusal refusal)
+        {
+            lock (_gate)
+            {
+                Retune();
+
+                var reserve = _footprint.ReservationFor(memoryBytes);
+                if (!MemoryFits(reserve))
+                {
+                    refusal = AdmissionRefusal.Memory;
+                    return null;
+                }
+                if (!TryTakeStart())
+                {
+                    refusal = AdmissionRefusal.StartRate;
+                    return null;
+                }
+
+                _warm++;
+                _committedMemoryBytes += reserve;
+                refusal = AdmissionRefusal.None;
+                return new HostReservation(this, reserve, slot: false, warm: true, startCharged: true);
+            }
+        }
+
+        /// <inheritdoc cref="TryReserveWarm(long, out AdmissionRefusal)"/>
+        public HostReservation? TryReserveWarm(long memoryBytes) => TryReserveWarm(memoryBytes, out _);
+
+        /// <summary>
+        /// A slot alone, for one call on a warm sandbox whose memory is already reserved and which
+        /// starts nothing. Counted in <see cref="Active"/> exactly like a single run's slot, so the
+        /// PSI loop and the test deferral see busy warm sandboxes as the CPU users they are.
+        /// </summary>
+        public HostReservation? TryReserveSlot()
+        {
+            lock (_gate)
+            {
+                Retune();
+                if (_active >= _slots) return null;
+                _active++;
+                return new HostReservation(this, 0, slot: true, warm: false, startCharged: false);
+            }
+        }
+
+        /// <summary>Both memory bounds for one more reservation. Called under the lock.</summary>
+        private bool MemoryFits(long reserve)
+        {
+            var floor = (long)_options.ReservedHostMemoryMb * 1024 * 1024;
+            return _committedMemoryBytes + reserve <= _signals.TotalMemoryBytes - floor
+                && _lastSample.AvailableMemoryBytes - reserve >= floor;
+        }
+
+        /// <summary>
+        /// Whether a container may start now, taking the start charge if so. Called under the lock.
+        /// Always yes when <see cref="RunnerOptions.StartCostCpuMs"/> is 0.
+        /// </summary>
+        private bool TryTakeStart()
+        {
+            var cost = _options.StartCostCpuMs;
+            if (cost <= 0) return true;
+
+            var now = _time.GetTimestamp();
+            var elapsed = _time.GetElapsedTime(_startRefilledTicks, now).TotalSeconds;
+            if (elapsed > 0)
+            {
+                _startTokens = Math.Min(_startBucketCapacity, _startTokens + (elapsed * _startRefillPerSecond));
+                _startRefilledTicks = now;
+            }
+
+            if (_startTokens < cost) return false;
+            _startTokens -= cost;
+            return true;
+        }
+
+        /// <summary>Gives back a start charge for a container that was never started.</summary>
+        private void RefundStart()
+        {
+            if (_options.StartCostCpuMs <= 0) return;
+            lock (_gate)
+            {
+                _startTokens = Math.Min(_startBucketCapacity, _startTokens + _options.StartCostCpuMs);
             }
         }
 
@@ -228,37 +367,86 @@ namespace Blocks.FunctionRunner.Admission
         {
             if (_options.MaxActiveSandboxes is { } pinned) return pinned;
 
-            var cpuSlots = (int)Math.Max(1, _signals.Cores * 1000 / Contracts.Ceilings.CpuMillicores);
+            // Each core is 1000 millicores, and not all of them are the sandboxes' to plan with:
+            // starting containers costs the host CPU outside every sandbox's quota. At the start
+            // rate admission allows, that is StartsPerSecondPerCore × StartCostCpuMs of each
+            // core's second — 800 of 1000 at the defaults. Planning every millicore as sandbox
+            // quota (8 cores → 80 slots) left nothing for that overhead, so a burst of cold starts
+            // ran the host at 100% before PSI could say so. What is left is the starting point;
+            // the PSI loop grows from there whenever nothing is stalling.
+            var startShare = Math.Min(
+                900.0, Math.Max(0, _options.StartCostCpuMs) * Math.Max(0, _options.StartsPerSecondPerCore));
+            var cpuSlots = (int)Math.Max(1, _signals.Cores * (1000 - startShare) / Contracts.Ceilings.CpuMillicores);
             return Math.Max(1, Math.Min(cpuSlots, MemoryCeiling()));
         }
 
-        private void Release(long memoryBytes)
+        internal void Release(long memoryBytes, bool slot, bool warm)
         {
             lock (_gate)
             {
-                _active = Math.Max(0, _active - 1);
+                if (slot) _active = Math.Max(0, _active - 1);
+                if (warm) _warm = Math.Max(0, _warm - 1);
                 _committedMemoryBytes = Math.Max(0, _committedMemoryBytes - memoryBytes);
             }
         }
 
-        private sealed class Reservation : IDisposable
+        /// <summary>Called by a reservation that charged a start for a container that never started.</summary>
+        internal void Refund() => RefundStart();
+    }
+
+    /// <summary>Why <see cref="HostBudget"/> said no.</summary>
+    public enum AdmissionRefusal
+    {
+        None,
+
+        /// <summary>Every slot is taken: CPU.</summary>
+        Slots,
+
+        /// <summary>Not enough memory — the one refusal that freeing idle warm sandboxes can fix.</summary>
+        Memory,
+
+        /// <summary>Container starts are over their rate.</summary>
+        StartRate,
+    }
+
+    /// <summary>
+    /// One admission: a slot, memory, a start charge — whichever it was granted. Disposing it gives
+    /// all of them back exactly once.
+    /// <para>
+    /// The start charge comes back too unless <see cref="ContainerStarted"/> was called. Admission
+    /// comes before the tenant, function and lease gates, so a run deferred at any of those never
+    /// started a container; charging it anyway meant a burst of deferred runs used the start budget
+    /// up and the next real start waited for nothing.
+    /// </para>
+    /// </summary>
+    public sealed class HostReservation : IDisposable
+    {
+        private readonly HostBudget _budget;
+        private readonly long _memoryBytes;
+        private readonly bool _slot;
+        private readonly bool _warm;
+        private bool _startCharged;
+        private int _released;
+
+        internal HostReservation(HostBudget budget, long memoryBytes, bool slot, bool warm, bool startCharged)
         {
-            private readonly HostBudget _budget;
-            private readonly long _memoryBytes;
-            private bool _released;
+            _budget = budget;
+            _memoryBytes = memoryBytes;
+            _slot = slot;
+            _warm = warm;
+            _startCharged = startCharged;
+        }
 
-            public Reservation(HostBudget budget, long memoryBytes)
-            {
-                _budget = budget;
-                _memoryBytes = memoryBytes;
-            }
+        /// <summary>A container was (about to be) created on this reservation: its start charge is spent.</summary>
+        public void ContainerStarted() => Volatile.Write(ref _startCharged, false);
 
-            public void Dispose()
-            {
-                if (_released) return;
-                _released = true;
-                _budget.Release(_memoryBytes);
-            }
+        public void Dispose()
+        {
+            // Interlocked: a warm sandbox's reservation can be released from the pool's sweep
+            // and its shutdown at once, and a double release would free memory twice.
+            if (Interlocked.Exchange(ref _released, 1) == 1) return;
+            if (Volatile.Read(ref _startCharged)) _budget.Refund();
+            _budget.Release(_memoryBytes, _slot, _warm);
         }
     }
 }

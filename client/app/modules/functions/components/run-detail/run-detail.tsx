@@ -1,6 +1,16 @@
 import { useMemo, useState } from "react";
-import { Ban, Braces, Copy, Download, Loader2, RotateCcw, Search } from "lucide-react";
+import {
+  AlertTriangle,
+  Ban,
+  Braces,
+  Copy,
+  Download,
+  Loader2,
+  RotateCcw,
+  Search,
+} from "lucide-react";
 import { Card, CardContent } from "@/components/ui-kits/card/card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
 import { Button } from "@/components/ui-kits/button/button";
 import { Input } from "@/components/ui-kits/input/input";
 import { cn } from "@/lib/utils";
@@ -18,6 +28,7 @@ import {
   formatTimeOfDay,
   runnerSpanMs,
 } from "../../utils/format";
+import { explainDiscardReason } from "../../utils/trigger";
 import { RunStatusChip } from "../run-status-chip";
 
 const LOG_LEVEL_FILTERS = ["All", "Info", "Warn", "Error"] as const;
@@ -193,6 +204,10 @@ export const RunDetail = ({
       ? `${formatDuration(span)} incl. startup`
       : undefined;
 
+  // The runner reports `cancelled` with no handover when a run was cancelled before any sandbox
+  // was taken: there is then no sandbox to call warm or cold, and nothing was "replaced".
+  const neverGotSandbox = run.discardReason === "cancelled" && run.handoverMs == null;
+
   const metrics: {
     label: string;
     value: string;
@@ -219,6 +234,17 @@ export const RunDetail = ({
       isWarning: run.attempt > 1,
     },
     { label: "Version", value: `v${run.versionNumber}`, isPrimary: true },
+    // Only a function with "Reuse sandbox" on reports these; an older run has neither. A run
+    // cancelled before it got a sandbox reports one too, but there was no sandbox to describe.
+    ...(run.reused != null && !neverGotSandbox
+      ? [
+          {
+            label: "Sandbox",
+            value: run.reused ? "Warm (reused)" : "Cold start",
+            hint: run.handoverMs != null ? `${run.handoverMs} ms handover` : undefined,
+          },
+        ]
+      : []),
     {
       label: "Triggered by",
       value: TRIGGER_LABELS[run.invokedBy] ?? run.invokedBy,
@@ -360,6 +386,32 @@ export const RunDetail = ({
           </div>
         </CardContent>
       </Card>
+
+      {run.discardReason && !neverGotSandbox && (
+        <div
+          className="flex items-start gap-2 rounded-lg border border-warning-200 bg-warning-50 px-4 py-2.5 text-xs text-warning-800"
+          data-testid="discard-reason"
+        >
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span className="min-w-0 break-words">
+            Sandbox replaced after this call:{" "}
+            {explainDiscardReason(run.discardReason) ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <code tabIndex={0} className="cursor-help font-mono underline decoration-dotted">
+                    {run.discardReason}
+                  </code>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs text-xs">
+                  {explainDiscardReason(run.discardReason)}
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <code className="font-mono">{run.discardReason}</code>
+            )}
+          </span>
+        </div>
+      )}
 
       {(run.errorCode || run.errorMessage) && (
         <Card className="border-error/30 bg-error/5">

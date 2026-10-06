@@ -134,5 +134,29 @@ namespace XUnitTest.Functions
             var hash = FunctionHashing.SourceHash(Source());
             hash.Should().MatchRegex("^[0-9a-f]{64}$");
         }
+
+        // ---- install scripts (FunctionSource.AllowInstallScripts) ---------------------------
+
+        [Fact]
+        public void Install_scripts_off_leaves_every_existing_hash_unchanged()
+        {
+            // Pinned against a source with the flag explicitly off: adding the field must not
+            // show every stored function as having unsaved changes, nor invalidate every build.
+            var off = Source();
+            off.AllowInstallScripts = false;
+            FunctionHashing.SourceHash(off).Should().Be(FunctionHashing.SourceHash(Source()));
+            FunctionHashing.ManifestHash(off).Should().Be(FunctionHashing.ManifestHash(Source()));
+        }
+
+        [Fact]
+        public void Turning_install_scripts_on_changes_the_source_and_manifest_hashes()
+        {
+            // The same package.json installs differently with scripts, so a build made without
+            // them must not be reused, and the editor must show the change as unsaved/undeployed.
+            var on = Source();
+            on.AllowInstallScripts = true;
+            FunctionHashing.SourceHash(on).Should().NotBe(FunctionHashing.SourceHash(Source()));
+            FunctionHashing.ManifestHash(on).Should().NotBe(FunctionHashing.ManifestHash(Source()));
+        }
     }
 }

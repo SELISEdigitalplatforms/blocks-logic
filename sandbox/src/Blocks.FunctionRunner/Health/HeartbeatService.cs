@@ -23,19 +23,22 @@ namespace Blocks.FunctionRunner.Health
         private readonly StartupGuard _guard;
         private readonly RunnerOptions _options;
         private readonly ILogger<HeartbeatService> _logger;
+        private readonly Sandbox.WarmPool? _warm;
 
         public HeartbeatService(
             IDatabase db,
             HostBudget budget,
             StartupGuard guard,
             IOptions<RunnerOptions> options,
-            ILogger<HeartbeatService> logger)
+            ILogger<HeartbeatService> logger,
+            Sandbox.WarmPool? warm = null)
         {
             _db = db;
             _budget = budget;
             _guard = guard;
             _options = options.Value;
             _logger = logger;
+            _warm = warm;
         }
 
         /// <summary>The most recent readiness verdict, shared with the processing loops.</summary>
@@ -54,6 +57,10 @@ namespace Blocks.FunctionRunner.Health
                     var readiness = await _guard.CheckAsync(stoppingToken).ConfigureAwait(false);
                     Latest = readiness;
 
+                    // Warm sandboxes are reported apart from `active`: an idle one holds memory
+                    // and no slot, so neither number alone says how full this runner is.
+                    var (warmTotal, warmBusy, warmIdle) = _warm?.Counts ?? (0, 0, 0);
+
                     await _db.HashSetAsync(key,
                     [
                         new HashEntry("runnerId", _options.RunnerId),
@@ -63,6 +70,9 @@ namespace Blocks.FunctionRunner.Health
                         new HashEntry("gvisorOk", readiness.GvisorOk ? "true" : "false"),
                         new HashEntry("healthy", readiness.Healthy ? "true" : "false"),
                         new HashEntry("detail", readiness.Summary),
+                        new HashEntry("warmTotal", warmTotal.ToString(CultureInfo.InvariantCulture)),
+                        new HashEntry("warmBusy", warmBusy.ToString(CultureInfo.InvariantCulture)),
+                        new HashEntry("warmIdle", warmIdle.ToString(CultureInfo.InvariantCulture)),
                         new HashEntry("observedAt", DateTimeOffset.UtcNow.ToString("O")),
                     ]).ConfigureAwait(false);
 

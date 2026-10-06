@@ -109,5 +109,27 @@ namespace XUnitTest.Functions
 
             await act.Should().NotThrowAsync();
         }
-    }
+    
+        [Fact]
+        public async Task A_run_that_asked_for_a_warm_sandbox_keeps_asking_on_its_retry()
+        {
+            _runs.Setup(r => r.GetByIdAsync("t1", "run-1", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new FunctionRunEntity { ItemId = "run-1", Attempt = 1, Status = RunStatus.Failed, ReuseRequested = true });
+
+            await Scheduler().SweepOnceAsync(CancellationToken.None);
+
+            var entry = (NameValueEntry[])_redis.Fake.Calls("StreamAddAsync").Single()[1]!;
+            entry.Single(e => e.Name == FunctionQueueKeys.RunReuseField).Value.ToString().Should().Be("1");
+        }
+
+        [Fact]
+        public async Task A_run_that_did_not_ask_for_reuse_retries_with_the_entry_exactly_as_before()
+        {
+            await Scheduler().SweepOnceAsync(CancellationToken.None);
+
+            var entry = (NameValueEntry[])_redis.Fake.Calls("StreamAddAsync").Single()[1]!;
+            entry.Select(e => e.Name.ToString()).Should().Equal(
+                "runId", "functionId", "versionId", "tenantId", "image", "attempt", "protocol");
+        }
+}
 }

@@ -254,8 +254,9 @@ namespace BlocksTemplate.Api.Controllers
         /// <summary>
         /// The public function endpoint (DECISIONS D5): <c>{METHOD} /api/fn/{functionId}/{**path}</c>.
         /// A tenant's client calls this instead of hosting the code. The route is registered for
-        /// GET and POST; the trigger picks one of them, and the other is refused with 405 once the
-        /// caller is authorized. Anything after the id is passed to the handler as
+        /// GET, POST, PUT, PATCH and DELETE; the trigger lists the ones it answers (or, when it
+        /// lists none, its single legacy method), and every other verb is refused with 405 and an
+        /// <c>Allow</c> header once the caller is authorized. Anything after the id is passed to the handler as
         /// <c>input.path</c>, with the method, query, allow-listed headers and body alongside it
         /// (see <c>FunctionHttpInputBuilder</c>).
         /// <para>
@@ -293,18 +294,42 @@ namespace BlocksTemplate.Api.Controllers
         /// <c>Functions:RateLimits:Enabled</c>).
         /// </para>
         /// <para>
-        /// <b>Always asynchronous.</b> The answer is 202 with a run id and a <c>pollToken</c>; the
-        /// caller collects the outcome from <see cref="PollRunResult"/>. There is no synchronous
-        /// mode: a run is a fresh sandbox, so holding the request open bought a few hundred
-        /// milliseconds of latency at the cost of a connection held for the whole run, an ingress
-        /// timeout that had to exceed it, and a caller who lost the result when the connection
-        /// dropped. A <c>wait</c> query parameter or a <c>Prefer: wait=</c> header is still accepted
-        /// and ignored, so an older client gets an answer rather than a 400 — it just gets 202.
+        /// <b>Asynchronous by default.</b> The answer is 202 with a run id and a <c>pollToken</c>; the
+        /// caller collects the outcome from <see cref="PollRunResult"/>. That stays byte-for-byte
+        /// what a caller gets unless it asks for more (sandbox/REUSE.md).
+        /// </para>
+        /// <para>
+        /// <b>Synchronous only for a function deployed as sync.</b> When the deployed trigger's
+        /// <c>ResponseMode</c> is <c>sync</c>, the request is held until the run finishes and the
+        /// function's own answer is the HTTP response (<see cref="FunctionHttpResponseMapper"/>: its
+        /// <c>{ statusCode, headers, body }</c> through a header allow-list, or 200 JSON; 502 for a
+        /// failed run, 504 for a timed-out one, both with the run id). The caller may shorten the
+        /// wait with <c>Prefer: wait=&lt;seconds&gt;</c> or skip it with <c>Prefer: respond-async</c>;
+        /// on an async function <c>Prefer</c> changes nothing. A failure that is about to be retried
+        /// is not an answer — the caller gets the 202. Sync was removed once, for three reasons, and
+        /// each is answered now:
+        /// <list type="bullet">
+        /// <item><i>Latency bought too little.</i> A run was always a fresh sandbox (~2.6 s of
+        /// platform start). With <c>ReuseSandbox</c> a warm sandbox answers in milliseconds, so
+        /// holding the request is worth it.</item>
+        /// <item><i>The connection was held for the whole run, past ingress timeouts.</i> The wait is
+        /// bounded: never longer than <c>Functions:HttpSyncWaitMaxSeconds</c> (30 s by default, under
+        /// typical 60 s ingress idle timeouts), never longer than the caller's own <c>wait=</c>, and
+        /// at most <c>Functions:MaxConcurrentSyncWaits</c> (256) requests are held per process —
+        /// beyond that a call is answered async at once.</item>
+        /// <item><i>A dropped connection lost the result.</i> Not any more: the run is queued, with
+        /// its record written, before the wait starts, and nothing in the wait can cancel it. A run
+        /// that has not finished in the window is answered with exactly the async 202 + poll token,
+        /// so the caller can always collect the result — and a caller that went away simply never
+        /// reads an answer the run still produces and records.</item>
+        /// </list>
+        /// The <c>wait</c> query parameter is still accepted and ignored (and not passed to the
+        /// handler), so an older client gets an answer rather than a 400.
         /// </para>
         /// </summary>
         [AllowAnonymous]
         [RequestSizeLimit(InvokeHardBodyLimitBytes)]
-        [AcceptVerbs("GET", "POST", Route = "~/api/fn/{functionId}/{**path}")]
+        [AcceptVerbs("GET", "POST", "PUT", "PATCH", "DELETE", Route = "~/api/fn/{functionId}/{**path}")]
         public async Task<IActionResult> Invoke(string functionId, string? path)
         {
             var instance = Request.Path.Value ?? $"/api/fn/{functionId}/{path}";
@@ -319,6 +344,7 @@ namespace BlocksTemplate.Api.Controllers
             // Buffered under the ceiling before anything is queued: the runtime refuses an envelope
             // over 1 MB outright, so accepting more would only create a run that can fail.
             var (body, tooLarge) = await ReadBodyAsync(aborted);
+            var (preferAsync, preferWaitSeconds) = ParsePrefer(Request.Headers["Prefer"]);
 
             var request = new InvokeFunctionRequestDto
             {
@@ -333,9 +359,12 @@ namespace BlocksTemplate.Api.Controllers
                 ContentType = string.IsNullOrWhiteSpace(Request.ContentType) ? null : Request.ContentType,
                 Body = tooLarge ? null : body,
                 BodyTooLarge = tooLarge,
-                // Never. Every HTTP invocation is fire-and-forget; only a workflow step waits,
-                // and it does so through InvokeFromWorkflowAsync, not through this route.
+                // Never set here. Whether this call waits is the service's decision — it alone
+                // knows the deployed trigger's response mode — from the two Prefer values below.
+                // (A workflow step waits through InvokeFromWorkflowAsync, not through this route.)
                 Wait = false,
+                PreferAsync = preferAsync,
+                PreferWaitSeconds = preferWaitSeconds,
             };
 
             try
@@ -347,6 +376,12 @@ namespace BlocksTemplate.Api.Controllers
                 // recognised run status counts as in flight: a build status (BuildId set) keeps
                 // its existing 200 shape.
                 var runStatus = FunctionWireMapping.ToRunStatus(result.Status, out var isRunStatus);
+                if (result.RespondSynchronously && isRunStatus && FunctionWireMapping.IsTerminal(runStatus))
+                {
+                    // Sync mode, finished in time: the function's own answer is the response.
+                    return SyncAnswer(FunctionHttpResponseMapper.Map(result));
+                }
+
                 if (!isRunStatus || FunctionWireMapping.IsTerminal(runStatus))
                 {
                     return Ok(result);
@@ -356,6 +391,13 @@ namespace BlocksTemplate.Api.Controllers
                 // function has no Blocks identity to read the run with (see PollRunResult).
                 result.PollToken = await TryIssuePollTokenAsync(tenantId, result.RunId, aborted);
                 return Accepted(result);
+            }
+            catch (OperationCanceledException) when (aborted.IsCancellationRequested)
+            {
+                // The caller hung up (typically during a sync wait). Nobody reads an answer, and
+                // the run itself is unaffected — it was queued before the wait began and nothing in
+                // the wait can cancel it. Not an error, so not logged as one.
+                return new EmptyResult();
             }
             catch (FunctionRateLimitedException ex)
             {
@@ -400,6 +442,50 @@ namespace BlocksTemplate.Api.Controllers
                 // the caller is told why rather than getting a 500.
                 return InvokeError(400, "FORBIDDEN_CONTENT", ex.Message, instance);
             }
+        }
+
+        /// <summary>The mapped synchronous answer as an action result; see <see cref="FunctionSyncAnswerResult"/>.</summary>
+        private static IActionResult SyncAnswer(FunctionHttpResponseMapper.Response answer) => new FunctionSyncAnswerResult(answer);
+
+        /// <summary>
+        /// Reads RFC 7240 <c>Prefer</c>: <c>respond-async</c> and <c>wait=&lt;seconds&gt;</c>, in
+        /// any order, across any number of header lines, case-insensitively. Anything else in the
+        /// header — and a <c>wait</c> that is not a whole number — is ignored, as the RFC asks of
+        /// preferences a server does not understand.
+        /// </summary>
+        [NonAction]
+        public static (bool RespondAsync, int? WaitSeconds) ParsePrefer(Microsoft.Extensions.Primitives.StringValues values)
+        {
+            var respondAsync = false;
+            int? wait = null;
+
+            foreach (var line in values)
+            {
+                if (string.IsNullOrEmpty(line)) continue;
+                foreach (var raw in line.Split(','))
+                {
+                    // A preference may carry parameters after ';' — only its own name=value matters.
+                    var preference = raw.Split(';')[0].Trim();
+                    if (preference.Length == 0) continue;
+
+                    var eq = preference.IndexOf('=');
+                    var name = (eq < 0 ? preference : preference[..eq]).Trim();
+                    var value = eq < 0 ? null : preference[(eq + 1)..].Trim().Trim('"');
+
+                    if (string.Equals(name, "respond-async", StringComparison.OrdinalIgnoreCase))
+                    {
+                        respondAsync = true;
+                    }
+                    else if (string.Equals(name, "wait", StringComparison.OrdinalIgnoreCase)
+                        && int.TryParse(value, System.Globalization.NumberStyles.None,
+                            System.Globalization.CultureInfo.InvariantCulture, out var seconds))
+                    {
+                        wait = seconds;
+                    }
+                }
+            }
+
+            return (respondAsync, wait);
         }
 
         /// <summary>
@@ -541,6 +627,36 @@ namespace BlocksTemplate.Api.Controllers
         private static string GetTenantId() => BlocksContext.GetContext()?.TenantId ?? string.Empty;
         private static string? GetUserId() => BlocksContext.GetContext()?.UserId;
         private static string? GetEmail() => BlocksContext.GetContext()?.Email;
+    }
+
+    /// <summary>
+    /// Writes a function's synchronous answer exactly: its status, its filtered headers (a repeated
+    /// name, e.g. several <c>Set-Cookie</c>, is appended, not replaced) and its body as raw bytes,
+    /// so a string body reaches the caller as the function returned it with no second JSON
+    /// encoding and no output formatter in between.
+    /// </summary>
+    public sealed class FunctionSyncAnswerResult(FunctionHttpResponseMapper.Response answer) : IActionResult
+    {
+        public FunctionHttpResponseMapper.Response Answer { get; } = answer;
+
+        public async Task ExecuteResultAsync(ActionContext context)
+        {
+            var response = context.HttpContext.Response;
+            response.StatusCode = Answer.StatusCode;
+            foreach (var (name, value) in Answer.Headers)
+            {
+                response.Headers.Append(name, value);
+            }
+            if (Answer.ContentType is not null)
+            {
+                response.ContentType = Answer.ContentType;
+            }
+            if (Answer.Body.Length > 0)
+            {
+                response.ContentLength = Answer.Body.Length;
+                await response.Body.WriteAsync(Answer.Body, context.HttpContext.RequestAborted);
+            }
+        }
     }
 
     public sealed class RunIdRequestDto

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using Blocks.FunctionRunner.Admission;
 using Blocks.FunctionRunner.Contracts;
@@ -34,6 +35,7 @@ namespace Blocks.FunctionRunner.Runs
         private readonly SecretStore.ISecretStoreBreaker? _secretBreaker;
         private readonly IRunSecretResolver _secrets;
         private readonly IRunAccessTokenResolver _accessTokens;
+        private readonly WarmPool? _warm;
         private readonly RunnerOptions _options;
         private readonly ILogger<RunProcessor> _logger;
 
@@ -47,7 +49,8 @@ namespace Blocks.FunctionRunner.Runs
             IOptions<RunnerOptions> options,
             ILogger<RunProcessor> logger,
             Maintenance.IImageUsageLog? usage = null,
-            SecretStore.ISecretStoreBreaker? secretBreaker = null)
+            SecretStore.ISecretStoreBreaker? secretBreaker = null,
+            WarmPool? warmPool = null)
         {
             _db = db;
             _sandbox = sandbox;
@@ -59,6 +62,7 @@ namespace Blocks.FunctionRunner.Runs
             _accessTokens = accessTokens;
             _options = options.Value;
             _logger = logger;
+            _warm = warmPool;
         }
 
         /// <summary>
@@ -127,6 +131,9 @@ namespace Blocks.FunctionRunner.Runs
             // from the caller's point of view even though it happens before admission.
             var startedAt = DateTimeOffset.UtcNow;
 
+            // The claim, for a warm run's handoverMs (claim → envelope on the sandbox's stdin).
+            var claimed = Stopwatch.StartNew();
+
             // --- image, before any slot is taken ------------------------------------
             // Producing the image can mean downloading an artifact and building it, which is
             // seconds. Doing that while holding a host slot, a tenant slot and one of the
@@ -177,9 +184,17 @@ namespace Blocks.FunctionRunner.Runs
                 }
             }
 
+            // Served by a warm sandbox only when both sides asked: the host (SandboxReuse) and the
+            // function (reuse=1 on its entry). Never a test: a test's image is local and deleted
+            // when it ends, which a sandbox kept alive on it would prevent.
+            var useWarm = _options.SandboxReuse && job.Reuse && !job.IsTest
+                && _warm is not null && _warm.SupportsReuse(image);
+
             // Admission. Neither refusal is a failure: the entry stays pending and is retried.
-            using var reservation = _budget.TryReserve(limits.MemoryBytes);
-            if (reservation is null)
+            // A warm call takes a slot only — the sandbox's memory and its start are charged by the
+            // pool, for as long as the sandbox lives, not per call.
+            using var reservation = new Admission(useWarm ? _budget.TryReserveSlot() : await ReserveSingleAsync(limits).ConfigureAwait(false));
+            if (reservation.Current is null)
             {
                 _logger.LogDebug("Host is at capacity ({Active}/{Capacity}); deferring run {RunId}",
                     _budget.Active, _budget.Capacity, job.RunId);
@@ -224,10 +239,27 @@ namespace Blocks.FunctionRunner.Runs
 
             await SetStatusAsync(runKey, RunStatuses.Starting).ConfigureAwait(false);
 
+            if (useWarm)
+            {
+                var served = await ProcessWarmAsync(job, fields, runKey, startedAt, claimed, image, limits, lease, token)
+                    .ConfigureAwait(false);
+                if (served is { } disposition) return disposition;
+
+                // The image turned out to have no reuse runtime (built on 24-v1). That is nobody's
+                // failure: this run, and every later one of this image, takes the single-run path.
+                // It needs a single run's whole reservation — memory and a start — not just the
+                // slot a warm call takes.
+                reservation.Swap(await ReserveSingleAsync(limits).ConfigureAwait(false));
+                if (reservation.Current is null)
+                {
+                    _logger.LogDebug("Host is at capacity; deferring run {RunId} after its warm start fell back", job.RunId);
+                    return Disposition.Deferred;
+                }
+            }
+
             var runDir = Path.Combine(_options.RunsDir, job.RunId);
             try
             {
-
                 // --- envelope ---------------------------------------------------------
                 // What comes off the queue carries secret-bound variables as references; the
                 // plaintext is fetched here, as late as possible, and exists only in this
@@ -235,77 +267,16 @@ namespace Blocks.FunctionRunner.Runs
                 // never written back to the run record: a retry re-reads the references and
                 // resolves them afresh, which is also what makes a rotated secret take effect on
                 // the very next attempt.
+                var prepared = await PrepareEnvelopeAsync(job, fields, runKey, startedAt, token).ConfigureAwait(false);
+                if (prepared.Done is { } done) return done;
+
                 string envelopePath;
-                IReadOnlyList<string> resolvedValues = [];
+                var resolvedValues = prepared.Values;
                 try
                 {
-                    var envelope = fields.TryGetValue("envelope", out var e) ? e : "{}";
-
-                    // Screened before anything is resolved, so an envelope the platform would
-                    // refuse anyway never causes a secret to be read.
-                    ExecutionEnvelope.Screen(envelope);
-
-                    if (job.Protocol >= RedisKeys.RunProtocolVersion)
-                    {
-                        var prepared = await ResolveSecretsAsync(job, envelope, token).ConfigureAwait(false);
-                        if (prepared.Failure is { } failure)
-                        {
-                            // An unreachable store is not this function's failure — nothing ran, and
-                            // the code was never at fault. Everything else here that cannot run yet
-                            // is deferred: a full host, a tenant over its share, a function at its
-                            // limit. This is the same thing, so it gets the same answer.
-                            //
-                            // Failing instead spent one of the run's attempts, and a second blip
-                            // then reported a permanently failed run to a tenant whose function was
-                            // fine. The breaker below keeps the deferred runs from taking slots
-                            // while they wait.
-                            if (failure.Code == ErrorCodes.SecretStoreUnavailable)
-                            {
-                                _secretBreaker?.RecordUnavailable(job.TenantId);
-
-                                // Deferring suits a deployed run: nobody is waiting, the entry keeps
-                                // its place on the stream, and it runs when the store is back.
-                                //
-                                // A test is the opposite. Someone is watching it, and the test loop
-                                // gives admission a bounded two minutes — so deferring there just
-                                // spins until that runs out and then reports "no sandbox slot freed
-                                // up", which is not what happened. The person waiting is better
-                                // served by the real reason, straight away.
-                                if (!job.IsTest)
-                                {
-                                    _logger.LogWarning(
-                                        "Run {RunId} cannot start: the secret store is unreachable. Leaving it "
-                                        + "queued rather than failing it.", job.RunId);
-                                    return Disposition.Deferred;
-                                }
-                            }
-
-                            // A secret that does not exist, or that this caller may not read, is the
-                            // author's to fix. Retrying it changes nothing, so it stays a failure.
-                            _secretBreaker?.RecordSuccess(job.TenantId);
-                            await CompleteAsync(job, runKey, startedAt, RunStatuses.Failed, failure.Code,
-                                failure.Message, null, 0, null, null, null, null, false).ConfigureAwait(false);
-                            return Disposition.Complete;
-                        }
-
-                        _secretBreaker?.RecordSuccess(job.TenantId);
-                        envelope = prepared.Envelope!;
-                        resolvedValues = prepared.Values;
-                    }
-
-                    // After the screen, deliberately: it refuses an `accessToken` key, and this
-                    // one is added by the runner from a grant, never carried by the queue.
-                    var accessToken = await RedeemAccessTokenAsync(job, fields, envelope, token).ConfigureAwait(false);
-                    if (accessToken is not null)
-                    {
-                        envelope = RunDelegation.Apply(envelope, accessToken);
-                        resolvedValues = [.. resolvedValues, accessToken];
-                    }
-
-                    var delegated = accessToken is not null;
                     envelopePath = EnvelopeGroupHandoff is null
-                        ? ExecutionEnvelope.Write(runDir, envelope, delegated)
-                        : ExecutionEnvelope.Write(runDir, envelope, EnvelopeGroupHandoff, delegated);
+                        ? ExecutionEnvelope.Write(runDir, prepared.Envelope!, prepared.Delegated)
+                        : ExecutionEnvelope.Write(runDir, prepared.Envelope!, EnvelopeGroupHandoff, prepared.Delegated);
                 }
                 catch (ExecutionEnvelope.ForbiddenContentException ex)
                 {
@@ -329,6 +300,10 @@ namespace Blocks.FunctionRunner.Runs
 
                 // --- execute ----------------------------------------------------------
                 await SetStatusAsync(runKey, RunStatuses.Running).ConfigureAwait(false);
+
+                // From here a container is created: the start charge is spent. Every return above
+                // gives it back with the reservation (HostReservation).
+                reservation.Current?.ContainerStarted();
                 var result = await _sandbox.RunAsync(job.RunId, image, envelopePath, limits, lease.Token)
                     .ConfigureAwait(false);
 
@@ -378,6 +353,334 @@ namespace Blocks.FunctionRunner.Runs
             {
                 CleanUp(runDir);
             }
+        }
+
+        /// <summary>The envelope ready to hand over, or the disposition already reached instead.</summary>
+        private sealed record PreparedRun(
+            string? Envelope, IReadOnlyList<string> Values, bool Delegated, Disposition? Done);
+
+        /// <summary>
+        /// Everything between the run record and the sandbox, shared by both paths so a warm call
+        /// gets exactly the envelope a single run would: screened, secrets resolved, the delegated
+        /// token redeemed for this run. When the run cannot go ahead the result is already reported
+        /// (or the run deferred) and <see cref="PreparedRun.Done"/> says how to dispose of the entry.
+        /// </summary>
+        private async Task<PreparedRun> PrepareEnvelopeAsync(
+            RunJob job, Dictionary<string, string> fields, string runKey, DateTimeOffset startedAt, CancellationToken token)
+        {
+            IReadOnlyList<string> resolvedValues = [];
+            try
+            {
+                var envelope = fields.TryGetValue("envelope", out var e) ? e : "{}";
+
+                // Screened before anything is resolved, so an envelope the platform would
+                // refuse anyway never causes a secret to be read.
+                ExecutionEnvelope.Screen(envelope);
+
+                if (job.Protocol >= RedisKeys.RunProtocolVersion)
+                {
+                    var prepared = await ResolveSecretsAsync(job, envelope, token).ConfigureAwait(false);
+                    if (prepared.Failure is { } failure)
+                    {
+                        // An unreachable store is not this function's failure — nothing ran, and
+                        // the code was never at fault. Everything else here that cannot run yet
+                        // is deferred: a full host, a tenant over its share, a function at its
+                        // limit. This is the same thing, so it gets the same answer.
+                        //
+                        // Failing instead spent one of the run's attempts, and a second blip
+                        // then reported a permanently failed run to a tenant whose function was
+                        // fine. The breaker below keeps the deferred runs from taking slots
+                        // while they wait.
+                        if (failure.Code == ErrorCodes.SecretStoreUnavailable)
+                        {
+                            _secretBreaker?.RecordUnavailable(job.TenantId);
+
+                            // Deferring suits a deployed run: nobody is waiting, the entry keeps
+                            // its place on the stream, and it runs when the store is back.
+                            //
+                            // A test is the opposite. Someone is watching it, and the test loop
+                            // gives admission a bounded two minutes — so deferring there just
+                            // spins until that runs out and then reports "no sandbox slot freed
+                            // up", which is not what happened. The person waiting is better
+                            // served by the real reason, straight away.
+                            if (!job.IsTest)
+                            {
+                                _logger.LogWarning(
+                                    "Run {RunId} cannot start: the secret store is unreachable. Leaving it "
+                                    + "queued rather than failing it.", job.RunId);
+                                return new PreparedRun(null, [], false, Disposition.Deferred);
+                            }
+                        }
+
+                        // A secret that does not exist, or that this caller may not read, is the
+                        // author's to fix. Retrying it changes nothing, so it stays a failure.
+                        _secretBreaker?.RecordSuccess(job.TenantId);
+                        await CompleteAsync(job, runKey, startedAt, RunStatuses.Failed, failure.Code,
+                            failure.Message, null, 0, null, null, null, null, false).ConfigureAwait(false);
+                        return new PreparedRun(null, [], false, Disposition.Complete);
+                    }
+
+                    _secretBreaker?.RecordSuccess(job.TenantId);
+                    envelope = prepared.Envelope!;
+                    resolvedValues = prepared.Values;
+                }
+
+                // After the screen, deliberately: it refuses an `accessToken` key, and this
+                // one is added by the runner from a grant, never carried by the queue.
+                var accessToken = await RedeemAccessTokenAsync(job, fields, envelope, token).ConfigureAwait(false);
+                if (accessToken is not null)
+                {
+                    envelope = RunDelegation.Apply(envelope, accessToken);
+                    resolvedValues = [.. resolvedValues, accessToken];
+                }
+
+                return new PreparedRun(envelope, resolvedValues, accessToken is not null, null);
+            }
+            catch (ExecutionEnvelope.ForbiddenContentException ex)
+            {
+                // The message names a key path or a size, never a value.
+                _logger.LogError("Refusing to run {RunId}: {Message}", job.RunId, ex.Message);
+                await CompleteAsync(job, runKey, startedAt, RunStatuses.Failed, ErrorCodes.RuntimeStartFailed,
+                    ex.Message, null, 0, null, null, null, null, false).ConfigureAwait(false);
+                return new PreparedRun(null, [], false, Disposition.Complete);
+            }
+        }
+
+        /// <summary>
+        /// Serves the run from the warm pool (sandbox/REUSE.md). Null means the image cannot do
+        /// reuse and the caller must take the single-run path; anything else is final.
+        /// <para>
+        /// The order differs from the single path in one place, on purpose: the sandbox is acquired
+        /// <i>before</i> the envelope is prepared. Starting one can be refused (no memory, the start
+        /// rate), and a refusal must come before a delegation grant is redeemed or a secret read for
+        /// a run that is then only deferred.
+        /// </para>
+        /// </summary>
+        private async Task<Disposition?> ProcessWarmAsync(
+            RunJob job, Dictionary<string, string> fields, string runKey, DateTimeOffset startedAt,
+            Stopwatch claimed, string image, RunLimits limits, RunLease lease, CancellationToken token)
+        {
+            var key = new WarmKey(job.TenantId ?? string.Empty, job.FunctionId, job.VersionId ?? string.Empty, image);
+
+            var (acquired, early) = await AcquireWarmAsync(job, runKey, startedAt, claimed, key, limits, lease, allowIdle: true, token)
+                .ConfigureAwait(false);
+            if (acquired is null) return early;
+
+            var handle = acquired;
+            WarmCallResult call;
+            IReadOnlyList<string> resolvedValues;
+            try
+            {
+                var prepared = await PrepareEnvelopeAsync(job, fields, runKey, startedAt, token).ConfigureAwait(false);
+                if (prepared.Done is { } done)
+                {
+                    await _warm!.ReturnUnusedAsync(handle).ConfigureAwait(false);
+                    return done;
+                }
+
+                string line;
+                try
+                {
+                    line = ExecutionEnvelope.ToLine(prepared.Envelope!, prepared.Delegated);
+                }
+                catch (ExecutionEnvelope.ForbiddenContentException ex)
+                {
+                    await _warm!.ReturnUnusedAsync(handle).ConfigureAwait(false);
+                    _logger.LogError("Refusing to run {RunId}: {Message}", job.RunId, ex.Message);
+                    await CompleteAsync(job, runKey, startedAt, RunStatuses.Failed, ErrorCodes.RuntimeStartFailed,
+                        ex.Message, null, 0, null, null, null, null, false).ConfigureAwait(false);
+                    return Disposition.Complete;
+                }
+
+                resolvedValues = prepared.Values;
+                await SetStatusAsync(runKey, RunStatuses.Running).ConfigureAwait(false);
+                call = await handle.RunCallAsync(job.RunId, line, limits, claimed, lease.Token).ConfigureAwait(false);
+
+                // A sandbox from the pool that died before this call's `started` line — it would
+                // not resume, would not take the envelope, or exited on the spot — failed nobody's
+                // code: whatever killed it happened in its previous life. The run is served once
+                // more, on a fresh sandbox. Only after `started` is a failure the call's own.
+                if (!call.Started && handle.Reused && call.Discard is not null and not "cancelled"
+                    && !lease.Token.IsCancellationRequested)
+                {
+                    var lost = await _warm!.ReleaseAsync(handle, call).ConfigureAwait(false);
+                    _logger.LogWarning(
+                        "Warm sandbox for run {RunId} died before the call started ({Reason}); serving it on a fresh one",
+                        job.RunId, lost);
+
+                    var (fresh, freshEarly) = await AcquireWarmAsync(
+                        job, runKey, startedAt, claimed, key, limits, lease, allowIdle: false, token).ConfigureAwait(false);
+                    // No room for a fresh one — or this image cannot do reuse after all: the run
+                    // waits for the next attempt rather than taking the single path, which would
+                    // redeem its delegation grant a second time.
+                    if (fresh is null) return freshEarly is null ? Disposition.Deferred : freshEarly;
+
+                    handle = fresh;
+                    call = await handle.RunCallAsync(job.RunId, line, limits, claimed, lease.Token).ConfigureAwait(false);
+                }
+            }
+            catch
+            {
+                // Whatever went wrong, a sandbox that may have seen part of this run is not
+                // offered to the next one. A no-op when the handle was already handed back.
+                await _warm!.DiscardAsync(handle, "crash").ConfigureAwait(false);
+                throw;
+            }
+
+            var discard = await _warm!.ReleaseAsync(handle, call).ConfigureAwait(false);
+            var report = new WarmReport(handle.Reused, discard, call.HandoverMs);
+            var result = call.Result;
+
+            if (lease.LeaseLost)
+            {
+                _logger.LogWarning("Abandoning run {RunId} after losing its lease", job.RunId);
+                return Disposition.NotOurs;
+            }
+
+            if (token.IsCancellationRequested)
+            {
+                // The runner is shutting down and killed the sandbox under the call. That is not
+                // the run's outcome: leave it pending for whichever runner claims it next.
+                return Disposition.Deferred;
+            }
+
+            if (result.HostFailure is not null)
+            {
+                await CompleteAsync(job, runKey, startedAt, RunStatuses.Failed, ErrorCodes.SandboxStartFailed,
+                    Redact(result.HostFailure, resolvedValues), result.ExitCode, result.DurationMs,
+                    null, null, null, null, false,
+                    startupMs: result.StartupMs, executionMs: result.ExecutionMs, warm: report)
+                    .ConfigureAwait(false);
+                return Disposition.Complete;
+            }
+
+            var (status, errorCode, errorMessage) = RunOutcome.Map(
+                result.OomKilled, result.ExitCode, result.TimedOut, lease.CancelRequested, result.Output);
+            errorMessage = Redact(errorMessage, resolvedValues);
+
+            // Not fed to _budget.Observe: a warm call's memory figure is a snapshot of a long-lived
+            // sandbox after the call, not the peak of one run, and the footprint estimate is a
+            // distribution of single-run peaks. The pool reserves a warm sandbox's memory itself.
+
+            await CompleteAsync(
+                job, runKey, startedAt, status, errorCode, errorMessage, result.ExitCode, result.DurationMs,
+                result.PeakMemoryBytes, result.CpuUsageMs, result.Output.ResultJson,
+                WithFailureLine(result.Output, errorCode, errorMessage, resolvedValues),
+                result.Output.Truncated,
+                startupMs: result.StartupMs, executionMs: result.ExecutionMs, warm: report)
+                .ConfigureAwait(false);
+
+            return Disposition.Complete;
+        }
+
+        /// <summary>
+        /// A sandbox from the pool, or what to do with the run instead: null with null for an image
+        /// that cannot do reuse (take the single path), or the disposition already reached.
+        /// </summary>
+        private async Task<(WarmHandle? Handle, Disposition? Done)> AcquireWarmAsync(
+            RunJob job, string runKey, DateTimeOffset startedAt, Stopwatch claimed, WarmKey key, RunLimits limits,
+            RunLease lease, bool allowIdle, CancellationToken token)
+        {
+            WarmAcquireResult acquired;
+            try
+            {
+                acquired = await _warm!.AcquireAsync(key, limits, lease.Token, allowIdle).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!token.IsCancellationRequested)
+            {
+                if (lease.LeaseLost) return (null, Disposition.NotOurs);
+                if (lease.CancelRequested)
+                {
+                    await CompleteAsync(job, runKey, startedAt, RunStatuses.Cancelled, null, "the run was cancelled",
+                        null, claimed.ElapsedMilliseconds, null, null, null, null, false,
+                        warm: new WarmReport(false, "cancelled", null)).ConfigureAwait(false);
+                    return (null, Disposition.Complete);
+                }
+
+                // Nobody cancelled anything: an infrastructure timeout. Retryable, so the run waits.
+                _logger.LogWarning("Starting a warm sandbox for run {RunId} timed out; deferring it", job.RunId);
+                return (null, Disposition.Deferred);
+            }
+
+            switch (acquired.Status)
+            {
+                case WarmAcquireStatus.NoReuseSupport:
+                    return (null, null);
+
+                case WarmAcquireStatus.NoCapacity:
+                    _logger.LogDebug("No room for a warm sandbox of function {FunctionId}; deferring run {RunId}",
+                        job.FunctionId, job.RunId);
+                    return (null, Disposition.Deferred);
+
+                case WarmAcquireStatus.StartFailed:
+                    return (null, await ReportFailedStartAsync(job, runKey, startedAt, acquired.Start!).ConfigureAwait(false));
+
+                default:
+                    return (acquired.Handle!, null);
+            }
+        }
+
+        /// <summary>
+        /// A single run's whole reservation. Refused for memory while idle warm sandboxes hold it,
+        /// the least recently used one is given up and the reservation tried once more: a paused
+        /// sandbox nobody is calling must not starve a run, or a test, that is waiting.
+        /// </summary>
+        private async Task<HostReservation?> ReserveSingleAsync(RunLimits limits)
+        {
+            var reservation = _budget.TryReserve(limits.MemoryBytes, out var refusal);
+            if (reservation is null && refusal == AdmissionRefusal.Memory && _warm is not null
+                && await _warm.EvictIdleAsync().ConfigureAwait(false))
+            {
+                reservation = _budget.TryReserve(limits.MemoryBytes, out _);
+            }
+            return reservation;
+        }
+
+        /// <summary>
+        /// A warm sandbox that never became ready. A function that does not load fails exactly as a
+        /// single run of it would — same status, same code, same logs — because it is the same
+        /// fault; a sandbox the host could not create is the host's, as on the single path.
+        /// </summary>
+        private async Task<Disposition> ReportFailedStartAsync(
+            RunJob job, string runKey, DateTimeOffset startedAt, WarmStartResult start)
+        {
+            var report = new WarmReport(false, "crash", null);
+
+            if (start.Status == WarmStartStatus.HostFailure)
+            {
+                await CompleteAsync(job, runKey, startedAt, RunStatuses.Failed, ErrorCodes.SandboxStartFailed,
+                    start.HostFailure, start.ExitCode, start.StartupMs, null, null, null, null, false,
+                    warm: report).ConfigureAwait(false);
+                return Disposition.Complete;
+            }
+
+            var (status, errorCode, errorMessage) = RunOutcome.Map(
+                start.OomKilled, start.ExitCode, start.TimedOut, cancelled: false, start.Output);
+            await CompleteAsync(
+                job, runKey, startedAt, status, errorCode, errorMessage, start.ExitCode, start.StartupMs,
+                null, null, null, WithFailureLine(start.Output, errorCode, errorMessage, []), start.Output.Truncated,
+                startupMs: start.StartupMs, warm: report).ConfigureAwait(false);
+            return Disposition.Complete;
+        }
+
+        /// <summary>The reuse fields of a result entry (sandbox/REUSE.md), present only for a warm run.</summary>
+        private sealed record WarmReport(bool Reused, string Discard, long? HandoverMs);
+
+        /// <summary>
+        /// The run's host reservation, swappable: a warm run that falls back to the single path
+        /// trades its slot for a single run's full reservation without leaving the using scope.
+        /// </summary>
+        private sealed class Admission(HostReservation? current) : IDisposable
+        {
+            public HostReservation? Current { get; private set; } = current;
+
+            public void Swap(HostReservation? next)
+            {
+                Current?.Dispose();
+                Current = next;
+            }
+
+            public void Dispose() => Current?.Dispose();
         }
 
         /// <summary>
@@ -556,7 +859,7 @@ namespace Blocks.FunctionRunner.Runs
             string status, string? errorCode, string? errorMessage,
             int? exitCode, long durationMs, long? peakMemory, long? cpuUsageMs,
             string? resultJson, List<string>? logs, bool truncated,
-            long? startupMs = null, long? executionMs = null)
+            long? startupMs = null, long? executionMs = null, WarmReport? warm = null)
         {
             var completedAt = DateTimeOffset.UtcNow;
             string? resultKey = null;
@@ -607,6 +910,20 @@ namespace Blocks.FunctionRunner.Runs
                 new("attempt", job.Attempt.ToString(CultureInfo.InvariantCulture)),
                 new("protocol", RedisKeys.ProtocolVersion.ToString(CultureInfo.InvariantCulture)),
             };
+
+            // A warm run's three extra fields (sandbox/REUSE.md), appended after everything above
+            // so the existing fields stay exactly as they were. A single run carries none of them,
+            // which a consumer reads the same as reused=0.
+            if (warm is not null)
+            {
+                entry =
+                [
+                    .. entry,
+                    new("reused", warm.Reused ? "1" : "0"),
+                    new("discard", warm.Discard),
+                    new("handoverMs", warm.HandoverMs?.ToString(CultureInfo.InvariantCulture) ?? string.Empty),
+                ];
+            }
 
             await _db.StreamAddAsync(RedisKeys.ResultsStream, entry).ConfigureAwait(false);
 

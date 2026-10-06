@@ -166,6 +166,15 @@ export const RunsTable = ({
 
                 <span className="whitespace-nowrap text-xs" role="gridcell">
                   {formatDuration(run.durationMs)}
+                  {/* Only runs of a function with "Reuse sandbox" on say warm or cold. */}
+                  {run.reused != null && (
+                    <span
+                      className="text-low-emphasis"
+                      title={run.reused ? "Warm (reused)" : "Cold start"}
+                    >
+                      {run.reused ? " · warm" : " · cold"}
+                    </span>
+                  )}
                 </span>
 
                 <span className="whitespace-nowrap text-xs" role="gridcell">

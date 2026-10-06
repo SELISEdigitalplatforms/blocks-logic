@@ -51,6 +51,7 @@ namespace Functions.DomainService.Dtos.Responses
         public string IndexJs { get; set; } = string.Empty;
         public string PackageJson { get; set; } = string.Empty;
         public string? LockJson { get; set; }
+        public bool AllowInstallScripts { get; set; }
         public FunctionLimits Limits { get; set; } = new();
         public RetryPolicy Retry { get; set; } = new();
         public TriggerConfig Trigger { get; set; } = new();
@@ -70,6 +71,7 @@ namespace Functions.DomainService.Dtos.Responses
             IndexJs = function.Source.IndexJs,
             PackageJson = function.Source.PackageJson,
             LockJson = function.Source.LockJson,
+            AllowInstallScripts = function.Source.AllowInstallScripts,
             Limits = function.Limits,
             Retry = function.Retry,
             Trigger = function.Trigger,
@@ -123,6 +125,11 @@ namespace Functions.DomainService.Dtos.Responses
 
         /// <summary>Peak RSS of the sandbox — the runs table shows it against the limit.</summary>
         public long? PeakMemoryBytes { get; set; }
+        /// <summary>
+        /// Warm (true) or cold (false) start, for the list's "· warm / · cold" marker; null for a run
+        /// that did not use a reused sandbox. The detail DTO carries the rest of the sandbox report.
+        /// </summary>
+        public bool? Reused { get; set; }
 
         public static RunSummaryDto From(FunctionRunEntity run) => new()
         {
@@ -137,6 +144,7 @@ namespace Functions.DomainService.Dtos.Responses
             CompletedAt = run.CompletedAt,
             DurationMs = run.DurationMs,
             PeakMemoryBytes = run.PeakMemoryBytes,
+            Reused = run.Reused,
         };
     }
 
@@ -167,6 +175,15 @@ namespace Functions.DomainService.Dtos.Responses
         public List<RunAttempt> Attempts { get; set; } = [];
         public List<OutputActionResult> OutputResults { get; set; } = [];
 
+        /// <summary>Served by an already-running (warm) sandbox; null when the runner did not say.</summary>
+        public bool? Reused { get; set; }
+
+        /// <summary>Why the warm sandbox was destroyed after this run; null when it was kept, or the runner did not say.</summary>
+        public string? DiscardReason { get; set; }
+
+        /// <summary>Claim to envelope-on-stdin of a warm sandbox, in milliseconds; null when not reported.</summary>
+        public long? HandoverMs { get; set; }
+
         public static RunDetailDto From(FunctionRunEntity run) => new()
         {
             Id = run.ItemId,
@@ -191,6 +208,9 @@ namespace Functions.DomainService.Dtos.Responses
             LogsTruncated = run.LogsTruncated,
             Attempts = run.Attempts,
             OutputResults = run.OutputResults,
+            Reused = run.Reused,
+            DiscardReason = run.DiscardReason,
+            HandoverMs = run.HandoverMs,
         };
     }
 
@@ -229,6 +249,15 @@ namespace Functions.DomainService.Dtos.Responses
         /// </summary>
         [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
         public string? PollToken { get; set; }
+
+        /// <summary>
+        /// Set by the public route's synchronous mode only: the caller waited, so a finished run is
+        /// answered with the function's own response (<c>FunctionHttpResponseMapper</c>) rather
+        /// than this DTO. Never serialized — the 202 a sync caller falls back to has to be the
+        /// same bytes an async caller gets.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool RespondSynchronously { get; set; }
     }
 
     /// <summary>

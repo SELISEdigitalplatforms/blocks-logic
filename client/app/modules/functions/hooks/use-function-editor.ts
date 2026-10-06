@@ -6,6 +6,7 @@ import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { isErrorWithErrors } from "@/lib/error";
 import { FUNCTIONS_QUERY_KEY } from "./use-functions";
 import { useFunctionEditorStore } from "../store/function-editor-store";
+import { withTriggerDefaults } from "../utils/trigger";
 
 /**
  * Drives the Code+Configuration editor: hydrates the store from a loaded function, saves the
@@ -24,9 +25,10 @@ export const useFunctionEditor = (
     hydrate({
       indexJs: functionDetail.indexJs,
       packageJson: functionDetail.packageJson,
+      allowInstallScripts: functionDetail.allowInstallScripts ?? false,
       limits: functionDetail.limits,
       retry: functionDetail.retry,
-      trigger: functionDetail.trigger,
+      trigger: withTriggerDefaults(functionDetail.trigger),
       outputActions: functionDetail.outputActions,
       variables: functionDetail.variables,
     });
@@ -42,6 +44,7 @@ export const useFunctionEditor = (
         functionId: functionId!,
         indexJs: state.indexJs,
         packageJson: state.packageJson,
+        allowInstallScripts: state.allowInstallScripts,
         limits: state.limits,
         retry: state.retry,
         trigger: state.trigger,
@@ -53,9 +56,10 @@ export const useFunctionEditor = (
       useFunctionEditorStore.getState().hydrate({
         indexJs: saved.indexJs,
         packageJson: saved.packageJson,
+        allowInstallScripts: saved.allowInstallScripts ?? false,
         limits: saved.limits,
         retry: saved.retry,
-        trigger: saved.trigger,
+        trigger: withTriggerDefaults(saved.trigger),
         outputActions: saved.outputActions,
         variables: saved.variables,
       });

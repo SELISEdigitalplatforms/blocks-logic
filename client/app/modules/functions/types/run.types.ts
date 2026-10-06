@@ -53,6 +53,12 @@ export interface IRunSummary {
   completedAt?: string | null;
   durationMs?: number | null;
   peakMemoryBytes?: number | null;
+  /** Reuse only: true = served by an already-running (warm) sandbox, false = cold start. */
+  reused?: boolean | null;
+  /** Reuse only: why the sandbox was replaced after this call (`dirty:<leftovers>`, `timeout`, …). */
+  discardReason?: string | null;
+  /** Reuse only: claim → input handed to the sandbox, in milliseconds. */
+  handoverMs?: number | null;
 }
 
 export interface IRunAttempt {
@@ -97,6 +103,12 @@ export interface IRunDetail {
   cpuUsageMs?: number | null;
   exitCode?: number | null;
   logsTruncated: boolean;
+  /** Reuse only: true = served by an already-running (warm) sandbox, false = cold start. */
+  reused?: boolean | null;
+  /** Reuse only: why the sandbox was replaced after this call (`dirty:<leftovers>`, `timeout`, …). */
+  discardReason?: string | null;
+  /** Reuse only: claim → input handed to the sandbox, in milliseconds. */
+  handoverMs?: number | null;
   attempts: IRunAttempt[];
   outputResults: IOutputActionResult[];
 }

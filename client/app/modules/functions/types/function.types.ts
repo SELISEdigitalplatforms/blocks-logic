@@ -27,10 +27,27 @@ export type AccessCombine = "Or" | "And";
 /** The one method the endpoint answers — server enum names, like the other trigger enums. */
 export type HttpTriggerMethod = "Get" | "Post";
 
+/** A verb the trigger may accept when it takes more than one — wire spelling, upper case. */
+export type HttpTriggerVerb = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
+/**
+ * How an HTTP call is answered: `async` returns 202 + poll token straight away (the default);
+ * `sync` waits for the function's answer and returns it, falling back to 202 + poll token when
+ * the run takes longer than the wait limit.
+ */
+export type TriggerResponseMode = "async" | "sync";
+
 export interface ITriggerConfig {
   httpEnabled: boolean;
-  /** GET or POST, one per function; the other method is refused with 405. */
+  /** GET or POST, one per function; the other method is refused with 405. Used when
+   *  {@link ITriggerConfig.httpMethods} is empty — every function saved before that list existed. */
   httpMethod: HttpTriggerMethod;
+  /** The verbs the endpoint accepts. Empty → only the single {@link ITriggerConfig.httpMethod}. */
+  httpMethods: HttpTriggerVerb[];
+  /** Keep the sandbox loaded between calls (warm). Default false. */
+  reuseSandbox: boolean;
+  /** Default `async`. */
+  responseMode: TriggerResponseMode;
   authMode: AuthMode;
   roles: string[];
   permissions: string[];
@@ -90,6 +107,8 @@ export interface IFunctionDetail {
   indexJs: string;
   packageJson: string;
   lockJson?: string | null;
+  /** npm install/postinstall scripts run at build (native packages). Absent on older servers. */
+  allowInstallScripts?: boolean;
   limits: IFunctionLimits;
   retry: IRetryPolicy;
   trigger: ITriggerConfig;
@@ -150,6 +169,7 @@ export interface ISaveFunctionPayload {
   indexJs: string;
   packageJson: string;
   lockJson?: string | null;
+  allowInstallScripts: boolean;
   limits: IFunctionLimits;
   retry: IRetryPolicy;
   trigger: ITriggerConfig;

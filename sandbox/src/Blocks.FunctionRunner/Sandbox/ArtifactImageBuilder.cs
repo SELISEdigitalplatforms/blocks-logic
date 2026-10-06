@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Formats.Tar;
 using System.Security.Cryptography;
 using Blocks.FunctionRunner.Options;
 using Microsoft.Extensions.Logging;
@@ -180,20 +181,27 @@ namespace Blocks.FunctionRunner.Sandbox
             return true;
         }
 
-        private async Task<bool> ExtractAsync(string archivePath, string contextDir, CancellationToken token)
+        internal async Task<bool> ExtractAsync(string archivePath, string contextDir, CancellationToken token)
         {
-            // `tar` rather than a library: the archive was written by `tar` on the builder, and the
-            // modes and the .bin symlinks npm creates have to survive the round trip intact.
-            var exit = await RunAsync(
-                "tar", ["-xf", archivePath, "-C", contextDir], token).ConfigureAwait(false);
-
-            if (exit != 0)
+            // In-process (System.Formats.Tar), not the host's `tar`. The runner's systemd unit sets
+            // RestrictSUIDSGID=true, whose seccomp filter cannot inspect openat2's arguments and so
+            // makes openat2 fail with ENOSYS; GNU tar 1.35 creates every file below the top level
+            // through openat2 and does not fall back. Every artifact run failed here with
+            // "manifest/package.json: Cannot open: Function not implemented" (tar exit 2) —
+            // reproduced under the unit's exact properties, and this path verified under them.
+            // The archive holds the build context only (Dockerfile, deps.tar, manifest/, src/);
+            // modes are kept on Unix, and entries that would land outside contextDir are refused.
+            try
             {
-                _logger.LogError("Extracting the artifact failed (tar exited {Exit})", exit);
+                await TarFile.ExtractToDirectoryAsync(archivePath, contextDir, overwriteFiles: true, token)
+                    .ConfigureAwait(false);
+                return true;
+            }
+            catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+            {
+                _logger.LogError(ex, "Extracting the artifact failed");
                 return false;
             }
-
-            return true;
         }
 
         private async Task<bool> DockerBuildAsync(string reference, string contextDir, CancellationToken token)
@@ -202,7 +210,7 @@ namespace Blocks.FunctionRunner.Sandbox
 
             // The CLI rather than the API: the context is already a directory on disk and `docker
             // build` streams it as-is, where the API would want it tarred again.
-            var exit = await RunAsync(
+            var (exit, error) = await RunAsync(
                 "docker",
                 ["build", "--quiet", "--tag", reference, "--file", Path.Combine(contextDir, "Dockerfile"), contextDir],
                 token).ConfigureAwait(false);
@@ -210,7 +218,8 @@ namespace Blocks.FunctionRunner.Sandbox
             if (exit != 0)
             {
                 _logger.LogError(
-                    "Building {Reference} from its artifact failed (docker exited {Exit})", reference, exit);
+                    "Building {Reference} from its artifact failed (docker exited {Exit}): {Error}",
+                    reference, exit, error);
                 return false;
             }
 
@@ -219,7 +228,12 @@ namespace Blocks.FunctionRunner.Sandbox
             return true;
         }
 
-        private static async Task<int> RunAsync(string file, string[] arguments, CancellationToken token)
+        /// <summary>
+        /// Runs a tool and returns its exit code with the tail of what it wrote to stderr. Both
+        /// streams are drained while it runs — a tool that fills an unread pipe blocks forever — and
+        /// stderr is kept because "exited 2" alone hid the real cause of every artifact failure.
+        /// </summary>
+        private static async Task<(int Exit, string Error)> RunAsync(string file, string[] arguments, CancellationToken token)
         {
             var info = new ProcessStartInfo(file)
             {
@@ -233,8 +247,12 @@ namespace Blocks.FunctionRunner.Sandbox
             }
 
             using var process = Process.Start(info) ?? throw new InvalidOperationException($"could not start {file}");
+            var stdout = process.StandardOutput.ReadToEndAsync(token);
+            var stderr = process.StandardError.ReadToEndAsync(token);
             await process.WaitForExitAsync(token).ConfigureAwait(false);
-            return process.ExitCode;
+            await stdout.ConfigureAwait(false);
+            var error = (await stderr.ConfigureAwait(false)).Trim();
+            return (process.ExitCode, error.Length > 2000 ? error[^2000..] : error);
         }
 
         /// <summary>

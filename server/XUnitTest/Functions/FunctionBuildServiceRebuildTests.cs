@@ -195,5 +195,26 @@ namespace XUnitTest.Functions
             _created.Should().BeEmpty();
             Streamed.Should().BeEmpty();
         }
+
+        // ---- install scripts -------------------------------------------------------------
+
+        [Fact]
+        public async Task A_build_runs_with_ignore_scripts_unless_the_function_opts_in()
+        {
+            await Service().EnsureImageAsync(Tenant, Function(), default, waitSecondsOverride: 0, forceRebuild: true);
+
+            QueuedBuildEntry().Single(e => e.Name == "allowScripts").Value.ToString().Should().Be("false");
+        }
+
+        [Fact]
+        public async Task A_function_that_allows_install_scripts_asks_the_runner_for_them()
+        {
+            var function = Function();
+            function.Source.AllowInstallScripts = true;
+
+            await Service().EnsureImageAsync(Tenant, function, default, waitSecondsOverride: 0, forceRebuild: true);
+
+            QueuedBuildEntry().Single(e => e.Name == "allowScripts").Value.ToString().Should().Be("true");
+        }
     }
 }

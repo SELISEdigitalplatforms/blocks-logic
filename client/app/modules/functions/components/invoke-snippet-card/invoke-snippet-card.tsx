@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useProjectStore } from "@seliseblocks/genesis-os";
 import { Card } from "@/components/ui-kits/card/card";
-import { snippetBlocksKey, toHttpVerb } from "../../constants/endpoint.constant";
+import { acceptedHttpVerbs, snippetBlocksKey } from "../../constants/endpoint.constant";
 import { buildInvokeUrl } from "../endpoint-badge";
 import { ITriggerConfig } from "../../types/function.types";
 
@@ -25,17 +25,19 @@ export const InvokeSnippetCard = ({ functionId, trigger }: InvokeSnippetCardProp
   // token-protected trigger.
   const authHeader =
     trigger.authMode === "Token" ? ` \\\n  -H "Authorization: Bearer $BLOCKS_TOKEN"` : "";
-  const verb = toHttpVerb(trigger.httpMethod);
-  // A GET carries its input in the query; a POST in the body. The example shows the one the
-  // trigger actually answers, so what the handler receives below is what this call produces.
+  // The first verb the trigger accepts. A GET carries its input in the query; any other verb in
+  // the body. The example shows one the trigger actually answers, so what the handler receives
+  // below is what this call produces.
+  const verb = acceptedHttpVerbs(trigger)[0];
+  const isSync = trigger.responseMode === "sync";
   const snippet =
     verb === "GET"
       ? `curl "${url}/orders/42?notify=true" \\\n  -H "x-blocks-key: ${blocksKey}"${authHeader}`
-      : `curl -X POST "${url}/orders/42?notify=true" \\\n  -H "x-blocks-key: ${blocksKey}"${authHeader} \\\n  -H "Content-Type: application/json" \\\n  -d '{"qty":2}'`;
+      : `curl -X ${verb} "${url}/orders/42?notify=true" \\\n  -H "x-blocks-key: ${blocksKey}"${authHeader} \\\n  -H "Content-Type: application/json" \\\n  -d '{"qty":2}'`;
   const receives =
     verb === "GET"
       ? '{ "method": "GET", "path": "orders/42",\n  "query": { "notify": "true" },\n  "headers": { "accept": "*/*", … },\n  "body": null }'
-      : '{ "method": "POST", "path": "orders/42",\n  "query": { "notify": "true" },\n  "headers": { "content-type": "application/json", … },\n  "body": { "qty": 2 } }';
+      : `{ "method": "${verb}", "path": "orders/42",\n  "query": { "notify": "true" },\n  "headers": { "content-type": "application/json", … },\n  "body": { "qty": 2 } }`;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(snippet);
@@ -68,11 +70,28 @@ export const InvokeSnippetCard = ({ functionId, trigger }: InvokeSnippetCardProp
         <span className="text-xs font-medium uppercase tracking-wide text-medium-emphasis">
           Response
         </span>
-        <pre className="font-mono text-xs leading-relaxed">
-          {'202 Accepted\n{ "runId": "run_7f21c4", "status": "QUEUED" }'}
-        </pre>
+        {isSync ? (
+          <>
+            <pre className="font-mono text-xs leading-relaxed">
+              {'200 OK\n{ "ok": true }   ← what the handler returned'}
+            </pre>
+            <span className="text-xs leading-relaxed text-medium-emphasis">
+              The caller waits for the answer. Return{" "}
+              <code className="font-mono">{"{ statusCode, headers, body }"}</code> to set the
+              status, headers and body yourself; anything else is sent as JSON with 200. If the run
+              takes too long, the call returns <code className="font-mono">202</code> with a{" "}
+              <code className="font-mono">pollToken</code> instead.
+            </span>
+          </>
+        ) : (
+          <pre className="font-mono text-xs leading-relaxed">
+            {'202 Accepted\n{ "runId": "run_7f21c4", "status": "QUEUED" }'}
+          </pre>
+        )}
         <span className="text-xs leading-relaxed text-medium-emphasis">
-          The call always returns straight away. Collect the result with{" "}
+          {isSync
+            ? "After a 202, collect the result with"
+            : "The call always returns straight away. Collect the result with"}{" "}
           <code className="font-mono">GET …/fn/runs/{"{runId}"}</code>, using the{" "}
           <code className="font-mono">pollToken</code> that came back with it. Every trigger — HTTP,
           workflow or a test from the editor — is listed under Runs.

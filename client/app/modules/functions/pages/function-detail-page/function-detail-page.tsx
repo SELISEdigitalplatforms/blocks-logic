@@ -44,6 +44,8 @@ import { VariablesEditor } from "../../components/variables-editor";
 import { DangerZoneCard } from "../../components/danger-zone-card";
 import { TriggerHttpCard } from "../../components/trigger-http-card";
 import { TriggerWorkflowCard } from "../../components/trigger-workflow-card";
+import { SandboxReuseCard } from "../../components/sandbox-reuse-card";
+import { InstallScriptsToggle } from "../../components/install-scripts-toggle";
 import { InvokeSnippetCard } from "../../components/invoke-snippet-card";
 import { OutputActionsEditor } from "../../components/output-actions-editor";
 import { RunsTable } from "../../components/runs-table";
@@ -54,7 +56,7 @@ import { DeleteFunctionDialog } from "../../components/delete-function-dialog";
 import { buildInvokeUrl } from "../../components/endpoint-badge";
 import { ProxyMethodBadge } from "@/modules/proxy/components/proxy-method-badge";
 import { getProxyPublicHost } from "@/modules/proxy/constants/proxy.constant";
-import { toHttpVerb } from "../../constants/endpoint.constant";
+import { acceptedHttpVerbs } from "../../constants/endpoint.constant";
 import { checkSetup } from "../../utils/connections";
 import { payloadOf } from "../../utils/test-input";
 
@@ -189,6 +191,8 @@ export const FunctionDetailPage = () => {
   const packageJson = useFunctionEditorStore((s) => s.packageJson);
   const setIndexJs = useFunctionEditorStore((s) => s.setIndexJs);
   const setPackageJson = useFunctionEditorStore((s) => s.setPackageJson);
+  const allowInstallScripts = useFunctionEditorStore((s) => s.allowInstallScripts);
+  const setAllowInstallScripts = useFunctionEditorStore((s) => s.setAllowInstallScripts);
   const activeFile = useFunctionEditorStore((s) => s.activeFile);
   const setActiveFile = useFunctionEditorStore((s) => s.setActiveFile);
   const limits = useFunctionEditorStore((s) => s.limits);
@@ -388,7 +392,9 @@ export const FunctionDetailPage = () => {
 
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-medium-emphasis">
               <span className="flex min-w-0 items-center gap-1.5">
-                <ProxyMethodBadge method={toHttpVerb(trigger.httpMethod)} />
+                {acceptedHttpVerbs(trigger).map((verb) => (
+                  <ProxyMethodBadge key={verb} method={verb} />
+                ))}
                 <code className="truncate font-mono">
                   {buildInvokeUrl(functionId, selectedProject)}
                 </code>
@@ -591,6 +597,12 @@ export const FunctionDetailPage = () => {
                   />
                 )}
               </div>
+              {activeFile === "package.json" && (
+                <InstallScriptsToggle
+                  checked={allowInstallScripts}
+                  onChange={setAllowInstallScripts}
+                />
+              )}
               <p className="shrink-0 border-t bg-surface-app px-4 py-2.5 text-xs text-medium-emphasis">
                 Native <code className="font-mono">fetch()</code>, async/await and pinned npm
                 packages. Variables arrive as <code className="font-mono">ctx.env.NAME</code> —
@@ -674,7 +686,10 @@ export const FunctionDetailPage = () => {
           <TabsContent value="trigger" className="flex flex-col gap-4">
             <TriggerHttpCard value={trigger} onChange={setTrigger} functionId={fn.id} />
             <div className="grid gap-4 xl:grid-cols-2">
-              <TriggerWorkflowCard value={trigger} onChange={setTrigger} />
+              <div className="flex flex-col gap-4">
+                <TriggerWorkflowCard value={trigger} onChange={setTrigger} />
+                <SandboxReuseCard value={trigger} onChange={setTrigger} />
+              </div>
               <InvokeSnippetCard functionId={fn.id} trigger={trigger} />
             </div>
           </TabsContent>

@@ -130,6 +130,45 @@ namespace Blocks.FunctionRunner.Runs
         }
 
         /// <summary>
+        /// The envelope as one stdin line for a reusable sandbox (sandbox/REUSE.md): the same
+        /// ceiling and the same screen as <see cref="Write(string, string, bool)"/>, then the same
+        /// JSON with its insignificant whitespace removed, because the line is the framing — a
+        /// pretty-printed envelope would arrive as several broken calls. Every value, key and
+        /// key order is kept exactly; nothing is written to disk, so there is no file to hand off.
+        /// </summary>
+        /// <exception cref="ForbiddenContentException">As for <see cref="Write(string, string, bool)"/>.</exception>
+        public static string ToLine(string envelopeJson, bool delegatedToken = false)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(envelopeJson);
+
+            var bytes = Encoding.UTF8.GetByteCount(envelopeJson);
+            if (bytes > Ceilings.InputBytes)
+            {
+                throw new ForbiddenContentException(
+                    $"the execution envelope is {bytes} bytes, over the {Ceilings.InputBytes} byte input ceiling");
+            }
+
+            Screen(envelopeJson, delegatedToken);
+
+            using var doc = JsonDocument.Parse(envelopeJson);
+            var buffer = new System.Buffers.ArrayBufferWriter<byte>(bytes);
+            using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions
+            {
+                Indented = false,
+                // Re-escaping would change nothing the sandbox reads, but there is no reason to
+                // alter a single byte of a string the tenant sent.
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+            }))
+            {
+                doc.RootElement.WriteTo(writer);
+            }
+
+            // JSON strings cannot hold a raw newline, so after this the only line break is the
+            // one the caller appends.
+            return Encoding.UTF8.GetString(buffer.WrittenSpan);
+        }
+
+        /// <summary>
         /// Proves this host can hand an envelope to the sandbox group, without a run at stake.
         /// The startup guard calls it so that a host where the runner is not a member of the
         /// sandbox gid reports itself unhealthy and claims nothing, rather than failing every run

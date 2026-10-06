@@ -286,7 +286,7 @@ namespace Functions.DomainService.Consumers
                     result, ParseNullableInt(entry.Get("exitCode")), ParseNullableLong(entry.Get("durationMs")),
                     ParseNullableLong(entry.Get("peakMemoryBytes")), ParseNullableLong(entry.Get("cpuUsageMs")),
                     entry.Get("runnerId"), startedAt, completedAt,
-                    entry.GetBool("truncated"), cancellationToken);
+                    entry.GetBool("truncated"), SandboxReport(entry), cancellationToken);
 
                 switch (written)
                 {
@@ -340,8 +340,7 @@ namespace Functions.DomainService.Consumers
                 ? run.Status != RunStatus.OutputProcessing
                 : IsPlatformDetermined(run.ErrorCode);
 
-        private static bool IsPlatformDetermined(RunErrorCode code) =>
-            code is RunErrorCode.Undeliverable or RunErrorCode.EnqueueFailed or RunErrorCode.Abandoned;
+        private static bool IsPlatformDetermined(RunErrorCode code) => FunctionWireMapping.IsPlatformDetermined(code);
 
         private async Task FollowUpAsync(string tenantId, FunctionRunEntity run, CancellationToken cancellationToken)
         {
@@ -368,9 +367,7 @@ namespace Functions.DomainService.Consumers
                 return;
             }
 
-            if (FunctionWireMapping.IsTerminal(run.Status)
-                && !IsPlatformDetermined(run.ErrorCode)
-                && FunctionWireMapping.IsRetryable(run.Status, run.ErrorCode))
+            if (FunctionWireMapping.IsRetryCandidate(run))
             {
                 await ScheduleRetryIfEligibleAsync(tenantId, run, cancellationToken);
             }
@@ -454,8 +451,8 @@ namespace Functions.DomainService.Consumers
             // rebuild against reliably (see FunctionInvocationService.ReplayAsync), and its
             // MaxAttempts is set from the function's own policy regardless, so this also
             // naturally covers the "policy says 1 attempt" case via the count check below.
-            if (string.IsNullOrEmpty(run.VersionId)) return;
-            if (run.Attempt >= run.MaxAttempts) return;
+            // Same budget test the synchronous HTTP wait relies on (FunctionWireMapping.WillBeRetried).
+            if (!FunctionWireMapping.WillBeRetried(run)) return;
 
             var version = await _versionRepository.GetByIdAsync(tenantId, run.VersionId, cancellationToken);
             if (version is null) return;
@@ -480,6 +477,26 @@ namespace Functions.DomainService.Consumers
                 _logger.LogInformation(
                     "Scheduled retry {Attempt}/{Max} for run {RunId} in {Delay}", nextAttempt, run.MaxAttempts, run.ItemId, delay);
             }
+        }
+
+        /// <summary>
+        /// The optional warm-sandbox fields (sandbox/REUSE.md). A runner that predates reuse sends
+        /// none of them, and each one missing stays null rather than defaulting to "fresh" or
+        /// "kept" — the run record should say "not reported", which is the truth.
+        /// </summary>
+        internal static RunSandboxReport SandboxReport(ResultStreamEntry entry)
+        {
+            var reused = entry.Get("reused") switch
+            {
+                "1" or "true" => true,
+                "0" or "false" => (bool?)false,
+                _ => null,
+            };
+            var discard = entry.Get("discard");
+            return new RunSandboxReport(
+                reused,
+                string.IsNullOrWhiteSpace(discard) ? null : discard,
+                ParseNullableLong(entry.Get("handoverMs")));
         }
 
         private static DateTime? ParseDate(string? value) =>

@@ -111,5 +111,14 @@ namespace XUnitTest.Functions
 
             json.Should().Contain("\"kind\":\"ExternalHttp\"");
         }
+
+        [Fact]
+        public void AllowInstallScripts_is_read_from_the_editor_payload_and_defaults_to_off()
+        {
+            JsonSerializer.Deserialize<SaveFunctionRequestDto>("""{"functionId":"fn_1"}""", Options)!
+                .AllowInstallScripts.Should().BeFalse();
+            JsonSerializer.Deserialize<SaveFunctionRequestDto>("""{"functionId":"fn_1","allowInstallScripts":true}""", Options)!
+                .AllowInstallScripts.Should().BeTrue();
+        }
     }
 }

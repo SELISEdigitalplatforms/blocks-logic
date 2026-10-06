@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
 import { RunDetail } from "./run-detail";
 
@@ -113,5 +114,51 @@ describe("RunDetail", () => {
 
     await waitFor(() => expect(screen.getByText("No logs recorded.")).toBeTruthy());
     expect(screen.queryByText(/UserRuntimeError/)).toBeNull();
+  });
+
+  it("says a reused run was warm, with its handover time", async () => {
+    getRun.mockResolvedValue(run({ status: "Succeeded", reused: true, handoverMs: 4 }));
+
+    renderWithProviders(<RunDetail runId="run_1" />);
+
+    await waitFor(() => expect(screen.getByText("Warm (reused)")).toBeTruthy());
+    expect(screen.getByText("4 ms handover")).toBeTruthy();
+    expect(screen.queryByTestId("discard-reason")).toBeNull();
+  });
+
+  it("says cold start when the run started a fresh sandbox", async () => {
+    getRun.mockResolvedValue(run({ status: "Succeeded", reused: false }));
+
+    renderWithProviders(<RunDetail runId="run_1" />);
+
+    await waitFor(() => expect(screen.getByText("Cold start")).toBeTruthy());
+  });
+
+  it("shows nothing about the sandbox for a run without reuse", async () => {
+    getRun.mockResolvedValue(run({ status: "Succeeded" }));
+
+    renderWithProviders(<RunDetail runId="run_1" />);
+
+    await waitFor(() => expect(screen.getByText("run_1")).toBeTruthy());
+    expect(screen.queryByText("Warm (reused)")).toBeNull();
+    expect(screen.queryByText("Cold start")).toBeNull();
+  });
+
+  it("warns when the sandbox was replaced, and explains a dirty reason in plain words", async () => {
+    getRun.mockResolvedValue(
+      run({ status: "Succeeded", reused: true, discardReason: "dirty:Timeout" }),
+    );
+    const user = userEvent.setup();
+
+    renderWithProviders(<RunDetail runId="run_1" />);
+
+    await waitFor(() => expect(screen.getByTestId("discard-reason")).toBeTruthy());
+    expect(screen.getByTestId("discard-reason").textContent).toContain(
+      "Sandbox replaced after this call: dirty:Timeout",
+    );
+    await user.hover(screen.getByText("dirty:Timeout"));
+    expect(
+      (await screen.findAllByText(/left a timer running after it answered/)).length,
+    ).toBeGreaterThan(0);
   });
 });

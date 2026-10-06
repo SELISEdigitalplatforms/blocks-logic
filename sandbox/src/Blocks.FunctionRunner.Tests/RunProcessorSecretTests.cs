@@ -346,8 +346,32 @@ namespace Blocks.FunctionRunner.Tests
             NoValueAnywhere(_logs.All);
         }
 
+        // A store outage is not the function's failure (RunProcessor, 2026-10-04: "Improve handling
+        // of unreachable secret store"): a deployed run is left queued — deferred — and only a test
+        // run, which someone is watching, reports it straight away. This test predated that change
+        // and still expected a failed deployed run; it was only ever run where Redis is present.
         [SkippableFact]
-        public async Task A_store_outage_is_reported_as_retryable_and_never_starts_the_sandbox()
+        public async Task A_store_outage_defers_a_deployed_run_and_never_starts_the_sandbox()
+        {
+            Skip.If(Unavailable, "no Redis available");
+            var sandbox = new RecordingSandbox();
+            var resolver = new FakeRunSecretResolver(@throw: new SecretStoreUnavailableException(
+                "the key vault could not be read", new InvalidOperationException($"inner detail {StripeValue}")));
+
+            var disposition = await Processor(sandbox, resolver).ProcessAsync(
+                await QueueAsync(Envelope(ReferencingEnv)), CancellationToken.None);
+
+            disposition.Should().Be(RunProcessor.Disposition.Deferred);
+            sandbox.Calls.Should().Be(0);
+            Directory.Exists(RunDir).Should().BeFalse();
+            var entries = await _db!.StreamRangeAsync(RedisKeys.ResultsStream, "-", "+");
+            entries.Should().NotContain(e => e.Values.Any(f => f.Name == "runId" && f.Value == _runId),
+                "a deferred run reports nothing; it runs when the store is back");
+            _logs.All.Should().NotContain("inner detail");
+        }
+
+        [SkippableFact]
+        public async Task A_store_outage_is_reported_as_retryable_for_a_test_run_and_never_starts_the_sandbox()
         {
             Skip.If(Unavailable, "no Redis available");
             var sandbox = new RecordingSandbox();
@@ -355,7 +379,7 @@ namespace Blocks.FunctionRunner.Tests
                 "the key vault could not be read", new InvalidOperationException($"inner detail {StripeValue}")));
 
             await Processor(sandbox, resolver).ProcessAsync(
-                await QueueAsync(Envelope(ReferencingEnv)), CancellationToken.None);
+                (await QueueAsync(Envelope(ReferencingEnv))) with { IsTest = true }, CancellationToken.None);
 
             sandbox.Calls.Should().Be(0);
             Directory.Exists(RunDir).Should().BeFalse();

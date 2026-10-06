@@ -151,6 +151,15 @@ namespace Functions.DomainService.Services
         private readonly IConfiguration _configuration;
         private readonly ILogger<FunctionInvocationService> _logger;
 
+        /// <summary>Default for <c>Functions:MaxConcurrentSyncWaits</c>.</summary>
+        internal const int DefaultMaxConcurrentSyncWaits = 256;
+
+        /// <summary>
+        /// Slots for synchronous HTTP waits held open at once, per process (the service is a
+        /// singleton). Sized from <c>Functions:MaxConcurrentSyncWaits</c> at start-up.
+        /// </summary>
+        private readonly SemaphoreSlim _syncWaits;
+
         public FunctionInvocationService(
             IFunctionRepository functionRepository,
             IFunctionVersionRepository versionRepository,
@@ -179,6 +188,9 @@ namespace Functions.DomainService.Services
             _cache = cache;
             _configuration = configuration;
             _logger = logger;
+
+            var maxSyncWaits = Math.Max(1, configuration.GetValue("Functions:MaxConcurrentSyncWaits", DefaultMaxConcurrentSyncWaits));
+            _syncWaits = new SemaphoreSlim(maxSyncWaits, maxSyncWaits);
         }
 
         public async Task<InvokeResultDto> InvokeHttpAsync(
@@ -233,12 +245,13 @@ namespace Functions.DomainService.Services
                     break;
             }
 
-            // The trigger answers one method. Checked after authorization, as the gateway checks
-            // a route's methods, so which verb a function takes is not learnable anonymously.
-            var verb = FunctionHttpInputBuilder.Verb(version.Trigger.HttpMethod);
-            if (!string.Equals(request.Method, verb, StringComparison.OrdinalIgnoreCase))
+            // The trigger answers its listed verbs (or the one legacy method when it lists none).
+            // Checked after authorization, as the gateway checks a route's methods, so which verbs
+            // a function takes is not learnable anonymously.
+            var allowed = FunctionHttpInputBuilder.AllowedVerbs(version.Trigger);
+            if (!allowed.Contains(request.Method ?? string.Empty, StringComparer.OrdinalIgnoreCase))
             {
-                throw new FunctionMethodNotAllowedException(verb);
+                throw new FunctionMethodNotAllowedException(string.Join(", ", allowed));
             }
 
             // After authorization, like the gateway's own body cap, so the ceiling is not a probe
@@ -251,10 +264,73 @@ namespace Functions.DomainService.Services
 
             var inputJson = FunctionHttpInputBuilder.Build(request);
 
-            return await InvokeCoreAsync(
-                tenantId, function, version, version.ImageDigest, decision.Context,
-                InvokedByType.Http, invokedById: null, inputJson, request.Wait, waitTimeoutSeconds: null,
-                cancellationToken);
+            var syncWait = SyncWaitSeconds(version.Trigger, request);
+
+            // Process-wide bound on requests held open. Each sync wait holds a connection and a
+            // subscription; without a ceiling a burst of slow calls to a sync function could hold
+            // every connection the Api has. Full → this call is simply async: 202 + poll token,
+            // which the caller already has to handle for a run that outlasts the wait.
+            var holdsSlot = syncWait is not null && _syncWaits.Wait(0);
+            if (!holdsSlot) syncWait = null;
+
+            try
+            {
+                var result = await InvokeCoreAsync(
+                    tenantId, function, version, FunctionRunImage.For(version), decision.Context,
+                    InvokedByType.Http, invokedById: null, inputJson, request.Wait || syncWait is not null,
+                    waitTimeoutSeconds: null, cancellationToken, httpWaitSeconds: syncWait,
+                    finishedOnlyWithoutRetry: syncWait is not null);
+
+                if (syncWait is null) return result;
+
+                var status = FunctionWireMapping.ToRunStatus(result.Status, out var recognised);
+                if (!recognised || !FunctionWireMapping.IsTerminal(status))
+                {
+                    // Not finished inside the window (or about to be retried): exactly the 202 an
+                    // async caller gets — same run id, same QUEUED status, poll token added by the
+                    // controller. Reporting RUNNING here would make the two 202s differ.
+                    return new InvokeResultDto { RunId = result.RunId, Status = FunctionQueueKeys.Wire.Queued };
+                }
+
+                // Only the controller reads this, to answer with the function's own response.
+                // It is never serialized.
+                result.RespondSynchronously = true;
+                return result;
+            }
+            finally
+            {
+                if (holdsSlot) _syncWaits.Release();
+            }
+        }
+
+        /// <summary>
+        /// How long a public HTTP call holds its request open for the function's answer, or null
+        /// for today's fire-and-forget 202 (sandbox/REUSE.md, "Control plane").
+        /// <list type="bullet">
+        /// <item>the deployed trigger is not <c>sync</c> → null: exactly the behaviour before sync
+        /// existed, whatever the caller's <c>Prefer</c> says.</item>
+        /// <item><c>Prefer: respond-async</c> → null.</item>
+        /// <item><c>Prefer: wait=N</c> → N seconds (N ≤ 0 means "do not wait" → null).</item>
+        /// <item>otherwise → the HTTP cap.</item>
+        /// </list>
+        /// Always bounded by <c>Functions:HttpSyncWaitMaxSeconds</c> (default
+        /// <see cref="DefaultHttpSyncWaitMaxSeconds"/>, under typical 60 s ingress timeouts), so the
+        /// caller gets a clean 202 before any gateway would cut the connection.
+        /// </summary>
+        internal int? SyncWaitSeconds(TriggerConfig trigger, InvokeFunctionRequestDto request)
+        {
+            // Only a function deployed as sync ever holds a request. Prefer: wait= on an async
+            // function is ignored, exactly as before sync existed — existing clients that send it
+            // keep getting their 202 and never a raw answer they did not ask the tenant for.
+            if (request.PreferAsync || !TriggerConfig.IsSync(trigger.ResponseMode)) return null;
+
+            var cap = Math.Max(1, _configuration.GetValue("Functions:HttpSyncWaitMaxSeconds", DefaultHttpSyncWaitMaxSeconds));
+            if (request.PreferWaitSeconds is { } asked)
+            {
+                return asked <= 0 ? null : Math.Min(asked, cap);
+            }
+
+            return cap;
         }
 
         /// <summary>
@@ -313,7 +389,7 @@ namespace Functions.DomainService.Services
             // The editor's payload becomes input.body of a POST to the root, so the handler code a
             // tenant tests is the code that runs behind the public route — no "works in Test,
             // input is undefined in production" surprise.
-            var inputJson = FunctionHttpInputBuilder.ForTest(request.InputJson, function.Trigger.HttpMethod);
+            var inputJson = FunctionHttpInputBuilder.ForTest(request.InputJson, FunctionHttpInputBuilder.TestVerb(function.Trigger));
 
             var result = await InvokeCoreAsync(
                 tenantId, function, version: null, TestImageRef(build.ItemId), context,
@@ -413,7 +489,7 @@ namespace Functions.DomainService.Services
             TestBuild? test = null;
             if (version is not null)
             {
-                image = version.ImageDigest;
+                image = FunctionRunImage.For(version);
             }
             else
             {
@@ -429,7 +505,11 @@ namespace Functions.DomainService.Services
             var result = await InvokeCoreAsync(
                 tenantId, function, version, image, context,
                 InvokedByType.Replay, invokedById: originalRun.ItemId, originalRun.Input,
-                wait: false, waitTimeoutSeconds: null, cancellationToken, test);
+                wait: false, waitTimeoutSeconds: null, cancellationToken, test,
+                // A replay re-sends an HTTP call's input the way it came in, so it may use a warm
+                // sandbox only if the original did; a replayed workflow step stays cold, like the
+                // workflow step itself.
+                replayOfHttp: originalRun.InvokedBy == InvokedByType.Http);
             if (test is not null) result.BuildId ??= test.BuildId;
             return result;
         }
@@ -456,7 +536,7 @@ namespace Functions.DomainService.Services
             }
 
             return await InvokeCoreAsync(
-                tenantId, function, version, version.ImageDigest, callerContext,
+                tenantId, function, version, FunctionRunImage.For(version), callerContext,
                 InvokedByType.Workflow, invokedById: workflowExecutionId, inputJson, wait: true,
                 waitTimeoutSeconds, cancellationToken);
         }
@@ -473,7 +553,10 @@ namespace Functions.DomainService.Services
             bool wait,
             int? waitTimeoutSeconds,
             CancellationToken cancellationToken,
-            TestBuild? test = null)
+            TestBuild? test = null,
+            int? httpWaitSeconds = null,
+            bool finishedOnlyWithoutRetry = false,
+            bool replayOfHttp = false)
         {
             var admission = await _admissionService.AdmitAsync(function, tenantId, inputJson, cancellationToken);
             if (!admission.IsAdmitted)
@@ -502,6 +585,13 @@ namespace Functions.DomainService.Services
                 MaxAttempts = test is not null ? 1 : Math.Max(1, (version?.Retry ?? function.Retry).Attempts),
             };
             run.IdempotencyKey = $"{run.ItemId}-{run.Attempt}";
+
+            // Warm sandboxes serve public HTTP calls of a deployed version that opted in (and
+            // replays of such calls) — never a workflow step, whose behaviour must not change with
+            // a switch built for the HTTP route, and never a test, which has its own build path.
+            run.ReuseRequested = test is null
+                && version?.Trigger is { ReuseSandbox: true }
+                && (invokedBy == InvokedByType.Http || (invokedBy == InvokedByType.Replay && replayOfHttp));
 
             // Secret-bound variables are NOT resolved here. The envelope keeps each one as its
             // `{{secret.<id>}}` reference because it is written to the Redis run record (and reused
@@ -568,10 +658,16 @@ namespace Functions.DomainService.Services
                 var httpCap = Math.Max(1, _configuration.GetValue("Functions:HttpSyncWaitMaxSeconds", DefaultHttpSyncWaitMaxSeconds));
                 maxSyncWaitSeconds = Math.Min(maxSyncWaitSeconds, httpCap);
             }
+            if (httpWaitSeconds is { } asked)
+            {
+                // A public caller's own bound (Prefer: wait=N, or the sync trigger's cap). Total,
+                // not execution-only: it is what the caller agreed to hold the connection for.
+                maxSyncWaitSeconds = Math.Max(1, Math.Min(maxSyncWaitSeconds, asked));
+            }
             var executionWaitSeconds = Math.Min(
                 maxSyncWaitSeconds, (waitTimeoutSeconds ?? limits.TimeoutSeconds) + SyncGraceSeconds);
             return await WaitForResultAsync(
-                tenantId, run.ItemId, executionWaitSeconds, maxSyncWaitSeconds, cancellationToken);
+                tenantId, run.ItemId, executionWaitSeconds, maxSyncWaitSeconds, cancellationToken, finishedOnlyWithoutRetry);
         }
 
         /// <summary>
@@ -654,7 +750,7 @@ namespace Functions.DomainService.Services
                     new NameValueEntry("functionId", function.ItemId),
                     new NameValueEntry("tenantId", tenantId),
                     new NameValueEntry("sourceKey", test.SourceKey),
-                    new NameValueEntry("allowScripts", "false"),
+                    new NameValueEntry("allowScripts", function.Source.AllowInstallScripts ? "true" : "false"),
                     new NameValueEntry("attempt", run.Attempt),
                     new NameValueEntry("protocol", FunctionQueueKeys.RunProtocolVersion),
                 ]);
@@ -688,6 +784,14 @@ namespace Functions.DomainService.Services
                     entry.Add(new NameValueEntry(
                         FunctionQueueKeys.RunArtifactSha256Field, version.ArtifactSha256 ?? string.Empty));
                 }
+            }
+
+            // Warm-sandbox opt-in, decided in InvokeCoreAsync from the deployed version only — never
+            // the editable function, so flipping the switch changes nothing until a deploy. Added
+            // only when on, so every other run entry stays exactly what it was.
+            if (run.ReuseRequested)
+            {
+                entry.Add(new NameValueEntry(FunctionQueueKeys.RunReuseField, "1"));
             }
 
             await database.StreamAddAsync(FunctionQueueKeys.RunsStream, [.. entry]);
@@ -762,7 +866,8 @@ namespace Functions.DomainService.Services
             string runId,
             int executionWaitSeconds,
             int absoluteMaxSeconds,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            bool finishedOnlyWithoutRetry = false)
         {
             var hardDeadline = DateTime.UtcNow.AddSeconds(absoluteMaxSeconds);
             var deadline = DateTime.UtcNow.AddSeconds(executionWaitSeconds);
@@ -797,6 +902,15 @@ namespace Functions.DomainService.Services
                     if (run is not null)
                     {
                         lastStatus = run.Status;
+
+                        if (FunctionWireMapping.IsTerminal(run.Status)
+                            && finishedOnlyWithoutRetry && FunctionWireMapping.WillBeRetried(run))
+                        {
+                            // A synchronous HTTP caller must not be answered with a failure the
+                            // result consumer is about to replace with another attempt: that
+                            // caller gets the 202 and polls the run to its real outcome.
+                            return new InvokeResultDto { RunId = runId, Status = FunctionQueueKeys.Wire.Queued };
+                        }
 
                         if (FunctionWireMapping.IsTerminal(run.Status))
                         {

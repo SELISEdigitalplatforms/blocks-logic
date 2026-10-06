@@ -10,6 +10,7 @@ import {
   snippetBlocksKey,
   toHttpVerb,
 } from "../../constants/endpoint.constant";
+import type { ProxyMethod } from "@/modules/proxy/types";
 import { HttpTriggerMethod } from "../../types/function.types";
 
 /**
@@ -36,10 +37,14 @@ export const buildInvokePath = (functionId: string) => getFunctionClientPath(fun
 export const EndpointBadge = ({
   functionId,
   method,
+  methods,
 }: {
   functionId: string;
   method: HttpTriggerMethod;
+  /** Every verb the trigger accepts, when it lists several; replaces `method` on the badge. */
+  methods?: ProxyMethod[];
 }) => {
+  const verbs = methods && methods.length > 0 ? methods : [toHttpVerb(method)];
   const [copied, setCopied] = useState(false);
   const [keyCopied, setKeyCopied] = useState(false);
   const project = useProjectStore().selectedProject;
@@ -64,7 +69,9 @@ export const EndpointBadge = ({
   return (
     <div className="flex flex-col gap-2 rounded-lg border bg-muted/20 px-3 py-2.5">
       <div className="flex items-center gap-2">
-        <ProxyMethodBadge method={toHttpVerb(method)} />
+        {verbs.map((verb) => (
+          <ProxyMethodBadge key={verb} method={verb} />
+        ))}
         <Button
           variant="ghost"
           size="icon"
@@ -110,7 +117,8 @@ export const EndpointBadge = ({
       <p className="text-xs text-muted-foreground">
         Whatever follows the id is yours to route on — it arrives as{" "}
         <code className="font-mono">input.path</code>, with the query, headers and body beside it.
-        The other method is refused with <code className="font-mono">405</code>.
+        Any other method is refused with{" "}
+        <code className="font-mono">405</code>.
       </p>
     </div>
   );
