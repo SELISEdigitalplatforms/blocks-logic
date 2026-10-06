@@ -73,7 +73,8 @@ namespace Workflow.DomainService.Utils
                 {
                     Queues = [NodeExecutionQueue, EmailTriggerQueue, DataTriggerQueue, SchedulerTriggerQueue, WorkflowImportQueue, LogicMailQueueName, CommunicationConstants.MailStatusQueueName, SchedulerConstants.ScheduleJobRegistryQueueName],
                     Topics = [MigrationCompletionTopic],
-                    QueuePrefetchCount = 40
+                    QueuePrefetchCount = 40,
+                    MaxConcurrentCalls = 40
                 }
             };
         }
