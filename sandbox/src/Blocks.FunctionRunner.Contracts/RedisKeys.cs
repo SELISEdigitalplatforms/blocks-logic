@@ -130,6 +130,12 @@ namespace Blocks.FunctionRunner.Contracts
         /// </summary>
         public const string RunApiTimingsField = "apiTimings";
 
+        /// <summary>
+        /// Optional field of a run entry (the Api's span) and of a result entry (the runner's span):
+        /// a W3C <c>traceparent</c>, so one call is one trace across the Api, the runner and the Worker.
+        /// </summary>
+        public const string TraceParentField = "traceparent";
+
         /// <inheritdoc cref="RunApiTimingsField" />
         public const string ResultTimingsField = "timings";
 

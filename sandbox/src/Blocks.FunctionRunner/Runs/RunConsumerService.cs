@@ -59,8 +59,8 @@ namespace Blocks.FunctionRunner.Runs
             // The capacity logged here is the budget's current view, not a configured number:
             // it moves with the host while this loop runs.
             _logger.LogInformation(
-                "Consuming {Stream} as {Consumer} (capacity {Capacity})",
-                RedisKeys.RunsStream, _options.RunnerId, _budget.Capacity);
+                "Consuming {Stream} as {Consumer} (capacity {Capacity}); function run spans: {Tracing}",
+                RedisKeys.RunsStream, _options.RunnerId, _budget.Capacity, _processor.TracingState);
 
             var idleDelay = TimeSpan.FromMilliseconds(250);
             // Wakes the idle wait below the moment the control plane queues a run.
@@ -226,6 +226,7 @@ namespace Blocks.FunctionRunner.Runs
                 Reuse = string.Equals(entry.Get(RedisKeys.RunReuseField), "1", StringComparison.Ordinal),
                 ApiTimings = entry.Get(RedisKeys.RunApiTimingsField),
                 QueuedMs = StreamEntryAgeMs(entry.Id),
+                TraceParent = entry.Get(RedisKeys.TraceParentField),
             };
 
             if (deliveries > 1)

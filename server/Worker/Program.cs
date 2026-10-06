@@ -92,6 +92,8 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             services.RegisterBlocksStorageServices();
             //services.RegisterSharedServices();
 
+            // Before Genesis sets up tracing, so it runs ahead of Genesis's exporter (see TraceTagSanitizer).
+            Common.InternalService.Tracing.TraceTagSanitizer.AddFirst(services);
             ApplicationConfigurations.ConfigureWorker(services, LogicConstants.GetMessageConfiguration(secret.MessageConnectionString));
         });
 

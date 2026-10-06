@@ -50,8 +50,10 @@ namespace Blocks.FunctionRunner.Runs
             ILogger<RunProcessor> logger,
             Maintenance.IImageUsageLog? usage = null,
             SecretStore.ISecretStoreBreaker? secretBreaker = null,
-            WarmPool? warmPool = null)
+            WarmPool? warmPool = null,
+            System.Diagnostics.ActivitySource? traces = null)
         {
+            _traces = traces;
             _db = db;
             _sandbox = sandbox;
             _images = images;
@@ -110,9 +112,40 @@ namespace Blocks.FunctionRunner.Runs
         public async Task<bool> IsCancelRequestedAsync(string runId)
             => await _db.KeyExistsAsync(RedisKeys.Cancel(runId)).ConfigureAwait(false);
 
+        private readonly System.Diagnostics.ActivitySource? _traces;
+        private static int _tracingReported;
+
+        /// <summary>Whether anything records this runner's <c>Function::Run</c> spans.</summary>
+        internal string TracingState => _traces is null ? "no activity source"
+            : _traces.HasListeners() ? $"recorded (source {_traces.Name})" : $"not recorded (nothing listens to {_traces.Name})";
+
+        /// <summary>
+        /// Processes one run inside its <c>Function::Run</c> span, which continues the Api's trace
+        /// (<see cref="Tracing.RunTracing"/>). Ids and outcome only — nothing the function saw.
+        /// </summary>
         public async Task<Disposition> ProcessAsync(RunJob job, CancellationToken token)
         {
             ArgumentNullException.ThrowIfNull(job);
+            using var span = Tracing.RunTracing.Start(
+                _traces, "Function::Run", System.Diagnostics.ActivityKind.Consumer, job.TraceParent, job.TenantId);
+            if (Interlocked.Exchange(ref _tracingReported, 1) == 0)
+            {
+                // Once, so an operator can tell from the journal whether runs reach the trace store.
+                _logger.LogInformation("Function run spans are {State} (source {Source})",
+                    span is not null ? "recorded" : "not recorded — nothing listens to this source",
+                    _traces?.Name ?? "none");
+            }
+            span?.SetTag("blocks.function.id", job.FunctionId);
+            span?.SetTag("blocks.function.version_id", job.VersionId);
+            span?.SetTag("blocks.function.run_id", job.RunId);
+            span?.SetTag("blocks.function.attempt", job.Attempt);
+            var disposition = await ProcessCoreAsync(job, token).ConfigureAwait(false);
+            span?.SetTag("blocks.function.disposition", disposition.ToString());
+            return disposition;
+        }
+
+        private async Task<Disposition> ProcessCoreAsync(RunJob job, CancellationToken token)
+        {
 
             var runKey = RedisKeys.Run(job.RunId);
             var hash = await _db.HashGetAllAsync(runKey).ConfigureAwait(false);
@@ -1013,6 +1046,23 @@ namespace Blocks.FunctionRunner.Runs
                     new("discard", warm.Discard),
                     new("handoverMs", warm.HandoverMs?.ToString(CultureInfo.InvariantCulture) ?? string.Empty),
                 ];
+            }
+
+            // The run's span: its outcome, and its id for the Worker's span to continue.
+            if (System.Diagnostics.Activity.Current is { } span)
+            {
+                span.SetTag("blocks.function.status", status);
+                if (errorCode is not null) span.SetTag("blocks.function.error_code", errorCode);
+                span.SetTag("blocks.function.duration_ms", durationMs);
+                if (warm is not null)
+                {
+                    span.SetTag("blocks.function.reused", warm.Reused);
+                    if (warm.HandoverMs is { } h) span.SetTag("blocks.function.handover_ms", h);
+                }
+                if (Tracing.RunTracing.CurrentTraceParent() is { } parent)
+                {
+                    entry = [.. entry, new(RedisKeys.TraceParentField, parent)];
+                }
             }
 
             // Every step time so far (Api, queue, hand-over), for the run record. Optional: a

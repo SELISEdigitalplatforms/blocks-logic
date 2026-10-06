@@ -59,8 +59,10 @@ namespace Functions.DomainService.Consumers
             IFunctionVersionRepository versionRepository,
             IFunctionImageRecoveryService imageRecovery,
             IFunctionRepository functionRepository,
-            ILogger<FunctionResultConsumer> logger)
+            ILogger<FunctionResultConsumer> logger,
+            System.Diagnostics.ActivitySource? traces = null)
         {
+            _traces = traces;
             ArgumentNullException.ThrowIfNull(cache);
             _db = cache.CacheDatabase();
             _runRepository = runRepository;
@@ -143,12 +145,21 @@ namespace Functions.DomainService.Consumers
             }
         }
 
+        private readonly System.Diagnostics.ActivitySource? _traces;
+
         private async Task HandleAsync(
             FunctionResultGroupConsumer consumer, ResultStreamEntry entry, SemaphoreSlim gate, CancellationToken stoppingToken)
         {
+            // The Worker's part of the call's trace, under the runner's span.
+            using var span = Common.InternalService.Tracing.RunTracing.Start(
+                _traces, "Function::Result", System.Diagnostics.ActivityKind.Consumer,
+                entry.Get(FunctionQueueKeys.TraceParentField), entry.Get("tenantId"));
+            span?.SetTag("blocks.function.run_id", entry.Get("runId"));
+            span?.SetTag("blocks.function.status", entry.Get("status"));
             try
             {
                 var outcome = await ProcessAsync(entry, stoppingToken);
+                span?.SetTag("blocks.function.result", outcome.Disposition.ToString());
                 if (outcome.Disposition == ResultDisposition.Rejected)
                 {
                     await consumer.DeadLetterAsync(entry, outcome.Reason ?? "rejected");

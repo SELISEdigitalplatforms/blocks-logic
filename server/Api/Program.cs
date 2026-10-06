@@ -35,6 +35,8 @@ builder.Configuration.AddMongoDbConfiguration(options =>
     options.SecretKey = "blocks-secret-logic";
 });
 
+// Before Genesis sets up tracing, so it runs ahead of Genesis's exporter (see TraceTagSanitizer).
+Common.InternalService.Tracing.TraceTagSanitizer.AddFirst(builder.Services);
 ApplicationConfigurations.ConfigureServices(builder.Services, LogicConstants.GetMessageConfiguration(secret.MessageConnectionString));
 
 builder.Services.Configure<FormOptions>(options =>

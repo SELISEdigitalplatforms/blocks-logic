@@ -129,6 +129,12 @@ namespace Functions.DomainService.Queue
         /// </summary>
         public const string RunApiTimingsField = "apiTimings";
 
+        /// <summary>
+        /// Optional field of a run entry (the Api's span) and of a result entry (the runner's span):
+        /// a W3C <c>traceparent</c>, so one call is one trace. Mirrors <c>RedisKeys.TraceParentField</c>.
+        /// </summary>
+        public const string TraceParentField = "traceparent";
+
         /// <inheritdoc cref="RunApiTimingsField" />
         public const string ResultTimingsField = "timings";
         public static string ResultsStream => _prefix + "functions:results";

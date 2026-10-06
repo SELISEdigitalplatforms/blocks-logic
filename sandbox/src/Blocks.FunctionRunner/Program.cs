@@ -35,6 +35,8 @@ var secret = await ApplicationConfigurations.ConfigureLogAndSecretsAsync(service
 // Genesis worker wiring: ICacheClient, ITenants, OpenTelemetry, health checks.
 // The message connection is deliberately allowed to be empty — the runner speaks Redis
 // Streams, not the service bus, so it must not require a broker to start.
+// Before Genesis sets up tracing, so it runs ahead of Genesis's exporter (see TraceTagSanitizer).
+Blocks.FunctionRunner.Tracing.TraceTagSanitizer.AddFirst(builder.Services);
 ApplicationConfigurations.ConfigureWorker(builder.Services, new MessageConfiguration
 {
     ServiceName = serviceName,

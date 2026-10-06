@@ -75,6 +75,9 @@ namespace Blocks.FunctionRunner.Contracts
 
         /// <summary>How long the entry sat on the runs stream before this runner claimed it, in ms.</summary>
         public long? QueuedMs { get; init; }
+
+        /// <summary>The Api span's W3C id (<see cref="RedisKeys.TraceParentField"/>), so this run joins the call's trace.</summary>
+        public string? TraceParent { get; init; }
     }
 
     /// <summary>A result written to <see cref="RedisKeys.ResultsStream"/> for the logic Worker.</summary>

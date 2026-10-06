@@ -881,6 +881,12 @@ namespace Functions.DomainService.Services
                 entry.Add(new NameValueEntry(FunctionQueueKeys.RunReuseField, "1"));
             }
 
+            // This request's span, so the runner's and the Worker's spans join the call's trace.
+            if (Common.InternalService.Tracing.RunTracing.CurrentTraceParent() is { } traceParent)
+            {
+                entry.Add(new NameValueEntry(FunctionQueueKeys.TraceParentField, traceParent));
+            }
+
             // This call's Api steps so far, for the run's Timing group (carried by the runner).
             if (StepTimer.Current.Value is { } timer)
             {
