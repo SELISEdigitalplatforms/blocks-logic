@@ -136,6 +136,15 @@ namespace Blocks.FunctionRunner.Contracts
         /// </summary>
         public const string TraceParentField = "traceparent";
 
+        /// <summary>
+        /// Runner-only fields of a run entry put back after a deferral: how many times it was
+        /// deferred, and when it was first queued (unix ms) — the deferral budget runs from there.
+        /// </summary>
+        public const string RunDeferralsField = "deferrals";
+
+        /// <inheritdoc cref="RunDeferralsField" />
+        public const string RunFirstQueuedField = "firstQueuedAt";
+
         /// <inheritdoc cref="RunApiTimingsField" />
         public const string ResultTimingsField = "timings";
 

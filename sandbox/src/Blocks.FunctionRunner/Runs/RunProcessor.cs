@@ -104,6 +104,50 @@ namespace Blocks.FunctionRunner.Runs
                 null, 0, null, null, null, null, false).ConfigureAwait(false);
         }
 
+        /// <summary>A status the runner writes only when an attempt is over.</summary>
+        internal static bool IsFinished(string? status) => status is RunStatuses.Succeeded or RunStatuses.Failed
+            or RunStatuses.TimedOut or RunStatuses.Cancelled or RunStatuses.ResourceExceeded;
+
+        /// <summary>
+        /// The result entry of an attempt that already finished, rebuilt from what Redis still holds
+        /// (status, result and log keys). Sent again only when its first send may not have landed;
+        /// the Worker ignores it when the record already holds this attempt's outcome. The error
+        /// message is not in Redis, so a failure re-sent this way carries its status and code only.
+        /// </summary>
+        private async Task RepublishFinishedAsync(RunJob job, string status)
+        {
+            var resultKey = RedisKeys.Result(job.RunId);
+            var logsKey = RedisKeys.Logs(job.RunId);
+            var hasResult = _db.KeyExistsAsync(resultKey);
+            var hasLogs = _db.KeyExistsAsync(logsKey);
+            await Task.WhenAll(hasResult, hasLogs).ConfigureAwait(false);
+            var now = DateTimeOffset.UtcNow.ToString("O");
+            await _db.StreamAddAsync(RedisKeys.ResultsStream,
+            [
+                new("runId", job.RunId),
+                new("functionId", job.FunctionId),
+                new("tenantId", job.TenantId ?? string.Empty),
+                new("status", status),
+                new("errorCode", string.Empty),
+                new("errorMessage", string.Empty),
+                new("exitCode", string.Empty),
+                new("durationMs", "0"),
+                new("startupMs", string.Empty),
+                new("executionMs", string.Empty),
+                new("peakMemoryBytes", string.Empty),
+                new("cpuUsageMs", string.Empty),
+                new("runnerId", _options.RunnerId),
+                new("startedAt", now),
+                new("completedAt", now),
+                new("resultKey", hasResult.Result ? resultKey : string.Empty),
+                new("logsKey", hasLogs.Result ? logsKey : string.Empty),
+                new("truncated", "false"),
+                new("attempt", job.Attempt.ToString(CultureInfo.InvariantCulture)),
+                new("protocol", RedisKeys.ProtocolVersion.ToString(CultureInfo.InvariantCulture)),
+            ]).ConfigureAwait(false);
+            StreamWakeup.Publish(_db, RedisKeys.ResultsNudgeChannel);
+        }
+
         /// <summary>True while the run's payload exists, i.e. it has not expired or been withdrawn.</summary>
         public async Task<bool> IsLiveAsync(string runId)
             => await _db.KeyExistsAsync(RedisKeys.Run(runId)).ConfigureAwait(false);
@@ -158,6 +202,19 @@ namespace Blocks.FunctionRunner.Runs
             }
 
             var fields = hash.ToDictionary(e => e.Name.ToString(), e => e.Value.ToString(), StringComparer.Ordinal);
+
+            // Already finished: the runner that ran it stopped after writing the result but before
+            // acknowledging the entry, so it was handed out again. Running it again would repeat its
+            // side effects (a charge, an email). Instead the result entry is published again — the
+            // Worker treats a second one for the same attempt as a duplicate — and the entry is done.
+            if (fields.TryGetValue("status", out var recorded) && IsFinished(recorded))
+            {
+                _logger.LogWarning(
+                    "Run {RunId} attempt {Attempt} already finished as {Status}; not running it again", job.RunId, job.Attempt, recorded);
+                await RepublishFinishedAsync(job, recorded).ConfigureAwait(false);
+                return Disposition.Complete;
+            }
+
             var limits = ReadLimits(fields);
 
             // Stamped before the image, because producing it is part of how long this run took
@@ -297,7 +354,9 @@ namespace Blocks.FunctionRunner.Runs
             // A display status for the run list, so not waited for here: it travels on the same
             // connection as the commands after it, and Redis applies one connection's commands in
             // order, so it still lands before Running and before the result.
-            _ = SetStatusQuietlyAsync(runKey, RunStatuses.Starting, job.RunId);
+            // On the warm path "Starting" is written once a sandbox is acquired (ProcessWarmAsync):
+            // a run deferred for want of one is still queued, and the Api's wait must keep sliding.
+            if (!useWarm) _ = SetStatusQuietlyAsync(runKey, RunStatuses.Starting, job.RunId);
 
             if (useWarm)
             {
@@ -559,6 +618,7 @@ namespace Blocks.FunctionRunner.Runs
 
             var handle = acquired;
             timings.SandboxReady();
+            _ = SetStatusQuietlyAsync(runKey, RunStatuses.Starting, job.RunId);
             WarmCallResult call;
             IReadOnlyList<string> resolvedValues;
             string? redeemed = null;

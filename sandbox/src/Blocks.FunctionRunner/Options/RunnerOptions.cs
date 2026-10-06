@@ -195,6 +195,17 @@ namespace Blocks.FunctionRunner.Options
         [Range(0, 256)]
         public int MaxParallelRuns { get; set; }
 
+        /// <summary>
+        /// How long a run may keep being deferred (host full, function or tenant at its limit, secret
+        /// store down) before it is given up as undeliverable. A deferred run is put back at the end
+        /// of the queue at once with a short back-off — it used to be left pending until the
+        /// abandoned-entry sweep (90 s), and each sweep counted as a delivery, so a run deferred three
+        /// times was failed although nothing was wrong (FN-1, 2026-10-06).
+        /// <c>RUNNER__DeferralBudgetSeconds</c>.
+        /// </summary>
+        [Range(30, 21600)]
+        public int DeferralBudgetSeconds { get; set; } = 600;
+
         /// <summary>Delivery attempts before an entry is moved to functions:dead.</summary>
         [Range(1, 20)]
         public int MaxAttempts { get; set; } = 3;

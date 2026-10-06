@@ -141,7 +141,15 @@ namespace Functions.DomainService.Nodes
             if (string.Equals(parameters.InputMode, "expression", StringComparison.OrdinalIgnoreCase))
             {
                 var resolved = parseExpression<object>(parameters.InputExpression, inputItem, context);
-                return resolved is null ? null : JsonSerializer.Serialize(resolved);
+                return resolved switch
+                {
+                    null => null,
+                    // The shared expression parser hands back Newtonsoft tokens for JSON (JObject,
+                    // JArray, JValue). System.Text.Json does not know them and wrote every object as
+                    // nested empty arrays: {"a":1} reached the function as {"a":[]} (WF-11, 2026-10-06).
+                    Newtonsoft.Json.Linq.JToken token => token.ToString(Newtonsoft.Json.Formatting.None),
+                    _ => JsonSerializer.Serialize(resolved),
+                };
             }
 
             return inputItem.Data.Output is null

@@ -76,7 +76,7 @@ namespace Blocks.FunctionRunner.Tests
                 await Task.Delay(RunTime, cancellationToken);
                 return new SandboxResult
                 {
-                    Output = new SandboxOutput(), ExitCode = 0, OomKilled = false, TimedOut = false,
+                    Output = new SandboxOutput { Ok = true, ResultJson = "1" }, ExitCode = 0, OomKilled = false, TimedOut = false,
                     DurationMs = (long)RunTime.TotalMilliseconds,
                 };
             }
@@ -98,7 +98,7 @@ namespace Blocks.FunctionRunner.Tests
             public HostSignalSample Sample() => new(0, 0, 0, 64L * 1024 * 1024 * 1024);
         }
 
-        private RunConsumerService Service(int maxParallelRuns)
+        private RunConsumerService Service(int maxParallelRuns, int deferralBudgetSeconds = 600)
         {
             var options = Microsoft.Extensions.Options.Options.Create(new RunnerOptions
             {
@@ -106,6 +106,7 @@ namespace Blocks.FunctionRunner.Tests
                 RunsDir = _runsDir,
                 MaxActiveSandboxes = 8,
                 MaxParallelRuns = maxParallelRuns,
+                DeferralBudgetSeconds = deferralBudgetSeconds,
             });
             var budget = new HostBudget(options, new RoomyHost(), new SandboxFootprint(), NullLogger<HostBudget>.Instance);
             var processor = new RunProcessor(_db!, new SlowSandbox(), new ResolvesAnything(), budget,
@@ -186,6 +187,107 @@ namespace Blocks.FunctionRunner.Tests
             var elapsed = await RunAllAsync(maxParallelRuns: 1);
 
             elapsed.Should().BeGreaterThanOrEqualTo(RunTime * 3 - TimeSpan.FromMilliseconds(50));
+        }
+
+        [SkippableFact]
+        public async Task Stopping_the_runner_lets_a_started_run_finish_instead_of_killing_it()
+        {
+            Skip.If(Unavailable, "no Redis available");
+            await QueueAsync();
+            using var service = Service(maxParallelRuns: 0);
+            await service.StartAsync(CancellationToken.None);
+            // Wait until the runs are inside their sandboxes, then stop the host.
+            await Task.Delay(RunTime / 2);
+            var watch = Stopwatch.StartNew();
+            await service.StopAsync(CancellationToken.None);
+
+            var done = (await _db!.StreamRangeAsync(RedisKeys.ResultsStream, "-", "+"))
+                .Where(e => e.Values.Any(v => v.Name == "runId" && _runIds.Contains(v.Value.ToString())))
+                .Select(e => e.Values.First(v => v.Name == "status").Value.ToString())
+                .ToList();
+            done.Should().HaveCount(_runIds.Count, "every started run was allowed to finish");
+            var detail = string.Join(" | ", (await _db!.StreamRangeAsync(RedisKeys.ResultsStream, "-", "+"))
+                .Where(e => e.Values.Any(v => v.Name == "runId" && _runIds.Contains(v.Value.ToString())))
+                .Select(e => string.Join(",", e.Values.Where(v => v.Name == "errorCode" || v.Name == "errorMessage").Select(v => v.Value))));
+            done.Should().OnlyContain(s => s == RunStatuses.Succeeded, detail);
+            watch.Elapsed.Should().BeLessThan(RunTime * 2);
+        }
+
+        private async Task<List<FunctionConcurrency>> FillFunctionSlotsAsync(string functionId)
+        {
+            var held = new List<FunctionConcurrency>();
+            for (var i = 0; i < Ceilings.MaxFunctionConcurrency; i++)
+            {
+                held.Add((await FunctionConcurrency.TryEnterAsync(_db!, functionId, $"run_busy_{i}", Ceilings.MaxFunctionConcurrency))!);
+            }
+            return held;
+        }
+
+        private async Task<string?> StatusOfAsync(string runId) =>
+            (await _db!.StreamRangeAsync(RedisKeys.ResultsStream, "-", "+"))
+                .Where(e => e.Values.Any(v => v.Name == "runId" && v.Value == runId))
+                .Select(e => (string?)e.Values.First(v => v.Name == "status").Value.ToString())
+                .LastOrDefault();
+
+        [SkippableFact]
+        public async Task A_deferred_run_goes_back_on_the_queue_at_once_and_runs_when_a_slot_frees()
+        {
+            Skip.If(Unavailable, "no Redis available");
+            var held = await FillFunctionSlotsAsync("fn_par_0");
+            await QueueAsync();
+            using var service = Service(maxParallelRuns: 0);
+            await service.StartAsync(CancellationToken.None);
+            try
+            {
+                await Task.Delay(1500);
+                (await StatusOfAsync(_runIds[0])).Should().BeNull("its function is at its limit");
+                var requeued = (await _db!.StreamRangeAsync(RedisKeys.RunsStream, "-", "+"))
+                    .Any(e => e.Values.Any(v => v.Name == "runId" && v.Value == _runIds[0])
+                           && e.Values.Any(v => v.Name == RedisKeys.RunDeferralsField));
+                requeued.Should().BeTrue("a deferral puts the run back on the queue, it is not left pending for the 90 s sweep");
+
+                foreach (var slot in held) await slot.DisposeAsync();
+                var watch = Stopwatch.StartNew();
+                while ((await StatusOfAsync(_runIds[0])) is null && watch.Elapsed < TimeSpan.FromSeconds(8)) await Task.Delay(50);
+                (await StatusOfAsync(_runIds[0])).Should().Be(RunStatuses.Succeeded);
+                watch.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(5), "it starts within the back-off, not after 90 s");
+            }
+            finally
+            {
+                foreach (var slot in held) await slot.DisposeAsync();
+                await service.StopAsync(CancellationToken.None);
+                await _db!.KeyDeleteAsync(RedisKeys.Concurrency("fn_par_0"));
+            }
+        }
+
+        [SkippableFact]
+        public async Task A_run_deferred_past_its_budget_is_given_up_with_the_reason()
+        {
+            Skip.If(Unavailable, "no Redis available");
+            var held = await FillFunctionSlotsAsync("fn_par_0");
+            await QueueAsync();
+            using var service = Service(maxParallelRuns: 0, deferralBudgetSeconds: 1);
+            await service.StartAsync(CancellationToken.None);
+            try
+            {
+                var watch = Stopwatch.StartNew();
+                StreamEntry? dead = null;
+                while (dead is null && watch.Elapsed < TimeSpan.FromSeconds(10))
+                {
+                    await Task.Delay(100);
+                    dead = (await _db!.StreamRangeAsync(RedisKeys.DeadStream, "-", "+"))
+                        .Cast<StreamEntry?>()
+                        .FirstOrDefault(e => e!.Value.Values.Any(v => v.Name == "runId" && v.Value == _runIds[0]));
+                }
+                dead.Should().NotBeNull();
+                dead!.Value.Values.First(v => v.Name == "deadReason").Value.ToString().Should().Contain("no capacity");
+            }
+            finally
+            {
+                foreach (var slot in held) await slot.DisposeAsync();
+                await service.StopAsync(CancellationToken.None);
+                await _db!.KeyDeleteAsync([RedisKeys.Concurrency("fn_par_0"), RedisKeys.DeadStream]);
+            }
         }
     }
 }

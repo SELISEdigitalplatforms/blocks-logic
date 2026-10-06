@@ -126,6 +126,23 @@ namespace XUnitTest.Functions
             service.Calls[0].Input.Should().Contain("42").And.Contain("orderId");
         }
 
+        [Theory]
+        [InlineData("{\"a\":1,\"b\":\"x\",\"c\":{\"d\":true}}", "{\"a\":1,\"b\":\"x\",\"c\":{\"d\":true}}")]
+        [InlineData("[1,2,{\"e\":null}]", "[1,2,{\"e\":null}]")]
+        [InlineData("42", "42")]
+        [InlineData("plain text", "\"plain text\"")]
+        public async Task Custom_json_input_reaches_the_function_as_written(string expression, string expected)
+        {
+            // WF-11: the expression parser returns Newtonsoft tokens; System.Text.Json wrote an
+            // object as nested empty arrays ({"a":1} arrived as {"a":[]}).
+            var service = new FakeInvocationService();
+            var items = new List<WorkflowItemExecutionEntity> { Item("i1", new BsonDocument("orderId", "42")) };
+
+            await Node(service).RunAsync(Context(items, inputMode: "expression", inputExpression: expression));
+
+            service.Calls[0].Input.Should().Be(expected);
+        }
+
         [Fact]
         public async Task The_returned_value_becomes_the_output_items_data()
         {

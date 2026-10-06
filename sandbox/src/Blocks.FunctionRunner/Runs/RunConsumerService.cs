@@ -101,11 +101,14 @@ namespace Blocks.FunctionRunner.Runs
 
                     var entries = await consumer.ReadNewAsync(count: 1, stoppingToken).ConfigureAwait(false);
 
-                    if (entries.Count == 0 && DateTimeOffset.UtcNow >= nextReclaim)
+                    // On its own timer: the sweep for entries a dead runner left behind used to run
+                    // only when no new entry arrived, so under steady traffic it never ran.
+                    if (DateTimeOffset.UtcNow >= nextReclaim && room > entries.Count)
                     {
                         nextReclaim = DateTimeOffset.UtcNow.Add(reclaimEvery);
-                        entries = await consumer.ReclaimAbandonedAsync(
-                            TimeSpan.FromMilliseconds(_options.ClaimIdleMs), count: Math.Min(5, room)).ConfigureAwait(false);
+                        var reclaimed = await consumer.ReclaimAbandonedAsync(
+                            TimeSpan.FromMilliseconds(_options.ClaimIdleMs), count: Math.Min(5, room - entries.Count)).ConfigureAwait(false);
+                        if (reclaimed.Count > 0) entries = [.. entries, .. reclaimed];
                     }
 
                     if (entries.Count == 0)
@@ -116,7 +119,11 @@ namespace Blocks.FunctionRunner.Runs
 
                     foreach (var entry in entries)
                     {
-                        running.Add(HandleGuardedAsync(consumer, entry, stoppingToken));
+                        // Not the stop token: a stopping host stops claiming but lets what it has
+                        // started finish (each run has its own deadline, ≤ startup allowance +
+                        // timeout + grace). Cancelling here killed calls half-way and ran them
+                        // again elsewhere ≥ 90 s later — side effects twice (FN-3, 2026-10-06).
+                        running.Add(HandleGuardedAsync(consumer, entry, CancellationToken.None));
                     }
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -144,6 +151,46 @@ namespace Blocks.FunctionRunner.Runs
             }
 
             _logger.LogInformation("Run loop stopped");
+        }
+
+        /// <summary>
+        /// A run that cannot start yet goes back to the end of the queue after a short back-off
+        /// (100 ms doubling to 2 s), and this delivery is acknowledged. Deferrals are counted apart
+        /// from crash re-deliveries (which keep MaxAttempts) and given a time budget from when the
+        /// run was first queued; past it, the run is dead-lettered with the reason, which closes it
+        /// as undeliverable. The back-off is spent inside this run's slot of the parallel loop, so
+        /// a host full of waiting runs claims fewer new ones on its own.
+        /// <para>
+        /// Put back before acknowledging: a crash in between leaves two entries for one run, and the
+        /// lease plus the "already finished" check make the second a no-op — never a lost run.
+        /// </para>
+        /// </summary>
+        private async Task RequeueDeferredAsync(GroupConsumer consumer, ClaimedEntry entry)
+        {
+            var deferrals = int.TryParse(entry.Get(RedisKeys.RunDeferralsField), NumberStyles.None, CultureInfo.InvariantCulture, out var d)
+                ? d : 0;
+            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var firstQueued = long.TryParse(entry.Get(RedisKeys.RunFirstQueuedField), NumberStyles.None, CultureInfo.InvariantCulture, out var f)
+                ? f
+                : now - (StreamEntryAgeMs(entry.Id) ?? 0);
+
+            if (now - firstQueued > _options.DeferralBudgetSeconds * 1000L)
+            {
+                await consumer.DeadLetterAsync(entry,
+                    $"no capacity to start it within {_options.DeferralBudgetSeconds} s ({deferrals} deferrals)").ConfigureAwait(false);
+                return;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(Math.Min(2000, 100 << Math.Min(deferrals, 5)))).ConfigureAwait(false);
+
+            var fields = entry.Fields
+                .Where(kv => kv.Key is not (RedisKeys.RunDeferralsField or RedisKeys.RunFirstQueuedField))
+                .Select(kv => new NameValueEntry(kv.Key, kv.Value))
+                .Append(new NameValueEntry(RedisKeys.RunDeferralsField, (deferrals + 1).ToString(CultureInfo.InvariantCulture)))
+                .Append(new NameValueEntry(RedisKeys.RunFirstQueuedField, firstQueued.ToString(CultureInfo.InvariantCulture)))
+                .ToArray();
+            await _db.StreamAddAsync(RedisKeys.RunsStream, fields).ConfigureAwait(false);
+            await consumer.AcknowledgeAsync(entry.Id).ConfigureAwait(false);
         }
 
         /// <summary>Milliseconds since a stream entry was added, from its id (<c>ms-seq</c>); null if unreadable.</summary>
@@ -225,7 +272,10 @@ namespace Blocks.FunctionRunner.Runs
                 // question (RunnerOptions.SandboxReuse).
                 Reuse = string.Equals(entry.Get(RedisKeys.RunReuseField), "1", StringComparison.Ordinal),
                 ApiTimings = entry.Get(RedisKeys.RunApiTimingsField),
-                QueuedMs = StreamEntryAgeMs(entry.Id),
+                // From when the run was first queued, across deferrals.
+                QueuedMs = long.TryParse(entry.Get(RedisKeys.RunFirstQueuedField), NumberStyles.None, CultureInfo.InvariantCulture, out var first)
+                    ? Math.Max(0, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - first)
+                    : StreamEntryAgeMs(entry.Id),
                 TraceParent = entry.Get(RedisKeys.TraceParentField),
             };
 
@@ -256,8 +306,7 @@ namespace Blocks.FunctionRunner.Runs
                     break;
 
                 case RunProcessor.Disposition.Deferred:
-                    // Left pending on purpose. Backing off keeps a full host from spinning.
-                    await Task.Delay(TimeSpan.FromMilliseconds(500), token).ConfigureAwait(false);
+                    await RequeueDeferredAsync(consumer, entry).ConfigureAwait(false);
                     break;
 
                 case RunProcessor.Disposition.NotOurs:

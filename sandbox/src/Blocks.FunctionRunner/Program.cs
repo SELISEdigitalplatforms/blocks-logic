@@ -48,6 +48,10 @@ builder.Services.AddFunctionRunnerWorkerServices();
 
 // systemd integration: Type=notify, so the unit is only "active" once the host is up.
 builder.Services.AddSystemd();
+// A stopping runner lets the runs it started finish: the longest a run can take is the startup
+// allowance + timeout + kill grace (30 + 30 + 2 s), and systemd allows 90 s (TimeoutStopSec).
+// The .NET default of 30 s cut runs off and they were executed again elsewhere (FN-3).
+builder.Services.Configure<HostOptions>(o => o.ShutdownTimeout = TimeSpan.FromSeconds(80));
 
 var host = builder.Build();
 await host.RunAsync();

@@ -465,5 +465,25 @@ namespace Blocks.FunctionRunner.Tests
             ((string?)await _db!.HashGetAsync(RedisKeys.Run(_runId), "status"))
                 .Should().NotBe(RunStatuses.Starting).And.NotBe(RunStatuses.Running);
         }
+
+        [SkippableFact]
+        public async Task A_redelivered_run_that_already_finished_is_not_run_again()
+        {
+            Skip.If(Unavailable, "no Redis available");
+            var job = await QueueAsync(Envelope(), Grant);
+            await _db!.HashSetAsync(RedisKeys.Run(_runId), "status", RunStatuses.Succeeded);
+            await _db.StringSetAsync(RedisKeys.Result(_runId), "\"done\"", TimeSpan.FromMinutes(5));
+            var sandbox = new RecordingSandbox();
+            var tokens = new FakeRunAccessTokenResolver(Token);
+
+            var disposition = await Processor(sandbox, tokens).ProcessAsync(job, CancellationToken.None);
+
+            disposition.Should().Be(RunProcessor.Disposition.Complete);
+            sandbox.Calls.Should().Be(0, "a finished attempt never executes twice");
+            tokens.Calls.Should().BeEmpty();
+            var entry = await ResultEntryAsync();
+            Field(entry, "status").Should().Be(RunStatuses.Succeeded);
+            Field(entry, "resultKey").Should().Be(RedisKeys.Result(_runId), "the Worker can still apply it");
+        }
     }
 }
