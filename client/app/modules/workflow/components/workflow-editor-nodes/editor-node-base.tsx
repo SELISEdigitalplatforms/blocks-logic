@@ -38,6 +38,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
   const executedNodes = useWorkflowStore((state) => state.executedNodes);
   const isListening = useWorkflowStore((state) => state.isListening);
   const listeningNodeId = useWorkflowStore((state) => state.listeningNodeId);
+  const editorMode = useWorkflowStore((state) => state.editorMode);
   const { handleExecuteStep, executeStepModal } = useHandleExecuteStep();
 
 
@@ -263,6 +264,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
           onClick={(e) => e.stopPropagation()}
           onDoubleClick={(e) => {
             e.stopPropagation();
+            if (editorMode !== "editor") return;
             setIsRenaming(true);
           }}
         >
