@@ -28,9 +28,9 @@ namespace Blocks.FunctionRunner.Builds
     /// or trying to escape the workspace, so those never reach a builder at all.
     /// </para>
     /// <para>
-    /// It also screens every dependency specifier the build will resolve. That matters more than
-    /// it used to: dependencies are installed fresh from package.json with no lockfile, so the
-    /// manifest is the only description of what npm is about to fetch. A specifier that names a
+    /// It also screens every dependency specifier the build will resolve. Without a lockfile the
+    /// manifest is the only description of what npm is about to fetch (a lockfile gets the same
+    /// rule per entry, in <see cref="LockfileValidator"/>). A specifier that names a
     /// git repository, a path, an alias or a floating tag would put the install somewhere this
     /// screening never looked, so only registry version ranges are accepted.
     /// </para>
@@ -66,6 +66,9 @@ namespace Blocks.FunctionRunner.Builds
             {
                 var pathProblem = ValidatePath(file.Path);
                 if (pathProblem is not null) return ValidationResult.Fail(pathProblem);
+                // The lockfile has its own ceiling (LockfileValidator.MaxBytes): it is install data,
+                // and a real one for a few hundred packages would use up the source budget alone.
+                if (file.Path is LockfileValidator.FileName) continue;
                 total += System.Text.Encoding.UTF8.GetByteCount(file.Content);
             }
 

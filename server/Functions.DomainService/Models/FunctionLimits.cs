@@ -33,9 +33,10 @@ namespace Functions.DomainService.Models
         public int Concurrency { get; set; } = Ceiling.Concurrency;
 
         /// <summary>
-        /// Requests per minute. <c>null</c> means unlimited, which is the default and the only
-        /// value V1 uses: the field exists in the model and API but is hidden in the interface
-        /// and disabled by configuration, so nothing is ever refused for volume.
+        /// HTTP calls per minute, set by the tenant (FN-19, 2026-10-07; Trigger tab). <c>null</c>:
+        /// a Public function gets the platform default (<c>Functions:RateLimits:PublicPerMinute</c>,
+        /// 600), a Token one no limit. Workflow and Test calls are never counted. The one limit a
+        /// function may choose: it is about who may call it, not what a run gets.
         /// </summary>
         public int? RequestsPerMinute { get; set; }
 
@@ -50,6 +51,9 @@ namespace Functions.DomainService.Models
         /// </summary>
         public static class Ceiling
         {
+            /// <summary>The highest HTTP calls-per-minute limit a tenant may set (FN-19).</summary>
+            public const int MaxRequestsPerMinute = 100_000;
+
             /// <summary>
             /// Every sandbox gets exactly this. 100 millicores is where Node's cold start stops
             /// dominating the request: each call is a fresh container, so boot and module import
@@ -111,9 +115,9 @@ namespace Functions.DomainService.Models
             TimeoutSeconds = Ceiling.TimeoutSeconds,
             Concurrency = Ceiling.Concurrency,
 
-            // Rate limiting is off by platform decision; the fields stay so an older document
-            // deserializes, and null is what every code path already reads as "unlimited".
-            RequestsPerMinute = null,
+            // The tenant's own HTTP rate limit is kept when it is a sane number (FN-19); anything
+            // else is "use the default". Per day stays off; the field only deserializes old documents.
+            RequestsPerMinute = RequestsPerMinute is >= 1 and <= Ceiling.MaxRequestsPerMinute ? RequestsPerMinute : null,
             RequestsPerDay = null,
         };
     }
@@ -284,10 +288,10 @@ namespace Functions.DomainService.Models
         public string PackageJson { get; set; } = string.Empty;
 
         /// <summary>
-        /// Retained so stored documents and existing API callers keep round-tripping, but no
-        /// longer used for anything: builds resolve package.json fresh and no lockfile is sent to
-        /// the builder. It stays in the source hash because removing a field from that hash would
-        /// change every existing hash and show every function as having unsaved changes.
+        /// The function's <c>package-lock.json</c>, optional. When set, the build installs exactly
+        /// these versions with <c>npm ci</c>, after the runner screens every entry (registry
+        /// packages with integrity hashes only; F-8). Part of the source hash, so changing it
+        /// rebuilds.
         /// </summary>
         public string? LockJson { get; set; }
 

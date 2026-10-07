@@ -598,7 +598,9 @@
             <c>/versions</c>, <c>/executions</c> and <c>/overview</c> sub-resources. The controller segment still
             comes from <c>[controller]</c> plus the global <c>api</c> prefix
             (<see cref="T:BlocksTemplate.Api.GlobalApiRoutePrefixConvention"/>); only the sub-paths are explicit.
-            Every action requires a bearer token and the tenant is taken from <see cref="T:Blocks.Genesis.BlocksContext"/>.
+            Every action requires a bearer token and a permission: <c>blocks-logic::proxy::read</c> to see
+            proxies, versions and execution logs, <c>blocks-logic::proxy::manage</c> to change them, test them or
+            preview an OpenAPI spec. The tenant is taken from <see cref="T:Blocks.Genesis.BlocksContext"/>.
             Where a service result carries its own <c>HttpStatus</c> the controller honours it, so the service
             stays the single source of truth for the SPEC §3.4 error contract.</item>
             <item><b>Data plane</b> (Phase 2) — <see cref="M:Utilities.Api.Controllers.ProxiesController.Gateway(System.String,System.String)"/> at

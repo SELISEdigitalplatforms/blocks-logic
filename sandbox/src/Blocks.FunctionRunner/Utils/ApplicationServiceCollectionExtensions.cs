@@ -76,6 +76,7 @@ namespace Blocks.FunctionRunner.Utils
             // slow body rather than the short calls the registry client makes.
             services.AddHttpClient(Sandbox.ArtifactImageBuilder.HttpClientName,
                 client => client.Timeout = TimeSpan.FromMinutes(10));
+            services.AddSingleton<Sandbox.ImageWorkGate>();
             services.AddSingleton<Sandbox.IArtifactImageBuilder, Sandbox.ArtifactImageBuilder>();
             services.AddSingleton<Maintenance.IImageUsageLog, Maintenance.ImageUsageLog>();
             services.AddSingleton<Builds.IDependencyCache, Builds.DependencyCache>();

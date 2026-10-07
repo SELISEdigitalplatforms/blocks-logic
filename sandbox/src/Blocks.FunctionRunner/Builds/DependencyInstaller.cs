@@ -75,7 +75,8 @@ namespace Blocks.FunctionRunner.Builds
 
             var containerName = BuildSandboxProfile.ContainerName(buildId);
             var npmFlags = allowScripts ? "--omit=dev" : "--omit=dev --ignore-scripts";
-            var script = BuildSandboxProfile.InstallScript(npmFlags, beginMarker, endMarker);
+            var useLockfile = File.Exists(Path.Combine(workHostPath, LockfileValidator.FileName));
+            var script = BuildSandboxProfile.InstallScript(npmFlags, beginMarker, endMarker, useLockfile);
             var log = new StringBuilder();
             string? containerId = null;
 
@@ -178,6 +179,13 @@ namespace Blocks.FunctionRunner.Builds
                             "exists and lists a reachable nameserver; it is bind-mounted over " +
                             "/etc/resolv.conf in every sandbox because Docker's embedded resolver " +
                             "does not work under gVisor.");
+                    }
+
+                    if (useLockfile && log.ToString().Contains("package.json and package-lock.json", StringComparison.Ordinal))
+                    {
+                        return Failed(log,
+                            "package-lock.json does not match package.json; regenerate it with npm install " +
+                            "and save both together, or remove the lockfile to resolve dependencies fresh");
                     }
 
                     return Failed(log, $"the dependency install failed (npm exited {exitCode})");

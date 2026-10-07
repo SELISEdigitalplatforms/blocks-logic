@@ -279,14 +279,6 @@ namespace Functions.DomainService.Services
 
             await _buildRepository.CreateAsync(tenantId, build, cancellationToken);
 
-            if (!string.IsNullOrEmpty(function.Source.LockJson))
-            {
-                _logger.LogWarning(
-                    "Function {FunctionId} carries a stored lockfile; it is not sent to the builder. " +
-                    "Dependencies are resolved fresh from package.json on every build",
-                    function.ItemId);
-            }
-
             var sourceBundle = JsonSerializer.Serialize(new
             {
                 files = BuildFileMap(function.Source),
@@ -332,12 +324,21 @@ namespace Functions.DomainService.Services
         /// always installs either installs or fails out loud.
         /// </para>
         /// </summary>
+        /// <para>
+        /// A stored lockfile is sent as <c>package-lock.json</c> (F-8). The runner screens every
+        /// entry (registry packages with integrity hashes only) and installs it exactly with
+        /// <c>npm ci</c>; without one it resolves package.json fresh, as before.
+        /// </para>
         internal static Dictionary<string, string> BuildFileMap(Models.FunctionSource source)
-            => new(StringComparer.Ordinal)
+        {
+            var files = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["index.js"] = source.IndexJs,
                 ["package.json"] = source.PackageJson,
             };
+            if (!string.IsNullOrWhiteSpace(source.LockJson)) files["package-lock.json"] = source.LockJson;
+            return files;
+        }
 
         /// <summary>
         /// A queued or building record that has not been touched within

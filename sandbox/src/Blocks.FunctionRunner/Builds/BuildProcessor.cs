@@ -30,11 +30,12 @@ namespace Blocks.FunctionRunner.Builds
     /// Test and Deploy share one image (DECISIONS D3).
     /// </para>
     /// <para>
-    /// Dependencies are always resolved fresh from <c>package.json</c>: lockfiles are not accepted
-    /// from tenants and never reach the build context. That trades reproducibility for freshness,
-    /// so the compensating control is that the versions npm actually resolved are read back out of
-    /// the build log and stored on the build record, rather than assumed from the manifest's
-    /// ranges — a range is a request, and only the resolved list says what shipped.
+    /// Dependencies resolve fresh from <c>package.json</c> unless the bundle carries a root
+    /// <c>package-lock.json</c>, which is then screened entry by entry (<see cref="LockfileValidator"/>)
+    /// and installed exactly with <c>npm ci</c>. Every install is followed by an advisory check
+    /// (<see cref="NpmAudit"/>). Either way the versions npm actually resolved are read back out of
+    /// the build log and stored on the build record — a range is a request, and only the resolved
+    /// list says what shipped.
     /// </para>
     /// </summary>
     /// <summary>What a build published: success and the image, or the reason it failed.</summary>
@@ -52,9 +53,8 @@ namespace Blocks.FunctionRunner.Builds
     public sealed class BuildProcessor
     {
         /// <summary>
-        /// Files that would pin an install to versions the platform never screened. They are
-        /// dropped from the bundle here and removed again inside the image, because a lockfile
-        /// is exactly the thing this pipeline no longer honours.
+        /// Lockfiles that are dropped: every other package manager's, and npm's anywhere but the
+        /// bundle root. The root <c>package-lock.json</c> is honoured after screening (F-8).
         /// </summary>
         internal static readonly string[] LockfileNames =
         [
@@ -121,7 +121,12 @@ namespace Blocks.FunctionRunner.Builds
 
             // The fenced block is machinery, not something a tenant should have to read, and at
             // a few hundred packages it would crowd the real npm output out of the 16 KB tail.
-            string PublishableLog() => Tail(StripPackagesBlock(log.ToString(), beginMarker, endMarker));
+            var auditBegin = NpmAudit.BeginMarker(beginMarker);
+            var auditEnd = NpmAudit.EndMarker(endMarker);
+            // The audit block first: its markers extend the packages markers, so stripping the
+            // packages block first would leave them half-blanked.
+            string PublishableLog() => Tail(StripPackagesBlock(
+                StripPackagesBlock(log.ToString(), auditBegin, auditEnd), beginMarker, endMarker));
 
             try
             {
@@ -161,6 +166,8 @@ namespace Blocks.FunctionRunner.Builds
                 }
 
                 var validation = SourceValidator.Validate(files, job.AllowScripts);
+                var lockfile = files.FirstOrDefault(f => f.Path is LockfileValidator.FileName)?.Content;
+                if (validation.Ok && lockfile is not null) validation = LockfileValidator.Validate(lockfile);
                 if (!validation.Ok)
                 {
                     _logger.LogWarning("Build {BuildId} rejected: {Reason}", job.BuildId, validation.Reason);
@@ -189,12 +196,16 @@ namespace Blocks.FunctionRunner.Builds
                 // installed before, reuse that tree: editing index.js, or just testing with a
                 // different input, no longer costs a full install.
                 var manifest = files.FirstOrDefault(f => f.Path is "package.json")?.Content;
+                // A lockfile changes what the install produces, so it is part of the cache key. Without
+                // one the key is the manifest alone, as before, so existing cache entries stay valid.
+                var dependencyKey = manifest is null || lockfile is null ? manifest : manifest + "\n\0lock\n" + lockfile;
                 var archivePath = Path.Combine(dirs.Work, BuildSandboxProfile.DepsArchiveName);
-                var restored = manifest is not null
-                    && _dependencies.TryRestore(job.TenantId, manifest, archivePath);
+                var restored = dependencyKey is not null
+                    && _dependencies.TryRestore(job.TenantId, dependencyKey, archivePath);
 
                 if (restored)
                 {
+                    // Not audited again: this exact tree passed the check when it was installed.
                     log.AppendLine("dependencies reused from a previous build of this manifest");
                 }
                 else
@@ -215,10 +226,22 @@ namespace Blocks.FunctionRunner.Builds
                         return outcome;
                     }
 
-                    // Only a tree that installed cleanly is worth keeping.
-                    if (manifest is not null)
+                    // --- advisories (F-8) ------------------------------------------------------
+                    var audit = NpmAudit.Parse(install.Log, auditBegin, auditEnd);
+                    log.AppendLine(NpmAudit.Summary(audit));
+                    var blocked = NpmAudit.Failure(audit, _options.AuditFailLevel);
+                    if (blocked is not null)
                     {
-                        _dependencies.Save(job.TenantId, manifest, archivePath);
+                        _logger.LogWarning("Build {BuildId} refused: {Reason}", job.BuildId, blocked);
+                        await PublishAsync(job, outcome, "FAILED", null, null, PublishableLog(), blocked)
+                            .ConfigureAwait(false);
+                        return outcome;
+                    }
+
+                    // Only a tree that installed cleanly and passed the check is worth keeping.
+                    if (dependencyKey is not null)
+                    {
+                        _dependencies.Save(job.TenantId, dependencyKey, archivePath);
                     }
                 }
 
@@ -342,9 +365,8 @@ namespace Blocks.FunctionRunner.Builds
         /// not be able to ride into an image just by existing.
         /// </para>
         /// <para>
-        /// Lockfiles are dropped rather than copied. A build resolves dependencies fresh from
-        /// package.json, and a lockfile in the context would quietly override that with pinned
-        /// versions — including transitive ones the manifest screening never saw.
+        /// The root <c>package-lock.json</c> (already screened) goes to <c>work/</c> only, for
+        /// <c>npm ci</c>; any other lockfile is dropped, since it would pin versions nothing screened.
         /// </para>
         /// </summary>
         internal static BuildDirectories PrepareWorkspace(string workspace, IReadOnlyList<SourceFile> files)
@@ -361,6 +383,13 @@ namespace Blocks.FunctionRunner.Builds
 
             foreach (var file in files)
             {
+                // The one honoured lockfile goes where the install reads it, and nowhere else: the
+                // image needs the installed tree, not the file. Already screened by the caller.
+                if (file.Path is LockfileValidator.FileName)
+                {
+                    File.WriteAllText(Path.Combine(work, LockfileValidator.FileName), file.Content);
+                    continue;
+                }
                 if (IsLockfile(file.Path)) continue;
 
                 var isManifest = file.Path is "package.json";
@@ -946,26 +975,8 @@ namespace Blocks.FunctionRunner.Builds
         /// </summary>
         internal static string? ExtractResolvedPackages(string log, string beginMarker, string endMarker)
         {
-            if (string.IsNullOrEmpty(log)) return null;
-
-            var lines = log.Split('\n');
-            var begin = -1;
-            for (var i = lines.Length - 1; i >= 0; i--)
-            {
-                if (lines[i].Trim() == beginMarker) { begin = i; break; }
-            }
-            if (begin < 0) return null;
-
-            var end = -1;
-            for (var i = begin + 1; i < lines.Length; i++)
-            {
-                if (lines[i].Trim() == endMarker) { end = i; break; }
-            }
-            // An unterminated block means the build died mid-print; nothing in it can be trusted.
-            if (end < 0) return null;
-
-            var json = string.Join('\n', lines[(begin + 1)..end]).Trim();
-            if (json.Length == 0) return null;
+            var json = ExtractBlock(log, beginMarker, endMarker);
+            if (json is null) return null;
 
             try
             {
@@ -994,6 +1005,34 @@ namespace Blocks.FunctionRunner.Builds
             {
                 return null;
             }
+        }
+
+        /// <summary>
+        /// The text of the last block fenced by these markers (whole lines), or null when there is
+        /// none, it is unterminated, or it is empty. Shared by the packages and audit blocks.
+        /// </summary>
+        internal static string? ExtractBlock(string log, string beginMarker, string endMarker)
+        {
+            if (string.IsNullOrEmpty(log)) return null;
+
+            var lines = log.Split('\n');
+            var begin = -1;
+            for (var i = lines.Length - 1; i >= 0; i--)
+            {
+                if (lines[i].Trim() == beginMarker) { begin = i; break; }
+            }
+            if (begin < 0) return null;
+
+            var end = -1;
+            for (var i = begin + 1; i < lines.Length; i++)
+            {
+                if (lines[i].Trim() == endMarker) { end = i; break; }
+            }
+            // An unterminated block means the build died mid-print; nothing in it can be trusted.
+            if (end < 0) return null;
+
+            var text = string.Join('\n', lines[(begin + 1)..end]).Trim();
+            return text.Length == 0 ? null : text;
         }
 
         /// <summary>Removes the fenced block, markers included, from a log shown to tenants.</summary>

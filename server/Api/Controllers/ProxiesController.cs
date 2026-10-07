@@ -18,7 +18,9 @@ namespace Utilities.Api.Controllers
     /// <c>/versions</c>, <c>/executions</c> and <c>/overview</c> sub-resources. The controller segment still
     /// comes from <c>[controller]</c> plus the global <c>api</c> prefix
     /// (<see cref="BlocksTemplate.Api.GlobalApiRoutePrefixConvention"/>); only the sub-paths are explicit.
-    /// Every action requires a bearer token and the tenant is taken from <see cref="BlocksContext"/>.
+    /// Every action requires a bearer token and a permission: <c>blocks-logic::proxy::read</c> to see
+    /// proxies, versions and execution logs, <c>blocks-logic::proxy::manage</c> to change them, test them or
+    /// preview an OpenAPI spec. The tenant is taken from <see cref="BlocksContext"/>.
     /// Where a service result carries its own <c>HttpStatus</c> the controller honours it, so the service
     /// stays the single source of truth for the SPEC §3.4 error contract.</item>
     /// <item><b>Data plane</b> (Phase 2) — <see cref="Gateway"/> at
@@ -92,7 +94,7 @@ namespace Utilities.Api.Controllers
         /// optionally narrowed by a name / slug search term and by isActive state. A list projection: full
         /// upstream and header rows are not included.
         /// </summary>
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::proxy::read")]
         [HttpGet]
         public async Task<IActionResult> List([FromQuery] ProxyGetAllRequestDto dto)
         {
@@ -109,7 +111,7 @@ namespace Utilities.Api.Controllers
         /// <c>POST /api/Proxies</c> — creates a proxy and its first <c>ProxyVersions</c> row. 201 on success;
         /// 409 <c>PROXY_SLUG_CONFLICT</c> when the slug derived from the name already exists for the tenant.
         /// </summary>
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::proxy::manage")]
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] ProxyCreateRequestDto dto)
         {
@@ -126,7 +128,7 @@ namespace Utilities.Api.Controllers
         /// <c>GET /api/Proxies/{proxyId}</c> — one proxy and its full configuration. An unknown id, or another
         /// tenant's proxy, returns 200 with a null payload rather than 404.
         /// </summary>
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::proxy::read")]
         [HttpGet("{proxyId}")]
         public async Task<IActionResult> Get(string proxyId)
         {
@@ -143,7 +145,7 @@ namespace Utilities.Api.Controllers
         /// <c>PUT /api/Proxies/{proxyId}</c> — rewrites the proxy's configuration and appends the per-field
         /// change set as a new version row. The slug is immutable and is never recomputed from a changed name.
         /// </summary>
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::proxy::manage")]
         [HttpPut("{proxyId}")]
         public async Task<IActionResult> Update(string proxyId, [FromBody] ProxyUpdateRequestDto dto)
         {
@@ -162,7 +164,7 @@ namespace Utilities.Api.Controllers
         /// While disabled the proxy's <see cref="Gateway"/> route answers 404
         /// <c>PROXY_GATEWAY_PROXYNOTFOUND</c>, exactly as an unknown slug does.
         /// </summary>
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::proxy::manage")]
         [HttpPatch("{proxyId}")]
         public async Task<IActionResult> SetEnabled(string proxyId, [FromBody] ProxyToggleRequestDto dto)
         {
@@ -181,7 +183,7 @@ namespace Utilities.Api.Controllers
         /// <c>ProxyExecutions</c> rows are deliberately retained, so Change history and Request logs keep
         /// working afterwards.
         /// </summary>
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::proxy::manage")]
         [HttpDelete("{proxyId}")]
         public async Task<IActionResult> Delete(string proxyId)
         {
@@ -199,7 +201,7 @@ namespace Utilities.Api.Controllers
         /// version rows for one proxy, newest first, each carrying its per-field change set and the effective
         /// config snapshot after that change.
         /// </summary>
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::proxy::read")]
         [HttpGet("{proxyId}/versions")]
         public async Task<IActionResult> ListVersions(string proxyId, [FromQuery] ProxyGetVersionsRequestDto dto)
         {
@@ -219,7 +221,7 @@ namespace Utilities.Api.Controllers
         /// action rather than a resource, so it stays a verb on a POST. History is never rewritten or
         /// truncated; the version number moves forward, not back.
         /// </summary>
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::proxy::manage")]
         [HttpPost("{proxyId}/versions/{versionId}/revert")]
         public async Task<IActionResult> Revert(string proxyId, string versionId)
         {
@@ -240,7 +242,7 @@ namespace Utilities.Api.Controllers
         /// the collection, not under <c>{proxyId}</c>, precisely because the draft it tests need not exist yet.
         /// The tenant is taken from <see cref="BlocksContext"/>; no <c>X-Blocks-Key</c> is required here.
         /// </summary>
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::proxy::manage")]
         [HttpPost("test")]
         public async Task<IActionResult> Test([FromBody] ProxyTestRequestDto dto)
         {
@@ -272,7 +274,7 @@ namespace Utilities.Api.Controllers
         /// this server makes to wherever a caller points it.
         /// </para>
         /// </summary>
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::proxy::manage")]
         [HttpPost("openapi/preview")]
         public async Task<IActionResult> PreviewOpenApi(
             [FromBody] ProxyOpenApiPreviewRequestDto dto, CancellationToken cancellationToken)
@@ -327,7 +329,7 @@ namespace Utilities.Api.Controllers
         /// <c>PROXY_NOT_FOUND</c> for a genuinely unknown proxy id (a deleted proxy whose rows remain still
         /// works).
         /// </summary>
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::proxy::read")]
         [HttpGet("{proxyId}/executions")]
         public async Task<IActionResult> ListExecutions(string proxyId, [FromQuery] ProxyGetExecutionsRequestDto dto)
         {
@@ -347,7 +349,7 @@ namespace Utilities.Api.Controllers
         /// untouched). An unknown id, an id whose proxy differs, or another tenant's row all return 200 with
         /// <c>data: null</c>.
         /// </summary>
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::proxy::read")]
         [HttpGet("{proxyId}/executions/{executionId}")]
         public async Task<IActionResult> GetExecution(string proxyId, string executionId)
         {
@@ -367,7 +369,7 @@ namespace Utilities.Api.Controllers
         /// fields. 404 <c>PROXY_NOT_FOUND</c> only when the id neither exists for the tenant nor has any
         /// execution rows.
         /// </summary>
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::proxy::read")]
         [HttpGet("{proxyId}/overview")]
         public async Task<IActionResult> GetOverview(string proxyId)
         {

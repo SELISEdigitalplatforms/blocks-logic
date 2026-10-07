@@ -260,6 +260,13 @@ namespace Functions.DomainService.Queue
         public static string RetryQueue => _prefix + "functions:retries";
 
         /// <summary>
+        /// Hash of how many times each <see cref="RetryQueue"/> member has been claimed. A claim that
+        /// is never finished (Worker crash, Mongo down) comes back after its lease; this bounds how
+        /// often, so an entry that always fails is given up on instead of tried for ever.
+        /// </summary>
+        public static string RetryClaims => _prefix + "functions:retries:claims";
+
+        /// <summary>
         /// Prefix of the marker written when a dead-lettered job has been applied to Mongo. The
         /// dead stream keeps its entries for forensics rather than deleting them on
         /// acknowledgement, so a reclaim or a second Worker can re-deliver one that was already

@@ -87,7 +87,8 @@ namespace XUnitTest.Functions
             effective.MemoryMb.Should().Be(128);
             effective.TimeoutSeconds.Should().Be(30);
             effective.Concurrency.Should().Be(10);
-            effective.RequestsPerMinute.Should().BeNull();
+            // The one value a tenant chooses (FN-19): its HTTP calls per minute, kept when sane.
+            effective.RequestsPerMinute.Should().Be(600);
         }
 
         [Fact]

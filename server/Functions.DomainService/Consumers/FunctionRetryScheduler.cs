@@ -28,14 +28,50 @@ namespace Functions.DomainService.Consumers
     /// from, and re-testing manually is one click away regardless.
     /// </para>
     /// <para>
-    /// The ZREM before acting is the claim: two Worker instances racing the same due entry will
-    /// have exactly one of them successfully remove it, so only one re-enqueues it.
+    /// The claim is a lease, not a removal. A due entry is moved <see cref="ClaimLease"/> into the
+    /// future in one script, so of two Workers racing it exactly one claims it, and it is removed
+    /// only once handled. Removing it first (as this did) lost the retry for good when the Worker
+    /// stopped, or Mongo or Redis failed, before the re-enqueue: the run stayed FAILED and nothing
+    /// ever looked at it again, since the stale-run sweeper does not touch finished runs (FN-16).
+    /// Now an unfinished claim simply falls due again. Handling it twice is safe: the run's attempt
+    /// number makes a second pass a no-op once the first one reset it.
+    /// </para>
+    /// <para>
+    /// One window is left: a crash after the reset but before the stream write leaves the run
+    /// QUEUED with nothing queued. The next pass sees the attempt already advanced and lets go; the
+    /// stale-run sweeper then closes the run as abandoned — visible, not silent.
     /// </para>
     /// </summary>
     public sealed class FunctionRetryScheduler : BackgroundService
     {
         private static readonly TimeSpan SweepInterval = TimeSpan.FromSeconds(5);
         private const int BatchSize = 50;
+
+        /// <summary>How long a claimed entry is held before another pass may take it again.</summary>
+        internal static readonly TimeSpan ClaimLease = TimeSpan.FromMinutes(2);
+
+        /// <summary>Claims after which an entry that never completes is dropped, with an error.</summary>
+        internal const int MaxClaims = 5;
+
+        /// <summary>
+        /// Claims a due member: only if it is still in the set and due, move it a lease into the
+        /// future and count the claim. Returns the claim count, or 0 when it was not ours to take.
+        /// </summary>
+        internal const string ClaimScript = @"
+local score = redis.call('ZSCORE', KEYS[1], ARGV[1])
+if (not score) or tonumber(score) > tonumber(ARGV[2]) then return 0 end
+redis.call('ZADD', KEYS[1], 'XX', ARGV[3], ARGV[1])
+local claims = redis.call('HINCRBY', KEYS[2], ARGV[1], 1)
+redis.call('EXPIRE', KEYS[2], ARGV[4])
+return claims";
+
+        /// <summary>Releases a handled member: off the queue and out of the claim count together.</summary>
+        internal const string DoneScript = @"
+redis.call('ZREM', KEYS[1], ARGV[1])
+redis.call('HDEL', KEYS[2], ARGV[1])
+return 1";
+
+        private static readonly TimeSpan ClaimCountTtl = TimeSpan.FromDays(1);
 
         /// <summary>
         /// The entry is written by <see cref="FunctionResultConsumer"/> from an anonymous object,
@@ -136,13 +172,44 @@ namespace Functions.DomainService.Consumers
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                // The claim: only the instance whose ZREM actually removes something proceeds.
-                var removed = await _db.SortedSetRemoveAsync(FunctionQueueKeys.RetryQueue, member);
-                if (!removed) continue;
+                var claims = await ClaimAsync(member, now);
+                if (claims == 0) continue;
 
-                await ProcessDueEntryAsync(member!, cancellationToken);
+                if (claims > MaxClaims)
+                {
+                    _logger.LogError(
+                        "Giving up on a retry claimed {Claims} times without completing; the run keeps its last result: {Member}",
+                        claims - 1, (string?)member);
+                    await DoneAsync(member);
+                    continue;
+                }
+
+                try
+                {
+                    await ProcessDueEntryAsync(member!, cancellationToken);
+                    await DoneAsync(member);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // Still claimed, so it falls due again after the lease rather than being lost.
+                    _logger.LogWarning(ex,
+                        "Retry entry not handled (claim {Claims} of {Max}); trying again in {Lease}",
+                        claims, MaxClaims, ClaimLease);
+                }
             }
         }
+
+        private async Task<long> ClaimAsync(RedisValue member, long now)
+        {
+            var result = await _db.ScriptEvaluateAsync(ClaimScript,
+                [FunctionQueueKeys.RetryQueue, FunctionQueueKeys.RetryClaims],
+                [member, now, now + (long)ClaimLease.TotalSeconds, (long)ClaimCountTtl.TotalSeconds]);
+            return result.IsNull ? 0 : (long)result;
+        }
+
+        private Task DoneAsync(RedisValue member) =>
+            _db.ScriptEvaluateAsync(DoneScript,
+                [FunctionQueueKeys.RetryQueue, FunctionQueueKeys.RetryClaims], [member]);
 
         private async Task ProcessDueEntryAsync(string member, CancellationToken cancellationToken)
         {

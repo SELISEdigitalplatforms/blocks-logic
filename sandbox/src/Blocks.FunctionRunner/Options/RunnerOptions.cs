@@ -200,6 +200,14 @@ namespace Blocks.FunctionRunner.Options
         public int MaxParallelRuns { get; set; }
 
         /// <summary>
+        /// How many image builds (from an artifact) and registry pulls this host runs at once, as
+        /// <c>RUNNER__MaxConcurrentImageWork</c>. 0 (the default) is half the cores, at least one.
+        /// Runs over the limit wait before admission, holding nothing (FN-13).
+        /// </summary>
+        [Range(0, 64)]
+        public int MaxConcurrentImageWork { get; set; }
+
+        /// <summary>
         /// How long a run may keep being deferred (host full, function or tenant at its limit, secret
         /// store down) before it is given up as undeliverable. A deferred run is put back at the end
         /// of the queue at once with a short back-off — it used to be left pending until the
@@ -325,6 +333,15 @@ namespace Blocks.FunctionRunner.Options
         /// </para>
         /// </summary>
         public bool DenyPrivateScriptsOnBuild { get; set; }
+
+        /// <summary>
+        /// The npm advisory severity that fails a build, as <c>RUNNER__AuditFailLevel</c>:
+        /// <c>low</c>, <c>moderate</c>, <c>high</c>, <c>critical</c> (the default) or <c>none</c>.
+        /// Advisories below it are listed in the build log as warnings; the check itself runs on
+        /// every install either way (F-8). A check that cannot run never fails a build.
+        /// </summary>
+        [RegularExpression("^(none|info|low|moderate|high|critical)$")]
+        public string AuditFailLevel { get; set; } = "critical";
 
         /// <summary>
         /// The image the dependency install runs in, as <c>RUNNER__BuildImage</c>. Empty — the

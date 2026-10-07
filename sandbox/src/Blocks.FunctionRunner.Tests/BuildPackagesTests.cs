@@ -80,8 +80,28 @@ namespace Blocks.FunctionRunner.Tests
             });
         }
 
+        [Fact]
+        public void A_root_package_lock_goes_to_the_install_folder_and_never_into_the_image()
+        {
+            // F-8: the screened root lockfile is what npm ci installs from. The image needs the
+            // installed tree, not the file, so it stays out of the build context.
+            var files = new List<SourceFile>
+            {
+                new("index.js", "export default async () => 1;"),
+                new("package.json", """{"type":"module"}"""),
+                new("package-lock.json", """{"lockfileVersion":3}"""),
+            };
+
+            InWorkspace(files, dirs =>
+            {
+                File.Exists(Path.Combine(dirs.Work, "package-lock.json")).Should().BeTrue();
+                Directory.EnumerateFiles(dirs.Context, "*", SearchOption.AllDirectories)
+                    .Select(Path.GetFileName)
+                    .Should().NotContain("package-lock.json");
+            });
+        }
+
         [Theory]
-        [InlineData("package-lock.json")]
         [InlineData("npm-shrinkwrap.json")]
         [InlineData("yarn.lock")]
         [InlineData("pnpm-lock.yaml")]
@@ -89,8 +109,7 @@ namespace Blocks.FunctionRunner.Tests
         [InlineData("vendor/package-lock.json")]
         public void A_lockfile_never_reaches_the_build_context(string path)
         {
-            // The whole point of the change: npm ci with a lockfile was skipped when none was sent
-            // and installed pinned versions when one was, and neither is what this pipeline wants.
+            // Any lockfile other than npm's own at the root would pin versions nothing screened.
             var files = new List<SourceFile>
             {
                 new("index.js", "export default async () => 1;"),

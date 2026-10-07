@@ -90,21 +90,32 @@ namespace Blocks.FunctionRunner.Builds
         /// never reclaimed the disk.
         /// </para>
         /// </summary>
-        public static string InstallScript(string npmFlags, string beginMarker, string endMarker)
+        /// <param name="useLockfile">A screened <c>package-lock.json</c> is in the workspace: install
+        /// exactly that with <c>npm ci</c>, which also fails if it is out of step with package.json.</param>
+        public static string InstallScript(string npmFlags, string beginMarker, string endMarker, bool useLockfile = false)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(npmFlags);
             ArgumentException.ThrowIfNullOrWhiteSpace(beginMarker);
             ArgumentException.ThrowIfNullOrWhiteSpace(endMarker);
 
+            var install = useLockfile
+                ? $"npm ci {npmFlags} --no-audit --no-fund"
+                : $"rm -f package-lock.json\nnpm install {npmFlags} --no-audit --no-fund";
+
+            // The advisory check (F-8) reads the lockfile the install just used or wrote. "|| true":
+            // audit exits non-zero when it finds something, and the runner decides what that means.
             return $"""
                 set -eu
                 trap 'rm -rf {WorkPath}/node_modules {WorkPath}/.npm-cache 2>/dev/null || true; chmod -R a+rwX {WorkPath} 2>/dev/null || true' EXIT
                 cd {WorkPath}
-                rm -f package-lock.json npm-shrinkwrap.json yarn.lock pnpm-lock.yaml
-                npm install {npmFlags} --no-audit --no-fund
+                rm -f npm-shrinkwrap.json yarn.lock pnpm-lock.yaml
+                {install}
                 echo "{beginMarker}"
                 npm ls --omit=dev --depth=0 --json 2>/dev/null || true
                 echo "{endMarker}"
+                echo "{NpmAudit.BeginMarker(beginMarker)}"
+                npm audit --omit=dev --json 2>/dev/null || true
+                echo "{NpmAudit.EndMarker(endMarker)}"
                 mkdir -p node_modules
                 tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf {WorkPath}/{DepsArchiveName} node_modules
                 """;

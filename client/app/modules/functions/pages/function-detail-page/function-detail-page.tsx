@@ -45,6 +45,7 @@ import { RetryForm } from "../../components/retry-form";
 import { VariablesEditor } from "../../components/variables-editor";
 import { DangerZoneCard } from "../../components/danger-zone-card";
 import { TriggerHttpCard } from "../../components/trigger-http-card";
+import { RateLimitCard } from "../../components/rate-limit-card";
 import { TriggerWorkflowCard } from "../../components/trigger-workflow-card";
 import { SandboxReuseCard } from "../../components/sandbox-reuse-card";
 import { SandboxRulesCard } from "../../components/sandbox-rules-card";
@@ -725,6 +726,12 @@ export const FunctionDetailPage = () => {
           {/* Full width with the supporting cards in columns, like proxy-details' overview. */}
           <TabsContent value="trigger" className="flex flex-col gap-4">
             <TriggerHttpCard value={trigger} onChange={setTrigger} functionId={fn.id} />
+            <RateLimitCard
+              key={fn.id}
+              authMode={trigger.authMode}
+              value={limits.requestsPerMinute}
+              onChange={(requestsPerMinute) => setLimits({ ...limits, requestsPerMinute })}
+            />
             <div className="grid gap-4 xl:grid-cols-2">
               <div className="flex flex-col gap-4">
                 <TriggerWorkflowCard value={trigger} onChange={setTrigger} />

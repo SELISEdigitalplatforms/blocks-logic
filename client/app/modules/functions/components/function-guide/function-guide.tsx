@@ -212,6 +212,7 @@ export default async function handler(input, ctx) {
                 "Read-only filesystem except /tmp (64 MB, files can't be executed).",
                 "At most 64 processes per sandbox; 10 calls of one function at the same time.",
                 "API mode waits at most 30 s for the answer.",
+                "HTTP calls per minute: 600 for a Public function, no limit for one that needs a login — change it under Trigger → Rate limit. Over it, callers get 429. Workflow steps and Test runs are not counted.",
               ]}
             />
           </AccordionContent>

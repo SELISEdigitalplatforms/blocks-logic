@@ -583,7 +583,7 @@ namespace Functions.DomainService.Services
             int? httpWaitSeconds = null,
             bool finishedOnlyWithoutRetry = false)
         {
-            var admission = await _admissionService.AdmitAsync(function, tenantId, inputJson, cancellationToken);
+            var admission = await _admissionService.AdmitAsync(function, tenantId, inputJson, invokedBy, version, cancellationToken);
             StepTimer.Current.Value?.Mark("admission");
             if (!admission.IsAdmitted)
             {

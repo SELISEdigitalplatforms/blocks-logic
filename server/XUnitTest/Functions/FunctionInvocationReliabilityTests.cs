@@ -68,7 +68,7 @@ namespace XUnitTest.Functions
                 .Setup(a => a.AuthorizeForWorkflow(It.IsAny<FunctionEntity>(), It.IsAny<FunctionVersionEntity?>(), It.IsAny<BlocksContext?>()))
                 .Returns(new AuthorizationResult(true));
             _admission
-                .Setup(a => a.AdmitAsync(It.IsAny<FunctionEntity>(), Tenant, It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+                .Setup(a => a.AdmitAsync(It.IsAny<FunctionEntity>(), Tenant, It.IsAny<string?>(), It.IsAny<InvokedByType>(), It.IsAny<FunctionVersionEntity?>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(AdmissionResult.Admit());
             _runs
                 .Setup(r => r.CreateAsync(Tenant, It.IsAny<FunctionRunEntity>(), It.IsAny<CancellationToken>()))
