@@ -10,7 +10,7 @@ using Proxy.DomainService.Services;
 namespace XUnitTest.Proxy
 {
     /// <summary>
-    /// Covers <see cref="ProxyVariableResolver"/>: name &rarr; id lookup + cache, one batched id &rarr; value
+    /// Covers <see cref="ProxyVariableResolver"/>: name &rarr; id lookup + cache, one uncached batched id &rarr; value
     /// read, de-duplication, the empty-input short-circuit, and the failure contract (an unknown name or any
     /// <see cref="SecretException"/> surfaces as <see cref="ProxyVariableResolutionException"/> carrying the
     /// offending names, never a value).
@@ -38,6 +38,57 @@ namespace XUnitTest.Proxy
                 _cache,
                 Options.Create(new ProxyVariableResolverOptions()),
                 Mock.Of<ILogger<ProxyVariableResolver>>());
+        }
+
+        // ---------- PX-9: exact lookup across pages; stored ids skip the search ----------
+
+        [Fact]
+        public async Task ResolveAsync_ExactNameBehindFiftyLookalikes_IsStillFound()
+        {
+            _secrets.Add("KEY", "id-real", "the-value");
+            for (var i = 0; i < 60; i++) _secrets.Add($"KEY_{i}", $"id-{i}", "other"); // newer, so they fill page 1
+
+            var result = await _resolver.ResolveAsync(new[] { "KEY" }, Tenant);
+
+            result["KEY"].Should().Be("the-value");
+            _secrets.FindCalls.Should().Be(2, "the exact match is on page 2");
+        }
+
+        [Fact]
+        public async Task ResolveAsync_WithStoredIds_ReadsByIdOnce_AndNeverSearches()
+        {
+            _secrets.Add("api-token", "id-1", "sk_live_1");
+
+            var result = await _resolver.ResolveAsync(
+                new[] { "api-token" }, Tenant, new Dictionary<string, string> { ["api-token"] = "id-1" });
+
+            result["api-token"].Should().Be("sk_live_1");
+            _secrets.FindCalls.Should().Be(0);
+            _secrets.GetValuesCalls.Should().Be(1);
+        }
+
+        [Fact]
+        public async Task ResolveAsync_NameMissingFromStoredIds_FallsBackToTheLookup()
+        {
+            _secrets.Add("a", "id-a", "va");
+            _secrets.Add("b", "id-b", "vb");
+
+            var result = await _resolver.ResolveAsync(
+                new[] { "a", "b" }, Tenant, new Dictionary<string, string> { ["a"] = "id-a" });
+
+            result.Should().HaveCount(2);
+            _secrets.FindCalls.Should().Be(1, "only 'b' had no stored id");
+        }
+
+        [Fact]
+        public async Task LookupIdsAsync_ReturnsExactIds_AndLeavesOutUnknownNames()
+        {
+            _secrets.Add("token", "id-t", "v");
+            _secrets.Add("token-old", "id-o", "v2");
+
+            var ids = await _resolver.LookupIdsAsync(new[] { "token", "nope" }, Tenant);
+
+            ids.Should().Equal(new Dictionary<string, string> { ["token"] = "id-t" });
         }
 
         [Fact]
@@ -76,15 +127,40 @@ namespace XUnitTest.Proxy
         }
 
         [Fact]
-        public async Task ResolveAsync_SecondCall_UsesCachedIdAndValue()
+        public async Task ResolveAsync_SecondCall_CachesIdOnly_ReadsValueAgain()
         {
             _secrets.Add("cached", "id-1", "v1");
 
             await _resolver.ResolveAsync(new[] { "cached" }, Tenant);
             await _resolver.ResolveAsync(new[] { "cached" }, Tenant);
 
-            _secrets.FindCalls.Should().Be(1);      // name -> id cached (5 min TTL)
-            _secrets.GetValuesCalls.Should().Be(1); // id -> value cached (60 s TTL)
+            _secrets.FindCalls.Should().Be(1);      // name -> id cached (an id is not a secret)
+            _secrets.GetValuesCalls.Should().Be(2); // value never cached: every call reads the vault
+        }
+
+        [Fact]
+        public async Task ResolveAsync_AfterASuccessfulRead_ADeniedCallerGetsNothing()
+        {
+            // PX-1: a value one caller was allowed to read must never serve the next caller.
+            _secrets.Add("api-key", "id-1", "sk_live_1");
+            (await _resolver.ResolveAsync(new[] { "api-key" }, Tenant))["api-key"].Should().Be("sk_live_1");
+
+            _secrets.FailValueReadFor("id-1", new SecretAccessDeniedException("denied", "no access"));
+            var act = () => _resolver.ResolveAsync(new[] { "api-key" }, Tenant);
+
+            (await act.Should().ThrowAsync<ProxyVariableResolutionException>())
+                .Which.Names.Should().Equal("api-key");
+        }
+
+        [Fact]
+        public async Task ResolveAsync_RotatedValue_IsSeenOnTheNextCall()
+        {
+            _secrets.Add("k", "id-1", "old");
+            await _resolver.ResolveAsync(new[] { "k" }, Tenant);
+
+            _secrets.Add("k", "id-1", "new");
+
+            (await _resolver.ResolveAsync(new[] { "k" }, Tenant))["k"].Should().Be("new");
         }
 
         [Fact]
@@ -144,11 +220,15 @@ namespace XUnitTest.Proxy
             public Task<SecretListResult> FindAsync(SecretFilter filter, CancellationToken cancellationToken = default)
             {
                 FindCalls++;
-                var data = _nameToId
-                    .Where(kv => kv.Key == filter.Search)
+                // Like the real store: "name contains, any case", newest first, one page at a time.
+                var all = _nameToId
+                    .Where(kv => kv.Key.Contains(filter.Search ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+                    .Reverse()
                     .Select(kv => new SecretResult { SecretId = kv.Value, Name = kv.Key, Type = SecretTypes.Service })
                     .ToList();
-                return Task.FromResult(new SecretListResult { Data = data, TotalCount = data.Count });
+                var size = filter.PageSize <= 0 ? 50 : filter.PageSize;
+                var page = all.Skip((Math.Max(1, filter.PageNumber) - 1) * size).Take(size).ToList();
+                return Task.FromResult(new SecretListResult { Data = page, TotalCount = all.Count });
             }
 
             public Task<IReadOnlyDictionary<string, string>> GetValuesAsync(

@@ -37,8 +37,15 @@ export const useUpdateProxy = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationKey: [...PROXY_QUERY_KEY, "update"],
-    mutationFn: ({ id, values }: { id: string; values: ProxyFormValues }) =>
-      proxyService.update({ id, values }),
+    mutationFn: ({
+      id,
+      values,
+      expectedVersion,
+    }: {
+      id: string;
+      values: ProxyFormValues;
+      expectedVersion?: number | null;
+    }) => proxyService.update({ id, values, expectedVersion }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: PROXY_QUERY_KEY }),
   });
 };
@@ -47,8 +54,15 @@ export const useToggleProxy = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationKey: [...PROXY_QUERY_KEY, "toggle"],
-    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
-      proxyService.toggle({ id, enabled }),
+    mutationFn: ({
+      id,
+      enabled,
+      expectedVersion,
+    }: {
+      id: string;
+      enabled: boolean;
+      expectedVersion?: number | null;
+    }) => proxyService.toggle({ id, enabled, expectedVersion }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: PROXY_QUERY_KEY }),
   });
 };

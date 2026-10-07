@@ -2,6 +2,7 @@ using System.Text;
 using FluentAssertions;
 using Proxy.DomainService.Dtos;
 using Proxy.DomainService.Entities;
+using Proxy.DomainService.Services;
 using Proxy.DomainService.Utils;
 
 namespace XUnitTest.Proxy
@@ -594,6 +595,59 @@ namespace XUnitTest.Proxy
                 });
 
             result.Errors.Should().NotContainKey("query");
+        }
+
+        // ---------- PX-7: body limits and copies ----------
+        [Fact]
+        public void BodyLimits_Request1Mb_ResponseMatchesFilterLimit()
+        {
+            ProxyGatewayService.MaxRequestBodyBytes.Should().Be(1L * 1024 * 1024);
+            ProxyGatewayService.MaxResponseBodyBytes.Should().Be(5L * 1024 * 1024);
+            ProxyGatewayService.MaxResponseBodyBytes.Should().Be(ProxyResponseProjector.MaxProjectableBytes,
+                "a response the gateway accepts must always be filterable");
+        }
+
+        [Fact]
+        public void ForwardResult_ResponseBody_IsDecodedFromBytesOnRead()
+        {
+            var result = new ProxyForwardResult { ResponseBytes = Encoding.UTF8.GetBytes("{\"a\":\"é\"}"), ResponseContentType = "application/json" };
+
+            result.ResponseBody.Should().Be("{\"a\":\"é\"}");
+            new ProxyForwardResult { ResponseBytes = null }.ResponseBody.Should().BeNull();
+            new ProxyForwardResult { ResponseBytes = Array.Empty<byte>() }.ResponseBody.Should().BeNull();
+            new ProxyForwardResult { ResponseBody = "set", ResponseBytes = Encoding.UTF8.GetBytes("other") }
+                .ResponseBody.Should().Be("set", "an explicit value wins over the bytes");
+        }
+
+        // ---------- No body is ever stored (user decision 2026-10-07) ----------
+        [Fact]
+        public void NoBodyField_OnTheLogRow_OrItsApi_OrTheProxy()
+        {
+            typeof(ProxyExecutionEntity).GetProperty("ResponseBody").Should().BeNull();
+            typeof(ProxyExecutionEntity).GetProperty("ResponseBodyStored").Should().BeNull();
+            typeof(ProxyExecutionDetailDto).GetProperty("ResponseBody").Should().BeNull();
+            typeof(ProxyDetailEntity).GetProperty("BodyCaptureUntil").Should().BeNull();
+            typeof(ProxyGetResponseDto).GetProperty("BodyCaptureUntil").Should().BeNull();
+        }
+
+        [Fact]
+        public void OldDocuments_WithABodyOrCaptureFields_StillLoad()
+        {
+            var row = new MongoDB.Bson.BsonDocument
+            {
+                { "_id", "e1" }, { "TenantId", "t1" }, { "ProxyId", "p1" }, { "ProxySlug", "s" },
+                { "RequestMethod", "GET" }, { "RequestPath", "/" }, { "RequestQuery", "" },
+                { "UpstreamUrl", "https://x" }, { "UpstreamHost", "x" }, { "Outcome", "Success" },
+                { "ResponseBody", "{\"customer\":\"Ana\"}" }, { "ResponseBodyStored", true },
+            };
+            MongoDB.Bson.Serialization.BsonSerializer.Deserialize<ProxyExecutionEntity>(row).ProxyId.Should().Be("p1");
+
+            var proxy = new MongoDB.Bson.BsonDocument
+            {
+                { "_id", "p1" }, { "TenantId", "t1" }, { "Name", "n" }, { "Slug", "s" }, { "Upstream", "https://x" },
+                { "BodyCaptureUntil", DateTime.UtcNow }, { "BodyCaptureBy", "u1" },
+            };
+            MongoDB.Bson.Serialization.BsonSerializer.Deserialize<ProxyDetailEntity>(proxy).Slug.Should().Be("s");
         }
     }
 }

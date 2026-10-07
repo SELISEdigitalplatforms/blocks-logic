@@ -104,14 +104,5 @@ namespace Proxy.DomainService.Dtos
         public string? ResponseFilterNote { get; set; }
 
         public long ResponseBodyBytes { get; set; }
-
-        /// <summary>
-        /// The stored upstream body, clipped to the API display limit (64 KB) when longer. The stored row is
-        /// never modified; see <see cref="ResponseBodyTruncatedForDisplay"/>.
-        /// </summary>
-        public string? ResponseBody { get; set; }
-
-        /// <summary><c>true</c> iff the API clipped <see cref="ResponseBody"/> before returning it (C6).</summary>
-        public bool ResponseBodyTruncatedForDisplay { get; set; }
     }
 }

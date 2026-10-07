@@ -40,6 +40,13 @@ namespace Proxy.DomainService.Dtos
         /// <summary>Who can call the gateway route. Omitted ⇒ a Blocks token is required, any signed-in caller.</summary>
         public ProxyResilienceInputDto? Resilience { get; set; }
 
+        /// <summary>
+        /// Gateway calls per minute for this proxy, from all callers together (P-3). <c>null</c> ⇒ the default:
+        /// 600 for a Public proxy, no limit for a token one. 1..100000. On Update, omitted resets it to the
+        /// default, so the console always sends the current value back.
+        /// </summary>
+        public int? RequestsPerMinute { get; set; }
+
         public ProxyAccessInputDto? Access { get; set; }
 
         /// <summary>Defaults to <c>true</c> when omitted.</summary>

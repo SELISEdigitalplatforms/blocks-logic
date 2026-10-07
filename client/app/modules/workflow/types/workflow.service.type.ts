@@ -106,6 +106,14 @@ export interface IGetWorkflowExecutionByIdPayload {
   executionId: string;
 }
 
+/** Continue a failed run from where it stopped (completed steps and already-done items are not run again). */
+export interface IResumeWorkflowExecutionResponse {
+  isSuccess: boolean;
+  executionId: string;
+  resumedNodeIds: string[];
+  error?: string | null;
+}
+
 export interface IGetWorkflowExecutionByIdResponse {
   data: IGetWorkflowExecutionById;
   isSuccess: boolean;

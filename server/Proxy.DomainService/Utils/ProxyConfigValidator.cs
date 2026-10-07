@@ -47,6 +47,9 @@ namespace Proxy.DomainService.Utils
         /// </summary>
         public ProxyResilienceConfig? Resilience { get; set; }
 
+        /// <summary>The tenant's own gateway calls-per-minute limit, or <c>null</c> for the default (P-3).</summary>
+        public int? RequestsPerMinute { get; set; }
+
         /// <summary>Normalized response-body treatment. Defaults to <see cref="ProxyResponseMode.All"/>.</summary>
         public ProxyResponseMode ResponseMode { get; set; } = ProxyResponseMode.All;
 
@@ -87,7 +90,8 @@ namespace Proxy.DomainService.Utils
             IEnumerable<string>? responseInclude = null,
             IEnumerable<ProxyRouteConfigInputDto>? routes = null,
             ProxyAccessInputDto? access = null,
-            ProxyResilienceInputDto? resilience = null)
+            ProxyResilienceInputDto? resilience = null,
+            int? requestsPerMinute = null)
         {
             var result = new ProxyConfigValidationResult();
 
@@ -102,8 +106,30 @@ namespace Proxy.DomainService.Utils
             result.Routes = NormalizeRoutes(routes, result);
             result.Access = NormalizeAccess(access, result);
             result.Resilience = NormalizeResilience(resilience, "this proxy", "resilience", result);
+            result.RequestsPerMinute = NormalizeRequestsPerMinute(requestsPerMinute, result);
 
             return result;
+        }
+
+        /// <summary>The highest gateway calls-per-minute limit a tenant may set; the same ceiling as a function's (FN-19).</summary>
+        public const int MaxRequestsPerMinute = 100_000;
+
+        /// <summary>
+        /// <c>null</c> keeps the default for the proxy's access. Zero or a negative number is refused rather
+        /// than read as "no limit": a Public proxy must not be able to switch its limit off by accident.
+        /// </summary>
+        private static int? NormalizeRequestsPerMinute(int? value, ProxyConfigValidationResult result)
+        {
+            if (value is null) return null;
+
+            if (value < 1 || value > MaxRequestsPerMinute)
+            {
+                result.Errors["requestsPerMinute"] =
+                    $"The rate limit must be a whole number from 1 to {MaxRequestsPerMinute} calls per minute.";
+                return null;
+            }
+
+            return value;
         }
 
         internal const int MaxAccessValues = 50;
@@ -592,6 +618,14 @@ namespace Proxy.DomainService.Utils
                 return;
             }
 
+            // PS-11: a password in the URL would show in the masked view and in every log row.
+            if (Uri.TryCreate(trimmed, UriKind.Absolute, out var parsed) && !string.IsNullOrEmpty(parsed.UserInfo))
+            {
+                result.Errors["upstream"] =
+                    "Do not put a user name or password in the URL. Send it as a header with a {{$VAR}} secret.";
+                return;
+            }
+
             if (!IsAbsoluteHttps(trimmed))
             {
                 result.Errors["upstream"] = "Must be an absolute https:// URL.";
@@ -604,11 +638,15 @@ namespace Proxy.DomainService.Utils
             }
         }
 
-        /// <summary><c>true</c> when <paramref name="value"/> is an absolute <c>https://</c> URL with a host.</summary>
+        /// <summary>
+        /// <c>true</c> when <paramref name="value"/> is an absolute <c>https://</c> URL with a host and no user
+        /// info (PS-11: a credential in the URL is never accepted, on the proxy or on a per-method override).
+        /// </summary>
         internal static bool IsAbsoluteHttps(string value) =>
             Uri.TryCreate(value, UriKind.Absolute, out var uri)
             && uri.Scheme == Uri.UriSchemeHttps
-            && !string.IsNullOrEmpty(uri.Host);
+            && !string.IsNullOrEmpty(uri.Host)
+            && string.IsNullOrEmpty(uri.UserInfo);
 
         /// <summary>
         /// Normalizes the per-method override layer (SPEC D-feature &sect;3.1). Each entry must target a method
@@ -655,7 +693,7 @@ namespace Proxy.DomainService.Utils
                     result.Errors["methodConfigs"] = mcGuardReason;
                 }
 
-                var overrideHeaders = entry.Headers is null ? null : NormalizePairs(entry.Headers, "methodConfigs", result);
+                var overrideHeaders = entry.Headers is null ? null : NormalizePairs(entry.Headers, "methodConfigs", result, areHeaders: true);
                 var overrideQuery = entry.Query is null ? null : NormalizePairs(entry.Query, "methodConfigs", result);
                 if (overrideHeaders is { Count: 0 })
                 {
@@ -720,8 +758,10 @@ namespace Proxy.DomainService.Utils
         }
 
         private static List<ProxyKeyValue> NormalizePairs(
-            IEnumerable<ProxyKeyValueInputDto>? pairs, string field, ProxyConfigValidationResult result)
+            IEnumerable<ProxyKeyValueInputDto>? pairs, string field, ProxyConfigValidationResult result,
+            bool areHeaders = false)
         {
+            areHeaders |= field == "headers";
             var normalized = new List<ProxyKeyValue>();
             var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             // Body-merge keys are JSON object keys: case-sensitive, so dedupe them ordinally, unlike headers.
@@ -737,7 +777,13 @@ namespace Proxy.DomainService.Utils
                     result.Errors[field] =
                         $"Each {field} key is required, must be {MaxKeyLength} characters or fewer, and must not have leading or trailing whitespace.";
                 }
-                else if (field == "headers" && !seenKeys.Add(key.Trim()))
+                else if (areHeaders && ProxyReservedHeaders.IsReserved(key))
+                {
+                    // PS-10: these steer where and how the request travels; Blocks sets them, the config may not.
+                    result.Errors[field] =
+                        $"The header \"{key.Trim()}\" cannot be set by a proxy. Not allowed: {ProxyReservedHeaders.Description}.";
+                }
+                else if (areHeaders && !seenKeys.Add(key.Trim()))
                 {
                     // A repeated header key would otherwise be sent as multiple header lines upstream.
                     result.Errors[field] = "Each header key must be unique (case-insensitive).";

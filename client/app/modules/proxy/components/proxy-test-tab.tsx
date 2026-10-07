@@ -27,6 +27,8 @@ import {
   fillRouteParams,
   formatProxyBody,
   jsonBodyKeys,
+  MAX_REQUEST_BODY_BYTES,
+  MAX_RESPONSE_BODY_BYTES,
   overriddenKeys,
   parseRouteTemplate,
   queryStringKeys,
@@ -34,6 +36,10 @@ import {
 } from "../utils";
 import { ProxyMethodBadge } from "./proxy-method-badge";
 import { ReadonlyConfigRows } from "./readonly-config-rows";
+
+const MB = 1024 * 1024;
+/** The gateway's size limits, shown before a call so nobody learns them from a 413 / 502. */
+const LIMITS_NOTE = `Limits: request body ${MAX_REQUEST_BODY_BYTES / MB} MB, response ${MAX_RESPONSE_BODY_BYTES / MB} MB.`;
 
 type Props = {
   proxy: Proxy;
@@ -164,6 +170,7 @@ export const ProxyTestTab = ({ proxy }: Props) => {
   const sendsBody = BODY_METHODS.includes(method);
   const overriddenQuery = overriddenKeys(queryStringKeys(query), effective.query);
   const overriddenBody = sendsBody ? overriddenKeys(jsonBodyKeys(body), effective.bodyMerge) : [];
+  const bodyBytes = useMemo(() => new TextEncoder().encode(body).length, [body]);
 
   const prefill = (nextMethod: ProxyMethod, nextRoute: ProxyRoute | undefined) => {
     const next = prefillFor(resolveEffectiveRoute(proxy, nextMethod, nextRoute), nextMethod);
@@ -181,7 +188,9 @@ export const ProxyTestTab = ({ proxy }: Props) => {
       ? `No route is declared for ${method} on this proxy.`
       : missingParams.length
         ? `Fill in ${missingParams.map((name) => `{${name}}`).join(", ")} to send.`
-        : null;
+        : sendsBody && bodyBytes > MAX_REQUEST_BODY_BYTES
+          ? `The request body is over the ${MAX_REQUEST_BODY_BYTES / MB} MB limit - the gateway would answer 413.`
+          : null;
 
   const changeMethod = (next: ProxyMethod) => {
     setMethod(next);
@@ -363,7 +372,8 @@ export const ProxyTestTab = ({ proxy }: Props) => {
               Send test request
             </Button>
             <span className="text-sm text-muted-foreground">
-              {blockedReason ?? "Runs through the live gateway; no request log row is written."}
+              {blockedReason ??
+                `Runs through the live gateway; no request log row is written. ${LIMITS_NOTE}`}
             </span>
           </div>
         </CardContent>

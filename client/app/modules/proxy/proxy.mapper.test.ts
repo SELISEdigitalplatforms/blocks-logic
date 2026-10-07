@@ -72,6 +72,7 @@ describe("proxy mapper", () => {
       id: "p1",
       upstreamUrl: "https://api.stripe.com/v1/charges",
       enabled: false,
+      version: 3,
     });
     expect(proxy.headers[0]).toEqual({ key: "Authorization", value: "Bearer {{$VAR.stripe}}" });
   });
@@ -109,9 +110,11 @@ describe("proxy mapper", () => {
       // null, not an object: the console sends "not configured" for a proxy whose form never
       // offered these, which is what keeps a save from inventing a policy.
       resilience: null,
+      requestsPerMinute: null,
       enabled: true,
     });
-    expect(mapProxyToUpdatePayload("p1", values)).toMatchObject({ itemId: "p1" });
+    expect(mapProxyToUpdatePayload("p1", values)).toMatchObject({ itemId: "p1", expectedVersion: null });
+    expect(mapProxyToUpdatePayload("p1", values, 7)).toMatchObject({ expectedVersion: 7 });
     expect(mapProxyToUpdatePayload("p1", values)).not.toHaveProperty("enabled");
   });
 
@@ -368,7 +371,6 @@ describe("proxy mapper", () => {
       status: 502,
       statusText: "Bad Gateway",
       injectedHeaderKeys: [],
-      responseBody: "",
     });
   });
 

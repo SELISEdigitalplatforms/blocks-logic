@@ -192,7 +192,9 @@ describe("ProxyDetails page", () => {
 
     await user.click(resume);
 
-    await waitFor(() => expect(toggleSpy).toHaveBeenCalledWith({ id: "p3", enabled: true }));
+    await waitFor(() =>
+      expect(toggleSpy).toHaveBeenCalledWith({ id: "p3", enabled: true, expectedVersion: 1 }),
+    );
     await waitFor(() =>
       expect(toasts.showSuccessToast).toHaveBeenCalledWith({ description: "Proxy resumed." }),
     );

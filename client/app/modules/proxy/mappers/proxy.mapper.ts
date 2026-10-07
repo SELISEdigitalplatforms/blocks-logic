@@ -207,10 +207,15 @@ export const mapProxyToCreatePayload = (values: ProxyFormValues) => ({
   ...toResponseFilter(values),
   access: toAccessPayload(values.access),
   resilience: toResilienceInput(values.resilience ?? null),
+  requestsPerMinute: values.requestsPerMinute ?? null,
   enabled: true,
 });
 
-export const mapProxyToUpdatePayload = (id: string, values: ProxyFormValues) => ({
+export const mapProxyToUpdatePayload = (
+  id: string,
+  values: ProxyFormValues,
+  expectedVersion: number | null = null,
+) => ({
   itemId: id,
   name: values.name.trim(),
   upstream: values.upstreamUrl.trim(),
@@ -223,6 +228,10 @@ export const mapProxyToUpdatePayload = (id: string, values: ProxyFormValues) => 
   ...toResponseFilter(values),
   access: toAccessPayload(values.access),
   resilience: toResilienceInput(values.resilience ?? null),
+  // Always sent: the server reads an omitted value as "back to the default".
+  requestsPerMinute: values.requestsPerMinute ?? null,
+  // The version the form was loaded from; the server answers 409 if the proxy changed since (PX-16).
+  expectedVersion,
 });
 
 export const mapProxyTestRequestToPayload = (request: ProxyTestRequest) => ({
@@ -419,6 +428,8 @@ export const mapProxyListItemDtoToProxy = (dto: ProxyListItemDto): Proxy => ({
   // The list row does not carry it, and a placeholder here would read as "not configured" for a
   // proxy that is. Only the detail read can answer this.
   resilience: null,
+  requestsPerMinute: null,
+  version: null,
   calls24h: Number(dto.calls24h ?? 0),
   createdAt: dto.createdDate,
   updatedAt: dto.lastUpdatedDate,
@@ -442,6 +453,9 @@ export const mapProxyDetailDtoToProxy = (dto: ProxyDetailDto): Proxy => ({
   responseInclude: Array.isArray(dto.responseInclude) ? dto.responseInclude : [],
   access: toAccess(dto.access),
   resilience: toResilience(dto.resilience),
+  requestsPerMinute:
+    typeof dto.requestsPerMinute === "number" && dto.requestsPerMinute > 0 ? dto.requestsPerMinute : null,
+  version: typeof dto.currentVersion === "number" ? dto.currentVersion : null,
   calls24h: 0,
   createdAt: dto.createdDate,
   updatedAt: dto.lastUpdatedDate,
@@ -504,12 +518,11 @@ export const mapProxyExecutionListItemDtoToLog = (
   upstreamUrl: "",
   injectedHeaderKeys: [],
   injectedQueryKeys: [],
-  responseBody: "",
   responseContentType: undefined,
   outcome: dto.outcome ?? undefined,
 });
 
-/** `GET /api/Proxies/{proxyId}/executions/{executionId}` — the expanded row with the display-clipped response body. */
+/** `GET /api/Proxies/{proxyId}/executions/{executionId}` — the expanded row (no body: Blocks never stores one). */
 export const mapProxyExecutionDetailDtoToLog = (
   dto: ProxyExecutionDetailDto,
 ): ProxyExecutionLog => ({
@@ -526,7 +539,6 @@ export const mapProxyExecutionDetailDtoToLog = (
   upstreamUrl: dto.upstreamUrl ?? "",
   injectedHeaderKeys: Array.isArray(dto.injectedHeaderKeys) ? dto.injectedHeaderKeys : [],
   injectedQueryKeys: Array.isArray(dto.injectedQueryKeys) ? dto.injectedQueryKeys : [],
-  responseBody: dto.responseBody ?? "",
   responseContentType: dto.responseContentType ?? undefined,
   outcome: dto.outcome ?? undefined,
   errorMessage: dto.errorMessage ?? undefined,

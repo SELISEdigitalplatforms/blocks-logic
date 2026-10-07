@@ -12,6 +12,17 @@ namespace Workflow.DomainService.Repositories
         Task<bool> AtomicCompleteNodeAsync(string executionId, string tenantId, string completedNodeId, List<string> nextNodeIds);
         Task AtomicFinalizeExecutionAsync(string executionId, string tenantId);
         Task AtomicAddNodeExecutionAsync(string executionId, string tenantId, NodeExecutionEntity nodeExecution);
+        /// <summary>
+        /// Adds the node's row only if this execution has no Running or Completed row for that node yet,
+        /// in one atomic update. False means the node already ran or is running (a redelivered message).
+        /// </summary>
+        Task<bool> TryAddFirstNodeExecutionAsync(string executionId, string tenantId, NodeExecutionEntity nodeExecution);
+
+        /// <summary>
+        /// Puts a failed production execution back to Running so it can continue, in one atomic update.
+        /// False if it is not (or no longer) a failed production execution — so two resumes cannot both start.
+        /// </summary>
+        Task<bool> TryReopenFailedExecutionAsync(string executionId, string tenantId);
         Task AtomicUpdateNodeExecutionCompletedAsync(string executionId, string tenantId, string nodeExecutionId, int outputItemCount, Dictionary<string, int> outputCountsByBranch, BsonDocument? contextUpdates);
         Task AtomicUpdateNodeExecutionFailedAsync(string executionId, string tenantId, string nodeExecutionId, string error, int outputItemCount, Dictionary<string, int> outputCountsByBranch);
         Task<List<WorkflowExecutionEntity>> GetByWorkflowIdAsync(string workflowId, string tenantId);

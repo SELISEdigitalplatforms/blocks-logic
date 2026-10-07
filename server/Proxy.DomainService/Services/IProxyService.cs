@@ -18,6 +18,8 @@ namespace Proxy.DomainService.Services
 
         Task<ProxyMutationResponse> ToggleAsync(string tenantId, ProxyToggleRequestDto request);
 
+        /// <summary>Turns debug capture (response bodies in the log) on for one hour, or off now. Writes no version.</summary>
+
         Task<ProxyMutationResponse> DeleteAsync(string tenantId, ProxyDeleteRequestDto request);
     }
 }

@@ -130,6 +130,16 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
+        public async Task A_workflow_run_is_never_retried_in_the_background()
+        {
+            // The step reports attempt 1 and moves on; a retry would repeat side effects unseen.
+            _version.Retry.Attempts = 3;
+            await Service().InvokeFromWorkflowAsync(Tenant, "fn-1", "{}", null, null, "wf-1");
+
+            _created!.MaxAttempts.Should().Be(1);
+        }
+
+        [Fact]
         public async Task A_new_deploy_is_used_on_the_very_next_call()
         {
             var service = Service();

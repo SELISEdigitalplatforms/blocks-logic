@@ -24,6 +24,12 @@ namespace Proxy.DomainService.Utils
         /// <summary>409 &mdash; "Revert this change" blocked: a field it targets was changed again by a later version.</summary>
         public const string RevertConflict = "PROXY_REVERT_CONFLICT";
 
+        /// <summary>
+        /// 409 &mdash; someone else changed the proxy after it was loaded (PX-16). Nothing was written; reload and
+        /// apply the change again.
+        /// </summary>
+        public const string VersionConflict = "PROXY_VERSION_CONFLICT";
+
         /// <summary>400 &mdash; the target version has nothing to revert (Create / Delete / empty change set).</summary>
         public const string VersionNotRevertable = "PROXY_VERSION_NOT_REVERTABLE";
     }

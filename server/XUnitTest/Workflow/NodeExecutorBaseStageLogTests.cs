@@ -43,8 +43,13 @@ namespace XUnitTest.Workflow
         {
             public bool ResolveNothing { get; init; }
 
+            public Task<IReadOnlyDictionary<string, string>> LookupIdsAsync(
+                IReadOnlyCollection<string> names, string tenantId, CancellationToken ct = default) =>
+                Task.FromResult<IReadOnlyDictionary<string, string>>(
+                    names.ToDictionary(n => n, n => "id-" + n, StringComparer.Ordinal));
+
             public Task<IReadOnlyDictionary<string, string>> ResolveAsync(
-                IReadOnlyCollection<string> names, string tenantId, CancellationToken ct = default)
+                IReadOnlyCollection<string> names, string tenantId, IReadOnlyDictionary<string, string>? knownIds = null, CancellationToken ct = default)
             {
                 IReadOnlyDictionary<string, string> values = ResolveNothing
                     ? new Dictionary<string, string>()

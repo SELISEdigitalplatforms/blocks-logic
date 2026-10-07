@@ -44,16 +44,16 @@ namespace Utilities.Api.Controllers
     {
         /// <summary>
         /// Kestrel-level backstop on the gateway body, deliberately ABOVE
-        /// <see cref="ProxyGatewayService.MaxRequestBodyBytes"/> (10 MB) rather than equal to it.
+        /// <see cref="ProxyGatewayService.MaxRequestBodyBytes"/> (1 MB) rather than equal to it.
         /// <para>
-        /// The 10 MB cap has to stay in application code: exceeding it is a documented outcome
+        /// The 1 MB cap has to stay in application code: exceeding it is a documented outcome
         /// (<c>RequestTooLarge</c>) that answers 413 with the Blocks error body and still records an execution
         /// row. A framework-level limit set to the same value would pre-empt that and return a bare Kestrel
         /// 413 with no row and no <c>code</c>. This one only catches a client streaming far past the point
         /// where the answer is already decided, so the contract is unchanged and the ceiling is bounded.
         /// </para>
         /// </summary>
-        private const long GatewayHardBodyLimitBytes = 12L * 1024 * 1024;
+        private const long GatewayHardBodyLimitBytes = 2L * 1024 * 1024;
 
         private readonly IProxyService _proxyService;
         private readonly IProxyVersionService _proxyVersionService;
@@ -61,6 +61,7 @@ namespace Utilities.Api.Controllers
         private readonly IProxyExecutionService _proxyExecutionService;
         private readonly IProxyGatewayService _gatewayService;
         private readonly IEndpointAccessAuthorizer _accessAuthorizer;
+        private readonly IProxyRateLimiter _rateLimiter;
         private readonly ILogger<ProxiesController> _logger;
 
         /// <summary>
@@ -76,6 +77,7 @@ namespace Utilities.Api.Controllers
             IProxyExecutionService proxyExecutionService,
             IProxyGatewayService gatewayService,
             IEndpointAccessAuthorizer accessAuthorizer,
+            IProxyRateLimiter rateLimiter,
             IProxyOpenApiImportService openApiImport,
             ILogger<ProxiesController> logger)
         {
@@ -86,6 +88,7 @@ namespace Utilities.Api.Controllers
             _proxyExecutionService = proxyExecutionService;
             _gatewayService = gatewayService;
             _accessAuthorizer = accessAuthorizer;
+            _rateLimiter = rateLimiter;
             _logger = logger;
         }
 
@@ -413,6 +416,10 @@ namespace Utilities.Api.Controllers
             var requestPath = Request.Path.Value ?? $"/api/proxy/gateway/{slug}/{path}";
             var aborted = HttpContext.RequestAborted;
 
+            // Every answer from here, relayed or Blocks-generated, is tenant content served from the console's
+            // own host (PS-1). Set before any return so no path can skip it.
+            AddGatewaySecurityHeaders(Response);
+
             // Step 1 — identify the tenant. The route is anonymous at the framework level because "Who can
             // call it" is stored per proxy and the Genesis bearer handler skips [AllowAnonymous] actions, so
             // the tenant has to be resolved here: x-blocks-key, or the tenant claim of a presented token.
@@ -435,10 +442,23 @@ namespace Utilities.Api.Controllers
                 return GatewayError(ProxyExecutionOutcome.Unauthorized, 401, requestPath);
             }
 
+            // Step 2b — the proxy's calls-per-minute limit (P-3), before the body is read or anything is
+            // written. Counted after the token check, so a caller without a valid token cannot spend a token
+            // proxy's allowance. An unknown or disabled proxy is not counted: it is answered 404 below.
+            if (config is { Enabled: true })
+            {
+                var retryAfter = await _rateLimiter.TryAcquireAsync(tenantId, config, aborted);
+                if (retryAfter is { } seconds)
+                {
+                    Response.Headers.RetryAfter = seconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    return GatewayError(ProxyExecutionOutcome.RateLimited, 429, requestPath);
+                }
+            }
+
             // Null for a public policy: no identity, no token-scoped work.
             var context = decision.Context;
 
-            // Step 3 — buffer the body under the 10 MB cap before any upstream connection (C4 / C10).
+            // Step 3 — buffer the body under the 1 MB cap before any upstream connection (C4 / C10).
             var (body, tooLarge) = await ReadBodyAsync(aborted);
 
             var result = await _gatewayService.ForwardAsync(new ProxyForwardRequest
@@ -488,6 +508,20 @@ namespace Utilities.Api.Controllers
             }
 
             return GatewayError(result.Outcome, result.StatusCode, requestPath, result.UpstreamStatusCode);
+        }
+
+        /// <summary>
+        /// The two headers every gateway answer carries (PS-1), the same pair Functions sends
+        /// (<c>FunctionHttpResponseMapper.SecurityHeaders</c>). The body is a tenant's upstream content served
+        /// from the platform origin: <c>nosniff</c> stops a browser re-reading JSON or text as HTML, and
+        /// <c>Content-Security-Policy: sandbox</c> puts any HTML or SVG an upstream returns in an opaque origin
+        /// with scripts off, so it cannot read the console's storage or act as the signed-in user. An
+        /// upstream's own CSP is never relayed, so it cannot loosen this.
+        /// </summary>
+        private static void AddGatewaySecurityHeaders(HttpResponse response)
+        {
+            response.Headers.XContentTypeOptions = "nosniff";
+            response.Headers.ContentSecurityPolicy = "sandbox";
         }
 
         /// <summary>Relays the upstream status, body, and Content-Type byte-for-byte. No other header is relayed.</summary>
@@ -540,16 +574,17 @@ namespace Utilities.Api.Controllers
         private static string SafeMessage(string outcome) => outcome switch
         {
             ProxyExecutionOutcome.Unauthorized => "Missing or invalid credentials for this tenant.",
+            ProxyExecutionOutcome.RateLimited => "Too many calls to this proxy. Wait for the time in Retry-After, then try again.",
             ProxyExecutionOutcome.ProxyNotFound => "No enabled proxy is configured for this path.",
             ProxyExecutionOutcome.MethodNotAllowed => "This HTTP method is not allowed for this proxy.",
             // Deliberately does not say whether the path exists upstream: the caller may not know the
             // vendor's URL shape, and this response must not become a way to discover it.
             ProxyExecutionOutcome.RouteNotAllowed => "This path is not a configured route on this proxy.",
-            ProxyExecutionOutcome.RequestTooLarge => "The request body exceeds the 10 MB limit.",
+            ProxyExecutionOutcome.RequestTooLarge => "The request body exceeds the 1 MB limit.",
             ProxyExecutionOutcome.Timeout => "The upstream endpoint did not respond within 30 seconds.",
             ProxyExecutionOutcome.UpstreamUnreachable => "The upstream endpoint could not be reached.",
             ProxyExecutionOutcome.UpstreamBlocked => "The upstream endpoint is not an allowed destination.",
-            ProxyExecutionOutcome.UpstreamResponseTooLarge => "The upstream response exceeds the 10 MB limit.",
+            ProxyExecutionOutcome.UpstreamResponseTooLarge => "The upstream response exceeds the 5 MB limit.",
             ProxyExecutionOutcome.VariableResolutionFailed => "A configured configuration variable could not be resolved.",
             ProxyExecutionOutcome.ResponseFilterFailed => "The upstream response could not be filtered to the configured fields.",
             _ => "The proxy could not complete the request.",

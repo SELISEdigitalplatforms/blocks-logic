@@ -21,6 +21,13 @@ namespace Proxy.DomainService.Utils
             var withoutScheme = StripScheme(upstream);
             var slashIndex = withoutScheme.IndexOf('/');
             var host = slashIndex >= 0 ? withoutScheme[..slashIndex] : withoutScheme;
+
+            // A row saved before user info was refused (PS-11) may carry "user:pass@host": never show it.
+            var at = host.LastIndexOf('@');
+            if (at >= 0)
+            {
+                host = host[(at + 1)..];
+            }
             if (host.Length == 0)
             {
                 return string.Empty;

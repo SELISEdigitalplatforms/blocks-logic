@@ -32,6 +32,14 @@ namespace Proxy.DomainService.Services
         /// </summary>
         public const int MaxOperations = 200;
 
+        /// <summary>
+        /// Named client for spec fetches (PX-8), registered in <c>AddProxyServices</c> on the guarded handler:
+        /// no redirects, every connection's IP checked at connect time, no cookies.
+        /// </summary>
+        public const string SpecClientName = "proxy-openapi-spec";
+
+        private static readonly TimeSpan FetchTimeout = TimeSpan.FromSeconds(15);
+
         private readonly IHttpClientFactory? _httpClientFactory;
         private readonly IProxyUpstreamGuard? _upstreamGuard;
 
@@ -82,36 +90,105 @@ namespace Proxy.DomainService.Services
                 return preview;
             }
 
+            // Every failure below is reported in plain words. The raw exception text is never returned: it can
+            // name an internal host and port ("connection refused 10.0.0.5:6379"), which turns this endpoint
+            // into a port scanner.
             string body;
             try
             {
-                var client = _httpClientFactory.CreateClient();
-                client.Timeout = TimeSpan.FromSeconds(15);
+                var client = _httpClientFactory.CreateClient(SpecClientName);
 
-                using var response = await client.GetAsync(uri, cancellationToken);
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeout.CancelAfter(FetchTimeout);
+
+                using var response = await client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+
+                // The guarded client never follows a redirect: the next hop would be a second, unchecked request.
+                if ((int)response.StatusCode is >= 300 and < 400)
+                {
+                    preview.Errors.Add("The specification URL redirects to another address. Paste the final URL instead.");
+                    return preview;
+                }
+
                 if (!response.IsSuccessStatusCode)
                 {
                     preview.Errors.Add($"The specification URL answered {(int)response.StatusCode}.");
                     return preview;
                 }
 
-                // Checked before the body is read into memory where the server declares a length, and
-                // again after, because a declared length is a claim.
+                // Refused early where the server declares a length; enforced while reading either way, because a
+                // declared length is a claim and a chunked reply declares none.
                 if (response.Content.Headers.ContentLength is > MaxSpecBytes)
                 {
-                    preview.Errors.Add($"The specification exceeds the {MaxSpecBytes / (1024 * 1024)} MB limit.");
+                    preview.Errors.Add(TooLargeMessage);
                     return preview;
                 }
 
-                body = await response.Content.ReadAsStringAsync(cancellationToken);
+                var text = await ReadCappedAsync(response.Content, timeout.Token);
+                if (text is null)
+                {
+                    preview.Errors.Add(TooLargeMessage);
+                    return preview;
+                }
+
+                body = text;
             }
-            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                preview.Errors.Add($"The specification could not be fetched: {ex.Message}");
+                throw;
+            }
+            catch (OperationCanceledException)
+            {
+                preview.Errors.Add($"The specification URL did not answer within {FetchTimeout.TotalSeconds:0} seconds.");
+                return preview;
+            }
+            catch (Exception ex) when (IsBlocked(ex))
+            {
+                preview.Errors.Add("That specification URL is not an allowed destination.");
+                return preview;
+            }
+            catch (Exception ex) when (ex is HttpRequestException or IOException)
+            {
+                preview.Errors.Add("The specification could not be fetched: the address could not be reached.");
                 return preview;
             }
 
             return Preview(body, existingRoutes);
+        }
+
+        private static string TooLargeMessage => $"The specification exceeds the {MaxSpecBytes / (1024 * 1024)} MB limit.";
+
+        /// <summary>Reads at most <see cref="MaxSpecBytes"/>; <c>null</c> when the body is longer.</summary>
+        private static async Task<string?> ReadCappedAsync(HttpContent content, CancellationToken cancellationToken)
+        {
+            await using var stream = await content.ReadAsStreamAsync(cancellationToken);
+            using var buffer = new MemoryStream();
+            var chunk = new byte[81920];
+            int read;
+            while ((read = await stream.ReadAsync(chunk, cancellationToken)) > 0)
+            {
+                if (buffer.Length + read > MaxSpecBytes)
+                {
+                    return null;
+                }
+
+                buffer.Write(chunk, 0, read);
+            }
+
+            return System.Text.Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length);
+        }
+
+        private static bool IsBlocked(Exception ex)
+        {
+            for (var e = ex; e is not null; e = e.InnerException)
+            {
+                if (e is ProxyUpstreamBlockedException)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <inheritdoc />

@@ -15,9 +15,15 @@ namespace Proxy.DomainService.Repositories
 
         Task InsertAsync(ProxyDetailEntity proxy);
 
-        Task ReplaceAsync(ProxyDetailEntity proxy);
+        /// <summary>
+        /// Writes every config field of <paramref name="proxy"/> (never <c>Stats</c>, which the stats flush owns)
+        /// only while the stored <c>CurrentVersion</c> is still <paramref name="expectedVersion"/> (PX-16).
+        /// Returns <c>false</c> when someone else wrote first; nothing is written then.
+        /// </summary>
+        Task<bool> SaveConfigAsync(ProxyDetailEntity proxy, int expectedVersion);
 
-        Task DeleteAsync(string tenantId, string itemId);
+        /// <summary>Deletes the proxy only while its version is still <paramref name="expectedVersion"/>; <c>false</c> otherwise.</summary>
+        Task<bool> DeleteAsync(string tenantId, string itemId, int expectedVersion);
 
         /// <summary>
         /// Applies buffered traffic counters to the tenant's proxy documents as one unordered bulk write of

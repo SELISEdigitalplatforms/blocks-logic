@@ -118,7 +118,7 @@ namespace Workflow.DomainService.Nodes
 
                 try
                 {
-                    var resolvedVariables = await resolver.ResolveAsync(variableNames, context.TenantId, context.CancellationToken);
+                    var resolvedVariables = await resolver.ResolveAsync(variableNames, context.TenantId, ct: context.CancellationToken);
                     var unresolved = variableNames
                         .Where(name => !resolvedVariables.ContainsKey(name))
                         .ToList();

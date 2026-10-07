@@ -1,4 +1,4 @@
-import { ReactNode, useState } from "react";
+import { useState } from "react";
 import { Activity, Check, ChevronRight, Copy, Loader2, Pause, Play } from "lucide-react";
 import { Badge } from "@/components/ui-kits/badge/badge";
 import { Button } from "@/components/ui-kits/button/button";
@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import { PROXY_LOG_PAGE_SIZE, PROXY_LOG_PAGE_SIZE_OPTIONS } from "../constants";
 import { useGetProxyExecution, useGetProxyExecutions } from "../hooks";
 import { Proxy, ProxyExecutionLog, ProxyLogFilter } from "../types";
-import { buildProxyCurl, formatProxyBody } from "../utils";
+import { buildProxyCurl } from "../utils";
 import { ProxyMethodBadge } from "./proxy-method-badge";
 
 const FILTERS: { value: ProxyLogFilter; label: string }[] = [
@@ -29,8 +29,8 @@ const OUTCOME_LABELS: Record<string, string> = {
   Timeout: "The upstream endpoint did not respond in time.",
   UpstreamUnreachable: "The upstream endpoint could not be reached.",
   UpstreamBlocked: "The upstream endpoint is not an allowed destination.",
-  UpstreamResponseTooLarge: "The upstream response exceeded the 10 MB limit.",
-  RequestTooLarge: "The request body exceeded the 10 MB limit.",
+  UpstreamResponseTooLarge: "The upstream response exceeded the 5 MB limit.",
+  RequestTooLarge: "The request body exceeded the 1 MB limit.",
   RequestBodyNotMergeable: "The request body is not a JSON object and could not be merged.",
   VariableResolutionFailed: "A configured configuration variable could not be resolved.",
   ResponseFilterFailed: "The upstream response could not be filtered to the configured fields.",
@@ -129,50 +129,11 @@ const CopyButton = ({
   );
 };
 
-/** JSON syntax-token regex: quoted strings (keys when followed by `:`), booleans, null, numbers. */
-const JSON_TOKEN_RE =
-  /("(?:\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\btrue\b|\bfalse\b|\bnull\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g;
-
-const jsonTokenClass = (token: string) => {
-  if (token.startsWith('"'))
-    return /:\s*$/.test(token)
-      ? "text-sky-700 dark:text-sky-400"
-      : "text-emerald-700 dark:text-emerald-400";
-  if (token === "true" || token === "false") return "text-amber-700 dark:text-amber-400";
-  if (token === "null") return "text-rose-700 dark:text-rose-400";
-  return "text-purple-700 dark:text-purple-400";
-};
-
-/** Colorizes a pretty-printed JSON string; falls back to plain text for anything that doesn't parse. */
-const JsonHighlight = ({ text }: { text: string }) => {
-  try {
-    JSON.parse(text);
-  } catch {
-    return <>{text}</>;
-  }
-
-  const nodes: ReactNode[] = [];
-  let lastIndex = 0;
-  let key = 0;
-  // matchAll iterates a copy of the regex, so the shared global's lastIndex is never touched.
-  for (const match of text.matchAll(JSON_TOKEN_RE)) {
-    if (match.index > lastIndex) nodes.push(text.slice(lastIndex, match.index));
-    nodes.push(
-      <span key={key++} className={jsonTokenClass(match[0])}>
-        {match[0]}
-      </span>,
-    );
-    lastIndex = match.index + match[0].length;
-  }
-  nodes.push(text.slice(lastIndex));
-  return <>{nodes}</>;
-};
-
 const logDetailsId = (logId: string) => `proxy-log-details-${logId}`;
 
 const LogDetails = ({ proxyId, log }: { proxyId: string; log: ProxyExecutionLog }) => {
-  // The list row carries only summary fields; the upstream response body, forwarded
-  // URL and injected keys are fetched on demand from `GET /api/Proxies/{proxyId}/executions/{executionId}`.
+  // The list row carries only summary fields; the forwarded URL and injected keys are fetched on demand
+  // from `GET /api/Proxies/{proxyId}/executions/{executionId}`.
   const { data, isLoading, isError } = useGetProxyExecution(proxyId, log.id);
   const detail = data ?? log;
   const errorText = detail.errorMessage || outcomeLabel(detail.outcome);
@@ -193,9 +154,6 @@ const LogDetails = ({ proxyId, log }: { proxyId: string; log: ProxyExecutionLog 
   const curl = buildProxyCurl(detail, typeof window === "undefined" ? "" : window.location.origin);
 
   const upstreamUrl = detail.upstreamUrl || detail.upstreamHost;
-  const formattedBody = detail.responseBody
-    ? formatProxyBody(detail.responseBody, detail.responseContentType)
-    : "";
 
   return (
     <div
@@ -256,22 +214,11 @@ const LogDetails = ({ proxyId, log }: { proxyId: string; log: ProxyExecutionLog 
       <div className="lg:col-span-2">
         <span className="text-xs font-medium uppercase text-muted-foreground">Response body</span>
         {isError ? (
-          <p className="mt-1 text-red-700">Failed to load the response body.</p>
+          <p className="mt-1 text-red-700">Failed to load the call details.</p>
         ) : (
-          <div className="group/body relative mt-1">
-            <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-background p-3 text-xs">
-              {formattedBody ? <JsonHighlight text={formattedBody} /> : "(empty response body)"}
-            </pre>
-            {detail.responseBody ? (
-              <CopyButton
-                label="Body"
-                value={detail.responseBody}
-                title="Copy the stored response body"
-                iconOnly
-                className="absolute right-2 top-2 bg-background opacity-0 transition-opacity group-hover/body:opacity-100"
-              />
-            ) : null}
-          </div>
+          <p className="mt-1 text-muted-foreground" data-testid="body-not-saved">
+            Not saved. Blocks never stores request or response bodies; they are customer data.
+          </p>
         )}
       </div>
     </div>
@@ -365,7 +312,7 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
             </Button>
           ))}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm text-muted-foreground">
             {data.length} of {totalAllCount} requests
           </span>

@@ -622,9 +622,9 @@
         <member name="F:Utilities.Api.Controllers.ProxiesController.GatewayHardBodyLimitBytes">
             <summary>
             Kestrel-level backstop on the gateway body, deliberately ABOVE
-            <see cref="P:Proxy.DomainService.Services.ProxyGatewayService.MaxRequestBodyBytes"/> (10 MB) rather than equal to it.
+            <see cref="P:Proxy.DomainService.Services.ProxyGatewayService.MaxRequestBodyBytes"/> (1 MB) rather than equal to it.
             <para>
-            The 10 MB cap has to stay in application code: exceeding it is a documented outcome
+            The 1 MB cap has to stay in application code: exceeding it is a documented outcome
             (<c>RequestTooLarge</c>) that answers 413 with the Blocks error body and still records an execution
             row. A framework-level limit set to the same value would pre-empt that and return a bare Kestrel
             413 with no row and no <c>code</c>. This one only catches a client streaming far past the point
@@ -765,6 +765,16 @@
             </para>
             </summary>
         </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.AddGatewaySecurityHeaders(Microsoft.AspNetCore.Http.HttpResponse)">
+            <summary>
+            The two headers every gateway answer carries (PS-1), the same pair Functions sends
+            (<c>FunctionHttpResponseMapper.SecurityHeaders</c>). The body is a tenant's upstream content served
+            from the platform origin: <c>nosniff</c> stops a browser re-reading JSON or text as HTML, and
+            <c>Content-Security-Policy: sandbox</c> puts any HTML or SVG an upstream returns in an opaque origin
+            with scripts off, so it cannot read the console's storage or act as the signed-in user. An
+            upstream's own CSP is never relayed, so it cannot loosen this.
+            </summary>
+        </member>
         <member name="M:Utilities.Api.Controllers.ProxiesController.Relay(Proxy.DomainService.Services.ProxyForwardResult)">
             <summary>Relays the upstream status, body, and Content-Type byte-for-byte. No other header is relayed.</summary>
         </member>
@@ -876,6 +886,12 @@
         </member>
         <member name="M:Utilities.Api.Controllers.WorkflowController.GetExecution(Workflow.DomainService.Dtos.WorkflowExecutionGetRequestDto)">
             <summary><c>GET</c> — one execution, including per-node results.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.ResumeExecution(Workflow.DomainService.Dtos.WorkflowExecutionGetRequestDto)">
+            <summary>
+            <c>POST</c> — continues a failed run from where it stopped. Steps that completed are not run again,
+            and a function step does not call again the items that already succeeded. 409 when it cannot be resumed.
+            </summary>
         </member>
         <member name="M:Utilities.Api.Controllers.WorkflowController.GetExecutionLogs(Workflow.DomainService.Dtos.WorkflowExecutionLogsGetRequestDto)">
             <summary><c>GET</c> — the stage log lines of one execution (stages and counts only, never data values),

@@ -196,6 +196,101 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
+        public async Task A_run_the_step_stopped_waiting_for_is_not_called_failed()
+        {
+            // It may still finish, or may already have done its work: the text must say so, so
+            // nobody re-runs the workflow believing nothing happened.
+            var service = new FakeInvocationService
+            {
+                Respond = _ => new InvokeResultDto { RunId = "run_9", Status = "RUNNING" },
+            };
+            var items = new List<WorkflowItemExecutionEntity> { Item("i1", new BsonDocument()) };
+
+            var result = await Node(service).RunAsync(Context(items));
+
+            result.IsSuccess.Should().BeFalse();
+            result.ErrorMessage.Should().Contain("run_9").And.Contain("did not finish in time")
+                .And.Contain("may already have done its work").And.NotContain("did not succeed");
+        }
+
+        [Fact]
+        public async Task When_an_item_fails_the_items_before_it_are_kept()
+        {
+            // Items 1 and 2 really ran (side effects included); dropping them hid that.
+            var calls = 0;
+            var service = new FakeInvocationService
+            {
+                Respond = _ => ++calls == 3
+                    ? new InvokeResultDto { RunId = "run_3", Status = "FAILED", ErrorMessage = "card declined" }
+                    : new InvokeResultDto { RunId = "run_ok", Status = "SUCCEEDED", Result = "{\"charged\":true}" },
+            };
+            var items = new List<WorkflowItemExecutionEntity>
+            {
+                Item("i1", new BsonDocument("n", 1)),
+                Item("i2", new BsonDocument("n", 2)),
+                Item("i3", new BsonDocument("n", 3)),
+                Item("i4", new BsonDocument("n", 4)),
+            };
+
+            var result = await Node(service).RunAsync(Context(items));
+
+            result.IsSuccess.Should().BeFalse();
+            service.Calls.Should().HaveCount(3, "the step stops at the failing item");
+            result.OutputItems.Should().HaveCount(2);
+            result.OutputItems!.Select(o => o.ParentItemIds![0]).Should().Equal("i1", "i2");
+            result.ErrorMessage.Should().Contain("item 3 of 4").And.Contain("card declined");
+        }
+
+        [Fact]
+        public async Task On_resume_items_that_already_succeeded_are_not_called_again()
+        {
+            var service = new FakeInvocationService();
+            var items = new List<WorkflowItemExecutionEntity>
+            {
+                Item("i1", new BsonDocument("n", 1)), Item("i2", new BsonDocument("n", 2)), Item("i3", new BsonDocument("n", 3)),
+            };
+            var done = Item("prev-1", new BsonDocument());
+            done.ParentItemIds = ["i1"];
+            done.Data = new NodeOutputItemData { Output = new BsonDocument("charged", "before") };
+            var context = Context(items);
+            context = new NodeExecutionContext
+            {
+                WorkflowExecutionId = context.WorkflowExecutionId, TenantId = context.TenantId, Parameters = context.Parameters,
+                InputItems = context.InputItems, IterationCount = context.IterationCount, HasUpstream = true,
+                WorkflowContext = context.WorkflowContext, AncestorNodeOutputs = context.AncestorNodeOutputs,
+                PreviousAttemptItems = [done],
+            };
+
+            var result = await Node(service).RunAsync(context);
+
+            result.IsSuccess.Should().BeTrue();
+            service.Calls.Should().HaveCount(2, "item 1 succeeded before and is not charged again");
+            result.OutputItems.Should().HaveCount(3);
+            result.OutputItems[0].Data.Output["charged"].AsString.Should().Be("before");
+            result.OutputItems[0].ParentItemIds.Should().Equal("i1");
+        }
+
+        [Fact]
+        public async Task When_the_invocation_throws_the_items_before_it_are_kept()
+        {
+            var calls = 0;
+            var service = new FakeInvocationService
+            {
+                Respond = _ =>
+                {
+                    if (++calls == 2) throw new InvalidOperationException("this function requires authentication");
+                    return new InvokeResultDto { RunId = "run_ok", Status = "SUCCEEDED", Result = "1" };
+                },
+            };
+            var items = new List<WorkflowItemExecutionEntity> { Item("i1", new BsonDocument()), Item("i2", new BsonDocument()) };
+
+            var result = await Node(service).RunAsync(Context(items));
+
+            result.IsSuccess.Should().BeFalse();
+            result.OutputItems.Should().ContainSingle();
+        }
+
+        [Fact]
         public async Task An_exception_from_the_invocation_service_fails_the_step_with_its_message()
         {
             var service = new FakeInvocationService { ThrowOnInvoke = new InvalidOperationException("no such function") };

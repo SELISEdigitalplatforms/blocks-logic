@@ -51,6 +51,9 @@ namespace Proxy.DomainService.Entities
         /// <summary>Timeout / retry / breaker as they stood, or <c>null</c> when none were configured.</summary>
         public ProxyResilienceConfig? Resilience { get; set; }
 
+        /// <summary>The tenant's own gateway calls-per-minute limit, or <c>null</c> for the default.</summary>
+        public int? RequestsPerMinute { get; set; }
+
         /// <summary>
         /// Response-body treatment on forward, captured per version so Revert round-trips a
         /// <c>responseMode</c> change. <see cref="ProxyResponseMode.All"/> ⇒ relayed unchanged.

@@ -1,3 +1,4 @@
+using System.Net;
 using FluentAssertions;
 using Proxy.DomainService.Entities;
 using Proxy.DomainService.Services;
@@ -245,6 +246,113 @@ namespace XUnitTest.Proxy
             preview.Operations.Should().ContainSingle();
             preview.BaseUrl.Should().BeEmpty();
             preview.Warnings.Should().Contain(w => w.Contains("server", StringComparison.OrdinalIgnoreCase));
+        }
+    
+        // ---- fetching by URL through the guarded client (PX-8) -------------------------------
+
+        private sealed class AllowingGuard : global::Proxy.DomainService.Utils.IProxyUpstreamGuard
+        {
+            public Task<bool> IsTargetBlockedAsync(string url, CancellationToken cancellationToken = default)
+                => Task.FromResult(false);
+        }
+
+        private sealed class ScriptedFactory(Func<HttpRequestMessage, HttpResponseMessage> respond) : IHttpClientFactory
+        {
+            public string? LastName { get; private set; }
+            public int Calls { get; private set; }
+
+            public HttpClient CreateClient(string name)
+            {
+                LastName = name;
+                return new HttpClient(new Handler(this, respond));
+            }
+
+            private sealed class Handler(ScriptedFactory owner, Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
+            {
+                protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+                {
+                    owner.Calls++;
+                    return Task.FromResult(respond(request));
+                }
+            }
+        }
+
+        /// <summary>A body with no Content-Length (like a chunked reply) that never ends on its own.</summary>
+        private sealed class EndlessStream : Stream
+        {
+            public override bool CanRead => true;
+            public override bool CanSeek => false;
+            public override bool CanWrite => false;
+            public override long Length => throw new NotSupportedException();
+            public override long Position { get => 0; set => throw new NotSupportedException(); }
+            public override void Flush() { }
+            public override int Read(byte[] buffer, int offset, int count) { Array.Fill(buffer, (byte)'x', offset, count); return count; }
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+            public override void SetLength(long value) => throw new NotSupportedException();
+            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        }
+
+        private static ProxyOpenApiImportService Fetching(ScriptedFactory factory) => new(factory, new AllowingGuard());
+
+        [Fact]
+        public async Task A_good_url_is_fetched_through_the_guarded_named_client()
+        {
+            var factory = new ScriptedFactory(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(Spec) });
+
+            var preview = await Fetching(factory).PreviewFromUrlAsync("https://vendor.example.com/openapi.json");
+
+            factory.LastName.Should().Be(ProxyOpenApiImportService.SpecClientName);
+            preview.Errors.Should().BeEmpty();
+            preview.Operations.Should().NotBeEmpty();
+        }
+
+        [Fact]
+        public async Task A_redirect_is_reported_and_never_followed()
+        {
+            var factory = new ScriptedFactory(_ =>
+            {
+                var r = new HttpResponseMessage(HttpStatusCode.Found);
+                r.Headers.Location = new Uri("http://169.254.169.254/latest/meta-data/");
+                return r;
+            });
+
+            var preview = await Fetching(factory).PreviewFromUrlAsync("https://evil.example.com/spec");
+
+            factory.Calls.Should().Be(1);
+            preview.Errors.Should().ContainSingle().Which.Should().Contain("redirects");
+            preview.Operations.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task A_body_with_no_length_is_cut_off_at_the_limit()
+        {
+            var factory = new ScriptedFactory(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(new EndlessStream()) });
+
+            var preview = await Fetching(factory).PreviewFromUrlAsync("https://big.example.com/spec");
+
+            preview.Errors.Should().ContainSingle().Which.Should().Contain("MB limit");
+        }
+
+        [Fact]
+        public async Task A_connect_time_block_reads_as_not_allowed()
+        {
+            var factory = new ScriptedFactory(_ => throw new HttpRequestException(
+                "refused", new global::Proxy.DomainService.Utils.ProxyUpstreamBlockedException()));
+
+            var preview = await Fetching(factory).PreviewFromUrlAsync("https://rebind.example.com/spec");
+
+            preview.Errors.Should().ContainSingle().Which.Should().Contain("not an allowed destination");
+        }
+
+        [Fact]
+        public async Task A_connection_error_never_echoes_the_internal_address()
+        {
+            var factory = new ScriptedFactory(_ => throw new HttpRequestException("Connection refused (10.0.0.5:6379)"));
+
+            var preview = await Fetching(factory).PreviewFromUrlAsync("https://down.example.com/spec");
+
+            preview.Errors.Should().ContainSingle()
+                .Which.Should().NotContain("10.0.0.5").And.NotContain("6379").And.Contain("could not be reached");
         }
     }
 }

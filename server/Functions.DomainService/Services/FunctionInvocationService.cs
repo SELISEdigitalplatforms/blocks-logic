@@ -607,8 +607,12 @@ namespace Functions.DomainService.Services
                 Input = inputJson,
                 Attempt = 1,
                 // A test is one build and one run; its image is gone afterwards, so there is
-                // nothing a retry could run.
-                MaxAttempts = test is not null ? 1 : Math.Max(1, (version?.Retry ?? function.Retry).Attempts),
+                // nothing a retry could run. A workflow step is never retried here either: the step
+                // has already reported attempt 1 and moved on, so a background retry would run the
+                // function again (side effects included) with nobody reading its result.
+                MaxAttempts = test is not null || invokedBy == InvokedByType.Workflow
+                    ? 1
+                    : Math.Max(1, (version?.Retry ?? function.Retry).Attempts),
             };
             run.IdempotencyKey = $"{run.ItemId}-{run.Attempt}";
 

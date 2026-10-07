@@ -157,6 +157,53 @@ describe("ProxyForm", () => {
     expect(saved?.responseInclude).toEqual([]);
   });
 
+  it("saves against the version it was loaded from, even after a background refetch (PX-16)", async () => {
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+    const p1 = (await proxyService.get("p1"))!;
+    const update = vi.spyOn(proxyService, "update");
+
+    const { rerender } = renderWithProviders(
+      <MemoryRouter>
+        <ProxyForm mode="edit" proxy={{ ...p1, version: 5 }} onSuccess={onSuccess} />
+      </MemoryRouter>,
+    );
+    // A refetch brings someone else's newer version; the form's edits are still based on v5.
+    rerender(
+      <MemoryRouter>
+        <ProxyForm mode="edit" proxy={{ ...p1, version: 6 }} onSuccess={onSuccess} />
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith(expect.objectContaining({ id: "p1", expectedVersion: 5 })),
+    );
+  });
+
+  it("shows the conflict and does not leave the form when someone else saved first (PX-16)", async () => {
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+    const p1 = (await proxyService.get("p1"))!;
+    const message = "Someone else changed this proxy. Reload to see their changes, then try again.";
+    vi.spyOn(proxyService, "update").mockResolvedValueOnce({
+      isSuccess: false,
+      errors: message,
+      code: "PROXY_VERSION_CONFLICT",
+      message,
+    });
+
+    renderWithProviders(
+      <MemoryRouter>
+        <ProxyForm mode="edit" proxy={p1} onSuccess={onSuccess} />
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(toasts.showErrorToast).toHaveBeenCalledWith({ errors: message }));
+    expect(onSuccess).not.toHaveBeenCalled();
+  });
+
   it("keeps a proxy-wide response filter set outside the console when the proxy is saved", async () => {
     // Sending "all" here would silently drop the filter and relay fields the owner chose to hide.
     const user = userEvent.setup();

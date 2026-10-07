@@ -47,10 +47,18 @@ namespace Workflow.DomainService.Services
         /// <summary>
         /// Queue mode: executes a single node, dispatches downstream nodes to Service Bus
         /// </summary>
-        public async Task RunNodeAsync(AddExcuationNodeEvent dto)
+        public async Task RunNodeAsync(AddExcuationNodeEvent dto, CancellationToken stopping = default)
         {
-            await ExecuteNodeAsync(dto, DispatchNodesToQueueAsync);
+            await ExecuteNodeAsync(dto, DispatchNodesToQueueAsync, stopping: stopping);
         }
+
+        /// <summary>
+        /// Why a step stopped when its Worker shut down. Not "failed": it may have done its work (a call
+        /// already sent), and with no rollback a re-run could do it twice.
+        /// </summary>
+        public const string InterruptedMessage =
+            "Interrupted: the Worker stopped while this step was running. It may already have done its work. "
+            + "Check before running this workflow again.";
 
         /// <summary>
         /// Immediate mode: executes a node and all downstream nodes sequentially in-process
@@ -67,7 +75,9 @@ namespace Workflow.DomainService.Services
         private async Task ExecuteNodeAsync(
             AddExcuationNodeEvent dto,
             Func<List<AddExcuationNodeEvent>, NodeExecutionLog, Task> dispatchNextNodes,
-            Func<NodeExecutionContext, NodeEntity, NodeExecutionResult, NodeExecutionResult>? postProcessResult = null)
+            Func<NodeExecutionContext, NodeEntity, NodeExecutionResult, NodeExecutionResult>? postProcessResult = null,
+            Func<NodeExecutionContext, NodeEntity, NodeExecutionResult>? runInstead = null,
+            CancellationToken stopping = default)
         {
             EnsureTenantId(dto);
 
@@ -96,10 +106,15 @@ namespace Workflow.DomainService.Services
             try
             {
                 nodeExecutionContext = await BuildNodeExecutionContextAsync(dto, execution, node, log);
+                // Without this the step could not be stopped: it kept waiting until the process was killed, and
+                // the node stayed Running for ever. Only the step's own work sees it; the writes below do not.
+                nodeExecutionContext.CancellationToken = stopping;
                 var executor = _nodeExecutors.First(ne => ne.NodeType == node.Type);
                 _logger.LogInformation("Node {NodeId} Using executor {ExecutorName}.", node.Id, executor.GetType().Name);
 
-                var result = await executor.RunAsync(nodeExecutionContext);
+                var result = runInstead != null
+                    ? runInstead(nodeExecutionContext, node)
+                    : await executor.RunAsync(nodeExecutionContext);
                 if (postProcessResult != null)
                 {
                     result = postProcessResult(nodeExecutionContext, node, result);
@@ -114,6 +129,11 @@ namespace Workflow.DomainService.Services
                     await dispatchNextNodes(nextEvents, log);
 
                 }
+            }
+            catch (OperationCanceledException) when (stopping.IsCancellationRequested)
+            {
+                await FailNodeExecutionAsync(execution, node, nodeExecutionContext, nodeExecution,
+                    new Exception(InterruptedMessage), outputItems: null, "Interrupted");
             }
             catch (Exception ex)
             {
@@ -176,6 +196,17 @@ namespace Workflow.DomainService.Services
                 return null;
             }
 
+            // A production node runs once per execution. A second delivery of its message (the Worker
+            // stopped mid-node, or the broker lock was lost) must not run it again: there is no rollback,
+            // so a second run repeats its side effects (a charge, an email). The atomic add below is the
+            // real guard; this check only skips the write when the row is already visible.
+            var production = execution.ExecutionMode == WorkflowExecutionMode.Production;
+            if (production && HasRunOrIsRunning(execution, node.Id))
+            {
+                LogDuplicateDelivery(executionLog, node.Id);
+                return null;
+            }
+
             _logger.LogInformation("Node {NodeId} is ready to execute.", node.Id);
             // Create node metadata
             var nodeExecution = new NodeExecutionEntity
@@ -190,17 +221,43 @@ namespace Workflow.DomainService.Services
                 RunIndex = execution.NodeExecutions.Count + 1
             };
 
+            // Atomically push NodeExecution to DB (avoids ReplaceOneAsync race)
+            if (production)
+            {
+                if (!await _workflowExecutionRepository.TryAddFirstNodeExecutionAsync(execution.Id, execution.TenantId, nodeExecution))
+                {
+                    LogDuplicateDelivery(executionLog, node.Id);
+                    return null;
+                }
+            }
+            else
+            {
+                await _workflowExecutionRepository.AtomicAddNodeExecutionAsync(execution.Id, execution.TenantId, nodeExecution);
+            }
+
             execution.NodeExecutions.Add(nodeExecution);
             execution.Status = WorkflowExecutionStatus.Running;
-
-            // Atomically push NodeExecution to DB (avoids ReplaceOneAsync race)
-            await _workflowExecutionRepository.AtomicAddNodeExecutionAsync(execution.Id, execution.TenantId, nodeExecution);
             _logger.LogInformation("Node {NodeId} Updated to Running status.", node.Id);
             executionLog.ForNode(node.Id, nodeExecution.RunIndex).Info(
                 ExecutionLogStages.NodeStarted, "Node '{NodeName:l}' ({NodeType:l} v{NodeVersion:l}) started.",
                 node.Name, node.Type, FormatVersion(node.Version));
 
             return (execution, node, nodeExecution);
+        }
+
+        /// <summary>
+        /// This execution already has a Running or Completed row for the node: its message was delivered
+        /// again. Failed rows do not count — a failed node fails the execution, which is checked first.
+        /// </summary>
+        public static bool HasRunOrIsRunning(WorkflowExecutionEntity execution, string nodeId) =>
+            execution.NodeExecutions.Any(ne => ne.NodeId == nodeId
+                && ne.Status is NodeExecutionStatus.Running or NodeExecutionStatus.Completed);
+
+        private void LogDuplicateDelivery(ExecutionLog executionLog, string nodeId)
+        {
+            _logger.LogWarning("Node {NodeId} already ran or is running in this execution; repeated message ignored.", nodeId);
+            executionLog.ForNode(nodeId, runIndex: null).Warn(
+                ExecutionLogStages.NodeSkipped, "Node already ran or is running; repeated message ignored so it does not run twice.");
         }
 
         /// <summary>
@@ -239,6 +296,13 @@ namespace Workflow.DomainService.Services
             _logger.LogInformation("Node {NodeId} Resolved {AncestorCount} ancestor node outputs.", node.Id, ancestorOutputs.Count);
             log.Info(ExecutionLogStages.NodeAncestors, "{Count} upstream node output(s) available to expressions.", ancestorOutputs.Count);
 
+            // Resumed execution: what this node saved on its last failed attempt, so it need not redo that work.
+            var previousAttempt = execution.NodeExecutions.LastOrDefault(ne =>
+                ne.NodeId == node.Id && ne.Status == NodeExecutionStatus.Failed && ne.OutputItemCount > 0);
+            var previousAttemptItems = previousAttempt is null
+                ? new List<WorkflowItemExecutionEntity>()
+                : await _workflowExecutionRepository.GetAllItemsByNodeExecutionIdAsync(previousAttempt.Id, execution.TenantId) ?? [];
+
             // Build execution context
             return new NodeExecutionContext
             {
@@ -254,7 +318,26 @@ namespace Workflow.DomainService.Services
                 HasUpstream = hasUpstream,
                 ServiceProvider = _serviceProvider,
                 Log = log,
+                PreviousAttemptItems = previousAttemptItems,
             };
+        }
+
+        /// <summary>Ids of node-execution rows that completed.</summary>
+        public static HashSet<string> CompletedNodeExecutionIds(WorkflowExecutionEntity execution) =>
+            execution.NodeExecutions.Where(ne => ne.Status == NodeExecutionStatus.Completed).Select(ne => ne.Id).ToHashSet();
+
+        /// <summary>
+        /// The nodes a failed execution must run again to continue: those still pending when it failed
+        /// (the failed node, and any branch step that was stopped), minus any that completed.
+        /// </summary>
+        public static List<string> NodesToResume(WorkflowExecutionEntity execution)
+        {
+            var completed = execution.NodeExecutions
+                .GroupBy(ne => ne.NodeId)
+                .Where(g => g.Last().Status == NodeExecutionStatus.Completed)
+                .Select(g => g.Key)
+                .ToHashSet();
+            return execution.ActiveNodeIds.Where(id => !string.IsNullOrWhiteSpace(id) && !completed.Contains(id)).Distinct().ToList();
         }
 
         /// <summary>
@@ -267,7 +350,7 @@ namespace Workflow.DomainService.Services
                 await _messageClient.SendToConsumerAsync(
                     new ConsumerMessage<AddExcuationNodeEvent>
                     {
-                        ConsumerName = LogicConstants.NodeExecutionQueue,
+                        ConsumerName = LogicConstants.NodeQueueFor(nextEvent.WorkflowExecutionId),
                         Payload = nextEvent
                     });
             }
@@ -364,7 +447,10 @@ namespace Workflow.DomainService.Services
                 execution.Id,
                 parentNodeIds,
                 execution.TenantId);
-            return parentItems;
+            // Only items of completed attempts: a resumed execution also holds the partial items a parent saved
+            // on its failed attempt, and those must not reach this node a second time.
+            var completed = CompletedNodeExecutionIds(execution);
+            return parentItems.Where(i => completed.Contains(i.NodeExecutionId)).ToList();
         }
 
         /// <summary>
@@ -431,6 +517,10 @@ namespace Workflow.DomainService.Services
             foreach (var node in execuatedItems)
             {
                 var nodeItems = execution.NodeExecutions.FirstOrDefault(ne => ne.Id == node.NodeExecutionId);
+                if (nodeItems != null && nodeItems.Status != NodeExecutionStatus.Completed)
+                {
+                    continue; // a failed attempt's partial items (resumed execution) are not this ancestor's output
+                }
                 if (nodeItems == null)
                 {
                     // No NodeExecution row matches this item's NodeExecutionId (e.g. a re-run ancestor whose
@@ -800,13 +890,30 @@ namespace Workflow.DomainService.Services
                 }
 
                 Func<NodeExecutionContext, NodeEntity, NodeExecutionResult, NodeExecutionResult>? hook = null;
+                Func<NodeExecutionContext, NodeEntity, NodeExecutionResult>? runInstead = null;
                 if (node.PinData != null && node.PinData.Count > 0)
                 {
-                    hook = (ctx, node, result) =>
+                    if (SkipsRunWhenPinned(node))
                     {
-                        ctx.Log.Info(ExecutionLogStages.NodePinned, "Output replaced with {Count} pinned item(s).", node.PinData!.Count);
-                        return NodeExecutionResult.Successful(BuildPinDataOutputItems(ctx, node, result));
-                    };
+                        // Pinned means "use this data, don't run": an action node (function, proxy, mail,
+                        // AI, HTTP) is not called at all, so a step test has no real side effects or cost.
+                        runInstead = (ctx, node) =>
+                        {
+                            ctx.Log.Info(ExecutionLogStages.NodePinned, "Not run; {Count} pinned item(s) used.", node.PinData!.Count);
+                            return NodeExecutionResult.Successful(PinnedOutputItems(ctx, node));
+                        };
+                    }
+                    else
+                    {
+                        // Logic, transform and trigger nodes have no side effects and decide branches, so
+                        // they still run and only their output is replaced — but a failure stays a failure.
+                        hook = (ctx, node, result) =>
+                        {
+                            if (!result.IsSuccess) return result;
+                            ctx.Log.Info(ExecutionLogStages.NodePinned, "Output replaced with {Count} pinned item(s).", node.PinData!.Count);
+                            return NodeExecutionResult.Successful(BuildPinDataOutputItems(ctx, node, result));
+                        };
+                    }
                 }
 
                 var evt = new AddExcuationNodeEvent
@@ -817,7 +924,7 @@ namespace Workflow.DomainService.Services
                     NodeId = node.Id,
                 };
 
-                await ExecuteNodeAsync(evt, noopDispatch, hook);
+                await ExecuteNodeAsync(evt, noopDispatch, hook, runInstead);
                 lastNodeFromCache = false;
 
                 execution = await _workflowExecutionRepository.GetByIdAsync(execution.Id, execution.TenantId);
@@ -1166,15 +1273,44 @@ namespace Workflow.DomainService.Services
 
         private static List<NodeOutputItem> BuildPinDataOutputItems(NodeExecutionContext context, NodeEntity node, NodeExecutionResult result)
         {
-            var items = new List<NodeOutputItem>(node.PinData!.Count);
-            var index = 0;
-            foreach (var item in result.OutputItems!)
+            // Item i gets pin entry i; items past the pinned ones keep their real output (this used to
+            // index past the end of the pin data and fail the node).
+            var outputs = result.OutputItems ?? new List<NodeOutputItem>();
+            for (var i = 0; i < outputs.Count && i < node.PinData!.Count; i++)
             {
-                if (node.PinData[index] == null) continue;
-                item.Data.Output = node.PinData[index];
-                index++;
+                if (node.PinData[i] != null && !node.PinData[i].IsBsonNull) outputs[i].Data.Output = node.PinData[i];
             }
-            return result.OutputItems;
+            return outputs;
+        }
+
+        /// <summary>Action nodes are the ones that act on the outside world; pinned, they are not run.</summary>
+        public static bool SkipsRunWhenPinned(NodeEntity node) =>
+            string.Equals(node.Category, "action", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// One output item per pin entry, as the node itself would have made them: branch "source", item i
+        /// tied to input item i when there is one, so expressions downstream resolve as after a real run.
+        /// </summary>
+        public static List<NodeOutputItem> PinnedOutputItems(NodeExecutionContext context, NodeEntity node)
+        {
+            var inputs = context.InputItems ?? new List<WorkflowItemExecutionEntity>();
+            var items = new List<NodeOutputItem>(node.PinData!.Count);
+            for (var i = 0; i < node.PinData.Count; i++)
+            {
+                var input = i < inputs.Count ? inputs[i] : null;
+                items.Add(new NodeOutputItem
+                {
+                    Data = new NodeOutputItemData
+                    {
+                        Input = input?.Data?.Output ?? new BsonDocument(),
+                        Output = node.PinData[i],
+                        Parameters = node.Parameters ?? new BsonDocument(),
+                    },
+                    Branch = "source",
+                    ParentItemIds = input is null ? new List<string>() : new List<string> { input.Id },
+                });
+            }
+            return items;
         }
 
         private List<NodeEntity> GetAncestorNodesAsync(WorkflowEntity workflow, string nodeId)

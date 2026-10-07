@@ -74,6 +74,7 @@ namespace Proxy.DomainService.Services
             MethodConfigs = proxy.MethodConfigs.Select(CloneMethodConfig).ToList(),
             Routes = proxy.Routes.Select(CloneRoute).ToList(),
             Resilience = CloneResilience(proxy.Resilience),
+            RequestsPerMinute = proxy.RequestsPerMinute,
             ResponseMode = proxy.ResponseMode,
             ResponseInclude = new List<string>(proxy.ResponseInclude),
             Access = proxy.Access.Clone(),

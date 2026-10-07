@@ -77,6 +77,8 @@ const buildProxy = (values: ProxyFormValues, existing?: Proxy): Proxy => {
         : [],
     access: values.access ?? defaultProxyAccess(),
     resilience: values.resilience ?? null,
+    requestsPerMinute: values.requestsPerMinute ?? null,
+    version: (existing?.version ?? 0) + 1,
     calls24h: existing?.calls24h ?? 0,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,

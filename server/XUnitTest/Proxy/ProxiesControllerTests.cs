@@ -22,6 +22,7 @@ namespace XUnitTest.Proxy
         private readonly Mock<IProxyGatewayService> _gatewayService = new();
         private readonly Mock<IEndpointAccessAuthorizer> _accessAuthorizer = new();
         private readonly Mock<IProxyOpenApiImportService> _openApiImport = new();
+        private readonly Mock<IProxyRateLimiter> _rateLimiter = new();
         private readonly ProxiesController _controller;
 
         public ProxiesControllerTests()
@@ -29,7 +30,7 @@ namespace XUnitTest.Proxy
             TestBlocksContext.Set("tenant-abc");
             _controller = new ProxiesController(
                 _proxyService.Object, _versionService.Object, _testService.Object, _executionService.Object,
-                _gatewayService.Object, _accessAuthorizer.Object, _openApiImport.Object,
+                _gatewayService.Object, _accessAuthorizer.Object, _rateLimiter.Object, _openApiImport.Object,
                 NullLogger<ProxiesController>.Instance);
         }
 
@@ -416,6 +417,95 @@ namespace XUnitTest.Proxy
             seen.ResolvedConfig.Should().BeSameAs(config);
             seen.ForbiddenReason.Should().BeNull();
             seen.CallerKind.Should().Be(ProxyCallerKind.Client);
+        }
+
+        // ---------- Gateway: security headers (PS-1) ----------
+
+        [Fact]
+        public async Task Gateway_RelayedHtml_IsServedSandboxed_AndNotSniffed()
+        {
+            // A public proxy whose upstream answers text/html with a script: served on the console's own host,
+            // it must render in an opaque origin with scripts off, or it runs as the victim.
+            GivenGatewayRequest();
+            var config = ResolvedWith(EndpointAccessPolicy.AllowPublic());
+            _gatewayService.Setup(g => g.ResolveAsync("tenant-abc", "stripe", It.IsAny<CancellationToken>())).ReturnsAsync(config);
+            _accessAuthorizer.Setup(a => a.AuthorizeAsync(It.IsAny<HttpRequest>(), "tenant-abc", config.Access, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(EndpointAccessDecision.Public());
+            _gatewayService.Setup(g => g.ForwardAsync(It.IsAny<ProxyForwardRequest>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ProxyForwardResult
+                {
+                    StatusCode = 200,
+                    Outcome = ProxyExecutionOutcome.Success,
+                    ResponseContentType = "text/html",
+                    ResponseBytes = System.Text.Encoding.UTF8.GetBytes("<script>fetch('/api/Proxies')</script>"),
+                });
+
+            await _controller.Gateway("stripe", "charges");
+
+            _controller.Response.Headers.XContentTypeOptions.ToString().Should().Be("nosniff");
+            _controller.Response.Headers.ContentSecurityPolicy.ToString().Should().Be("sandbox");
+        }
+
+        [Fact]
+        public async Task Gateway_BlocksGeneratedError_AlsoCarriesTheSecurityHeaders()
+        {
+            GivenGatewayRequest(tenantHeader: null);
+
+            var result = await _controller.Gateway("stripe", "charges");
+
+            StatusOf(result).Should().Be(401);
+            _controller.Response.Headers.XContentTypeOptions.ToString().Should().Be("nosniff");
+            _controller.Response.Headers.ContentSecurityPolicy.ToString().Should().Be("sandbox");
+        }
+
+        // ---------- Gateway: rate limit (P-3) ----------
+
+        [Fact]
+        public async Task Gateway_OverTheRateLimit_Returns429_WithRetryAfter_AndNeverForwards()
+        {
+            GivenGatewayRequest();
+            var config = ResolvedWith(EndpointAccessPolicy.AllowPublic());
+            _gatewayService.Setup(g => g.ResolveAsync("tenant-abc", "stripe", It.IsAny<CancellationToken>())).ReturnsAsync(config);
+            _accessAuthorizer.Setup(a => a.AuthorizeAsync(It.IsAny<HttpRequest>(), "tenant-abc", config.Access, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(EndpointAccessDecision.Public());
+            _rateLimiter.Setup(l => l.TryAcquireAsync("tenant-abc", config, It.IsAny<CancellationToken>())).ReturnsAsync(17);
+
+            var result = await _controller.Gateway("stripe", "charges");
+
+            StatusOf(result).Should().Be(429);
+            _controller.Response.Headers.RetryAfter.ToString().Should().Be("17");
+            _gatewayService.Verify(g => g.ForwardAsync(It.IsAny<ProxyForwardRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task Gateway_UnauthenticatedCaller_DoesNotSpendTheProxysAllowance()
+        {
+            GivenGatewayRequest();
+            var config = ResolvedWith(EndpointAccessPolicy.RequireToken());
+            _gatewayService.Setup(g => g.ResolveAsync("tenant-abc", "stripe", It.IsAny<CancellationToken>())).ReturnsAsync(config);
+            _accessAuthorizer.Setup(a => a.AuthorizeAsync(It.IsAny<HttpRequest>(), "tenant-abc", config.Access, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(EndpointAccessDecision.Unauthenticated("no token"));
+
+            var result = await _controller.Gateway("stripe", "charges");
+
+            StatusOf(result).Should().Be(401);
+            _rateLimiter.Verify(l => l.TryAcquireAsync(It.IsAny<string>(), It.IsAny<ProxyResolvedConfig>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task Gateway_UnknownSlug_IsNotCounted()
+        {
+            GivenGatewayRequest();
+            _gatewayService.Setup(g => g.ResolveAsync("tenant-abc", "stripe", It.IsAny<CancellationToken>()))
+                .ReturnsAsync((ProxyResolvedConfig?)null);
+            _accessAuthorizer.Setup(a => a.AuthorizeAsync(It.IsAny<HttpRequest>(), "tenant-abc", It.IsAny<EndpointAccessPolicy>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(EndpointAccessDecision.Public());
+            _gatewayService.Setup(g => g.ForwardAsync(It.IsAny<ProxyForwardRequest>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ProxyForwardResult { StatusCode = 404, Outcome = ProxyExecutionOutcome.ProxyNotFound });
+
+            await _controller.Gateway("stripe", "charges");
+
+            _rateLimiter.Verify(l => l.TryAcquireAsync(It.IsAny<string>(), It.IsAny<ProxyResolvedConfig>(), It.IsAny<CancellationToken>()), Times.Never);
         }
 
         [Fact]

@@ -44,6 +44,7 @@ import {
   IImportWorkflowResponse,
   IGetPreSignedUrlForUploadPayload,
   IGetPreSignedUrlForUploadResponse,
+  IResumeWorkflowExecutionResponse,
 } from "../types/workflow.service.type";
 
 export class WorkflowService {
@@ -108,6 +109,12 @@ export class WorkflowService {
       ExecutionId: payload.executionId,
     });
     return this.LogicHttpClient.get(`${WORKFLOW_ENDPOINTS.GET_EXECUTION}?${params.toString()}`);
+  }
+
+  resumeWorkflowExecution = (
+    payload: IGetWorkflowExecutionByIdPayload,
+  ): Promise<IResumeWorkflowExecutionResponse> => {
+    return this.LogicHttpClient.post(`${WORKFLOW_ENDPOINTS.RESUME_EXECUTION}`, { ExecutionId: payload.executionId });
   }
 
   getWorkflowExecutionLogs = (

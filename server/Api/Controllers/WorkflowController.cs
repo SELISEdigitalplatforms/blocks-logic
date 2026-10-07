@@ -364,6 +364,19 @@ namespace Utilities.Api.Controllers
             return Ok(execution);
         }
 
+        /// <summary>
+        /// <c>POST</c> — continues a failed run from where it stopped. Steps that completed are not run again,
+        /// and a function step does not call again the items that already succeeded. 409 when it cannot be resumed.
+        /// </summary>
+        [Authorize]
+        [HttpPost]
+        public async Task<IActionResult> ResumeExecution([FromBody] WorkflowExecutionGetRequestDto dto)
+        {
+            var tenantId = GetTenantId();
+            var result = await _workflowExecutionService.ResumeExecutionAsync(tenantId, dto);
+            return result.IsSuccess ? Ok(result) : Conflict(result);
+        }
+
         /// <summary><c>GET</c> — the stage log lines of one execution (stages and counts only, never data values),
         /// with whether they are available, expired or still arriving.</summary>
         [Authorize]

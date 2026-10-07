@@ -15,12 +15,15 @@ namespace Proxy.DomainService.Services
         private readonly IProxyRepository _proxyRepository;
         private readonly IProxyVersionRepository _proxyVersionRepository;
         private readonly ILogger<ProxyVersionService> _logger;
+        private readonly IProxyVariableResolver? _variableResolver;
 
         public ProxyVersionService(
             IProxyRepository proxyRepository,
             IProxyVersionRepository proxyVersionRepository,
-            ILogger<ProxyVersionService> logger)
+            ILogger<ProxyVersionService> logger,
+            IProxyVariableResolver? variableResolver = null)
         {
+            _variableResolver = variableResolver;
             _proxyRepository = proxyRepository;
             _proxyVersionRepository = proxyVersionRepository;
             _logger = logger;
@@ -147,11 +150,24 @@ namespace Proxy.DomainService.Services
                 ProxyChangeSet.ApplyField(proxy, change.Field, change.Before);
             }
 
+            // PX-9: re-bind ids for the restored config. A revert is never refused for a missing secret (it puts
+            // back a state that once worked); an unbound name falls back to a name lookup at call time.
+            (proxy.SecretIds, _) = await ProxySecretIdBinder.BindAsync(_variableResolver, tenantId, proxy, _logger);
+
+            var readVersion = proxy.CurrentVersion;
             proxy.LastUpdatedDate = DateTime.UtcNow;
             proxy.LastUpdatedBy = ProxyVersionFactory.CurrentUserId();
             proxy.CurrentVersion += 1;
 
-            await _proxyRepository.ReplaceAsync(proxy);
+            // PX-16: write only if nobody changed the proxy since it was read; no history row otherwise.
+            if (!await _proxyRepository.SaveConfigAsync(proxy, readVersion))
+            {
+                _logger.LogWarning(
+                    "Revert of proxy {ProxyId} (tenant {TenantId}) refused: it changed while the revert ran.", proxyId, tenantId);
+                return ProxyMutationResponse.Failure(
+                    409, ProxyErrorCodes.VersionConflict,
+                    "Someone else changed this proxy. Reload to see their changes, then try again.");
+            }
 
             var afterSnapshot = ProxyVersionFactory.SnapshotOf(proxy);
             var changes = ProxyChangeSet.Diff(beforeSnapshot, afterSnapshot);
@@ -198,8 +214,9 @@ namespace Proxy.DomainService.Services
             {
                 Field = c.Field,
                 Label = c.Label,
-                Before = c.Before,
-                After = c.After,
+                // Masked for display only; the stored change keeps the real value so Revert still works.
+                Before = ProxyChangeSet.MaskForDisplay(c.Field, c.Before),
+                After = ProxyChangeSet.MaskForDisplay(c.Field, c.After),
             }).ToList(),
             Who = version.CreatedBy,
             WhoName = version.CreatedByName,

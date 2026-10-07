@@ -274,13 +274,17 @@ namespace Workflow.DomainService.Services
                     _executionLogger.For(execution).Info(
                         ExecutionLogStages.ExecutionInProcess, "Running in-process; the webhook waits for the last node.");
                     var response = await _workflowEngineService.RunNodeInProcessAsync(payload);
+                    // The caller waited for the run, so it is told how the run ended. Still HTTP 200, so a
+                    // caller that only checks the status code behaves as before; the error text is not
+                    // returned (it can hold internal details) — it is on the execution.
+                    var finalStatus = WebhookFinalStatus(response);
                     var responseModeData = triggerNode.Parameters.GetValue("httpResponseData");
                     if (responseModeData == null)
                     {
                         return new WorkflowWebhookResponseDto
                         {
                             ExecutionId = execution.Id,
-                            Status = "Completed",
+                            Status = finalStatus,
                         };
                     }
                     if (responseModeData.ToString().ToLower() == "none")
@@ -298,7 +302,7 @@ namespace Workflow.DomainService.Services
                         return new WorkflowWebhookResponseDto
                         {
                             ExecutionId = execution.Id,
-                            Status = "Completed",
+                            Status = finalStatus,
                             Data = responseDataMode == "all"
                                 ? JsonDocument.Parse("[]").RootElement
                                 : null
@@ -313,14 +317,14 @@ namespace Workflow.DomainService.Services
                         return new WorkflowWebhookResponseDto
                         {
                             ExecutionId = execution.Id,
-                            Status = "Completed",
+                            Status = finalStatus,
                             Data = data
                         };
                     }
                     return new WorkflowWebhookResponseDto
                     {
                         ExecutionId = execution.Id,
-                        Status = "Completed",
+                        Status = finalStatus,
                         Data = data.ValueKind == JsonValueKind.Array && data.GetArrayLength() > 0
                             ? data[0]
                             : null
@@ -328,7 +332,7 @@ namespace Workflow.DomainService.Services
                 }
                 await _messageClient.SendToConsumerAsync(new ConsumerMessage<AddExcuationNodeEvent>
                 {
-                    ConsumerName = LogicConstants.NodeExecutionQueue,
+                    ConsumerName = LogicConstants.NodeQueueFor(payload.WorkflowExecutionId),
                     Payload = payload
                 });
                 LogTriggerQueued(execution, triggerNode);
@@ -481,7 +485,7 @@ namespace Workflow.DomainService.Services
                 await NotifyWorkflowStartedAsync(execution);
                 await _messageClient.SendToConsumerAsync(new ConsumerMessage<AddExcuationNodeEvent>
                 {
-                    ConsumerName = LogicConstants.NodeExecutionQueue,
+                    ConsumerName = LogicConstants.NodeQueueFor(execution.Id!),
                     Payload = new AddExcuationNodeEvent
                     {
                         TenantId = workflow.TenantId,
@@ -660,6 +664,57 @@ namespace Workflow.DomainService.Services
             AttemptNumber = row.AttemptNumber,
             ExecutionMode = row.ExecutionMode,
         };
+
+        public async Task<WorkflowExecutionResumeResponseDto> ResumeExecutionAsync(string tenantId, WorkflowExecutionGetRequestDto dto)
+        {
+            var response = new WorkflowExecutionResumeResponseDto { ExecutionId = dto.ExecutionId };
+            var execution = await _executionRepository.GetByIdAsync(dto.ExecutionId, tenantId);
+            if (execution is null)
+            {
+                response.Error = "Execution not found.";
+                return response;
+            }
+            if (execution.ExecutionMode != WorkflowExecutionMode.Production || execution.Status != WorkflowExecutionStatus.Failed)
+            {
+                response.Error = "Only a failed run (not a test run) can be resumed.";
+                return response;
+            }
+
+            var nodes = WorkflowEngineService.NodesToResume(execution);
+            if (nodes.Count == 0)
+            {
+                response.Error = "Nothing is left to run in this execution.";
+                return response;
+            }
+
+            // Atomic: a second click, or two people at once, cannot start it twice.
+            if (!await _executionRepository.TryReopenFailedExecutionAsync(execution.Id, tenantId))
+            {
+                response.Error = "This execution is no longer failed (it was already resumed).";
+                return response;
+            }
+
+            _executionLogger.For(execution).Info(
+                ExecutionLogStages.ExecutionInProcess, "Resumed by a user; continuing from {Count} node(s).", nodes.Count);
+            foreach (var nodeId in nodes)
+            {
+                await _messageClient.SendToConsumerAsync(new ConsumerMessage<AddExcuationNodeEvent>
+                {
+                    ConsumerName = LogicConstants.NodeQueueFor(execution.Id),
+                    Payload = new AddExcuationNodeEvent
+                    {
+                        TenantId = execution.TenantId,
+                        WorkflowId = execution.WorkflowId,
+                        WorkflowExecutionId = execution.Id,
+                        NodeId = nodeId,
+                    },
+                });
+            }
+
+            response.IsSuccess = true;
+            response.ResumedNodeIds = nodes;
+            return response;
+        }
 
         public async Task<WorkflowExecutionGetResponseDto> GetExecutionByIdAsync(string tenantId, WorkflowExecutionGetRequestDto dto)
         {
@@ -1019,7 +1074,7 @@ namespace Workflow.DomainService.Services
                 await NotifyWorkflowStartedAsync(execution);
                 await _messageClient.SendToConsumerAsync(new ConsumerMessage<AddExcuationNodeEvent>
                 {
-                    ConsumerName = LogicConstants.NodeExecutionQueue,
+                    ConsumerName = LogicConstants.NodeQueueFor(execution.Id!),
                     Payload = new AddExcuationNodeEvent
                     {
                         TenantId = workflow.TenantId,
@@ -1117,7 +1172,7 @@ namespace Workflow.DomainService.Services
                 await NotifyWorkflowStartedAsync(execution);
                 await _messageClient.SendToConsumerAsync(new ConsumerMessage<AddExcuationNodeEvent>
                 {
-                    ConsumerName = LogicConstants.NodeExecutionQueue,
+                    ConsumerName = LogicConstants.NodeQueueFor(execution.Id!),
                     Payload = new AddExcuationNodeEvent
                     {
                         TenantId = workflowSnapshot.TenantId,
@@ -1437,5 +1492,9 @@ namespace Workflow.DomainService.Services
         }
 
 
+
+        /// <summary>"Failed" when the in-process run ended failed, otherwise "Completed".</summary>
+        public static string WebhookFinalStatus(WorkflowExecutionEntity? execution) =>
+            execution?.Status == WorkflowExecutionStatus.Failed ? "Failed" : "Completed";
     }
 }

@@ -72,6 +72,8 @@ export const PROXY_MOCK_DATA: Proxy[] = [
     responseInclude: [],
     resilience: null,
     access: tokenOnlyAccess(),
+    requestsPerMinute: null,
+    version: 1,
     calls24h: 1248,
     createdAt: "2026-04-12T09:15:00.000Z",
     updatedAt: "2026-09-01T11:30:00.000Z",
@@ -105,6 +107,8 @@ export const PROXY_MOCK_DATA: Proxy[] = [
     responseInclude: [],
     resilience: null,
     access: tokenOnlyAccess(),
+    requestsPerMinute: null,
+    version: 1,
     calls24h: 382,
     createdAt: "2026-05-02T14:00:00.000Z",
     updatedAt: "2026-08-27T08:45:00.000Z",
@@ -138,6 +142,8 @@ export const PROXY_MOCK_DATA: Proxy[] = [
     responseInclude: ["location.name", "current.temp_c", "current.condition.text"],
     resilience: null,
     access: tokenOnlyAccess(),
+    requestsPerMinute: null,
+    version: 1,
     calls24h: 74,
     createdAt: "2026-06-18T10:20:00.000Z",
     updatedAt: "2026-08-30T16:10:00.000Z",
@@ -158,7 +164,6 @@ export const PROXY_MOCK_EXECUTION_LOGS: ProxyExecutionLog[] = [
     upstreamUrl: "https://api.stripe.com/v1/charges",
     injectedHeaderKeys: ["Authorization"],
     injectedQueryKeys: ["expand[]"],
-    responseBody: '{\n  "id": "ch_mock_123",\n  "status": "succeeded"\n}',
     responseContentType: "application/json",
   },
   {
@@ -174,7 +179,6 @@ export const PROXY_MOCK_EXECUTION_LOGS: ProxyExecutionLog[] = [
     upstreamUrl: "https://api.stripe.com/v1/charges/ch_404",
     injectedHeaderKeys: ["Authorization"],
     injectedQueryKeys: [],
-    responseBody: '{\n  "error": "Charge was not found"\n}',
     responseContentType: "application/json",
   },
   {
@@ -190,7 +194,6 @@ export const PROXY_MOCK_EXECUTION_LOGS: ProxyExecutionLog[] = [
     upstreamUrl: "https://api.stripe.com/v1/charges",
     injectedHeaderKeys: ["Authorization"],
     injectedQueryKeys: ["expand[]"],
-    responseBody: '{\n  "error": "Upstream timeout"\n}',
     responseContentType: "application/json",
   },
   {
@@ -206,7 +209,6 @@ export const PROXY_MOCK_EXECUTION_LOGS: ProxyExecutionLog[] = [
     upstreamUrl: "https://api.sendgrid.com/v3/mail/send",
     injectedHeaderKeys: ["Authorization"],
     injectedQueryKeys: [],
-    responseBody: '{\n  "queued": true\n}',
     responseContentType: "application/json",
   },
   {
@@ -222,7 +224,6 @@ export const PROXY_MOCK_EXECUTION_LOGS: ProxyExecutionLog[] = [
     upstreamUrl: "https://api.weatherapi.com/v1/current.json",
     injectedHeaderKeys: [],
     injectedQueryKeys: ["key"],
-    responseBody: '{\n  "error": "Missing API key"\n}',
     responseContentType: "application/json",
   },
 ];

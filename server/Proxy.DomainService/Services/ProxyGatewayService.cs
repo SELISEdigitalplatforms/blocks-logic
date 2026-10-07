@@ -19,13 +19,19 @@ namespace Proxy.DomainService.Services
         /// <summary>Named <see cref="HttpClient"/> configured in <c>AddProxyServices()</c> (30 s timeout, no redirects).</summary>
         public const string UpstreamClientName = "proxy-upstream";
 
-        private const long MaxBodyBytes = 10L * 1024 * 1024;
+        /// <summary>
+        /// Hard cap on the inbound <em>request</em> body. 1 MB: the proxy carries API calls, not file uploads
+        /// (PX-7, user decision 2026-10-07), and a public proxy must not let anyone park 10 MB per call in memory.
+        /// </summary>
+        private const long MaxBodyBytes = 1L * 1024 * 1024;
 
         /// <summary>
-        /// Hard cap on the buffered upstream <em>response</em>. Mirrors <see cref="MaxBodyBytes"/>; also set as
-        /// the named client's <see cref="System.Net.Http.HttpClient.MaxResponseContentBufferSize"/> backstop.
+        /// Hard cap on the buffered upstream <em>response</em>: 5 MB, the same as
+        /// <see cref="Utils.ProxyResponseProjector.MaxProjectableBytes"/>, so a body the gateway accepts can always be
+        /// filtered (PX-7, 2026-10-07). Also set as the named client's
+        /// <see cref="System.Net.Http.HttpClient.MaxResponseContentBufferSize"/> backstop.
         /// </summary>
-        public const long MaxResponseBodyBytes = 10L * 1024 * 1024;
+        public const long MaxResponseBodyBytes = 5L * 1024 * 1024;
 
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IProxyRepository _proxyRepository;
@@ -177,7 +183,8 @@ namespace Proxy.DomainService.Services
             {
                 try
                 {
-                    vars = await _variableResolver.ResolveAsync(varNames, request.TenantId, cancellationToken);
+                    // Ids stored at save (PX-9): read by id at once, no search per call.
+                    vars = await _variableResolver.ResolveAsync(varNames, request.TenantId, config.SecretIds, cancellationToken);
                 }
                 catch (ProxyVariableResolutionException ex)
                 {
@@ -224,8 +231,13 @@ namespace Proxy.DomainService.Services
                 effContentType = "application/json";
             }
 
+            // Every secret this forward knows it is sending (P-5 / PS-2): masked in the response the caller gets
+            // and in everything the log row stores.
+            var secrets = ProxySecretRedactor.CollectSecrets(vars, effHeaders, effQuery, effective.BodyMerge);
+
             var (storedUrl, outboundUrl, injectedQueryKeys) = BuildUrls(
                 effUpstream, effQuery, route.UpstreamPathSuffix, request, vars);
+            storedUrl = ProxySecretRedactor.RedactUrl(storedUrl, secrets);
             var upstreamHost = SafeHost(outboundUrl);
             // Best-effort list for failure rows; replaced with the keys that actually attached once the
             // request message is built (a malformed key is dropped rather than sent).
@@ -247,12 +259,13 @@ namespace Proxy.DomainService.Services
             }
 
             var resilience = effective.Resilience;
+            var breakerScope = BreakerScope(request, config);
 
             // Refused before anything is sent, and only when this proxy asked for a breaker. The code is
             // its own outcome so the caller can tell "we declined to call the upstream" from "the upstream
             // did not answer" — retrying the first immediately is pointless.
             if (resilience?.Breaker is { } breakerConfig
-                && _breaker.IsOpen(request.TenantId, upstreamHost, breakerConfig))
+                && _breaker.IsOpen(breakerScope, upstreamHost, breakerConfig))
             {
                 stopwatch.Stop();
                 _logger.LogWarning(
@@ -312,6 +325,7 @@ namespace Proxy.DomainService.Services
                     catch (Exception ex) when (
                         attempt < attempts
                         && !cancellationToken.IsCancellationRequested
+                        && !IsUpstreamBlocked(ex)
                         && (ex is HttpRequestException || ex is OperationCanceledException))
                     {
                         // A transport failure or this attempt's timeout, with attempts left. The caller
@@ -328,7 +342,7 @@ namespace Proxy.DomainService.Services
                 {
                     // Reached the host and it answered. Whatever the status, the circuit's question is
                     // "is this host responding", and it is.
-                    _breaker.RecordSuccess(request.TenantId, upstreamHost);
+                    _breaker.RecordSuccess(breakerScope, upstreamHost);
                     _ = onSuccess;
                 }
             }
@@ -343,7 +357,7 @@ namespace Proxy.DomainService.Services
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
                 stopwatch.Stop();
-                RecordUpstreamFailure(effective, request.TenantId, upstreamHost);
+                RecordUpstreamFailure(effective, breakerScope, upstreamHost);
                 _logger.LogWarning(
                     "Proxy gateway: upstream {Host} did not respond within {Timeout}s for slug '{Slug}' "
                     + "(tenant {TenantId}); returning 504.",
@@ -351,6 +365,18 @@ namespace Proxy.DomainService.Services
                 return await FinalizeAsync(request, config, route, BuildFailure(
                     ProxyExecutionOutcome.Timeout, 504, startedAt, stopwatch, storedUrl, upstreamHost,
                     injectedHeaderKeys, injectedQueryKeys, "Upstream did not respond within 30s"));
+            }
+            catch (HttpRequestException ex) when (IsUpstreamBlocked(ex))
+            {
+                // The connect-time guard refused the address (DNS rebinding, or a name that now points
+                // inward). Same outcome as the pre-send check; not a host failure, so the breaker is untouched.
+                stopwatch.Stop();
+                _logger.LogWarning(
+                    "Proxy gateway: upstream {Host} for slug '{Slug}' (tenant {TenantId}) was refused at connect time (blocked address); returning 502.",
+                    upstreamHost, config.Slug, request.TenantId);
+                return await FinalizeAsync(request, config, route, BuildFailure(
+                    ProxyExecutionOutcome.UpstreamBlocked, 502, startedAt, stopwatch, storedUrl, upstreamHost,
+                    injectedHeaderKeys, injectedQueryKeys, "The upstream endpoint is not an allowed destination"));
             }
             catch (HttpRequestException ex) when (IsResponseTooLarge(ex))
             {
@@ -360,12 +386,12 @@ namespace Proxy.DomainService.Services
                     upstreamHost, MaxResponseBodyBytes, config.Slug, request.TenantId);
                 return await FinalizeAsync(request, config, route, BuildFailure(
                     ProxyExecutionOutcome.UpstreamResponseTooLarge, 502, startedAt, stopwatch, storedUrl, upstreamHost,
-                    injectedHeaderKeys, injectedQueryKeys, "Upstream response exceeded the 10 MB limit"));
+                    injectedHeaderKeys, injectedQueryKeys, "Upstream response exceeded the 5 MB limit"));
             }
             catch (HttpRequestException ex)
             {
                 stopwatch.Stop();
-                RecordUpstreamFailure(effective, request.TenantId, upstreamHost);
+                RecordUpstreamFailure(effective, breakerScope, upstreamHost);
                 _logger.LogWarning(ex,
                     "Proxy gateway: upstream {Host} unreachable for slug '{Slug}' (tenant {TenantId}); returning 502.",
                     upstreamHost, config.Slug, request.TenantId);
@@ -397,7 +423,7 @@ namespace Proxy.DomainService.Services
                         upstreamHost, response.Content.Headers.ContentLength, MaxResponseBodyBytes, config.Slug, request.TenantId);
                     return await FinalizeAsync(request, config, route, BuildFailure(
                         ProxyExecutionOutcome.UpstreamResponseTooLarge, 502, startedAt, stopwatch, storedUrl, upstreamHost,
-                        injectedHeaderKeys, injectedQueryKeys, "Upstream response exceeded the 10 MB limit"));
+                        injectedHeaderKeys, injectedQueryKeys, "Upstream response exceeded the 5 MB limit"));
                 }
 
                 byte[] bytes;
@@ -413,7 +439,7 @@ namespace Proxy.DomainService.Services
                         upstreamHost, MaxResponseBodyBytes, config.Slug, request.TenantId);
                     return await FinalizeAsync(request, config, route, BuildFailure(
                         ProxyExecutionOutcome.UpstreamResponseTooLarge, 502, startedAt, stopwatch, storedUrl, upstreamHost,
-                        injectedHeaderKeys, injectedQueryKeys, "Upstream response exceeded the 10 MB limit"));
+                        injectedHeaderKeys, injectedQueryKeys, "Upstream response exceeded the 5 MB limit"));
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
@@ -444,7 +470,7 @@ namespace Proxy.DomainService.Services
                         upstreamHost, bytes.LongLength, MaxResponseBodyBytes, config.Slug, request.TenantId);
                     return await FinalizeAsync(request, config, route, BuildFailure(
                         ProxyExecutionOutcome.UpstreamResponseTooLarge, 502, startedAt, stopwatch, storedUrl, upstreamHost,
-                        injectedHeaderKeys, injectedQueryKeys, "Upstream response exceeded the 10 MB limit"));
+                        injectedHeaderKeys, injectedQueryKeys, "Upstream response exceeded the 5 MB limit"));
                 }
 
                 var contentType = response.Content.Headers.ContentType?.ToString();
@@ -472,6 +498,10 @@ namespace Proxy.DomainService.Services
                 }
 
                 var effectiveCt = relayCt ?? contentType;
+
+                // A vendor that echoes a key back ("invalid key sk_live_…") must not hand it to the caller (PS-2).
+                relayBytes = ProxySecretRedactor.MaskBody(relayBytes, effectiveCt, secrets);
+
                 var result = new ProxyForwardResult
                 {
                     StatusCode = status,
@@ -482,7 +512,6 @@ namespace Proxy.DomainService.Services
                     InjectedHeaderKeys = injectedHeaderKeys,
                     InjectedQueryKeys = injectedQueryKeys,
                     LatencyMs = (int)stopwatch.ElapsedMilliseconds,
-                    ResponseBody = ExecutionBodyStore.Capture(relayBytes, effectiveCt),
                     ResponseBodyBytes = relayBytes?.LongLength ?? 0,
                     ResponseContentType = effectiveCt,
                     ResponseBytes = relayBytes,
@@ -506,12 +535,28 @@ namespace Proxy.DomainService.Services
         /// Timeouts and connection failures are what it counts; a 4xx or 5xx answer is not, because the
         /// host is plainly alive and the breaker's question is only whether it is reachable.
         /// </summary>
-        private void RecordUpstreamFailure(EffectiveConfig effective, string tenantId, string host)
+        private void RecordUpstreamFailure(EffectiveConfig effective, string breakerScope, string host)
         {
             if (effective.Resilience?.Breaker is { } breaker)
             {
-                _breaker.RecordFailure(tenantId, host, breaker);
+                _breaker.RecordFailure(breakerScope, host, breaker);
             }
+        }
+
+        /// <summary>
+        /// Who shares one circuit (PS-8, 2026-10-07): tenant + proxy + caller type. An anonymous caller (public
+        /// proxy, no identity) can make calls slow on purpose — a huge AI prompt times out — so anonymous calls
+        /// get their own circuit: tripping it never blocks signed-in callers, workflow steps, Test, or the
+        /// tenant's other proxies to the same vendor. An unsaved draft (Test) has no id and uses its slug.
+        /// </summary>
+        internal static string BreakerScope(ProxyForwardRequest request, ProxyResolvedConfig config)
+        {
+            var proxy = config.ProxyId is { Length: > 0 } id ? id : "draft:" + config.Slug;
+            var caller = request.IsTest ? "test"
+                : request.CallerKind == ProxyCallerKind.Workflow ? "workflow"
+                : string.IsNullOrEmpty(request.UserId) ? "anonymous"
+                : "user";
+            return $"{request.TenantId}|{proxy}|{caller}";
         }
 
         /// <summary>
@@ -640,6 +685,12 @@ namespace Proxy.DomainService.Services
             attachedHeaderKeys = new List<string>(headers.Count);
             foreach (var header in headers)
             {
+                // PS-10: refused on save; skipped here too for configs saved before that rule.
+                if (ProxyReservedHeaders.IsReserved(header.Key))
+                {
+                    continue;
+                }
+
                 var value = ProxyVarRef.Substitute(header.Value, variables);
                 if (message.Headers.TryAddWithoutValidation(header.Key, value)
                     || (message.Content is not null
@@ -677,9 +728,11 @@ namespace Proxy.DomainService.Services
                 target += "/" + encodedSuffix.TrimStart('/');
             }
 
-            var configuredKeys = new HashSet<string>(query.Select(q => q.Key), StringComparer.Ordinal);
+            // Case-insensitive (PS-5): a caller's "?Project=x" must not slip past a configured "project=abc" — a
+            // vendor that reads names without case and takes the first value would use the caller's.
+            var configuredKeys = new HashSet<string>(query.Select(q => q.Key), StringComparer.OrdinalIgnoreCase);
 
-            // Incoming params: keep every key that a configured Query entry does NOT override (H7). They were
+            // Incoming params: keep every key that a configured Query entry does NOT override (H7), in any case. They were
             // URL-decoded by the parser, so they are re-encoded on the way back out via Uri.EscapeDataString
             // ('+' -> %20, sub-delims encoded). Signed-query-string upstreams (OAuth1, some HMAC schemes) that
             // depend on byte-exact query preservation are therefore unsupported in this phase.
@@ -700,23 +753,29 @@ namespace Proxy.DomainService.Services
                 }
             }
 
-            // Configured params override on collision. A value carrying a {{$VAR.name}} token is sent with the
+            // Configured params override on collision and go FIRST, so even a vendor that takes the first of two
+            // values ignoring case reads the configured one. A value carrying a {{$VAR.name}} token is sent with the
             // token substituted but NOT URL-encoded (so upstreams that sign the query string still work for a
             // bare token), and is STORED with the raw token, never a resolved value (C8 / C9).
             var injectedQueryKeys = new List<string>();
+            var configuredStored = new List<string>();
+            var configuredOutbound = new List<string>();
             foreach (var configured in query)
             {
                 injectedQueryKeys.Add(configured.Key);
                 var key = Uri.EscapeDataString(configured.Key);
                 var hasToken = ProxyVarRef.ContainsRef(configured.Value);
                 var outboundValue = ProxyVarRef.Substitute(configured.Value, variables);
-                outboundParts.Add(hasToken
+                configuredOutbound.Add(hasToken
                     ? $"{key}={outboundValue}"
                     : $"{key}={Uri.EscapeDataString(outboundValue)}");
-                storedParts.Add(hasToken
+                configuredStored.Add(hasToken
                     ? $"{key}={configured.Value}"
                     : $"{key}={Uri.EscapeDataString(outboundValue)}");
             }
+
+            storedParts = configuredStored.Concat(storedParts).ToList();
+            outboundParts = configuredOutbound.Concat(outboundParts).ToList();
 
             var storedUrl = storedParts.Count == 0 ? target : target + "?" + string.Join("&", storedParts);
             var outboundUrl = outboundParts.Count == 0 ? target : target + "?" + string.Join("&", outboundParts);
@@ -725,6 +784,20 @@ namespace Proxy.DomainService.Services
 
         private static string SafeHost(string url) =>
             Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri.Host : string.Empty;
+
+        /// <summary><c>true</c> when the connect-time guard refused the target (wrapped by the handler).</summary>
+        private static bool IsUpstreamBlocked(Exception ex)
+        {
+            for (var e = ex; e is not null; e = e.InnerException)
+            {
+                if (e is ProxyUpstreamBlockedException)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
 
         /// <summary>
         /// <c>true</c> when <paramref name="ex"/> is the <see cref="HttpClient.MaxResponseContentBufferSize"/>
@@ -830,7 +903,8 @@ namespace Proxy.DomainService.Services
                     : ProxyRoutePath.Normalize(route.Route.UpstreamPath),
                 RequestMethod = request.Method,
                 RequestPath = request.RequestPath,
-                RequestQuery = request.IncomingQuery ?? string.Empty,
+                // Caller-sent credentials (?api_key=…) are never stored (P-5).
+                RequestQuery = ProxySecretRedactor.RedactQuery(request.IncomingQuery),
                 UpstreamUrl = result.UpstreamUrl,
                 UpstreamHost = result.UpstreamHost,
                 InjectedHeaderKeys = result.InjectedHeaderKeys.ToList(),
@@ -840,7 +914,7 @@ namespace Proxy.DomainService.Services
                 Outcome = result.Outcome,
                 LatencyMs = result.LatencyMs,
                 ResponseBodyBytes = result.ResponseBodyBytes,
-                ResponseBody = result.ResponseBody,
+                // Never a request or response body: it is customer data (user decision 2026-10-07).
                 ResponseContentType = result.ResponseContentType,
                 ResponseFilterApplied = result.ResponseFilterApplied,
                 ResponseFilterNote = result.ResponseFilterNote,

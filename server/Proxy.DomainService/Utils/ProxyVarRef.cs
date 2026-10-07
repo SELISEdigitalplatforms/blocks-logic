@@ -43,6 +43,29 @@ namespace Proxy.DomainService.Utils
         /// Every distinct variable NAME referenced across the given pair lists (ordinal, case-sensitive), in
         /// first-seen order. A <c>null</c> list is skipped. Feeds the single batched resolve per forward.
         /// </summary>
+        /// <summary>
+        /// Every <c>{{$VAR.name}}</c> name anywhere in a proxy's config: shared headers / query / body-merge, the
+        /// per-method overrides and every route's overrides. What the saved name &rarr; id map must cover (PX-9).
+        /// </summary>
+        public static IReadOnlyList<string> NamesIn(ProxyDetailEntity proxy)
+        {
+            var lists = new List<IEnumerable<ProxyKeyValue>?> { proxy.Headers, proxy.Query, proxy.BodyMerge };
+            foreach (var method in proxy.MethodConfigs)
+            {
+                lists.Add(method.Headers);
+                lists.Add(method.Query);
+            }
+
+            foreach (var route in proxy.Routes)
+            {
+                lists.Add(route.Headers);
+                lists.Add(route.Query);
+                lists.Add(route.BodyMerge);
+            }
+
+            return Names(lists.ToArray()).ToList();
+        }
+
         public static IEnumerable<string> Names(params IEnumerable<ProxyKeyValue>?[] lists)
         {
             var seen = new HashSet<string>(StringComparer.Ordinal);

@@ -12,6 +12,7 @@ import { WorkflowExecutionStatus } from "../utils/workflow-execution-list.util";
 const svc = vi.hoisted(() => ({
   getWorkflowExecutionById: vi.fn(),
   getWorkflowExecutions: vi.fn(),
+  resumeWorkflowExecution: vi.fn(),
   triggerListener: vi.fn().mockResolvedValue({}),
 }));
 vi.mock("@/modules/workflow/services/workflow.service", () => ({
@@ -109,6 +110,46 @@ describe("WorkflowExecutionEditor", () => {
       expect(svc.getWorkflowExecutionById).toHaveBeenCalledWith({ executionId: "e1" }),
     );
     await waitFor(() => expect(screen.getByText("Status:")).toBeTruthy());
+  });
+
+  const detail = (status: number) => ({
+    data: { id: "e1", status, workflowSnapshot: { nodes: [], edges: [] }, nodeExecutions: [], items: [] },
+  });
+
+  it("offers Resume on a failed production run and calls the API", async () => {
+    svc.getWorkflowExecutionById.mockResolvedValue(detail(WorkflowExecutionStatus.Failed));
+    svc.resumeWorkflowExecution.mockResolvedValue({ isSuccess: true, executionId: "e1", resumedNodeIds: ["n2"] });
+    renderWithProviders(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      <WorkflowExecutionEditor execution={{ id: "e1", status: WorkflowExecutionStatus.Failed, executionMode: 1 } as any} />,
+    );
+    fireEvent.click(await screen.findByTestId("execution-resume-button"));
+    // React Query passes its own context as a second argument; the payload is the first.
+    await waitFor(() => expect(svc.resumeWorkflowExecution.mock.calls[0]?.[0]).toEqual({ executionId: "e1" }));
+  });
+
+  it("says why when a run cannot be resumed", async () => {
+    svc.getWorkflowExecutionById.mockResolvedValue(detail(WorkflowExecutionStatus.Failed));
+    svc.resumeWorkflowExecution.mockResolvedValue({ isSuccess: false, executionId: "e1", resumedNodeIds: [], error: "already resumed" });
+    renderWithProviders(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      <WorkflowExecutionEditor execution={{ id: "e1", status: WorkflowExecutionStatus.Failed, executionMode: 1 } as any} />,
+    );
+    fireEvent.click(await screen.findByTestId("execution-resume-button"));
+    expect((await screen.findByRole("alert")).textContent).toContain("already resumed");
+  });
+
+  it.each([
+    ["a completed run", WorkflowExecutionStatus.Completed, 1],
+    ["a failed test run", WorkflowExecutionStatus.Failed, 0],
+  ])("has no Resume on %s", async (_label, status, executionMode) => {
+    svc.getWorkflowExecutionById.mockResolvedValue(detail(status));
+    renderWithProviders(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      <WorkflowExecutionEditor execution={{ id: "e1", status, executionMode } as any} />,
+    );
+    await waitFor(() => expect(screen.getByText("Status:")).toBeTruthy());
+    expect(screen.queryByTestId("execution-resume-button")).toBeNull();
   });
 
   it("reads the status chip from the execution detail when the list row is still running", async () => {

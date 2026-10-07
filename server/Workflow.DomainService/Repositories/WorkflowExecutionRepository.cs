@@ -203,6 +203,45 @@ namespace Workflow.DomainService.Repositories
             await collection.UpdateOneAsync(filter, update);
         }
 
+        public async Task<bool> TryReopenFailedExecutionAsync(string executionId, string tenantId)
+        {
+            var filter = Builders<WorkflowExecutionEntity>.Filter;
+            var update = Builders<WorkflowExecutionEntity>.Update
+                .Set(e => e.Status, WorkflowExecutionStatus.Running)
+                .Set(e => e.ErrorMessage, null)
+                .Set(e => e.FinishedAt, null)
+                .Inc(e => e.AttemptNumber, 1);
+
+            var result = await GetCollection(tenantId).UpdateOneAsync(
+                filter.Eq(e => e.Id, executionId)
+                & filter.Eq(e => e.Status, WorkflowExecutionStatus.Failed)
+                & filter.Eq(e => e.ExecutionMode, WorkflowExecutionMode.Production),
+                update);
+            return result.ModifiedCount > 0;
+        }
+
+        public async Task<bool> TryAddFirstNodeExecutionAsync(string executionId, string tenantId, NodeExecutionEntity nodeExecution)
+        {
+            var update = Builders<WorkflowExecutionEntity>.Update
+                .Push(e => e.NodeExecutions, nodeExecution)
+                .Set(e => e.Status, WorkflowExecutionStatus.Running);
+
+            var result = await GetCollection(tenantId).UpdateOneAsync(FirstRunFilter(executionId, nodeExecution.NodeId), update);
+            return result.MatchedCount > 0;
+        }
+
+        /// <summary>
+        /// The execution, only while it has no Running or Completed row for <paramref name="nodeId"/>. One
+        /// document, one update: two deliveries of the same node message cannot both pass it.
+        /// </summary>
+        public static FilterDefinition<WorkflowExecutionEntity> FirstRunFilter(string executionId, string nodeId)
+        {
+            var filter = Builders<WorkflowExecutionEntity>.Filter;
+            return filter.Eq(e => e.Id, executionId)
+                & filter.Not(filter.ElemMatch(e => e.NodeExecutions, ne => ne.NodeId == nodeId
+                    && (ne.Status == NodeExecutionStatus.Running || ne.Status == NodeExecutionStatus.Completed)));
+        }
+
         /// <summary>
         /// Atomically updates a specific NodeExecution entry to Completed status with output metadata.
         /// Uses array filter to target the specific NodeExecution by its Id.

@@ -438,7 +438,11 @@ export const ProxyDetails = () => {
 
   const handleToggleEnabled = async () => {
     const enabled = !proxy.enabled;
-    const res = await toggleProxy.mutateAsync({ id: proxy.id, enabled });
+    const res = await toggleProxy.mutateAsync({
+      id: proxy.id,
+      enabled,
+      expectedVersion: proxy.version,
+    });
     if (!res.isSuccess)
       return showErrorToast({
         errors: res.errors || (enabled ? "Failed to resume proxy" : "Failed to pause proxy"),

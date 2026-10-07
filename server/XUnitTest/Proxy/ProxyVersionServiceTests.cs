@@ -20,6 +20,7 @@ namespace XUnitTest.Proxy
         public ProxyVersionServiceTests()
         {
             TestBlocksContext.Set(Tenant, "user-1");
+            _proxyRepo.Setup(r => r.SaveConfigAsync(It.IsAny<ProxyDetailEntity>(), It.IsAny<int>())).ReturnsAsync(true);
             _service = new ProxyVersionService(_proxyRepo.Object, _versionRepo.Object, Mock.Of<ILogger<ProxyVersionService>>());
         }
 
@@ -144,6 +145,21 @@ namespace XUnitTest.Proxy
             result.Data.Should().BeNull();
         }
 
+        [Fact]
+        public async Task Revert_AnotherSaveWinsTheRace_Returns409_WritesNoRevertRow()
+        {
+            var proxy = Proxy();
+            _versionRepo.Setup(r => r.GetAsync(Tenant, "v2")).ReturnsAsync(Version(2, ProxyVersionKind.ConfigUpdate, id: "v2"));
+            _proxyRepo.Setup(r => r.GetAsync(Tenant, "p1")).ReturnsAsync(proxy);
+            _proxyRepo.Setup(r => r.SaveConfigAsync(It.IsAny<ProxyDetailEntity>(), It.IsAny<int>())).ReturnsAsync(false);
+
+            var result = await _service.RevertAsync(Tenant, new ProxyRevertRequestDto { ProxyId = "p1", VersionId = "v2" });
+
+            result.HttpStatus.Should().Be(409);
+            result.Code.Should().Be("PROXY_VERSION_CONFLICT");
+            _versionRepo.Verify(r => r.InsertAsync(It.IsAny<ProxyVersionEntity>()), Times.Never);
+        }
+
         // ---------- Revert : clean inverse patch ----------
         [Fact]
         public async Task Revert_CleanInversePatch_RestoresBeforeValues_WritesRevertRow_BumpsVersion()
@@ -175,7 +191,7 @@ namespace XUnitTest.Proxy
                 c.Field == "upstream"
                 && c.Before == "https://api.stripe.com/v9/x"
                 && c.After == "https://api.stripe.com/v1/charges");
-            _proxyRepo.Verify(r => r.ReplaceAsync(proxy), Times.Once);
+            _proxyRepo.Verify(r => r.SaveConfigAsync(proxy, It.IsAny<int>()), Times.Once);
         }
 
         // ---------- Revert : SSRF guard on the restored upstream (PR 3) ----------
@@ -201,7 +217,7 @@ namespace XUnitTest.Proxy
             result.Errors.Should().ContainKey("upstream");
             proxy.Upstream.Should().Be("https://api.stripe.com/v9/x");
             proxy.CurrentVersion.Should().Be(4);
-            _proxyRepo.Verify(r => r.ReplaceAsync(It.IsAny<ProxyDetailEntity>()), Times.Never);
+            _proxyRepo.Verify(r => r.SaveConfigAsync(It.IsAny<ProxyDetailEntity>(), It.IsAny<int>()), Times.Never);
             _versionRepo.Verify(r => r.InsertAsync(It.IsAny<ProxyVersionEntity>()), Times.Never);
         }
 
@@ -221,7 +237,7 @@ namespace XUnitTest.Proxy
             result.Errors.Should().ContainKey("upstream");
             proxy.Upstream.Should().Be("https://api.stripe.com/v99/moved-since");
             proxy.CurrentVersion.Should().Be(4);
-            _proxyRepo.Verify(r => r.ReplaceAsync(It.IsAny<ProxyDetailEntity>()), Times.Never);
+            _proxyRepo.Verify(r => r.SaveConfigAsync(It.IsAny<ProxyDetailEntity>(), It.IsAny<int>()), Times.Never);
             _versionRepo.Verify(r => r.InsertAsync(It.IsAny<ProxyVersionEntity>()), Times.Never);
         }
 
@@ -239,7 +255,7 @@ namespace XUnitTest.Proxy
 
             result.HttpStatus.Should().Be(400);
             result.Code.Should().Be("PROXY_VERSION_NOT_REVERTABLE");
-            _proxyRepo.Verify(r => r.ReplaceAsync(It.IsAny<ProxyDetailEntity>()), Times.Never);
+            _proxyRepo.Verify(r => r.SaveConfigAsync(It.IsAny<ProxyDetailEntity>(), It.IsAny<int>()), Times.Never);
         }
 
         [Fact]
@@ -446,7 +462,7 @@ namespace XUnitTest.Proxy
             result.HttpStatus.Should().Be(409);
             result.Code.Should().Be("PROXY_DELETED");
             _versionRepo.Verify(r => r.InsertAsync(It.IsAny<ProxyVersionEntity>()), Times.Never);
-            _proxyRepo.Verify(r => r.ReplaceAsync(It.IsAny<ProxyDetailEntity>()), Times.Never);
+            _proxyRepo.Verify(r => r.SaveConfigAsync(It.IsAny<ProxyDetailEntity>(), It.IsAny<int>()), Times.Never);
         }
     }
 }

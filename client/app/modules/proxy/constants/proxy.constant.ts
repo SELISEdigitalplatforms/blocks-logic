@@ -22,6 +22,7 @@ export const PROXY_ENDPOINTS = {
   TEST: `${PROXY_BASE}/test`,
   /** One proxy: `GET`, `PUT` (full update), `PATCH` (enabled only), `DELETE`. */
   byId: (proxyId: string) => `${PROXY_BASE}/${id(proxyId)}`,
+  /** `POST` `{ enabled }` — keep response bodies in the log for one hour, or stop now. */
   /** `GET` — the Change history tab. */
   versions: (proxyId: string) => `${PROXY_BASE}/${id(proxyId)}/versions`,
   /** `POST` — restore that version's config as a new version row. */

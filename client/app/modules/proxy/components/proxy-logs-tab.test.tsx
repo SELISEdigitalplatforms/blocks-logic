@@ -46,7 +46,11 @@ describe("ProxyLogsTab", () => {
     await user.click(screen.getByRole("button", { name: "5xx" }));
     expect(await screen.findByText("1 of 3 requests")).toBeTruthy();
     await user.click(screen.getByText("/api/proxy/gateway/stripe-payments/charges"));
-    expect(await screen.findByText(/Upstream timeout/)).toBeTruthy();
+    // Blocks never stores a body, and there is no switch to turn saving on.
+    expect((await screen.findByTestId("body-not-saved")).textContent).toContain(
+      "Blocks never stores request or response bodies",
+    );
+    expect(screen.queryByText(/Save bodies/)).toBeNull();
   });
 
   it("shows a chevron on each row that rotates and toggles aria-expanded", async () => {

@@ -112,6 +112,7 @@ describe("ProxyService HTTP wiring", () => {
         organizationId: "",
       },
       resilience: null,
+      requestsPerMinute: null,
       enabled: true,
     });
     expect(res).toMatchObject({ isSuccess: true, itemId: "p9" });
@@ -162,9 +163,43 @@ describe("ProxyService HTTP wiring", () => {
     expect(logicService.delete).toHaveBeenCalledWith("/api/Proxies/p1");
   });
 
-  it("PATCHes only the enabled flag, with the id in the path rather than the body", async () => {
+  it("PATCHes the enabled flag and the loaded version, with the id in the path", async () => {
     await proxyService.toggle({ id: "p1", enabled: false });
-    expect(logicService.patch).toHaveBeenCalledWith("/api/Proxies/p1", { enabled: false });
+    expect(logicService.patch).toHaveBeenCalledWith("/api/Proxies/p1", {
+      enabled: false,
+      expectedVersion: null,
+    });
+
+    await proxyService.toggle({ id: "p1", enabled: true, expectedVersion: 4 });
+    expect(logicService.patch).toHaveBeenLastCalledWith("/api/Proxies/p1", {
+      enabled: true,
+      expectedVersion: 4,
+    });
+  });
+
+  it("passes a 409 version conflict through with the server's message (PX-16)", async () => {
+    logicService.put.mockRejectedValueOnce(
+      new FakeHttpError(409, {
+        isSuccess: false,
+        errors: null,
+        code: "PROXY_VERSION_CONFLICT",
+        message: "Someone else changed this proxy. Reload to see their changes, then try again.",
+      }),
+    );
+    const res = await proxyService.update({
+      id: "p1",
+      expectedVersion: 2,
+      values: { name: "S", upstreamUrl: "https://api.stripe.com", methods: ["GET"], headers: [], query: [] },
+    });
+    expect(logicService.put).toHaveBeenCalledWith(
+      "/api/Proxies/p1",
+      expect.objectContaining({ expectedVersion: 2 }),
+    );
+    expect(res).toMatchObject({
+      isSuccess: false,
+      code: "PROXY_VERSION_CONFLICT",
+      errors: "Someone else changed this proxy. Reload to see their changes, then try again.",
+    });
   });
 
   it("maps ProxyLogFilter to a statusClass query param on the executions sub-resource", async () => {

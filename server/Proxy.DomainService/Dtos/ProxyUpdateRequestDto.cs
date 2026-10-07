@@ -49,6 +49,20 @@ namespace Proxy.DomainService.Dtos
         /// </summary>
         public ProxyResilienceInputDto? Resilience { get; set; }
 
+        /// <summary>
+        /// Gateway calls per minute for this proxy, from all callers together (P-3). <c>null</c> ⇒ the default:
+        /// 600 for a Public proxy, no limit for a token one. 1..100000. On Update, omitted resets it to the
+        /// default, so the console always sends the current value back.
+        /// </summary>
+        public int? RequestsPerMinute { get; set; }
+
         public ProxyAccessInputDto? Access { get; set; }
+
+        /// <summary>
+        /// The <c>currentVersion</c> the console loaded (PX-16). When the proxy has moved on since, the write is
+        /// refused with 409 <c>PROXY_VERSION_CONFLICT</c> instead of silently overwriting the other change.
+        /// <c>null</c> (old clients) ⇒ only the read-then-write race on the server is guarded.
+        /// </summary>
+        public int? ExpectedVersion { get; set; }
     }
 }
