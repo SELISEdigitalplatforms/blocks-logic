@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using System.Text.Json;
 using Workflow.DomainService.Entities;
 
 namespace Workflow.DomainService.Dtos;
@@ -11,7 +10,9 @@ public class WorkflowCreateRequestDto
 
     public string Description { get; set; } = string.Empty;
 
-    public JsonElement Nodes { get; set; } = JsonDocument.Parse("[]").RootElement;
+    // Same node shape that Get returns and Update accepts. Nullable so an explicit
+    // "nodes": null is treated as empty rather than failing implicit [Required] validation.
+    public List<NodeDto>? Nodes { get; set; } = new();
 
     public List<EdgeEnity> Edges { get; set; } = new();
 

@@ -60,6 +60,20 @@ namespace Workflow.DomainService.Services
         }
 
         /// <summary>
+        /// Creates an error response for request nodes that cannot be stored
+        /// </summary>
+        private BaseMutationResponse CreateNodeMappingError(NodeMappingException ex)
+        {
+            _logger.LogWarning("Rejected workflow nodes: {Reason}", ex.Message);
+            return new BaseMutationResponse
+            {
+                IsSuccess = false,
+                ItemId = null,
+                Errors = new Dictionary<string, string> { { "Message", ex.Message } }
+            };
+        }
+
+        /// <summary>
         /// Safely gets a workflow and handles errors using common error responses
         /// </summary>
         private async Task<(WorkflowEntity? workflow, BaseMutationResponse? errorResponse)> TryGetWorkflowAsync(string tenantId, string workflowId, string context)
@@ -212,12 +226,21 @@ namespace Workflow.DomainService.Services
 
         {
             _logger.LogInformation("Creating workflow for TenantId: {TenantId}, Name: {Name}", tenantId, dto.Name);
+            List<NodeEntity> nodes;
+            try
+            {
+                nodes = NodeMapper.ToEntities(dto.Nodes);
+            }
+            catch (NodeMappingException ex)
+            {
+                return CreateNodeMappingError(ex);
+            }
             var model = new WorkflowEntity
             {
                 ItemId = Guid.NewGuid().ToString().Replace("-", ""),
                 Name = dto.Name,
                 TenantId = tenantId,
-                Nodes = JsonConvert.DeserializeObject<List<NodeEntity>>(dto.Nodes.GetRawText()) ?? new(),
+                Nodes = nodes,
                 Edges = dto.Edges,
                 IsDirty = true,
                 IsPublished = false,
@@ -231,7 +254,9 @@ namespace Workflow.DomainService.Services
                 CreatedBy = BlocksContext.GetContext().UserId ?? "system",
                 LastUpdatedBy = BlocksContext.GetContext().UserId ?? "system",
             };
-            _logger.LogInformation("Inserting workflow into repository: {Model}", JsonConvert.SerializeObject(model));
+            // Counts only: Newtonsoft cannot serialize the BsonDocument node parameters.
+            _logger.LogInformation("Inserting workflow {WorkflowId} '{Name}' with {NodeCount} nodes and {EdgeCount} edges",
+                model.ItemId, model.Name, model.Nodes.Count, model.Edges?.Count ?? 0);
             try
             {
                 await _workflowRepository.CreateWorkflowAsync(model);
@@ -463,19 +488,14 @@ namespace Workflow.DomainService.Services
             workflow.IsDirty = true;
             if (dto.Nodes != null)
             {
-                workflow.Nodes = dto.Nodes.Select(n => new NodeEntity
+                try
                 {
-                    Name = n.Name,
-                    Id = n.Id,
-                    Category = n.Category,
-                    Type = n.Type,
-                    Version = n.Version,
-                    Position = n.Position,
-                    Handle = n.Handle,
-                    Parameters = BsonDocument.Parse(n.Parameters.GetRawText()),
-                    Settings = BsonDocument.Parse(n.Settings.GetRawText()),
-                    PinData = BsonJsonConverter.ToBsonArrayOrNull(n.PinData),
-                }).ToList();
+                    workflow.Nodes = NodeMapper.ToEntities(dto.Nodes);
+                }
+                catch (NodeMappingException ex)
+                {
+                    return CreateNodeMappingError(ex);
+                }
             }
             workflow.LastUpdatedDate = DateTime.UtcNow;
             workflow.LastUpdatedBy = BlocksContext.GetContext().UserId ?? "system";
