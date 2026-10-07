@@ -8,6 +8,7 @@ using Functions.DomainService.Enums;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Services;
+using Functions.DomainService.Utils;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -88,7 +89,7 @@ namespace XUnitTest.Functions
             Field(entry, FunctionQueueKeys.RunArtifactSha256Field).Should().Be("abc123");
         }
 
-        private Task<global::Functions.DomainService.Dtos.Responses.FunctionVersionSummaryDto> DeployAsync(FunctionDeploymentService service) =>
+        private Task<DeployOutcome> DeployAsync(FunctionDeploymentService service) =>
             service.DeployAsync(Tenant, new DeployFunctionRequestDto { FunctionId = "fn-1" }, "user-1", "u@x");
 
         private IReadOnlyList<object?[]> WarmEntries() =>
@@ -183,6 +184,107 @@ namespace XUnitTest.Functions
             result.Should().NotBeNull();
             _functions.Verify(f => f.SetActiveVersionAsync(Tenant, "fn-1", _created!.ItemId, _created.Number,
                 It.IsAny<DateTime>(), "user-1", It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        // ---- F-4: a deploy does not hold the request for the whole build (2026-10-07) ------------
+
+        [Fact]
+        public async Task A_build_still_running_after_the_short_wait_answers_pending_and_creates_no_version()
+        {
+            _builds.Setup(b => b.EnsureImageAsync(Tenant, It.IsAny<FunctionEntity>(), It.IsAny<CancellationToken>(), 20, false))
+                .ReturnsAsync(new FunctionBuildEntity { ItemId = "b-slow", FunctionId = "fn-1", Status = BuildStatus.Building });
+
+            var outcome = await DeployAsync(Service());
+
+            outcome.IsPending.Should().BeTrue();
+            outcome.BuildId.Should().Be("b-slow");
+            outcome.BuildStatus.Should().Be("Building");
+            _created.Should().BeNull();
+            WarmEntries().Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task The_wait_comes_from_configuration()
+        {
+            await DeployAsync(Service(("Functions:DeployWaitSeconds", "5")));
+
+            _builds.Verify(b => b.EnsureImageAsync(Tenant, It.IsAny<FunctionEntity>(), It.IsAny<CancellationToken>(), 5, false), Times.Once);
+        }
+
+        private Task<DeployOutcome> DeployBuildAsync(string buildId, FunctionBuildEntity build)
+        {
+            _builds.Setup(b => b.GetAsync(Tenant, buildId, It.IsAny<CancellationToken>())).ReturnsAsync(build);
+            return Service().DeployAsync(Tenant, new DeployFunctionRequestDto { FunctionId = "fn-1", BuildId = buildId }, "user-1", "u@x");
+        }
+
+        [Fact]
+        public async Task Deploying_the_finished_build_creates_its_version_without_building_again()
+        {
+            _function.SourceHash = "src-1";
+
+            var outcome = await DeployBuildAsync("b-done", new FunctionBuildEntity
+            {
+                ItemId = "b-done", FunctionId = "fn-1", SourceHash = "src-1", Status = BuildStatus.Succeeded, ImageDigest = "registry/fn@sha256:done",
+            });
+
+            outcome.Version!.Number.Should().Be(_created!.Number);
+            _created.ImageDigest.Should().Be("registry/fn@sha256:done");
+            _builds.Verify(b => b.EnsureImageAsync(It.IsAny<string>(), It.IsAny<FunctionEntity>(), It.IsAny<CancellationToken>(), It.IsAny<int?>(), It.IsAny<bool>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task A_build_that_is_still_running_stays_pending()
+        {
+            _function.SourceHash = "src-1";
+
+            var outcome = await DeployBuildAsync("b-run", new FunctionBuildEntity
+            {
+                ItemId = "b-run", FunctionId = "fn-1", SourceHash = "src-1", Status = BuildStatus.Queued,
+            });
+
+            outcome.IsPending.Should().BeTrue();
+            outcome.BuildStatus.Should().Be("Queued");
+        }
+
+        [Fact]
+        public async Task Code_saved_again_after_the_build_started_is_not_deployed_from_the_old_build()
+        {
+            _function.SourceHash = "src-2";
+
+            var act = () => DeployBuildAsync("b-old", new FunctionBuildEntity
+            {
+                ItemId = "b-old", FunctionId = "fn-1", SourceHash = "src-1", Status = BuildStatus.Succeeded, ImageDigest = "x",
+            });
+
+            (await act.Should().ThrowAsync<FunctionValidationException>()).Which.Message.Should().Contain("code changed");
+            _created.Should().BeNull();
+        }
+
+        [Theory]
+        [InlineData("fn-other", false)]
+        [InlineData("fn-1", true)]   // a Test build: not deployable
+        public async Task Another_functions_build_or_a_test_build_is_refused(string functionId, bool ephemeral)
+        {
+            _function.SourceHash = "src-1";
+
+            var act = () => DeployBuildAsync("b-x", new FunctionBuildEntity
+            {
+                ItemId = "b-x", FunctionId = functionId, SourceHash = "src-1", Status = BuildStatus.Succeeded, ImageDigest = "x", Ephemeral = ephemeral,
+            });
+
+            await act.Should().ThrowAsync<FunctionValidationException>();
+            _created.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task A_failed_build_is_still_a_deploy_error_with_its_reason()
+        {
+            _builds.Setup(b => b.EnsureImageAsync(Tenant, It.IsAny<FunctionEntity>(), It.IsAny<CancellationToken>(), It.IsAny<int?>(), It.IsAny<bool>()))
+                .ReturnsAsync(new FunctionBuildEntity { ItemId = "b-f", Status = BuildStatus.Failed, ErrorMessage = "npm error 404" });
+
+            var act = () => DeployAsync(Service());
+
+            (await act.Should().ThrowAsync<FunctionValidationException>()).Which.Message.Should().Contain("npm error 404");
         }
     }
 }

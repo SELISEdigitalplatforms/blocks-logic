@@ -160,6 +160,9 @@ namespace Functions.DomainService.Services
         /// </summary>
         private readonly SemaphoreSlim _syncWaits;
 
+        /// <summary>Active version documents, by version id (see <see cref="FunctionVersionCache"/>).</summary>
+        private readonly FunctionVersionCache _versions = new();
+
         public FunctionInvocationService(
             IFunctionRepository functionRepository,
             IFunctionVersionRepository versionRepository,
@@ -193,6 +196,10 @@ namespace Functions.DomainService.Services
             _syncWaits = new SemaphoreSlim(maxSyncWaits, maxSyncWaits);
         }
 
+        private Task<FunctionVersionEntity?> ActiveVersionAsync(string tenantId, string versionId, CancellationToken cancellationToken)
+            => _versions.GetOrReadAsync(tenantId, versionId,
+                () => _versionRepository.GetByIdAsync(tenantId, versionId, cancellationToken));
+
         public async Task<InvokeResultDto> InvokeHttpAsync(
             string tenantId, string functionId, InvokeFunctionRequestDto request, CancellationToken cancellationToken = default)
         {
@@ -213,7 +220,7 @@ namespace Functions.DomainService.Services
             FunctionVersionEntity? version = null;
             if (function is { Status: FunctionStatus.Live } && !string.IsNullOrEmpty(function.ActiveVersionId))
             {
-                version = await _versionRepository.GetByIdAsync(tenantId, function.ActiveVersionId, cancellationToken);
+                version = await ActiveVersionAsync(tenantId, function.ActiveVersionId, cancellationToken);
                 timer.Mark("version");
             }
 
@@ -293,6 +300,9 @@ namespace Functions.DomainService.Services
                 timedRunId = result.RunId;
 
                 if (syncWait is null) return result;
+
+                // Streaming (F-5): the controller answers with the pieces as they come.
+                if (result.Streaming) return result;
 
                 var status = FunctionWireMapping.ToRunStatus(result.Status, out var recognised);
                 if (!recognised || !FunctionWireMapping.IsTerminal(status))
@@ -503,7 +513,7 @@ namespace Functions.DomainService.Services
             string image;
             if (!string.IsNullOrEmpty(function.ActiveVersionId))
             {
-                version = await _versionRepository.GetByIdAsync(tenantId, function.ActiveVersionId, cancellationToken);
+                version = await ActiveVersionAsync(tenantId, function.ActiveVersionId, cancellationToken);
             }
 
             TestBuild? test = null;
@@ -525,11 +535,7 @@ namespace Functions.DomainService.Services
             var result = await InvokeCoreAsync(
                 tenantId, function, version, image, context,
                 InvokedByType.Replay, invokedById: originalRun.ItemId, originalRun.Input,
-                wait: false, waitTimeoutSeconds: null, cancellationToken, test,
-                // A replay re-sends an HTTP call's input the way it came in, so it may use a warm
-                // sandbox only if the original did; a replayed workflow step stays cold, like the
-                // workflow step itself.
-                replayOfHttp: originalRun.InvokedBy == InvokedByType.Http);
+                wait: false, waitTimeoutSeconds: null, cancellationToken, test);
             if (test is not null) result.BuildId ??= test.BuildId;
             return result;
         }
@@ -546,7 +552,7 @@ namespace Functions.DomainService.Services
                 throw new FunctionValidationException($"function '{functionId}' is not deployed");
             }
 
-            var version = await _versionRepository.GetByIdAsync(tenantId, function.ActiveVersionId, cancellationToken)
+            var version = await ActiveVersionAsync(tenantId, function.ActiveVersionId, cancellationToken)
                 ?? throw new FunctionNotFoundException($"function '{functionId}' has no active version");
 
             var authResult = _authorizationService.AuthorizeForWorkflow(function, version, callerContext);
@@ -575,8 +581,7 @@ namespace Functions.DomainService.Services
             CancellationToken cancellationToken,
             TestBuild? test = null,
             int? httpWaitSeconds = null,
-            bool finishedOnlyWithoutRetry = false,
-            bool replayOfHttp = false)
+            bool finishedOnlyWithoutRetry = false)
         {
             var admission = await _admissionService.AdmitAsync(function, tenantId, inputJson, cancellationToken);
             StepTimer.Current.Value?.Mark("admission");
@@ -607,13 +612,10 @@ namespace Functions.DomainService.Services
             };
             run.IdempotencyKey = $"{run.ItemId}-{run.Attempt}";
 
-            // Warm sandboxes serve every public HTTP call of a deployed version (and replays of such
-            // calls) — always on, like a serverless platform, decided 2026-10-06; the runner's
-            // RUNNER__SandboxReuse still gates it per host. Never a workflow step (Workflow is in
-            // production and its behaviour must not change) and never a test (own build path).
-            run.ReuseRequested = test is null
-                && version is not null
-                && (invokedBy == InvokedByType.Http || (invokedBy == InvokedByType.Replay && replayOfHttp));
+            // Warm sandboxes serve every run of a deployed version, whoever calls it — HTTP, a
+            // workflow step, a schedule, a replay (user, 2026-10-07: "it must not matter"). The
+            // runner's RUNNER__SandboxReuse still gates it per host. Never a test (own build path).
+            run.ReuseRequested = test is null && version is not null;
 
             // Secret-bound variables are NOT resolved here. The envelope keeps each one as its
             // `{{secret.<id>}}` reference because it is written to the Redis run record (and reused
@@ -719,7 +721,7 @@ namespace Functions.DomainService.Services
                 && (version.OutputActions?.Count ?? 0) == 0;
             return await WaitForResultAsync(
                 tenantId, run.ItemId, executionWaitSeconds, maxSyncWaitSeconds, cancellationToken, finishedOnlyWithoutRetry,
-                answerFromRunner);
+                answerFromRunner, allowStream: httpWaitSeconds is not null && test is null);
         }
 
         /// <summary>
@@ -998,7 +1000,8 @@ namespace Functions.DomainService.Services
             int absoluteMaxSeconds,
             CancellationToken cancellationToken,
             bool finishedOnlyWithoutRetry = false,
-            bool answerFromRunner = false)
+            bool answerFromRunner = false,
+            bool allowStream = false)
         {
             var hardDeadline = DateTime.UtcNow.AddSeconds(absoluteMaxSeconds);
             var deadline = DateTime.UtcNow.AddSeconds(executionWaitSeconds);
@@ -1022,6 +1025,19 @@ namespace Functions.DomainService.Services
                 catch (ObjectDisposedException) { /* the wait already ended */ }
             };
 
+            // A streamed answer (F-5): the first piece hands the caller over to the stream reader,
+            // which then owns the connection until the run's end. Only for a sync HTTP caller.
+            var streamed = 0;
+            var streamChannel = RedisChannel.Literal(FunctionQueueKeys.StreamChannel(runId));
+            Action<RedisChannel, RedisValue> onStreamed = (_, _) =>
+            {
+                Volatile.Write(ref streamed, 1);
+                try { signal.Release(); }
+                catch (SemaphoreFullException) { /* a re-check is already due */ }
+                catch (ObjectDisposedException) { /* the wait already ended */ }
+            };
+            var streamSubscriber = allowStream ? await TrySubscribeAsync(streamChannel, onStreamed) : null;
+
             // Subscribed before the first read, so a completion between the read and the
             // subscription cannot be missed.
             var subscriber = await TrySubscribeAsync(channel, onNotified);
@@ -1036,6 +1052,14 @@ namespace Functions.DomainService.Services
                 while (true)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
+
+                    // Checked first: a stream that has started — or already ended — is the
+                    // answer, so a fast stream is not answered as a plain result.
+                    if (Volatile.Read(ref streamed) == 1)
+                    {
+                        timer?.Mark("streaming");
+                        return new InvokeResultDto { RunId = runId, Status = FunctionQueueKeys.Wire.Running, Streaming = true };
+                    }
 
                     var run = await _runRepository.GetByIdAsync(tenantId, runId, cancellationToken);
                     reads++;
@@ -1105,7 +1129,7 @@ namespace Functions.DomainService.Services
                     var notified = await signal.WaitAsync(remaining < delay ? remaining : delay, cancellationToken);
                     if (notified) timer?.Mark("notified");
 
-                    if (answerFromRunner && Volatile.Read(ref succeeded) == 1)
+                    if (answerFromRunner && Volatile.Read(ref succeeded) == 1 && Volatile.Read(ref streamed) == 0)
                     {
                         var fromRunner = await TryReadRunnerSuccessAsync(runId);
                         if (fromRunner is not null)
@@ -1120,6 +1144,11 @@ namespace Functions.DomainService.Services
             }
             finally
             {
+                if (streamSubscriber is not null)
+                {
+                    try { await streamSubscriber.UnsubscribeAsync(streamChannel, onStreamed); }
+                    catch (Exception ex) { _logger.LogDebug("Could not unsubscribe from {Channel}: {Message}", streamChannel, ex.Message); }
+                }
                 if (subscriber is not null)
                 {
                     try

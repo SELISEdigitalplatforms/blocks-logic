@@ -14,9 +14,18 @@ using StackExchange.Redis;
 
 namespace Functions.DomainService.Services
 {
+    /// <summary>
+    /// A deploy's outcome: the new version, or — when its build outlasted the deploy's wait — the
+    /// build still running, to watch and then deploy with <see cref="DeployFunctionRequestDto.BuildId"/>.
+    /// </summary>
+    public sealed record DeployOutcome(FunctionVersionSummaryDto? Version, string? BuildId = null, string? BuildStatus = null)
+    {
+        public bool IsPending => Version is null;
+    }
+
     public interface IFunctionDeploymentService
     {
-        Task<FunctionVersionSummaryDto> DeployAsync(
+        Task<DeployOutcome> DeployAsync(
             string tenantId, DeployFunctionRequestDto request, string? actorId, string? actorEmail,
             CancellationToken cancellationToken = default);
 
@@ -86,7 +95,7 @@ namespace Functions.DomainService.Services
             _logger = logger;
         }
 
-        public async Task<FunctionVersionSummaryDto> DeployAsync(
+        public async Task<DeployOutcome> DeployAsync(
             string tenantId, DeployFunctionRequestDto request, string? actorId, string? actorEmail,
             CancellationToken cancellationToken = default)
         {
@@ -95,18 +104,42 @@ namespace Functions.DomainService.Services
             var function = await _functionRepository.GetByIdAsync(tenantId, request.FunctionId, cancellationToken)
                 ?? throw new FunctionNotFoundException($"function '{request.FunctionId}' was not found");
 
-            var build = await _buildService.EnsureImageAsync(
-                tenantId, function, cancellationToken, waitSecondsOverride: null, request.Rebuild);
+            // The request waits for the build only a short while (F-4): a proxy in front of the Api
+            // cuts requests at ~60 s, and a build can take minutes. A cached image or a fast build
+            // still answers with the version; a longer one answers 202 with the build to watch.
+            FunctionBuildEntity build;
+            if (!string.IsNullOrEmpty(request.BuildId))
+            {
+                build = await _buildService.GetAsync(tenantId, request.BuildId, cancellationToken);
+                if (build.FunctionId != function.ItemId || build.Ephemeral)
+                {
+                    throw new FunctionValidationException("that build is not a deployable build of this function");
+                }
+                if (build.SourceHash != function.SourceHash)
+                {
+                    throw new FunctionValidationException(
+                        "the code changed after this build started; deploy again to build the current code");
+                }
+            }
+            else
+            {
+                build = await _buildService.EnsureImageAsync(
+                    tenantId, function, cancellationToken,
+                    waitSecondsOverride: _configuration.GetValue("Functions:DeployWaitSeconds", 20), request.Rebuild);
+            }
+
+            if (build.Status is BuildStatus.Queued or BuildStatus.Building)
+            {
+                return new DeployOutcome(null, build.ItemId, build.Status.ToString());
+            }
+
             // A build is usable if it produced either an artifact or a registry image. Both are
             // accepted so a runner on the old path and one on the new path can deploy side by side
             // during the cutover; neither being present means the build gave us nothing to run.
             var hasArtifact = !string.IsNullOrEmpty(build.ArtifactSha256);
             if (build.Status != BuildStatus.Succeeded || (string.IsNullOrEmpty(build.ImageDigest) && !hasArtifact))
             {
-                throw new FunctionValidationException(
-                    build.Status is BuildStatus.Queued or BuildStatus.Building
-                        ? "the build has not finished yet; try deploying again shortly"
-                        : $"the build failed: {build.ErrorMessage ?? "unknown error"}");
+                throw new FunctionValidationException($"the build failed: {build.ErrorMessage ?? "unknown error"}");
             }
 
             FunctionVersionEntity? created = null;
@@ -192,7 +225,7 @@ namespace Functions.DomainService.Services
 
             await TryPublishPrewarmAsync(tenantId, created, previousVersionId);
 
-            return FunctionVersionSummaryDto.From(created);
+            return new DeployOutcome(FunctionVersionSummaryDto.From(created));
         }
 
         /// <summary>

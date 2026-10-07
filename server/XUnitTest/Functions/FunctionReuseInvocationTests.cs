@@ -260,6 +260,87 @@ namespace XUnitTest.Functions
             result.RespondSynchronously.Should().BeTrue();
         }
 
+        // ---- F-5: a streamed answer takes over the sync wait (2026-10-07) ------------------------
+
+        /// <summary>Pub/sub with every subscription kept by channel, so a test can nudge either one.</summary>
+        private Dictionary<string, Action<RedisChannel, RedisValue>> WithChannels()
+        {
+            var handlers = new Dictionary<string, Action<RedisChannel, RedisValue>>();
+            var subscriber = new Mock<ISubscriber>();
+            subscriber
+                .Setup(s => s.SubscribeAsync(It.IsAny<RedisChannel>(), It.IsAny<Action<RedisChannel, RedisValue>>(), It.IsAny<CommandFlags>()))
+                .Callback((RedisChannel channel, Action<RedisChannel, RedisValue> handler, CommandFlags _) =>
+                {
+                    lock (handlers) handlers[channel.ToString()] = handler;
+                })
+                .Returns(Task.CompletedTask);
+            var multiplexer = new Mock<IConnectionMultiplexer>();
+            multiplexer.Setup(m => m.GetSubscriber(It.IsAny<object?>())).Returns(subscriber.Object);
+            _redis.Fake.On("get_Multiplexer", _ => multiplexer.Object);
+            return handlers;
+        }
+
+        private static async Task<Action<RedisChannel, RedisValue>> HandlerAsync(
+            Dictionary<string, Action<RedisChannel, RedisValue>> handlers, Func<string, bool> channel)
+        {
+            for (var i = 0; i < 200; i++)
+            {
+                lock (handlers)
+                {
+                    var hit = handlers.FirstOrDefault(h => channel(h.Key));
+                    if (hit.Value is not null) return hit.Value;
+                }
+                await Task.Delay(10);
+            }
+            throw new InvalidOperationException("never subscribed");
+        }
+
+        [Fact]
+        public async Task The_first_piece_of_a_stream_hands_a_sync_caller_over_to_the_stream()
+        {
+            _version.Trigger.ResponseMode = "sync";
+            RunIs(RunStatus.Running);
+            var handlers = WithChannels();
+
+            var call = Service().InvokeHttpAsync(Tenant, "fn-1", Call(preferWait: 20));
+            (await HandlerAsync(handlers, c => c.Contains("stream-nudge")))(RedisChannel.Literal("x"), "c");
+            var result = await call;
+
+            result.Streaming.Should().BeTrue();
+            result.RunId.Should().Be(_created!.ItemId);
+            result.RespondSynchronously.Should().BeFalse("not the mapped answer: the pieces are");
+        }
+
+        [Fact]
+        public async Task A_stream_that_already_ended_is_still_answered_as_a_stream_not_as_its_result()
+        {
+            _version.Trigger.ResponseMode = "sync";
+            RunIs(RunStatus.Running);
+            var handlers = WithChannels();
+            _redis.Fake.On("HashGetAsync", _ => (RedisValue)FunctionQueueKeys.Wire.Succeeded);
+            _redis.Fake.On("StringGetAsync", _ => (RedisValue)"\"Hello\"");
+
+            var call = Service().InvokeHttpAsync(Tenant, "fn-1", Call(preferWait: 20));
+            var stream = await HandlerAsync(handlers, c => c.Contains("stream-nudge"));
+            var sync = await HandlerAsync(handlers, c => c.Contains("function:sync:"));
+            stream(RedisChannel.Literal("x"), "c");
+            sync(RedisChannel.Literal("x"), FunctionQueueKeys.Wire.Succeeded);
+            var result = await call;
+
+            result.Streaming.Should().BeTrue();
+        }
+
+        [Fact]
+        public async Task An_async_caller_never_listens_for_a_stream()
+        {
+            RunIs(RunStatus.Succeeded);
+            var handlers = WithChannels();
+
+            await Service().InvokeHttpAsync(Tenant, "fn-1", Call());
+
+            handlers.Keys.Should().NotContain(k => k.Contains("stream-nudge"));
+        }
+
         [Fact]
         public async Task A_function_with_output_actions_still_waits_for_the_record()
         {
@@ -398,31 +479,28 @@ namespace XUnitTest.Functions
             (await service.InvokeHttpAsync(Tenant, "fn-1", Call())).RespondSynchronously.Should().BeTrue();
         }
 
-        // ------------------------------------------------- reuse only for HTTP calls ----
+        // ------------------------------------------ reuse for every deployed run ----
 
         [Fact]
-        public async Task A_workflow_step_never_carries_the_reuse_flag()
+        public async Task A_workflow_step_uses_a_warm_sandbox_like_an_http_call()
         {
-            _version.Trigger.ReuseSandbox = true;
             RunIs(RunStatus.Succeeded);
 
             await Service().InvokeFromWorkflowAsync(Tenant, "fn-1", "{}", null, null, "wf-1");
 
-            RunEntry().Should().NotContain(e => e.Name == FunctionQueueKeys.RunReuseField);
-            _created!.ReuseRequested.Should().BeFalse();
+            RunEntry().Should().Contain(e => e.Name == FunctionQueueKeys.RunReuseField);
+            _created!.ReuseRequested.Should().BeTrue();
         }
 
         [Theory]
-        [InlineData(InvokedByType.Http, true)]
-        [InlineData(InvokedByType.Workflow, false)]
-        public async Task A_replay_reuses_only_when_the_original_was_an_http_call(InvokedByType original, bool reuse)
+        [InlineData(InvokedByType.Http)]
+        [InlineData(InvokedByType.Workflow)]
+        public async Task A_replay_of_a_deployed_run_reuses_whatever_the_original_was(InvokedByType original)
         {
-            _version.Trigger.ReuseSandbox = true;
-
             await Service().ReplayAsync(Tenant, new FunctionRunEntity { ItemId = "orig", FunctionId = "fn-1", InvokedBy = original, Input = "{}" });
 
-            RunEntry().Any(e => e.Name == FunctionQueueKeys.RunReuseField).Should().Be(reuse);
-            _created!.ReuseRequested.Should().Be(reuse);
+            RunEntry().Any(e => e.Name == FunctionQueueKeys.RunReuseField).Should().BeTrue();
+            _created!.ReuseRequested.Should().BeTrue();
         }
 
         [Fact]

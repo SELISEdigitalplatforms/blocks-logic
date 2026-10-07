@@ -195,5 +195,70 @@ namespace XUnitTest.Functions
             FunctionHttpInputBuilder.MaxBodyBytes.Should().BeLessThan(FunctionLimits.Ceiling.InputBytes);
             FunctionHttpInputBuilder.MaxBodyBytes.Should().BeGreaterThan(FunctionLimits.Ceiling.InputBytes / 2);
         }
+
+        // ---- F-3: webhook signatures (2026-10-07) ------------------------------------------------
+
+        [Theory]
+        [InlineData("Stripe-Signature")]
+        [InlineData("X-Hub-Signature-256")]
+        [InlineData("X-Shopify-Hmac-Sha256")]
+        [InlineData("X-Slack-Signature")]
+        [InlineData("X-Slack-Request-Timestamp")]
+        [InlineData("svix-signature")]
+        [InlineData("webhook-signature")]
+        public void Webhook_signature_headers_reach_the_handler_and_pass_the_screen(string header)
+        {
+            var input = FunctionHttpInputBuilder.Build(Request(headers: new(StringComparer.OrdinalIgnoreCase) { [header] = "t=1,v1=abc" }));
+
+            JsonDocument.Parse(input).RootElement.GetProperty("headers").GetProperty(header.ToLowerInvariant())
+                .GetString().Should().Be("t=1,v1=abc");
+            var act = () => FunctionEnvelopeBuilder.Screen($$"""{"run":{},"env":{},"input":{{input}}}""");
+            act.Should().NotThrow();
+        }
+
+        [Fact]
+        public void The_raw_body_is_the_exact_bytes_the_signature_was_computed_over()
+        {
+            // Whitespace and key order are lost in `body`; a signature over them must still verify.
+            const string sent = "{ \"b\": 1,\n  \"a\": 2.50 }";
+            var root = Build(Request(body: sent));
+
+            root.GetProperty("body").GetProperty("a").GetDecimal().Should().Be(2.50m);
+            Encoding.UTF8.GetString(Convert.FromBase64String(root.GetProperty("rawBody").GetString()!)).Should().Be(sent);
+
+            // Bytes that are not UTF-8 survive too.
+            var binary = new byte[] { 0xff, 0x00, 0xfe };
+            var request = Request(contentType: "application/octet-stream");
+            request.Body = binary;
+            Convert.FromBase64String(Build(request).GetProperty("rawBody").GetString()!).Should().Equal(binary);
+        }
+
+        [Fact]
+        public void No_body_has_a_null_raw_body()
+        {
+            Build(Request(method: "GET", body: null, contentType: null))
+                .GetProperty("rawBody").ValueKind.Should().Be(JsonValueKind.Null);
+        }
+
+        [Fact]
+        public void A_body_too_large_to_carry_twice_is_still_accepted_without_its_raw_copy()
+        {
+            // 700 KB passes today; adding it again as base64 would cross the 1 MB input ceiling.
+            var big = "{\"x\":\"" + new string('a', 700 * 1024) + "\"}";
+            var json = FunctionHttpInputBuilder.Build(Request(body: big));
+
+            JsonDocument.Parse(json).RootElement.GetProperty("rawBody").ValueKind.Should().Be(JsonValueKind.Null);
+            Encoding.UTF8.GetByteCount(json).Should().BeLessThan((int)FunctionLimits.Ceiling.InputBytes);
+        }
+
+        [Fact]
+        public void A_test_run_carries_its_payload_as_the_raw_body_and_a_GET_test_none()
+        {
+            var post = JsonDocument.Parse(FunctionHttpInputBuilder.ForTest("{\"id\":7}")).RootElement;
+            Encoding.UTF8.GetString(Convert.FromBase64String(post.GetProperty("rawBody").GetString()!)).Should().Be("{\"id\":7}");
+
+            JsonDocument.Parse(FunctionHttpInputBuilder.ForTest("{\"id\":7}", HttpTriggerMethod.Get)).RootElement
+                .GetProperty("rawBody").ValueKind.Should().Be(JsonValueKind.Null);
+        }
     }
 }

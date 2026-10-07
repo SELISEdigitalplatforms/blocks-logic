@@ -71,6 +71,7 @@ namespace Blocks.FunctionRunner.Builds
 
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IDependencyCache _dependencies;
+        private readonly Maintenance.IImageUsageLog? _usage;
 
         public BuildProcessor(
             IDatabase db,
@@ -80,9 +81,13 @@ namespace Blocks.FunctionRunner.Builds
             IHttpClientFactory httpClientFactory,
             IDependencyCache dependencies,
             IOptions<RunnerOptions> options,
-            ILogger<BuildProcessor> logger)
+            ILogger<BuildProcessor> logger,
+            Maintenance.IImageUsageLog? usage = null)
         {
             _httpClientFactory = httpClientFactory;
+            // Marks a test's dependency image as used, so Image GC keeps the busy ones. Optional:
+            // without it those images simply age out (see ImageGc.TestDepsIdle).
+            _usage = usage;
             _dependencies = dependencies;
             _db = db;
             _docker = docker;
@@ -233,7 +238,9 @@ namespace Blocks.FunctionRunner.Builds
 
                 // --- build ---------------------------------------------------------------
                 var tag = job.ImageRef;
-                var built = await BuildImageAsync(dirs.Context, tag, job.LocalOnly, log, timeout.Token).ConfigureAwait(false);
+                var built = job.LocalOnly
+                    ? await BuildTestImageAsync(job, dirs, manifest, tag, log, timeout.Token).ConfigureAwait(false)
+                    : await BuildImageAsync(dirs.Context, tag, ImageKind.Function, log, timeout.Token).ConfigureAwait(false);
                 if (!built)
                 {
                     await PublishAsync(job, outcome, "FAILED", null, null, PublishableLog(), "the image build failed")
@@ -406,9 +413,143 @@ namespace Blocks.FunctionRunner.Builds
         internal static bool IsLockfile(string path) =>
             LockfileNames.Contains(Path.GetFileName(path), StringComparer.OrdinalIgnoreCase);
 
-        private async Task<bool> BuildImageAsync(string contextDir, string tag, bool test, StringBuilder log, CancellationToken token)
+        /// <summary>What an image is for; decides its labels and so how Image GC treats it.</summary>
+        internal enum ImageKind { Function, Test, TestDeps }
+
+        /// <summary>
+        /// A test's image, in two steps (FN-14, 2026-10-07).
+        /// <para>
+        /// The template's one image cost 11–18 s per test even with the install skipped: its
+        /// <c>chown -R</c>/<c>chmod -R</c> comes after the source, so every edit re-walked the whole
+        /// dependency tree, the metadata steps each started a container, and deleting the test image
+        /// pruned the dependency layers with it. So a test builds on a <b>dependency image</b> — base,
+        /// manifest, dependencies, permissions, env, user, entrypoint — built once per tenant and
+        /// exact dependency tree and kept on this host, and adds only the source on top (~1 s).
+        /// </para>
+        /// <para>
+        /// The result is the same image as the template's: the source goes in root-owned and
+        /// read-only because the build context carries it that way (0555, files and directories) —
+        /// what the template's <c>RUN chmod -R a-w,a+rX</c> makes of this tar's entries, whose
+        /// files carry an execute bit. Checked against a real build in TestDepsImageTests.
+        /// Deployed builds keep the template.
+        /// </para>
+        /// </summary>
+        private async Task<bool> BuildTestImageAsync(
+            BuildJob job, BuildDirectories dirs, string? manifest, string tag, StringBuilder log, CancellationToken token)
         {
-            using var context = CreateTarContext(contextDir);
+            var source = Path.Combine(dirs.Context, "src");
+            if (!File.Exists(Path.Combine(source, "index.js")))
+            {
+                // The template's own check, made here because the source layer has no RUN step.
+                log.AppendLine("index.js is missing from the function source");
+                return false;
+            }
+
+            var archive = Path.Combine(dirs.Context, BuildSandboxProfile.DepsArchiveName);
+            string archiveSha;
+            await using (var stream = File.OpenRead(archive))
+            {
+                archiveSha = Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, token).ConfigureAwait(false));
+            }
+
+            var depsTag = TestDepsImageRef(job.TenantId, _options.BaseImage, RunLimits.Default.MaxOldSpaceMb, manifest, archiveSha);
+            if (await LocalImageExistsAsync(depsTag, token).ConfigureAwait(false))
+            {
+                log.AppendLine("dependency image reused; only the source is added");
+            }
+            else
+            {
+                var depsContext = Path.Combine(dirs.Root, "deps-context");
+                Directory.CreateDirectory(depsContext);
+                Directory.Move(Path.Combine(dirs.Context, "manifest"), Path.Combine(depsContext, "manifest"));
+                File.Move(archive, Path.Combine(depsContext, BuildSandboxProfile.DepsArchiveName));
+                await File.WriteAllTextAsync(
+                    Path.Combine(depsContext, "Dockerfile"),
+                    TestDepsDockerfile(_options.BaseImage, BuildSandboxProfile.DepsArchiveName, RunLimits.Default.MaxOldSpaceMb),
+                    token).ConfigureAwait(false);
+
+                log.AppendLine("building the dependency image for this package.json; later tests reuse it");
+                if (!await BuildImageAsync(depsContext, depsTag, ImageKind.TestDeps, log, token).ConfigureAwait(false))
+                {
+                    return false;
+                }
+            }
+
+            _usage?.Touch(depsTag);
+
+            var testContext = Path.Combine(dirs.Root, "test-context");
+            Directory.CreateDirectory(testContext);
+            Directory.Move(source, Path.Combine(testContext, "src"));
+            await File.WriteAllTextAsync(
+                Path.Combine(testContext, "Dockerfile"), TestSourceDockerfile(depsTag), token).ConfigureAwait(false);
+
+            return await BuildImageAsync(testContext, tag, ImageKind.Test, log, token, readOnlySource: true)
+                .ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Bumped when <see cref="TestDepsDockerfile"/> changes, so no host reuses a dependency
+        /// image laid out the old way.
+        /// </summary>
+        internal const int TestDepsLayout = 1;
+
+        /// <summary>
+        /// The local name of a test's dependency image. Everything that decides its contents is in
+        /// the key: the tenant (never shared across tenants), the runtime, the heap size, the
+        /// manifest and the exact dependency archive (a fresh install of the same manifest can
+        /// resolve newer versions, and must not reuse the old tree).
+        /// </summary>
+        internal static string TestDepsImageRef(string? tenantId, string baseImage, int maxOldSpaceMb, string? manifest, string archiveSha)
+        {
+            var key = string.Join('\n',
+                TestDepsLayout.ToString(CultureInfo.InvariantCulture), tenantId ?? string.Empty, baseImage,
+                maxOldSpaceMb.ToString(CultureInfo.InvariantCulture), archiveSha, manifest ?? string.Empty);
+            var hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(key)));
+            return $"blocks-test-deps/{hash[..40]}:local";
+        }
+
+        /// <summary>
+        /// Everything of <c>function.Dockerfile.tmpl</c> except the source: same base, layout,
+        /// permissions, heap size, user and entrypoint. Keep the two in step.
+        /// </summary>
+        internal static string TestDepsDockerfile(string baseImage, string depsArchive, int maxOldSpaceMb) =>
+            string.Create(CultureInfo.InvariantCulture, $$"""
+                FROM {{baseImage}}
+                USER root
+                WORKDIR /function
+                COPY manifest/ /function/
+                ADD {{depsArchive}} /function/
+                RUN set -eux; \
+                    chown -R root:root /function; \
+                    chmod -R a-w,a+rX /function; \
+                    test -d /function/node_modules || { echo "node_modules is missing from the build" >&2; exit 1; }
+                ENV NODE_OPTIONS=--max-old-space-size={{maxOldSpaceMb}}
+                USER 10001:10001
+                ENTRYPOINT ["node", "/runtime/bootstrap.mjs"]
+
+                """);
+
+        /// <summary>The test's own layer: the source, read-only as the build context carries it.</summary>
+        internal static string TestSourceDockerfile(string depsImage) =>
+            $"FROM {depsImage}\nCOPY src/ /function/\n";
+
+        private async Task<bool> LocalImageExistsAsync(string reference, CancellationToken token)
+        {
+            try
+            {
+                await _docker.Images.InspectImageAsync(reference, token).ConfigureAwait(false);
+                return true;
+            }
+            catch (DockerImageNotFoundException)
+            {
+                return false;
+            }
+        }
+
+        private async Task<bool> BuildImageAsync(
+            string contextDir, string tag, ImageKind kind, StringBuilder log, CancellationToken token, bool readOnlySource = false)
+        {
+            using var context = CreateTarContext(contextDir, readOnlySource);
 
             var parameters = new ImageBuildParameters
             {
@@ -429,9 +570,12 @@ namespace Blocks.FunctionRunner.Builds
                 CPUShares = _options.BuildCpuShares,
                 CPUQuota = _options.BuildCpus > 0 ? _options.BuildCpus * 100_000L : 0,
                 CPUPeriod = _options.BuildCpus > 0 ? 100_000L : 0,
-                Labels = test
-                    ? new Dictionary<string, string> { [FunctionImageLabel] = "true", [TestImageLabel] = "true" }
-                    : new Dictionary<string, string> { [FunctionImageLabel] = "true" },
+                Labels = kind switch
+                {
+                    ImageKind.Test => new Dictionary<string, string> { [FunctionImageLabel] = "true", [TestImageLabel] = "true" },
+                    ImageKind.TestDeps => new Dictionary<string, string> { [FunctionImageLabel] = "true", [TestDepsImageLabel] = "true" },
+                    _ => new Dictionary<string, string> { [FunctionImageLabel] = "true" },
+                },
             };
 
             var failed = false;
@@ -467,6 +611,12 @@ namespace Blocks.FunctionRunner.Builds
         /// Image GC removes any that a crashed runner left behind, without waiting for the keep set.
         /// </summary>
         public const string TestImageLabel = "dev.selise.blocks.test";
+
+        /// <summary>
+        /// Label on a test's dependency image: local to one host, shared by that tenant's tests of
+        /// one dependency tree. Image GC removes it once idle (<c>ImageGc.TestDepsIdle</c>).
+        /// </summary>
+        public const string TestDepsImageLabel = "dev.selise.blocks.test-deps";
 
         /// <summary>The image id of a local-only build — what the run then executes.</summary>
         private async Task<string?> LocalImageIdAsync(string tag, StringBuilder log, CancellationToken token)
@@ -709,7 +859,11 @@ namespace Blocks.FunctionRunner.Builds
         /// file deletes itself when the stream closes.
         /// </para>
         /// </summary>
-        private static FileStream CreateTarContext(string contextDir)
+        /// <param name="readOnlySource">
+        /// Every file and directory goes in as 0555 — what the template's chmod leaves — so the
+        /// image gets them read-only without a RUN step (a test's source layer; see <see cref="BuildTestImageAsync"/>).
+        /// </param>
+        internal static FileStream CreateTarContext(string contextDir, bool readOnlySource = false)
         {
             var path = Path.Combine(
                 Path.GetDirectoryName(contextDir.TrimEnd(Path.DirectorySeparatorChar))!,
@@ -724,10 +878,24 @@ namespace Blocks.FunctionRunner.Builds
                 archive.IsStreamOwner = false;
                 archive.RootPath = contextDir.Replace('\\', '/').TrimEnd('/');
 
+                if (readOnlySource)
+                {
+                    foreach (var directory in Directory.EnumerateDirectories(contextDir, "*", SearchOption.AllDirectories)
+                                 .OrderBy(d => d, StringComparer.Ordinal))
+                    {
+                        var entry = TarEntry.CreateTarEntry(Path.GetRelativePath(contextDir, directory).Replace('\\', '/') + "/");
+                        entry.TarHeader.TypeFlag = TarHeader.LF_DIR;
+                        entry.TarHeader.Mode = ReadOnlyMode;
+                        entry.ModTime = DateTime.UtcNow;
+                        archive.WriteEntry(entry, recurse: false);
+                    }
+                }
+
                 foreach (var file in Directory.EnumerateFiles(contextDir, "*", SearchOption.AllDirectories))
                 {
                     var entry = TarEntry.CreateEntryFromFile(file);
                     entry.Name = Path.GetRelativePath(contextDir, file).Replace('\\', '/');
+                    if (readOnlySource && entry.Name != "Dockerfile") entry.TarHeader.Mode = ReadOnlyMode;
                     archive.WriteEntry(entry, recurse: false);
                 }
             }
@@ -735,6 +903,9 @@ namespace Blocks.FunctionRunner.Builds
             buffer.Position = 0;
             return buffer;
         }
+
+        /// <summary>0555: read and traverse for all, write for none.</summary>
+        internal const int ReadOnlyMode = 0x16D;
 
         private static List<SourceFile> ParseBundle(string json)
         {

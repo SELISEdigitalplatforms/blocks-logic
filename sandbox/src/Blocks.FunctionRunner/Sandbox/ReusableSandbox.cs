@@ -198,6 +198,13 @@ namespace Blocks.FunctionRunner.Sandbox
         private long _lastCpuTotalMs;
         private bool _dead;
 
+        // The start-up boost is dropped once: at `ready`, or by the cap (StartBoostMaxMs) if that
+        // comes first. Both await the same drop, so it is one `docker update`, and a failed one is
+        // seen by whichever side reads it.
+        private readonly Lock _dropGate = new();
+        private Task<string?>? _drop;
+        private volatile bool _startOver;
+
         public ReusableSandbox(IReusableContainer container, RunnerOptions options, ILogger logger, TimeProvider? time = null)
         {
             ArgumentNullException.ThrowIfNull(container);
@@ -246,6 +253,50 @@ namespace Blocks.FunctionRunner.Sandbox
                 await KillAsync().ConfigureAwait(false);
                 throw;
             }
+            finally
+            {
+                _startOver = true;
+            }
+        }
+
+        /// <summary>Drops the start-up CPU to the run limit, once; later callers get the same outcome.</summary>
+        private Task<string?> DropBoostOnceAsync(CancellationToken token)
+        {
+            lock (_dropGate) { return _drop ??= _container.DropToRunLimitAsync(token); }
+        }
+
+        /// <summary>The drop's failure, if it has happened and failed.</summary>
+        private string? DropFailure()
+        {
+            lock (_dropGate) { return _drop is { IsCompletedSuccessfully: true, Result: { } failed } ? failed : null; }
+        }
+
+        /// <summary>
+        /// The cap on the boost: a start not ready after <see cref="RunnerOptions.StartBoostMaxMs"/>
+        /// goes on at the run limit. A module that loops or works hard at load otherwise held 1 CPU
+        /// for the whole start allowance, on every start. Not confirmed → the sandbox is killed.
+        /// </summary>
+        private async Task CapBoostAsync(CancellationToken token)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(_options.StartBoostMaxMs), _time, token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            if (_startOver) return;
+
+            var failed = await DropBoostOnceAsync(CancellationToken.None).ConfigureAwait(false);
+            if (failed is null)
+            {
+                _logger.LogInformation(
+                    "Warm sandbox {Name} not ready after {Ms} ms; start-up CPU dropped to the run limit", Name, _options.StartBoostMaxMs);
+                return;
+            }
+            _logger.LogError("Destroying warm sandbox {Name}: {Reason}", Name, failed);
+            await KillAsync().ConfigureAwait(false);
         }
 
         private async Task<WarmStartResult> StartCoreAsync(Stopwatch started, CancellationToken token)
@@ -273,6 +324,9 @@ namespace Blocks.FunctionRunner.Sandbox
 
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
             deadline.CancelAfter(TimeSpan.FromSeconds(_options.StartupAllowanceSeconds));
+
+            // Runs beside the read loop; does nothing once the start is over (_startOver).
+            if (_options.StartBoostMaxMs > 0) _ = CapBoostAsync(token);
 
             var output = new SandboxOutput();
             long bytes = 0;
@@ -302,7 +356,7 @@ namespace Blocks.FunctionRunner.Sandbox
                             CanAsk = evt.CanAsk;
                             // The start-up boost ends here, before the sandbox can serve anyone:
                             // no call ever runs above the run limit. Not confirmed → not used.
-                            var notDropped = await _container.DropToRunLimitAsync(token).ConfigureAwait(false);
+                            var notDropped = await DropBoostOnceAsync(token).ConfigureAwait(false);
                             if (notDropped is not null)
                             {
                                 _logger.LogError("Destroying warm sandbox {Name}: {Reason}", Name, notDropped);
@@ -354,6 +408,17 @@ namespace Blocks.FunctionRunner.Sandbox
             // exited keeps its own exit code; the kill is a no-op for it).
             await KillAsync().ConfigureAwait(false);
             var exit = await SafeExitStateAsync().ConfigureAwait(false);
+
+            // Killed by the cap because the boost could not be dropped: the host's fault, not the function's.
+            if (DropFailure() is { } dropFailure)
+            {
+                return new WarmStartResult
+                {
+                    Status = WarmStartStatus.HostFailure,
+                    StartupMs = started.ElapsedMilliseconds,
+                    HostFailure = dropFailure,
+                };
+            }
 
             if (IsMissingReuseRuntime(output, fatalCode, fatalMessage))
             {
@@ -419,6 +484,12 @@ namespace Blocks.FunctionRunner.Sandbox
         /// </param>
         /// <param name="handover">Started when the run was claimed; read when the envelope is written.</param>
         /// <param name="cancellation">The run's lease token: cancel or lease lost kills the sandbox.</param>
+        /// <param name="onAnswer">
+        /// Called once, on the read loop, the moment the call's own <c>result</c> line is read — so
+        /// the caller can be answered before the runtime's <c>idle</c>, which comes only after every
+        /// <c>ctx.waitUntil</c> task and the leftover check. Must not block; it gets the output as
+        /// parsed so far, whose verdict (Ok, error, result) no later line can change.
+        /// </param>
         public async Task<WarmCallResult> RunCallAsync(
             string runId,
             string envelopeLine,
@@ -426,7 +497,9 @@ namespace Blocks.FunctionRunner.Sandbox
             long? startupMs,
             Stopwatch? handover,
             CancellationToken cancellation,
-            Func<CancellationToken, Task<string?>>? accessToken = null)
+            Func<CancellationToken, Task<string?>>? accessToken = null,
+            Action<SandboxOutput>? onAnswer = null,
+            Action<string>? onChunk = null)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(runId);
             ArgumentException.ThrowIfNullOrWhiteSpace(envelopeLine);
@@ -509,6 +582,7 @@ namespace Blocks.FunctionRunner.Sandbox
             long? handlerCpuMs = null;
             long? hostCpuAtStart = null, hostCpuAtAnswer = null;
             var ended = false;   // the stream ended: the sandbox exited
+            var answerSent = false;
             // The caller's token, fetched once when the call first asks for it (`need`), then the
             // same answer for any later ask of this call. Never for another call, never after it.
             Task<string?>? tokenFetch = null;
@@ -560,6 +634,22 @@ namespace Blocks.FunctionRunner.Sandbox
                                 hostCpuAtAnswer ??= _container.HostCpuMicroseconds();
                             }
                             _parser.Feed(output, line);
+                            if (evt.Type == "result" && !answerSent && output.Ok is not null)
+                            {
+                                answerSent = true;
+                                Answer(onAnswer, output, runId);
+                            }
+                            break;
+
+                        case "chunk":
+                            // A piece of this call's streamed answer (F-5), handed on as it
+                            // arrives. Another call's, or late, is nobody's to receive: dropped.
+                            if (evt.Late || evt.Data is null || !string.Equals(evt.Call, runId, StringComparison.Ordinal)) break;
+                            if (onChunk is not null)
+                            {
+                                try { onChunk(evt.Data); }
+                                catch (Exception ex) { _logger.LogWarning("Could not relay a piece of call {RunId}: {Message}", runId, ex.Message); }
+                            }
                             break;
 
                         case "need":
@@ -699,6 +789,20 @@ namespace Blocks.FunctionRunner.Sandbox
                 MemoryBytes = memoryBytes,
                 Started = handlerStartedMs is not null,
             };
+        }
+
+        /// <summary>Hands the call's verdict to the caller; a throwing callback costs the early answer only.</summary>
+        private void Answer(Action<SandboxOutput>? onAnswer, SandboxOutput output, string runId)
+        {
+            if (onAnswer is null) return;
+            try
+            {
+                onAnswer(output);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Could not answer call {RunId} early: {Message}", runId, ex.Message);
+            }
         }
 
         /// <summary>How the container ended, or null — never an exception: it is read on failure paths.</summary>
@@ -881,7 +985,7 @@ namespace Blocks.FunctionRunner.Sandbox
         /// <summary>The fields of one reuse-protocol line this side acts on.</summary>
         internal readonly record struct ProtocolLine(
             string? Type, string? Call, bool Late, bool Clean, IReadOnlyList<string> Leftovers, string? Code, string? Message,
-            long? CpuMs = null, string? What = null, long? AskId = null, bool CanAsk = false)
+            long? CpuMs = null, string? What = null, long? AskId = null, bool CanAsk = false, string? Data = null)
         {
             /// <summary>Reads a line; anything that is not a JSON object with a string <c>t</c> has a null type.</summary>
             public static ProtocolLine Read(string line)
@@ -921,7 +1025,7 @@ namespace Blocks.FunctionRunner.Sandbox
 
                     return new ProtocolLine(
                         Str("t"), Str("call"), Bool("late"), Bool("clean"), leftovers, Str("code"), Str("message"), cpuMs,
-                        Str("what"), askId, canAsk);
+                        Str("what"), askId, canAsk, Str("data"));
                 }
                 catch (JsonException)
                 {

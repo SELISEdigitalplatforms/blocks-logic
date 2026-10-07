@@ -204,4 +204,6 @@ export interface IDeployFunctionPayload {
   note?: string | null;
   /** Build again instead of deploying this source's cached image. */
   rebuild?: boolean;
+  /** Deploy exactly this build: the one a 202 answer named. Refused if the code changed since. */
+  buildId?: string;
 }

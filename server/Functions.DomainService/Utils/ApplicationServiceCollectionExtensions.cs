@@ -88,6 +88,7 @@ namespace Functions.DomainService.Utils
             // store comes from Genesis (AddBlocksDelegation, part of the API and Worker setup).
             services.AddSingleton<IFunctionDelegationService, FunctionDelegationService>();
             services.AddSingleton<IFunctionInvocationService, FunctionInvocationService>();
+            services.AddSingleton<IFunctionStreamReader, FunctionStreamReader>();
 
             services.AddSingleton<IOutputActionProcessor, OutputActionProcessor>();
             services.AddSingleton<ISecretResolver>(sp => SelectSecretResolver(sp));

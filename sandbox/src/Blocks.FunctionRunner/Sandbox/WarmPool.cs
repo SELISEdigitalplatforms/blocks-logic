@@ -115,7 +115,8 @@ namespace Blocks.FunctionRunner.Sandbox
         /// </summary>
         public async Task<WarmCallResult> RunCallAsync(
             string runId, string envelopeLine, RunLimits limits, Stopwatch? handover, CancellationToken token,
-            Func<CancellationToken, Task<string?>>? accessToken = null)
+            Func<CancellationToken, Task<string?>>? accessToken = null, Action<Protocol.SandboxOutput>? onAnswer = null,
+            Action<string>? onChunk = null)
         {
             if (Paused)
             {
@@ -139,7 +140,7 @@ namespace Blocks.FunctionRunner.Sandbox
                 Paused = false;
             }
 
-            return await Entry.Sandbox.RunCallAsync(runId, envelopeLine, limits, StartupMs, handover, token, accessToken)
+            return await Entry.Sandbox.RunCallAsync(runId, envelopeLine, limits, StartupMs, handover, token, accessToken, onAnswer, onChunk)
                 .ConfigureAwait(false);
         }
     }
@@ -181,6 +182,13 @@ namespace Blocks.FunctionRunner.Sandbox
         /// a failed sandbox start per run.
         /// </summary>
         private readonly HashSet<string> _noReuse = new(StringComparer.Ordinal);
+
+        /// <summary>
+        /// Versions whose module failed to load by its own fault, and until when they are not
+        /// started again (<see cref="RunnerOptions.FailedLoadHoldSeconds"/>). The same code fails
+        /// the same way, so a start per call only burned a start's CPU for the same answer.
+        /// </summary>
+        private readonly Dictionary<WarmKey, (long Until, WarmStartResult Start)> _heldLoads = [];
 
         private bool _disposed;
 
@@ -263,6 +271,49 @@ namespace Blocks.FunctionRunner.Sandbox
             lock (_gate) { return !_noReuse.Contains(image); }
         }
 
+        /// <summary>
+        /// The function's own load error: its module threw, so it says so the same way every time.
+        /// Not a timeout, an OOM kill or a crash — those can pass (a slow dependency, a busy host),
+        /// so the next call tries again.
+        /// </summary>
+        internal static bool IsOwnLoadFailure(WarmStartResult start) =>
+            start.Status == WarmStartStatus.LoadFailed && !start.TimedOut && !start.OomKilled
+            && start.Output.ErrorCode == ErrorCodes.UserRuntimeError;
+
+        private void Hold(WarmKey key, WarmStartResult start)
+        {
+            if (_options.FailedLoadHoldSeconds <= 0) return;
+            var now = _time.GetTimestamp();
+            var until = now + (long)(_options.FailedLoadHoldSeconds * (double)_time.TimestampFrequency);
+            lock (_gate)
+            {
+                // Expired holds go here, so the map holds only versions failing right now.
+                foreach (var stale in _heldLoads.Where(h => h.Value.Until <= now).Select(h => h.Key).ToList())
+                {
+                    _heldLoads.Remove(stale);
+                }
+                _heldLoads[key] = (until, start);
+            }
+            _logger.LogWarning(
+                "Function {FunctionId} version {VersionId} failed to load; not started again for {Seconds}s",
+                key.FunctionId, key.VersionId, _options.FailedLoadHoldSeconds);
+        }
+
+        /// <summary>
+        /// The failed start to answer with while this version is held, or null. Answered as a start
+        /// that took no time: no sandbox was made for this call.
+        /// </summary>
+        private WarmStartResult? HeldLoad(WarmKey key)
+        {
+            lock (_gate)
+            {
+                if (!_heldLoads.TryGetValue(key, out var held)) return null;
+                if (held.Until > _time.GetTimestamp()) return held.Start with { StartupMs = 0 };
+                _heldLoads.Remove(key);
+                return null;
+            }
+        }
+
         /// <summary>Whether a container of this name is one the pool knows about — the reaper's test.</summary>
         public bool IsTracked(string containerName)
         {
@@ -289,6 +340,7 @@ namespace Blocks.FunctionRunner.Sandbox
             ArgumentNullException.ThrowIfNull(limits);
 
             if (!SupportsReuse(key.Image)) return new WarmAcquireResult(WarmAcquireStatus.NoReuseSupport);
+            if (HeldLoad(key) is { } held) return new WarmAcquireResult(WarmAcquireStatus.StartFailed, Start: held);
 
             if (allowIdle)
             {
@@ -412,6 +464,7 @@ namespace Blocks.FunctionRunner.Sandbox
                         key.Image);
                     return new WarmAcquireResult(WarmAcquireStatus.NoReuseSupport, Start: started);
                 }
+                if (IsOwnLoadFailure(started)) Hold(key, started);
                 return new WarmAcquireResult(WarmAcquireStatus.StartFailed, Start: started);
             }
 
@@ -576,7 +629,7 @@ namespace Blocks.FunctionRunner.Sandbox
             var started = 0;
             for (var i = 0; i < count && !token.IsCancellationRequested; i++)
             {
-                if (!SupportsReuse(key.Image)) break;
+                if (!SupportsReuse(key.Image) || HeldLoad(key) is not null) break;
                 var result = await StartNewAsync(key, limits, busy: false, token).ConfigureAwait(false);
                 if (result.Status != WarmAcquireStatus.Acquired)
                 {

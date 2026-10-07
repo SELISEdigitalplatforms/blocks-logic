@@ -262,6 +262,14 @@ namespace Functions.DomainService.Dtos.Responses
         /// </summary>
         [System.Text.Json.Serialization.JsonIgnore]
         public bool RespondSynchronously { get; set; }
+
+        /// <summary>
+        /// Set by a sync wait the moment the run started streaming its answer (F-5): the caller is
+        /// answered with the pieces as they come (<c>FunctionStreamReader</c>), not with this DTO.
+        /// Never serialized.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool Streaming { get; set; }
     }
 
     /// <summary>

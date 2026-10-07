@@ -262,6 +262,32 @@
             encoding and no output formatter in between.
             </summary>
         </member>
+        <member name="T:BlocksTemplate.Api.Controllers.FunctionStreamResult">
+            <summary>
+            A streamed answer (F-5): 200, then each piece the moment the runner relays it — as plain
+            chunked text, or as Server-Sent Events when the caller accepts <c>text/event-stream</c>
+            (each piece one <c>data:</c> event; a final <c>event: done</c>, or <c>event: error</c>
+            with the run's status). A plain-text stream whose run fails after it started has no way to
+            say so but to stop short: the connection is aborted, so the client sees an incomplete body
+            rather than a clean end. The run id is in <c>x-blocks-run-id</c> for looking it up.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionStreamResult.#ctor(System.String,System.Boolean)">
+            <summary>
+            A streamed answer (F-5): 200, then each piece the moment the runner relays it — as plain
+            chunked text, or as Server-Sent Events when the caller accepts <c>text/event-stream</c>
+            (each piece one <c>data:</c> event; a final <c>event: done</c>, or <c>event: error</c>
+            with the run's status). A plain-text stream whose run fails after it started has no way to
+            say so but to stop short: the connection is aborted, so the client sees an incomplete body
+            rather than a clean end. The run id is in <c>x-blocks-run-id</c> for looking it up.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionStreamResult.SseData(System.String)">
+            <summary>One SSE event: every line of the piece as its own <c>data:</c> line.</summary>
+        </member>
+        <member name="T:BlocksTemplate.Api.Controllers.DeployPendingDto">
+            <summary>A deploy whose build is still running: watch <see cref="P:BlocksTemplate.Api.Controllers.DeployPendingDto.BuildId"/>, then deploy it.</summary>
+        </member>
         <member name="T:BlocksTemplate.Api.Controllers.HealthController">
             <summary>
             Health-check configuration and the heartbeat endpoint monitored services call, routed as

@@ -111,10 +111,15 @@ declare interface FunctionInput {
   readonly path: string;
   /** A repeated key is an array. */
   readonly query: Record<string, string | string[]>;
-  /** Lower-cased. Content negotiation and provenance only — never a credential. */
+  /** Lower-cased. Content negotiation, provenance and webhook signatures — never a credential. */
   readonly headers: Record<string, string>;
   /** Parsed JSON, the raw text for other content types, null for no body (always null on GET). */
   readonly body: unknown;
+  /**
+   * The exact request bytes, base64 — what a webhook signature is computed over. Null with no
+   * body, or when the body is too large to carry twice (over about 450 KB).
+   */
+  readonly rawBody: string | null;
 }
 
 /**
@@ -124,7 +129,8 @@ declare interface FunctionInput {
  * once when the sandbox starts — the place for clients, caches and constants — and referencing
  * \`ctx\` there fails the run while the module is still loading, before the handler is called.
  */
-declare type FunctionHandler = (input: FunctionInput, ctx: FunctionContext) => unknown | Promise<unknown>;
+declare type FunctionHandler = (input: FunctionInput, ctx: FunctionContext) =>
+  unknown | Promise<unknown> | AsyncIterable<unknown>; // an async iterable streams (async function*)
 
 /**
  * Return this from the handler to control the HTTP answer when the trigger's Response is

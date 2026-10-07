@@ -674,3 +674,85 @@ describe('reuse mode: the caller token on demand', () => {
     } finally { await s.close(); }
   });
 });
+
+describe('reuse mode: streamed answers (F-5)', () => {
+  test('each piece is a chunk line of its call, sent while the handler still works, before the result', async () => {
+    const s = sandbox({ 'index.js': `
+      export default async function* (input) {
+        yield 'Hel';
+        yield 'lo ';
+        await new Promise((r) => setTimeout(r, 400));
+        yield input.call;
+      }` });
+    try {
+      await s.ready();
+      s.send(JSON.stringify(envelope('A')));
+      await s.waitFor((e) => e.t === 'chunk' && e.data === 'lo ');
+      assert.equal(s.events.find((e) => e.t === 'result' && e.call === 'A'), undefined, 'live: no result yet');
+      const a = await s.call('B');   // queued behind A; A finishes first
+      const chunksA = s.events.filter((e) => e.t === 'chunk' && e.call === 'A').map((e) => e.data);
+      assert.deepEqual(chunksA, ['Hel', 'lo ', 'A']);
+      const resultA = s.events.find((e) => e.t === 'result' && e.call === 'A');
+      assert.equal(resultA.value, 'Hello A', 'the run keeps the text as its result');
+      assert.ok(s.events.indexOf(resultA) > s.events.findLastIndex((e) => e.t === 'chunk' && e.call === 'A'));
+      assert.equal(s.events.find((e) => e.t === 'idle' && e.call === 'A').clean, true);
+      assert.equal(a.result.value, 'Hello B');
+    } finally { await s.close(); }
+  });
+
+  test('bytes become text (a character split across pieces survives), objects become JSON lines', async () => {
+    const s = sandbox({ 'index.js': `
+      export default async function () {
+        const euro = Buffer.from('€');
+        return (async function* () {
+          yield euro.subarray(0, 1);
+          yield euro.subarray(1);
+          yield { n: 1 };
+        })();
+      }` });
+    try {
+      await s.ready();
+      const a = await s.call('A');
+      const text = s.events.filter((e) => e.t === 'chunk' && e.call === 'A').map((e) => e.data).join('');
+      assert.equal(text, '€{"n":1}\n');
+      assert.equal(a.result.value, '€{"n":1}\n');
+    } finally { await s.close(); }
+  });
+
+  test('a stream that throws midway fails the call; what was sent stays sent', async () => {
+    const s = sandbox({ 'index.js': `
+      export default async function* () { yield 'part'; throw new Error('upstream closed'); }` });
+    try {
+      await s.ready();
+      const a = await s.call('A');
+      assert.deepEqual(s.events.filter((e) => e.t === 'chunk').map((e) => e.data), ['part']);
+      assert.equal(a.result.ok, false);
+      assert.equal(a.result.code, 'USER_RUNTIME_ERROR');
+      assert.match(a.result.message, /upstream closed/);
+    } finally { await s.close(); }
+  });
+
+  test('a stream over its budget stops and fails as RESULT_TOO_LARGE', async () => {
+    const s = sandbox({ 'index.js': `
+      const big = 'x'.repeat(512 * 1024);
+      export default async function* () { for (let i = 0; i < 10; i++) yield big; }` });
+    try {
+      await s.ready();
+      const a = await s.call('A');
+      assert.equal(a.result.ok, false);
+      assert.equal(a.result.code, 'RESULT_TOO_LARGE');
+      const sent = s.events.filter((e) => e.t === 'chunk').reduce((n, e) => n + e.data.length, 0);
+      assert.ok(sent <= 3 * 1024 * 1024 && sent > 0);
+    } finally { await s.close(); }
+  });
+
+  test('a stream that outlasts the time limit is stopped as a timeout', async () => {
+    const s = sandbox({ 'index.js': `
+      export default async function* () { yield 'a'; await new Promise((r) => setTimeout(r, 60000)); yield 'b'; }` });
+    try {
+      await s.ready();
+      const a = await s.call('A', { limits: { timeoutMs: 300 } });
+      assert.equal(a.result.code, 'TIMED_OUT');
+    } finally { await s.close(); }
+  });
+});

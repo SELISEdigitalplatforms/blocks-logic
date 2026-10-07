@@ -147,6 +147,11 @@ namespace Blocks.FunctionRunner.Protocol
                     output.TruncationReason ??= evt.Reason ?? "unspecified";
                     break;
 
+                case "chunk":
+                    // A piece of a streamed answer (F-5). Relayed live by a warm call; a single
+                    // run is read whole, and its result already holds the text.
+                    break;
+
                 case "result":
                     // Only the first result line counts. A function that manages to emit a
                     // second one cannot overwrite the verdict.

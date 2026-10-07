@@ -41,20 +41,29 @@ describe("TriggerHttpCard", () => {
     expect(screen.getByText(/\/logic\/v4\/fn\/fn-1/)).toBeTruthy();
   });
 
-  it("offers GET and POST, one at a time, and shows only the chosen one on the endpoint", async () => {
+  it("has one method editor only: the accepted-methods buttons, no separate GET/POST switch", async () => {
     const onChange = render(tokenTrigger);
 
-    expect(screen.getByRole("tab", { name: "GET" })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: "POST" })).toBeTruthy();
-    expect(screen.queryByRole("tab", { name: /PUT|PATCH|DELETE/ })).toBeNull();
-    // The badge on the endpoint block is the trigger's method — the tabs and the accepted-methods
-    // toggles are the other two POSTs.
-    expect(screen.getAllByText("POST")).toHaveLength(3);
-    expect(screen.getAllByText("GET")).toHaveLength(2);
+    expect(screen.queryByRole("tablist", { name: "HTTP method" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Accept POST" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
 
-    await userEvent.click(screen.getByRole("tab", { name: "GET" }));
+    // Adding GET then dropping POST is how a POST function becomes a GET one.
+    await userEvent.click(screen.getByRole("button", { name: "Accept GET" }));
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ httpMethods: ["GET", "POST"] }),
+    );
+  });
 
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ httpMethod: "Get" }));
+  it("stores a lone GET in the old single-method shape", async () => {
+    const onChange = render({ ...tokenTrigger, httpMethods: ["GET", "POST"] });
+
+    await userEvent.click(screen.getByRole("button", { name: "Accept POST" }));
+
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ httpMethods: [], httpMethod: "Get" }),
+    );
   });
 
   it("offers the proxy's two kinds, by name", () => {
@@ -163,16 +172,6 @@ describe("TriggerHttpCard", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Accept POST" }));
 
-    expect(onChange).not.toHaveBeenCalled();
-  });
-
-  it("hides the single-method tabs while a multi-verb list is in use, so nothing can collapse it", async () => {
-    const onChange = render({ ...tokenTrigger, httpMethods: ["GET", "PUT"] });
-
-    expect(screen.queryByRole("tab", { name: "POST" })).toBeNull();
-    // Tabbing through the card (focus alone) must never rewrite the method list.
-    await userEvent.tab();
-    await userEvent.tab();
     expect(onChange).not.toHaveBeenCalled();
   });
 

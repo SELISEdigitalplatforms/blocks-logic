@@ -32,6 +32,86 @@ namespace Blocks.FunctionRunner.Tests
             => sandbox.RunCallAsync(id, Lines.Envelope(id), RunLimits.Default, startupMs, null, token);
 
         [Fact]
+        public async Task The_answer_is_handed_over_at_the_result_line_before_the_idle()
+        {
+            // ctx.waitUntil work runs after the result and before idle: the caller must not wait for it.
+            var (sandbox, container) = await ReadyAsync(c => c.OnCall = id => [Lines.Started(id), Lines.Result(id, "7")]);
+            var answered = new TaskCompletionSource<SandboxOutput>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var answers = 0;
+
+            var call = sandbox.RunCallAsync("run_early", Lines.Envelope("run_early"), RunLimits.Default, null, null, default,
+                onAnswer: o => { answers++; answered.TrySetResult(o); });
+
+            var output = await answered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            output.Ok.Should().BeTrue();
+            output.ResultJson.Should().Be("7");
+            call.IsCompleted.Should().BeFalse("the call is not over until its idle");
+
+            container.Push(Lines.Log("run_early", "after the answer"));
+            container.Push(Lines.Result("run_early", "8"));
+            container.Push(Lines.Idle("run_early", clean: true));
+            var done = await call;
+
+            answers.Should().Be(1);
+            done.Result.Output.ResultJson.Should().Be("7");
+            done.Result.Output.Logs.Should().ContainSingle(l => l.Contains("after the answer"));
+        }
+
+        [Fact]
+        public async Task Another_calls_result_line_is_not_this_calls_answer()
+        {
+            var (sandbox, _) = await ReadyAsync(c => c.OnCall = id =>
+                [Lines.Result("run_other", "1"), Lines.Started(id), Lines.Failure(id, ErrorCodes.UserRuntimeError, "boom"), Lines.Idle(id, clean: true)]);
+            var seen = new List<SandboxOutput>();
+
+            await sandbox.RunCallAsync("run_mine", Lines.Envelope("run_mine"), RunLimits.Default, null, null, default,
+                onAnswer: seen.Add);
+
+            seen.Should().ContainSingle().Which.Ok.Should().BeFalse();
+        }
+
+        [Fact]
+        public async Task A_call_without_a_result_line_is_never_answered_early_and_a_throwing_callback_is_harmless()
+        {
+            var (sandbox, _) = await ReadyAsync(c => c.OnCall = id => [Lines.Started(id), Lines.Idle(id, clean: true)]);
+            var calls = 0;
+
+            await sandbox.RunCallAsync("run_none", Lines.Envelope("run_none"), RunLimits.Default, null, null, default,
+                onAnswer: _ => calls++);
+            calls.Should().Be(0);
+
+            var (other, container) = await ReadyAsync();
+            var call = await other.RunCallAsync("run_throw", Lines.Envelope("run_throw"), RunLimits.Default, null, null, default,
+                onAnswer: _ => throw new InvalidOperationException("caller broke"));
+            call.Discard.Should().BeNull("a callback failure is not the sandbox's");
+            call.Result.Output.ResultJson.Should().Be("\"ok\"");
+        }
+
+        [Fact]
+        public async Task A_calls_stream_pieces_are_handed_on_in_order_and_no_other_calls()
+        {
+            var (sandbox, _) = await ReadyAsync(c => c.OnCall = id =>
+            [
+                Lines.Started(id),
+                Lines.Chunk(id, "Hel"),
+                Lines.Chunk("run_other", "not yours"),
+                Lines.Chunk(id, "late piece", late: true),
+                Lines.Chunk(id, "lo"),
+                Lines.Result(id, "\"Hello\""),
+                Lines.Idle(id, clean: true),
+            ]);
+            var pieces = new List<string>();
+
+            var call = await sandbox.RunCallAsync("run_s", Lines.Envelope("run_s"), RunLimits.Default, null, null, default,
+                onChunk: pieces.Add);
+
+            pieces.Should().Equal("Hel", "lo");
+            call.Result.Output.Malformed.Should().BeEmpty("a chunk line is protocol, not stray output");
+            call.Result.Output.ResultJson.Should().Be("\"Hello\"");
+            call.Discard.Should().BeNull();
+        }
+
+        [Fact]
         public async Task A_call_reports_the_runtimes_own_cpu_for_the_handler_window_not_dockers_total()
         {
             // Docker's figure is the container's total since the last call (unpause, envelope read,

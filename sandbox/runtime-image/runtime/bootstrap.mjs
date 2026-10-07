@@ -15,7 +15,7 @@
 // output at all.
 
 import { readFileSync } from 'node:fs';
-import { ProtocolWriter, LIMITS, EXIT, CODE } from './protocol.mjs';
+import { ProtocolWriter, LIMITS, EXIT, CODE, isStream, pumpStream } from './protocol.mjs';
 import { parseEnvelope, EnvelopeError, blocksWithToken } from './envelope.mjs';
 
 const ENVELOPE_PATH = process.env.BLOCKS_EXECUTION_FILE || '/run/blocks/execution.json';
@@ -277,13 +277,18 @@ async function main() {
     value = deadline
       ? await Promise.race([handler(envelope.input, ctx), deadline])
       : await handler(envelope.input, ctx);
+    // A streamed answer (F-5). A single run is read whole by the runner, so nobody sees the
+    // pieces live here (Test, workflow steps); its start is the result, as in reuse mode.
+    if (isStream(value)) {
+      value = deadline ? await Promise.race([pumpStream(value, writer), deadline]) : await pumpStream(value, writer);
+    }
   } catch (err) {
     if (timer) _clearTimeout(timer);
     const d = describe(err);
     return finish(EXIT.USER_ERROR, {
-      code: err?.__timeout ? CODE.TIMED_OUT : CODE.USER_RUNTIME_ERROR,
+      code: err?.__timeout ? CODE.TIMED_OUT : (err?.__code ?? CODE.USER_RUNTIME_ERROR),
       message: d.message,
-      stack: err?.__timeout ? undefined : d.stack,
+      stack: err?.__timeout || err?.__code ? undefined : d.stack,
     });
   }
   if (timer) _clearTimeout(timer);

@@ -15,6 +15,7 @@ import {
 import {
   IFunctionBuild,
   IFunctionVersionSummary,
+  IDeployPending,
   IGetVersionsResponse,
 } from "../types/version.types";
 import {
@@ -74,7 +75,10 @@ export class FunctionService {
     return this.logicHttpClient.post(FUNCTIONS_ENDPOINTS.TEST, payload);
   };
 
-  deployFunction = (payload: IDeployFunctionPayload): Promise<IFunctionVersionSummary> => {
+  /** 200 → the new version; 202 → the build is still running (see useDeploy). */
+  deployFunction = (
+    payload: IDeployFunctionPayload,
+  ): Promise<IFunctionVersionSummary | IDeployPending> => {
     return this.logicHttpClient.post(FUNCTIONS_ENDPOINTS.DEPLOY, payload);
   };
 

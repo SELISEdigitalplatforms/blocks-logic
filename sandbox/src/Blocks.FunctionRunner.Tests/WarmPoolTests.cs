@@ -59,6 +59,76 @@ namespace Blocks.FunctionRunner.Tests
         private async Task<string> ServeAsync(WarmHandle handle, string id) =>
             await _pool.ReleaseAsync(handle, await CallAsync(handle, id));
 
+        // ---- FN-6: a version that fails to load is held (2026-10-07) ------------------------------
+
+        private void FailToLoad() => _factory.Configure = c =>
+        {
+            c.OnStart.Clear();
+            c.OnStart.Add(Lines.Fatal(ErrorCodes.UserRuntimeError, "the function module failed to load: SyntaxError"));
+            c.Exit = (10, false);
+        };
+
+        [Fact]
+        public async Task A_version_that_fails_to_load_is_answered_from_its_failure_until_the_hold_ends()
+        {
+            FailToLoad();
+
+            var first = await _pool.AcquireAsync(Key, RunLimits.Default, CancellationToken.None);
+            first.Status.Should().Be(WarmAcquireStatus.StartFailed);
+            _factory.Created.Should().ContainSingle();
+
+            var second = await _pool.AcquireAsync(Key, RunLimits.Default, CancellationToken.None);
+            second.Status.Should().Be(WarmAcquireStatus.StartFailed);
+            second.Start!.Output.ErrorMessage.Should().Contain("SyntaxError", "the same answer as the real start");
+            second.Start.StartupMs.Should().Be(0, "no sandbox was made for it");
+            _factory.Created.Should().ContainSingle("no new start");
+            (await _pool.PrewarmAsync(Key, RunLimits.Default, 1, CancellationToken.None)).Should().Be(0);
+            _factory.Created.Should().ContainSingle("nor a pre-warm");
+
+            // Another version — the fix, deployed — is not held.
+            _factory.Configure = null;
+            (await _pool.AcquireAsync(Key with { VersionId = "v2" }, RunLimits.Default, CancellationToken.None))
+                .Status.Should().Be(WarmAcquireStatus.Acquired);
+
+            _time.Advance(TimeSpan.FromSeconds(_options.FailedLoadHoldSeconds + 1));
+            (await _pool.AcquireAsync(Key, RunLimits.Default, CancellationToken.None))
+                .Status.Should().Be(WarmAcquireStatus.Acquired, "the hold is over: started again");
+        }
+
+        [Fact]
+        public async Task With_the_hold_off_every_call_starts_again()
+        {
+            await using var off = With(o => o.FailedLoadHoldSeconds = 0);
+            off.FailToLoad();
+
+            await off._pool.AcquireAsync(Key, RunLimits.Default, CancellationToken.None);
+            await off._pool.AcquireAsync(Key, RunLimits.Default, CancellationToken.None);
+
+            off._factory.Created.Should().HaveCount(2);
+        }
+
+        [Theory]
+        [InlineData(false, false, ErrorCodes.UserRuntimeError, true)]
+        [InlineData(true, false, ErrorCodes.TimedOut, false)]          // slow load: may pass
+        [InlineData(false, true, ErrorCodes.UserRuntimeError, false)]  // OOM at load
+        [InlineData(false, false, null, false)]                        // crashed without a verdict
+        public void Only_the_functions_own_load_error_is_held(bool timedOut, bool oom, string? code, bool held)
+        {
+            var output = new Protocol.SandboxOutput();
+            if (code is not null)
+            {
+                new Protocol.SandboxOutputParser().Feed(output,
+                    System.Text.Json.JsonSerializer.Serialize(new { t = "result", ok = false, code, message = "x" }));
+            }
+            var start = new WarmStartResult
+            {
+                Status = WarmStartStatus.LoadFailed, Output = output, TimedOut = timedOut, OomKilled = oom,
+            };
+
+            WarmPool.IsOwnLoadFailure(start).Should().Be(held);
+            WarmPool.IsOwnLoadFailure(start with { Status = WarmStartStatus.HostFailure }).Should().BeFalse();
+        }
+
         [Fact]
         public async Task A_clean_sandbox_is_paused_and_reused_by_the_next_call()
         {

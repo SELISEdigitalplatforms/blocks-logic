@@ -116,6 +116,37 @@ namespace XUnitTest.Functions
 
         private static FunctionRunEntity Run(RunStatus status) => new() { ItemId = "run", Status = status, Result = "{\"ok\":true}" };
 
+        // ---- the active version is kept in memory, and a new deploy is seen at once --
+
+        [Fact]
+        public async Task The_active_version_is_read_from_mongo_once_across_calls()
+        {
+            var service = Service();
+
+            await service.InvokeFromWorkflowAsync(Tenant, "fn-1", "{}", null, null, "wf-1");
+            await service.InvokeFromWorkflowAsync(Tenant, "fn-1", "{}", null, null, "wf-1");
+
+            _versions.Verify(v => v.GetByIdAsync(Tenant, "v-1", It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task A_new_deploy_is_used_on_the_very_next_call()
+        {
+            var service = Service();
+            await service.InvokeFromWorkflowAsync(Tenant, "fn-1", "{}", null, null, "wf-1");
+            _created!.VersionId.Should().Be("v-1");
+
+            var v2 = new FunctionVersionEntity { ItemId = "v-2", FunctionId = "fn-1", Number = 2, ImageDigest = "sha256:def" };
+            v2.Limits.TimeoutSeconds = 60;
+            _versions.Setup(v => v.GetByIdAsync(Tenant, "v-2", It.IsAny<CancellationToken>())).ReturnsAsync(v2);
+            _function.ActiveVersionId = "v-2";
+
+            await service.InvokeFromWorkflowAsync(Tenant, "fn-1", "{}", null, null, "wf-1");
+
+            _created!.VersionId.Should().Be("v-2");
+            _created.VersionNumber.Should().Be(2);
+        }
+
         // ---- secret references stay references in the queue -----------------------
 
         /// <summary>
@@ -609,20 +640,20 @@ namespace XUnitTest.Functions
         {
             RunIs(() => Run(RunStatus.Queued));
             _redis.Fake.On("StringSetAsync", _ => false);          // the window is already held
-            _redis.Fake.On("KeyTimeToLiveAsync", _ => TimeSpan.FromSeconds(90));
+            _redis.Fake.On("KeyTimeToLiveAsync", _ => TimeSpan.FromSeconds(45));
 
             var act = async () => await Service()
                 .TestAsync(Tenant, "fn-1", new TestFunctionRequestDto { FunctionId = "fn-1", InputJson = "{}" });
 
             var thrown = await act.Should().ThrowAsync<FunctionRateLimitedException>();
-            thrown.Which.RetryAfterSeconds.Should().Be(90, "the caller is told when, not just no");
+            thrown.Which.RetryAfterSeconds.Should().Be(45, "the caller is told when, not just no");
             _redis.Fake.Calls("StreamAddAsync").Should().BeEmpty("nothing is queued for a refused test");
         }
 
         [Fact]
-        public async Task The_window_is_two_minutes()
+        public async Task The_window_is_one_minute()
         {
-            FunctionQueueKeys.TestRateWindow.Should().Be(TimeSpan.FromSeconds(120));
+            FunctionQueueKeys.TestRateWindow.Should().Be(TimeSpan.FromSeconds(60));
             await Task.CompletedTask;
         }
 

@@ -6,16 +6,10 @@ import { cn } from "@/lib/utils";
 import { AccessRulePicker } from "@/modules/proxy/components/proxy-access-card";
 import { useIamPermissions, useIamRoles } from "@/modules/proxy/hooks";
 import type { ProxyAccessRule } from "@/modules/proxy/types";
-import {
-  FUNCTION_HTTP_METHODS,
-  FUNCTION_HTTP_VERBS,
-  acceptedHttpVerbs,
-  toHttpVerb,
-} from "../../constants/endpoint.constant";
+import { FUNCTION_HTTP_VERBS, acceptedHttpVerbs } from "../../constants/endpoint.constant";
 import {
   AccessCombine,
   AuthMode,
-  HttpTriggerMethod,
   HttpTriggerVerb,
   ITriggerConfig,
   MatchMode,
@@ -69,6 +63,9 @@ const RESPONSE_OPTIONS: Array<{
 ];
 
 /**
+ * The only method editor. There used to be a GET/POST switch beside it too, but it edited the same
+ * setting (it showed only while one GET or POST was on) — two controls for one thing.
+ *
  * The verbs after one is toggled, as the trigger stores them. A single GET or POST goes back to
  * the legacy single `httpMethod` (and an empty list), so a function that only ever needed one
  * method keeps the shape every older function has. The last verb cannot be removed.
@@ -143,51 +140,20 @@ export const TriggerHttpCard = ({ value, onChange, functionId }: TriggerHttpCard
     <Card className="rounded-xl">
       <CardContent className="space-y-5 p-5">
         <div className="space-y-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="text-sm font-semibold">HTTP endpoint</p>
-              {isSync ? (
-                <p className="text-xs text-muted-foreground">
-                  Always on. The caller waits for the function&apos;s answer; a run that takes too
-                  long returns <code className="font-mono">202 Accepted</code> with a run id and a
-                  poll token instead.
-                </p>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  Always on. The call returns <code className="font-mono">202 Accepted</code> with a
-                  run id and a poll token — never the result itself, so nothing holds a connection
-                  open for the length of a run.
-                </p>
-              )}
-            </div>
-            {/* The single-method shape every older function has. Hidden while a multi-verb list is in
-                use: the verb buttons below are the only editor then, so nothing — not even moving
-                keyboard focus across these tabs — can collapse the list back to one method.
-                Manual activation: focus alone never changes the method. */}
-            {!hasVerbList && (
-            <Tabs
-              value={value.httpMethod}
-              activationMode="manual"
-              onValueChange={(method) =>
-                patch({ httpMethod: method as HttpTriggerMethod, httpMethods: [] })
-              }
-              className="w-auto flex-shrink-0"
-            >
-              <TabsList
-                className="grid h-8 grid-cols-2 rounded-md bg-muted p-0.5"
-                aria-label="HTTP method"
-              >
-                {FUNCTION_HTTP_METHODS.map((method) => (
-                  <TabsTrigger
-                    key={method}
-                    value={method}
-                    className="rounded px-3 font-mono text-xs"
-                  >
-                    {toHttpVerb(method)}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
+          <div>
+            <p className="text-sm font-semibold">HTTP endpoint</p>
+            {isSync ? (
+              <p className="text-xs text-muted-foreground">
+                Always on. The caller waits for the function&apos;s answer; a run that takes too
+                long returns <code className="font-mono">202 Accepted</code> with a run id and a
+                poll token instead.
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Always on. The call returns <code className="font-mono">202 Accepted</code> with a
+                run id and a poll token — never the result itself, so nothing holds a connection
+                open for the length of a run.
+              </p>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">

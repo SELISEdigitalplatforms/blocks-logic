@@ -123,6 +123,13 @@ namespace Blocks.FunctionRunner.Contracts
         public const string RunReuseField = "reuse";
 
         /// <summary>
+        /// Run-hash field <c>phase</c>, display only: <see cref="RunPhaseBuilding"/> while a test
+        /// builds its image. Not the status — the Api reads any status past Queued as "started".
+        /// </summary>
+        public const string RunPhaseField = "phase";
+        public const string RunPhaseBuilding = "building";
+
+        /// <summary>
         /// Optional field of a run entry: the Api's step times (<see cref="RunJob.ApiTimings"/>).
         /// Optional field of a result entry, <see cref="ResultTimingsField"/>: every step time of
         /// the call so far — <c>api.*</c>, <c>queue</c>, <c>handover.*</c> — for the run record.
@@ -218,6 +225,23 @@ namespace Blocks.FunctionRunner.Contracts
         /// <summary>Channel that wakes an API request waiting synchronously on a run.</summary>
         public static string SyncChannel(string runId) => $"{_prefix}function:sync:{runId}";
 
+        /// <summary>
+        /// A streamed answer (F-5): a Redis stream of the run's pieces in order — entries with
+        /// <see cref="StreamDataField"/>, then one with <see cref="StreamEndField"/> (the final
+        /// status). Ordered and lossless, so a reader that falls behind or comes late misses
+        /// nothing. TTL <see cref="StreamOutTtl"/>.
+        /// </summary>
+        public static string StreamOut(string runId) => $"{_prefix}function:stream:{runId}";
+
+        /// <summary>Wakes the Api request reading <see cref="StreamOut"/>; the message carries nothing.</summary>
+        public static string StreamChannel(string runId) => $"{_prefix}function:stream-nudge:{runId}";
+
+        public const string StreamDataField = "d";
+        public const string StreamEndField = "end";
+        public const string StreamCodeField = "code";
+        public const string StreamMessageField = "message";
+        public static readonly TimeSpan StreamOutTtl = TimeSpan.FromMinutes(10);
+
         /// <summary>Per-function concurrency counter; overflow queues and never rejects.</summary>
         public static string Concurrency(string functionId) => $"{_prefix}function:concurrency:{functionId}";
 
@@ -242,6 +266,13 @@ namespace Blocks.FunctionRunner.Contracts
 
         /// <summary>Runner heartbeat hash. TTL 15 s, so a dead runner disappears quickly.</summary>
         public static string Runner(string runnerId) => $"{_prefix}function:runner:{runnerId}";
+
+        /// <summary>
+        /// Set of runner ids that have sent a heartbeat (FN-17). Membership only: whether a runner is
+        /// alive is read from its <see cref="Runner"/> hash's TTL (Redis's clock, not the hosts'),
+        /// and members whose hash is gone are removed by whoever reads the set.
+        /// </summary>
+        public static string Runners => _prefix + "function:runners";
 
         /// <summary>Source bundle for a build. TTL 1 h.</summary>
         public static string Source(string buildId) => $"{_prefix}function:source:{buildId}";

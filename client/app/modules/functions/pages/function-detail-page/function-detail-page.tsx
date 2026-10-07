@@ -25,7 +25,9 @@ import { isErrorWithErrors } from "@/lib/error";
 import { cn } from "@/lib/utils";
 import { useGetFunction } from "../../hooks/use-function";
 import { useFunctionEditor } from "../../hooks/use-function-editor";
-import { useDeployFunction, useUpdateFunction } from "../../hooks/use-functions";
+import { useUpdateFunction } from "../../hooks/use-functions";
+import { useDeploy } from "../../hooks/use-deploy";
+import { BuildProgress } from "../../components/build-progress";
 import { useGetRuns } from "../../hooks/use-runs";
 import { useGetVersions } from "../../hooks/use-versions";
 import { useFunctionEditorStore } from "../../store/function-editor-store";
@@ -191,7 +193,17 @@ export const FunctionDetailPage = () => {
 
   const { data: fn, isLoading, isFetched } = useGetFunction({ functionId });
   const { save, isSaving, isDirty } = useFunctionEditor(functionId, fn);
-  const { mutateAsync: deployAsync, isPending: isDeploying } = useDeployFunction();
+  const {
+    deploy,
+    isBuilding,
+    buildId: deployBuildId,
+  } = useDeploy(functionId, {
+    onDeployed: (version) => showSuccessToast({ description: `Deployed as v${version.number}.` }),
+    onFailed: (error) =>
+      isErrorWithErrors(error)
+        ? showErrorToast({ errors: error.errors })
+        : showErrorToast({ errors: "Failed to deploy function" }),
+  });
   const { mutateAsync: renameAsync, isPending: isRenaming } = useUpdateFunction();
 
   const indexJs = useFunctionEditorStore((s) => s.indexJs);
@@ -285,8 +297,8 @@ export const FunctionDetailPage = () => {
     try {
       // Deploying the previous source because the save failed would ship the wrong code.
       if (isDirty && !(await save())) return;
-      const version = await deployAsync({ functionId });
-      showSuccessToast({ description: `Deployed as v${version.number}.` });
+      // Toasts come from useDeploy: the version may arrive now or after the build (202).
+      await deploy();
     } catch (error) {
       if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
       return showErrorToast({ errors: "Failed to deploy function" });
@@ -328,9 +340,7 @@ export const FunctionDetailPage = () => {
   }
   if (!fn) return null;
 
-  // Deploy answers with the version once the image is built, so "Building…" is exactly the window
-  // where that request is in flight — the API exposes no build id to poll from here.
-  const isBuilding = isDeploying;
+  // "Building…" covers the deploy request and, when it answered 202, the build it is watching.
   const isDeployed = fn.activeVersionNumber != null;
   const hasUndeployedChanges = isDirty || fn.isDirty;
   const deployLabel = isBuilding
@@ -475,6 +485,13 @@ export const FunctionDetailPage = () => {
             </Button>
           </div>
         </div>
+
+        {/* A deploy whose build outlasted the request (202): its progress, and its log if it fails. */}
+        {deployBuildId && (
+          <div className="mb-2">
+            <BuildProgress buildId={deployBuildId} />
+          </div>
+        )}
 
         <Tabs
           value={queryParams.tab}

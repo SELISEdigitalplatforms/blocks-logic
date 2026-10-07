@@ -31,6 +31,7 @@ namespace Blocks.FunctionRunner.Runs
         private readonly ISandbox _sandbox;
         private readonly IImageResolver _images;
         private readonly HostBudget _budget;
+        private readonly FleetCapacity? _fleet;
         private readonly Maintenance.IImageUsageLog? _usage;
         private readonly SecretStore.ISecretStoreBreaker? _secretBreaker;
         private readonly IRunSecretResolver _secrets;
@@ -51,8 +52,10 @@ namespace Blocks.FunctionRunner.Runs
             Maintenance.IImageUsageLog? usage = null,
             SecretStore.ISecretStoreBreaker? secretBreaker = null,
             WarmPool? warmPool = null,
-            System.Diagnostics.ActivitySource? traces = null)
+            System.Diagnostics.ActivitySource? traces = null,
+            FleetCapacity? fleet = null)
         {
+            _fleet = fleet;
             _traces = traces;
             _db = db;
             _sandbox = sandbox;
@@ -151,6 +154,29 @@ namespace Blocks.FunctionRunner.Runs
         /// <summary>True while the run's payload exists, i.e. it has not expired or been withdrawn.</summary>
         public async Task<bool> IsLiveAsync(string runId)
             => await _db.KeyExistsAsync(RedisKeys.Run(runId)).ConfigureAwait(false);
+
+        /// <summary>
+        /// Marks a test run as building on this host, for the console to show. A field of its own,
+        /// never the status: the Api reads Claimed as "started" and would start the run's timeout
+        /// during the build. Only while the payload exists; a failure is logged, never thrown.
+        /// </summary>
+        public async Task MarkBuildingAsync(string runId)
+        {
+            try
+            {
+                await _db.ScriptEvaluateAsync(SetPhaseIfExistsScript, [RedisKeys.Run(runId)],
+                    [RedisKeys.RunPhaseBuilding]).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Could not mark run {RunId} building ({ExceptionType})", runId, ex.GetType().Name);
+            }
+        }
+
+        private const string SetPhaseIfExistsScript =
+            "if redis.call('EXISTS', KEYS[1]) == 1 then " +
+            "return redis.call('HSET', KEYS[1], '" + RedisKeys.RunPhaseField + "', ARGV[1]) end " +
+            "return 0";
 
         /// <summary>True when the control plane has asked for the run to stop.</summary>
         public async Task<bool> IsCancelRequestedAsync(string runId)
@@ -308,10 +334,11 @@ namespace Blocks.FunctionRunner.Runs
             // instead of two (each is a remote call on the hot path of every run). Whichever was
             // taken is released by its `await using` when the other refuses, so the outcome is
             // the same as taking them one after the other.
+            // A share of the fleet: the count is one key every runner shares (FN-17).
+            var tenantLimit = _options.TenantSlotLimit(_fleet?.For(_budget.Capacity) ?? _budget.Capacity);
             var tenantSlotTask = string.IsNullOrEmpty(job.TenantId)
                 ? Task.FromResult<FunctionConcurrency?>(null)
-                : FunctionConcurrency.TryEnterTenantAsync(
-                    _db, job.TenantId, job.RunId, _options.TenantSlotLimit(_budget.Capacity));
+                : FunctionConcurrency.TryEnterTenantAsync(_db, job.TenantId, job.RunId, tenantLimit);
             var slotTask = job.IsTest
                 ? FunctionConcurrency.TryEnterTestAsync(_db, job.FunctionId, job.RunId)
                 : FunctionConcurrency.TryEnterAsync(_db, job.FunctionId, job.RunId, limits.FunctionConcurrency);
@@ -329,7 +356,7 @@ namespace Blocks.FunctionRunner.Runs
             {
                 _logger.LogDebug(
                     "Tenant {TenantId} is at its share of {Limit} sandbox slot(s); deferring run {RunId}",
-                    job.TenantId, _options.TenantSlotLimit(_budget.Capacity), job.RunId);
+                    job.TenantId, tenantLimit, job.RunId);
                 return Disposition.Deferred;
             }
 
@@ -622,6 +649,12 @@ namespace Blocks.FunctionRunner.Runs
             WarmCallResult call;
             IReadOnlyList<string> resolvedValues;
             string? redeemed = null;
+            // The answer sent the moment the call's result line arrived, before the sandbox's idle.
+            // Its status is final: what happens after it (ctx.waitUntil work timing out, the
+            // sandbox dying, a cancel) only decides whether the sandbox is kept.
+            EarlyAnswer? answered = null;
+            // A streamed answer's pieces, relayed to the Api as they come (F-5); null until the first.
+            StreamRelay? relay = null;
             try
             {
                 // A warm sandbox whose runtime asks on demand (`await ctx.blocks.getAccessToken()`)
@@ -667,7 +700,28 @@ namespace Blocks.FunctionRunner.Runs
                     return value;
                 };
 
-                call = await handle.RunCallAsync(job.RunId, line, limits, claimed, lease.Token, onDemand ? accessToken : null).ConfigureAwait(false);
+                Action<SandboxOutput> onAnswer = output =>
+                {
+                    if (answered is not null || lease.LeaseLost || token.IsCancellationRequested) return;
+                    var (status, code, message) = RunOutcome.Map(false, 0, false, lease.CancelRequested, output);
+                    IReadOnlyList<string> masked = Volatile.Read(ref redeemed) is { } asked
+                        ? [.. resolvedValues, asked]
+                        : resolvedValues;
+                    var redacted = Redact(message, masked);
+                    // The stream's end goes out after its last piece (same connection, in order).
+                    var written = relay is { Started: true }
+                        ? Task.WhenAll(AnswerAsync(job, runKey, status, output.ResultJson), relay.EndAsync(status, code, redacted))
+                        : AnswerAsync(job, runKey, status, output.ResultJson);
+                    answered = new EarlyAnswer(status, code, redacted, written);
+                };
+                Action<string> onChunk = data =>
+                {
+                    if (lease.LeaseLost) return;
+                    (relay ??= new StreamRelay(_db, job.RunId, _logger)).Send(data);
+                };
+
+                call = await handle.RunCallAsync(job.RunId, line, limits, claimed, lease.Token,
+                    onDemand ? accessToken : null, onAnswer, onChunk).ConfigureAwait(false);
 
                 // A sandbox from the pool that died before this call's `started` line — it would
                 // not resume, would not take the envelope, or exited on the spot — failed nobody's
@@ -689,7 +743,8 @@ namespace Blocks.FunctionRunner.Runs
                     if (fresh is null) return freshEarly is null ? Disposition.Deferred : freshEarly;
 
                     handle = fresh;
-                    call = await handle.RunCallAsync(job.RunId, line, limits, claimed, lease.Token, onDemand ? accessToken : null).ConfigureAwait(false);
+                    call = await handle.RunCallAsync(job.RunId, line, limits, claimed, lease.Token,
+                        onDemand ? accessToken : null, onAnswer, onChunk).ConfigureAwait(false);
                 }
             }
             catch
@@ -701,6 +756,8 @@ namespace Blocks.FunctionRunner.Runs
             }
 
             var discard = await _warm!.ReleaseAsync(handle, call).ConfigureAwait(false);
+            // Landed before the result entry below, as the result and status always have.
+            if (answered is not null) await answered.Written.ConfigureAwait(false);
             // A token the call asked for is masked like a resolved secret in everything recorded below.
             if (Volatile.Read(ref redeemed) is { } asked) resolvedValues = [.. resolvedValues, asked];
             timings.Log(_logger, job.RunId, call.HandoverMs, handle.Reused);
@@ -722,6 +779,7 @@ namespace Blocks.FunctionRunner.Runs
 
             if (result.HostFailure is not null)
             {
+                if (relay is not null) await relay.EndAsync(RunStatuses.Failed, ErrorCodes.SandboxStartFailed, null).ConfigureAwait(false);
                 await CompleteAsync(job, runKey, startedAt, RunStatuses.Failed, ErrorCodes.SandboxStartFailed,
                     Redact(result.HostFailure, resolvedValues), result.ExitCode, result.DurationMs,
                     null, null, null, null, false,
@@ -733,6 +791,20 @@ namespace Blocks.FunctionRunner.Runs
             var (status, errorCode, errorMessage) = RunOutcome.Map(
                 result.OomKilled, result.ExitCode, result.TimedOut, lease.CancelRequested, result.Output);
             errorMessage = Redact(errorMessage, resolvedValues);
+            if (answered is not null)
+            {
+                if (status != answered.Status)
+                {
+                    _logger.LogWarning(
+                        "Run {RunId} keeps the answer it gave ({Answered}); after it the call ended as {Later} (discard {Discard})",
+                        job.RunId, answered.Status, status, discard);
+                }
+                (status, errorCode, errorMessage) = (answered.Status, answered.ErrorCode, answered.ErrorMessage);
+            }
+
+            // A stream that never reached its result line (killed, crashed, timed out by the runner)
+            // still tells its reader how it ended. A no-op when the answer already closed it.
+            if (relay is not null) await relay.EndAsync(status, errorCode, errorMessage).ConfigureAwait(false);
 
             // Not fed to _budget.Observe: a warm call's memory figure is a snapshot of a long-lived
             // sandbox after the call, not the peak of one run, and the footprint estimate is a
@@ -1030,6 +1102,44 @@ namespace Blocks.FunctionRunner.Runs
         /// <b>before</b> the stream entry, so a crash between the two replays the run rather
         /// than losing it.
         /// </summary>
+        /// <summary>A warm call's outcome as fixed when its result line arrived, and its write.</summary>
+        private sealed record EarlyAnswer(string Status, string? ErrorCode, string? ErrorMessage, Task Written);
+
+        /// <summary>
+        /// The part of <see cref="CompleteAsync"/> the caller waits for — result, then status, then
+        /// the sync notification — sent as soon as a warm call's result line arrives instead of
+        /// after its ctx.waitUntil work, the clean-up check, the stats read and the pause. The
+        /// Api's fast path reads exactly these two keys. The Worker's result entry still comes
+        /// last (CompleteAsync writes both again, unchanged); a crash in between leaves a finished
+        /// status, which a redelivery re-publishes rather than runs again. Never throws: a failed
+        /// write only means the caller waits for the record, as before.
+        /// </summary>
+        private async Task AnswerAsync(RunJob job, string runKey, string status, string? resultJson)
+        {
+            try
+            {
+                var writes = new List<Task>(2);
+                if (resultJson is not null)
+                {
+                    writes.Add(_db.StringSetAsync(RedisKeys.Result(job.RunId), resultJson, RedisKeys.ResultTtl));
+                }
+                writes.Add(SetStatusAsync(runKey, status));
+                await Task.WhenAll(writes).ConfigureAwait(false);
+
+                // Only a success can be answered from Redis; anything else is answered from the
+                // record, so waking the caller now would cost it a read for nothing.
+                if (status == RunStatuses.Succeeded)
+                {
+                    await _db.PublishAsync(
+                        RedisChannel.Literal(RedisKeys.SyncChannel(job.RunId)), status).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Could not answer run {RunId} early ({ExceptionType})", job.RunId, ex.GetType().Name);
+            }
+        }
+
         private async Task CompleteAsync(
             RunJob job, string runKey, DateTimeOffset startedAt,
             string status, string? errorCode, string? errorMessage,
@@ -1136,9 +1246,10 @@ namespace Blocks.FunctionRunner.Runs
             await _db.StreamAddAsync(RedisKeys.ResultsStream, entry).ConfigureAwait(false);
             StreamWakeup.Publish(_db, RedisKeys.ResultsNudgeChannel);
 
-            // Wake anyone waiting synchronously on this run.
-            await _db.PublishAsync(
-                RedisChannel.Literal(RedisKeys.SyncChannel(job.RunId)), status).ConfigureAwait(false);
+            // Wake anyone waiting synchronously on this run. Not waited for (FN-4): it is a hint —
+            // the Api's waiter also polls — and it follows the result writes on the same
+            // connection, so it still lands after them.
+            StreamWakeup.Publish(_db, RedisKeys.SyncChannel(job.RunId), status);
 
             _logger.LogInformation(
                 "Run {RunId} finished as {Status} in {DurationMs}ms (exit {ExitCode})",

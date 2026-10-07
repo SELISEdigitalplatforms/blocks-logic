@@ -5,7 +5,11 @@ using StackExchange.Redis;
 namespace Blocks.FunctionRunner.Redis
 {
     /// <summary>One entry claimed from a stream.</summary>
-    public sealed record ClaimedEntry(RedisValue Id, IReadOnlyDictionary<string, string> Fields)
+    /// <param name="Fresh">
+    /// Read with <c>XREADGROUP &gt;</c>: never delivered to anyone before, so its delivery count is
+    /// 1 by definition and need not be asked for. False for a reclaimed entry.
+    /// </param>
+    public sealed record ClaimedEntry(RedisValue Id, IReadOnlyDictionary<string, string> Fields, bool Fresh = false)
     {
         public string? Get(string field) => Fields.TryGetValue(field, out var v) ? v : null;
 
@@ -71,7 +75,7 @@ namespace Blocks.FunctionRunner.Redis
             {
                 var entries = await _db.StreamReadGroupAsync(
                     _stream, _group, _consumer, StreamPosition.NewMessages, count).ConfigureAwait(false);
-                return Convert(entries);
+                return Convert(entries, fresh: true);
             }
             catch (RedisException ex)
             {
@@ -120,6 +124,14 @@ namespace Blocks.FunctionRunner.Redis
         /// How many times this entry has been delivered, across all runners. Used to retire an
         /// entry that keeps killing whoever picks it up.
         /// </summary>
+        /// <remarks>
+        /// A fresh read answers 1 without a Redis call — one round trip saved on every run (FN-4).
+        /// A reclaimed entry is still looked up, so the poison-entry budget keeps working.
+        /// </remarks>
+        public Task<int> DeliveryCountAsync(ClaimedEntry entry)
+            => entry.Fresh ? Task.FromResult(1) : DeliveryCountAsync(entry.Id);
+
+        /// <summary>The delivery count of an entry by id, always asked of Redis.</summary>
         public async Task<int> DeliveryCountAsync(RedisValue id)
         {
             try
@@ -175,7 +187,7 @@ namespace Blocks.FunctionRunner.Redis
             _logger.LogError("Dead-lettered entry {Id} from {Stream}: {Reason}", entry.Id, _stream, reason);
         }
 
-        private static List<ClaimedEntry> Convert(StackExchange.Redis.StreamEntry[] entries)
+        private static List<ClaimedEntry> Convert(StackExchange.Redis.StreamEntry[] entries, bool fresh = false)
         {
             var result = new List<ClaimedEntry>(entries.Length);
             foreach (var entry in entries)
@@ -186,7 +198,7 @@ namespace Blocks.FunctionRunner.Redis
                 {
                     if (value.Name.HasValue) fields[value.Name!] = value.Value.ToString();
                 }
-                result.Add(new ClaimedEntry(entry.Id, fields));
+                result.Add(new ClaimedEntry(entry.Id, fields, fresh));
             }
             return result;
         }

@@ -20,7 +20,8 @@ namespace Functions.DomainService.Services
     ///   "path":    "orders/42",                 // what followed /api/fn/{id}/, "" for none
     ///   "query":   { "limit": "10", "tag": ["a", "b"] },
     ///   "headers": { "content-type": "application/json", ... },
-    ///   "body":    { ... } | "raw text" | null
+    ///   "body":    { ... } | "raw text" | null,
+    ///   "rawBody": "base64 of the exact bytes" | null
     /// }
     /// </code>
     /// <para>
@@ -61,6 +62,28 @@ namespace Functions.DomainService.Services
             "x-forwarded-for",
             "x-forwarded-proto",
             "x-forwarded-host",
+
+            // Webhook signatures (F-3, 2026-10-07): a signature proves who sent the body, it
+            // grants nothing, so it may travel. Verified against `rawBody` and the tenant's own
+            // signing secret (a bound variable), never against the parsed `body`.
+            "stripe-signature",
+            "x-hub-signature",
+            "x-hub-signature-256",
+            "x-github-event",
+            "x-github-delivery",
+            "x-shopify-hmac-sha256",
+            "x-shopify-topic",
+            "x-shopify-shop-domain",
+            "x-shopify-webhook-id",
+            "x-slack-signature",
+            "x-slack-request-timestamp",
+            // Svix and Standard Webhooks (Clerk, Resend, OpenAI and others).
+            "svix-id",
+            "svix-timestamp",
+            "svix-signature",
+            "webhook-id",
+            "webhook-timestamp",
+            "webhook-signature",
         };
 
         private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
@@ -79,6 +102,39 @@ namespace Functions.DomainService.Services
                 ["body"] = Body(request.Body, request.ContentType),
             };
 
+            return WithRawBody(input, request.Body);
+        }
+
+        /// <summary>
+        /// Room the rest of the envelope (identity, env, limits) needs beside the input; the same
+        /// margin <see cref="MaxBodyBytes"/> leaves.
+        /// </summary>
+        private const long EnvelopeMargin = 64 * 1024;
+
+        /// <summary>
+        /// Adds <c>rawBody</c>: the request's exact bytes, base64. A webhook signature is computed
+        /// over those bytes, and the parsed <c>body</c> cannot give them back (whitespace, key
+        /// order, number forms). It carries the body a second time, so it is added only when the
+        /// whole input still fits the input ceiling — otherwise <c>null</c>, and a body that is
+        /// accepted today is never refused for it. With no body it is <c>null</c>.
+        /// </summary>
+        private static string WithRawBody(JsonObject input, byte[]? body)
+        {
+            if (body is null || body.Length == 0)
+            {
+                input["rawBody"] = null;
+                return input.ToJsonString(SerializerOptions);
+            }
+
+            input["rawBody"] = null;
+            var without = input.ToJsonString(SerializerOptions);
+            var base64Length = 4L * ((body.Length + 2) / 3);
+            if (Encoding.UTF8.GetByteCount(without) + base64Length > FunctionLimits.Ceiling.InputBytes - EnvelopeMargin)
+            {
+                return without;
+            }
+
+            input["rawBody"] = Convert.ToBase64String(body);
             return input.ToJsonString(SerializerOptions);
         }
 
@@ -154,7 +210,9 @@ namespace Functions.DomainService.Services
                 ["body"] = isGet ? null : payload,
             };
 
-            return input.ToJsonString(SerializerOptions);
+            // A test carries its payload as the raw body too, so code that verifies or reads
+            // rawBody runs in Test as it will in production.
+            return WithRawBody(input, isGet || string.IsNullOrWhiteSpace(inputJson) ? null : Encoding.UTF8.GetBytes(inputJson));
         }
 
         private static JsonObject QueryFromPayload(JsonNode? payload)

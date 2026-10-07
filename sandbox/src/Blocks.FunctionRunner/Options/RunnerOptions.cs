@@ -58,10 +58,11 @@ namespace Blocks.FunctionRunner.Options
         /// How many function images this host keeps before evicting the least recently used, as
         /// <c>RUNNER__MaxCachedImages</c>.
         /// <para>
-        /// Zero (the default) derives it from the disk instead, so a 64 GB temp disk and a 512 GB
-        /// data disk both do something sensible without anyone setting a number. Set it to pin an
-        /// explicit count. Disk is a cache here, not a store: an evicted image rebuilds from its
-        /// artifact in seconds, so holding too few costs latency, never correctness.
+        /// Zero (the default) means no count limit: <see cref="ImageDiskPercent"/> alone decides, by
+        /// each image's own bytes over the shared base, so a 64 GB temp disk and a 512 GB data disk
+        /// both do something sensible without anyone setting a number. Set it to also pin an explicit
+        /// count. Disk is a cache here, not a store: an evicted image rebuilds from its artifact in
+        /// seconds, so holding too few costs latency, never correctness.
         /// </para>
         /// </summary>
         [Range(0, 100_000)]
@@ -101,8 +102,11 @@ namespace Blocks.FunctionRunner.Options
 
         /// <summary>
         /// The most sandbox slots one tenant may hold at once, as
-        /// <c>RUNNER__MaxSandboxesPerTenant</c>. Zero (the default) derives it as half the host's
-        /// capacity, rounded up.
+        /// <c>RUNNER__MaxSandboxesPerTenant</c>, for the whole fleet: the count is one Redis key
+        /// all runners share. Zero (the default) derives it as half the fleet's capacity (the sum
+        /// of live runners' heartbeats, <see cref="Admission.FleetCapacity"/>), rounded up — half
+        /// this host's when the fleet cannot be read. Before 2026-10-07 it was half the host's,
+        /// so with N runners a tenant got 1/(2N) of the fleet (FN-17).
         /// <para>
         /// The host budget on its own is first-come-first-served, so one tenant with a burst
         /// could hold every slot on a runner while every other tenant waited behind it. Nothing
@@ -112,9 +116,9 @@ namespace Blocks.FunctionRunner.Options
         /// </summary>
         public int MaxSandboxesPerTenant { get; set; }
 
-        /// <summary>The effective value of <see cref="MaxSandboxesPerTenant"/> for a given capacity.</summary>
-        public int TenantSlotLimit(int hostCapacity) =>
-            MaxSandboxesPerTenant > 0 ? MaxSandboxesPerTenant : Math.Max(1, (hostCapacity + 1) / 2);
+        /// <summary>The effective value of <see cref="MaxSandboxesPerTenant"/> for a given (fleet) capacity.</summary>
+        public int TenantSlotLimit(int capacity) =>
+            MaxSandboxesPerTenant > 0 ? MaxSandboxesPerTenant : Math.Max(1, (capacity + 1) / 2);
 
         /// <summary>
         /// Whether the registry admin API is reached over TLS. Null means "decide from
@@ -421,6 +425,34 @@ namespace Blocks.FunctionRunner.Options
         /// </summary>
         [Range(0, 8000)]
         public int StartBoostMillicores { get; set; } = 1000;
+
+        /// <summary>
+        /// The longest a sandbox keeps the start-up boost, as <c>RUNNER__StartBoostMaxMs</c>: it is
+        /// dropped at <c>ready</c> (warm) or <c>started</c> (single run), or after this long,
+        /// whichever comes first. Without it a module that loops or works hard at load kept 1 CPU
+        /// for the whole start allowance (30 s) on every start. A healthy start is ready in ~1 s.
+        /// 0 = no cap (dropped at ready/started only). Decided 2026-10-07 (user: "max 5s").
+        /// </summary>
+        [Range(0, 60_000)]
+        public int StartBoostMaxMs { get; set; } = 5000;
+
+        /// <summary>
+        /// Whether single runs (workflow steps, Test, reuse off) start boosted too, as
+        /// <c>RUNNER__StartBoostSingleRuns</c>. A single run has no <c>ready</c>: the boost is
+        /// dropped when its <c>started</c> line is read, so the handler's first ~50 ms (one
+        /// <c>docker update</c> under runsc) can still run boosted. False = single runs start at
+        /// the run limit, as before 2026-10-07.
+        /// </summary>
+        public bool StartBoostSingleRuns { get; set; } = true;
+
+        /// <summary>
+        /// How long a version whose module failed to load (its own error, not a timeout or a crash)
+        /// is not started again on this runner, as <c>RUNNER__FailedLoadHoldSeconds</c>. Calls in
+        /// that time fail at once with the same error and logs, at no sandbox cost. A new version
+        /// is a new key and is never held. 0 = off.
+        /// </summary>
+        [Range(0, 3600)]
+        public int FailedLoadHoldSeconds { get; set; } = 30;
 
         /// <summary>
         /// Container starts per second per core this host may make, as

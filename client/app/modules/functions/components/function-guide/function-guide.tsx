@@ -42,6 +42,8 @@ export const GUIDE_SECTIONS = [
   "speed",
   "rules",
   "api",
+  "webhooks",
+  "streaming",
   "limits",
   "network",
   "packages",
@@ -62,8 +64,8 @@ export const FunctionGuide = () => (
               items={[
                 <>
                   <Code>input</Code>: <Code>method</Code>, <Code>path</Code>, <Code>query</Code>,{" "}
-                  <Code>headers</Code>, <Code>body</Code> (a workflow step passes the previous
-                  step&apos;s output instead).
+                  <Code>headers</Code>, <Code>body</Code>, <Code>rawBody</Code> (a workflow step
+                  passes the previous step&apos;s output instead).
                 </>,
                 <>
                   <Code>ctx</Code>: <Code>env</Code> (your variables), <Code>context</Code> (the
@@ -137,6 +139,63 @@ export default async function handler(input, ctx) {
                 "Headers that pass: content-type, content-language, content-disposition, cache-control, expires, last-modified, etag, vary, retry-after; location on a 3xx; x-* except x-forwarded-*, x-real-ip, x-original-*, x-blocks-*. At most 32 headers / 8 KB. set-cookie is always dropped.",
                 "A failed run answers 502, a timed-out run 504. A call that takes longer than 30 s gets 202 + a poll token — the run still finishes.",
                 "Accepted methods (GET, POST, PUT, PATCH, DELETE) are set on the Trigger tab; any other gets 405.",
+              ]}
+            />
+          </AccordionContent>
+        </AccordionItem>
+
+        <AccordionItem value="webhooks">
+          <AccordionTrigger className="px-2 text-sm">Receiving webhooks</AccordionTrigger>
+          <AccordionContent className="flex flex-col gap-2 px-2">
+            <P>
+              Verify a webhook with <Code>input.rawBody</Code> (the exact bytes, base64) — never
+              with <Code>input.body</Code>, which is parsed and no longer matches the signature.
+              Keep the signing secret in a secret-bound variable.
+            </P>
+            <Block>{`import Stripe from "stripe";
+const stripe = new Stripe("unused"); // module level
+
+export default async function handler(input, ctx) {
+  const event = stripe.webhooks.constructEvent(
+    Buffer.from(input.rawBody, "base64"),
+    input.headers["stripe-signature"],
+    ctx.env.STRIPE_WEBHOOK_SECRET,
+  ); // throws if the signature is wrong
+  return { received: event.type };
+}`}</Block>
+            <Items
+              items={[
+                "Signature headers that reach the function: stripe-signature, x-hub-signature(-256), x-github-event, x-github-delivery, x-shopify-hmac-sha256, x-shopify-topic, x-shopify-shop-domain, x-shopify-webhook-id, x-slack-signature, x-slack-request-timestamp, svix-id/timestamp/signature, webhook-id/timestamp/signature.",
+                "rawBody is null when there is no body, or when the body is too large to carry twice (over about 450 KB).",
+                "Set the trigger to Public: the sender has no Blocks login. The signature check is what protects it.",
+              ]}
+            />
+          </AccordionContent>
+        </AccordionItem>
+
+        <AccordionItem value="streaming">
+          <AccordionTrigger className="px-2 text-sm">Streaming answers (AI)</AccordionTrigger>
+          <AccordionContent className="flex flex-col gap-2 px-2">
+            <P>
+              With Response = <strong>Wait for answer</strong>, yield pieces instead of returning
+              once: the caller gets each piece the moment you yield it.
+            </P>
+            <Block>{`export default async function* handler(input, ctx) {
+  const stream = await openai.chat.completions.create({
+    model: "gpt-4o-mini", stream: true,
+    messages: [{ role: "user", content: input.body.prompt }],
+  });
+  for await (const part of stream) {
+    yield part.choices[0]?.delta?.content ?? "";
+  }
+}`}</Block>
+            <Items
+              items={[
+                "Yield strings (sent as they are), bytes (sent as UTF-8 text) or objects (sent as one JSON line each). Returning any async iterable works too, such as a fetch response's body.",
+                "The caller gets plain text, or Server-Sent Events when it sends Accept: text/event-stream (each piece a data: event, then event: done).",
+                "If the run fails after it started streaming, an SSE caller gets event: error; a plain-text answer is cut off, so the client sees it as incomplete.",
+                "At most 3 MB per answer, inside the 30 s run time. The run's result keeps the first 256 KB of the text.",
+                "Test runs and workflow steps get the whole text at the end, not piece by piece.",
               ]}
             />
           </AccordionContent>

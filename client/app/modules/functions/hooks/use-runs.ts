@@ -109,6 +109,29 @@ export const useGetRunLogs = (runId: string | undefined, pageNumber = 0, pageSiz
   });
 };
 
+/**
+ * The newest Test run of a function. The Test request stays open until its run ends, so this is
+ * how the panel learns the run id early (live status + logs) and finds a test still running after
+ * a reload or a 429. `fast` polls while a Test request is open.
+ */
+export const useLatestTestRun = (functionId: string, options?: { fast?: boolean }) => {
+  return useQuery({
+    queryKey: [...RUNS_QUERY_KEY, "latest-test", functionId],
+    queryFn: async () => {
+      const response = await functionService.getRuns({
+        functionId,
+        invokedBy: "Test",
+        pageNumber: 0,
+        pageSize: 1,
+      });
+      return response?.data?.[0] ?? null;
+    },
+    enabled: !!functionId,
+    refetchOnWindowFocus: false,
+    refetchInterval: options?.fast ? 1500 : false,
+  });
+};
+
 export const useReplayRun = () => {
   const queryClient = useQueryClient();
   return useMutation({

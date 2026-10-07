@@ -18,6 +18,15 @@ export interface IGetVersionsResponse {
 
 export type BuildStatus = "Queued" | "Building" | "Succeeded" | "Failed";
 
+/** Deploy's 202 answer: the build outlasted the request's short wait. Watch it, then deploy it. */
+export interface IDeployPending {
+  buildId: string;
+  status: BuildStatus;
+}
+
+export const isDeployPending = (result: unknown): result is IDeployPending =>
+  typeof result === "object" && result !== null && "buildId" in result && !("number" in result);
+
 export interface IFunctionBuild {
   id: string;
   status: BuildStatus;

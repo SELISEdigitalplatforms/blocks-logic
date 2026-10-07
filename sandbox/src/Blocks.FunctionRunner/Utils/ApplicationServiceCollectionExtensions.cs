@@ -67,6 +67,7 @@ namespace Blocks.FunctionRunner.Utils
             services.AddSingleton<IHostSignals, ProcHostSignals>();
             services.AddSingleton<SandboxFootprint>();
             services.AddSingleton<HostBudget>();
+            services.AddSingleton<FleetCapacity>();
             // Typed client: Image GC deletes the registry's copy of an image as well as the
             // daemon's, so the two stores cannot drift apart.
             services.AddHttpClient<IRegistryClient, Maintenance.RegistryClient>();

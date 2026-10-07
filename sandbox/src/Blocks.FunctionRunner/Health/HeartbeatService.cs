@@ -24,6 +24,7 @@ namespace Blocks.FunctionRunner.Health
         private readonly RunnerOptions _options;
         private readonly ILogger<HeartbeatService> _logger;
         private readonly Sandbox.WarmPool? _warm;
+        private readonly FleetCapacity? _fleet;
 
         public HeartbeatService(
             IDatabase db,
@@ -31,8 +32,10 @@ namespace Blocks.FunctionRunner.Health
             StartupGuard guard,
             IOptions<RunnerOptions> options,
             ILogger<HeartbeatService> logger,
-            Sandbox.WarmPool? warm = null)
+            Sandbox.WarmPool? warm = null,
+            FleetCapacity? fleet = null)
         {
+            _fleet = fleet;
             _db = db;
             _budget = budget;
             _guard = guard;
@@ -78,6 +81,13 @@ namespace Blocks.FunctionRunner.Health
 
                     await _db.KeyExpireAsync(key, RedisKeys.HeartbeatTtl).ConfigureAwait(false);
 
+                    // The fleet's capacity for the tenant share, read here and not per run.
+                    if (_fleet is not null)
+                    {
+                        await _fleet.JoinAsync(_db).ConfigureAwait(false);
+                        await _fleet.RefreshAsync(_db).ConfigureAwait(false);
+                    }
+
                     // Which base image this host builds on, for the control plane's build cache. Old
                     // entries (no runner announced them for a day) are dropped as we go.
                     var nowSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -103,6 +113,7 @@ namespace Blocks.FunctionRunner.Health
             try
             {
                 await _db.KeyDeleteAsync(key).ConfigureAwait(false);
+                if (_fleet is not null) await _fleet.LeaveAsync(_db).ConfigureAwait(false);
             }
             catch (RedisException)
             {

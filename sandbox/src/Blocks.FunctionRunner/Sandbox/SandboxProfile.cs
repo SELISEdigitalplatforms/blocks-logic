@@ -48,12 +48,14 @@ namespace Blocks.FunctionRunner.Sandbox
         /// <param name="envelopeHostPath">Host path of this run's execution.json.</param>
         /// <param name="limits">Already-clamped limits. Nothing here re-clamps them.</param>
         /// <param name="options">Runner options supplying the network and resolv.conf.</param>
+        /// <param name="nanoCpus">The CPU to start with — the start-up boost — or null for the run limit.</param>
         public static CreateContainerParameters Create(
             string containerName,
             string image,
             string envelopeHostPath,
             RunLimits limits,
-            RunnerOptions options)
+            RunnerOptions options,
+            long? nanoCpus = null)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(containerName);
             ArgumentException.ThrowIfNullOrWhiteSpace(image);
@@ -61,7 +63,7 @@ namespace Blocks.FunctionRunner.Sandbox
             ArgumentNullException.ThrowIfNull(limits);
             ArgumentNullException.ThrowIfNull(options);
 
-            return Build(containerName, image, envelopeHostPath, limits, options);
+            return Build(containerName, image, envelopeHostPath, limits, options, nanoCpus);
         }
 
         // ---- reuse mode (sandbox/REUSE.md) ---------------------------------------------

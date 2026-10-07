@@ -56,7 +56,7 @@ namespace Blocks.FunctionRunner.Tests
             {
                 foreach (var id in _runIds)
                 {
-                    await _db.KeyDeleteAsync([RedisKeys.Run(id), RedisKeys.Lease(id), RedisKeys.Result(id), RedisKeys.Logs(id)]);
+                    await _db.KeyDeleteAsync([RedisKeys.Run(id), RedisKeys.Lease(id), RedisKeys.Result(id), RedisKeys.Logs(id), RedisKeys.StreamOut(id)]);
                 }
                 await _db.KeyDeleteAsync([RedisKeys.Concurrency(_functionId), RedisKeys.TenantSlots("tenant_test")]);
             }
@@ -298,6 +298,171 @@ namespace Blocks.FunctionRunner.Tests
             Field(result, "errorCode").Should().Be(ErrorCodes.UserRuntimeError);
             Field(result, "errorMessage").Should().Contain("failed to load");
             Field(result, "discard").Should().Be("crash");
+        }
+
+        // ---- FN-2: the answer does not wait for ctx.waitUntil (2026-10-07) ----------------------
+
+        [SkippableFact]
+        public async Task A_warm_caller_is_answered_at_the_result_line_before_waitUntil_work_ends()
+        {
+            Skip.If(Unavailable, "no Redis available");
+            var (processor, factory) = Processor(new CountingSandbox(), reuseOn: true);
+            factory.Configure = c => c.OnCall = id => [Lines.Started(id), Lines.Result(id, "42")];
+            var job = await QueueAsync(reuse: true);
+            var notified = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var sub = _redis!.GetSubscriber();
+            await sub.SubscribeAsync(RedisChannel.Literal(RedisKeys.SyncChannel(job.RunId)), (_, v) => notified.TrySetResult(v!));
+
+            var run = processor.ProcessAsync(job, default);
+
+            (await notified.Task.WaitAsync(TimeSpan.FromSeconds(5))).Should().Be(RunStatuses.Succeeded);
+            // What the Api's fast path reads is there; the Worker's entry is not, the run still goes on.
+            ((string?)await _db!.HashGetAsync(RedisKeys.Run(job.RunId), "status")).Should().Be(RunStatuses.Succeeded);
+            ((string?)await _db.StringGetAsync(RedisKeys.Result(job.RunId))).Should().Be("42");
+            (await _db.StreamRangeAsync(RedisKeys.ResultsStream, "-", "+"))
+                .Should().NotContain(e => e.Values.Any(f => f.Name == "runId" && f.Value == job.RunId));
+            run.IsCompleted.Should().BeFalse();
+
+            // The waitUntil work logs, then the runtime reports the call over.
+            factory.Created[0].Push(Lines.Log(job.RunId, "analytics sent"));
+            factory.Created[0].Push(Lines.Idle(job.RunId, clean: true));
+            (await run).Should().Be(RunProcessor.Disposition.Complete);
+
+            var entry = await ResultEntryAsync(job.RunId);
+            Field(entry, "status").Should().Be(RunStatuses.Succeeded);
+            Field(entry, "discard").Should().BeEmpty();
+            var logs = await _db.ListRangeAsync(RedisKeys.Logs(job.RunId));
+            logs.Select(l => (string)l!).Should().Contain(l => l.Contains("analytics sent"), "late logs still reach the record");
+            factory.Created[0].Pauses.Should().Be(1, "kept and paused, after the answer");
+        }
+
+        [SkippableFact]
+        public async Task An_answered_call_keeps_its_status_when_the_sandbox_dies_afterwards()
+        {
+            Skip.If(Unavailable, "no Redis available");
+            var (processor, factory) = Processor(new CountingSandbox(), reuseOn: true);
+            factory.Configure = c =>
+            {
+                c.Exit = (137, true);
+                c.OnCall = id =>
+                {
+                    // Answered, then OOM-killed inside its waitUntil work.
+                    c.Push(Lines.Started(id));
+                    c.Push(Lines.Result(id, "1"));
+                    c.End();
+                    return [];
+                };
+            };
+            var job = await QueueAsync(reuse: true);
+
+            (await processor.ProcessAsync(job, default)).Should().Be(RunProcessor.Disposition.Complete);
+
+            var entry = await ResultEntryAsync(job.RunId);
+            Field(entry, "status").Should().Be(RunStatuses.Succeeded, "the caller already has this answer");
+            Field(entry, "errorCode").Should().BeEmpty();
+            Field(entry, "discard").Should().Be("memory", "the kill still ends the sandbox and shows on the run");
+            ((string?)await _db!.HashGetAsync(RedisKeys.Run(job.RunId), "status")).Should().Be(RunStatuses.Succeeded);
+            Pool.Counts.Total.Should().Be(0);
+        }
+
+        [SkippableFact]
+        public async Task A_failed_call_is_recorded_early_without_waking_the_caller()
+        {
+            Skip.If(Unavailable, "no Redis available");
+            var (processor, factory) = Processor(new CountingSandbox(), reuseOn: true);
+            factory.Configure = c => c.OnCall = id =>
+                [Lines.Started(id), Lines.Failure(id, ErrorCodes.UserRuntimeError, "boom"), Lines.Idle(id, clean: true)];
+            var job = await QueueAsync(reuse: true);
+            var messages = new List<string>();
+            var sub = _redis!.GetSubscriber();
+            await sub.SubscribeAsync(RedisChannel.Literal(RedisKeys.SyncChannel(job.RunId)), (_, v) => { lock (messages) messages.Add(v!); });
+
+            await processor.ProcessAsync(job, default);
+            await Task.Delay(200);
+
+            var entry = await ResultEntryAsync(job.RunId);
+            Field(entry, "status").Should().Be(RunStatuses.Failed);
+            Field(entry, "errorCode").Should().Be(ErrorCodes.UserRuntimeError);
+            Field(entry, "errorMessage").Should().Be("boom");
+            lock (messages) messages.Should().Equal([RunStatuses.Failed], "only the final notification, after the entry");
+        }
+
+        // ---- F-5: streamed answers (2026-10-07) --------------------------------------------------
+
+        private async Task<StreamEntry[]> StreamAsync(string runId)
+        {
+            _streamKeys.Add(RedisKeys.StreamOut(runId));
+            return await _db!.StreamRangeAsync(RedisKeys.StreamOut(runId), "-", "+");
+        }
+
+        private readonly List<string> _streamKeys = [];
+
+        [SkippableFact]
+        public async Task A_streamed_answer_reaches_the_run_stream_piece_by_piece_then_its_end()
+        {
+            Skip.If(Unavailable, "no Redis available");
+            var (processor, factory) = Processor(new CountingSandbox(), reuseOn: true);
+            factory.Configure = c => c.OnCall = id =>
+                [Lines.Started(id), Lines.Chunk(id, "Hel"), Lines.Chunk(id, "lo")];
+            var job = await QueueAsync(reuse: true);
+            var nudges = 0;
+            await _redis!.GetSubscriber().SubscribeAsync(
+                RedisChannel.Literal(RedisKeys.StreamChannel(job.RunId)), (_, _) => Interlocked.Increment(ref nudges));
+
+            var run = processor.ProcessAsync(job, default);
+
+            // Live: both pieces are there while the call is still going.
+            for (var i = 0; i < 100 && (await StreamAsync(job.RunId)).Length < 2; i++) await Task.Delay(20);
+            var live = await StreamAsync(job.RunId);
+            live.Select(e => (string?)e[RedisKeys.StreamDataField]).Should().Equal("Hel", "lo");
+            run.IsCompleted.Should().BeFalse();
+            (await _db!.KeyTimeToLiveAsync(RedisKeys.StreamOut(job.RunId))).Should().NotBeNull("it expires");
+
+            factory.Created[0].Push(Lines.Result(job.RunId, "\"Hello\""));
+            factory.Created[0].Push(Lines.Idle(job.RunId, clean: true));
+            await run;
+
+            var all = await StreamAsync(job.RunId);
+            all.Should().HaveCount(3);
+            ((string?)all[2][RedisKeys.StreamEndField]).Should().Be(RunStatuses.Succeeded);
+            for (var i = 0; i < 50 && Volatile.Read(ref nudges) < 3; i++) await Task.Delay(20);
+            Volatile.Read(ref nudges).Should().BeGreaterThanOrEqualTo(3, "a nudge per piece and one for the end");
+            ((string?)await _db.StringGetAsync(RedisKeys.Result(job.RunId))).Should().Be("\"Hello\"");
+        }
+
+        [SkippableFact]
+        public async Task A_stream_cut_off_by_a_crash_still_ends_with_the_runs_status()
+        {
+            Skip.If(Unavailable, "no Redis available");
+            var (processor, factory) = Processor(new CountingSandbox(), reuseOn: true);
+            factory.Configure = c => c.OnCall = id =>
+            {
+                c.Push(Lines.Started(id));
+                c.Push(Lines.Chunk(id, "partial"));
+                c.End();
+                return [];
+            };
+            var job = await QueueAsync(reuse: true);
+
+            await processor.ProcessAsync(job, default);
+
+            var all = await StreamAsync(job.RunId);
+            all.Select(e => (string?)e[RedisKeys.StreamDataField]).First().Should().Be("partial");
+            var end = all.Last();
+            ((string?)end[RedisKeys.StreamEndField]).Should().NotBeNullOrEmpty().And.NotBe(RunStatuses.Succeeded);
+            all.Count(e => !e[RedisKeys.StreamEndField].IsNull).Should().Be(1, "exactly one end");
+        }
+
+        [SkippableFact]
+        public async Task A_call_that_does_not_stream_writes_no_stream()
+        {
+            Skip.If(Unavailable, "no Redis available");
+            var (processor, _) = Processor(new CountingSandbox(), reuseOn: true);
+            var job = await QueueAsync(reuse: true);
+
+            await processor.ProcessAsync(job, default);
+
+            (await _db!.KeyExistsAsync(RedisKeys.StreamOut(job.RunId))).Should().BeFalse();
         }
 
         // ---- review fixes (2026-10-06) ---------------------------------------------------------

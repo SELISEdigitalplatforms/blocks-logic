@@ -189,6 +189,10 @@ namespace Functions.DomainService.Queue
 
         // ---- per-entity keys ----------------------------------------------------
         public static string Run(string runId) => $"{_prefix}function:run:{runId}";
+
+        /// <summary>Run-hash field set by the runner while a test builds (twin of the runner's RedisKeys).</summary>
+        public const string RunPhaseField = "phase";
+        public const string RunPhaseBuilding = "building";
         public static string Result(string runId) => $"{_prefix}function:result:{runId}";
         public static string Logs(string runId) => $"{_prefix}function:logs:{runId}";
         public static string Lease(string runId) => $"{_prefix}function:lease:{runId}";
@@ -205,12 +209,23 @@ namespace Functions.DomainService.Queue
         /// How long a function must wait between tests.
         /// <para>
         /// A test builds and runs on a host that is also serving deployed functions, so the cost of
-        /// one is real. Two minutes is long enough that nobody can hold a host down by clicking, and
-        /// short enough that it does not get in the way of working.
+        /// one is real. One minute (user, 2026-10-07; was two): a test now builds only the source on
+        /// a kept dependency image (~1 s, FN-14), so the window is about clicking, not build cost.
         /// </para>
         /// </summary>
-        public static readonly TimeSpan TestRateWindow = TimeSpan.FromSeconds(120);
+        public static readonly TimeSpan TestRateWindow = TimeSpan.FromSeconds(60);
         public static string SyncChannel(string runId) => $"{_prefix}function:sync:{runId}";
+
+        /// <summary>A run's streamed answer (F-5): mirrors the runner's <c>RedisKeys.StreamOut</c>.</summary>
+        public static string StreamOut(string runId) => $"{_prefix}function:stream:{runId}";
+
+        /// <summary>Nudged by the runner on every piece and at the end; mirrors <c>RedisKeys.StreamChannel</c>.</summary>
+        public static string StreamChannel(string runId) => $"{_prefix}function:stream-nudge:{runId}";
+
+        public const string StreamDataField = "d";
+        public const string StreamEndField = "end";
+        public const string StreamCodeField = "code";
+        public const string StreamMessageField = "message";
         public static string Concurrency(string functionId) => $"{_prefix}function:concurrency:{functionId}";
         public static string Runner(string runnerId) => $"{_prefix}function:runner:{runnerId}";
         public static string Source(string buildId) => $"{_prefix}function:source:{buildId}";
