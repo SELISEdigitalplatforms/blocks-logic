@@ -3,6 +3,7 @@ import { Input } from "@/components/ui-kits/input/input";
 import { Button } from "@/components/ui-kits/button/button";
 import { VariableRefField, secretIdRef, soleRefKey } from "@/components/variable-picker";
 import { IVariableBinding } from "../../types/function.types";
+import { TYPED_CREDENTIAL_MESSAGE, isTypedCredential } from "../../utils/secret-literals";
 
 type VariablesEditorProps = {
   value: IVariableBinding[];
@@ -11,8 +12,7 @@ type VariablesEditorProps = {
 
 const KEY_PATTERN = /^[A-Z][A-Z0-9_]*$/;
 const MAX_VALUE_LENGTH = 4096;
-/** Names that usually mean a credential — a plain-text variable is readable in the sandbox, so warn. */
-const SECRET_LOOKING_KEY = /(SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|PRIVATE|_KEY|^KEY$|APIKEY)/;
+/** A long opaque value under an ordinary name may still be a credential: warn, never refuse. */
 const SECRET_LOOKING_VALUE = /^[A-Za-z0-9_\-.]{32,}$/;
 
 const keyError = (key: string, index: number, all: IVariableBinding[]) => {
@@ -25,8 +25,7 @@ const keyError = (key: string, index: number, all: IVariableBinding[]) => {
 const valueError = (value: string) =>
   value.length > MAX_VALUE_LENGTH ? "This value is too long." : null;
 
-const looksLikeSecret = ({ key, value }: IVariableBinding) =>
-  SECRET_LOOKING_KEY.test(key.toUpperCase()) || SECRET_LOOKING_VALUE.test(value);
+const looksLikeSecret = ({ value }: IVariableBinding) => SECRET_LOOKING_VALUE.test(value);
 
 /**
  * `ctx.env.KEY` bindings. A value is either typed in plain — readable by anyone who can see the
@@ -82,7 +81,9 @@ export const VariablesEditor = ({ value, onChange }: VariablesEditorProps) => {
             const keyMessage = keyError(variable.key, index, value);
             const valueMessage = valueError(variable.value);
             const bound = soleRefKey(variable.value, secretIdRef);
-            const secretWarning = !bound && looksLikeSecret(variable);
+            // Same rule as the host's save check (FunctionSecretLiterals).
+            const typedCredential = !bound && isTypedCredential(variable.key, variable.value);
+            const secretWarning = !bound && !typedCredential && looksLikeSecret(variable);
 
             return (
               <div key={index} className="border-b px-4 py-2.5 last:border-b-0">
@@ -121,6 +122,12 @@ export const VariablesEditor = ({ value, onChange }: VariablesEditorProps) => {
 
                 {(keyMessage || valueMessage) && (
                   <p className="mt-1.5 text-xs text-error">{keyMessage ?? valueMessage}</p>
+                )}
+                {!keyMessage && typedCredential && (
+                  <p className="mt-1.5 flex items-start gap-1.5 text-xs text-warning-800">
+                    <TriangleAlert className="mt-px h-3.5 w-3.5 shrink-0" />
+                    {TYPED_CREDENTIAL_MESSAGE}
+                  </p>
                 )}
                 {!keyMessage && secretWarning && (
                   <p className="mt-1.5 flex items-start gap-1.5 text-xs text-warning-800">

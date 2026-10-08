@@ -75,6 +75,13 @@ public sealed class FunctionExceptionFilter : IExceptionFilter
         {
             errors["buildId"] = buildFailed.BuildId;
         }
+        // Not messages either: the delete dialog reads them to offer "delete anyway" with what it will do.
+        if (context.Exception is FunctionDeleteBlockedException blocked)
+        {
+            errors["deleteBlocked"] = "true";
+            errors["activeRuns"] = blocked.ActiveRuns.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            errors["workflows"] = blocked.Workflows.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
 
         context.Result = new ObjectResult(new BaseResponse
         {

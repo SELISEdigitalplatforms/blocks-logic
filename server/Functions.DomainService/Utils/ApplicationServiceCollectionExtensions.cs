@@ -87,6 +87,8 @@ namespace Functions.DomainService.Utils
             // ctx.blocks.accessToken: a delegation grant per run, redeemed by the runner. The grant
             // store comes from Genesis (AddBlocksDelegation, part of the API and Worker setup).
             services.AddSingleton<IFunctionDelegationService, FunctionDelegationService>();
+            // Deletes a run's grant once the run is provably final (applied result with no retry, retry give-up).
+            services.AddSingleton<IFunctionRunGrantRevoker, FunctionRunGrantRevoker>();
             services.AddSingleton<IFunctionInvocationService, FunctionInvocationService>();
             services.AddSingleton<IFunctionStreamReader, FunctionStreamReader>();
 

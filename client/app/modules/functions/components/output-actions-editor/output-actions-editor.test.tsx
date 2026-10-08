@@ -96,7 +96,9 @@ describe("OutputActionsEditor", () => {
 
     it("shows an off action as skipped and turns it back on", async () => {
       const onChange = vi.fn();
-      renderWithProviders(<OutputActionsEditor value={[{ ...baseAction, enabled: false }]} onChange={onChange} />);
+      renderWithProviders(
+        <OutputActionsEditor value={[{ ...baseAction, enabled: false }]} onChange={onChange} />,
+      );
 
       expect(screen.getByText("Off — skipped")).toBeTruthy();
       await userEvent.click(screen.getByRole("switch", { name: "Action 1 on" }));
@@ -111,8 +113,30 @@ describe("OutputActionsEditor", () => {
         <OutputActionsEditor value={[legacy as IOutputAction]} onChange={vi.fn()} />,
       );
 
-      expect(screen.getByRole("switch", { name: "Action 1 on" }).getAttribute("aria-checked")).toBe("true");
+      expect(screen.getByRole("switch", { name: "Action 1 on" }).getAttribute("aria-checked")).toBe(
+        "true",
+      );
       expect(screen.queryByText("Off — skipped")).toBeNull();
     });
+  });
+
+  it("states the save rule under a header with a typed credential, and not under others", () => {
+    renderWithProviders(
+      <OutputActionsEditor
+        value={[
+          {
+            ...baseAction,
+            headers: {
+              Authorization: "Bearer sk_live_123",
+              "X-Api-Key": "{{secret.s1}}",
+              "Content-Type": "application/json",
+            },
+          },
+        ]}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getAllByText(/save refuses a new or changed typed value here/i)).toHaveLength(1);
   });
 });

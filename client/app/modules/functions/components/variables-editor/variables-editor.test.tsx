@@ -127,4 +127,32 @@ describe("VariablesEditor", () => {
 
     expect(screen.getAllByText("That key is already used.")).toHaveLength(2);
   });
+
+  it("states the save rule for a typed value under a credential name, without blocking the row", () => {
+    const onChange = vi.fn();
+    renderWithProviders(
+      <VariablesEditor value={[{ key: "DB_PASSWORD", value: "hunter2" }]} onChange={onChange} />,
+    );
+
+    expect(
+      screen.getByText(
+        /save refuses a new or changed typed value here; use a configuration variable instead/i,
+      ),
+    ).toBeTruthy();
+    expect(screen.getByDisplayValue("hunter2")).toBeTruthy();
+  });
+
+  it("does not state the rule for an ordinary name or for a scheme word before a reference", () => {
+    renderWithProviders(
+      <VariablesEditor
+        value={[
+          { key: "REGION", value: "eu-west" },
+          { key: "AUTH_HEADER", value: "Bearer {{secret.s1}}" },
+        ]}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText(/save refuses/i)).toBeNull();
+  });
 });

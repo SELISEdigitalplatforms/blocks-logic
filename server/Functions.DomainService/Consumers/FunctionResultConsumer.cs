@@ -50,6 +50,7 @@ namespace Functions.DomainService.Consumers
         private readonly IFunctionVersionRepository _versionRepository;
         private readonly IFunctionImageRecoveryService _imageRecovery;
         private readonly IFunctionRepository _functionRepository;
+        private readonly IFunctionRunGrantRevoker _runGrants;
         private readonly ILogger<FunctionResultConsumer> _logger;
 
         public FunctionResultConsumer(
@@ -59,6 +60,7 @@ namespace Functions.DomainService.Consumers
             IFunctionVersionRepository versionRepository,
             IFunctionImageRecoveryService imageRecovery,
             IFunctionRepository functionRepository,
+            IFunctionRunGrantRevoker runGrants,
             ILogger<FunctionResultConsumer> logger,
             System.Diagnostics.ActivitySource? traces = null)
         {
@@ -70,6 +72,7 @@ namespace Functions.DomainService.Consumers
             _versionRepository = versionRepository;
             _imageRecovery = imageRecovery;
             _functionRepository = functionRepository;
+            _runGrants = runGrants;
             _logger = logger;
         }
 
@@ -346,7 +349,7 @@ namespace Functions.DomainService.Consumers
 
             // Everything below is safe to repeat, and is repeated on a redelivery: that is what
             // finishes the job when a Worker died between writing the result and acknowledging it.
-            await FollowUpAsync(tenantId, run, cancellationToken);
+            var retryPending = await FollowUpAsync(tenantId, run, cancellationToken);
             timer.Mark("followup");
 
             await _db.PublishAsync(
@@ -355,6 +358,16 @@ namespace Functions.DomainService.Consumers
             _logger.LogInformation(
                 "Result of run {RunId} published {TotalMs} ms after pick-up (queued {QueuedMs} ms): {Steps}",
                 runId, timer.ElapsedMs, queuedMs, timer.ToString());
+
+            // After the publish, so a waiting caller (HTTP or a workflow step) is woken exactly as before.
+            // No attempt of this run will start again, so nothing will redeem its delegation grant: end it
+            // now rather than leave it redeemable for its TTL. The runner sends this result only after the
+            // whole call (ctx.waitUntil and any on-demand token included), and output actions run on the
+            // host without it. Repeated on a redelivery, where it finds the field already gone. Never throws.
+            if (!retryPending && (FunctionWireMapping.IsTerminal(run.Status) || run.Status == RunStatus.OutputProcessing))
+            {
+                await _runGrants.RevokeAsync(runId);
+            }
 
             // After the publish, so the caller already has the answer: where this call's time went,
             // for the run's Timing group. Best effort — a run is never failed over its timings.
@@ -399,20 +412,21 @@ namespace Functions.DomainService.Consumers
                 : -1;
         }
 
-        private async Task FollowUpAsync(string tenantId, FunctionRunEntity run, CancellationToken cancellationToken)
+        /// <returns>True when another attempt of the run is scheduled (or already was).</returns>
+        private async Task<bool> FollowUpAsync(string tenantId, FunctionRunEntity run, CancellationToken cancellationToken)
         {
             if (run.Status == RunStatus.Succeeded && run.OutputResults.Count == 0)
             {
                 var (actions, _) = await FunctionOutputConfig.ResolveAsync(
                     _versionRepository, _functionRepository, tenantId, run, cancellationToken);
-                if (!FunctionOutputConfig.HasEnabledActions(actions)) return;
+                if (!FunctionOutputConfig.HasEnabledActions(actions)) return false;
 
                 if (await _runRepository.TryBeginOutputProcessingAsync(tenantId, run.ItemId, run.Attempt, cancellationToken))
                 {
                     run.Status = RunStatus.OutputProcessing;
                     await EnqueueOutputJobAsync(tenantId, run);
                 }
-                return;
+                return false;
             }
 
             if (run.Status == RunStatus.OutputProcessing)
@@ -421,13 +435,11 @@ namespace Functions.DomainService.Consumers
                 // the stream. Adding it again is harmless: the output consumer drops a job whose
                 // run is no longer OUTPUT_PROCESSING, and never sends an action twice.
                 await EnqueueOutputJobAsync(tenantId, run);
-                return;
+                return false;
             }
 
-            if (FunctionWireMapping.IsRetryCandidate(run))
-            {
-                await ScheduleRetryIfEligibleAsync(tenantId, run, cancellationToken);
-            }
+            return FunctionWireMapping.IsRetryCandidate(run)
+                && await ScheduleRetryIfEligibleAsync(tenantId, run, cancellationToken);
         }
 
         private Task EnqueueOutputJobAsync(string tenantId, FunctionRunEntity run) =>
@@ -509,17 +521,18 @@ namespace Functions.DomainService.Consumers
             }
         }
 
-        private async Task ScheduleRetryIfEligibleAsync(string tenantId, FunctionRunEntity run, CancellationToken cancellationToken)
+        /// <returns>True when a retry is scheduled — by this call, or already by an earlier delivery.</returns>
+        private async Task<bool> ScheduleRetryIfEligibleAsync(string tenantId, FunctionRunEntity run, CancellationToken cancellationToken)
         {
             // Retries only apply to a deployed version. A Test run has nothing durable to
             // rebuild against reliably (see FunctionInvocationService.ReplayAsync), and its
             // MaxAttempts is set from the function's own policy regardless, so this also
             // naturally covers the "policy says 1 attempt" case via the count check below.
             // Same budget test the synchronous HTTP wait relies on (FunctionWireMapping.WillBeRetried).
-            if (!FunctionWireMapping.WillBeRetried(run)) return;
+            if (!FunctionWireMapping.WillBeRetried(run)) return false;
 
             var version = await _versionRepository.GetByIdAsync(tenantId, run.VersionId, cancellationToken);
-            if (version is null) return;
+            if (version is null) return false;
 
             var nextAttempt = run.Attempt + 1;
             var delay = version.Retry.DelayFor(nextAttempt);
@@ -541,6 +554,8 @@ namespace Functions.DomainService.Consumers
                 _logger.LogInformation(
                     "Scheduled retry {Attempt}/{Max} for run {RunId} in {Delay}", nextAttempt, run.MaxAttempts, run.ItemId, delay);
             }
+            // NX false = an earlier delivery already scheduled it: still pending.
+            return true;
         }
 
         /// <summary>

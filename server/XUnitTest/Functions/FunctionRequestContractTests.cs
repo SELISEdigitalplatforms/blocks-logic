@@ -219,6 +219,22 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
+        public void A_refused_delete_carries_what_holds_the_function()
+        {
+            var context = ContextFor(new FunctionDeleteBlockedException("this function cannot be deleted yet", 3, 1));
+
+            new FunctionExceptionFilter().OnException(context);
+
+            var result = context.Result.Should().BeOfType<ObjectResult>().Which;
+            result.StatusCode.Should().Be(400);
+            var errors = result.Value.Should().BeOfType<BaseResponse>().Which.Errors;
+            errors["invalid_request"].Should().Contain("cannot be deleted yet");
+            errors["deleteBlocked"].Should().Be("true");
+            errors["activeRuns"].Should().Be("3");
+            errors["workflows"].Should().Be("1");
+        }
+
+        [Fact]
         public void A_plain_validation_refusal_has_no_build_id()
         {
             var context = ContextFor(new FunctionValidationException("nope"));

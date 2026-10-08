@@ -1317,7 +1317,11 @@ namespace Blocks.FunctionRunner.Runs
         {
             try
             {
-                if (Directory.Exists(runDir)) Directory.Delete(runDir, recursive: true);
+                // The envelope first, on its own: it holds resolved secrets, so it must go even when
+                // something else in the directory cannot be removed.
+                if (!Directory.Exists(runDir)) return;
+                File.Delete(Path.Combine(runDir, ExecutionEnvelope.FileName));
+                Directory.Delete(runDir, recursive: true);
             }
             catch (IOException ex)
             {

@@ -29,6 +29,7 @@ namespace XUnitTest.Functions
         private readonly Mock<IFunctionVersionRepository> _versions = new();
         private readonly Mock<IFunctionImageRecoveryService> _images = new();
         private readonly Mock<IFunctionRepository> _functions = new();
+        private readonly Mock<IFunctionRunGrantRevoker> _grants = new();
         private readonly (IDatabase Database, FakeRedisDatabase Fake) _redis = FakeRedisDatabase.Create();
 
         private readonly FunctionVersionEntity _version = new() { ItemId = "v-1", FunctionId = "fn-1" };
@@ -81,7 +82,7 @@ namespace XUnitTest.Functions
             cache.Setup(c => c.CacheDatabase()).Returns(_redis.Database);
             return new FunctionResultConsumer(
                 cache.Object, _runs.Object, _logs.Object, _versions.Object, _images.Object, _functions.Object,
-                NullLogger<FunctionResultConsumer>.Instance);
+                _grants.Object, NullLogger<FunctionResultConsumer>.Instance);
         }
 
         private static ResultStreamEntry Entry(params (string Key, string Value)[] overrides)
@@ -445,5 +446,128 @@ namespace XUnitTest.Functions
         public void An_unrecognised_reused_value_is_not_guessed(string value)
             => SandboxReport(new ResultStreamEntry("1-0", new Dictionary<string, string> { ["reused"] = value, ["handoverMs"] = "x" }))
                 .Should().Be(new RunSandboxReport(null, null, null));
+
+        // ---- the run's delegation grant ends when the run is final -------------------------
+
+        private void Revoked(int times) => _grants.Verify(g => g.RevokeAsync(RunId), Times.Exactly(times));
+
+        [Fact]
+        public async Task A_success_with_nothing_after_it_revokes_the_grant()
+        {
+            await Consumer().ProcessAsync(Entry(), CancellationToken.None);
+
+            Revoked(1);
+        }
+
+        [Fact]
+        public async Task A_success_handed_to_output_actions_revokes_the_grant_they_never_use()
+        {
+            _version.OutputActions = [new OutputAction { Id = "a1", Url = "https://example.test" }];
+
+            await Consumer().ProcessAsync(Entry(), CancellationToken.None);
+
+            OutputJobs().Should().ContainSingle();
+            Revoked(1);
+        }
+
+        [Theory]
+        [InlineData(FunctionQueueKeys.Wire.Failed, FunctionQueueKeys.Wire.UserRuntimeError)]
+        [InlineData(FunctionQueueKeys.Wire.Cancelled, "")]
+        public async Task A_final_failure_or_cancel_revokes_the_grant(string status, string code)
+        {
+            await Consumer().ProcessAsync(Entry(("status", status), ("errorCode", code)), CancellationToken.None);
+
+            Revoked(1);
+        }
+
+        [Fact]
+        public async Task A_failure_that_will_be_retried_keeps_the_grant_for_the_next_attempt()
+        {
+            await Consumer().ProcessAsync(
+                Entry(("status", FunctionQueueKeys.Wire.Failed), ("errorCode", FunctionQueueKeys.Wire.SandboxStartFailed)),
+                CancellationToken.None);
+
+            _redis.Fake.Calls("SortedSetAddAsync").Should().ContainSingle();
+            Revoked(0);
+        }
+
+        [Fact]
+        public async Task A_redelivery_finding_the_retry_already_scheduled_still_keeps_the_grant()
+        {
+            _redis.Fake.On("SortedSetAddAsync", _ => false); // NX: an earlier delivery added it
+
+            await Consumer().ProcessAsync(
+                Entry(("status", FunctionQueueKeys.Wire.Failed), ("errorCode", FunctionQueueKeys.Wire.SandboxStartFailed)),
+                CancellationToken.None);
+
+            Revoked(0);
+        }
+
+        [Fact]
+        public async Task A_retryable_failure_on_its_last_attempt_revokes_the_grant()
+        {
+            _record.Attempt = 3;
+
+            await Consumer().ProcessAsync(
+                Entry(("attempt", "3"), ("status", FunctionQueueKeys.Wire.Failed), ("errorCode", FunctionQueueKeys.Wire.SandboxStartFailed)),
+                CancellationToken.None);
+
+            _redis.Fake.Calls("SortedSetAddAsync").Should().BeEmpty();
+            Revoked(1);
+        }
+
+        [Fact]
+        public async Task A_retryable_failure_whose_version_is_gone_revokes_the_grant()
+        {
+            _versions.Setup(v => v.GetByIdAsync(Tenant, "v-1", It.IsAny<CancellationToken>())).ReturnsAsync((FunctionVersionEntity?)null);
+
+            await Consumer().ProcessAsync(
+                Entry(("status", FunctionQueueKeys.Wire.Failed), ("errorCode", FunctionQueueKeys.Wire.SandboxStartFailed)),
+                CancellationToken.None);
+
+            Revoked(1);
+        }
+
+        [Fact]
+        public async Task A_result_from_an_older_attempt_never_touches_the_grant_the_new_attempt_needs()
+        {
+            _record.Attempt = 2;
+
+            await Consumer().ProcessAsync(Entry(("attempt", "1"), ("status", FunctionQueueKeys.Wire.Failed)), CancellationToken.None);
+
+            Revoked(0);
+        }
+
+        [Fact]
+        public async Task A_write_that_throws_leaves_the_grant_for_the_redelivery_to_decide()
+        {
+            _runs.Setup(r => r.ApplyResultAsync(
+                    Tenant, RunId, It.IsAny<int>(), It.IsAny<RunStatus>(), It.IsAny<RunErrorCode>(), It.IsAny<string?>(),
+                    It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<long?>(),
+                    It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<DateTime>(), It.IsAny<bool>(), It.IsAny<RunSandboxReport?>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new TimeoutException("mongo"));
+
+            var act = () => Consumer().ProcessAsync(Entry(), CancellationToken.None);
+
+            await act.Should().ThrowAsync<TimeoutException>();
+            Revoked(0);
+        }
+
+        [Fact]
+        public async Task A_workflow_step_is_woken_first_and_its_outcome_is_unchanged_by_the_revoke()
+        {
+            _record.InvokedBy = InvokedByType.Workflow;
+            var publishesBeforeRevoke = -1;
+            _grants.Setup(g => g.RevokeAsync(RunId))
+                .Callback(() => publishesBeforeRevoke = _redis.Fake.Calls("PublishAsync").Count)
+                .Returns(Task.CompletedTask);
+
+            var outcome = await Consumer().ProcessAsync(Entry(), CancellationToken.None);
+
+            outcome.Disposition.Should().Be(ResultDisposition.Applied);
+            publishesBeforeRevoke.Should().Be(1, "the waiting step hears the outcome before anything else happens");
+            _redis.Fake.Calls("PublishAsync").Should().ContainSingle(a =>
+                a[0]!.ToString() == FunctionQueueKeys.SyncChannel(RunId) && a[1]!.ToString() == FunctionQueueKeys.Wire.Succeeded);
+        }
 }
 }

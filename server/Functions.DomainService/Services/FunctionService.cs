@@ -161,6 +161,15 @@ namespace Functions.DomainService.Services
 
             var function = await GetEntityAsync(tenantId, request.FunctionId, cancellationToken);
 
+            // A typed credential is refused (never store a secret value, 2026-10-08) — but only a new or
+            // changed one, so a function saved before the rule still saves unchanged.
+            var literals = FunctionSecretLiterals.FindNewLiterals(
+                request.Variables, request.OutputActions, function.Variables, function.OutputActions);
+            if (literals.Count > 0)
+            {
+                throw new FunctionValidationException(string.Join("; ", literals));
+            }
+
             function.Source = new FunctionSource
             {
                 IndexJs = request.IndexJs,
@@ -198,21 +207,38 @@ namespace Functions.DomainService.Services
             var function = await _repository.GetByIdAsync(tenantId, functionId, cancellationToken);
             if (function is null) return false;
 
-            var references = force
-                ? []
-                : await _usageService.GetWorkflowReferencesAsync(tenantId, functionId, cancellationToken);
-            if (references.Count > 0)
+            if (!force)
             {
-                // Refused rather than warned: the step keeps its function id either way, so the
-                // only difference is whether the person deleting finds out now or a workflow does
-                // at its next run.
-                var named = string.Join(", ", references.Take(5).Select(r =>
-                    r.IsPublished ? $"'{r.Name}' (published)" : $"'{r.Name}'"));
-                var more = references.Count > 5 ? $" and {references.Count - 5} more" : string.Empty;
+                // Refused rather than warned, for both: a workflow step keeps its function id either
+                // way (the person deleting finds out now, or the workflow does at its next run), and a
+                // run that has not finished would be cancelled by the purge with nobody told (FN-66).
+                // force deletes anyway; the purge then cancels those runs.
+                var references = await _usageService.GetWorkflowReferencesAsync(tenantId, functionId, cancellationToken);
+                var (_, activeRuns) = await _runRepository.GetAllAsync(
+                    tenantId, new FunctionRunFilter(functionId, null, null, null, ActiveOnly: true),
+                    pageNumber: 0, pageSize: 1, cancellationToken);
 
-                throw new FunctionValidationException(
-                    $"this function is used by {references.Count} workflow(s): {named}{more}. " +
-                    "Remove those steps first, or delete it anyway with force.");
+                if (references.Count > 0 || activeRuns > 0)
+                {
+                    var reasons = new List<string>();
+                    if (activeRuns > 0)
+                    {
+                        reasons.Add($"it has {activeRuns} run(s) that have not finished (queued or running)");
+                    }
+                    if (references.Count > 0)
+                    {
+                        var named = string.Join(", ", references.Take(5).Select(r =>
+                            r.IsPublished ? $"'{r.Name}' (published)" : $"'{r.Name}'"));
+                        var more = references.Count > 5 ? $" and {references.Count - 5} more" : string.Empty;
+                        reasons.Add($"it is used by {references.Count} workflow(s): {named}{more}");
+                    }
+
+                    throw new FunctionDeleteBlockedException(
+                        $"this function cannot be deleted yet: {string.Join("; ", reasons)}. " +
+                        "Wait for the runs to finish and remove those steps, or delete it anyway with force " +
+                        "(unfinished runs are cancelled).",
+                        activeRuns, references.Count);
+                }
             }
 
             // The tombstone is the delete. From here the function is invisible to every read and

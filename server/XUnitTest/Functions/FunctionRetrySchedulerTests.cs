@@ -5,6 +5,7 @@ using Functions.DomainService.Entities;
 using Functions.DomainService.Enums;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Repositories;
+using Functions.DomainService.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using StackExchange.Redis;
@@ -36,6 +37,7 @@ namespace XUnitTest.Functions
         }
 
         private readonly Mock<global::Functions.DomainService.Storage.IFunctionArtifactStore> _artifacts = new();
+        private readonly Mock<IFunctionRunGrantRevoker> _grants = new();
 
         /// <summary>The claim script answers <paramref name="claims"/>; the release script answers 1.</summary>
         private void ClaimsAre(long claims) =>
@@ -50,7 +52,7 @@ namespace XUnitTest.Functions
             var cache = new Mock<ICacheClient>();
             cache.Setup(c => c.CacheDatabase()).Returns(_redis.Database);
             return new FunctionRetryScheduler(cache.Object, _runs.Object, _versions.Object,
-                NullLogger<FunctionRetryScheduler>.Instance, _artifacts.Object);
+                _grants.Object, NullLogger<FunctionRetryScheduler>.Instance, _artifacts.Object);
         }
 
         private void VersionIs(FunctionVersionEntity version) =>
@@ -274,6 +276,105 @@ namespace XUnitTest.Functions
             var entry = (NameValueEntry[])_redis.Fake.Calls("StreamAddAsync").Single()[1]!;
             entry.Select(e => e.Name.ToString()).Should().Equal(
                 "runId", "functionId", "versionId", "tenantId", "image", "attempt", "protocol");
+        }
+
+        // ---- the run's delegation grant: ended only when no attempt will start again --------
+
+        private void Revoked(int times) => _grants.Verify(g => g.RevokeAsync("run-1"), Times.Exactly(times));
+
+        [Fact]
+        public async Task A_retry_that_is_enqueued_keeps_the_grant_for_the_new_attempt()
+        {
+            await Scheduler().SweepOnceAsync(CancellationToken.None);
+
+            _redis.Fake.Calls("StreamAddAsync").Should().ContainSingle();
+            Revoked(0);
+        }
+
+        [Fact]
+        public async Task A_retry_another_worker_already_started_keeps_the_grant()
+        {
+            _runs.Setup(r => r.ResetForRetryAsync("t1", "run-1", 2, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+            await Scheduler().SweepOnceAsync(CancellationToken.None);
+
+            Revoked(0);
+        }
+
+        [Fact]
+        public async Task A_stale_retry_entry_keeps_the_grant()
+        {
+            _runs.Setup(r => r.GetByIdAsync("t1", "run-1", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new FunctionRunEntity { ItemId = "run-1", Attempt = 2, Status = RunStatus.Running });
+
+            await Scheduler().SweepOnceAsync(CancellationToken.None);
+
+            Revoked(0);
+        }
+
+        [Fact]
+        public async Task A_retry_whose_version_is_gone_revokes_the_grant()
+        {
+            _versions.Setup(v => v.GetByIdAsync("t1", "v-1", It.IsAny<CancellationToken>())).ReturnsAsync((FunctionVersionEntity?)null);
+
+            await Scheduler().SweepOnceAsync(CancellationToken.None);
+
+            Revoked(1);
+        }
+
+        [Fact]
+        public async Task A_retry_whose_version_cannot_run_revokes_the_grant()
+        {
+            VersionIs(new FunctionVersionEntity { ItemId = "v-1" });
+
+            await Scheduler().SweepOnceAsync(CancellationToken.None);
+
+            Revoked(1);
+        }
+
+        [Fact]
+        public async Task A_retry_whose_run_is_gone_revokes_the_grant()
+        {
+            _runs.Setup(r => r.GetByIdAsync("t1", "run-1", It.IsAny<CancellationToken>())).ReturnsAsync((FunctionRunEntity?)null);
+
+            await Scheduler().SweepOnceAsync(CancellationToken.None);
+
+            Revoked(1);
+        }
+
+        [Fact]
+        public async Task A_retry_whose_envelope_expired_revokes_the_grant()
+        {
+            _redis.Fake.On("HashGetAsync", _ => RedisValue.Null);
+
+            await Scheduler().SweepOnceAsync(CancellationToken.None);
+
+            Revoked(1);
+        }
+
+        [Fact]
+        public async Task A_retry_that_cannot_be_enqueued_revokes_the_grant_before_its_payload_is_withdrawn()
+        {
+            _redis.Fake.On("StreamAddAsync", _ => throw new RedisConnectionException(ConnectionFailureType.SocketFailure, "down"));
+            var deletesBeforeRevoke = -1;
+            _grants.Setup(g => g.RevokeAsync("run-1"))
+                .Callback(() => deletesBeforeRevoke = _redis.Fake.Calls("KeyDeleteAsync").Count)
+                .Returns(Task.CompletedTask);
+
+            await Scheduler().SweepOnceAsync(CancellationToken.None);
+
+            Revoked(1);
+            deletesBeforeRevoke.Should().Be(0, "the grant id is read from the payload, so it must be read first");
+        }
+
+        [Fact]
+        public async Task A_retry_given_up_after_too_many_claims_leaves_the_grant_to_its_ttl()
+        {
+            ClaimsAre(FunctionRetryScheduler.MaxClaims + 1);
+
+            await Scheduler().SweepOnceAsync(CancellationToken.None);
+
+            Revoked(0);
         }
 }
 }

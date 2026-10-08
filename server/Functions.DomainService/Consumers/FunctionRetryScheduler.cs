@@ -84,6 +84,7 @@ return 1";
         private readonly IDatabase _db;
         private readonly IFunctionRunRepository _runRepository;
         private readonly IFunctionVersionRepository _versionRepository;
+        private readonly IFunctionRunGrantRevoker _runGrants;
         private readonly ILogger<FunctionRetryScheduler> _logger;
         private readonly Storage.IFunctionArtifactStore? _artifacts;
 
@@ -91,12 +92,14 @@ return 1";
             ICacheClient cache,
             IFunctionRunRepository runRepository,
             IFunctionVersionRepository versionRepository,
+            IFunctionRunGrantRevoker runGrants,
             ILogger<FunctionRetryScheduler> logger,
             Storage.IFunctionArtifactStore? artifacts = null)
         {
             _db = cache.CacheDatabase();
             _runRepository = runRepository;
             _versionRepository = versionRepository;
+            _runGrants = runGrants;
             _logger = logger;
             _artifacts = artifacts;
         }
@@ -234,6 +237,7 @@ return 1";
             if (run is null)
             {
                 _logger.LogWarning("Retry for run {RunId} skipped: the run no longer exists", entry.RunId);
+                await _runGrants.RevokeAsync(entry.RunId);
                 return;
             }
             if (run.Attempt != entry.Attempt - 1)
@@ -254,6 +258,7 @@ return 1";
             {
                 _logger.LogWarning(
                     "Retry for run {RunId} skipped: version '{VersionId}' is no longer available", entry.RunId, entry.VersionId);
+                await _runGrants.RevokeAsync(entry.RunId);
                 return;
             }
 
@@ -269,6 +274,7 @@ return 1";
                 _logger.LogWarning(
                     "Retry for run {RunId} skipped: version '{VersionId}' has neither an image nor an artifact",
                     entry.RunId, entry.VersionId);
+                await _runGrants.RevokeAsync(entry.RunId);
                 return;
             }
             var artifactFields = await ArtifactFieldsAsync(entry.TenantId, version, entry.RunId);
@@ -279,6 +285,7 @@ return 1";
             {
                 _logger.LogWarning(
                     "Retry for run {RunId} skipped: its execution envelope has expired", entry.RunId);
+                await _runGrants.RevokeAsync(entry.RunId);
                 return;
             }
 
@@ -292,6 +299,7 @@ return 1";
             catch (Exception ex) when (ex is JsonException or InvalidOperationException or NullReferenceException)
             {
                 _logger.LogError(ex, "Could not patch the execution envelope for run {RunId}'s retry", entry.RunId);
+                await _runGrants.RevokeAsync(entry.RunId);
                 return;
             }
 
@@ -340,6 +348,8 @@ return 1";
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Could not re-enqueue run {RunId} for attempt {Attempt}", entry.RunId, entry.Attempt);
+                // Before the payload goes: the grant id is read from it. Never throws.
+                await _runGrants.RevokeAsync(entry.RunId);
                 try
                 {
                     // Withdraw the payload so a stream entry that did land despite the error

@@ -124,6 +124,9 @@ namespace Blocks.FunctionRunner.Utils
         {
             ArgumentNullException.ThrowIfNull(services);
 
+            // First: hosted services start in this order, so envelopes a crashed runner left (they
+            // hold resolved secrets) are gone before any loop below claims work.
+            services.AddHostedService<Maintenance.LeftoverEnvelopeCleaner>();
             services.AddHostedService(sp => sp.GetRequiredService<HeartbeatService>());
             services.AddHostedService<RunConsumerService>();
             // Pre-warm and drain requests, and the idle sweep of the warm pool; idle unless

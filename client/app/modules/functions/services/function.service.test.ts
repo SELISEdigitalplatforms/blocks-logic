@@ -62,6 +62,13 @@ describe("functionService", () => {
     );
   });
 
+  it("asks for force only when deleting anyway", async () => {
+    await functionService.deleteFunction("fn_1", true);
+    expect(http.logicService.delete).toHaveBeenLastCalledWith(expect.stringContaining("force=true"));
+    await functionService.deleteFunction("fn_1");
+    expect(http.logicService.delete).toHaveBeenLastCalledWith(expect.not.stringContaining("force"));
+  });
+
   it("tests a function against the Test endpoint", async () => {
     await functionService.testFunction({ functionId: "fn_1", inputJson: "{}" });
     expect(http.logicService.post).toHaveBeenCalledWith(

@@ -15,6 +15,17 @@ namespace Functions.DomainService.Utils
         public string BuildId { get; } = buildId;
     }
 
+    /// <summary>
+    /// A delete refused because the function is still in use: runs not finished (queued or running)
+    /// and/or workflow steps pointing at it. Still a 400, plus the counts, so the console can say what
+    /// would happen and offer "delete anyway" (force), which cancels the runs (FN-66).
+    /// </summary>
+    public class FunctionDeleteBlockedException(string message, long activeRuns, int workflows) : FunctionValidationException(message)
+    {
+        public long ActiveRuns { get; } = activeRuns;
+        public int Workflows { get; } = workflows;
+    }
+
     /// <summary>The requested function, version, run or build does not exist. Maps to 404.</summary>
     public class FunctionNotFoundException(string message) : Exception(message);
 

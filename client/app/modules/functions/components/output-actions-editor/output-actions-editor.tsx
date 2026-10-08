@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { HTTP_METHOD_OPTIONS } from "../../constants/limits.constant";
 import { IOutputAction } from "../../types/function.types";
 import { VariableTokenField, secretIdRef } from "@/components/variable-picker";
+import { TYPED_CREDENTIAL_MESSAGE, isTypedCredential } from "../../utils/secret-literals";
 
 type OutputActionsEditorProps = {
   value: IOutputAction[];
@@ -230,41 +231,48 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
                   </p>
                 )}
                 {Object.entries(action.headers).map(([key, headerValue]) => (
-                  <div key={key} className="flex flex-wrap items-center gap-2">
-                    <Input
-                      aria-label="Header name"
-                      placeholder="Header name"
-                      className="h-9 min-w-[140px] flex-[0_1_190px] font-mono text-xs"
-                      value={key}
-                      onChange={(e) => renameHeader(index, key, e.target.value)}
-                    />
-                    <div className="min-w-[180px] flex-1">
-                      <VariableTokenField
-                        value={headerValue}
-                        onChange={(next) => updateHeader(index, key, next)}
-                        codec={secretIdRef}
-                        ariaLabel="Header value"
-                        placeholder="Value"
+                  <div key={key} className="flex flex-col gap-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Input
+                        aria-label="Header name"
+                        placeholder="Header name"
+                        className="h-9 min-w-[140px] flex-[0_1_190px] font-mono text-xs"
+                        value={key}
+                        onChange={(e) => renameHeader(index, key, e.target.value)}
                       />
+                      <div className="min-w-[180px] flex-1">
+                        <VariableTokenField
+                          value={headerValue}
+                          onChange={(next) => updateHeader(index, key, next)}
+                          codec={secretIdRef}
+                          ariaLabel="Header value"
+                          placeholder="Value"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Remove header"
+                        className="h-8 w-8 shrink-0 text-medium-emphasis hover:text-error"
+                        onClick={() => removeHeader(index, key)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Remove header"
-                      className="h-8 w-8 shrink-0 text-medium-emphasis hover:text-error"
-                      onClick={() => removeHeader(index, key)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    {/* Same rule as the host's save check (FunctionSecretLiterals). */}
+                    {isTypedCredential(key, headerValue) && (
+                      <p className="text-xs text-warning-800">{TYPED_CREDENTIAL_MESSAGE}</p>
+                    )}
                   </div>
                 ))}
               </div>
 
               {!hasBody(action.method) ? (
                 <p className="text-xs text-medium-emphasis">
-                  A <code className="font-mono">{action.method}</code> carries no body — the function
-                  result is not sent. Use the URL or a header to pass anything the endpoint needs.
+                  A <code className="font-mono">{action.method}</code> carries no body — the
+                  function result is not sent. Use the URL or a header to pass anything the endpoint
+                  needs.
                 </p>
               ) : (
                 <div className="flex flex-col gap-2">

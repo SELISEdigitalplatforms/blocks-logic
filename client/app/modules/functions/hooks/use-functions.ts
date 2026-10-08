@@ -54,7 +54,8 @@ export const useDeleteFunction = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationKey: [FUNCTIONS_QUERY_KEY, "delete"],
-    mutationFn: (functionId: string) => functionService.deleteFunction(functionId),
+    mutationFn: ({ functionId, force = false }: { functionId: string; force?: boolean }) =>
+      functionService.deleteFunction(functionId, force),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [FUNCTIONS_QUERY_KEY] });
     },
