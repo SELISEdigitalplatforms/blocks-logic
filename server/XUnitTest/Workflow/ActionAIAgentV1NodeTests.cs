@@ -67,7 +67,7 @@ namespace XUnitTest.Workflow
 
         private static string ErrorMessage(NodeExecutionResult result)
         {
-            result.IsSuccess.Should().BeTrue("an agent error is an error item, like the HTTP Request node");
+            result.IsSuccess.Should().BeFalse("a failed item fails the step, so the run ends Failed (C-9, 2026-10-08); the error item is kept");
             var output = result.OutputItems.Should().ContainSingle().Subject.Data.Output.AsBsonDocument;
             output["error"].AsBoolean.Should().BeTrue();
             return output["message"].AsString;

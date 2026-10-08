@@ -203,7 +203,7 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(parameters));
 
-            result.IsSuccess.Should().BeTrue("a per-item proxy failure is an error item, like the HTTP Request node");
+            result.IsSuccess.Should().BeFalse("a failed item fails the step, so the run ends Failed (C-9, 2026-10-08); the error item is kept");
             ItemError(result).Should().Contain("cannot contain");
             _sent.Should().BeEmpty();
         }
@@ -217,7 +217,7 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(parameters));
 
-            result.IsSuccess.Should().BeTrue("a per-item proxy failure is an error item, like the HTTP Request node");
+            result.IsSuccess.Should().BeFalse("a failed item fails the step, so the run ends Failed (C-9, 2026-10-08); the error item is kept");
             ItemError(result).Should().Contain("not valid");
             _sent.Should().BeEmpty();
         }
@@ -227,7 +227,7 @@ namespace XUnitTest.Workflow
         {
             var result = await Node().RunAsync(Context(Parameters(routePath: "orders/{id}")));
 
-            result.IsSuccess.Should().BeTrue("a per-item proxy failure is an error item, like the HTTP Request node");
+            result.IsSuccess.Should().BeFalse("a failed item fails the step, so the run ends Failed (C-9, 2026-10-08); the error item is kept");
             ItemError(result).Should().Contain("id");
             _sent.Should().BeEmpty();
         }
@@ -436,7 +436,7 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(Parameters()));
 
-            result.IsSuccess.Should().BeTrue("a per-item proxy failure is an error item, like the HTTP Request node");
+            result.IsSuccess.Should().BeFalse("a failed item fails the step, so the run ends Failed (C-9, 2026-10-08); the error item is kept");
             ItemError(result).Should().Contain("text/html");
         }
 
@@ -453,7 +453,7 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(Parameters(routePath: "orders")));
 
-            result.IsSuccess.Should().BeTrue("a per-item proxy failure is an error item, like the HTTP Request node");
+            result.IsSuccess.Should().BeFalse("a failed item fails the step, so the run ends Failed (C-9, 2026-10-08); the error item is kept");
             ItemError(result).Should().Contain("does not declare the endpoint GET orders");
             ItemError(result).Should().Contain("re-select the endpoint");
         }
@@ -470,7 +470,7 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(Parameters(method: "DELETE")));
 
-            result.IsSuccess.Should().BeTrue("a per-item proxy failure is an error item, like the HTTP Request node");
+            result.IsSuccess.Should().BeFalse("a failed item fails the step, so the run ends Failed (C-9, 2026-10-08); the error item is kept");
             ItemError(result).Should().Contain("does not allow DELETE");
             ItemError(result).Should().Contain("GET, POST");
         }
@@ -488,7 +488,7 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(Parameters()));
 
-            result.IsSuccess.Should().BeTrue("a per-item proxy failure is an error item, like the HTTP Request node");
+            result.IsSuccess.Should().BeFalse("a failed item fails the step, so the run ends Failed (C-9, 2026-10-08); the error item is kept");
             ItemError(result).Should().Contain("503");
             ItemError(result).Should().Contain("Could not connect to the upstream endpoint");
         }

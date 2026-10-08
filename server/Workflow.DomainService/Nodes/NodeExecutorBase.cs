@@ -56,6 +56,7 @@ namespace Workflow.DomainService.Nodes
                         Parameters = parameters ?? new BsonDocument(),
                     },
                     Branch = branch,
+                    IsError = true,
                     ParentItemIds = !string.IsNullOrEmpty(inputItem?.Id)
                         ? new List<string> { inputItem!.Id }
                         : new List<string>(),
@@ -165,7 +166,7 @@ namespace Workflow.DomainService.Nodes
             log.Info(ExecutionLogStages.NodeParameters, "Parameters loaded.");
 
             log.Info(ExecutionLogStages.NodeExecuting, "Running {NodeType:l} logic on {Count} item(s).", NodeType, context.InputItems.Count);
-            var result = await ExecuteAsync(context, parameters);
+            var result = FailIfAnyItemFailed(await ExecuteAsync(context, parameters));
             if (result.IsSuccess)
             {
                 log.Info(ExecutionLogStages.NodeExecuted, "Logic finished: {Count} output item(s).", result.OutputItems?.Count ?? 0);
@@ -175,6 +176,28 @@ namespace Workflow.DomainService.Nodes
                 log.Error(ExecutionLogStages.NodeExecuted, "Logic reported a failure.");
             }
             return result;
+        }
+
+        /// <summary>
+        /// A step with any failed item fails (C-9, user 2026-10-08: "a step error makes the run Failed"). Before,
+        /// the step showed the error in red but reported success, so the run said Completed, the webhook
+        /// answered Completed and Resume never appeared. All items are kept, failed and good, so the run shows
+        /// exactly what happened; the message names the first failure and how many failed.
+        /// </summary>
+        public static NodeExecutionResult FailIfAnyItemFailed(NodeExecutionResult result)
+        {
+            if (!result.IsSuccess || result.OutputItems is not { Count: > 0 } items) return result;
+
+            var failed = items.Where(i => i.IsError).ToList();
+            if (failed.Count == 0) return result;
+
+            var first = failed[0].Data?.Output is BsonDocument output && output.TryGetValue("message", out var message)
+                ? message.ToString()
+                : "an item failed";
+            var summary = items.Count == 1
+                ? first
+                : $"{failed.Count} of {items.Count} item(s) failed. First: {first}";
+            return NodeExecutionResult.Failed(summary, items);
         }
 
         private static string? JsonPath(Newtonsoft.Json.JsonException ex) => ex switch
