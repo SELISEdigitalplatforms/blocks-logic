@@ -118,8 +118,8 @@ namespace Scheduler.DomainService.Services
                 {
                     // Log only — webhook deliveries are fire-and-forget; Hangfire must not retry.
                     _logger.LogWarning(
-                        "Webhook for schedule {ItemId} to {Url} returned non-success status code {StatusCode} ({ReasonPhrase}).",
-                        schedule.ItemId, webhook.Url, (int)response.StatusCode, response.ReasonPhrase);
+                        "Webhook for schedule {ItemId} to host {Host} returned non-success status code {StatusCode} ({ReasonPhrase}).",
+                        schedule.ItemId, WebhookHost(webhook.Url), (int)response.StatusCode, response.ReasonPhrase);
                 }
                 else
                 {
@@ -131,27 +131,27 @@ namespace Scheduler.DomainService.Services
             catch (HttpRequestException ex)
             {
                 _logger.LogWarning(
-                    "Webhook delivery for schedule {ItemId} to {Url} failed: {ErrorMessage}.",
-                    schedule.ItemId, webhook.Url, ex.Message);
+                    "Webhook delivery for schedule {ItemId} to host {Host} failed: {ErrorMessage}.",
+                    schedule.ItemId, WebhookHost(webhook.Url), ex.Message);
             }
             catch (TaskCanceledException ex) when (!ex.CancellationToken.IsCancellationRequested)
             {
                 _logger.LogWarning(
-                    "Webhook delivery for schedule {ItemId} to {Url} timed out after {Timeout} seconds.",
-                    schedule.ItemId, webhook.Url, _httpClient.Timeout.TotalSeconds);
+                    "Webhook delivery for schedule {ItemId} to host {Host} timed out after {Timeout} seconds.",
+                    schedule.ItemId, WebhookHost(webhook.Url), _httpClient.Timeout.TotalSeconds);
             }
             catch (OperationCanceledException)
             {
                 _logger.LogWarning(
-                    "Webhook delivery for schedule {ItemId} to {Url} was cancelled.",
-                    schedule.ItemId, webhook.Url);
+                    "Webhook delivery for schedule {ItemId} to host {Host} was cancelled.",
+                    schedule.ItemId, WebhookHost(webhook.Url));
                 throw;
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(
-                    ex, "Webhook delivery for schedule {ItemId} to {Url} failed with an unexpected error.",
-                    schedule.ItemId, webhook.Url);
+                    ex, "Webhook delivery for schedule {ItemId} to host {Host} failed with an unexpected error.",
+                    schedule.ItemId, WebhookHost(webhook.Url));
             }
         }
 
@@ -200,5 +200,12 @@ namespace Scheduler.DomainService.Services
                 Payload = publishScheduleCommand
             });
         }
+
+        /// <summary>
+        /// The host only: a webhook URL often carries its secret in the path or query (Slack, Teams, a
+        /// <c>?token=</c>), and never belongs in a log (user rule 2026-10-08).
+        /// </summary>
+        internal static string WebhookHost(string? url) =>
+            Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri.Host : "(invalid url)";
     }
 }

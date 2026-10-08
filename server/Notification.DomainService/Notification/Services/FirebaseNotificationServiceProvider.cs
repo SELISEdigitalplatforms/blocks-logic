@@ -77,12 +77,14 @@ namespace DomainService.Notification
                 requestMessage.Headers.TryAddWithoutValidation("Authorization", $"key={applicationId}");
                 requestMessage.Headers.TryAddWithoutValidation("Content-Type", "application/json");
 
-                _logger.LogInformation("Send Data To Firebase:" + System.Text.Json.JsonSerializer.Serialize(data));
+                // Never the payload or the response object: the response carries the request and its
+                // "Authorization: key=<server key>" header (user rule 2026-10-08).
+                _logger.LogInformation("Sending a notification to Firebase topic for user {UserId}", userId);
                 var response = await _httpClient.SendAsync(requestMessage);
 
                 if (response.IsSuccessStatusCode)
                 {
-                    _logger.LogInformation(System.Text.Json.JsonSerializer.Serialize(response));
+                    _logger.LogInformation("Firebase accepted the notification for user {UserId}: {StatusCode}", userId, (int)response.StatusCode);
                     continue;
                 }
 

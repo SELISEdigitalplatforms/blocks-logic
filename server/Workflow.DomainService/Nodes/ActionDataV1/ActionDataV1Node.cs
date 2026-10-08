@@ -459,8 +459,8 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                 if (!response.IsSuccessStatusCode)
                 {
                     var errorContent = await response.Content.ReadAsStringAsync();
-                    _logger.LogError("Failed to get token via refresh_token. Status: {StatusCode}, Error: {Error}",
-                        response.StatusCode, errorContent);
+                    _logger.LogError("Failed to get token via refresh_token. Status: {StatusCode}, Error: {Error}, body {BodyLength} chars",
+                        response.StatusCode, Services.TokenErrorBody.Code(errorContent), errorContent.Length);
                     return null;
                 }
 
@@ -818,8 +818,9 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
             }
             catch (Exception ex)
             {
-                _logger.LogWarning("Failed to convert value '{Value}' to type '{Type}': {Error}. Storing as string.",
-                    value, fieldType, ex.Message);
+                // Never the value or the parse message that quotes it: a mapped field can hold a secret.
+                _logger.LogWarning("Failed to convert a value to type '{Type}' ({ErrorKind}). Storing as string.",
+                    fieldType, ex.GetType().Name);
                 return BsonValue.Create(value);
             }
         }

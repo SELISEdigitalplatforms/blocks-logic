@@ -306,11 +306,16 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
             return engine;
         }
 
+        // console.* in a script is accepted and dropped. It used to print to the server's stdout, which put
+        // tenant item data (tokens from an upstream response, resolved values) into platform logs; the
+        // tenant never saw those lines anyway. User rule 2026-10-08: never show a secret in a log.
+        private static readonly Action<object?> DropConsoleLine = _ => { };
+
         private static readonly object CodeNodeConsole = new
         {
-            log = (Action<object?>)(msg => Console.WriteLine($"[code-node] {msg}")),
-            warn = (Action<object?>)(msg => Console.WriteLine($"[code-node][warn] {msg}")),
-            error = (Action<object?>)(msg => Console.Error.WriteLine($"[code-node][error] {msg}")),
+            log = DropConsoleLine,
+            warn = DropConsoleLine,
+            error = DropConsoleLine,
         };
 
 

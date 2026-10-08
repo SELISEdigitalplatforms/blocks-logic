@@ -111,7 +111,7 @@ namespace DomainService.Notification
             var provider = _notifierFactory.GetNotifierServiceProvider(configuration.ChannelToNotify);
             await provider.Notify(notifyRequest, configuration);
 
-            _logger.LogInformation("Notify: Notify request has handled successfully with payload {@payload}", notifyRequest);
+            _logger.LogInformation("Notify: Notify request has handled successfully for configuration {ConfigurationName}", notifyRequest.ConfigurationName);
         }
 
         public async Task RemoveCollectionAsync(string collectionId)

@@ -150,7 +150,8 @@ namespace Workflow.DomainService.Services
                     }
                     catch (JsonException ex)
                     {
-                        _logger.LogWarning(ex, "Failed to deserialize notification response. Raw response: {RawResponse}", rawResponse);
+                        // Length only: the body is the notifier's echo and is not ours to log (user rule 2026-10-08).
+                        _logger.LogWarning("Failed to deserialize notification response ({ErrorKind}); body {BodyLength} chars.", ex.GetType().Name, rawResponse.Length);
                     }
                 }
 

@@ -231,7 +231,8 @@ namespace Workflow.DomainService.Services
                 CreatedBy = BlocksContext.GetContext().UserId ?? "system",
                 LastUpdatedBy = BlocksContext.GetContext().UserId ?? "system",
             };
-            _logger.LogInformation("Inserting workflow into repository: {Model}", JsonConvert.SerializeObject(model));
+            // Ids and counts only: the nodes carry parameters such as a ClientSecret (user rule 2026-10-08).
+            _logger.LogInformation("Inserting workflow {WorkflowId} with {NodeCount} node(s)", model.ItemId, model.Nodes.Count);
             try
             {
                 await _workflowRepository.CreateWorkflowAsync(model);
