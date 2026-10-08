@@ -147,6 +147,25 @@ namespace XUnitTest.Functions
             (await Read(run.ItemId))!.Status.Should().Be(RunStatus.OutputProcessing);
         }
 
+        [Fact]
+        public async Task The_cpu_window_is_stored_with_its_figure_and_cleared_when_a_later_result_has_none()
+        {
+            var run = await Seed(RunStatus.Queued, attempt: 1);
+            await _repository.ApplyResultAsync(Tenant, run.ItemId, 1, RunStatus.Failed, RunErrorCode.None, null, null,
+                1, 1600, null, 12, "runner-1", DateTime.UtcNow, DateTime.UtcNow, false, new RunSandboxReport(null, null, null, 1500));
+            (await Read(run.ItemId))!.CpuWindowMs.Should().Be(1500);
+
+            (await _repository.ResetForRetryAsync(Tenant, run.ItemId, 2)).Should().BeTrue();
+            (await Read(run.ItemId))!.CpuWindowMs.Should().BeNull("a retry starts with no figures");
+
+            // An older runner's whole-container total: no window may stay next to it.
+            await _repository.ApplyResultAsync(Tenant, run.ItemId, 2, RunStatus.Succeeded, RunErrorCode.None, null, null,
+                0, 2400, null, 580, "runner-1", DateTime.UtcNow, DateTime.UtcNow, false);
+            var stored = await Read(run.ItemId);
+            stored!.CpuUsageMs.Should().Be(580);
+            stored.CpuWindowMs.Should().BeNull();
+        }
+
         // ---- ResetForRetryAsync ----------------------------------------------------
 
         [Fact]

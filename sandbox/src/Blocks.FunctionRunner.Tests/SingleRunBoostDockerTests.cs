@@ -163,6 +163,12 @@ namespace Blocks.FunctionRunner.Tests
             result.Output.Ok.Should().BeTrue();
             updates.Should().ContainSingle();
             (updates[0] - startAt!.Value).Should().BeGreaterThan(1900, "dropped once the handler was about to run");
+
+            // 2 s of load work at 1 CPU is not the handler's: its CPU is read over started → result
+            // on the host counter (2026-10-08, "243 / 100 m" for a trivial Test run).
+            result.CpuWindowMs.Should().NotBeNull();
+            result.CpuUsageMs.Should().BeLessThan(500, "the 2 s of boosted load work is left out");
+            result.CpuWindowMs!.Value.Should().BeLessThanOrEqualTo(result.ExecutionMs!.Value + 50);
         }
     }
 }

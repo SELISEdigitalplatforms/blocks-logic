@@ -170,6 +170,13 @@ namespace Functions.DomainService.Dtos.Responses
 
         /// <summary>Total CPU time the sandbox consumed for the run, in milliseconds — a cumulative counter, not a percentage.</summary>
         public long? CpuUsageMs { get; set; }
+
+        /// <summary>
+        /// The wall ms <see cref="CpuUsageMs"/> was measured over when it is the handler's own window
+        /// (host counter, handler start to result), so the two divide into millicores. Null when the
+        /// CPU figure is a total that includes start-up — never divide that one by a duration.
+        /// </summary>
+        public long? CpuWindowMs { get; set; }
         public int? ExitCode { get; set; }
         public bool LogsTruncated { get; set; }
         public List<RunAttempt> Attempts { get; set; } = [];
@@ -207,6 +214,7 @@ namespace Functions.DomainService.Dtos.Responses
             DurationMs = run.DurationMs,
             PeakMemoryBytes = run.PeakMemoryBytes,
             CpuUsageMs = run.CpuUsageMs,
+            CpuWindowMs = run.CpuWindowMs,
             ExitCode = run.ExitCode,
             LogsTruncated = run.LogsTruncated,
             Attempts = run.Attempts,

@@ -139,6 +139,7 @@ namespace Blocks.FunctionRunner.Runs
                 new("executionMs", string.Empty),
                 new("peakMemoryBytes", string.Empty),
                 new("cpuUsageMs", string.Empty),
+                new("cpuWindowMs", string.Empty),
                 new("runnerId", _options.RunnerId),
                 new("startedAt", now),
                 new("completedAt", now),
@@ -490,7 +491,7 @@ namespace Blocks.FunctionRunner.Runs
                     result.PeakMemoryBytes, result.CpuUsageMs, result.Output.ResultJson,
                     WithFailureLine(result.Output, errorCode, errorMessage, resolvedValues),
                     result.Output.Truncated,
-                    startupMs: result.StartupMs, executionMs: result.ExecutionMs, timings: timings)
+                    startupMs: result.StartupMs, executionMs: result.ExecutionMs, cpuWindowMs: result.CpuWindowMs, timings: timings)
                     .ConfigureAwait(false);
 
                 return Disposition.Complete;
@@ -815,7 +816,7 @@ namespace Blocks.FunctionRunner.Runs
                 result.PeakMemoryBytes, result.CpuUsageMs, result.Output.ResultJson,
                 WithFailureLine(result.Output, errorCode, errorMessage, resolvedValues),
                 result.Output.Truncated,
-                startupMs: result.StartupMs, executionMs: result.ExecutionMs, warm: report, timings: timings)
+                startupMs: result.StartupMs, executionMs: result.ExecutionMs, cpuWindowMs: result.CpuWindowMs, warm: report, timings: timings)
                 .ConfigureAwait(false);
 
             return Disposition.Complete;
@@ -1145,7 +1146,7 @@ namespace Blocks.FunctionRunner.Runs
             string status, string? errorCode, string? errorMessage,
             int? exitCode, long durationMs, long? peakMemory, long? cpuUsageMs,
             string? resultJson, List<string>? logs, bool truncated,
-            long? startupMs = null, long? executionMs = null, WarmReport? warm = null, HandoverTimings? timings = null)
+            long? startupMs = null, long? executionMs = null, long? cpuWindowMs = null, WarmReport? warm = null, HandoverTimings? timings = null)
         {
             var completedAt = DateTimeOffset.UtcNow;
             string? resultKey = null;
@@ -1194,6 +1195,8 @@ namespace Blocks.FunctionRunner.Runs
                 new("executionMs", executionMs?.ToString(CultureInfo.InvariantCulture) ?? string.Empty),
                 new("peakMemoryBytes", peakMemory?.ToString(CultureInfo.InvariantCulture) ?? string.Empty),
                 new("cpuUsageMs", cpuUsageMs?.ToString(CultureInfo.InvariantCulture) ?? string.Empty),
+                // The wall ms cpuUsageMs covers when it is the handler's own window; empty = a total, not divisible.
+                new("cpuWindowMs", cpuWindowMs?.ToString(CultureInfo.InvariantCulture) ?? string.Empty),
                 new("runnerId", _options.RunnerId),
                 new("startedAt", startedAt.ToString("O")),
                 new("completedAt", completedAt.ToString("O")),

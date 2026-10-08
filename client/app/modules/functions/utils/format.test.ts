@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  describeRunCpu,
   formatDuration,
   formatMemoryAgainstLimit,
   formatMillicoresAgainstLimit,
@@ -96,8 +97,8 @@ describe("formatMemoryAgainstLimit", () => {
 });
 
 describe("formatMillicoresAgainstLimit", () => {
-  it("averages consumed CPU over the run's wall time, in the unit the limit is set in", () => {
-    // 1.4 s of CPU across a 6.98 s run is a fifth of a core held busy throughout.
+  it("averages consumed CPU over the window it was measured in, in the unit the limit is set in", () => {
+    // 1.4 s of CPU across a 6.98 s handler window is a fifth of a core held busy throughout.
     expect(formatMillicoresAgainstLimit(1400, 6980, 200)).toBe("201 / 200 m");
     // An I/O-bound run: the same wall time, almost none of it spent on CPU.
     expect(formatMillicoresAgainstLimit(120, 6980, 200)).toBe("17 / 200 m");
@@ -115,9 +116,39 @@ describe("formatMillicoresAgainstLimit", () => {
     expect(formatMillicoresAgainstLimit(0, 6980, 200)).toBe("—");
   });
 
-  it("does not divide by a duration it does not have", () => {
+  it("does not divide by a window it does not have", () => {
     expect(formatMillicoresAgainstLimit(1400, null, 200)).toBe("—");
     expect(formatMillicoresAgainstLimit(1400, 0, 200)).toBe("—");
+  });
+
+  it("does not compare a window too short for the per-period quota", () => {
+    // A 5 ms handler that spent 12 ms of CPU in one burst is not 2400 m of a 100 m limit.
+    expect(formatMillicoresAgainstLimit(12, 5, 100)).toBe("—");
+    expect(formatMillicoresAgainstLimit(12, 999, 100)).toBe("—");
+    expect(formatMillicoresAgainstLimit(100, 1000, 100)).toBe("100 / 100 m");
+  });
+});
+
+describe("describeRunCpu", () => {
+  it("gives millicores with the CPU time behind them when the window allows it", () => {
+    expect(describeRunCpu(1400, 6980, 200)).toEqual({ value: "201 / 200 m", hint: "1.40 s CPU time in 6.98 s" });
+  });
+
+  it("gives the CPU time alone for a short handler, and says why", () => {
+    expect(describeRunCpu(3, 40, 100)).toEqual({
+      value: "3 ms CPU time",
+      hint: "Handler ran 40 ms: too short to compare with the limit",
+    });
+  });
+
+  it("never divides a total that includes start-up (an older run, or no window measured)", () => {
+    // The 2026-10-08 "243 / 100 m": nearly all of a Test run's total was start-up at the boost.
+    expect(describeRunCpu(600, null, 100)).toEqual({ value: "600 ms CPU time", hint: "Includes sandbox start-up" });
+  });
+
+  it("says nothing when nothing was measured", () => {
+    expect(describeRunCpu(null, 1000, 100)).toEqual({ value: "—" });
+    expect(describeRunCpu(0, 1000, 100)).toEqual({ value: "—" });
   });
 });
 

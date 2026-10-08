@@ -23,7 +23,7 @@ import {
   formatAbsoluteTime,
   formatDuration,
   formatMemoryAgainstLimit,
-  formatMillicoresAgainstLimit,
+  describeRunCpu,
   formatRelativeTime,
   formatTimeOfDay,
   runnerSpanMs,
@@ -222,12 +222,11 @@ export const RunDetail = ({
       value: formatMemoryAgainstLimit(run.peakMemoryBytes, memoryLimitMb),
     },
     {
-      // Millicores, not raw CPU time: the limit is set in millicores, so this is the figure that
-      // says whether the sandbox was throttled — the consumed time it is derived from stays in
-      // the hint, since that is the one that says how much work was actually done.
+      // Millicores when the runner measured the handler's own window long enough to compare with
+      // the limit (set in millicores); otherwise the CPU time alone, never divided by the run's
+      // duration (which includes start-up at the boost).
       label: "CPU",
-      value: formatMillicoresAgainstLimit(run.cpuUsageMs, run.durationMs, cpuLimitMillicores),
-      hint: run.cpuUsageMs ? `${formatDuration(run.cpuUsageMs)} CPU time` : undefined,
+      ...describeRunCpu(run.cpuUsageMs, run.cpuWindowMs, cpuLimitMillicores),
     },
     {
       label: "Attempts",

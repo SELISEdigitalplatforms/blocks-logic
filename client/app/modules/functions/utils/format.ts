@@ -99,28 +99,59 @@ export const formatMemoryAgainstLimit = (
 };
 
 /**
- * "138 / 100 m" — the CPU a run actually used, averaged over its wall time, against the millicore
- * limit it ran under.
+ * Below this, a CPU average says nothing about the limit. The limit is a quota per 100 ms period
+ * (10 ms at 100 m), and a short window can catch a whole period's quota spent in a burst — a
+ * 5 ms handler then reads far above the limit without ever exceeding it. Over 10 periods the
+ * drift is at most about one period's quota.
+ */
+export const CPU_COMPARE_MIN_WINDOW_MS = 1000;
+
+/**
+ * "38 / 100 m" — the CPU the handler used, averaged over the window it was measured in, against
+ * the millicore limit it ran under. 1000 m is one core held busy for the whole window, so a
+ * figure at the limit means the time went on waiting for CPU quota, and one far below it means
+ * the time went on I/O.
  *
- * The runner records CPU as *consumed time*, a cumulative cgroup counter. That answers "how much
- * work did it do" but not "was it starved", which is the question a limit expressed in millicores
- * raises. Dividing by the sandbox's own stopwatch converts it into the unit the limit is set in:
- * 1000 m is one core held busy for the whole run, so a figure pinned at the limit means the wall
- * time went on waiting for CPU quota, and one far below it means the wall time went on I/O.
+ * The window is the runner's `cpuWindowMs`: the handler's own start to result, read from the
+ * host counter the limit is enforced on. It is never the run's duration: that one includes
+ * gVisor and Node starting at the start-up boost (1 CPU), which made a trivial handler read
+ * "243 / 100 m". No window (an older run, or a total), or one too short to compare, gives "—".
  *
- * Zero is treated as "not measured", not as "used no CPU": the runner reports null when no stats
- * sample arrived and rounds anything it did measure up to at least 1 ms, so a literal 0 only ever
- * comes from a runner build that read the container's final, already-torn-down sample.
+ * Zero CPU is treated as "not measured", not as "used no CPU": the runner reports null when no
+ * stats sample arrived and rounds anything it did measure up to at least 1 ms.
  */
 export const formatMillicoresAgainstLimit = (
   cpuUsageMs?: number | null,
-  durationMs?: number | null,
+  cpuWindowMs?: number | null,
   limitMillicores?: number | null,
 ): string => {
   if (cpuUsageMs == null || cpuUsageMs <= 0) return "—";
-  if (durationMs == null || durationMs <= 0) return "—";
-  const used = Math.round((cpuUsageMs / durationMs) * 1000);
+  if (cpuWindowMs == null || cpuWindowMs < CPU_COMPARE_MIN_WINDOW_MS) return "—";
+  const used = Math.round((cpuUsageMs / cpuWindowMs) * 1000);
   return limitMillicores == null ? `${used} m` : `${used} / ${limitMillicores} m`;
+};
+
+/**
+ * The CPU card of a run: millicores against the limit when the measurement allows it, else the
+ * CPU time alone, with a hint saying why there is no millicore figure.
+ */
+export const describeRunCpu = (
+  cpuUsageMs?: number | null,
+  cpuWindowMs?: number | null,
+  limitMillicores?: number | null,
+): { value: string; hint?: string } => {
+  if (cpuUsageMs == null || cpuUsageMs <= 0) return { value: "—" };
+  const millicores = formatMillicoresAgainstLimit(cpuUsageMs, cpuWindowMs, limitMillicores);
+  if (millicores !== "—") {
+    return { value: millicores, hint: `${formatDuration(cpuUsageMs)} CPU time in ${formatDuration(cpuWindowMs)}` };
+  }
+  if (cpuWindowMs != null) {
+    return {
+      value: `${formatDuration(cpuUsageMs)} CPU time`,
+      hint: `Handler ran ${formatDuration(cpuWindowMs)}: too short to compare with the limit`,
+    };
+  }
+  return { value: `${formatDuration(cpuUsageMs)} CPU time`, hint: "Includes sandbox start-up" };
 };
 
 export const formatRunCount = (count?: number | null): string =>

@@ -423,6 +423,22 @@ namespace XUnitTest.Functions
             VerifySandboxReport(s => s == new RunSandboxReport(null, null, null));
         }
 
+        [Fact]
+        public async Task The_handler_cpu_window_is_recorded_with_the_cpu_figure()
+        {
+            await Consumer().ProcessAsync(Entry(("cpuUsageMs", "12"), ("cpuWindowMs", "1500")), CancellationToken.None);
+
+            VerifySandboxReport(s => s == new RunSandboxReport(null, null, null, 1500));
+        }
+
+        [Theory]
+        [InlineData("")]
+        [InlineData("-5")]
+        [InlineData("x")]
+        public void A_missing_or_unusable_cpu_window_is_null_so_the_total_is_never_divided(string value)
+            => SandboxReport(new ResultStreamEntry("1-0", new Dictionary<string, string> { ["cpuWindowMs"] = value }))
+                .Should().Be(new RunSandboxReport(null, null, null, null));
+
         [Theory]
         [InlineData("yes")]
         [InlineData("2")]

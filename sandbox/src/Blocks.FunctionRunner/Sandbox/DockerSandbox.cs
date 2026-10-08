@@ -49,6 +49,15 @@ namespace Blocks.FunctionRunner.Sandbox
         /// </summary>
         public long? CpuUsageMs { get; init; }
 
+        /// <summary>
+        /// The wall time <see cref="CpuUsageMs"/> covers, set only when that figure is the host's
+        /// counter over the handler's own window (<c>started</c> to <c>result</c>), so the two
+        /// divide into millicores comparable with the limit. Null when the CPU figure is any
+        /// other total (the whole container, or since the last warm call), which must not be
+        /// divided by a duration.
+        /// </summary>
+        public long? CpuWindowMs { get; init; }
+
         /// <summary>Set when the sandbox could not be created or started at all.</summary>
         public string? HostFailure { get; init; }
     }
@@ -172,7 +181,9 @@ namespace Blocks.FunctionRunner.Sandbox
                 using var deadlineCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 deadlineCts.CancelAfter(deadline);
 
-                var readTask = ReadStreamAsync(stream, attachCts.Token, boost is null ? null : boost.OnText);
+                var cpuWindow = new HandlerCpuWindow(() => HostCpu.ReadMicroseconds(id), stopwatch);
+                Action<string> onText = boost is null ? cpuWindow.OnText : text => { boost.OnText(text); cpuWindow.OnText(text); };
+                var readTask = ReadStreamAsync(stream, attachCts.Token, onText);
                 var timedOut = false;
                 using var boostCap = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 if (boost is not null && _options.StartBoostMaxMs > 0) _ = boost.CapAsync(_options.StartBoostMaxMs, boostCap.Token);
@@ -212,6 +223,15 @@ namespace Blocks.FunctionRunner.Sandbox
                 // that socket lingers.
                 statsCts.CancelAfter(TimeSpan.FromSeconds(2));
                 var (peakMemoryBytes, cpuUsageMs) = await statsTask.ConfigureAwait(false);
+
+                // The handler's own CPU when the host counter was read at both ends; Docker's
+                // whole-container total (start-up boost included) stays the fallback, with no window.
+                long? cpuWindowMs = null;
+                if (cpuWindow.Measured() is { } handlerCpu)
+                {
+                    cpuUsageMs = handlerCpu.CpuMs;
+                    cpuWindowMs = handlerCpu.WindowMs;
+                }
 
                 // --- post-mortem --------------------------------------------------------
                 var inspect = await _docker.Containers.InspectContainerAsync(containerId, CancellationToken.None)
@@ -257,6 +277,7 @@ namespace Blocks.FunctionRunner.Sandbox
                     DurationMs = stopwatch.ElapsedMilliseconds,
                     PeakMemoryBytes = peakMemoryBytes,
                     CpuUsageMs = cpuUsageMs,
+                    CpuWindowMs = cpuWindowMs,
                 };
             }
             catch (Exception ex) when (ex is not OperationCanceledException)

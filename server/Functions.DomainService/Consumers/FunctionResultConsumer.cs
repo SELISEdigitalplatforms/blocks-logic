@@ -560,7 +560,8 @@ namespace Functions.DomainService.Consumers
             return new RunSandboxReport(
                 reused,
                 string.IsNullOrWhiteSpace(discard) ? null : discard,
-                ParseNullableLong(entry.Get("handoverMs")));
+                ParseNullableLong(entry.Get("handoverMs")),
+                ParseNullableLong(entry.Get("cpuWindowMs")) is >= 0 and var window ? window : null);
         }
 
         private static DateTime? ParseDate(string? value) =>

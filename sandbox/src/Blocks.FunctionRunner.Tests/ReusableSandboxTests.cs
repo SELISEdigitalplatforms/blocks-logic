@@ -146,6 +146,8 @@ namespace Blocks.FunctionRunner.Tests
             var call = await CallAsync(sandbox, "run_hostcpu");
 
             call.Result.CpuUsageMs.Should().Be(12);
+            call.Result.CpuWindowMs.Should().NotBeNull("the host's figure covers the handler's window, so it can be divided");
+            call.Result.CpuWindowMs.Should().Be(call.Result.ExecutionMs);
         }
 
         [Fact]
@@ -161,6 +163,7 @@ namespace Blocks.FunctionRunner.Tests
             var call = await CallAsync(sandbox, "run_nocgroup");
 
             call.Result.CpuUsageMs.Should().Be(30);
+            call.Result.CpuWindowMs.Should().BeNull("the runtime's figure counts throttled time: not comparable with the limit");
         }
 
         [Fact]

@@ -727,6 +727,7 @@ namespace Blocks.FunctionRunner.Sandbox
             var oomKilled = false;
             long? memoryBytes = null;
             long? cpuUsageMs = null;
+            long? cpuWindowMs = null;
 
             if (discard is null)
             {
@@ -746,6 +747,7 @@ namespace Blocks.FunctionRunner.Sandbox
                 if (hostCpuAtStart is { } from && hostCpuAtAnswer is { } to && to >= from)
                 {
                     cpuUsageMs = Math.Max(1, (to - from + 500) / 1000);
+                    if (handlerStartedMs is { } fromMs && answeredMs is { } toMs && toMs >= fromMs) cpuWindowMs = toMs - fromMs;
                 }
             }
             else
@@ -780,6 +782,7 @@ namespace Blocks.FunctionRunner.Sandbox
                     ExecutionMs = handlerStartedMs is null ? null : executionMs,
                     PeakMemoryBytes = memoryBytes,
                     CpuUsageMs = cpuUsageMs,
+                    CpuWindowMs = cpuWindowMs,
                 },
                 Clean = clean,
                 Leftovers = leftovers,
@@ -1223,33 +1226,7 @@ namespace Blocks.FunctionRunner.Sandbox
         }
 
         /// <inheritdoc />
-        public long? HostCpuMicroseconds()
-        {
-            if (_containerId is null) return null;
-            // systemd cgroup driver (this host), then the cgroupfs driver's layout.
-            foreach (var path in (string[])[
-                $"/sys/fs/cgroup/system.slice/docker-{_containerId}.scope/cpu.stat",
-                $"/sys/fs/cgroup/docker/{_containerId}/cpu.stat"])
-            {
-                try
-                {
-                    foreach (var line in File.ReadLines(path))
-                    {
-                        if (line.StartsWith("usage_usec ", StringComparison.Ordinal)
-                            && long.TryParse(line.AsSpan(11), System.Globalization.NumberStyles.None,
-                                System.Globalization.CultureInfo.InvariantCulture, out var usec))
-                        {
-                            return usec;
-                        }
-                    }
-                }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                {
-                    // Not this layout, or not readable: try the next, else fall back.
-                }
-            }
-            return null;
-        }
+        public long? HostCpuMicroseconds() => HostCpu.ReadMicroseconds(_containerId);
 
         public async Task<(long? MemoryBytes, long? CpuTotalMs)> StatsAsync(CancellationToken token)
         {

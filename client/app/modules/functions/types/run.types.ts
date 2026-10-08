@@ -108,6 +108,8 @@ export interface IRunDetail {
   peakMemoryBytes?: number | null;
   /** Total CPU time the sandbox consumed for the run, in milliseconds — cumulative, not a percentage. */
   cpuUsageMs?: number | null;
+  /** Wall ms `cpuUsageMs` covers when it is the handler's own window; null = a total incl. start-up, never divide it. */
+  cpuWindowMs?: number | null;
   exitCode?: number | null;
   logsTruncated: boolean;
   /** Reuse only: true = served by an already-running (warm) sandbox, false = cold start. */
