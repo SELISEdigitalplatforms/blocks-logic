@@ -38,8 +38,8 @@ export const VersionSourceDialog = ({
         <DialogHeader>
           <DialogTitle>Source of v{version?.number}</DialogTitle>
           <DialogDescription>
-            What this version was built from. It cannot be edited — roll back to make it active, or
-            copy from here into the editor.
+            What this version was built from. It cannot be edited — copy from here into the
+            editor.
           </DialogDescription>
         </DialogHeader>
 

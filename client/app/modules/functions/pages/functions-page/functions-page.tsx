@@ -36,7 +36,7 @@ export const FunctionsPage = () => {
         <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">Functions</h1>
           <p className="mt-1 text-sm text-medium-emphasis">
-            Deploy code and call it over HTTP or from a workflow — each run in its own sandbox.
+            Deploy code and call it over HTTP or from a workflow — it runs in an isolated sandbox.
           </p>
         </div>
         {showCreateButton && (

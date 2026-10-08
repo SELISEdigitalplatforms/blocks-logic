@@ -351,7 +351,7 @@ namespace XUnitTest.Proxy
 
             result.IsValid.Should().BeFalse();
             result.Errors.Should().ContainKey("responseInclude")
-                .WhoseValue.Should().Be("At most 200 response fields.");
+                .WhoseValue.Should().Be("Too many response fields.");
         }
 
         [Fact]

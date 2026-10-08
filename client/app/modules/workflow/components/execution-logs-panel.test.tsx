@@ -194,7 +194,7 @@ describe("ExecutionLogsPanel", () => {
     ],
     [
       { logs: [], mayStillArrive: true },
-      "Waiting for logs... They can take a few seconds to appear.",
+      "Waiting for logs... They can take a while to appear.",
     ],
     [{ logs: [], mayStillArrive: false }, "No logs were recorded for this execution."],
   ])("renders the %o state", async (data, text) => {
@@ -300,7 +300,7 @@ describe("ExecutionLogsPanel", () => {
   it("shows the trace id and the truncation notice", async () => {
     svc.getWorkflowExecutionLogs.mockResolvedValue(response({ isTruncated: true }));
     renderPanel();
-    expect(await screen.findByText("Only the first 2,000 lines are shown.")).toBeTruthy();
+    expect(await screen.findByText("Not all lines are shown.")).toBeTruthy();
     expect(screen.getByText("Trace 0af7651916cd43dd8448eb211c80319c")).toBeTruthy();
   });
 

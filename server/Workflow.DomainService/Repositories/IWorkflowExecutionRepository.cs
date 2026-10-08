@@ -10,11 +10,18 @@ namespace Workflow.DomainService.Repositories
         Task<WorkflowExecutionEntity?> GetByIdAsync(string id, string tenantId);
         Task UpdateAsync(WorkflowExecutionEntity execution);
         Task<bool> AtomicCompleteNodeAsync(string executionId, string tenantId, string completedNodeId, List<string> nextNodeIds);
-        Task AtomicFinalizeExecutionAsync(string executionId, string tenantId);
+        /// <summary>Marks the execution Completed unless it is already Failed. False = it was Failed and stays Failed.</summary>
+        Task<bool> AtomicFinalizeExecutionAsync(string executionId, string tenantId);
         Task AtomicAddNodeExecutionAsync(string executionId, string tenantId, NodeExecutionEntity nodeExecution);
         /// <summary>
+        /// Adds the node's row and sets the execution Running, only while the execution is not Failed, in one
+        /// atomic update. False = the execution failed meanwhile (another branch), so the node must not run.
+        /// </summary>
+        Task<bool> TryAddNodeExecutionAsync(string executionId, string tenantId, NodeExecutionEntity nodeExecution);
+        /// <summary>
         /// Adds the node's row only if this execution has no Running or Completed row for that node yet,
-        /// in one atomic update. False means the node already ran or is running (a redelivered message).
+        /// and is not Failed, in one atomic update. False means the node already ran or is running (a
+        /// redelivered message), or another branch failed the execution meanwhile.
         /// </summary>
         Task<bool> TryAddFirstNodeExecutionAsync(string executionId, string tenantId, NodeExecutionEntity nodeExecution);
 

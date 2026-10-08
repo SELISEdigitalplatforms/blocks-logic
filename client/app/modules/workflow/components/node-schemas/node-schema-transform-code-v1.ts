@@ -40,15 +40,8 @@ export const NodeSchemaTransformCodeV1: NodeSchemaDefinition = {
         height: 280,
       },
     ],
-    settings: [
-      {
-        id: "continue-on-error",
-        type: "switch",
-        label: "Continue on Error",
-        info: "Continue workflow execution even if this node fails.",
-        key: "settings.continueOnError",
-      },
-    ],
+    // No "Continue on Error": the engine never reads node settings, so the switch had no effect.
+    settings: [],
   },
   defaults: {
     parameters: {
@@ -56,9 +49,7 @@ export const NodeSchemaTransformCodeV1: NodeSchemaDefinition = {
       language: "js",
       script: "",
     },
-    settings: {
-      continueOnError: false,
-    },
+    settings: {},
   },
   transform: (node) => node,
   fieldReference: (p) => ({ kind: "code", mode: p.mode === "each" ? "each" : "all" }),

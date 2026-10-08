@@ -230,9 +230,13 @@ namespace Workflow.DomainService.Services
                     return null;
                 }
             }
-            else
+            else if (!await _workflowExecutionRepository.TryAddNodeExecutionAsync(execution.Id, execution.TenantId, nodeExecution))
             {
-                await _workflowExecutionRepository.AtomicAddNodeExecutionAsync(execution.Id, execution.TenantId, nodeExecution);
+                // Another branch failed the execution after it was read above: this node must not run,
+                // and the execution must not be set back to Running.
+                executionLog.ForNode(node.Id, runIndex: null).Warn(
+                    ExecutionLogStages.NodeSkipped, "Execution already Failed; node event ignored.");
+                return null;
             }
 
             execution.NodeExecutions.Add(nodeExecution);
@@ -656,16 +660,13 @@ namespace Workflow.DomainService.Services
 
             if (!string.IsNullOrEmpty(completionNodeId) && node.Id == completionNodeId)
             {
-                execution.Status = WorkflowExecutionStatus.Completed;
-                execution.FinishedAt = DateTime.UtcNow;
-                execution.ActiveNodeIds = [];
                 // Atomically update this NodeExecution to Completed in DB
                 await _workflowExecutionRepository.AtomicUpdateNodeExecutionCompletedAsync(
                     execution.Id, execution.TenantId, nodeExecution.Id,
                     outputItems.Count, nodeExecution.OutputCountsByBranch, contextUpdates);
                 context.Log.Info(ExecutionLogStages.NodeCompleted, "Node completed in {DurationMs} ms.", ElapsedMs(nodeExecution.StartedAt));
                 context.Log.Info(ExecutionLogStages.NodeTargetReached, "Step target reached; stopping.");
-                await _workflowExecutionRepository.AtomicFinalizeExecutionAsync(execution.Id, execution.TenantId);
+                var finalized = await _workflowExecutionRepository.AtomicFinalizeExecutionAsync(execution.Id, execution.TenantId);
                 await _workflowNotificationService.NotifyExecutionEventAsync(
                     execution,
                     nodeExecution,
@@ -674,6 +675,11 @@ namespace Workflow.DomainService.Services
                     status: nameof(NodeExecutionStatus.Completed),
                     data: nodeExecution.Id,
                     message: $"Node '{nodeExecution.NodeName}' completed successfully.");
+                // Another branch failed the execution meanwhile: it stays Failed, and nobody is told "completed".
+                if (!finalized) return [];
+                execution.Status = WorkflowExecutionStatus.Completed;
+                execution.FinishedAt = DateTime.UtcNow;
+                execution.ActiveNodeIds = [];
                 await _workflowNotificationService.NotifyExecutionEventAsync(
                     execution,
                     nodeExecution: null,

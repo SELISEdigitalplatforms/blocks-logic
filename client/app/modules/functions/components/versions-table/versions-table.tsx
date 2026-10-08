@@ -33,8 +33,7 @@ export const VersionsTable = ({
   return (
     <div className="flex flex-col gap-3">
       <p className="max-w-[68ch] text-xs leading-relaxed text-medium-emphasis">
-        Every deploy builds an immutable image. Rolling back re-points the active version — no
-        rebuild, and in-flight runs finish on the version they started with.
+        Every deploy pins an immutable build. A version cannot be changed after it is made.
       </p>
 
       <div className="overflow-hidden rounded-lg border" role="table" aria-label="Versions">

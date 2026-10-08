@@ -124,6 +124,18 @@ namespace XUnitTest.Workflow
 
         // ----- Required selections --------------------------------------------------
 
+        /// <summary>
+        /// Since "Refactor error handling" (c2986972, 2026-09-16) a per-item failure is a synthetic error
+        /// item on the "source" branch and the step still succeeds (same as the HTTP Request node); only a
+        /// node-level problem (no proxy / no endpoint) fails the step. Returns that single item's message.
+        /// </summary>
+        private static string ItemError(NodeExecutionResult result)
+        {
+            var output = result.OutputItems.Should().ContainSingle().Subject.Data.Output.AsBsonDocument;
+            output["error"].AsBoolean.Should().BeTrue();
+            return output["message"].AsString;
+        }
+
         [Fact]
         public async Task RunAsync_NoProxySelected_FailsWithoutCallingTheGateway()
         {
@@ -191,8 +203,8 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(parameters));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("cannot contain");
+            result.IsSuccess.Should().BeTrue("a per-item proxy failure is an error item, like the HTTP Request node");
+            ItemError(result).Should().Contain("cannot contain");
             _sent.Should().BeEmpty();
         }
 
@@ -205,8 +217,8 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(parameters));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("not valid");
+            result.IsSuccess.Should().BeTrue("a per-item proxy failure is an error item, like the HTTP Request node");
+            ItemError(result).Should().Contain("not valid");
             _sent.Should().BeEmpty();
         }
 
@@ -215,8 +227,8 @@ namespace XUnitTest.Workflow
         {
             var result = await Node().RunAsync(Context(Parameters(routePath: "orders/{id}")));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("id");
+            result.IsSuccess.Should().BeTrue("a per-item proxy failure is an error item, like the HTTP Request node");
+            ItemError(result).Should().Contain("id");
             _sent.Should().BeEmpty();
         }
 
@@ -272,8 +284,8 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(parameters));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().StartWith("Invalid JSON body:");
+            result.IsSuccess.Should().BeTrue("a per-item proxy failure is an error item, like the HTTP Request node");
+            ItemError(result).Should().StartWith("Invalid JSON body:");
             _sent.Should().BeEmpty();
         }
 
@@ -375,8 +387,8 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(Parameters()));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("text/html");
+            result.IsSuccess.Should().BeTrue("a per-item proxy failure is an error item, like the HTTP Request node");
+            ItemError(result).Should().Contain("text/html");
         }
 
         // ----- Gateway refusals -----------------------------------------------------
@@ -392,9 +404,9 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(Parameters(routePath: "orders")));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("does not declare the endpoint GET orders");
-            result.ErrorMessage.Should().Contain("re-select the endpoint");
+            result.IsSuccess.Should().BeTrue("a per-item proxy failure is an error item, like the HTTP Request node");
+            ItemError(result).Should().Contain("does not declare the endpoint GET orders");
+            ItemError(result).Should().Contain("re-select the endpoint");
         }
 
         [Fact]
@@ -409,9 +421,9 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(Parameters(method: "DELETE")));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("does not allow DELETE");
-            result.ErrorMessage.Should().Contain("GET, POST");
+            result.IsSuccess.Should().BeTrue("a per-item proxy failure is an error item, like the HTTP Request node");
+            ItemError(result).Should().Contain("does not allow DELETE");
+            ItemError(result).Should().Contain("GET, POST");
         }
 
         [Fact]
@@ -427,9 +439,9 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(Parameters()));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("503");
-            result.ErrorMessage.Should().Contain("Could not connect to the upstream endpoint");
+            result.IsSuccess.Should().BeTrue("a per-item proxy failure is an error item, like the HTTP Request node");
+            ItemError(result).Should().Contain("503");
+            ItemError(result).Should().Contain("Could not connect to the upstream endpoint");
         }
     }
 }

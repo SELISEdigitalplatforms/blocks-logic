@@ -51,7 +51,7 @@ describe("ProxyResilienceCard", () => {
     renderWithProviders(<Harness />);
 
     expect(readValue()).toBeNull();
-    expect(screen.getByText(/Not set — a call runs until Blocks' own 30-second limit/)).toBeTruthy();
+    expect(screen.getByText(/Not set — each try stops after Blocks' own 30-second limit/)).toBeTruthy();
     expect(screen.getByText(/Off — a failed call is returned to your client/)).toBeTruthy();
     expect(screen.queryByLabelText("Seconds")).toBeNull();
   });

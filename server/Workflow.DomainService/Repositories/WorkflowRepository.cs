@@ -98,7 +98,22 @@ namespace Workflow.DomainService.Repositories
         {
             var collection = GetCollection(tenantId);
 
-            var filter = Builders<WorkflowEntity>.Filter.ElemMatch(w => w.Nodes, Builders<NodeEntity>.Filter.Eq("Parameters.mailServerConfigurationId", mailServerConfigurationId));
+            // Draft match: test mode reads the draft's email node (and its test subject).
+            var draftMatch = Builders<WorkflowEntity>.Filter.ElemMatch(w => w.Nodes,
+                Builders<NodeEntity>.Filter.Eq("Parameters.mailServerConfigurationId", mailServerConfigurationId));
+
+            // Published match: production must follow the PUBLISHED version. Its trigger nodes are copied into
+            // PublishedMeta.TriggerNodes at publish time, so a workflow whose draft no longer uses this mailbox
+            // (edited, not yet re-published) is still found. The caller re-checks the published snapshot.
+            var publishedNode = Builders<NodeEntity>.Filter.And(
+                Builders<NodeEntity>.Filter.Eq("Parameters.mailServerConfigurationId", mailServerConfigurationId),
+                Builders<NodeEntity>.Filter.Eq("Type", "email"),
+                Builders<NodeEntity>.Filter.Eq("Category", "trigger"));
+            var publishedMatch = Builders<WorkflowEntity>.Filter.And(
+                Builders<WorkflowEntity>.Filter.Eq(w => w.IsPublished, true),
+                Builders<WorkflowEntity>.Filter.ElemMatch(w => w.PublishedMeta.TriggerNodes, publishedNode));
+
+            var filter = Builders<WorkflowEntity>.Filter.Or(draftMatch, publishedMatch);
             return await collection.Find(filter).ToListAsync();
         }
 

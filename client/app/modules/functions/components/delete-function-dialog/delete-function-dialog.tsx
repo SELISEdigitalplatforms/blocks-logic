@@ -72,7 +72,7 @@ export const DeleteFunctionDialog = ({
           <DialogDescription>
             This removes <span className="font-semibold text-foreground">{fn?.name}</span>, its
             endpoint, every version and all runs and logs. It cannot be undone, and it is refused
-            while runs are still active.
+            while a workflow step uses this function.
           </DialogDescription>
         </DialogHeader>
 

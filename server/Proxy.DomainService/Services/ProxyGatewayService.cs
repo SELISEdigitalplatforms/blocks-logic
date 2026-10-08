@@ -364,7 +364,7 @@ namespace Proxy.DomainService.Services
                     upstreamHost, effective.Resilience?.TimeoutSeconds ?? 30, config.Slug, request.TenantId);
                 return await FinalizeAsync(request, config, route, BuildFailure(
                     ProxyExecutionOutcome.Timeout, 504, startedAt, stopwatch, storedUrl, upstreamHost,
-                    injectedHeaderKeys, injectedQueryKeys, "Upstream did not respond within 30s"));
+                    injectedHeaderKeys, injectedQueryKeys, "Upstream did not respond in time"));
             }
             catch (HttpRequestException ex) when (IsUpstreamBlocked(ex))
             {
@@ -457,7 +457,7 @@ namespace Proxy.DomainService.Services
                         upstreamHost, config.Slug, request.TenantId);
                     return await FinalizeAsync(request, config, route, BuildFailure(
                         ProxyExecutionOutcome.Timeout, 504, startedAt, stopwatch, storedUrl, upstreamHost,
-                        injectedHeaderKeys, injectedQueryKeys, "Upstream did not respond within 30s"));
+                        injectedHeaderKeys, injectedQueryKeys, "Upstream did not respond in time"));
                 }
 
                 stopwatch.Stop();
@@ -704,6 +704,15 @@ namespace Proxy.DomainService.Services
         }
 
         /// <summary>
+        /// Query keys Blocks itself reads to resolve the tenant (same list as <c>EndpointAccessAuthorizer</c>
+        /// TenantResolutionKeys and Genesis <c>TenantContextHelper</c>). Any case: ASP.NET query lookup ignores case,
+        /// so "?X-Blocks-Key=" is read by Blocks too. Never forwarded from a client caller; a configured query key
+        /// with the same name is still sent.
+        /// </summary>
+        internal static readonly IReadOnlySet<string> BlocksQueryKeys =
+            new HashSet<string>(["x-blocks-key", "tenant_id"], StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
         /// Rebuilds the target URL. Returns the URL to STORE (a query value carrying a <c>{{$VAR.name}}</c>
         /// token keeps the raw token), the URL to CALL (tokens substituted with their resolved values), and
         /// the list of query keys Blocks injected.
@@ -738,9 +747,14 @@ namespace Proxy.DomainService.Services
             // depend on byte-exact query preservation are therefore unsupported in this phase.
             var storedParts = new List<string>();
             var outboundParts = new List<string>();
+            // Blocks' own tenant keys (x-blocks-key, tenant_id) are read by the gateway to pick the tenant; they are
+            // never the vendor's business. A workflow step's query is written by its author on purpose (Blocks reads
+            // no tenant from it), so only client and Test calls lose them.
+            var stripBlocksKeys = !string.Equals(request.CallerKind, ProxyCallerKind.Workflow, StringComparison.Ordinal);
             foreach (var pair in QueryHelpers.ParseQuery(request.IncomingQuery ?? string.Empty))
             {
-                if (configuredKeys.Contains(pair.Key))
+                if (configuredKeys.Contains(pair.Key)
+                    || (stripBlocksKeys && BlocksQueryKeys.Contains(pair.Key)))
                 {
                     continue;
                 }

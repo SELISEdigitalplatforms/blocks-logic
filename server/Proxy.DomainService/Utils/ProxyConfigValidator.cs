@@ -209,7 +209,7 @@ namespace Proxy.DomainService.Utils
 
                 if (value.Length > MaxAccessValueLength)
                 {
-                    result.Errors[$"access.{label}"] = $"Each {label} entry must be at most {MaxAccessValueLength} characters.";
+                    result.Errors[$"access.{label}"] = $"Each {label} entry is too long.";
                     continue;
                 }
 
@@ -224,7 +224,7 @@ namespace Proxy.DomainService.Utils
 
             if (normalized.Values.Count > MaxAccessValues)
             {
-                result.Errors[$"access.{label}"] = $"At most {MaxAccessValues} {label} entries.";
+                result.Errors[$"access.{label}"] = $"Too many {label} entries.";
             }
 
             return normalized;
@@ -314,7 +314,7 @@ namespace Proxy.DomainService.Utils
                 if (delay < 1 || delay > MaxRetryDelaySeconds)
                 {
                     result.Errors[field] =
-                        $"The retry delay for {where} must be between 1 and {MaxRetryDelaySeconds} seconds.";
+                        $"The retry delay for {where} must be at least one second and not too long.";
                     return null;
                 }
 
@@ -340,14 +340,14 @@ namespace Proxy.DomainService.Utils
                 if (threshold < 1 || threshold > MaxBreakerThreshold)
                 {
                     result.Errors[field] =
-                        $"The breaker failure threshold for {where} must be between 1 and {MaxBreakerThreshold}.";
+                        $"The breaker failure threshold for {where} must be at least one and not too high.";
                     return null;
                 }
 
                 if (openSeconds < 1 || openSeconds > MaxBreakerOpenSeconds)
                 {
                     result.Errors[field] =
-                        $"The breaker open duration for {where} must be between 1 and {MaxBreakerOpenSeconds} seconds.";
+                        $"The breaker open duration for {where} must be at least one second and not too long.";
                     return null;
                 }
 
@@ -463,7 +463,7 @@ namespace Proxy.DomainService.Utils
 
             if (normalized.Count > ProxyRoutePath.MaxRoutes)
             {
-                result.Errors["routes"] = $"At most {ProxyRoutePath.MaxRoutes} routes.";
+                result.Errors["routes"] = "Too many routes.";
             }
 
             return normalized;
@@ -516,7 +516,7 @@ namespace Proxy.DomainService.Utils
 
             if (normalized.Count > ProxyResponsePath.MaxPaths)
             {
-                result.Errors["routes"] = $"At most {ProxyResponsePath.MaxPaths} response fields on a route.";
+                result.Errors["routes"] = "Too many response fields on a route.";
                 return normalized;
             }
 
@@ -569,7 +569,7 @@ namespace Proxy.DomainService.Utils
 
             if (normalized.Count > ProxyResponsePath.MaxPaths)
             {
-                result.Errors["responseInclude"] = $"At most {ProxyResponsePath.MaxPaths} response fields.";
+                result.Errors["responseInclude"] = "Too many response fields.";
             }
             else
             {
@@ -596,7 +596,7 @@ namespace Proxy.DomainService.Utils
             result.Name = trimmed;
             if (trimmed.Length == 0 || trimmed.Length > MaxNameLength)
             {
-                result.Errors["name"] = $"Name is required and must be {MaxNameLength} characters or fewer.";
+                result.Errors["name"] = "Name is required and must not be too long.";
                 return;
             }
 
@@ -614,7 +614,7 @@ namespace Proxy.DomainService.Utils
 
             if (trimmed.Length > MaxUpstreamLength)
             {
-                result.Errors["upstream"] = $"Upstream URL must be {MaxUpstreamLength} characters or fewer.";
+                result.Errors["upstream"] = "Upstream URL is too long.";
                 return;
             }
 
@@ -775,7 +775,7 @@ namespace Proxy.DomainService.Utils
                 if (string.IsNullOrWhiteSpace(key) || key.Length > MaxKeyLength || key.Trim().Length != key.Length)
                 {
                     result.Errors[field] =
-                        $"Each {field} key is required, must be {MaxKeyLength} characters or fewer, and must not have leading or trailing whitespace.";
+                        $"Each {field} key is required, must not be too long, and must not have leading or trailing whitespace.";
                 }
                 else if (areHeaders && ProxyReservedHeaders.IsReserved(key))
                 {
@@ -795,7 +795,7 @@ namespace Proxy.DomainService.Utils
 
                 if (value.Length > MaxValueLength)
                 {
-                    result.Errors[field] = $"Each {field} value must be {MaxValueLength} characters or fewer.";
+                    result.Errors[field] = $"Each {field} value is too long.";
                 }
 
                 normalized.Add(new ProxyKeyValue

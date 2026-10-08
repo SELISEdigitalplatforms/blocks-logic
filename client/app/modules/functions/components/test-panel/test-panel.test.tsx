@@ -107,7 +107,7 @@ describe("TestPanel", () => {
     renderPanel();
     await userEvent.click(screen.getByRole("button", { name: /run test/i }));
 
-    expect((await screen.findByRole("alert")).textContent).toMatch(/try again in 87s/);
+    expect((await screen.findByRole("alert")).textContent).toMatch(/tested a moment ago/);
     const button = screen.getByRole("button", { name: /next test in 8\ds/i });
     expect(button.hasAttribute("disabled")).toBe(true);
   });

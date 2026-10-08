@@ -47,6 +47,7 @@ namespace Workflow.DomainService.Utils
         public const string DataTriggerQueue = "blocks_logic_workflow_data_trigger_listener";
         public const string SchedulerTriggerQueue = SchedulerConstants.WorkflowSchedulerTriggerQueue;
         public const string WorkflowImportQueue = "blocks_logic_workflow_import_listener";
+        /// <summary>Fallback only, when WORKFLOW_NOTIFICATION_CONFIGURATION_NAME is not set; no environment creates it.</summary>
         public const string WorkflowImportNotificationConfigurationName = "workflow-import";
         public const string LogicMailQueueName = "blocks_email_listener";
         public const string MigrationCompletionTopic = "blocks_migration_topic1";

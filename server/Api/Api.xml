@@ -516,6 +516,103 @@
         <member name="M:BlocksTemplate.Api.GlobalApiRoutePrefixConvention.#ctor(System.String)">
             <summary>Prepends a segment (e.g. <c>api</c>) to every controller’s attribute route template.</summary>
         </member>
+        <member name="T:BlocksTemplate.Api.Security.ContentSecurityPolicy">
+            <summary>
+            Builds the SPA's Content-Security-Policy from configuration.
+            <para>
+            The origins come from the same <c>FrontendRuntime</c> section that fills the SPA's runtime
+            config, so the policy describes whatever environment the host is actually running in (one
+            image runs on dev, stg and prod). Same pattern as blocks-os / blocks-iam / blocks-data
+            <c>server/Api/Security/ContentSecurityPolicy.cs</c>. Anything no runtime key describes goes in
+            <c>Csp:ExtraConnectSrc</c> / <c>Csp:ExtraFormAction</c> rather than back into code.
+            </para>
+            </summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.ContentSecurityPolicy.ConnectOriginKeys">
+            <summary><c>FrontendRuntime</c> keys holding an origin the SPA makes requests to.</summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.ContentSecurityPolicy.WebSocketOriginKeys">
+            <summary>
+            Hosts the SPA opens a WebSocket to: the notification hub. CSP does not let an
+            <c>https:</c> source match a <c>wss:</c> URL, so the <c>wss:</c> twin is emitted too.
+            </summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.ContentSecurityPolicy.FormActionOriginKeys">
+            <summary>Where a login POST may be sent: the identity host and the portal.</summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.ContentSecurityPolicy.MonacoSource">
+            <summary>
+            Monaco (functions code editor, workflow code fields) is loaded by @monaco-editor/loader
+            from this pinned CDN path, with its CSS, codicon font and workers. A path source, not the
+            whole jsdelivr host: the host serves every npm package, so allowing it would let an
+            injected tag load any script. If the loader version in client/package-lock.json changes,
+            this must change with it (the code editor stays blank otherwise).
+            </summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.ContentSecurityPolicy.RecaptchaScriptSources">
+            <summary>reCAPTCHA on the login/sign-up forms (client/app/components/captcha).</summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.ContentSecurityPolicy.FixedConnectSources">
+            <summary>
+            Fixed third parties the SPA calls: Rollbar (genesis-os error reporting) and Azure Blob
+            (workflow import PUTs the file to a pre-signed URL; the account differs per environment).
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.ContentSecurityPolicy.BuildPolicy(System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String})">
+            <summary>
+            The policy itself, separated from configuration so it can be asserted directly.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.ContentSecurityPolicy.Normalize(System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Reduce configured values to distinct, sorted origins.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.ContentSecurityPolicy.ToOrigin(System.String)">
+            <summary>
+            A CSP source is an origin, so any path, query or trailing slash is dropped. A value that
+            is not an absolute http(s)/ws(s) URL -- including an unfilled <c>__BLOCKS_*__</c>
+            placeholder -- is ignored rather than emitted verbatim, so a malformed secret cannot
+            inject a directive.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.ContentSecurityPolicy.ToWebSocketOrigin(System.String)">
+            <summary>
+            The wss origin a browser uses to open a socket to an https host, or null. Plain http and
+            ws hosts get no socket allowance: the socket would carry the session token in clear text.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.ContentSecurityPolicy.Split(System.String)">
+            <summary>Space-, comma- or semicolon-separated list, for origins no runtime key describes.</summary>
+        </member>
+        <member name="T:BlocksTemplate.Api.Security.CspMode">
+            <summary>How the CSP header is sent. Set by <c>Csp:Mode</c> (env var <c>Csp__Mode</c>).</summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.CspMode.Enforce">
+            <summary>Default. The browser blocks what the policy does not allow.</summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.CspMode.ReportOnly">
+            <summary>
+            Kill switch without a rebuild: sent as Content-Security-Policy-Report-Only, so the
+            browser only logs violations in the console and blocks nothing.
+            </summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.CspMode.Off">
+            <summary>No CSP header at all. The other security headers stay.</summary>
+        </member>
+        <member name="T:BlocksTemplate.Api.Security.SecurityHeaders">
+            <summary>
+            Browser-facing security headers for the SPA, its static files and the API.
+            <para>
+            Never overwrites a header the response already carries: proxy gateway and public function
+            answers set their own <c>Content-Security-Policy: sandbox</c>, <c>X-Content-Type-Options</c>
+            and <c>Cache-Control</c> (ProxiesController.AddGatewaySecurityHeaders,
+            FunctionHttpResponseMapper), and those must reach the client unchanged.
+            </para>
+            <para>
+            The SPA policy and frame/permissions headers go only on pages and static files, not on
+            <c>/api</c> (JSON and user-defined function responses) or <c>/swagger</c> (its own UI).
+            </para>
+            </summary>
+        </member>
         <member name="T:Api.Controllers.NotifierController">
             <summary>
             Delivery and read-state for user notifications, routed as <c>/api/Notifier/{action}</c>.

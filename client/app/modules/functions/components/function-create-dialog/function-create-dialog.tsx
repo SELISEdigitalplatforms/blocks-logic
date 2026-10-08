@@ -34,8 +34,8 @@ import { FunctionTemplate } from "../../types/function.types";
 // Limits from FEATURES-AND-UI §4.2. The server allows more, deliberately: this is the form's
 // contract with the person typing, not the storage limit.
 const createFunctionFormSchema = z.object({
-  name: z.string().min(2, "Give it at least 2 characters").max(64, "Keep it under 64 characters"),
-  description: z.string().max(200, "Keep it under 200 characters").optional(),
+  name: z.string().min(2, "This name is too short").max(64, "This name is too long"),
+  description: z.string().max(200, "This description is too long").optional(),
   template: z.enum(["Minimal", "HttpEcho", "FetchTransform"]),
 });
 
@@ -87,7 +87,8 @@ export const FunctionCreateDialog = ({ open, onOpenChange }: FunctionCreateDialo
             <DialogTitle className="tracking-tight">Create function</DialogTitle>
             <DialogDescription>
               Pick a starter and name it. Its endpoint is{" "}
-              <code className="font-mono text-xs">/logic/v4/fn/{"{id}"}</code> on GET or POST, so
+              <code className="font-mono text-xs">/logic/v4/fn/{"{id}"}</code> (POST to start; more
+              methods on the Trigger tab), so
               there is no slug to choose and nothing here has to be unique.
             </DialogDescription>
           </div>

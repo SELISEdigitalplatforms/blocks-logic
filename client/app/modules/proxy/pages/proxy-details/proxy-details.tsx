@@ -147,11 +147,11 @@ const EndpointRow = ({
         <dt className="text-muted-foreground">Forwards to</dt>
         <dd className="break-all font-mono">{forwardsTo}</dd>
         <dt className="text-muted-foreground">Sends</dt>
-        <dd>{extras.length ? extras.join(" · ") : "Only the connection’s headers and query"}</dd>
+        <dd>{extras.length ? extras.join(" · ") : "The connection’s headers and query (plus the caller’s query)"}</dd>
         <dt className="text-muted-foreground">Returns</dt>
         <dd>
           {!filters ? (
-            "The vendor’s whole response"
+            "The vendor’s status and body (secret values masked)"
           ) : paths.length ? (
             <div className="space-y-1">
               <span>
@@ -164,7 +164,7 @@ const EndpointRow = ({
             </div>
           ) : (
             <>
-              An empty object (<code>{"{}"}</code>) — no fields selected yet
+              An empty object (<code>{"{}"}</code>) — no fields selected yet. Vendor errors return 502
               {filterFromProxy ? (
                 <span className="text-muted-foreground"> — from the proxy-wide filter</span>
               ) : null}
@@ -582,7 +582,7 @@ export const ProxyDetails = () => {
             ) : (
               <>
                 <div className="grid gap-4 md:grid-cols-3">
-                  <MetricCard label="Last 24h calls" value={calls24h.toLocaleString()} />
+                  <MetricCard label="Recent calls" value={calls24h.toLocaleString()} />
                   <MetricCard label="Avg latency" value={`${averageLatency} ms`} />
                   <MetricCard label="Error rate" value={`${errorRate}%`} danger={errorRateIsHigh} />
                 </div>
@@ -646,7 +646,7 @@ export const ProxyDetails = () => {
                       <p className="text-xs text-muted-foreground">
                         {proxy.resilience
                           ? "Endpoints use this unless they set their own."
-                          : "No timeout, retries or circuit breaker configured. Calls wait for the vendor and are never sent twice."}
+                          : "Not set for the proxy. Endpoints with their own settings use those; the rest wait up to 30 s and are never sent twice."}
                       </p>
                     </div>
                     <EndpointsSection proxy={proxy} clientUrlFor={clientUrlFor} />

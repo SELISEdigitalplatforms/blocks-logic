@@ -787,9 +787,11 @@ namespace XUnitTest.Proxy
             result.StatusCode.Should().Be(504);
             result.Outcome.Should().Be(ProxyExecutionOutcome.Timeout);
             result.UpstreamStatusCode.Should().BeNull();
-            result.ErrorMessage.Should().NotBeNullOrEmpty();
+            // No number: the tenant may set its own timeout (1-30 s), so "30s" would be false.
+            result.ErrorMessage.Should().Be("Upstream did not respond in time");
             row!.Outcome.Should().Be(ProxyExecutionOutcome.Timeout);
             row.UpstreamStatusCode.Should().BeNull();
+            row.ErrorMessage.Should().Be("Upstream did not respond in time");
         }
 
         [Fact]
@@ -852,6 +854,140 @@ namespace XUnitTest.Proxy
 
             _handler.LastRequestUri!.ToString()
                 .Should().Be("https://api.stripe.com/v1/charges?model=gpt-4o-mini&q=hi");
+        }
+
+        // ---------- Blocks' own tenant keys never reach the vendor ----------
+
+        [Theory]
+        [InlineData("x-blocks-key=tenant-a&q=hi")]
+        [InlineData("X-Blocks-Key=tenant-a&q=hi")]
+        [InlineData("TENANT_ID=tenant-a&q=hi")]
+        [InlineData("tenant_id=tenant-a&x-blocks-key=tenant-a&q=hi")]
+        [InlineData("x-blocks-key=a&X-BLOCKS-KEY=b&tenant_id=c&Tenant_Id=d&q=hi")]
+        [InlineData("x-blocks-key=&tenant_id&q=hi")]
+        public async Task Forward_ClientQuery_BlocksTenantKeys_AreNotForwarded(string incoming)
+        {
+            var proxy = Proxy(p => AllowSuffixRoutes(p));
+            GivenProxy(proxy);
+            _handler.Respond = (_, _) => Json(HttpStatusCode.OK, "{}");
+
+            await _service.ForwardAsync(Request("GET", b =>
+            {
+                b.Slug = proxy.Slug;
+                b.IncomingQuery = incoming;
+            }));
+
+            _handler.LastRequestUri!.ToString().Should().Be("https://api.stripe.com/v1/charges?q=hi");
+        }
+
+        [Fact]
+        public async Task Forward_OnlyBlocksTenantKeys_SendsNoQueryAtAll()
+        {
+            var proxy = Proxy(p => AllowSuffixRoutes(p));
+            GivenProxy(proxy);
+            _handler.Respond = (_, _) => Json(HttpStatusCode.OK, "{}");
+
+            await _service.ForwardAsync(Request("GET", b =>
+            {
+                b.Slug = proxy.Slug;
+                b.IncomingQuery = "x-blocks-key=tenant-a";
+            }));
+
+            _handler.LastRequestUri!.ToString().Should().Be("https://api.stripe.com/v1/charges");
+        }
+
+        [Fact]
+        public async Task Forward_ConfiguredTenantIdKey_IsStillSent_CallerValueDropped()
+        {
+            // The owner may need "tenant_id" for the vendor: a configured key is the owner's, not Blocks' auth.
+            var proxy = Proxy(p =>
+            {
+                p.Query.Add(new ProxyKeyValue { Key = "tenant_id", Value = "vendor-tenant" });
+                AllowSuffixRoutes(p);
+            });
+            GivenProxy(proxy);
+            _handler.Respond = (_, _) => Json(HttpStatusCode.OK, "{}");
+
+            await _service.ForwardAsync(Request("GET", b =>
+            {
+                b.Slug = proxy.Slug;
+                b.IncomingQuery = "Tenant_Id=blocks-tenant&x-blocks-key=blocks-tenant&q=hi";
+            }));
+
+            _handler.LastRequestUri!.ToString()
+                .Should().Be("https://api.stripe.com/v1/charges?tenant_id=vendor-tenant&q=hi");
+        }
+
+        [Fact]
+        public async Task Forward_KeysThatOnlyLookLikeBlocksKeys_AreForwarded()
+        {
+            var proxy = Proxy(p => AllowSuffixRoutes(p));
+            GivenProxy(proxy);
+            _handler.Respond = (_, _) => Json(HttpStatusCode.OK, "{}");
+
+            await _service.ForwardAsync(Request("GET", b =>
+            {
+                b.Slug = proxy.Slug;
+                b.IncomingQuery = "tenant=a&x-blocks-key2=b&tenantid=c";
+            }));
+
+            _handler.LastRequestUri!.ToString()
+                .Should().Be("https://api.stripe.com/v1/charges?tenant=a&x-blocks-key2=b&tenantid=c");
+        }
+
+        [Fact]
+        public async Task Forward_TestCall_BlocksTenantKeys_AreNotForwarded()
+        {
+            var proxy = Proxy(p => AllowSuffixRoutes(p));
+            _handler.Respond = (_, _) => Json(HttpStatusCode.OK, "{}");
+
+            await _service.ForwardAsync(Request("GET", b =>
+            {
+                b.Slug = proxy.Slug;
+                b.IsTest = true;
+                b.CallerKind = ProxyCallerKind.Test;
+                b.ResolvedConfig = ProxyResolvedConfig.FromEntity(proxy);
+                b.IncomingQuery = "x-blocks-key=tenant-a&q=hi";
+            }));
+
+            _handler.LastRequestUri!.ToString().Should().Be("https://api.stripe.com/v1/charges?q=hi");
+        }
+
+        [Fact]
+        public async Task Forward_WorkflowStep_QueryIsKeptAsWritten()
+        {
+            // Blocks reads no tenant from a workflow step's query, so a vendor "tenant_id" the author set is kept.
+            var proxy = Proxy(p => AllowSuffixRoutes(p));
+            GivenProxy(proxy);
+            _handler.Respond = (_, _) => Json(HttpStatusCode.OK, "{}");
+
+            await _service.ForwardAsync(Request("GET", b =>
+            {
+                b.Slug = proxy.Slug;
+                b.CallerKind = ProxyCallerKind.Workflow;
+                b.IncomingQuery = "tenant_id=vendor-1&q=hi";
+            }));
+
+            _handler.LastRequestUri!.ToString().Should().Be("https://api.stripe.com/v1/charges?tenant_id=vendor-1&q=hi");
+        }
+
+        [Fact]
+        public async Task Forward_CallerHeaders_AreNeverForwarded()
+        {
+            // The request model carries no caller headers at all: only configured headers (+ Content-Type) go out,
+            // so a caller's x-blocks-key header or Authorization cannot reach the vendor.
+            typeof(ProxyForwardRequest).GetProperties()
+                .Select(p => p.Name)
+                .Should().NotContain(n => n.Contains("Header", StringComparison.OrdinalIgnoreCase)
+                    || n.Contains("Authorization", StringComparison.OrdinalIgnoreCase)
+                    || n.Contains("Cookie", StringComparison.OrdinalIgnoreCase));
+
+            var proxy = Proxy();
+            GivenProxy(proxy);
+            _handler.Respond = (_, _) => Json(HttpStatusCode.OK, "{}");
+            await _service.ForwardAsync(Request("GET", b => b.Slug = proxy.Slug));
+
+            _handler.LastRequest!.Headers.Contains("x-blocks-key").Should().BeFalse();
         }
 
         [Fact]
@@ -1585,6 +1721,7 @@ namespace XUnitTest.Proxy
             public bool IsTest { get; set; }
             public ProxyResolvedConfig? ResolvedConfig { get; set; }
             public string? ForbiddenReason { get; set; }
+            public string CallerKind { get; set; } = ProxyCallerKind.Client;
 
             public ProxyForwardRequest Build() => new()
             {
@@ -1601,6 +1738,7 @@ namespace XUnitTest.Proxy
                 BodyTooLarge = BodyTooLarge,
                 ContentType = ContentType,
                 IsTest = IsTest,
+                CallerKind = CallerKind,
             };
         }
 

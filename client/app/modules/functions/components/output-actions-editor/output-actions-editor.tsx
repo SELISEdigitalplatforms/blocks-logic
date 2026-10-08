@@ -100,7 +100,7 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
           <span className="text-sm font-semibold">No output actions</span>
           <span className="text-xs text-medium-emphasis">
             The return value is stored on the run and available from{" "}
-            <code className="font-mono">GET /api/fn/runs/{"{runId}"}</code>.
+            <code className="font-mono">GET …/fn/runs/{"{runId}"}</code>.
           </span>
         </div>
       )}
@@ -209,8 +209,8 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
               </div>
               {Object.entries(action.headers).length === 0 && (
                 <p className="text-xs text-medium-emphasis">
-                  No headers. <code className="font-mono">Content-Type: application/json</code> is
-                  sent by default.
+                  No headers. A POST, PUT or PATCH sends{" "}
+                  <code className="font-mono">Content-Type: application/json</code> by default.
                 </p>
               )}
               {Object.entries(action.headers).map(([key, headerValue]) => (
@@ -298,13 +298,12 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
                       onChange={(next) => update(index, { bodyTemplate: next })}
                       codec={secretIdRef}
                       ariaLabel="Body template"
-                      placeholder={'{ "payload": {{result}}, "runId": "{{run.id}}" }'}
+                      placeholder={'{ "payload": {{result}} }'}
                       className="min-h-[90px] resize-y font-mono text-xs"
                     />
                     <p className="text-xs text-medium-emphasis">
-                      <code className="font-mono">{"{{result}}"}</code> and{" "}
-                      <code className="font-mono">{"{{run.id}}"}</code> are substituted before the
-                      call.
+                      <code className="font-mono">{"{{result}}"}</code> is replaced with the
+                      returned value before the call.
                     </p>
                   </>
                 )}

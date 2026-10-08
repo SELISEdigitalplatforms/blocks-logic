@@ -3,6 +3,7 @@ using Blocks.Extensions.DependencyInjection;
 using Blocks.Genesis;
 using Blocks.Secrets;
 using BlocksTemplate.Api;
+using BlocksTemplate.Api.Security;
 using CloudConfiguration.DomainService.Shared.Utilities;
 using Common.InternalService.Shared.Utilities;
 using DomainService.Notification;
@@ -89,6 +90,23 @@ services.RegisterBlocksStorageServices();
 await services.RegisterBlocksDeploymentServicesAsync(vaultType);
 
 var app = builder.Build();
+
+// Built once: the policy comes from configuration, which does not change per request.
+var contentSecurityPolicy = ContentSecurityPolicy.Build(app.Configuration);
+var cspMode = SecurityHeaders.ReadMode(app.Configuration);
+Console.WriteLine($"CSP mode: {cspMode}");
+
+// OnStarting, so headers a controller already set (proxy/function sandbox CSP) are seen and kept.
+app.Use(async (context, next) =>
+{
+    context.Response.OnStarting(() =>
+    {
+        SecurityHeaders.Apply(context, contentSecurityPolicy, cspMode);
+        return Task.CompletedTask;
+    });
+
+    await next(context);
+});
 
 app.UseDefaultFiles();
 app.UseStaticFiles();

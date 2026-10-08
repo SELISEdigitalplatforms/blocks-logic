@@ -16,13 +16,13 @@ export const LimitsForm = () => {
   const profile = options ?? DEFAULT_LIMITS_OPTIONS;
 
   const rows = [
-    { label: "Memory", value: `${profile.memoryMb} MB` },
-    { label: "Timeout", value: `${profile.timeoutSeconds} s per run` },
+    { label: "Memory", value: "Fixed per run, cannot be raised" },
+    { label: "Timeout", value: "Fixed per run, cannot be raised" },
     { label: "CPU", value: `${profile.cpuMillicores}m per run` },
     {
       label: "Concurrency",
-      value: `${profile.concurrency} at a time`,
-      note: "Runs beyond this queue rather than fail.",
+      value: "Limited per function",
+      note: "Runs beyond the limit queue rather than fail.",
     },
     ...HARD_CAPS.filter((cap) => cap.label !== "CPU"),
   ];

@@ -8,6 +8,10 @@ namespace Workflow.DomainService.Repositories
 
         Task<List<WorkflowEntity>> GetAllWorkflowsAsync(string tenantId, int pageSize, int pageNumber, string? search, bool? isPublished);
 
+        /// <summary>
+        /// Workflows whose draft OR published trigger nodes (PublishedMeta.TriggerNodes, published only) use the
+        /// mailbox. Test mode matches on the draft; production must be confirmed against the published snapshot.
+        /// </summary>
         Task<List<WorkflowEntity>> GetWorkflowsByMailServerConfigurationIdAsync(string tenantId, string mailServerConfigurationId);
 
         Task<List<WorkflowEntity>> GetWorkflowsByDataCollectionAsync(string tenantId, string collectionName, string operation);

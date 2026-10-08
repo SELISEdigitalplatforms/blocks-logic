@@ -46,7 +46,7 @@ const STEPS = [
   },
   {
     title: "Build and start sandbox",
-    hint: "Installing your packages and starting a fresh sandbox. Every test builds fresh, so this is the slow step (often 10–40 s).",
+    hint: "Installing your packages and starting a fresh sandbox. Every test builds its own image, so this is the slow step.",
   },
   {
     title: "Run handler",
@@ -230,7 +230,12 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
             ? error.errors.runId
             : null;
         if (runIdInError) setRunId(runIdInError);
-        setRequestError(message);
+        // A 429's own text names the test window, which is not a decided number: say it plainly.
+        setRequestError(
+          status === 429
+            ? "This function was tested a moment ago. Wait for the countdown, then run it again."
+            : message,
+        );
       } finally {
         setIsSaving(false);
         inFlight.current = false;
@@ -316,7 +321,7 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
           <span className="text-xs text-low-emphasis">
             sent as{" "}
             <code className="font-mono">{testVerb === "GET" ? "input.query" : "input.body"}</code> ·
-            same sandbox as production
+            same limits as production
           </span>
         </div>
         <Textarea

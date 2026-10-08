@@ -190,7 +190,7 @@ const LogDetails = ({ proxyId, log }: { proxyId: string; log: ProxyExecutionLog 
           <CopyButton
             label="cURL"
             value={curl}
-            title="Copy this call as a curl command (credentials left as placeholders)"
+            title="Copy an approximate curl command for this call (check URL and credentials before use)"
           />
           <CopyButton
             label="JSON"
@@ -201,7 +201,7 @@ const LogDetails = ({ proxyId, log }: { proxyId: string; log: ProxyExecutionLog 
       </div>
       <div>
         <span className="text-xs font-medium uppercase text-muted-foreground">
-          Injected credentials
+          Added headers and query keys
         </span>
         <p>{[...detail.injectedHeaderKeys, ...detail.injectedQueryKeys].join(", ") || "None"}</p>
       </div>

@@ -228,19 +228,8 @@ namespace Workflow.DomainService.Services
                     BlocksContext.SetContext(context);
                 }
 
-                var normalizedInput = new BsonArray();
-
-                if (input.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var element in input.EnumerateArray())
-                    {
-                        normalizedInput.Add(BsonDocument.Parse(element.GetRawText()));
-                    }
-                }
-                else
-                {
-                    normalizedInput.Add(BsonDocument.Parse(input.GetRawText()));
-                }
+                // After auth on purpose: an unauthenticated caller gets 401, not a hint about the body shape.
+                var normalizedInput = WebhookBodyNormalizer.Normalize(input);
 
                 var triggerMetadata = new TriggerMetadata
                 {
@@ -346,6 +335,10 @@ namespace Workflow.DomainService.Services
             {
                 throw; // preserve 401
             }
+            catch (InvalidWebhookBodyException)
+            {
+                throw; // the controller answers 400
+            }
             catch (Exception ex)
             {
                 throw new InvalidOperationException("Failed to create execution for webhook", ex);
@@ -380,23 +373,19 @@ namespace Workflow.DomainService.Services
                 return;
             }
 
-            var draftWorkflows = await _workflowRepository.GetWorkflowsByMailServerConfigurationIdAsync(tenantId, emailEvent.Mail.MailServerConfigurationId);
-            _logger.LogInformation("Found {WorkflowCount} workflows for MailServerConfigurationId: {MailServerConfigurationId}", draftWorkflows.Count, emailEvent.Mail.MailServerConfigurationId);
+            var candidateWorkflows = await _workflowRepository.GetWorkflowsByMailServerConfigurationIdAsync(tenantId, emailEvent.Mail.MailServerConfigurationId);
+            _logger.LogInformation("Found {WorkflowCount} workflows for MailServerConfigurationId: {MailServerConfigurationId}", candidateWorkflows.Count, emailEvent.Mail.MailServerConfigurationId);
 
             var pendingProduction = new List<WorkflowEntity>();
 
-            foreach (var workflow in draftWorkflows)
+            foreach (var workflow in candidateWorkflows)
             {
-                var triggerNode = FindEmailTriggerNode(workflow.Nodes, emailEvent.Mail.MailServerConfigurationId);
-                if (triggerNode == null)
+                // Test mode follows the DRAFT's email node. Production follows the PUBLISHED snapshot (checked
+                // below), so a workflow whose draft no longer uses this mailbox still runs its published version.
+                var draftTriggerNode = FindEmailTriggerNode(workflow.Nodes, emailEvent.Mail.MailServerConfigurationId);
+                if (draftTriggerNode != null && IsTestSubjectMatch(draftTriggerNode, emailEvent.Mail.Subject))
                 {
-                    _logger.LogWarning("No Email trigger node found for WorkflowId: {WorkflowId} with MailServerConfigurationId: {MailServerConfigurationId}", workflow.ItemId, emailEvent.Mail.MailServerConfigurationId);
-                    continue;
-                }
-
-                if (IsTestSubjectMatch(triggerNode, emailEvent.Mail.Subject))
-                {
-                    await QueueEmailTriggerExecutionAsync(workflow, triggerNode, WorkflowExecutionMode.Test, emailEvent, tenantId);
+                    await QueueEmailTriggerExecutionAsync(workflow, draftTriggerNode, WorkflowExecutionMode.Test, emailEvent, tenantId);
                 }
                 else if (workflow.IsPublished && !string.IsNullOrEmpty(workflow.PublishedVersionId))
                 {
@@ -933,8 +922,7 @@ namespace Workflow.DomainService.Services
 
             var operationStr = dataEvent.Operation.ToString();
             var triggerData = BuildTriggerData(dataEvent, operationStr);
-            var isMockedData = triggerData.All(data => data.AsBsonDocument.Contains("Tags") && data.AsBsonDocument
-              ["Tags"].AsBsonArray.Contains("mock-data"));
+            var isMockedData = IsMockedData(triggerData);
 
             List<WorkflowEntity> workflows = new List<WorkflowEntity>();
             // If the data is mocked, we will use the workflow as is, otherwise we will only published workflows that are published.
@@ -964,6 +952,21 @@ namespace Workflow.DomainService.Services
                 var executionMode = isMockedData ? WorkflowExecutionMode.Test : WorkflowExecutionMode.Production;
                 await QueueDataTriggerExecutionAsync(workflow, executionMode, dataEvent, operationStr, triggerData, tenantId);
             }
+        }
+
+        /// <summary>
+        /// A data event is a test ("mock-data") event only when EVERY item has a Tags array holding "mock-data".
+        /// Tags is the user's own field: a string, number, null or missing Tags means "not test" — it used to
+        /// throw (AsBsonArray) and drop the whole event, production runs included.
+        /// Note: Updated events carry no Tags (only UpdatedFields), so they are never test events.
+        /// </summary>
+        public static bool IsMockedData(BsonArray triggerData)
+        {
+            return triggerData.Count > 0 && triggerData.All(data =>
+                data is BsonDocument doc
+                && doc.TryGetValue("Tags", out var tags)
+                && tags is BsonArray tagArray
+                && tagArray.Contains("mock-data"));
         }
 
         public static BsonArray BuildTriggerData(DataChangeEvent dataEvent, string operationStr)
@@ -1207,8 +1210,10 @@ namespace Workflow.DomainService.Services
         }
 
         /// <summary>
-        /// Mints an ambient delegation grant for in-process ("last") webhook execution, where
-        /// Genesis never sees a bus send and therefore would not attach a grant header.
+        /// Mints an ambient delegation grant for in-process runs (the "last" webhook mode and the editor's
+        /// Execute step), where Genesis never sees a bus send and therefore would not attach a grant header.
+        /// Execute step used to work only through the raw-token fallback in the HTTP/Data nodes (WS-1, removed);
+        /// it now runs as the editor through this grant.
         /// No-op when the factory returns null (no authenticated user / missing stamp claims).
         /// </summary>
         private async Task AttachDelegationGrantAsync()
@@ -1372,6 +1377,7 @@ namespace Workflow.DomainService.Services
                 await NotifyWorkflowStartedAsync(triggerlessExecution);
                 LogStepExecution(triggerlessExecution, targetNode);
 
+                await AttachDelegationGrantAsync();
                 var triggerlessResult = await _workflowEngineService.ExecuteStepNodeAsync(
                     tenantId, triggerlessExecution.Id, string.Empty, dto.NodeId, dto.SourceExecutionId);
 
@@ -1482,6 +1488,7 @@ namespace Workflow.DomainService.Services
             execution.ActiveNodeIds.Add(triggerNode.Id);
             await NotifyWorkflowStartedAsync(execution);
             LogStepExecution(execution, targetNode);
+            await AttachDelegationGrantAsync();
             var result = await _workflowEngineService.ExecuteStepNodeAsync(tenantId, execution.Id, triggerNode.Id, dto.NodeId, dto.SourceExecutionId);
             return new StepExecuteResponseDto
             {

@@ -2,6 +2,7 @@ using MongoDB.Bson;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text.Json;
+using Workflow.DomainService.Entities;
 using Workflow.DomainService.Logging;
 
 namespace Workflow.DomainService.Nodes.LogicIFV1
@@ -20,31 +21,21 @@ namespace Workflow.DomainService.Nodes.LogicIFV1
             var conditionType = parameters.ConditionType?.Trim().ToLowerInvariant();
             var useOr = conditionType == "or";
 
+            // An item whose conditions cannot be evaluated (unknown operator or type, an expression error) used to
+            // become an error item on branch "source". An If node has no "source" edge, so the item was dropped
+            // without a trace and the run still "succeeded". Now the step fails and names the first bad item.
+            string? firstError = null;
+            var failedCount = 0;
+
             for (var i = 0; i < context.IterationCount; i++)
             {
                 try
                 {
-                    bool conditionMet = useOr
-                        ? parameters.Conditions.Any(condition =>
-                    {
-                        var rawLeft = parseExpression<string>(condition.Left, context.InputItems[i], context) ?? string.Empty;
-                        var rawRight = parseExpression<string>(condition.Right, context.InputItems[i], context) ?? string.Empty;
-                        var type = condition.Type?.Trim().ToLowerInvariant() ?? "string";
-                        var operatorType = condition.Operator?.Trim().ToLowerInvariant() ?? string.Empty;
-                        var leftValue = NormalizeValueForType(rawLeft, type);
-                        var rightValue = NormalizeValueForType(rawRight, type);
-                        return IsConditionMet(leftValue, operatorType, rightValue, type);
-                    })
-                        : parameters.Conditions.All(condition =>
-                    {
-                        var rawLeft = parseExpression<string>(condition.Left, context.InputItems[i], context) ?? string.Empty;
-                        var rawRight = parseExpression<string>(condition.Right, context.InputItems[i], context) ?? string.Empty;
-                        var type = condition.Type?.Trim().ToLowerInvariant() ?? "string";
-                        var operatorType = condition.Operator?.Trim().ToLowerInvariant() ?? string.Empty;
-                        var leftValue = NormalizeValueForType(rawLeft, type);
-                        var rightValue = NormalizeValueForType(rawRight, type);
-                        return IsConditionMet(leftValue, operatorType, rightValue, type);
-                    });
+                    var inputItem = context.InputItems[i];
+                    // Every condition is evaluated (no short-circuit), so a bad operator fails the item every
+                    // time instead of only when the earlier conditions happen not to decide the result.
+                    var results = parameters.Conditions.Select(condition => EvaluateCondition(condition, inputItem, context)).ToList();
+                    bool conditionMet = useOr ? results.Any(r => r) : results.All(r => r);
 
                     var branch = conditionMet ? "if-true" : "if-false";
                     outputItems.Add(new NodeOutputItem
@@ -52,15 +43,17 @@ namespace Workflow.DomainService.Nodes.LogicIFV1
                         Data = new NodeOutputItemData
                         {
                             Parameters = parameters.ToBsonDocument(),
-                            Input = context.InputItems[i].Data.Input,
-                            Output = context.InputItems[i].Data.Output,
+                            Input = inputItem.Data.Input,
+                            Output = inputItem.Data.Output,
                         },
                         Branch = branch,
-                        ParentItemIds = new List<string>() { context.InputItems[i].Id },
+                        ParentItemIds = new List<string>() { inputItem.Id },
                     });
                 }
                 catch (Exception ex)
                 {
+                    failedCount++;
+                    firstError ??= $"Item {i}: {ex.Message}";
                     AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
                 }
             }
@@ -68,9 +61,33 @@ namespace Workflow.DomainService.Nodes.LogicIFV1
                 context.IterationCount,
                 outputItems.Count(o => o.Branch == "if-true"),
                 outputItems.Count(o => o.Branch == "if-false"));
+
+            if (firstError != null)
+            {
+                var message = failedCount == 1
+                    ? $"Condition could not be evaluated. {firstError}"
+                    : $"Condition could not be evaluated for {failedCount} item(s). First: {firstError}";
+                return Task.FromResult(NodeExecutionResult.Failed(message, outputItems));
+            }
             return Task.FromResult(NodeExecutionResult.Successful(outputItems));
         }
 
+        private bool EvaluateCondition(Condition condition, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
+        {
+            if (condition is null)
+                throw new InvalidOperationException("Condition is empty");
+
+            var rawLeft = parseExpression<string>(condition.Left, inputItem, context) ?? string.Empty;
+            var rawRight = parseExpression<string>(condition.Right, inputItem, context) ?? string.Empty;
+            var type = string.IsNullOrWhiteSpace(condition.Type) ? "string" : condition.Type.Trim().ToLowerInvariant();
+            var operatorType = condition.Operator?.Trim().ToLowerInvariant() ?? string.Empty;
+            var leftValue = NormalizeValueForType(rawLeft, type);
+            var rightValue = NormalizeValueForType(rawRight, type);
+            return IsConditionMet(leftValue, operatorType, rightValue, type);
+        }
+
+        private static InvalidOperationException UnknownOperator(string op, string type)
+            => new($"Unknown operator {(string.IsNullOrEmpty(op) ? "(empty)" : op)} for type {type}");
 
         private static bool IsConditionMet(object? leftValue, string operatorType, object? rightValue, string type)
         {
@@ -81,7 +98,7 @@ namespace Workflow.DomainService.Nodes.LogicIFV1
                 "boolean" => EvaluateBooleanCondition(leftValue, operatorType, rightValue),
                 "date_time" => EvaluateDateTimeCondition(leftValue, operatorType, rightValue),
                 "array" => EvaluateArrayCondition(leftValue, operatorType, rightValue),
-                _ => true
+                _ => throw new InvalidOperationException($"Unknown type {type}")
             };
         }
 
@@ -93,12 +110,18 @@ namespace Workflow.DomainService.Nodes.LogicIFV1
                 "not_equals" => left != right,
                 "contains" => left.Contains(right),
                 "not_contains" => !left.Contains(right),
-                _ => true
+                // "in": the left value equals one entry of the right list (JSON array or comma-separated).
+                "in" => InList(left, right),
+                "not_in" => !InList(left, right),
+                _ => throw UnknownOperator(op, "string")
             };
         }
 
         private static bool EvaluateNumberCondition(object? leftValue, string op, object? rightValue)
         {
+            if (op is not ("equals" or "not_equals" or "greater_than" or "less_than" or "greater_or_equal" or "less_or_equal"))
+                throw UnknownOperator(op, "number");
+
             if (leftValue is not double left || rightValue is not double right)
                 return false;
 
@@ -110,12 +133,15 @@ namespace Workflow.DomainService.Nodes.LogicIFV1
                 "less_than" => left < right,
                 "greater_or_equal" => left >= right,
                 "less_or_equal" => left <= right,
-                _ => true
+                _ => throw UnknownOperator(op, "number")
             };
         }
 
         private static bool EvaluateBooleanCondition(object? leftValue, string op, object? rightValue)
         {
+            if (op is not ("is_true" or "is_false" or "equals" or "not_equals"))
+                throw UnknownOperator(op, "boolean");
+
             if (leftValue is not bool left)
                 return false;
 
@@ -124,8 +150,7 @@ namespace Workflow.DomainService.Nodes.LogicIFV1
                 return op switch
                 {
                     "is_true" => left,
-                    "is_false" => !left,
-                    _ => true
+                    _ => !left
                 };
             }
 
@@ -135,13 +160,15 @@ namespace Workflow.DomainService.Nodes.LogicIFV1
             return op switch
             {
                 "equals" => left == right,
-                "not_equals" => left != right,
-                _ => true
+                _ => left != right
             };
         }
 
         private static bool EvaluateDateTimeCondition(object? leftValue, string op, object? rightValue)
         {
+            if (op is not ("equals" or "not_equals" or "greater_than" or "less_than" or "greater_or_equal" or "less_or_equal"))
+                throw UnknownOperator(op, "date_time");
+
             if (leftValue is not DateTimeOffset left)
                 return false;
 
@@ -156,12 +183,22 @@ namespace Workflow.DomainService.Nodes.LogicIFV1
                 "less_than" => left < right,
                 "greater_or_equal" => left >= right,
                 "less_or_equal" => left <= right,
-                _ => true
+                _ => throw UnknownOperator(op, "date_time")
             };
         }
 
+        /// <summary>
+        /// Array conditions compare two lists (each a JSON array or a comma-separated text).
+        /// contains / not_contains: the lists share at least one value / share none.
+        /// in: every value of the left list is in the right list (left is a subset of right); an empty
+        /// left list is not "in". not_in is the negation of in (at least one left value is missing from right).
+        /// Values are compared as exact text (case-sensitive).
+        /// </summary>
         private static bool EvaluateArrayCondition(object? leftValue, string op, object? rightValue)
         {
+            if (op is not ("contains" or "not_contains" or "in" or "not_in"))
+                throw UnknownOperator(op, "array");
+
             if (leftValue is not string[] leftArray || rightValue is not string[] rightArray)
                 return false;
 
@@ -169,9 +206,20 @@ namespace Workflow.DomainService.Nodes.LogicIFV1
             {
                 "contains" => leftArray.Intersect(rightArray).Any(),
                 "not_contains" => !leftArray.Intersect(rightArray).Any(),
-                _ => true
+                "in" => IsSubset(leftArray, rightArray),
+                _ => !IsSubset(leftArray, rightArray)
             };
         }
+
+        /// <summary>
+        /// String "in": the right side is a list — a JSON array (["a","b"]) or comma-separated text (a, b),
+        /// entries trimmed. Exact, case-sensitive match, like "equals". Empty right text is an empty list.
+        /// </summary>
+        private static bool InList(string left, string right)
+            => !string.IsNullOrEmpty(right) && NormalizeArrayValue(right).Contains(left, StringComparer.Ordinal);
+
+        private static bool IsSubset(string[] left, string[] right)
+            => left.Length > 0 && left.All(value => right.Contains(value, StringComparer.Ordinal));
 
         private static object? NormalizeValueForType(string value, string type)
         {

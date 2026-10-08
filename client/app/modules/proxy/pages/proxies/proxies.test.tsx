@@ -32,7 +32,7 @@ describe("Proxies page", () => {
     );
 
     expect(await screen.findByRole("heading", { name: "Proxy" })).toBeTruthy();
-    expect(screen.getByText(/The vendor URL and secret never reach the browser/i)).toBeTruthy();
+    expect(screen.getByText(/Your client never\s+sees the vendor URL or the key/i)).toBeTruthy();
     expect(await screen.findByText("Stripe Payments")).toBeTruthy();
     expect(screen.getByRole("button", { name: /add proxy/i })).toBeTruthy();
   });

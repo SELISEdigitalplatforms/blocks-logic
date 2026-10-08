@@ -1,6 +1,8 @@
 import { NodeGuideTriggerScheduleV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
 
+// "months" is not offered. A legacy node stored as "months" still loads: its stored cron is kept,
+// and an hour/minute edit regenerates it from that cron (day of month and month step preserved).
 const TRIGGER_INTERVAL_OPTIONS = [
   { label: "Minutes", value: "minutes" },
   { label: "Hours", value: "hours" },
@@ -307,27 +309,6 @@ export const NodeSchemaTriggerScheduleV1: NodeSchemaDefinition = {
           deriveScheduleFields(data).hoursBetweenTriggers,
       },
       {
-        id: "monthsBetweenTriggers",
-        type: "number",
-        label: "Months Between Triggers",
-        info: "Prefer divisors of 12 (1, 2, 3, 4, 6, 12) — other values fire every month.",
-        key: "monthsBetweenTriggers",
-        min: 1,
-        max: 12,
-        required: true,
-        transient: true,
-        dependsOn: {
-          key: "triggerInterval",
-          value: "months",
-          operator: "equals",
-        },
-        onChange: (_value: unknown, data: Record<string, unknown>) => ({
-          cronExpression: regenerateCronExpression(data),
-        }),
-        defaultValue: (data: Record<string, unknown>) =>
-          deriveScheduleFields(data).monthsBetweenTriggers,
-      },
-      {
         id: "cronExpression",
         type: "text",
         label: "Cron Expression",
@@ -340,27 +321,6 @@ export const NodeSchemaTriggerScheduleV1: NodeSchemaDefinition = {
           operator: "equals",
         },
         disabled: (data: Record<string, unknown>) => data.triggerInterval !== "custom",
-      },
-      {
-        id: "triggerAtDayOfMonth",
-        type: "number",
-        label: "Trigger at Day of Month",
-        info: "Day of the month (1-28 so it exists in every month).",
-        key: "triggerAtDayOfMonth",
-        min: 1,
-        max: 28,
-        required: true,
-        transient: true,
-        dependsOn: {
-          key: "triggerInterval",
-          value: "months",
-          operator: "equals",
-        },
-        onChange: (_value: unknown, data: Record<string, unknown>) => ({
-          cronExpression: regenerateCronExpression(data),
-        }),
-        defaultValue: (data: Record<string, unknown>) =>
-          deriveScheduleFields(data).triggerAtDayOfMonth,
       },
       {
         id: "triggerAtWeekdays",
@@ -385,8 +345,8 @@ export const NodeSchemaTriggerScheduleV1: NodeSchemaDefinition = {
       {
         id: "triggerAtHour",
         type: "select",
-        label: "Trigger at Hour",
-        info: "Hour of the day.",
+        label: "Trigger at Hour (UTC)",
+        info: "Hour of the day, in UTC. Schedules run on UTC time.",
         key: "triggerAtHour",
         required: true,
         options: HOUR_OPTIONS,

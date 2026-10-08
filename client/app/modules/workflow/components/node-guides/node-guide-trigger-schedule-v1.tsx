@@ -13,7 +13,7 @@ export const NodeGuideTriggerScheduleV1 = () => (
     notes={[
       "The saved parameters are normalized to triggerInterval and cronExpression; the helper timing fields are transient.",
       "Published schedule runs receive output fields such as WorkflowId, TriggerId, TenantId, CronExpression, and FiredAt.",
-      "Monthly schedules limit the day of month to 1-28 so the day exists in every month.",
+      "Schedules run on UTC time, so hours and the cron expression are in UTC.",
       "Hourly schedules use cron stepping, so intervals that do not divide 24 evenly run on matching clock hours rather than exact elapsed-hour spacing.",
     ]}
   />

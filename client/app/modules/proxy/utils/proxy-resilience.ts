@@ -104,7 +104,7 @@ export const resilienceIssues = (value: ProxyResilience | null | undefined): Res
     if (outOfRange(initialDelaySeconds, limits.maxRetryDelaySeconds)) {
       issues.push({
         path: ["retry", "initialDelaySeconds"],
-        message: `The delay must be between 1 and ${limits.maxRetryDelaySeconds} seconds.`,
+        message: "The delay is out of range.",
       });
     }
   }
@@ -113,14 +113,14 @@ export const resilienceIssues = (value: ProxyResilience | null | undefined): Res
     if (outOfRange(value.breaker.failureThreshold, limits.maxBreakerThreshold)) {
       issues.push({
         path: ["breaker", "failureThreshold"],
-        message: `The failure count must be between 1 and ${limits.maxBreakerThreshold}.`,
+        message: "The failure count is out of range.",
       });
     }
 
     if (outOfRange(value.breaker.openSeconds, limits.maxBreakerOpenSeconds)) {
       issues.push({
         path: ["breaker", "openSeconds"],
-        message: `The pause must be between 1 and ${limits.maxBreakerOpenSeconds} seconds.`,
+        message: "The pause is out of range.",
       });
     }
   }

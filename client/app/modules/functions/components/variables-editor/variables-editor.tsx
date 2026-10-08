@@ -23,7 +23,7 @@ const keyError = (key: string, index: number, all: IVariableBinding[]) => {
 };
 
 const valueError = (value: string) =>
-  value.length > MAX_VALUE_LENGTH ? `Values are capped at ${MAX_VALUE_LENGTH} characters.` : null;
+  value.length > MAX_VALUE_LENGTH ? "This value is too long." : null;
 
 const looksLikeSecret = ({ key, value }: IVariableBinding) =>
   SECRET_LOOKING_KEY.test(key.toUpperCase()) || SECRET_LOOKING_VALUE.test(value);

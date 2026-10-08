@@ -227,6 +227,10 @@ namespace Utilities.Api.Controllers
             {
                 return StatusCode(401, new { message = "Unauthorized" });
             }
+            catch (InvalidWebhookBodyException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
 
         }
 
@@ -252,6 +256,10 @@ namespace Utilities.Api.Controllers
             catch (UnauthorizedAccessException)
             {
                 return StatusCode(401, new { message = "Unauthorized" });
+            }
+            catch (InvalidWebhookBodyException ex)
+            {
+                return BadRequest(new { message = ex.Message });
             }
 
         }
@@ -285,6 +293,10 @@ namespace Utilities.Api.Controllers
             {
                 return StatusCode(401, new { message = "Unauthorized" });
             }
+            catch (InvalidWebhookBodyException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
         /// <summary>
@@ -315,6 +327,10 @@ namespace Utilities.Api.Controllers
             catch (UnauthorizedAccessException)
             {
                 return StatusCode(401, new { message = "Unauthorized" });
+            }
+            catch (InvalidWebhookBodyException ex)
+            {
+                return BadRequest(new { message = ex.Message });
             }
         }
 

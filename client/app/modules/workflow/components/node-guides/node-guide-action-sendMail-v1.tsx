@@ -15,7 +15,7 @@ export const NodeGuideActionSendMailV1 = () => (
     notes={[
       "The node sends one email for each input item.",
       "The output includes Success, Errors, and To so later nodes can inspect the send result.",
-      "The output also includes AttachmentCount and AttachmentsSent, the resolved File IDs that were attempted for that iteration (even on failure).",
+      "The output also includes AttachmentCount and AttachmentsSent: the attachment entries after expressions are resolved, blank ones included. If sending throws an error, the output is an error item instead.",
       "Attachments left blank, or that resolve to an empty/unresolvable expression, are silently skipped - no error is raised for those entries.",
       "Template and language options are loaded from the current project.",
       "The body mapping keys are derived from the selected template body, so changing the template can change which mappings are shown.",

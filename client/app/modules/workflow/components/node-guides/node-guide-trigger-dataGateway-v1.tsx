@@ -11,10 +11,10 @@ export const NodeGuideTriggerDataGatewayV1 = () => (
       "In editor test mode, use data marked for test execution as described in the node notes.",
     ]}
     notes={[
-      "The project key is captured from the selected project.",
+      "The x-blocks-key is captured from the selected project.",
       "Insert and delete payloads include operation details, document id when available, timestamp, and document fields.",
       "Update payloads include UpdatedFields with field name, old value, and new value instead of the full document fields.",
-      "Records whose Tags include mock-data run matching workflows in test mode. Normal records use published workflows.",
+      "A change runs matching draft workflows in test mode only when every record in it has a Tags array containing mock-data (Inserted and Deleted only; Updated changes carry no Tags). Other changes use published workflows.",
     ]}
   />
 );

@@ -373,7 +373,7 @@ export const ProxyTestTab = ({ proxy }: Props) => {
             </Button>
             <span className="text-sm text-muted-foreground">
               {blockedReason ??
-                `Runs through the live gateway; no request log row is written. ${LIMITS_NOTE}`}
+                `Runs the same forwarding as live calls, without the caller and rate-limit checks; no request log row is written. ${LIMITS_NOTE}`}
             </span>
           </div>
         </CardContent>

@@ -84,6 +84,20 @@ namespace DomainService.Notification
             }
 
             var configuration = await _configurationRepository.GetByNameAsync(notifyRequest.ConfigurationName);
+            if (configuration is null)
+            {
+                // Said, not thrown: an unknown name used to end in a NullReferenceException (HTTP 500) that
+                // told the sender nothing, and the notification was silently lost.
+                _logger.LogWarning("Notify: no notification configuration named {ConfigurationName}", notifyRequest.ConfigurationName);
+                return new BaseResponse
+                {
+                    IsSuccess = false,
+                    Errors = new Dictionary<string, string>
+                    {
+                        [nameof(NotifyRequest.ConfigurationName)] = $"No notification configuration named '{notifyRequest.ConfigurationName}'.",
+                    },
+                };
+            }
             await SendNotificationAsync(configuration, notifyRequest);
 
             //TODO

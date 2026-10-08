@@ -78,7 +78,8 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
         /// <summary>
         /// Adds a bearer token when Authentication is Blocks Authentication or Client Credential
         /// and no Authorization header was already set manually (manual value always wins).
-        /// Best effort: silently leaves headers untouched when no token is available.
+        /// Blocks Authentication without a delegated token throws <see cref="NoDelegatedTokenException"/>
+        /// (the item fails). Client Credential keeps its behaviour.
         /// </summary>
         private async Task ApplyAuthenticationAsync(
             ActionHttpRequestV1Parameters parameters,
@@ -95,9 +96,11 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
             string? token = null;
             if (string.Equals(mode, "blocksAuthentication", StringComparison.OrdinalIgnoreCase))
             {
+                // Delegated token only. Never the caller's raw BlocksContext.OAuthToken, and never an
+                // unauthenticated send: no token fails this item (WS-1).
                 token = await _workflowAuthService.CreateBlocksAuthorizationTokenAsync();
                 if (string.IsNullOrWhiteSpace(token))
-                    token = BlocksContext.GetContext()?.OAuthToken;
+                    throw new NoDelegatedTokenException();
             }
             else if (string.Equals(mode, "clientCredential", StringComparison.OrdinalIgnoreCase)
                 && !string.IsNullOrWhiteSpace(parameters.ClientId)

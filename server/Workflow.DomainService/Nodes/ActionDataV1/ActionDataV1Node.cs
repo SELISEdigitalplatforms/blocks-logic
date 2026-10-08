@@ -391,12 +391,13 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
             // Authenticate based on selected authentication type
             if (string.Equals(parameters.AuthenticationType, "blocksAuthentication", StringComparison.OrdinalIgnoreCase))
             {
+                // Delegated token only. Never the caller's raw BlocksContext.OAuthToken, and never an
+                // unauthenticated send: no token fails this item (WS-1).
                 var token = await _workflowAuthService.CreateBlocksAuthorizationTokenAsync();
-                if (string.IsNullOrWhiteSpace(token))
-                    token = BlocksContext.GetContext()?.OAuthToken;
-                if (!string.IsNullOrWhiteSpace(token))
-                    request.Headers.Add("Authorization", $"Bearer {token}");
                 if (logToken) LogToken(log, token);
+                if (string.IsNullOrWhiteSpace(token))
+                    throw new NoDelegatedTokenException();
+                request.Headers.Add("Authorization", $"Bearer {token}");
             }
             else if (parameters.AuthenticationType == "clientCredential"
                 && !string.IsNullOrWhiteSpace(parameters.ClientId) && !string.IsNullOrWhiteSpace(parameters.ClientSecret))

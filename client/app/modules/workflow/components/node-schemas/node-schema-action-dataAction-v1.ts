@@ -29,7 +29,6 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
           description: React.createElement(
             "span",
             null,
-            "Guided query fields are being phased out and will be removed soon. Please use ",
             React.createElement(
               "code",
               {
@@ -38,7 +37,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
               },
               "Raw Query",
             ),
-            " for new data action configurations.",
+            " is recommended for new nodes.",
           ),
         }),
       },

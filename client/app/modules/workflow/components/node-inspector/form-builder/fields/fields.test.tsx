@@ -310,6 +310,39 @@ describe("TabWithTextField", () => {
 });
 
 describe("ConditionsField", () => {
+  it("shows a saved String 'in' condition as 'Equals one of (list)' with a list hint", () => {
+    const onChange = vi.fn();
+    renderWithProviders(
+      <ConditionsField
+        field={field({ id: "condIn", type: "conditions" })}
+        value={[{ left: "a", operator: "in", right: "", type: "string" }]}
+        onChange={onChange}
+        data={{}}
+        config={cfg}
+        readOnly={false}
+      />,
+    );
+    expect(screen.getAllByText("Equals one of (list)").length).toBeGreaterThan(0);
+    const right = document.getElementById("condIn-right-0") as HTMLInputElement;
+    expect(right.placeholder).toBe("List: JSON array or comma-separated values");
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("shows a saved Array 'not_in' condition as 'Not all values are in (list)'", () => {
+    renderWithProviders(
+      <ConditionsField
+        field={field({ id: "condNotIn", type: "conditions" })}
+        value={[{ left: "a,b", operator: "not_in", right: "a,b,c", type: "array" }]}
+        onChange={vi.fn()}
+        data={{}}
+        config={cfg}
+        readOnly={false}
+      />,
+    );
+    expect(screen.getAllByText("Not all values are in (list)").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/not supported/)).toBeNull();
+  });
+
   it("renders a default condition row and adds another", () => {
     const onChange = vi.fn();
     renderWithProviders(

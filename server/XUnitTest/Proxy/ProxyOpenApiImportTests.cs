@@ -166,7 +166,7 @@ namespace XUnitTest.Proxy
         {
             var huge = new string('x', ProxyOpenApiImportService.MaxSpecBytes + 1);
 
-            Service.Preview(huge).Errors.Should().Contain(e => e.Contains("MB", StringComparison.Ordinal));
+            Service.Preview(huge).Errors.Should().Contain("The specification is too large.");
         }
 
         // ---- fetching by URL ------------------------------------------------------------
@@ -330,7 +330,7 @@ namespace XUnitTest.Proxy
 
             var preview = await Fetching(factory).PreviewFromUrlAsync("https://big.example.com/spec");
 
-            preview.Errors.Should().ContainSingle().Which.Should().Contain("MB limit");
+            preview.Errors.Should().ContainSingle().Which.Should().Be("The specification is too large.");
         }
 
         [Fact]

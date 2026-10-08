@@ -56,8 +56,8 @@ export const SandboxHelpCard = ({ limits }: SandboxHelpCardProps) => {
               </div>
             ))}
             <p className="border-t pt-2.5 text-xs leading-relaxed text-low-emphasis">
-              This function runs with {limits.memoryMb} MB, {limits.cpuMillicores}m of CPU and a{" "}
-              {limits.timeoutSeconds} s timeout. Node 24, read-only filesystem apart from{" "}
+              This function runs with fixed memory, {limits.cpuMillicores}m of CPU and a fixed
+              timeout. Node 24, read-only filesystem apart from{" "}
               <code className="font-mono">/tmp</code>.
             </p>
           </CardContent>

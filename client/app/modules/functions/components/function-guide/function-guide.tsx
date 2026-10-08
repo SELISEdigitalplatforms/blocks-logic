@@ -78,10 +78,10 @@ export const FunctionGuide = () => (
                   the top of the file runs once, when the sandbox starts.
                 </>,
                 <>
-                  The caller&apos;s token is fetched only when your code asks:{" "}
-                  <Code>const token = await ctx.blocks.getAccessToken()</Code>. Ask on the path
-                  that calls Blocks, not at the top of every call — a call that never asks pays
-                  nothing. It is asked for once per call; asking again in the same call returns
+                  Get the caller&apos;s token with{" "}
+                  <Code>const token = await ctx.blocks.getAccessToken()</Code>. In a warm sandbox
+                  it is fetched only when your code asks, so ask on the path that calls Blocks,
+                  not at the top of every call. It is asked for once per call; asking again in the same call returns
                   the same token. Never keep it outside the call (a module variable, a listener).{" "}
                   <Code>ctx.blocks.accessToken</Code> was removed.
                 </>,
@@ -95,11 +95,11 @@ export const FunctionGuide = () => (
           <AccordionContent className="flex flex-col gap-2 px-2">
             <Items
               items={[
-                "HTTP calls of a deployed function reuse a warm sandbox: your module stays loaded and open connections stay open. A warm call costs your handler's own time.",
+                "Calls of a deployed function (HTTP and workflow steps) reuse a warm sandbox when the runner host has reuse on: your module stays loaded and open connections stay open. A warm call costs your handler's own time.",
                 "Create database and HTTP clients once, at module level. Never connect and close per call.",
-                "Every deploy prepares a warm sandbox, so the first call after it is fast too.",
-                "Test runs and workflow steps always start a fresh sandbox — don't judge speed by Test.",
-                "A sandbox idle for 10 minutes, older than 1 hour, after 1 000 calls or close to its memory limit is replaced; the next call starts cold.",
+                "With reuse on, every deploy prepares a warm sandbox, so the first call after it is fast too.",
+                "Test runs always start a fresh sandbox — don't judge speed by Test.",
+                "A sandbox that sits idle, gets old, serves many calls or comes close to its memory limit is replaced; the next call starts cold.",
               ]}
             />
             <Block>{`let client; // module level: reused by every call
@@ -136,8 +136,8 @@ export default async function handler(input, ctx) {
             <Items
               items={[
                 "Anything else you return is sent as 200 + JSON.",
-                "Headers that pass: content-type, content-language, content-disposition, cache-control, expires, last-modified, etag, vary, retry-after; location on a 3xx; x-* except x-forwarded-*, x-real-ip, x-original-*, x-blocks-*. At most 32 headers / 8 KB. set-cookie is always dropped.",
-                "A failed run answers 502, a timed-out run 504. A call that takes longer than 30 s gets 202 + a poll token — the run still finishes.",
+                "Headers that pass: content-type, content-language, content-disposition, cache-control, expires, last-modified, etag, vary, retry-after; location on a 3xx; x-* except x-forwarded-*, x-real-ip, x-original-*, x-blocks-*. The number and size of headers are capped. set-cookie is always dropped.",
+                "A failed run answers 502, a timed-out run 504. A call that takes too long gets 202 + a poll token — the run still finishes.",
                 "Accepted methods (GET, POST, PUT, PATCH, DELETE) are set on the Trigger tab; any other gets 405.",
               ]}
             />
@@ -166,7 +166,7 @@ export default async function handler(input, ctx) {
             <Items
               items={[
                 "Signature headers that reach the function: stripe-signature, x-hub-signature(-256), x-github-event, x-github-delivery, x-shopify-hmac-sha256, x-shopify-topic, x-shopify-shop-domain, x-shopify-webhook-id, x-slack-signature, x-slack-request-timestamp, svix-id/timestamp/signature, webhook-id/timestamp/signature.",
-                "rawBody is null when there is no body, or when the body is too large to carry twice (over about 450 KB).",
+                "rawBody is null when there is no body, or when the body is too large to carry twice.",
                 "Set the trigger to Public: the sender has no Blocks login. The signature check is what protects it.",
               ]}
             />
@@ -194,7 +194,7 @@ export default async function handler(input, ctx) {
                 "Yield strings (sent as they are), bytes (sent as UTF-8 text) or objects (sent as one JSON line each). Returning any async iterable works too, such as a fetch response's body.",
                 "The caller gets plain text, or Server-Sent Events when it sends Accept: text/event-stream (each piece a data: event, then event: done).",
                 "If the run fails after it started streaming, an SSE caller gets event: error; a plain-text answer is cut off, so the client sees it as incomplete.",
-                "At most 3 MB per answer, inside the 30 s run time. The run's result keeps the first 256 KB of the text.",
+                "A streamed answer has a size cap and must finish inside the run's time limit. The run's result keeps only the start of the text.",
                 "Test runs and workflow steps get the whole text at the end, not piece by piece.",
               ]}
             />
@@ -206,12 +206,12 @@ export default async function handler(input, ctx) {
           <AccordionContent className="px-2">
             <Items
               items={[
-                "30 s run time per call (work passed to ctx.waitUntil included).",
-                "128 MB memory, 0.1 CPU. Node 24.",
-                "Request body ~960 KB; result 5 MB; logs 1 MB or 10 000 lines per call.",
-                "Read-only filesystem except /tmp (64 MB, files can't be executed).",
-                "At most 64 processes per sandbox; 10 calls of one function at the same time.",
-                "API mode waits at most 30 s for the answer.",
+                "Each call has a fixed time limit (work passed to ctx.waitUntil included).",
+                "Fixed memory per sandbox, which cannot be raised; 0.1 CPU. Node 24.",
+                "The request body, the result and the logs of each call are size-limited.",
+                "Read-only filesystem except a small /tmp (files can't be executed).",
+                "Processes per sandbox and calls of one function at the same time are capped; extra calls queue.",
+                "API mode waits a limited time for the answer, then returns 202 + a poll token.",
                 "HTTP calls per minute: 600 for a Public function, no limit for one that needs a login — change it under Trigger → Rate limit. Over it, callers get 429. Workflow steps and Test runs are not counted.",
               ]}
             />
@@ -252,7 +252,7 @@ export default async function handler(input, ctx) {
               items={[
                 "ctx.log.info(message, data) and console.log both land on the run's log.",
                 "Run details show Warm (reused) or Cold start, and why a sandbox was replaced after a call (e.g. a timer or request left running).",
-                "Use Replay on a run to repeat it with the same input.",
+                "Use Replay on a run to repeat it with the same input, on the live version.",
               ]}
             />
           </AccordionContent>

@@ -188,8 +188,8 @@ describe("transform set-field v1", () => {
     expect(NodeSchemaTransformSetFieldV1.transform?.(node)).toEqual(node);
   });
 
-  it("carries a continue-on-error setting", () => {
-    expect(field(NodeSchemaTransformSetFieldV1, "settings.continueOnError")).toBeDefined();
+  it("has no continue-on-error setting (the engine never reads it)", () => {
+    expect(field(NodeSchemaTransformSetFieldV1, "settings.continueOnError")).toBeUndefined();
   });
 });
 
@@ -348,6 +348,22 @@ describe("send mail v1", () => {
 
 describe("webhook trigger v1", () => {
   const urlConfig = { tenantId: "pk", workflowId: "wf", nodeId: "nd", executionMode: 0 };
+
+  it("shows the HTTP method as fixed POST text, not a select", () => {
+    const f = fieldById(NodeSchemaTriggerWebhookV1, "http-method");
+    expect(f.type).toBe("display");
+    expect(f.transient).toBe(true);
+    expect(f.key).not.toBe("httpMethod");
+    expect((f.displayValue as () => string)()).toBe("POST");
+  });
+
+  it("keeps a saved httpMethod untouched on load", () => {
+    const node = { id: "n", parameters: { httpMethod: "GET", authorizationMode: "" } } as never;
+    const out = NodeSchemaTriggerWebhookV1.transform?.(node) as unknown as {
+      parameters: Record<string, unknown>;
+    };
+    expect(out.parameters.httpMethod).toBe("GET");
+  });
 
   it("labels the header-based URL and the deprecated path URL", () => {
     expect(fieldById(NodeSchemaTriggerWebhookV1, "webhook-url").label).toBe("Webhook URL");
@@ -1024,7 +1040,7 @@ describe("transform code v1", () => {
     expect(NodeSchemaTransformCodeV1.defaults.parameters.script).toBe("");
   });
 
-  it("carries a continue-on-error setting", () => {
-    expect(field(NodeSchemaTransformCodeV1, "settings.continueOnError")).toBeDefined();
+  it("has no continue-on-error setting (the engine never reads it)", () => {
+    expect(field(NodeSchemaTransformCodeV1, "settings.continueOnError")).toBeUndefined();
   });
 });

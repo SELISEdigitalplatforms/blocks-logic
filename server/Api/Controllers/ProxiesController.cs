@@ -581,7 +581,7 @@ namespace Utilities.Api.Controllers
             // vendor's URL shape, and this response must not become a way to discover it.
             ProxyExecutionOutcome.RouteNotAllowed => "This path is not a configured route on this proxy.",
             ProxyExecutionOutcome.RequestTooLarge => "The request body exceeds the 1 MB limit.",
-            ProxyExecutionOutcome.Timeout => "The upstream endpoint did not respond within 30 seconds.",
+            ProxyExecutionOutcome.Timeout => "The upstream endpoint did not respond in time.",
             ProxyExecutionOutcome.UpstreamUnreachable => "The upstream endpoint could not be reached.",
             ProxyExecutionOutcome.UpstreamBlocked => "The upstream endpoint is not an allowed destination.",
             ProxyExecutionOutcome.UpstreamResponseTooLarge => "The upstream response exceeds the 5 MB limit.",

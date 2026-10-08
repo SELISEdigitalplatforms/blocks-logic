@@ -100,15 +100,8 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
         },
       },
     ],
-    settings: [
-      {
-        id: "continue-on-error",
-        type: "switch",
-        label: "Continue on Error",
-        info: "Continue workflow execution even if this node fails",
-        key: "settings.continueOnError",
-      },
-    ],
+    // No "Continue on Error": the engine never reads node settings, so the switch had no effect.
+    settings: [],
   },
   defaults: {
     parameters: {
@@ -119,9 +112,7 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
       mode: "manual_mapping",
       manualMappingFields: [],
     },
-    settings: {
-      continueOnError: false,
-    },
+    settings: {},
   },
   transform: (node) => node,
 };

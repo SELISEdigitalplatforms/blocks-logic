@@ -13,7 +13,7 @@ export type ReuseHint = {
 
 export const REUSE_HINT_MESSAGES = {
   interval:
-    "setInterval keeps running after the call ends, so the sandbox is replaced after it. Clear it before returning, or use a schedule trigger for repeating work.",
+    "setInterval keeps running after the call ends, so the sandbox is replaced after it. Clear it before returning. For repeating work, use a scheduled workflow with a Function step.",
   unawaitedFetch:
     "This fetch is not awaited. If the call answers first, the request is cut off and the sandbox is replaced. Use await, return it, or ctx.waitUntil(fetch(…)).",
   moduleVariable:

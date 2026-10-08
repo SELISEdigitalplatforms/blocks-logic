@@ -317,8 +317,9 @@ export const ConnectionsCard = ({
         </div>
 
         <p className="text-xs leading-relaxed text-low-emphasis">
-          Only public endpoints are reachable — private networks and the VPN are blocked. Each run
-          opens its own connection, so close it before returning.
+          Only public endpoints are reachable — private networks and the VPN are blocked. The
+          examples connect and close inside one call to stay short; in your function, create the
+          client once at module level and reuse it.
         </p>
       </CardContent>
 

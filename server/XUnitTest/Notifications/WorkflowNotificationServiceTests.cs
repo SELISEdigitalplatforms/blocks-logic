@@ -195,14 +195,17 @@ namespace XUnitTest.Notifications
         }
 
         [Fact]
-        public async Task The_request_carries_the_current_tenant_and_the_derived_secret()
+        public async Task The_request_carries_the_root_tenant_and_the_derived_secret()
         {
             var (sut, handler) = Build();
 
             await sut.Notify(["user-1"], Data());
 
+            // The notification service is called as the root tenant (RootTenantId), not the workflow's
+            // tenant — changed on purpose in 09d5cd0c "fix: notification configuration for workflow"
+            // (2026-09-21, live on origin/main).
             handler.Request!.Headers.GetValues("x-blocks-key").Should().ContainSingle()
-                .Which.Should().Be("tenant-1");
+                .Which.Should().Be("root-tenant");
             handler.Request.Headers.GetValues("Secret").Should().ContainSingle()
                 .Which.Should().Be("hashed-secret");
         }
@@ -244,7 +247,7 @@ namespace XUnitTest.Notifications
         }
 
         [Fact]
-        public async Task NotifyImportAsync_UsesTheImportConfigurationAndCorrelationId()
+        public async Task NotifyImportAsync_UsesTheWorkflowConfigurationAndCorrelationId()
         {
             var (sut, handler) = Build();
 
@@ -257,7 +260,9 @@ namespace XUnitTest.Notifications
                 workflowId: "wf-imported",
                 issues: 0);
 
-            handler.RequestBody.Should().Contain(LogicConstants.WorkflowImportNotificationConfigurationName);
+            // The configuration execution events use (its event the console listens to), not the never-created "workflow-import".
+            handler.RequestBody.Should().Contain("\"workflow-config\"");
+            handler.RequestBody.Should().NotContain(LogicConstants.WorkflowImportNotificationConfigurationName);
             handler.RequestBody.Should().Contain("cor-9");
             handler.RequestBody.Should().Contain("wf-imported");
             handler.RequestBody.Should().Contain("Workflow imported");

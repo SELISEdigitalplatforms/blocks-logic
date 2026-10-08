@@ -142,7 +142,7 @@ export const buildProxyRouteDetails = (
         id: "access",
         type: "radio",
         label: "Authentication",
-        info: "Who may call this proxy. Blocks token: the caller must send a valid Blocks access token, and meet the role and permission rules below. Public: anyone can call it.",
+        info: "Who may call this proxy over HTTP. Blocks token: the caller must send a valid Blocks access token, and meet the role and permission rules below. Public: anyone can call it. Workflow steps are not checked against these rules.",
         options: ACCESS_OPTIONS,
       },
       access?.kind ?? "blocksToken",

@@ -424,9 +424,9 @@ export const ProxyOpenApiImportDialog = ({
                 <AlertDescription className="text-xs">
                   The document says these calls are authenticated with{" "}
                   <span className="font-mono">{missingCredentials.join(", ")}</span>. They will be
-                  added to the connection with no value — set each one to a{" "}
-                  <span className="font-mono">{"{{$VAR.name}}"}</span> before saving, or the vendor
-                  will refuse the calls. A specification never carries the key itself.
+                  added to the connection with no value — set a value for each one (ideally a{" "}
+                  <span className="font-mono">{"{{$VAR.name}}"}</span> secret), or the vendor will
+                  refuse the calls. A specification never carries the key itself.
                 </AlertDescription>
               </Alert>
             ) : null}

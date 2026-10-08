@@ -21,7 +21,7 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		icon: <Webhook className="h-5 w-5 text-error" />,
 		title: "Webhook",
 		description:
-			"Start the workflow by clicking the Execute button. Ideal for quick tests and simple runs.",
+			"Starts the workflow when another app sends a POST request to its URL.",
 		type: "webhook",
 		category: "trigger",
 		version: "v1",
@@ -196,7 +196,7 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		icon: <Code2 className="h-5 w-5 text-blue-500" />,
 		title: "Code",
 		description:
-			"Run custom JavaScript or Python to transform data or implement custom logic.",
+			"Run custom JavaScript to transform data or implement custom logic.",
 		type: "code",
 		category: "transform",
 		version: "v1",

@@ -11,8 +11,8 @@ const CODE_CLASS = "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-pri
 const code = (text: string) => React.createElement("code", { className: CODE_CLASS }, text);
 
 const INPUT_JSON_PLACEHOLDER = `{
-  "orderId": {{$json.orderId}},
-  "email": "{{$json.customer.email}}",
+  "orderId": {{$json.output.orderId}},
+  "email": "{{$json.output.customer.email}}",
   "source": "workflow"
 }`;
 
@@ -61,7 +61,7 @@ export const NodeSchemaActionFunction: NodeSchemaDefinition = {
         type: "select",
         label: "Function",
         info:
-          "The deployed function this step runs. Only Live functions are listed; one whose workflow trigger is turned off is shown greyed out until that trigger is enabled in the function's settings.",
+          "The deployed function this step runs. Only Live functions are listed, and not always all of them. One whose workflow trigger is turned off is shown greyed out until that trigger is enabled in the function's settings.",
         key: "functionId",
         placeholder: "Select a deployed function",
         required: true,
@@ -94,13 +94,13 @@ export const NodeSchemaActionFunction: NodeSchemaDefinition = {
             "span",
             null,
             "Write the JSON the function should receive. Insert values from earlier steps with ",
-            code("{{$json.field}}"),
+            code("{{$json.output.field}}"),
             " for the incoming item, ",
             code('{{$node["Step name"].json.output.field}}'),
             " for any earlier step, or ",
-            code("{{$context.key}}"),
-            " for workflow context. Wrap text values in quotes (",
-            code('"{{$json.email}}"'),
+            code("{{$context.Input}}"),
+            " for the trigger data. Wrap text values in quotes (",
+            code('"{{$json.output.email}}"'),
             "); leave numbers, booleans and objects unquoted. When testing this step on its own with nothing connected, the incoming item is empty.",
           ),
         }),

@@ -139,7 +139,7 @@ namespace Proxy.DomainService.Services
             }
             catch (OperationCanceledException)
             {
-                preview.Errors.Add($"The specification URL did not answer within {FetchTimeout.TotalSeconds:0} seconds.");
+                preview.Errors.Add("The specification URL did not answer in time.");
                 return preview;
             }
             catch (Exception ex) when (IsBlocked(ex))
@@ -156,7 +156,7 @@ namespace Proxy.DomainService.Services
             return Preview(body, existingRoutes);
         }
 
-        private static string TooLargeMessage => $"The specification exceeds the {MaxSpecBytes / (1024 * 1024)} MB limit.";
+        private static string TooLargeMessage => "The specification is too large.";
 
         /// <summary>Reads at most <see cref="MaxSpecBytes"/>; <c>null</c> when the body is longer.</summary>
         private static async Task<string?> ReadCappedAsync(HttpContent content, CancellationToken cancellationToken)
@@ -204,7 +204,7 @@ namespace Proxy.DomainService.Services
 
             if (System.Text.Encoding.UTF8.GetByteCount(specJson) > MaxSpecBytes)
             {
-                preview.Errors.Add($"The specification exceeds the {MaxSpecBytes / (1024 * 1024)} MB limit.");
+                preview.Errors.Add("The specification is too large.");
                 return preview;
             }
 
@@ -257,7 +257,7 @@ namespace Proxy.DomainService.Services
                     if (preview.Operations.Count >= MaxOperations)
                     {
                         preview.Warnings.Add(
-                            $"Only the first {MaxOperations} operations are shown; narrow the specification "
+                            "Not every operation is shown; narrow the specification "
                             + "or import it in parts.");
                         return preview;
                     }

@@ -159,6 +159,18 @@ namespace XUnitTest.Notifications
         }
 
         [Fact]
+        public async Task NotifyAsync_AnswersAnUnknownConfigurationInsteadOfThrowing()
+        {
+            _configRepo.Setup(c => c.GetByNameAsync("missing")).ReturnsAsync((NotificationConfiguration)null!);
+
+            var result = await _sut.NotifyAsync(new NotifyRequest { ConfigurationName = "missing", ConnectionId = "conn-1" });
+
+            result.IsSuccess.Should().BeFalse();
+            result.Errors.Should().ContainKey("ConfigurationName");
+            _notifier.Verify(n => n.Notify(It.IsAny<NotifyRequest>(), It.IsAny<NotificationConfiguration>()), Times.Never);
+        }
+
+        [Fact]
         public async Task NotifyAsync_ReturnsTheValidationErrorsWithoutNotifying()
         {
             _notifyValidator

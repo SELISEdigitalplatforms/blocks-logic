@@ -49,9 +49,8 @@ const FunctionsEmptyState = ({ onCreateFunction }: { onCreateFunction: () => voi
     </div>
     <h4 className="mt-5 text-lg font-semibold text-high-emphasis">No functions yet</h4>
     <p className="mt-2 max-w-md text-sm text-muted-foreground">
-      A function is a small Node handler you deploy here. Every invocation runs in its own sandbox,
-      with its own limits. Call it over HTTP with a Blocks token, or from a workflow&apos;s Function
-      step.
+      A function is a small Node handler you deploy here. It runs in an isolated sandbox, and calls
+      may reuse a warm one. Call it over HTTP or from a workflow&apos;s Function step.
     </p>
     <Button className="mt-6 gap-2" size="sm" onClick={onCreateFunction}>
       <Plus className="h-4 w-4" />

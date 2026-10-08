@@ -35,7 +35,7 @@ export const SandboxRulesCard = () => {
               className="rounded-md bg-surface-app p-2.5 text-xs leading-relaxed text-medium-emphasis"
               data-testid="sandbox-rules-mode"
             >
-              <strong className="font-semibold">HTTP calls reuse the sandbox.</strong> A call that
+              <strong className="font-semibold">Calls of a deployed function reuse the sandbox.</strong> A call that
               breaks one of these keeps its result, but its sandbox is replaced after it and work it
               left running may be stopped. The run shows &quot;Sandbox replaced after this call&quot;.
             </p>

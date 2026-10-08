@@ -564,7 +564,7 @@ export const FunctionDetailPage = () => {
                   <span className="hidden text-xs text-low-emphasis sm:inline">
                     {activeFile === "index.js"
                       ? `ES modules · ${indexJs.split("\n").length} lines`
-                      : "pinned versions only · installed at deploy"}
+                      : "version ranges · installed on Test and Deploy"}
                   </span>
                   {/* Monaco owns all three; these only make them visible. Every one keeps its
                       keyboard shortcut, so the buttons are a discovery aid rather than the
@@ -629,7 +629,7 @@ export const FunctionDetailPage = () => {
                 />
               )}
               <p className="shrink-0 border-t bg-surface-app px-4 py-2.5 text-xs text-medium-emphasis">
-                Native <code className="font-mono">fetch()</code>, async/await and pinned npm
+                Native <code className="font-mono">fetch()</code>, async/await and npm
                 packages. Variables arrive as <code className="font-mono">ctx.env.NAME</code> —
                 inside the handler, where <code className="font-mono">ctx</code> exists. Calls reuse
                 the sandbox: open connections at module level, keep request data in the handler,
@@ -784,7 +784,6 @@ export const FunctionDetailPage = () => {
             {queryParams.runId ? (
               <RunDetail
                 runId={queryParams.runId}
-                memoryLimitMb={limits.memoryMb}
                 cpuLimitMillicores={limits.cpuMillicores}
                 onBack={() => setQueryParams({ runId: "" })}
                 onUseAsTestInput={(input) => {
@@ -821,7 +820,6 @@ export const FunctionDetailPage = () => {
                     <RunsTable
                       runs={runs}
                       isLoading={isRunsLoading}
-                      memoryLimitMb={limits.memoryMb}
                       hasFilters={hasRunFilters}
                       isDeployed={isDeployed}
                       onOpenRun={(runId) => setQueryParams({ runId })}

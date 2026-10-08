@@ -398,6 +398,25 @@ namespace XUnitTest.Proxy
         }
 
         [Fact]
+        public async Task Gateway_Timeout_MessageHasNoNumber()
+        {
+            // The tenant may set its own timeout, so the caller must not be told "30 seconds".
+            GivenGatewayRequest();
+            var config = ResolvedWith(EndpointAccessPolicy.AllowPublic());
+            _gatewayService.Setup(g => g.ResolveAsync("tenant-abc", "stripe", It.IsAny<CancellationToken>())).ReturnsAsync(config);
+            _accessAuthorizer.Setup(a => a.AuthorizeAsync(It.IsAny<HttpRequest>(), "tenant-abc", config.Access, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(EndpointAccessDecision.Public());
+            _gatewayService.Setup(g => g.ForwardAsync(It.IsAny<ProxyForwardRequest>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ProxyForwardResult { StatusCode = 504, Outcome = ProxyExecutionOutcome.Timeout });
+
+            var result = await _controller.Gateway("stripe", "charges");
+
+            StatusOf(result).Should().Be(504);
+            var message = ((ObjectResult)result).Value!.GetType().GetProperty("message")!.GetValue(((ObjectResult)result).Value);
+            message.Should().Be("The upstream endpoint did not respond in time.");
+        }
+
+        [Fact]
         public async Task Gateway_PublicPolicy_ForwardsWithNoIdentity()
         {
             GivenGatewayRequest();

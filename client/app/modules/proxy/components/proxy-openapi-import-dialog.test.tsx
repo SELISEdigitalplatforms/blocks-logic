@@ -149,7 +149,7 @@ describe("ProxyOpenApiImportDialog", () => {
     await read(user);
     await waitFor(() => screen.getByRole("button", { name: "Add 2 endpoints" }));
 
-    expect(screen.getByText(/set each one to a/)).toBeTruthy();
+    expect(screen.getByText(/set a value for each one/)).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Add 2 endpoints" }));
 
     expect(result(onImport).credentialKeys).toEqual(["X-Api-Key"]);

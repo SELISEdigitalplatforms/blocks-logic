@@ -184,7 +184,7 @@ export const ProxyList = ({ proxies, isLoading, onProxyDeleted, isFiltered }: Pr
               </TableCell>
               <TableCell className="border-y border-border bg-background px-6 py-5 text-base transition-colors group-hover:bg-muted/50">
                 <span className="whitespace-nowrap text-sm text-muted-foreground">
-                  {proxy.calls24h.toLocaleString()} calls 24h
+                  {proxy.calls24h.toLocaleString()} recent calls
                 </span>
               </TableCell>
               <TableCell className="w-[160px] rounded-r-lg border-y border-r border-border bg-background px-6 py-5 text-base transition-colors group-hover:bg-muted/50">

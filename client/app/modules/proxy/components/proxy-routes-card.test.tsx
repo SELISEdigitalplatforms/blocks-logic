@@ -104,7 +104,7 @@ describe("ProxyRoutesCard same-name warnings", () => {
     );
 
     await openOverrides(user);
-    expect(warnings(/Duplicate — only the last x-foo row is sent\./i)).toHaveLength(2);
+    expect(warnings(/Duplicate x-foo header — saving will fail\./i)).toHaveLength(2);
     expect(warnings(/Replaces the connection's/)).toHaveLength(0);
   });
 

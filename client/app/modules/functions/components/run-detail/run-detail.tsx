@@ -34,6 +34,9 @@ import { RunTiming } from "../run-timing";
 
 const LOG_LEVEL_FILTERS = ["All", "Info", "Warn", "Error"] as const;
 
+/** Log lines loaded for the viewer and the download; a run may store more. */
+const LOG_PAGE_SIZE = 500;
+
 const LOG_LEVEL_CLASS: Record<string, string> = {
   error: "text-error",
   warn: "text-warning-800",
@@ -168,7 +171,7 @@ export const RunDetail = ({
   onBack,
 }: RunDetailProps) => {
   const { data: run, isLoading } = useGetRun({ runId });
-  const { data: logsData, isLoading: isLogsLoading } = useGetRunLogs(runId, 0, 500);
+  const { data: logsData, isLoading: isLogsLoading } = useGetRunLogs(runId, 0, LOG_PAGE_SIZE);
   const { mutateAsync: replayAsync, isPending: isReplaying } = useReplayRun();
   const { mutateAsync: cancelAsync, isPending: isCancelling } = useCancelRun();
   const [logLevel, setLogLevel] = useState<(typeof LOG_LEVEL_FILTERS)[number]>("All");
@@ -230,7 +233,7 @@ export const RunDetail = ({
     },
     {
       label: "Attempts",
-      value: `${run.attempt} / ${run.maxAttempts}`,
+      value: String(run.attempt),
       isWarning: run.attempt > 1,
     },
     { label: "Version", value: `v${run.versionNumber}`, isPrimary: true },
@@ -259,7 +262,7 @@ export const RunDetail = ({
     try {
       await replayAsync(run.id);
       showSuccessToast({
-        description: "Replayed as a new run with the same input and idempotency key.",
+        description: "Replayed as a new run with the same input, on the live version.",
       });
     } catch (error) {
       if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
@@ -538,8 +541,9 @@ export const RunDetail = ({
 
         <p className="border-t px-4 py-2.5 text-xs text-low-emphasis">
           Captured from <code className="font-mono">ctx.log</code> and{" "}
-          <code className="font-mono">console</code> — 1 MB per run
-          {run.logsTruncated ? ", and this run hit that cap" : ", nothing dropped"}.
+          <code className="font-mono">console</code>, up to the run&apos;s log limit
+          {run.logsTruncated ? " — this run hit that cap" : " — this run stayed under it"}.
+          {logs.length >= LOG_PAGE_SIZE ? " Showing the first lines only." : ""}
         </p>
       </Card>
 
