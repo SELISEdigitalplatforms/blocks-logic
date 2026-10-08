@@ -1,7 +1,47 @@
 import react from "@vitejs/plugin-react";
 import path from "path";
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig, loadEnv, type Plugin } from "vite";
 import fs from "fs";
+
+// Monaco's AMD build, served from our own origin at /monaco/vs (see app/lib/monaco-loader.ts) so
+// the CSP needs no CDN. Copied on build; served straight from node_modules in dev.
+const MONACO_VS_DIR = path.resolve(__dirname, "node_modules/monaco-editor/min/vs");
+const MONACO_VS_URL = "/monaco/vs";
+
+function selfHostMonaco(): Plugin {
+  let outDir = "";
+  return {
+    name: "self-host-monaco",
+    configResolved(config) {
+      outDir = path.resolve(config.root, config.build.outDir);
+    },
+    configureServer(server) {
+      server.middlewares.use(MONACO_VS_URL, (req, res, next) => {
+        const relative = decodeURIComponent((req.url ?? "/").split("?")[0]);
+        const file = path.resolve(MONACO_VS_DIR, "." + relative);
+        // Never serve outside the Monaco folder (e.g. /monaco/vs/../../package.json).
+        if (!file.startsWith(MONACO_VS_DIR + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
+          return next();
+        }
+        const types: Record<string, string> = {
+          ".js": "text/javascript",
+          ".css": "text/css",
+          ".ttf": "font/ttf",
+          ".json": "application/json",
+        };
+        res.setHeader("Content-Type", types[path.extname(file)] ?? "application/octet-stream");
+        fs.createReadStream(file).pipe(res);
+      });
+    },
+    closeBundle() {
+      // Fail the build rather than ship a blank code editor.
+      if (!fs.existsSync(path.join(MONACO_VS_DIR, "loader.js"))) {
+        throw new Error(`[self-host-monaco] ${MONACO_VS_DIR}/loader.js not found; run npm ci`);
+      }
+      fs.cpSync(MONACO_VS_DIR, path.join(outDir, MONACO_VS_URL), { recursive: true });
+    },
+  };
+}
 
 // HTTPS is driven solely by the machine env vars LOGIC_SSL_CERT / LOGIC_SSL_KEY.
 // If either is unset/empty, or the file it points to is missing, fall back to HTTP (no throw).
@@ -40,7 +80,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     envPrefix: ["BLOCKS_"],
-    plugins: [react()],
+    plugins: [react(), selfHostMonaco()],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./app"),

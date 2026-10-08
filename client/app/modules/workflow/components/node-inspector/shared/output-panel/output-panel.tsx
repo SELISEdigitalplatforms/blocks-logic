@@ -4,11 +4,13 @@ import { useWorkflowStore } from "@blocks-workflow/store";
 import { copyToClipboard } from "@blocks-workflow/utils/copy-to-clipboard";
 import { useCallback, useMemo, useState } from "react";
 import { inferSchemaFromRuntimeRows } from "@blocks-workflow/utils/runtime-node-data";
-import { ChevronDown, ChevronUp, Copy } from "lucide-react";
+import { ChevronDown, ChevronUp, Copy, TriangleAlert } from "lucide-react";
 import { useWorkflow } from "@blocks-workflow/hooks/use-workflow";
 import { Button } from "@/components/ui-kits/button/button";
 import { Textarea } from "@/components/ui-kits/textarea/textarea";
 import { showErrorToast } from "@/hooks/use-toast";
+import { NodeExecutionStatus } from "@blocks-workflow/utils/workflow-execution-editor.util";
+import type { ExecutedNode } from "@blocks-workflow/models/workflow.model";
 
 type BranchGroup = {
   branch: string;
@@ -28,6 +30,7 @@ export const OutputPanel = ({
   const [mockDataInput, setMockDataInput] = useState("");
   const selectedNode = useWorkflowStore((s) => s.selectedNode);
   const executedItems = useWorkflowStore((s) => s.executedItems);
+  const executedNodes = useWorkflowStore((s) => s.executedNodes);
   const { editorMode, updateNode, lastSuccessfulExecutionData } = useWorkflow();
 
   const runtimeOutputByBranch = useMemo<BranchGroup[]>(() => {
@@ -63,6 +66,13 @@ export const OutputPanel = ({
       schema: inferSchemaFromRuntimeRows(rows),
     }));
   }, [executedItems, selectedNode, editorMode]);
+
+  // The error the server saved on this node's latest run (nodeExecution.error). It used to be stored
+  // and never shown, so a failed test step looked like one with no output (WF-40).
+  const failedRunError = useMemo(
+    () => (selectedNode ? latestRunError(executedNodes, selectedNode.id) : null),
+    [executedNodes, selectedNode],
+  );
 
   const runtimeOutputRows = useMemo(
     () => runtimeOutputByBranch.flatMap((group) => group.rows),
@@ -148,6 +158,16 @@ export const OutputPanel = ({
           )}
         </div>
       </div>
+
+      {failedRunError && !isEditingMock && (
+        <div
+          role="alert"
+          className="mt-2 flex max-h-32 shrink-0 gap-2 overflow-y-auto rounded border border-error/40 bg-error/5 p-2 text-xs text-error"
+        >
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <p className="whitespace-pre-wrap break-words">{failedRunError}</p>
+        </div>
+      )}
 
       {isEditingMock ? (
         <div className="mt-2 flex flex-1 flex-col gap-2 overflow-hidden rounded bg-surface-app p-2">
@@ -350,6 +370,21 @@ function RuntimeJson({ rows }: { rows: unknown[] }) {
       </pre>
     </div>
   );
+}
+
+/**
+ * Error text of the node's latest run, or null when that run did not fail. Runs saved before the server
+ * stored a user-facing message hold ex.ToString(): cut it before the stack trace and drop the
+ * "System.Exception: " prefix.
+ */
+function latestRunError(executedNodes: ExecutedNode[] | null | undefined, nodeId: string): string | null {
+  const latest = (executedNodes ?? [])
+    .filter((ne) => ne.nodeId === nodeId)
+    .reduce<ExecutedNode | null>((last, ne) => (!last || ne.runIndex >= last.runIndex ? ne : last), null);
+  if (!latest || latest.status !== NodeExecutionStatus.Failed) return null;
+
+  const message = (latest.error ?? "").split(/\r?\n\s+at /)[0].replace(/^System\.Exception:\s*/, "").trim();
+  return message || "This step failed.";
 }
 
 function formatCellValue(value: unknown): string {

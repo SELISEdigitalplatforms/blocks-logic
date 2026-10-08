@@ -108,6 +108,20 @@ app.Use(async (context, next) =>
     await next(context);
 });
 
+// CSP violation reports. Before static files, the SPA fallback and Genesis's tenant/auth
+// middleware: browsers post them anonymously, without the x-blocks-key header.
+var cspReportLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("CspReport");
+app.Use(async (context, next) =>
+{
+    if (CspReportEndpoint.Matches(context))
+    {
+        await CspReportEndpoint.HandleAsync(context, cspReportLogger);
+        return;
+    }
+
+    await next(context);
+});
+
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
@@ -208,7 +222,12 @@ static void ApplyFrontendRuntimeSettings(IConfiguration configuration, string we
         ["__BLOCKS_STUDIO_CLIENT_ID__"] = section["BLOCKS_STUDIO_CLIENT_ID"],
     };
 
+    // The self-hosted Monaco build (client/vite.config.ts) is third-party code with no tokens;
+    // skipping it saves reading ~16 MB on every start.
+    var monacoRoot = Path.Combine(webRootPath, "monaco") + Path.DirectorySeparatorChar;
+
     var files = Directory.EnumerateFiles(webRootPath, "*", SearchOption.AllDirectories)
+        .Where(path => !path.StartsWith(monacoRoot, StringComparison.Ordinal))
         .Where(path =>
         {
             var ext = Path.GetExtension(path);

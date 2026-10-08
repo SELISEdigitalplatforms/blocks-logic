@@ -6,6 +6,15 @@ namespace Functions.DomainService.Utils
     /// </summary>
     public class FunctionValidationException(string message) : Exception(message);
 
+    /// <summary>
+    /// A deploy whose build already failed. Still a 400, plus the build's id so the editor can show
+    /// that build's log, not only its one-line reason (PKG-14).
+    /// </summary>
+    public class FunctionBuildFailedException(string message, string buildId) : FunctionValidationException(message)
+    {
+        public string BuildId { get; } = buildId;
+    }
+
     /// <summary>The requested function, version, run or build does not exist. Maps to 404.</summary>
     public class FunctionNotFoundException(string message) : Exception(message);
 

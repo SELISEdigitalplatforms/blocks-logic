@@ -1,3 +1,4 @@
+using Blocks.Genesis;
 using System.Text.Json;
 using BlocksTemplate.Api;
 using FluentAssertions;
@@ -201,6 +202,31 @@ namespace XUnitTest.Functions
 
             context.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(429);
             context.HttpContext.Response.Headers.RetryAfter.ToString().Should().Be("42");
+        }
+
+        [Fact]
+        public void A_failed_build_refusal_carries_the_build_id()
+        {
+            var context = ContextFor(new FunctionBuildFailedException("the build failed: npm error code E404", "b-7"));
+
+            new FunctionExceptionFilter().OnException(context);
+
+            var result = context.Result.Should().BeOfType<ObjectResult>().Which;
+            result.StatusCode.Should().Be(400);
+            var errors = result.Value.Should().BeOfType<BaseResponse>().Which.Errors;
+            errors["invalid_request"].Should().Contain("E404");
+            errors["buildId"].Should().Be("b-7");
+        }
+
+        [Fact]
+        public void A_plain_validation_refusal_has_no_build_id()
+        {
+            var context = ContextFor(new FunctionValidationException("nope"));
+
+            new FunctionExceptionFilter().OnException(context);
+
+            context.Result.Should().BeOfType<ObjectResult>().Which.Value.Should().BeOfType<BaseResponse>()
+                .Which.Errors.Should().NotContainKey("buildId");
         }
 
         [Fact]

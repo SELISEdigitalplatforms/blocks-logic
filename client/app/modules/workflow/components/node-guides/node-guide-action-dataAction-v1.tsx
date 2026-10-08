@@ -12,7 +12,7 @@ export const NodeGuideActionDataActionV1 = () => (
       "For Get, review the selected Fields and remove fields you do not need.",
     ]}
     notes={[
-      "Raw Query runs once for each input item, and expressions in the query are resolved before it is sent.",
+      "Raw Query runs once for each input item, and expressions in the query are resolved before it is sent. {{$json.field}} reads a field of the current item (same as {{$json.output.field}}); values inside \"…\" strings are escaped automatically.",
       "Guided Get returns one output item per returned record when the response contains an items array.",
       "Guided Insert, Update, and Delete return an action result with status and item information.",
       "Guided field mappings are converted using the selected collection schema where possible.",

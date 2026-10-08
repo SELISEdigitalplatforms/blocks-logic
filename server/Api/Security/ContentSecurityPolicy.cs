@@ -51,26 +51,26 @@ public static class ContentSecurityPolicy
     ];
 
     /// <summary>
-    /// Monaco (functions code editor, workflow code fields) is loaded by @monaco-editor/loader
-    /// from this pinned CDN path, with its CSS, codicon font and workers. A path source, not the
-    /// whole jsdelivr host: the host serves every npm package, so allowing it would let an
-    /// injected tag load any script. If the loader version in client/package-lock.json changes,
-    /// this must change with it (the code editor stays blank otherwise).
+    /// Where the browser sends CSP violation reports (<see cref="CspReportEndpoint"/>). Same
+    /// origin, outside <c>/api</c> so tenant validation and auth do not reject the browser's
+    /// anonymous POST.
     /// </summary>
-    public const string MonacoSource = "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/";
+    public const string ReportPath = "/csp-report";
 
-    /// <summary>reCAPTCHA on the login/sign-up forms (client/app/components/captcha).</summary>
-    private const string RecaptchaScriptSources = "https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/";
-    private const string RecaptchaFrameSource = "https://www.google.com/recaptcha/";
+    /// <summary>Reporting API group name used by <c>report-to</c> and <c>Reporting-Endpoints</c>.</summary>
+    public const string ReportGroup = "csp-endpoint";
 
     /// <summary>
-    /// Fixed third parties the SPA calls: Rollbar (genesis-os error reporting) and Azure Blob
-    /// (workflow import PUTs the file to a pre-signed URL; the account differs per environment).
+    /// Used only when <c>Csp:BlobStorageSrc</c> is not set: workflow import PUTs the file to a
+    /// pre-signed Azure Blob URL and the storage account differs per environment, so an
+    /// unconfigured environment keeps working. Set the exact account(s) to drop the wildcard.
     /// </summary>
+    public const string BlobStorageFallback = "https://*.blob.core.windows.net";
+
+    /// <summary>Fixed third parties the SPA calls: Rollbar (genesis-os error reporting).</summary>
     private static readonly string[] FixedConnectSources =
     [
         "https://api.rollbar.com",
-        "https://*.blob.core.windows.net",
     ];
 
     public static string Build(IConfiguration configuration)
@@ -80,46 +80,64 @@ public static class ContentSecurityPolicy
         var runtime = configuration.GetSection("FrontendRuntime");
         var csp = configuration.GetSection("Csp");
 
+        // Storage holds both workflow-import uploads (connect) and avatars/logos (img).
+        var blobStorage = Normalize(Split(csp["BlobStorageSrc"]));
+        IEnumerable<string?> blob = blobStorage.Count > 0 ? blobStorage : [BlobStorageFallback];
+
         return BuildPolicy(
             connectSrc: Origins(runtime, ConnectOriginKeys)
                 .Concat(Origins(runtime, WebSocketOriginKeys).Select(ToWebSocketOrigin))
+                .Concat(blob)
                 .Concat(Split(csp["ExtraConnectSrc"])),
-            formAction: Origins(runtime, FormActionOriginKeys).Concat(Split(csp["ExtraFormAction"])));
+            formAction: Origins(runtime, FormActionOriginKeys).Concat(Split(csp["ExtraFormAction"])),
+            imgSrc: blob.Concat(Split(csp["ExtraImgSrc"])));
     }
 
     /// <summary>
     /// The policy itself, separated from configuration so it can be asserted directly.
     /// </summary>
-    public static string BuildPolicy(IEnumerable<string?> connectSrc, IEnumerable<string?> formAction)
+    public static string BuildPolicy(
+        IEnumerable<string?> connectSrc,
+        IEnumerable<string?> formAction,
+        IEnumerable<string?>? imgSrc = null)
     {
         var connect = Normalize(connectSrc);
         var form = Normalize(formAction);
+        var img = Normalize(imgSrc ?? []);
 
         return string.Join(
             " ",
             "default-src 'self';",
             // Runtime config is the external /runtime-config.js, so no inline script is needed.
-            $"script-src 'self' {MonacoSource} {RecaptchaScriptSources};",
+            // Monaco is served from this origin (/monaco/vs, client/app/lib/monaco-loader.ts).
+            "script-src 'self';",
             // genesis-os pages, Radix, xyflow and Monaco inject <style> elements and style
             // attributes at runtime (see blocks-brain lessons 2026-10-06, monitor login blank).
-            $"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com {MonacoSource};",
-            // Images cannot run script; avatars and icons come from per-environment storage hosts.
-            "img-src 'self' data: blob: https:;",
-            $"font-src 'self' data: https://fonts.gstatic.com {MonacoSource};",
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;",
+            // Same shape as os/iam/data/monitor: avatars and logos come from storage hosts
+            // (Csp:BlobStorageSrc) and anything else from Csp:ExtraImgSrc.
+            $"img-src 'self' data: blob:{Suffix(img)};",
+            "font-src 'self' data: https://fonts.gstatic.com;",
             $"connect-src 'self' {string.Join(" ", FixedConnectSources)}{Suffix(connect)};",
             // Monaco runs its language workers from blob: bootstraps.
             "worker-src 'self' blob:;",
-            $"frame-src {RecaptchaFrameSource};",
             "frame-ancestors 'none';",
             "base-uri 'self';",
             "object-src 'none';",
-            $"form-action 'self'{Suffix(form)}");
+            $"form-action 'self'{Suffix(form)};",
+            // report-to for current browsers (Reporting-Endpoints header, SecurityHeaders),
+            // report-uri for Firefox, which has no report-to yet.
+            $"report-to {ReportGroup};",
+            $"report-uri {ReportPath}");
     }
 
-    /// <summary>Reduce configured values to distinct, sorted origins.</summary>
+    /// <summary>
+    /// Reduce configured values to distinct, sorted origins. The blob fallback is the one
+    /// wildcard kept as is (a URI parser rejects <c>*.</c> hosts, and config cannot add it).
+    /// </summary>
     private static List<string> Normalize(IEnumerable<string?> values) =>
         values
-            .Select(ToOrigin)
+            .Select(value => ReferenceEquals(value, BlobStorageFallback) ? value : ToOrigin(value))
             .Where(origin => origin is not null)
             .Select(origin => origin!)
             .Distinct(StringComparer.OrdinalIgnoreCase)

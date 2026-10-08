@@ -139,7 +139,7 @@ namespace Functions.DomainService.Services
             var hasArtifact = !string.IsNullOrEmpty(build.ArtifactSha256);
             if (build.Status != BuildStatus.Succeeded || (string.IsNullOrEmpty(build.ImageDigest) && !hasArtifact))
             {
-                throw new FunctionValidationException($"the build failed: {build.ErrorMessage ?? "unknown error"}");
+                throw new FunctionBuildFailedException($"the build failed: {build.ErrorMessage ?? "unknown error"}", build.ItemId);
             }
 
             FunctionVersionEntity? created = null;

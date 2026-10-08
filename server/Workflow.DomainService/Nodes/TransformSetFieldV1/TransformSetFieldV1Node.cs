@@ -14,8 +14,6 @@ namespace Workflow.DomainService.Nodes.TransformSetFieldV1
         public override string NodeType => "setfield";
         public override string Version => "v1";
 
-        private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(2);
-
         protected override async Task<NodeExecutionResult> ExecuteAsync(NodeExecutionContext context, TransformSetFieldV1Parameters? nodeparameters)
         {
             var parameters = nodeparameters ?? new TransformSetFieldV1Parameters();
@@ -54,6 +52,12 @@ namespace Workflow.DomainService.Nodes.TransformSetFieldV1
                         ParentItemIds = new List<string>() { context.InputItems[i].Id },
                     });
                 }
+                catch (InvalidFilledJsonException ex)
+                {
+                    // The configured JSON is broken for this item: a config problem, not a data one.
+                    // The step fails (it does not report success with an error item).
+                    return NodeExecutionResult.Failed(ex.ForItem(i), outputItems);
+                }
                 catch (Exception ex)
                 {
                     AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
@@ -80,7 +84,7 @@ namespace Workflow.DomainService.Nodes.TransformSetFieldV1
                     "string" => JsonValue.Create(parseExpression<string>(field.value, inputItem, context)),
                     "number" => JsonValue.Create(parseExpression<double>(field.value, inputItem, context)),
                     "boolean" => JsonValue.Create(parseExpression<bool>(field.value, inputItem, context)),
-                    "json" => JsonNode.Parse(field.value),
+                    "json" => JsonNode.Parse(FillJsonTemplateOrThrow(field.value, $"Field '{key}'", inputItem, context)),
                     _ => JsonValue.Create(parseExpression<object>(field.value, inputItem, context)?.ToString())
                 };
             }
@@ -88,33 +92,13 @@ namespace Workflow.DomainService.Nodes.TransformSetFieldV1
         }
 
         private JsonObject ParseJsonValue(
-        string jsonCode,
-        WorkflowItemExecutionEntity inputItem,
-        NodeExecutionContext context)
+            string jsonCode,
+            WorkflowItemExecutionEntity inputItem,
+            NodeExecutionContext context)
         {
-            var resolved = System.Text.RegularExpressions.Regex.Replace(jsonCode, @"\{\{(.+?)\}\}", match =>
-            {
-                var value = parseExpression<object>(match.Value, inputItem, context);
-                if (value == null) return "null";
-                var strValue = value switch
-                {
-                    string s => s,
-                    bool b => b.ToString().ToLower(),
-                    _ => Newtonsoft.Json.JsonConvert.SerializeObject(value)
-                };
-
-                try
-                {
-                    JsonDocument.Parse(strValue);
-                    return strValue;
-                }
-                catch
-                {
-                    return $"\"{strValue}\"";
-                }
-            }, System.Text.RegularExpressions.RegexOptions.None, RegexTimeout);
-
-            return JsonNode.Parse(resolved)!.AsObject();
+            var resolved = FillJsonTemplateOrThrow(jsonCode, "JSON Code", inputItem, context);
+            return JsonNode.Parse(resolved) as JsonObject
+                ?? throw new InvalidFilledJsonException("JSON Code must be a JSON object ({ … }) after filling in values");
         }
 
         private JsonObject FilterInput(JsonElement input, List<string> fields, bool include)

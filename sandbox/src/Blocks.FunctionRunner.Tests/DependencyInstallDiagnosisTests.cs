@@ -38,5 +38,54 @@ namespace Blocks.FunctionRunner.Tests
         {
             DependencyInstaller.LooksLikeDnsFailure(Log(output)).Should().BeFalse();
         }
+    
+        // ---------- PKG-14: npm's own error lines reach the failure text ----------
+
+        [Fact]
+        public void NpmErrorSummary_KeepsTheErrorLinesWithoutPrefixOrLogPointer()
+        {
+            var log = "added 3 packages\n"
+                + "npm error code ETARGET\n"
+                + "npm error notarget No matching version found for left-pad@9.9.9.\n"
+                + "npm error A complete log of this run can be found in: /home/node/.npm/_logs/2026-10-08T10_00_00_000Z-debug-0.log\n";
+
+            DependencyInstaller.NpmErrorSummary(log).Should()
+                .Be("code ETARGET | notarget No matching version found for left-pad@9.9.9.");
+        }
+
+        [Fact]
+        public void NpmErrorSummary_ReadsTheOldNpmPrefixToo()
+        {
+            DependencyInstaller.NpmErrorSummary("npm ERR! code E404\r\nnpm ERR! 404 Not Found - GET https://registry.npmjs.org/nope")
+                .Should().Be("code E404 | 404 Not Found - GET https://registry.npmjs.org/nope");
+        }
+
+        [Theory]
+        [InlineData("")]
+        [InlineData("added 3 packages in 2s")]
+        [InlineData("npm warn deprecated foo@1.0.0")]
+        [InlineData("npm error\nnpm error A complete log of this run can be found in: /x/_logs/a.log")]
+        public void NpmErrorSummary_IsNullWithoutErrorLines(string log)
+        {
+            DependencyInstaller.NpmErrorSummary(log).Should().BeNull();
+        }
+
+        [Fact]
+        public void NpmErrorSummary_IsBoundedInLinesAndLength()
+        {
+            var many = string.Concat(Enumerable.Range(0, 50).Select(i => $"npm error line {i} {new string('x', 200)}\n"));
+
+            var summary = DependencyInstaller.NpmErrorSummary(many)!;
+
+            summary.Length.Should().BeLessThanOrEqualTo(DependencyInstaller.NpmErrorMaxChars + 1);
+            summary.Should().NotContain("line 6 ");
+        }
+
+        [Fact]
+        public void NpmErrorSummary_DropsRepeatedLines()
+        {
+            DependencyInstaller.NpmErrorSummary("npm error code E403\nnpm error code E403\nnpm error 403 Forbidden")
+                .Should().Be("code E403 | 403 Forbidden");
+        }
     }
 }

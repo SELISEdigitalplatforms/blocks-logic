@@ -18,9 +18,23 @@ interface UseDeployOptions {
  * Leaving the page stops the watching, not the build: the next Deploy finds the finished build
  * and is instant.
  */
+/**
+ * A deploy refused because its build already failed carries that build's id in `errors.buildId`
+ * (PKG-14). Split it off: it is not a message for the toast, it is the build whose log to show.
+ */
+export const splitFailedBuild = (error: unknown): { error: unknown; buildId?: string } => {
+  const errors = (error as { errors?: unknown } | null)?.errors;
+  if (!errors || typeof errors !== "object" || Array.isArray(errors)) return { error };
+  const { buildId, ...rest } = errors as Record<string, unknown>;
+  if (typeof buildId !== "string" || buildId.length === 0) return { error };
+  return { error: { ...(error as object), errors: rest }, buildId };
+};
+
 export const useDeploy = (functionId: string, { onDeployed, onFailed }: UseDeployOptions) => {
   const { mutateAsync, isPending } = useDeployFunction();
   const [buildId, setBuildId] = useState<string>();
+  // The failed build a refused deploy named: known to be over before GetBuild answers.
+  const [refusedBuildId, setRefusedBuildId] = useState<string>();
   const { data: build } = useGetBuild(buildId);
   // The build whose outcome was already handled: the effect re-runs on every render.
   const handled = useRef<string | null>(null);
@@ -40,13 +54,24 @@ export const useDeploy = (functionId: string, { onDeployed, onFailed }: UseDeplo
     callbacks.current.onDeployed(result);
   };
 
+  // Report a refused deploy once. When it names a failed build, keep that build on screen so its
+  // log shows, and mark it handled so the GetBuild effect does not report it a second time.
+  const fail = (error: unknown) => {
+    const { error: shown, buildId: failedBuildId } = splitFailedBuild(error);
+    handled.current = failedBuildId ?? null;
+    setRefusedBuildId(failedBuildId);
+    setBuildId(failedBuildId);
+    callbacks.current.onFailed(shown);
+  };
+
   const deploy = async () => {
     handled.current = null;
+    setRefusedBuildId(undefined);
     setBuildId(undefined);
     try {
       settle(await mutateAsync({ functionId }));
     } catch (error) {
-      callbacks.current.onFailed(error);
+      fail(error);
     }
   };
 
@@ -63,15 +88,13 @@ export const useDeploy = (functionId: string, { onDeployed, onFailed }: UseDeplo
     handled.current = buildId;
     mutateAsync({ functionId, buildId })
       .then(settle)
-      .catch((error) => {
-        setBuildId(undefined);
-        callbacks.current.onFailed(error);
-      });
+      .catch(fail);
     // settle and mutateAsync are stable for this purpose; the build's status drives the effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [build, buildId, functionId]);
 
-  const isWaitingForBuild = !!buildId && build?.status !== "Failed";
+  // A build named by a refused deploy is already known to have failed, before GetBuild answers.
+  const isWaitingForBuild = !!buildId && refusedBuildId !== buildId && build?.status !== "Failed";
 
   return {
     deploy,

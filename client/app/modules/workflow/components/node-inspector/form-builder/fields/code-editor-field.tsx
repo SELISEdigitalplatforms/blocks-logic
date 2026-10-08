@@ -6,8 +6,9 @@ import { useTheme } from "@seliseblocks/genesis-os/hooks";
 import { FieldProps } from "../form-field.types";
 import { cn } from "@/lib/utils";
 
-// Per @monaco-editor/react docs, Monaco is loaded from CDN by default —
-// no bundling, no worker setup, no direct `monaco-editor` import needed.
+// Monaco is loaded by @monaco-editor/react's AMD loader from our own origin
+// (app/lib/monaco-loader.ts) — no bundling, no worker setup, no direct
+// `monaco-editor` import needed.
 // Importing `monaco-editor` directly in a Vite project forces Vite to
 // transform its entire ESM tree and exhausts the JS heap (OOM).
 

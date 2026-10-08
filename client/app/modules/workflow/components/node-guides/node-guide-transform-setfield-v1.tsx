@@ -7,12 +7,13 @@ export const NodeGuideTransformSetFieldV1 = () => (
     steps={[
       "Choose Manual Mapping to add fields one by one, or JSON to enter an output object directly.",
       "In Manual Mapping, choose the value type for each field so numbers and booleans are written as those types.",
-      "In JSON mode, enter a valid JSON object. Expressions inside the JSON are resolved for each input item.",
+      "In JSON mode, enter a valid JSON object. Expressions inside the JSON are resolved for each input item: {{$json.field}} reads a field of the current item (same as {{$json.output.field}}).",
       "Turn on Include Other Input Fields if the output should keep data from the incoming item.",
       "When including input fields, choose All Fields, Specific Fields, or Exclude Fields.",
     ]}
     notes={[
       "The node runs once for each input item.",
+      "In JSON mode, values inside quotes are escaped automatically and values without quotes keep their type. JSON that is not valid after the values are filled in fails the step.",
       "Fields you set are merged on top of the included input fields, so a new value can replace an included field with the same name.",
       "By default, other input fields are not included.",
       "Specific include or exclude lists are comma-separated, so keep field names aligned with the incoming data.",

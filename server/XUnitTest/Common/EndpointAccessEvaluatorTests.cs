@@ -148,5 +148,63 @@ namespace XUnitTest.Common
 
             policy.Roles.Values.Should().Equal("a");
         }
+    
+        // ---- FN-36: the reason is known (for the log); the 403 text stays generic ----
+
+        [Fact]
+        public void ExplainDenial_IsNullWhenTheCallerPasses()
+        {
+            var policy = EndpointAccessPolicy.RequireToken();
+            policy.Roles = Rule("any", "editor");
+
+            EndpointAccessEvaluator.ExplainDenial(Caller(roles: ["editor"]), policy).Should().BeNull();
+            EndpointAccessEvaluator.ExplainDenial(Caller(), EndpointAccessPolicy.AllowPublic()).Should().BeNull();
+        }
+
+        [Fact]
+        public void ExplainDenial_NamesTheMissingRolesForAnAllRule()
+        {
+            var policy = EndpointAccessPolicy.RequireToken();
+            policy.Roles = Rule("all", "editor", "owner", "billing");
+
+            EndpointAccessEvaluator.ExplainDenial(Caller(roles: ["editor"]), policy)
+                .Should().Be("missing role(s): owner, billing (any rule must pass)");
+        }
+
+        [Fact]
+        public void ExplainDenial_ListsTheChoicesForAnAnyRule_AndEachFailedRule()
+        {
+            var policy = EndpointAccessPolicy.RequireToken();
+            policy.Roles = Rule("any", "admin");
+            policy.Permissions = Rule("any", "proxy:call", "proxy:manage");
+            policy.Combine = EndpointAccessCombine.And;
+
+            EndpointAccessEvaluator.ExplainDenial(Caller(roles: ["viewer"]), policy).Should()
+                .Be("needs one role of: admin; needs one permission of: proxy:call, proxy:manage (all rules must pass)");
+        }
+
+        [Fact]
+        public void ExplainDenial_OnlyNamesTheFailedRuleUnderAnd()
+        {
+            var policy = EndpointAccessPolicy.RequireToken();
+            policy.Roles = Rule("any", "admin");
+            policy.Permissions = Rule("any", "proxy:call");
+            policy.Combine = EndpointAccessCombine.And;
+
+            EndpointAccessEvaluator.ExplainDenial(Caller(roles: ["admin"]), policy).Should()
+                .Be("needs one permission of: proxy:call (all rules must pass)");
+        }
+
+        [Fact]
+        public void ExplainDenial_NamesAWrongOrganization()
+        {
+            var policy = EndpointAccessPolicy.RequireToken();
+            policy.OrganizationId = "org-a";
+
+            EndpointAccessEvaluator.ExplainDenial(Caller(orgId: "org-b"), policy)
+                .Should().Be("organization 'org-a' required, caller is in 'org-b'");
+            EndpointAccessEvaluator.ExplainDenial(Caller(), policy)
+                .Should().Be("organization 'org-a' required, caller is in 'default'");
+        }
     }
 }

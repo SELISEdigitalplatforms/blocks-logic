@@ -75,8 +75,6 @@ namespace Workflow.DomainService.Services
         private async Task ExecuteNodeAsync(
             AddExcuationNodeEvent dto,
             Func<List<AddExcuationNodeEvent>, NodeExecutionLog, Task> dispatchNextNodes,
-            Func<NodeExecutionContext, NodeEntity, NodeExecutionResult, NodeExecutionResult>? postProcessResult = null,
-            Func<NodeExecutionContext, NodeEntity, NodeExecutionResult>? runInstead = null,
             CancellationToken stopping = default)
         {
             EnsureTenantId(dto);
@@ -87,6 +85,9 @@ namespace Workflow.DomainService.Services
             var (execution, node, nodeExecution) = prepared.Value;
             var log = _executionLogger.For(execution).ForNode(node.Id, nodeExecution.RunIndex);
             var completionNodeId = execution.ExecutionMode == WorkflowExecutionMode.Test ? execution.WorkflowSnapshot.TestMeta.CompletionNodeId : null;
+            // Here, not in the step-test path only: a test that waits for its webhook / email / mock-data
+            // event runs this same pipeline, and used to call a pinned action node for real (WF-40).
+            var (postProcessResult, runInstead) = PinBehavior(execution, node);
 
             await _workflowNotificationService.NotifyExecutionEventAsync(
                 execution,
@@ -756,6 +757,15 @@ namespace Workflow.DomainService.Services
             List<NodeOutputItem>? outputItems,
             string errorKind)
         {
+            // Shown to the user on the node (output panel) and in the run's notifications. ex.ToString()
+            // used to be stored here: stack trace, internal types and paths for anyone who can read the run.
+            var error = UserFacingError(ex, errorKind);
+            if (!IsEngineWrittenFailure(errorKind))
+            {
+                _logger.LogError(ex, "Workflow node {NodeId} ({NodeType}) failed unexpectedly in execution {ExecutionId}.",
+                    node.Id, node.Type, execution.Id);
+            }
+
             var persistedItems = new List<WorkflowItemExecutionEntity>();
 
             if (outputItems is { Count: > 0 } && context is not null)
@@ -795,18 +805,18 @@ namespace Workflow.DomainService.Services
 
             nodeExecution.Status = NodeExecutionStatus.Failed;
             nodeExecution.EndedAt = DateTime.UtcNow;
-            nodeExecution.Error = ex.ToString();
+            nodeExecution.Error = error;
             nodeExecution.OutputItemCount = persistedItems.Count;
             nodeExecution.OutputCountsByBranch = persistedItems
                 .GroupBy(o => o.Branch)
                 .ToDictionary(g => g.Key, g => g.Count());
 
             execution.Status = WorkflowExecutionStatus.Failed;
-            execution.ErrorMessage = ex.ToString();
+            execution.ErrorMessage = error;
             execution.FinishedAt = DateTime.UtcNow;
 
             await _workflowExecutionRepository.AtomicUpdateNodeExecutionFailedAsync(
-                execution.Id, execution.TenantId, nodeExecution.Id, ex.ToString(),
+                execution.Id, execution.TenantId, nodeExecution.Id, error,
                 nodeExecution.OutputItemCount, nodeExecution.OutputCountsByBranch);
 
             // Never the exception message: the error text is shown on the node itself, not in the logs.
@@ -822,7 +832,7 @@ namespace Workflow.DomainService.Services
                 code: ExecutionEventCodes.NodeExecutionCode(NodeExecutionStatus.Failed),
                 status: nameof(NodeExecutionStatus.Failed),
                 data: nodeExecution.Id,
-                message: $"Node '{nodeExecution.NodeName}' failed: {ex.Message}");
+                message: $"Node '{nodeExecution.NodeName}' failed: {error}");
 
             await _workflowNotificationService.NotifyExecutionEventAsync(
                 execution,
@@ -831,11 +841,35 @@ namespace Workflow.DomainService.Services
                 code: ExecutionEventCodes.WorkflowExecutionCode(WorkflowExecutionStatus.Failed),
                 status: nameof(WorkflowExecutionStatus.Failed),
                 data: execution.Id!,
-                message: $"Workflow '{execution.WorkflowSnapshot.Name}' failed: {ex.Message}");
+                message: $"Workflow '{execution.WorkflowSnapshot.Name}' failed: {error}");
             executionLog.Error(ExecutionLogStages.ExecutionFailed, "Execution failed at node '{NodeName:l}'.", node.Name);
 
             await _workflowExecutionRepository.AtomicCompleteNodeAsync(
                 execution.Id, execution.TenantId, nodeExecution.NodeId, new List<string>());
+        }
+
+        public const string UnexpectedErrorMessage =
+            "The step failed because of an unexpected error. The details are in the server log.";
+
+        /// <summary>
+        /// Failures whose message the engine wrote itself: a node's own reported failure (its executor
+        /// already keeps it free of internals) and a Worker shutdown. Anything else is an unexpected
+        /// exception whose message may carry hosts, queries or paths.
+        /// </summary>
+        private static bool IsEngineWrittenFailure(string errorKind) =>
+            errorKind is "NodeReportedFailure" or "Interrupted";
+
+        /// <summary>The text stored on the failed node and run, safe to show the user.</summary>
+        public static string UserFacingError(Exception ex, string errorKind)
+        {
+            ArgumentNullException.ThrowIfNull(ex);
+            if (!IsEngineWrittenFailure(errorKind)) return UnexpectedErrorMessage;
+
+            // new Exception(null) reports "Exception of type 'System.Exception' was thrown."
+            return ex.Message is { Length: > 0 } message && ex.GetType() == typeof(Exception)
+                && message != new Exception().Message
+                ? message
+                : "The step failed.";
         }
 
         public async Task<WorkflowExecutionEntity?> ExecuteStepNodeAsync(string tenantId, string executionId, string triggerNodeId, string targetNodeId, string? sourceExecutionId = null)
@@ -895,33 +929,6 @@ namespace Workflow.DomainService.Services
                     cacheEligible = false;
                 }
 
-                Func<NodeExecutionContext, NodeEntity, NodeExecutionResult, NodeExecutionResult>? hook = null;
-                Func<NodeExecutionContext, NodeEntity, NodeExecutionResult>? runInstead = null;
-                if (node.PinData != null && node.PinData.Count > 0)
-                {
-                    if (SkipsRunWhenPinned(node))
-                    {
-                        // Pinned means "use this data, don't run": an action node (function, proxy, mail,
-                        // AI, HTTP) is not called at all, so a step test has no real side effects or cost.
-                        runInstead = (ctx, node) =>
-                        {
-                            ctx.Log.Info(ExecutionLogStages.NodePinned, "Not run; {Count} pinned item(s) used.", node.PinData!.Count);
-                            return NodeExecutionResult.Successful(PinnedOutputItems(ctx, node));
-                        };
-                    }
-                    else
-                    {
-                        // Logic, transform and trigger nodes have no side effects and decide branches, so
-                        // they still run and only their output is replaced — but a failure stays a failure.
-                        hook = (ctx, node, result) =>
-                        {
-                            if (!result.IsSuccess) return result;
-                            ctx.Log.Info(ExecutionLogStages.NodePinned, "Output replaced with {Count} pinned item(s).", node.PinData!.Count);
-                            return NodeExecutionResult.Successful(BuildPinDataOutputItems(ctx, node, result));
-                        };
-                    }
-                }
-
                 var evt = new AddExcuationNodeEvent
                 {
                     TenantId = execution.TenantId,
@@ -930,7 +937,8 @@ namespace Workflow.DomainService.Services
                     NodeId = node.Id,
                 };
 
-                await ExecuteNodeAsync(evt, noopDispatch, hook, runInstead);
+                // Pins are applied inside ExecuteNodeAsync (step tests are always Test mode).
+                await ExecuteNodeAsync(evt, noopDispatch);
                 lastNodeFromCache = false;
 
                 execution = await _workflowExecutionRepository.GetByIdAsync(execution.Id, execution.TenantId);
@@ -1287,6 +1295,37 @@ namespace Workflow.DomainService.Services
                 if (node.PinData[i] != null && !node.PinData[i].IsBsonNull) outputs[i].Data.Output = node.PinData[i];
             }
             return outputs;
+        }
+
+        /// <summary>
+        /// How a node's pin data changes its run: in every Test-mode run (step test, webhook / email / mock-data
+        /// test), never in Production. Both null = run normally.
+        /// </summary>
+        public static (Func<NodeExecutionContext, NodeEntity, NodeExecutionResult, NodeExecutionResult>? PostProcess,
+            Func<NodeExecutionContext, NodeEntity, NodeExecutionResult>? RunInstead) PinBehavior(WorkflowExecutionEntity execution, NodeEntity node)
+        {
+            if (execution.ExecutionMode != WorkflowExecutionMode.Test || node.PinData is not { Count: > 0 })
+                return (null, null);
+
+            if (SkipsRunWhenPinned(node))
+            {
+                // Pinned means "use this data, don't run": an action node (function, proxy, mail, AI, HTTP)
+                // is not called at all, so a test has no real side effects or cost.
+                return (null, (ctx, pinned) =>
+                {
+                    ctx.Log.Info(ExecutionLogStages.NodePinned, "Not run; {Count} pinned item(s) used.", pinned.PinData!.Count);
+                    return NodeExecutionResult.Successful(PinnedOutputItems(ctx, pinned));
+                });
+            }
+
+            // Logic, transform and trigger nodes have no side effects and decide branches, so they still run
+            // and only their output is replaced — but a failure stays a failure.
+            return ((ctx, pinned, result) =>
+            {
+                if (!result.IsSuccess) return result;
+                ctx.Log.Info(ExecutionLogStages.NodePinned, "Output replaced with {Count} pinned item(s).", pinned.PinData!.Count);
+                return NodeExecutionResult.Successful(BuildPinDataOutputItems(ctx, pinned, result));
+            }, null);
         }
 
         /// <summary>Action nodes are the ones that act on the outside world; pinned, they are not run.</summary>

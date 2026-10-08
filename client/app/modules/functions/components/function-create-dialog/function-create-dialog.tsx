@@ -31,12 +31,15 @@ import { useCreateFunction } from "../../hooks/use-functions";
 import { FUNCTION_TEMPLATES } from "../../constants/templates";
 import { FunctionTemplate } from "../../types/function.types";
 
+// Every template the picker shows, so a new one cannot be offered and then refused by the form (FN-12).
+const TEMPLATE_VALUES = FUNCTION_TEMPLATES.map((t) => t.value) as [FunctionTemplate, ...FunctionTemplate[]];
+
 // Limits from FEATURES-AND-UI §4.2. The server allows more, deliberately: this is the form's
 // contract with the person typing, not the storage limit.
 const createFunctionFormSchema = z.object({
   name: z.string().min(2, "This name is too short").max(64, "This name is too long"),
   description: z.string().max(200, "This description is too long").optional(),
-  template: z.enum(["Minimal", "HttpEcho", "FetchTransform"]),
+  template: z.enum(TEMPLATE_VALUES),
 });
 
 type CreateFunctionFormValues = z.infer<typeof createFunctionFormSchema>;

@@ -188,7 +188,12 @@ namespace Blocks.FunctionRunner.Builds
                             "and save both together, or remove the lockfile to resolve dependencies fresh");
                     }
 
-                    return Failed(log, $"the dependency install failed (npm exited {exitCode})");
+                    // npm's own error lines say what went wrong (ETARGET, E404, a peer conflict); the
+                    // exit code alone did not, and the toast showed only "npm exited 1" (PKG-14).
+                    var npmError = NpmErrorSummary(log.ToString());
+                    return Failed(log, npmError is null
+                        ? $"the dependency install failed (npm exited {exitCode})"
+                        : $"the dependency install failed (npm exited {exitCode}): {npmError}");
                 }
 
                 // The script's last act is writing the archive, so its absence after a clean exit
@@ -234,6 +239,42 @@ namespace Blocks.FunctionRunner.Builds
             return text.Contains("EAI_AGAIN", StringComparison.Ordinal)
                 || text.Contains("ENOTFOUND", StringComparison.Ordinal)
                 || text.Contains("getaddrinfo", StringComparison.Ordinal);
+        }
+
+        internal const int NpmErrorMaxLines = 6;
+        internal const int NpmErrorMaxChars = 600;
+
+        /// <summary>
+        /// npm's error lines from an install log (<c>npm error …</c> on npm 9+, <c>npm ERR! …</c> before),
+        /// prefix removed, joined into one short text; null when there are none. Leaves out the
+        /// "complete log" pointer: it names a path inside the build sandbox that nobody can open.
+        /// </summary>
+        internal static string? NpmErrorSummary(string log)
+        {
+            if (string.IsNullOrEmpty(log)) return null;
+
+            var lines = new List<string>();
+            foreach (var raw in log.Split('\n'))
+            {
+                var line = raw.Trim();
+                string rest;
+                if (line.StartsWith("npm error", StringComparison.Ordinal)) rest = line["npm error".Length..];
+                else if (line.StartsWith("npm ERR!", StringComparison.Ordinal)) rest = line["npm ERR!".Length..];
+                else continue;
+
+                rest = rest.Trim();
+                if (rest.Length == 0
+                    || rest.Contains("A complete log of this run", StringComparison.Ordinal)
+                    || rest.Contains("/_logs/", StringComparison.Ordinal)) continue;
+                if (lines.Count > 0 && lines[^1] == rest) continue;
+
+                lines.Add(rest);
+                if (lines.Count == NpmErrorMaxLines) break;
+            }
+
+            if (lines.Count == 0) return null;
+            var text = string.Join(" | ", lines);
+            return text.Length <= NpmErrorMaxChars ? text : text[..NpmErrorMaxChars] + "…";
         }
 
         private static InstallResult Failed(StringBuilder log, string failure) =>

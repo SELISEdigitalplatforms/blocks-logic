@@ -46,13 +46,12 @@ namespace Functions.DomainService.Repositories
             var filter = Builders<FunctionVersionEntity>.Filter.Eq(v => v.FunctionId, functionId);
             var collection = Collection(tenantId);
             var totalCount = await collection.CountDocumentsAsync(filter, cancellationToken: cancellationToken);
-            // Each version snapshots its own full copy of the source, and the versions table
-            // shows only number, digest, note and author. GetVersionSourceAsync is the one path
-            // that wants the code, and it fetches a single version by id.
+            // Each version snapshots its own full copy of the source, which the versions table never
+            // shows. GetVersionSourceAsync is the one path that wants the code, and it fetches a single
+            // version by id. Packages stays: it is a short summary and the table's Packages column.
             var items = await collection.Find(filter)
                 .Project<FunctionVersionEntity>(Builders<FunctionVersionEntity>.Projection
-                    .Exclude(v => v.Source)
-                    .Exclude(v => v.Packages))
+                    .Exclude(v => v.Source))
                 .SortByDescending(v => v.Number)
                 .Skip(Math.Max(0, pageNumber) * Math.Max(1, pageSize))
                 .Limit(Math.Max(1, pageSize))

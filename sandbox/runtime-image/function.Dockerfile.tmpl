@@ -54,4 +54,11 @@ RUN set -eux; \
 ENV NODE_OPTIONS=--max-old-space-size={{MAX_OLD_SPACE_MB}}
 
 USER 10001:10001
+
+# Syntax check of the tenant's own files (FN-30), so a syntax error fails the build instead of
+# deploying and going Live. `node --check` only parses: it never runs the code, so this stays a
+# command this repository wrote (see above). node_modules is skipped. Runs as the function user.
+# BuildProcessor.SyntaxCheckRun is this exact instruction; keep the two in step.
+RUN set -eu; cd /function; find . -path ./node_modules -prune -o -type f \( -name '*.js' -o -name '*.mjs' -o -name '*.cjs' \) -print | while IFS= read -r file; do node --check "$file" || { echo "BLOCKS_SYNTAX_ERROR ${file#./}" >&2; exit 1; }; done
+
 ENTRYPOINT ["node", "/runtime/bootstrap.mjs"]

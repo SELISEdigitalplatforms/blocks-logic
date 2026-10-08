@@ -332,8 +332,11 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
             {
                 try
                 {
-                    var resolvedQuery = parseExpression<string>(parameters.RawQuery, context.InputItems[i], context)
-                        ?? parameters.RawQuery;
+                    // Values inside "…" string literals are escaped (a quote in a value cannot end the
+                    // literal); values outside a string are inserted as before. Not validated.
+                    var resolvedQuery = string.IsNullOrEmpty(parameters.RawQuery)
+                        ? parameters.RawQuery
+                        : ResolveGraphQlTemplate(parameters.RawQuery, context.InputItems[i], context);
 
                     var response = await SendGraphQLRequestAsync(parameters, resolvedQuery, context.TenantId, context.Log, logToken: i == 0);
                     response.EnsureSuccessStatusCode();

@@ -6,11 +6,12 @@ export const NodeGuideActionFunction = () => (
     description="Invokes a deployed Function synchronously and uses its returned value as this step's output."
     steps={[
       "Pick a Function. Only Live (deployed) functions are listed, and not always all of them. One whose workflow trigger is turned off is shown greyed out — turn that trigger on in the function's own Triggers settings before selecting it.",
-      'Choose the Input: "Previous step\'s output" forwards the incoming item unchanged; "Custom JSON" opens an editor where you compose the payload, inserting values from earlier steps with {{ }} placeholders.',
+      'Choose the Input: "Previous step\'s output" forwards the incoming item unchanged; "Custom JSON" opens an editor where you compose the payload, inserting values from earlier steps with {{ }} placeholders. {{$json.field}} reads a field of the incoming item (same as {{$json.output.field}}); values inside quotes are escaped automatically.',
       "Test the workflow and confirm the function's returned value maps into later steps as expected.",
     ]}
     notes={[
       "One invocation per input item — a run that does not succeed fails the whole step.",
+      "In Custom JSON mode, an input that is not valid JSON after the values are filled in fails the step before the function is called.",
       "The step waits for the function's own timeout plus a short grace. There is nothing to configure here.",
       "The function runs with the caller's identity when the trigger has one. Schedule and email triggers have no caller.",
       "A Function step with nothing wired into it still runs once when tested on its own, with no input.",

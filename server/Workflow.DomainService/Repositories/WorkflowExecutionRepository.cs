@@ -452,6 +452,10 @@ namespace Workflow.DomainService.Repositories
             List<Dictionary<string, string>> nodeIdBranchPairs,
             string tenantId)
         {
+            // A step with no incoming lines has no parents: no items. Without this the filter below is
+            // `$or: []`, which Mongo rejects, and the step failed before its own checks ran (PKG-25).
+            if (nodeIdBranchPairs is not { Count: > 0 }) return new List<WorkflowItemExecutionEntity>();
+
             var collection = _dbContextProvider.GetCollection<WorkflowItemExecutionEntity>(tenantId, "WorkflowItemExecutions");
 
             var filter = Builders<WorkflowItemExecutionEntity>.Filter.And(

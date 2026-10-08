@@ -102,7 +102,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
         id: "rawQuery",
         type: "graphql-code-editor",
         label: "Raw Query",
-        info: "Enter the raw GraphQL query to send to the Data Gateway API",
+        info: "Enter the raw GraphQL query to send to the Data Gateway API. {{$json.field}} reads a field of the current item (same as {{$json.output.field}}); values inside \"…\" strings are escaped automatically.",
         key: "rawQuery",
         dependsOn: {
           key: "rawQueryMode",

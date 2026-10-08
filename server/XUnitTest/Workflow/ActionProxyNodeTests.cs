@@ -284,9 +284,58 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(parameters));
 
-            result.IsSuccess.Should().BeTrue("a per-item proxy failure is an error item, like the HTTP Request node");
-            ItemError(result).Should().StartWith("Invalid JSON body:");
+            // A body that is not JSON after filling is a config error: the step fails (PKG-23),
+            // it is no longer an error item on a successful step.
+            result.IsSuccess.Should().BeFalse();
+            result.ErrorMessage.Should().StartWith("Body is not valid JSON after filling in values:")
+                .And.Contain("(line 1, position").And.EndWith("(item 1)");
+            result.OutputItems.Should().BeEmpty();
             _sent.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task RunAsync_BodyValuesWithQuotesAndBackslashes_AreEscapedInsideStrings()
+        {
+            var item = Item("item-1", new BsonDocument { { "name", "Bob \"B\" \\ Smith\nline2" }, { "n", 3 } });
+            var parameters = Parameters(method: "POST", haveBody: true,
+                body: "{\"name\": \"{{$json.name}}\", \"raw\": {{$json.name}}, \"n\": {{$json.output.n}}}");
+
+            var result = await Node().RunAsync(Context(parameters, new List<WorkflowItemExecutionEntity> { item }));
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            using var doc = System.Text.Json.JsonDocument.Parse(_sent.Single().Body!);
+            doc.RootElement.GetProperty("name").GetString().Should().Be("Bob \"B\" \\ Smith\nline2");
+            doc.RootElement.GetProperty("raw").GetString().Should().Be("Bob \"B\" \\ Smith\nline2");
+            doc.RootElement.GetProperty("n").GetInt32().Should().Be(3);
+        }
+
+        [Fact]
+        public async Task RunAsync_BodyThatIsOnlyAMissingValue_SendsNoBody()
+        {
+            var parameters = Parameters(method: "POST", haveBody: true, body: "{{$json.payload}}");
+
+            var result = await Node().RunAsync(Context(parameters));
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            _sent.Single().Body.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task RunAsync_InvalidBodyOnALaterItem_FailsTheStepAndKeepsEarlierItems()
+        {
+            var items = new List<WorkflowItemExecutionEntity>
+            {
+                Item("item-1", new BsonDocument("v", 5)),
+                Item("item-2", new BsonDocument("v", "x")),
+            };
+            var parameters = Parameters(method: "POST", haveBody: true, body: "{\"a\": 1{{$json.v}}}");
+
+            var result = await Node().RunAsync(Context(parameters, items));
+
+            result.IsSuccess.Should().BeFalse();
+            result.ErrorMessage.Should().EndWith("(item 2)");
+            _sent.Should().ContainSingle();
+            result.OutputItems.Should().ContainSingle();
         }
 
         [Fact]

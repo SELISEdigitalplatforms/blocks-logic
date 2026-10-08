@@ -81,4 +81,38 @@ describe("OutputActionsEditor", () => {
 
     expect(onChange).toHaveBeenCalledWith([]);
   });
+
+  describe("on/off switch (FN-48)", () => {
+    it("turns an action off and keeps its settings", async () => {
+      const onChange = vi.fn();
+      renderWithProviders(<OutputActionsEditor value={[baseAction]} onChange={onChange} />);
+
+      const toggle = screen.getByRole("switch", { name: "Action 1 on" });
+      expect(toggle.getAttribute("aria-checked")).toBe("true");
+      await userEvent.click(toggle);
+
+      expect(onChange).toHaveBeenCalledWith([{ ...baseAction, enabled: false }]);
+    });
+
+    it("shows an off action as skipped and turns it back on", async () => {
+      const onChange = vi.fn();
+      renderWithProviders(<OutputActionsEditor value={[{ ...baseAction, enabled: false }]} onChange={onChange} />);
+
+      expect(screen.getByText("Off — skipped")).toBeTruthy();
+      await userEvent.click(screen.getByRole("switch", { name: "Action 1 on" }));
+
+      expect(onChange).toHaveBeenCalledWith([{ ...baseAction, enabled: true }]);
+    });
+
+    it("treats a saved action without the field as on, like the host", () => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { enabled, ...legacy } = baseAction;
+      renderWithProviders(
+        <OutputActionsEditor value={[legacy as IOutputAction]} onChange={vi.fn()} />,
+      );
+
+      expect(screen.getByRole("switch", { name: "Action 1 on" }).getAttribute("aria-checked")).toBe("true");
+      expect(screen.queryByText("Off — skipped")).toBeNull();
+    });
+  });
 });

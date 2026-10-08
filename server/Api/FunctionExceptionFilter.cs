@@ -69,10 +69,17 @@ public sealed class FunctionExceptionFilter : IExceptionFilter
                 break;
         }
 
+        var errors = new Dictionary<string, string> { [errorKey] = context.Exception.Message };
+        // Not a message: the editor takes it out of the errors and opens that build's log.
+        if (context.Exception is FunctionBuildFailedException buildFailed && !string.IsNullOrEmpty(buildFailed.BuildId))
+        {
+            errors["buildId"] = buildFailed.BuildId;
+        }
+
         context.Result = new ObjectResult(new BaseResponse
         {
             IsSuccess = false,
-            Errors = new Dictionary<string, string> { [errorKey] = context.Exception.Message },
+            Errors = errors,
         })
         {
             StatusCode = statusCode,

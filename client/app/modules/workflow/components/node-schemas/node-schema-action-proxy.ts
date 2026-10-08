@@ -402,7 +402,7 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
           value: true,
         },
         label: "Body",
-        info: "JSON body forwarded to the upstream. Keys from the proxy config are prefilled and locked; add your own fields around them. Must be a JSON object when the proxy config merges body fields.",
+        info: "JSON body forwarded to the upstream. Keys from the proxy config are prefilled and locked; add your own fields around them. Must be a JSON object when the proxy config merges body fields. {{$json.field}} reads a field of the current item (same as {{$json.output.field}}); values inside quotes are escaped automatically. If the body is not valid JSON after that, the step fails.",
         key: "body",
         locked: configBody,
         lockedDependencies: ENDPOINT_KEYS,

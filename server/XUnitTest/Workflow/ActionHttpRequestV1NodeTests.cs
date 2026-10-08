@@ -165,6 +165,114 @@ namespace XUnitTest.Workflow
             output.Contains("message").Should().BeTrue();
         }
 
+        // ----- Body is a JSON template (PKG-20 / PKG-23) ------------------------------------
+
+        private static WorkflowItemExecutionEntity ItemWith(string id, BsonDocument output)
+        {
+            var item = Item();
+            item.Id = id;
+            item.Data = new NodeOutputItemData { Output = output };
+            return item;
+        }
+
+        private static async Task<(NodeExecutionResult Result, List<string?> Sent)> RunWithBody(
+            string bodyContentType, string body, params WorkflowItemExecutionEntity[] items)
+        {
+            var sent = new List<string?>();
+            var handler = new RecordingHandler(sent);
+            var context = new NodeExecutionContext
+            {
+                WorkflowExecutionId = "exec-1",
+                TenantId = "tenant-1",
+                Parameters = new BsonDocument
+                {
+                    { "httpMethod", "POST" },
+                    { "url", "https://example.test/post" },
+                    { "bodyContentType", bodyContentType },
+                    { "body", body },
+                    { "havebody", true },
+                },
+                InputItems = items.Length > 0 ? items.ToList() : new List<WorkflowItemExecutionEntity> { Item() },
+                IterationCount = items.Length > 0 ? items.Length : 1,
+                WorkflowContext = new BsonDocument(),
+            };
+            var node = new ActionHttpRequestV1Node(
+                new TestHttpClientFactory(handler),
+                Mock.Of<IWorkflowAuthService>(),
+                Mock.Of<IClientCredentialTokenService>(),
+                NullLogger<ActionHttpRequestV1Node>.Instance);
+            return (await node.RunAsync(context), sent);
+        }
+
+        private sealed class RecordingHandler(List<string?> sent) : HttpMessageHandler
+        {
+            protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            {
+                sent.Add(request.Content == null ? null : await request.Content.ReadAsStringAsync(cancellationToken));
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"ok\":true}") };
+            }
+        }
+
+        [Fact]
+        public async Task RunAsync_JsonBodyInvalidAfterFill_FailsTheStepAndSendsNothing()
+        {
+            // Was: an error item on a successful step.
+            var (result, sent) = await RunWithBody("json", "{\"a\": {{$json.name}} {{$json.name}}}",
+                ItemWith("i1", new BsonDocument("name", "Bob")));
+
+            result.IsSuccess.Should().BeFalse();
+            result.ErrorMessage.Should().StartWith("Body is not valid JSON after filling in values:")
+                .And.Contain("(line 1, position").And.EndWith("(item 1)");
+            result.ErrorMessage.Should().NotContain("Bob", "the filled body can carry secrets and is never echoed");
+            sent.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task RunAsync_JsonBodyValuesWithQuotes_AreEscaped()
+        {
+            var (result, sent) = await RunWithBody("json",
+                "{\"slug\": \"{{$json.output.slug}}\", \"name\": {{$json.name}}, \"u\": \"{{$json.u}}\"}",
+                ItemWith("i1", new BsonDocument { { "slug", "\"my-post\"" }, { "name", "Bob \"B\" Smith" }, { "u", "日本 ✓" } }));
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            using var doc = System.Text.Json.JsonDocument.Parse(sent.Single()!);
+            doc.RootElement.GetProperty("slug").GetString().Should().Be("\"my-post\"");
+            doc.RootElement.GetProperty("name").GetString().Should().Be("Bob \"B\" Smith");
+            doc.RootElement.GetProperty("u").GetString().Should().Be("日本 ✓");
+        }
+
+        [Fact]
+        public async Task RunAsync_TextBody_IsFilledRawAsBefore()
+        {
+            var (result, sent) = await RunWithBody("text", "say \"{{$json.q}}\"",
+                ItemWith("i1", new BsonDocument("q", "a\"b")));
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            sent.Single().Should().Be("say \"a\"b\"");
+        }
+
+        [Fact]
+        public async Task RunAsync_BlankJsonBody_SendsNoBody()
+        {
+            var (result, sent) = await RunWithBody("json", "   ");
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            sent.Single().Should().BeNull();
+        }
+
+        [Fact]
+        public async Task RunAsync_InvalidJsonBodyOnALaterItem_FailsTheStepAndKeepsEarlierItems()
+        {
+            var (result, sent) = await RunWithBody("json", "{\"a\": 1{{$json.v}}}",
+                ItemWith("i1", new BsonDocument("v", 5)),
+                ItemWith("i2", new BsonDocument("v", "x")));
+
+            result.IsSuccess.Should().BeFalse();
+            result.ErrorMessage.Should().EndWith("(item 2)");
+            sent.Should().ContainSingle().Which.Should().Be("{\"a\": 15}");
+            result.OutputItems.Should().ContainSingle();
+        }
+
         private static async Task<NodeExecutionResult> RunWithResponse(string responseBody)
         {
             var services = new ServiceCollection()

@@ -16,6 +16,7 @@ export const NodeGuideActionHttpRequestV1 = () => (
       "The node sends one request for each input item.",
       "The response body must be valid JSON. A JSON array response becomes multiple workflow output items.",
       "Body editing is only shown after Send Body is enabled and the body content type is JSON.",
+      "In the JSON body, {{$json.field}} reads a field of the current item (same as {{$json.output.field}}). Values inside quotes are escaped automatically; without quotes a value keeps its type. A body that is not valid JSON after the values are filled in fails the step.",
       "Headers and query parameters are omitted unless their switches are enabled.",
     ]}
   />

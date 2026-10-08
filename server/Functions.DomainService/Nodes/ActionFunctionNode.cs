@@ -77,7 +77,16 @@ namespace Functions.DomainService.Nodes
                     continue;
                 }
 
-                var inputJson = BuildInputJson(parameters, inputItem, context);
+                string? inputJson;
+                try
+                {
+                    inputJson = BuildInputJson(parameters, inputItem, context);
+                }
+                catch (InvalidFilledJsonException ex)
+                {
+                    // Nothing was sent for this item; items before it really ran and are kept.
+                    return NodeExecutionResult.Failed(ex.ForItem(i), outputItems);
+                }
 
                 InvokeResultDto result;
                 try
@@ -181,24 +190,19 @@ namespace Functions.DomainService.Nodes
 
         /// <summary>
         /// "item" passes the current input item's own output through as the function's input,
-        /// unchanged; "expression" evaluates <see cref="ActionFunctionParameters.InputExpression"/>
-        /// the same way every other node's expression fields are evaluated.
+        /// unchanged; "expression" fills <see cref="ActionFunctionParameters.InputExpression"/> as a JSON
+        /// template (values inside "…" are escaped, a plain <c>{{$json.email}}</c> becomes a JSON string)
+        /// and must then be valid JSON, else <see cref="InvalidFilledJsonException"/> fails the step.
+        /// A blank expression, or one that fills to JSON <c>null</c>, sends no input.
         /// </summary>
         private string? BuildInputJson(
             ActionFunctionParameters parameters, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
         {
             if (string.Equals(parameters.InputMode, "expression", StringComparison.OrdinalIgnoreCase))
             {
-                var resolved = parseExpression<object>(parameters.InputExpression, inputItem, context);
-                return resolved switch
-                {
-                    null => null,
-                    // The shared expression parser hands back Newtonsoft tokens for JSON (JObject,
-                    // JArray, JValue). System.Text.Json does not know them and wrote every object as
-                    // nested empty arrays: {"a":1} reached the function as {"a":[]} (WF-11, 2026-10-06).
-                    Newtonsoft.Json.Linq.JToken token => token.ToString(Newtonsoft.Json.Formatting.None),
-                    _ => JsonSerializer.Serialize(resolved),
-                };
+                if (string.IsNullOrWhiteSpace(parameters.InputExpression)) return null;
+                var filled = FillJsonTemplateOrThrow(parameters.InputExpression, "Input", inputItem, context).Trim();
+                return filled == "null" ? null : filled;
             }
 
             return inputItem.Data.Output is null

@@ -38,7 +38,7 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
           value: "json",
         },
         label: "JSON Code",
-        info: "Enter JSON",
+        info: "Enter a JSON object. {{$json.field}} reads a field of the current item (same as {{$json.output.field}}); values inside quotes are escaped automatically. If it is not valid JSON after that, the step fails.",
         key: "jsonCode",
       },
       {

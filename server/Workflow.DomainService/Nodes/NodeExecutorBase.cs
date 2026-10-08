@@ -3,6 +3,7 @@ using MongoDB.Bson;
 using MongoDB.Bson.IO;
 using Newtonsoft.Json.Linq;
 using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.DependencyInjection;
 using Proxy.DomainService.Services;
@@ -146,6 +147,16 @@ namespace Workflow.DomainService.Nodes
             {
                 parameters = Newtonsoft.Json.JsonConvert.DeserializeObject<TParameters>(json, ParameterDeserializationSettings);
             }
+            catch (Newtonsoft.Json.JsonException ex)
+            {
+                // A saved parameter has the wrong JSON shape (e.g. an array where an object of text values
+                // is expected; workflows built through the API are not shape-checked on save). Fail this step
+                // with the field path and expected vs actual shape. Newtonsoft's own message is never shown:
+                // it quotes the offending value, which can be a secret.
+                log.Error(ExecutionLogStages.NodeParametersFailed, "Parameters could not be read ({ErrorKind:l}).", ex.GetType().Name);
+                return NodeExecutionResult.Failed(
+                    NodeParameterShape.Describe(json, typeof(TParameters)) ?? NodeParameterShape.Fallback(JsonPath(ex)));
+            }
             catch (Exception ex)
             {
                 log.Error(ExecutionLogStages.NodeParametersFailed, "Parameters could not be read ({ErrorKind:l}).", ex.GetType().Name);
@@ -165,6 +176,13 @@ namespace Workflow.DomainService.Nodes
             }
             return result;
         }
+
+        private static string? JsonPath(Newtonsoft.Json.JsonException ex) => ex switch
+        {
+            Newtonsoft.Json.JsonSerializationException s => s.Path,
+            Newtonsoft.Json.JsonReaderException r => r.Path,
+            _ => null,
+        };
 
         private static IEnumerable<string> CollectVariableNames(BsonValue value)
         {
@@ -252,21 +270,181 @@ namespace Workflow.DomainService.Nodes
         }
 
         private static string ResolveExpression(string expr, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
-        {
+            => ResolveExpressionValue(expr, inputItem, context).Text;
 
+        /// <summary>
+        /// What one <c>{{expr}}</c> resolved to. <see cref="Typed"/> is set for <c>$json</c> / <c>$node</c>
+        /// paths (the stored BSON value, so its type is known); text-only sources (<c>$context</c>,
+        /// <c>$VAR</c>) leave it null. <see cref="Found"/> is false for a missing path, a missing context
+        /// key, or an unknown expression; <see cref="Text"/> is then empty.
+        /// </summary>
+        private readonly record struct ExpressionValue(bool Found, BsonValue? Typed, string Text)
+        {
+            public static readonly ExpressionValue Missing = new(false, null, "");
+
+            public static ExpressionValue FromBson(BsonValue? value)
+                => value is null ? Missing : new(true, value, FormatSelectedBsonValue(value));
+        }
+
+        private static ExpressionValue ResolveExpressionValue(string expr, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
+        {
             if (expr.StartsWith("$node"))
-                return ResolveNodeReferenceByBsonType(expr, inputItem, context);
+                return ExpressionValue.FromBson(SelectNodeReference(expr, inputItem, context));
 
             if (expr.StartsWith("$json"))
-                return ResolveJsonExpressionByBsonType(expr, inputItem, context);
+                return ExpressionValue.FromBson(SelectJsonExpression(expr, inputItem));
 
             if (expr.StartsWith("$context"))
-                return ResolveContextExpression(expr, context);
+                return ResolveContextExpressionValue(expr, context);
 
             if (expr.StartsWith("$VAR."))
-                return ResolveVarExpression(expr, context);
+                return new ExpressionValue(true, null, ResolveVarExpression(expr, context));
 
-            return "";
+            return ExpressionValue.Missing;
+        }
+
+        private enum TemplateKind { Json, GraphQl }
+
+        /// <summary>
+        /// Fills the <c>{{…}}</c> values of a JSON template (Set Field JSON, Function input, HTTP / Proxy
+        /// JSON body) so the result stays JSON whatever the values contain.
+        /// <list type="bullet">
+        /// <item>Inside a "…" string literal: the value's text, JSON-escaped (no quotes added).
+        /// A missing value is empty.</item>
+        /// <item>Outside a string, a <c>$json</c> / <c>$node</c> value is written as JSON by its stored type:
+        /// a string is quoted and escaped (so <c>"123"</c> stays a string), numbers / booleans / null as
+        /// themselves, objects and arrays as JSON.</item>
+        /// <item>Outside a string, a text-only value (<c>$context</c>, <c>$VAR</c>) is inserted as is when
+        /// it already parses as JSON, else as an escaped JSON string.</item>
+        /// <item>Outside a string, a missing value is <c>null</c>.</item>
+        /// </list>
+        /// The result is not validated here; see <see cref="FillJsonTemplateOrThrow"/>.
+        /// </summary>
+        protected string ResolveJsonTemplate(string template, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
+            => FillTemplate(template, inputItem, context, TemplateKind.Json);
+
+        /// <summary>
+        /// <see cref="ResolveJsonTemplate"/>, then checks the result is valid JSON. Throws
+        /// <see cref="InvalidFilledJsonException"/> naming <paramref name="fieldLabel"/> and the error
+        /// position when it is not; nodes turn that into a failed step.
+        /// </summary>
+        protected string FillJsonTemplateOrThrow(
+            string? template, string fieldLabel, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
+        {
+            var filled = ResolveJsonTemplate(template ?? string.Empty, inputItem, context);
+            if (!JsonTemplateText.TryValidate(filled, out var error))
+                throw new InvalidFilledJsonException($"{fieldLabel} is not valid JSON after filling in values: {error}");
+            return filled;
+        }
+
+        /// <summary>
+        /// Fills the <c>{{…}}</c> values of a raw GraphQL query. Inside a "…" string literal the value is
+        /// escaped the same way as JSON, so a <c>"</c> in a value cannot end the literal. Outside a
+        /// string the value's text is inserted exactly as before. Not validated.
+        /// </summary>
+        protected string ResolveGraphQlTemplate(string template, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
+            => FillTemplate(template, inputItem, context, TemplateKind.GraphQl);
+
+        private static string FillTemplate(
+            string template, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context, TemplateKind kind)
+        {
+            if (string.IsNullOrEmpty(template)) return template ?? string.Empty;
+
+            var sb = new StringBuilder(template.Length + 16);
+            var inString = false;
+            var i = 0;
+            while (i < template.Length)
+            {
+                var c = template[i];
+
+                // Same token shape as parseExpression: "{{", one or more non-brace characters, "}}".
+                // The expression itself is skipped as a whole, so quotes inside it
+                // ($node["Name"]) never change the string state.
+                if (c == '{' && TryReadExpression(template, i, out var expr, out var next))
+                {
+                    var value = ResolveExpressionValue(expr.Trim(), inputItem, context);
+                    if (inString)
+                        JsonTemplateText.AppendEscaped(sb, value.Found ? value.Text : string.Empty);
+                    else if (kind == TemplateKind.GraphQl)
+                        sb.Append(value.Text);
+                    else
+                        sb.Append(ToJsonValue(value));
+                    i = next;
+                    continue;
+                }
+
+                sb.Append(c);
+                if (inString)
+                {
+                    if (c == '\\' && i + 1 < template.Length)
+                    {
+                        // An escaped character (\" included) never ends the string.
+                        sb.Append(template[i + 1]);
+                        i += 2;
+                        continue;
+                    }
+                    if (c == '"') inString = false;
+                }
+                else if (c == '"')
+                {
+                    inString = true;
+                }
+                i++;
+            }
+            return sb.ToString();
+        }
+
+        private static bool TryReadExpression(string text, int start, out string expr, out int next)
+        {
+            expr = string.Empty;
+            next = start;
+            if (start + 1 >= text.Length || text[start + 1] != '{') return false;
+
+            var k = start + 2;
+            while (k < text.Length && text[k] != '{' && text[k] != '}') k++;
+            if (k == start + 2 || k + 1 >= text.Length || text[k] != '}' || text[k + 1] != '}') return false;
+
+            expr = text.Substring(start + 2, k - start - 2);
+            next = k + 2;
+            return true;
+        }
+
+        /// <summary>A value written outside a JSON string literal (see <see cref="ResolveJsonTemplate"/>).</summary>
+        private static string ToJsonValue(ExpressionValue value)
+        {
+            if (!value.Found) return "null";
+            if (value.Typed is not null) return BsonToJsonLiteral(value.Typed);
+            return JsonTemplateText.IsValidJson(value.Text) ? value.Text : JsonTemplateText.Quote(value.Text);
+        }
+
+        private static string BsonToJsonLiteral(BsonValue value)
+        {
+            switch (value.BsonType)
+            {
+                case BsonType.Null:
+                case BsonType.Undefined:
+                    return "null";
+                case BsonType.String:
+                    return JsonTemplateText.Quote(value.AsString);
+                case BsonType.Boolean:
+                    return value.AsBoolean ? "true" : "false";
+                case BsonType.Int32:
+                    return value.AsInt32.ToString(CultureInfo.InvariantCulture);
+                case BsonType.Int64:
+                    return value.AsInt64.ToString(CultureInfo.InvariantCulture);
+                case BsonType.Double:
+                    var d = value.AsDouble;
+                    // NaN / Infinity have no JSON number form; keep them readable as strings.
+                    return double.IsFinite(d)
+                        ? Newtonsoft.Json.JsonConvert.SerializeObject(d)
+                        : JsonTemplateText.Quote(d.ToString(CultureInfo.InvariantCulture));
+                case BsonType.Decimal128:
+                    var text = value.AsDecimal128.ToString();
+                    return JsonTemplateText.IsValidJson(text) ? text : JsonTemplateText.Quote(text);
+                default:
+                    // Documents, arrays, dates, ids: relaxed extended JSON is valid JSON.
+                    return value.ToJson(new JsonWriterSettings { OutputMode = JsonOutputMode.RelaxedExtendedJson });
+            }
         }
 
         /// <summary>
@@ -312,11 +490,14 @@ namespace Workflow.DomainService.Nodes
         }
 
         private static string ResolveContextExpression(string expr, NodeExecutionContext context)
+            => ResolveContextExpressionValue(expr, context).Text;
+
+        private static ExpressionValue ResolveContextExpressionValue(string expr, NodeExecutionContext context)
         {
-            var key = expr.Substring(9);
+            var key = expr.Length > 9 ? expr.Substring(9) : "";
             return context.WorkflowContext.Contains(key)
-                ? context.WorkflowContext[key]?.ToString() ?? ""
-                : "";
+                ? new ExpressionValue(true, null, context.WorkflowContext[key]?.ToString() ?? "")
+                : ExpressionValue.Missing;
         }
 
         /// <summary>
@@ -394,10 +575,9 @@ namespace Workflow.DomainService.Nodes
 
         /// <summary>
         /// Same ancestor lookup as <see cref="ResolveNodeReference"/>, but the path after
-        /// <c>.json.output</c> may be empty, <c>.field</c>, or <c>[index]</c>, and the value is
-        /// read with <see cref="SelectOutputPathByBsonType"/>.
+        /// <c>.json.output</c> may be empty, <c>.field</c>, or <c>[index]</c>. Null when missing.
         /// </summary>
-        private static string ResolveNodeReferenceByBsonType(string expr, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
+        private static BsonValue? SelectNodeReference(string expr, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
         {
             var nodeMatch = Regex.Match(
                 expr,
@@ -405,7 +585,7 @@ namespace Workflow.DomainService.Nodes
                 RegexOptions.None,
                 RegexTimeout);
             if (!nodeMatch.Success)
-                return "";
+                return null;
 
             var nodeName = nodeMatch.Groups["node"].Value;
             var path = nodeMatch.Groups["dotted"].Success
@@ -413,46 +593,64 @@ namespace Workflow.DomainService.Nodes
                 : nodeMatch.Groups["bracket"].Value;
 
             if (!inputItem.AncestorMap.TryGetValue(nodeName, out var ancestorId) || ancestorId == null)
-                return "";
+                return null;
             var ancestorItem = context.AncestorNodeOutputs.TryGetValue(nodeName, out var items)
                 ? items.FirstOrDefault(i => i.Id == ancestorId)
                 : null;
 
             if (ancestorItem?.Data?.Output is null)
-                return "";
-            return SelectOutputPathByBsonType(ancestorItem.Data.Output, path);
+                return null;
+            return TrySelectBsonPath(ancestorItem.Data.Output, path, out var selected) ? selected : null;
         }
 
         /// <summary>
-        /// Reads <c>$json</c> / <c>$json.output</c> without assuming a dot before the next segment.
-        /// <c>$json.output.ids[0]</c> and <c>$json.output[0]</c> both keep the index.
+        /// Reads a <c>$json</c> expression on the current item's output. Null when missing.
+        /// <list type="bullet">
+        /// <item><c>$json</c> and <c>$json.output</c>: the whole item.</item>
+        /// <item><c>$json.output.x</c> / <c>$json.output[0]</c>: path on the item (the original form).</item>
+        /// <item><c>$json.x</c> / <c>$json[0]</c>: the same as <c>$json.output.x</c> / <c>$json.output[0]</c>.</item>
+        /// <item>Anything else starting with <c>$json</c> (e.g. <c>$jsonfoo</c>): missing.</item>
+        /// </list>
+        /// Because <c>$json.output.x</c> keeps its meaning, an item field literally named <c>output</c>
+        /// is read with <c>$json.output.output</c> (<c>$json.output</c> alone is the whole item).
+        /// A dot right before the next segment is optional: <c>$json.output.ids[0]</c> keeps the index.
         /// </summary>
-        private static string ResolveJsonExpressionByBsonType(string expr, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
+        private static BsonValue? SelectJsonExpression(string expr, WorkflowItemExecutionEntity inputItem)
         {
             var output = inputItem.Data?.Output;
             if (output is null)
-                return "";
+                return null;
 
-            if (expr.StartsWith("$json.output.", StringComparison.Ordinal))
-                return SelectOutputPathByBsonType(output, expr.Substring("$json.output.".Length));
+            string path;
+            if (expr == "$json" || expr == "$json.output")
+                path = "";
+            else if (expr.StartsWith("$json.output.", StringComparison.Ordinal))
+                path = expr.Substring("$json.output.".Length);
+            else if (expr.StartsWith("$json.output[", StringComparison.Ordinal))
+                path = expr.Substring("$json.output".Length);
+            else if (expr.StartsWith("$json.", StringComparison.Ordinal))
+                path = expr.Substring("$json.".Length);
+            else if (expr.StartsWith("$json[", StringComparison.Ordinal))
+                path = expr.Substring("$json".Length);
+            else
+                return null;
 
-            if (expr.StartsWith("$json.output[", StringComparison.Ordinal))
-                return SelectOutputPathByBsonType(output, expr.Substring("$json.output".Length));
-
-            return FormatSelectedBsonValue(output);
+            return TrySelectBsonPath(output, path, out var selected) ? selected : null;
         }
 
         /// <summary>
         /// Walks <paramref name="path"/> on <paramref name="output"/> using <see cref="BsonType"/>.
         /// A <see cref="BsonType.Array"/> consumes <c>[n]</c>. A <see cref="BsonType.Document"/> consumes a property name.
-        /// A dot immediately before <c>[</c> is ignored. Missing names and out-of-range indexes return empty.
+        /// A dot immediately before <c>[</c> is ignored. Missing names and out-of-range indexes return false.
+        /// An empty path selects <paramref name="output"/> itself.
         /// </summary>
-        private static string SelectOutputPathByBsonType(BsonValue output, string path)
+        private static bool TrySelectBsonPath(BsonValue output, string path, out BsonValue selected)
         {
+            selected = output;
             if (output is null)
-                return "";
+                return false;
             if (string.IsNullOrEmpty(path))
-                return FormatSelectedBsonValue(output);
+                return true;
 
             var current = output;
             var index = 0;
@@ -467,15 +665,16 @@ namespace Workflow.DomainService.Nodes
                 if (path[index] == '[')
                 {
                     if (!TryReadPathIndex(path, ref index, out var elementIndex) || !TrySelectArrayElement(current, elementIndex, out current))
-                        return "";
+                        return false;
                     continue;
                 }
 
                 if (!TryReadPathName(path, ref index, out var name) || !TrySelectProperty(current, name, out current))
-                    return "";
+                    return false;
             }
 
-            return FormatSelectedBsonValue(current);
+            selected = current;
+            return true;
         }
 
         private static bool TryReadPathIndex(string path, ref int index, out int elementIndex)

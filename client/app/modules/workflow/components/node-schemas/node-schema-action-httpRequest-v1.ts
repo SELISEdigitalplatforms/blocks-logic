@@ -142,7 +142,7 @@ export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
           value: "json",
         },
         label: "Body",
-        info: "JSON body sent with the request. Expressions are resolved for each item.",
+        info: "JSON body sent with the request. Expressions are resolved for each item: {{$json.field}} reads a field of the current item (same as {{$json.output.field}}). Values inside quotes are escaped automatically. If the body is not valid JSON after that, the step fails.",
         key: "body",
       },
     ],

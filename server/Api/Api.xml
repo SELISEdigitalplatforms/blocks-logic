@@ -540,31 +540,36 @@
         <member name="F:BlocksTemplate.Api.Security.ContentSecurityPolicy.FormActionOriginKeys">
             <summary>Where a login POST may be sent: the identity host and the portal.</summary>
         </member>
-        <member name="F:BlocksTemplate.Api.Security.ContentSecurityPolicy.MonacoSource">
+        <member name="F:BlocksTemplate.Api.Security.ContentSecurityPolicy.ReportPath">
             <summary>
-            Monaco (functions code editor, workflow code fields) is loaded by @monaco-editor/loader
-            from this pinned CDN path, with its CSS, codicon font and workers. A path source, not the
-            whole jsdelivr host: the host serves every npm package, so allowing it would let an
-            injected tag load any script. If the loader version in client/package-lock.json changes,
-            this must change with it (the code editor stays blank otherwise).
+            Where the browser sends CSP violation reports (<see cref="T:BlocksTemplate.Api.Security.CspReportEndpoint"/>). Same
+            origin, outside <c>/api</c> so tenant validation and auth do not reject the browser's
+            anonymous POST.
             </summary>
         </member>
-        <member name="F:BlocksTemplate.Api.Security.ContentSecurityPolicy.RecaptchaScriptSources">
-            <summary>reCAPTCHA on the login/sign-up forms (client/app/components/captcha).</summary>
+        <member name="F:BlocksTemplate.Api.Security.ContentSecurityPolicy.ReportGroup">
+            <summary>Reporting API group name used by <c>report-to</c> and <c>Reporting-Endpoints</c>.</summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.ContentSecurityPolicy.BlobStorageFallback">
+            <summary>
+            Used only when <c>Csp:BlobStorageSrc</c> is not set: workflow import PUTs the file to a
+            pre-signed Azure Blob URL and the storage account differs per environment, so an
+            unconfigured environment keeps working. Set the exact account(s) to drop the wildcard.
+            </summary>
         </member>
         <member name="F:BlocksTemplate.Api.Security.ContentSecurityPolicy.FixedConnectSources">
-            <summary>
-            Fixed third parties the SPA calls: Rollbar (genesis-os error reporting) and Azure Blob
-            (workflow import PUTs the file to a pre-signed URL; the account differs per environment).
-            </summary>
+            <summary>Fixed third parties the SPA calls: Rollbar (genesis-os error reporting).</summary>
         </member>
-        <member name="M:BlocksTemplate.Api.Security.ContentSecurityPolicy.BuildPolicy(System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String})">
+        <member name="M:BlocksTemplate.Api.Security.ContentSecurityPolicy.BuildPolicy(System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String})">
             <summary>
             The policy itself, separated from configuration so it can be asserted directly.
             </summary>
         </member>
         <member name="M:BlocksTemplate.Api.Security.ContentSecurityPolicy.Normalize(System.Collections.Generic.IEnumerable{System.String})">
-            <summary>Reduce configured values to distinct, sorted origins.</summary>
+            <summary>
+            Reduce configured values to distinct, sorted origins. The blob fallback is the one
+            wildcard kept as is (a URI parser rejects <c>*.</c> hosts, and config cannot add it).
+            </summary>
         </member>
         <member name="M:BlocksTemplate.Api.Security.ContentSecurityPolicy.ToOrigin(System.String)">
             <summary>
@@ -582,6 +587,37 @@
         </member>
         <member name="M:BlocksTemplate.Api.Security.ContentSecurityPolicy.Split(System.String)">
             <summary>Space-, comma- or semicolon-separated list, for origins no runtime key describes.</summary>
+        </member>
+        <member name="T:BlocksTemplate.Api.Security.CspReportEndpoint">
+            <summary>
+            Receives the browser's CSP violation reports (<c>report-to</c> / <c>report-uri</c>) and logs
+            them, so a policy that blocks something real shows up in the logs instead of only in a
+            user's console.
+            <para>
+            The endpoint is anonymous by nature (browsers send no credentials), so it trusts nothing:
+            the body is capped, only report content types are read, control characters are stripped
+            before logging, and logging is capped per minute so a flood cannot fill the logs. It always
+            answers 204 for an accepted report and never echoes input.
+            </para>
+            </summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.CspReportEndpoint.MaxBodyBytes">
+            <summary>A real report is well under 2 KB; a batch of a few stays under this.</summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.CspReportEndpoint.MaxLoggedChars">
+            <summary>What is kept of one body in the log line.</summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.CspReportEndpoint.MaxLogsPerMinute">
+            <summary>Log lines per minute per process; the rest are counted, not logged.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.CspReportEndpoint.TakeLogSlot(System.DateTimeOffset,System.Int32@)">
+            <summary>One shared budget per minute. Returns how many reports were dropped before this one.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.CspReportEndpoint.Sanitize(System.String)">
+            <summary>Strip control characters (no forged log lines) and cut to <see cref="F:BlocksTemplate.Api.Security.CspReportEndpoint.MaxLoggedChars"/>.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.CspReportEndpoint.ResetForTests">
+            <summary>Test hook: start every test from an empty budget.</summary>
         </member>
         <member name="T:BlocksTemplate.Api.Security.CspMode">
             <summary>How the CSP header is sent. Set by <c>Csp:Mode</c> (env var <c>Csp__Mode</c>).</summary>

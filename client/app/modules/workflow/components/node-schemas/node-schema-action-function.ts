@@ -11,8 +11,8 @@ const CODE_CLASS = "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-pri
 const code = (text: string) => React.createElement("code", { className: CODE_CLASS }, text);
 
 const INPUT_JSON_PLACEHOLDER = `{
-  "orderId": {{$json.output.orderId}},
-  "email": "{{$json.output.customer.email}}",
+  "orderId": {{$json.orderId}},
+  "email": "{{$json.customer.email}}",
   "source": "workflow"
 }`;
 
@@ -94,14 +94,16 @@ export const NodeSchemaActionFunction: NodeSchemaDefinition = {
             "span",
             null,
             "Write the JSON the function should receive. Insert values from earlier steps with ",
+            code("{{$json.field}}"),
+            " for a field of the incoming item (same as ",
             code("{{$json.output.field}}"),
-            " for the incoming item, ",
+            "), ",
             code('{{$node["Step name"].json.output.field}}'),
             " for any earlier step, or ",
             code("{{$context.Input}}"),
-            " for the trigger data. Wrap text values in quotes (",
-            code('"{{$json.output.email}}"'),
-            "); leave numbers, booleans and objects unquoted. When testing this step on its own with nothing connected, the incoming item is empty.",
+            " for the trigger data. Without quotes a value keeps its type: text, number, true/false or object. Inside quotes (",
+            code('"Hi {{$json.name}}"'),
+            ") it becomes part of the text and is escaped automatically. If the input is not valid JSON after the values are filled in, the step fails. When testing this step on its own with nothing connected, the incoming item is empty.",
           ),
         }),
       },
@@ -109,7 +111,7 @@ export const NodeSchemaActionFunction: NodeSchemaDefinition = {
         id: "inputExpression",
         type: "json-code-editor",
         label: "Input JSON",
-        info: "The payload handed to the function as its input. Placeholders in {{ }} are resolved when the step runs.",
+        info: "The payload handed to the function as its input. Placeholders in {{ }} are resolved when the step runs; values inside quotes are escaped automatically. Must be valid JSON after that, or the step fails.",
         key: "inputExpression",
         placeholder: INPUT_JSON_PLACEHOLDER,
         height: 168,

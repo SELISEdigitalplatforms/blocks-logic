@@ -64,7 +64,40 @@ namespace Blocks.FunctionRunner.Tests
             deps.TrimEnd().Split('\n')[^1].Should().StartWith("ENTRYPOINT");
 
             BuildProcessor.TestSourceDockerfile("blocks-test-deps/abc:local")
-                .Should().Be("FROM blocks-test-deps/abc:local\nCOPY src/ /function/\n");
+                .Should().Be($"FROM blocks-test-deps/abc:local\nCOPY src/ /function/\n{BuildProcessor.SyntaxCheckRun}\n");
+        }
+
+        [Fact]
+        public void A_deployed_build_and_a_test_build_run_the_same_syntax_check()
+        {
+            var template = File.ReadAllLines(Path.Combine(AppContext.BaseDirectory, "function.Dockerfile.tmpl"));
+            template.Should().Contain(BuildProcessor.SyntaxCheckRun);
+            // After the switch to the function user, so tenant files are only ever parsed unprivileged.
+            Array.IndexOf(template, BuildProcessor.SyntaxCheckRun)
+                .Should().BeGreaterThan(Array.IndexOf(template, "USER 10001:10001"));
+            BuildProcessor.SyntaxCheckRun.Should().Contain("node --check").And.Contain("-path ./node_modules -prune");
+        }
+
+        [Fact]
+        public void A_syntax_error_in_the_log_becomes_file_line_and_reason()
+        {
+            const string log = "Step 9/10 : RUN set -eu; ...\n ---> Running in abc\n/function/lib/a.js:3\n"
+                               + "export default async (ctx)=>{ return {a:1 ;\n                                          ^\n\n"
+                               + "SyntaxError: Unexpected token ';'\n    at checkSyntax (node:internal/main/check_syntax:74:5)\n\n"
+                               + "Node.js v24.20.0\nBLOCKS_SYNTAX_ERROR lib/a.js\nThe command '/bin/sh -c ...' returned a non-zero code: 1";
+            BuildProcessor.SyntaxErrorFailure(log).Should().Be("syntax error in lib/a.js line 3: Unexpected token ';'");
+        }
+
+        [Theory]
+        [InlineData("BLOCKS_SYNTAX_ERROR index.js\n", "syntax error in index.js")]                       // no node output kept
+        [InlineData("/function/index.js:x\nBLOCKS_SYNTAX_ERROR index.js\r\n", "syntax error in index.js")] // odd location, CRLF
+        [InlineData("npm ERR! something\nreturned a non-zero code: 1", null)]                           // another failure
+        [InlineData("\u001b[91m/function/index.js:2\nSyntaxError: Unexpected end of input\n\u001b[0m\u001b[91mBLOCKS_SYNTAX_ERROR index.js\n\u001b[0m",
+            "syntax error in index.js line 2: Unexpected end of input")]                                // Engine colour codes
+        [InlineData("", null)]
+        public void Only_the_syntax_check_marker_makes_a_syntax_error_message(string log, string? expected)
+        {
+            BuildProcessor.SyntaxErrorFailure(log).Should().Be(expected);
         }
 
         [Fact]
@@ -124,6 +157,7 @@ namespace Blocks.FunctionRunner.Tests
         private string RefImage => $"blocks-fn-deps-test/ref-{_suffix}:local";
         private string DepsImage => $"blocks-fn-deps-test/deps-{_suffix}:local";
         private string TestImage => $"blocks-fn-deps-test/test-{_suffix}:local";
+        private string BrokenImage => $"blocks-fn-deps-test/broken-{_suffix}:local";
 
         public async Task InitializeAsync()
         {
@@ -143,7 +177,7 @@ namespace Blocks.FunctionRunner.Tests
         {
             if (_docker is not null)
             {
-                foreach (var image in new[] { TestImage, DepsImage, RefImage })
+                foreach (var image in new[] { TestImage, DepsImage, RefImage, BrokenImage })
                 {
                     try
                     {
@@ -202,6 +236,54 @@ namespace Blocks.FunctionRunner.Tests
             await BuildAsync(test, TestImage, readOnlySource: true);
 
             (await Describe(TestImage)).Should().Be(await Describe(RefImage));
+        }
+
+        [SkippableFact]
+        public async Task A_syntax_error_fails_the_build_and_names_the_file()
+        {
+            Skip.If(_skip is not null, _skip);
+
+            var all = Path.Combine(_root, "broken");
+            Directory.CreateDirectory(Path.Combine(all, "manifest"));
+            Directory.CreateDirectory(Path.Combine(all, "src", "lib"));
+            File.WriteAllText(Path.Combine(all, "manifest", "package.json"), "{\"name\":\"f\",\"type\":\"module\"}");
+            // Valid ESM with top-level await and an import that does not resolve: parsing alone accepts it.
+            File.WriteAllText(Path.Combine(all, "src", "index.js"),
+                "import x from 'nope';\nexport default async () => 1;\nawait Promise.resolve(1);\n");
+            File.WriteAllText(Path.Combine(all, "src", "lib", "a.mjs"), "export const a = {b: 1 ;\n");
+            var modules = Path.Combine(_root, "broken-modules");
+            Directory.CreateDirectory(Path.Combine(modules, "node_modules", "x"));
+            // A broken file inside node_modules is not the tenant's code and must not be checked.
+            File.WriteAllText(Path.Combine(modules, "node_modules", "x", "index.js"), "this is not javascript (");
+            using (var tar = Process.Start("tar", ["-cf", Path.Combine(all, "deps.tar"), "-C", modules, "node_modules"]))
+            {
+                await tar.WaitForExitAsync();
+                tar.ExitCode.Should().Be(0);
+            }
+            File.WriteAllText(Path.Combine(all, "Dockerfile"), File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "function.Dockerfile.tmpl"))
+                .Replace("{{BASE_IMAGE}}", Base, StringComparison.Ordinal)
+                .Replace("{{DEPS_ARCHIVE}}", "deps.tar", StringComparison.Ordinal)
+                .Replace("{{MAX_OLD_SPACE_MB}}", "192", StringComparison.Ordinal));
+
+            var log = new System.Text.StringBuilder();
+            var failed = false;
+            using (var context = BuildProcessor.CreateTarContext(all, readOnlySource: false))
+            {
+                await _docker!.Images.BuildImageFromDockerfileAsync(
+                    new ImageBuildParameters { Dockerfile = "Dockerfile", Tags = [BrokenImage], Remove = true, ForceRemove = true },
+                    context, null, null, new Progress<JSONMessage>(m =>
+                    {
+                        if (!string.IsNullOrEmpty(m.Stream)) log.Append(m.Stream);
+                        if (!string.IsNullOrEmpty(m.ErrorMessage)) failed = true;
+                    }));
+            }
+
+            failed.Should().BeTrue();
+            BuildProcessor.SyntaxErrorFailure(log.ToString()).Should().StartWith("syntax error in lib/a.mjs line 1: ");
+
+            // The same source without the broken file builds.
+            File.Delete(Path.Combine(all, "src", "lib", "a.mjs"));
+            await BuildAsync(all, BrokenImage, readOnlySource: false);
         }
 
         private async Task BuildAsync(string context, string tag, bool readOnlySource)

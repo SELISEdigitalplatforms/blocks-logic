@@ -11,7 +11,7 @@ vi.mock("../services/function.service", () => ({
   },
 }));
 
-import { useDeploy } from "./use-deploy";
+import { splitFailedBuild, useDeploy } from "./use-deploy";
 
 const version = { id: "v1", number: 3, imageDigest: "d", runCount: 0, createdDate: "", createdBy: "" };
 
@@ -88,4 +88,44 @@ describe("useDeploy (F-4: deploy does not hold the request for the build)", () =
 
     expect(onFailed).toHaveBeenCalledWith({ errors: "the build failed: boom" });
   });
+
+  it("a deploy refused for a failed build shows that build's log and reports once (PKG-14)", async () => {
+    deployFunction.mockRejectedValue({
+      isSuccess: false,
+      errors: { invalid_request: "the build failed: npm error code E404", buildId: "b9" },
+    });
+    getBuild.mockResolvedValue({ id: "b9", status: "Failed", errorMessage: "npm error code E404", createdDate: "" });
+    const { hook, onFailed } = setup();
+
+    await act(() => hook.result.current.deploy());
+
+    expect(hook.result.current.buildId).toBe("b9");
+    expect(hook.result.current.isBuilding).toBe(false);
+    expect(onFailed).toHaveBeenCalledWith({
+      isSuccess: false,
+      errors: { invalid_request: "the build failed: npm error code E404" },
+    });
+    await waitFor(() => expect(getBuild).toHaveBeenCalled());
+    expect(onFailed).toHaveBeenCalledTimes(1);
+  });
+
+  it("a refusal without a build id is passed on unchanged", async () => {
+    const refusal = { isSuccess: false, errors: { invalid_request: "the code changed" } };
+    deployFunction.mockRejectedValue(refusal);
+    const { hook, onFailed } = setup();
+
+    await act(() => hook.result.current.deploy());
+
+    expect(onFailed).toHaveBeenCalledWith(refusal);
+    expect(hook.result.current.buildId).toBeUndefined();
+  });
+});
+
+describe("splitFailedBuild", () => {
+  it.each([null, undefined, "boom", { errors: "text" }, { errors: ["a"] }, { errors: { buildId: 7 } }, { errors: { buildId: "" } }])(
+    "leaves %j alone",
+    (error) => {
+      expect(splitFailedBuild(error)).toEqual({ error });
+    },
+  );
 });

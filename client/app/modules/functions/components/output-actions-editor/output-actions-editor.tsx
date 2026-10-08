@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui-kits/select/select";
 import { Card } from "@/components/ui-kits/card/card";
+import { Switch } from "@/components/ui-kits/switch/switch";
 import { cn } from "@/lib/utils";
 import { HTTP_METHOD_OPTIONS } from "../../constants/limits.constant";
 import { IOutputAction } from "../../types/function.types";
@@ -105,213 +106,229 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
         </div>
       )}
 
-      {value.map((action, index) => (
-        <Card key={action.id} className="overflow-hidden">
-          <div className="flex items-center gap-3 border-b bg-surface-app px-4 py-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blocks-primary-50 text-xs font-semibold text-primary">
-              {index + 1}
-            </span>
-            <span className="min-w-0 truncate text-sm font-semibold">External HTTP call</span>
-            <span className="flex-1" />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label="Move earlier"
-              disabled={index === 0}
-              className="h-7 w-7 disabled:opacity-30"
-              onClick={() => move(index, -1)}
-            >
-              <ArrowUp className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label="Move later"
-              disabled={index === value.length - 1}
-              className="h-7 w-7 disabled:opacity-30"
-              onClick={() => move(index, 1)}
-            >
-              <ArrowDown className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 gap-1.5 px-2 text-xs text-error hover:text-error"
-              onClick={() => remove(index)}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              Remove
-            </Button>
-          </div>
-
-          <div className="flex flex-col gap-3.5 p-4">
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-semibold">Method</Label>
-                <Select value={action.method} onValueChange={(v) => update(index, { method: v })}>
-                  <SelectTrigger className="h-9 w-28">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {HTTP_METHOD_OPTIONS.map((method) => (
-                      <SelectItem key={method} value={method}>
-                        {method}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex min-w-[220px] flex-1 flex-col gap-1.5">
-                <Label className="text-xs font-semibold">Endpoint</Label>
-                <Input
-                  className="h-9 font-mono text-xs"
-                  placeholder="https://api.vendor.com/v1/events"
-                  value={action.url}
-                  onChange={(e) => update(index, { url: e.target.value })}
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-semibold">Timeout</Label>
-                <Select
-                  value={String(action.timeoutSeconds)}
-                  onValueChange={(v) => update(index, { timeoutSeconds: Number(v) })}
-                >
-                  <SelectTrigger className="h-9 w-28">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TIMEOUT_OPTIONS.map((seconds) => (
-                      <SelectItem key={seconds} value={String(seconds)}>
-                        {seconds} s
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+      {value.map((action, index) => {
+        // Missing means on: the host's OutputAction.Enabled defaults to true.
+        const isEnabled = action.enabled !== false;
+        return (
+          <Card key={action.id} className="overflow-hidden">
+            <div className="flex items-center gap-3 border-b bg-surface-app px-4 py-3">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blocks-primary-50 text-xs font-semibold text-primary">
+                {index + 1}
+              </span>
+              <span className="min-w-0 truncate text-sm font-semibold">External HTTP call</span>
+              {!isEnabled && (
+                <span className="shrink-0 rounded bg-neutral-100 px-1.5 py-0.5 text-[11px] font-medium text-medium-emphasis">
+                  Off — skipped
+                </span>
+              )}
+              <span className="flex-1" />
+              {/* The host skips a disabled action (FN-48); turning one off keeps its settings. */}
+              <Switch
+                aria-label={`Action ${index + 1} on`}
+                checked={isEnabled}
+                onCheckedChange={(checked) => update(index, { enabled: checked })}
+                className="flex-shrink-0"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label="Move earlier"
+                disabled={index === 0}
+                className="h-7 w-7 disabled:opacity-30"
+                onClick={() => move(index, -1)}
+              >
+                <ArrowUp className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label="Move later"
+                disabled={index === value.length - 1}
+                className="h-7 w-7 disabled:opacity-30"
+                onClick={() => move(index, 1)}
+              >
+                <ArrowDown className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1.5 px-2 text-xs text-error hover:text-error"
+                onClick={() => remove(index)}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Remove
+              </Button>
             </div>
 
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between gap-3">
-                <Label className="text-xs font-semibold">Headers</Label>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 gap-1 px-2 text-xs text-primary hover:text-primary"
-                  onClick={() => updateHeader(index, "", "")}
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Add header
-                </Button>
-              </div>
-              {Object.entries(action.headers).length === 0 && (
-                <p className="text-xs text-medium-emphasis">
-                  No headers. A POST, PUT or PATCH sends{" "}
-                  <code className="font-mono">Content-Type: application/json</code> by default.
-                </p>
-              )}
-              {Object.entries(action.headers).map(([key, headerValue]) => (
-                <div key={key} className="flex flex-wrap items-center gap-2">
+            <div className={cn("flex flex-col gap-3.5 p-4", !isEnabled && "opacity-60")}>
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-semibold">Method</Label>
+                  <Select value={action.method} onValueChange={(v) => update(index, { method: v })}>
+                    <SelectTrigger className="h-9 w-28">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {HTTP_METHOD_OPTIONS.map((method) => (
+                        <SelectItem key={method} value={method}>
+                          {method}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex min-w-[220px] flex-1 flex-col gap-1.5">
+                  <Label className="text-xs font-semibold">Endpoint</Label>
                   <Input
-                    aria-label="Header name"
-                    placeholder="Header name"
-                    className="h-9 min-w-[140px] flex-[0_1_190px] font-mono text-xs"
-                    value={key}
-                    onChange={(e) => renameHeader(index, key, e.target.value)}
+                    className="h-9 font-mono text-xs"
+                    placeholder="https://api.vendor.com/v1/events"
+                    value={action.url}
+                    onChange={(e) => update(index, { url: e.target.value })}
                   />
-                  <div className="min-w-[180px] flex-1">
-                    <VariableTokenField
-                      value={headerValue}
-                      onChange={(next) => updateHeader(index, key, next)}
-                      codec={secretIdRef}
-                      ariaLabel="Header value"
-                      placeholder="Value"
-                    />
-                  </div>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-semibold">Timeout</Label>
+                  <Select
+                    value={String(action.timeoutSeconds)}
+                    onValueChange={(v) => update(index, { timeoutSeconds: Number(v) })}
+                  >
+                    <SelectTrigger className="h-9 w-28">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TIMEOUT_OPTIONS.map((seconds) => (
+                        <SelectItem key={seconds} value={String(seconds)}>
+                          {seconds} s
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between gap-3">
+                  <Label className="text-xs font-semibold">Headers</Label>
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon"
-                    aria-label="Remove header"
-                    className="h-8 w-8 shrink-0 text-medium-emphasis hover:text-error"
-                    onClick={() => removeHeader(index, key)}
+                    size="sm"
+                    className="h-8 gap-1 px-2 text-xs text-primary hover:text-primary"
+                    onClick={() => updateHeader(index, "", "")}
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Plus className="h-3.5 w-3.5" />
+                    Add header
                   </Button>
                 </div>
-              ))}
-            </div>
-
-            {!hasBody(action.method) ? (
-              <p className="text-xs text-medium-emphasis">
-                A <code className="font-mono">{action.method}</code> carries no body — the function
-                result is not sent. Use the URL or a header to pass anything the endpoint needs.
-              </p>
-            ) : (
-              <div className="flex flex-col gap-2">
-                <Label className="text-xs font-semibold" id={`fn-body-mode-${action.id}`}>
-                  Body
-                </Label>
-                <div
-                  className="flex flex-wrap gap-2"
-                  role="radiogroup"
-                  aria-labelledby={`fn-body-mode-${action.id}`}
-                >
-                  {[
-                    { label: "Function result", isTemplate: false },
-                    { label: "Template", isTemplate: true },
-                  ].map((option) => {
-                    const isSelected = (action.bodyTemplate != null) === option.isTemplate;
-                    return (
-                      <button
-                        key={option.label}
-                        type="button"
-                        role="radio"
-                        aria-checked={isSelected}
-                        className={cn(
-                          "rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors",
-                          isSelected
-                            ? "border-primary bg-blocks-primary-25 text-primary"
-                            : "border-border text-medium-emphasis hover:bg-surface-app",
-                        )}
-                        onClick={() =>
-                          update(index, { bodyTemplate: option.isTemplate ? "{{result}}" : null })
-                        }
-                      >
-                        {option.label}
-                      </button>
-                    );
-                  })}
-                </div>
-                {action.bodyTemplate == null ? (
+                {Object.entries(action.headers).length === 0 && (
                   <p className="text-xs text-medium-emphasis">
-                    The returned value is sent as the JSON body, unchanged.
+                    No headers. A POST, PUT or PATCH sends{" "}
+                    <code className="font-mono">Content-Type: application/json</code> by default.
                   </p>
-                ) : (
-                  <>
-                    <VariableTokenField
-                      multiline
-                      value={action.bodyTemplate}
-                      onChange={(next) => update(index, { bodyTemplate: next })}
-                      codec={secretIdRef}
-                      ariaLabel="Body template"
-                      placeholder={'{ "payload": {{result}} }'}
-                      className="min-h-[90px] resize-y font-mono text-xs"
-                    />
-                    <p className="text-xs text-medium-emphasis">
-                      <code className="font-mono">{"{{result}}"}</code> is replaced with the
-                      returned value before the call.
-                    </p>
-                  </>
                 )}
+                {Object.entries(action.headers).map(([key, headerValue]) => (
+                  <div key={key} className="flex flex-wrap items-center gap-2">
+                    <Input
+                      aria-label="Header name"
+                      placeholder="Header name"
+                      className="h-9 min-w-[140px] flex-[0_1_190px] font-mono text-xs"
+                      value={key}
+                      onChange={(e) => renameHeader(index, key, e.target.value)}
+                    />
+                    <div className="min-w-[180px] flex-1">
+                      <VariableTokenField
+                        value={headerValue}
+                        onChange={(next) => updateHeader(index, key, next)}
+                        codec={secretIdRef}
+                        ariaLabel="Header value"
+                        placeholder="Value"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Remove header"
+                      className="h-8 w-8 shrink-0 text-medium-emphasis hover:text-error"
+                      onClick={() => removeHeader(index, key)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
               </div>
-            )}
-          </div>
-        </Card>
-      ))}
+
+              {!hasBody(action.method) ? (
+                <p className="text-xs text-medium-emphasis">
+                  A <code className="font-mono">{action.method}</code> carries no body — the function
+                  result is not sent. Use the URL or a header to pass anything the endpoint needs.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <Label className="text-xs font-semibold" id={`fn-body-mode-${action.id}`}>
+                    Body
+                  </Label>
+                  <div
+                    className="flex flex-wrap gap-2"
+                    role="radiogroup"
+                    aria-labelledby={`fn-body-mode-${action.id}`}
+                  >
+                    {[
+                      { label: "Function result", isTemplate: false },
+                      { label: "Template", isTemplate: true },
+                    ].map((option) => {
+                      const isSelected = (action.bodyTemplate != null) === option.isTemplate;
+                      return (
+                        <button
+                          key={option.label}
+                          type="button"
+                          role="radio"
+                          aria-checked={isSelected}
+                          className={cn(
+                            "rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors",
+                            isSelected
+                              ? "border-primary bg-blocks-primary-25 text-primary"
+                              : "border-border text-medium-emphasis hover:bg-surface-app",
+                          )}
+                          onClick={() =>
+                            update(index, { bodyTemplate: option.isTemplate ? "{{result}}" : null })
+                          }
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {action.bodyTemplate == null ? (
+                    <p className="text-xs text-medium-emphasis">
+                      The returned value is sent as the JSON body, unchanged.
+                    </p>
+                  ) : (
+                    <>
+                      <VariableTokenField
+                        multiline
+                        value={action.bodyTemplate}
+                        onChange={(next) => update(index, { bodyTemplate: next })}
+                        codec={secretIdRef}
+                        ariaLabel="Body template"
+                        placeholder={'{ "payload": {{result}} }'}
+                        className="min-h-[90px] resize-y font-mono text-xs"
+                      />
+                      <p className="text-xs text-medium-emphasis">
+                        <code className="font-mono">{"{{result}}"}</code> is replaced with the
+                        returned value before the call.
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </Card>
+        );
+      })}
 
       {value.length > 0 && (
         <p className="text-xs text-medium-emphasis">

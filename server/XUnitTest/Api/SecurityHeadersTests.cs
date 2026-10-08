@@ -84,20 +84,60 @@ namespace XUnitTest.Api
         }
 
         [Fact]
-        public void Policy_ForbidsInlineScriptAndEvalButAllowsWhatTheSpaLoads()
+        public void Policy_ForbidsInlineScriptAndEvalAndThirdPartyScripts()
         {
             var policy = ContentSecurityPolicy.Build(Config(new()));
 
-            var script = Directive(policy, "script-src");
-            script.Should().NotContain("unsafe-inline").And.NotContain("unsafe-eval").And.NotContain("*");
-            script.Should().Contain(ContentSecurityPolicy.MonacoSource);
-            ContentSecurityPolicy.MonacoSource.Should().EndWith("/", "a CSP path source without '/' matches one file only");
+            // Monaco is self-hosted (/monaco/vs) and reCAPTCHA is not used: no script host at all.
+            Directive(policy, "script-src").Should().Be("script-src 'self'");
+            policy.Should().NotContain("jsdelivr").And.NotContain("recaptcha").And.NotContain("frame-src");
 
             Directive(policy, "style-src").Should().Contain("'unsafe-inline'").And.Contain("https://fonts.googleapis.com");
             Directive(policy, "font-src").Should().Contain("https://fonts.gstatic.com");
             Directive(policy, "worker-src").Should().Contain("blob:");
-            Directive(policy, "connect-src").Should().Contain("https://api.rollbar.com").And.Contain("https://*.blob.core.windows.net");
+            Directive(policy, "connect-src").Should().Contain("https://api.rollbar.com");
             policy.Should().Contain("frame-ancestors 'none'").And.Contain("object-src 'none'").And.Contain("base-uri 'self'");
+        }
+
+        [Fact]
+        public void Policy_ImagesAreLimitedToSelfAndStorage()
+        {
+            var policy = ContentSecurityPolicy.Build(Config(new() { ["Csp:ExtraImgSrc"] = "https://cdn.example.com" }));
+
+            var img = Directive(policy, "img-src");
+            img.Should().StartWith("img-src 'self' data: blob:").And.Contain("https://cdn.example.com");
+            img.Split(' ').Should().NotContain("https:", "any https host is what the scan flags");
+        }
+
+        [Fact]
+        public void Policy_UnconfiguredBlobStorageKeepsTheWildcardSoImportStillWorks()
+        {
+            var policy = ContentSecurityPolicy.Build(Config(new()));
+
+            Directive(policy, "connect-src").Should().Contain(ContentSecurityPolicy.BlobStorageFallback);
+            Directive(policy, "img-src").Should().Contain(ContentSecurityPolicy.BlobStorageFallback);
+        }
+
+        [Fact]
+        public void Policy_ConfiguredBlobStorageReplacesTheWildcard()
+        {
+            var policy = ContentSecurityPolicy.Build(Config(new()
+            {
+                ["Csp:BlobStorageSrc"] = "https://blocksdev.blob.core.windows.net/container?sv=x, not-a-url",
+            }));
+
+            policy.Should().NotContain("*.blob.core.windows.net").And.NotContain("sv=x").And.NotContain("not-a-url");
+            Directive(policy, "connect-src").Should().Contain("https://blocksdev.blob.core.windows.net");
+            Directive(policy, "img-src").Should().Contain("https://blocksdev.blob.core.windows.net");
+        }
+
+        [Fact]
+        public void Policy_ReportsViolations()
+        {
+            var policy = ContentSecurityPolicy.Build(Config(new()));
+
+            Directive(policy, "report-to").Should().Be("report-to " + ContentSecurityPolicy.ReportGroup);
+            Directive(policy, "report-uri").Should().Be("report-uri " + ContentSecurityPolicy.ReportPath);
         }
 
         // ---------- Mode ----------
@@ -136,6 +176,8 @@ namespace XUnitTest.Api
             headers["Referrer-Policy"].ToString().Should().NotBeEmpty();
             headers["Permissions-Policy"].ToString().Should().NotBeEmpty();
             headers["Cache-Control"].ToString().Should().Be("no-cache");
+            headers["Reporting-Endpoints"].ToString().Should()
+                .Be($"{ContentSecurityPolicy.ReportGroup}=\"{ContentSecurityPolicy.ReportPath}\"");
         }
 
         [Fact]
@@ -158,6 +200,7 @@ namespace XUnitTest.Api
 
             context.Response.Headers.ContainsKey("Content-Security-Policy").Should().BeFalse();
             context.Response.Headers.ContainsKey("Content-Security-Policy-Report-Only").Should().BeFalse();
+            context.Response.Headers.ContainsKey("Reporting-Endpoints").Should().BeFalse();
             context.Response.Headers["X-Frame-Options"].ToString().Should().Be("DENY");
         }
 

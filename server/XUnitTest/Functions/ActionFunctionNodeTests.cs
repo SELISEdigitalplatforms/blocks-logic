@@ -130,7 +130,7 @@ namespace XUnitTest.Functions
         [InlineData("{\"a\":1,\"b\":\"x\",\"c\":{\"d\":true}}", "{\"a\":1,\"b\":\"x\",\"c\":{\"d\":true}}")]
         [InlineData("[1,2,{\"e\":null}]", "[1,2,{\"e\":null}]")]
         [InlineData("42", "42")]
-        [InlineData("plain text", "\"plain text\"")]
+        [InlineData("\"plain text\"", "\"plain text\"")]
         public async Task Custom_json_input_reaches_the_function_as_written(string expression, string expected)
         {
             // WF-11: the expression parser returns Newtonsoft tokens; System.Text.Json wrote an
@@ -141,6 +141,98 @@ namespace XUnitTest.Functions
             await Node(service).RunAsync(Context(items, inputMode: "expression", inputExpression: expression));
 
             service.Calls[0].Input.Should().Be(expected);
+        }
+
+        // ----- Expression input is a JSON template (PKG-20 / PKG-23) -------------------------
+
+        [Fact]
+        public async Task Plain_text_input_that_is_not_json_fails_the_step_and_calls_nothing()
+        {
+            // Was: silently sent as the JSON string "plain text".
+            var service = new FakeInvocationService();
+            var items = new List<WorkflowItemExecutionEntity> { Item("i1", new BsonDocument()) };
+
+            var result = await Node(service).RunAsync(Context(items, inputMode: "expression", inputExpression: "plain text"));
+
+            result.IsSuccess.Should().BeFalse();
+            result.ErrorMessage.Should().StartWith("Input is not valid JSON after filling in values:")
+                .And.Contain("line 1, position").And.EndWith("(item 1)");
+            service.Calls.Should().BeEmpty();
+        }
+
+        [Theory]
+        [InlineData("{{$json.output.email}}")]
+        [InlineData("{{$json.email}}")]
+        [InlineData("  {{ $json.email }}  ")]
+        public async Task A_plain_expression_input_becomes_a_json_string(string expression)
+        {
+            var service = new FakeInvocationService();
+            var items = new List<WorkflowItemExecutionEntity> { Item("i1", new BsonDocument("email", "a\"b@x.io")) };
+
+            var result = await Node(service).RunAsync(Context(items, inputMode: "expression", inputExpression: expression));
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            service.Calls[0].Input.Should().Be("\"a\\\"b@x.io\"");
+        }
+
+        [Fact]
+        public async Task Values_in_a_json_input_template_are_escaped_and_typed()
+        {
+            var service = new FakeInvocationService();
+            var output = new BsonDocument
+            {
+                { "name", "Bob \"B\" Smith" },
+                { "zip", "123" },
+                { "n", 5 },
+                { "tags", new BsonArray { "a", "b" } },
+            };
+            var items = new List<WorkflowItemExecutionEntity> { Item("i1", output) };
+
+            var result = await Node(service).RunAsync(Context(items, inputMode: "expression",
+                inputExpression: "{\"label\": \"Hi {{$json.name}}\", \"name\": {{$json.name}}, \"zip\": {{$json.zip}}, \"n\": {{$json.n}}, \"tags\": {{$json.tags}}}"));
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            using var doc = System.Text.Json.JsonDocument.Parse(service.Calls[0].Input!);
+            doc.RootElement.GetProperty("label").GetString().Should().Be("Hi Bob \"B\" Smith");
+            doc.RootElement.GetProperty("name").GetString().Should().Be("Bob \"B\" Smith");
+            doc.RootElement.GetProperty("zip").GetString().Should().Be("123");
+            doc.RootElement.GetProperty("n").GetInt32().Should().Be(5);
+            doc.RootElement.GetProperty("tags").GetArrayLength().Should().Be(2);
+        }
+
+        [Theory]
+        [InlineData("")]
+        [InlineData("   ")]
+        [InlineData("{{$json.missing}}")]
+        public async Task A_blank_or_null_input_sends_no_input(string expression)
+        {
+            var service = new FakeInvocationService();
+            var items = new List<WorkflowItemExecutionEntity> { Item("i1", new BsonDocument()) };
+
+            var result = await Node(service).RunAsync(Context(items, inputMode: "expression", inputExpression: expression));
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            service.Calls.Should().ContainSingle().Which.Input.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task Invalid_input_on_a_later_item_fails_the_step_and_keeps_the_items_already_run()
+        {
+            var service = new FakeInvocationService();
+            var items = new List<WorkflowItemExecutionEntity>
+            {
+                Item("i1", new BsonDocument("v", 5)),
+                Item("i2", new BsonDocument("v", "x")),
+            };
+
+            // Item 1 fills to {"a": 15} (valid); item 2 to {"a": 1"x"} (invalid).
+            var result = await Node(service).RunAsync(Context(items, inputMode: "expression",
+                inputExpression: "{\"a\": 1{{$json.v}}}"));
+
+            result.IsSuccess.Should().BeFalse();
+            result.ErrorMessage.Should().Contain("Input is not valid JSON").And.EndWith("(item 2)");
+            service.Calls.Should().ContainSingle().Which.Input.Should().Be("{\"a\": 15}");
+            result.OutputItems.Should().ContainSingle().Which.ParentItemIds.Should().BeEquivalentTo(["i1"]);
         }
 
         [Fact]

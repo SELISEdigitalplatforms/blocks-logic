@@ -48,12 +48,18 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
             {
                 try
                 {
-                    var (url, httpMethod, headers, bodyContent, contentType) = PrepareRequest(parameters, context.InputItems[i], context);
-                    if (url == null)
+                    string url, httpMethod, bodyContent, contentType;
+                    Dictionary<string, string> headers;
+                    try
                     {
+                        (url, httpMethod, headers, bodyContent, contentType) = PrepareRequest(parameters, context.InputItems[i], context);
+                    }
+                    catch (InvalidFilledJsonException ex)
+                    {
+                        // Nothing was sent for this item. The configured body is broken, so the step
+                        // fails; items before it already ran and are kept.
                         requestLog.Failed(i, "InvalidJsonBody");
-                        AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), bodyContent);
-                        continue;
+                        return NodeExecutionResult.Failed(ex.ForItem(i), outputItems);
                     }
 
                     await ApplyAuthenticationAsync(parameters, headers, context.TenantId);
@@ -115,7 +121,7 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
             headers[AuthorizationHeaderName] = $"Bearer {token}";
         }
 
-        private (string? url, string httpMethod, Dictionary<string, string> headers, string bodyContent, string contentType) PrepareRequest(
+        private (string url, string httpMethod, Dictionary<string, string> headers, string bodyContent, string contentType) PrepareRequest(
             ActionHttpRequestV1Parameters parameters, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
         {
             var url = parseExpression<string>(parameters.Url, inputItem, context) ?? "";
@@ -145,16 +151,19 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
             var bodyContent = string.Empty;
             if (parameters.HaveBody)
             {
-                bodyContent = parseExpression<string>(parameters.Body.Trim(), inputItem, context);
-
-                if (parameters.BodyContentType.ToLower() == "json")
+                var body = (parameters.Body ?? string.Empty).Trim();
+                if (string.Equals(parameters.BodyContentType, "json", StringComparison.OrdinalIgnoreCase))
                 {
-                    try { JsonDocument.Parse(bodyContent); }
-                    catch (JsonException ex)
-                    {
-                        _logger.LogError(bodyContent);
-                        return (null, httpMethod, headers, $"Invalid JSON body: {ex.Message}", "");
-                    }
+                    // Values are filled JSON-safe (escaped inside "…", typed outside), then the body must be
+                    // valid JSON or the step fails. A blank body sends no body, as for other content types.
+                    // The body is never logged: it can carry secrets.
+                    bodyContent = body.Length == 0
+                        ? string.Empty
+                        : FillJsonTemplateOrThrow(body, "Body", inputItem, context);
+                }
+                else
+                {
+                    bodyContent = parseExpression<string>(body, inputItem, context) ?? string.Empty;
                 }
             }
 

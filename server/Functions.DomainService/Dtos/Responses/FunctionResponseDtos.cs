@@ -72,7 +72,10 @@ namespace Functions.DomainService.Dtos.Responses
             PackageJson = function.Source.PackageJson,
             LockJson = function.Source.LockJson,
             AllowInstallScripts = function.Source.AllowInstallScripts,
-            Limits = function.Limits,
+            // Clamped, so an old document's per-day value (or an out-of-range per-minute one) is
+            // never handed to the editor: it would send it straight back and the save would be
+            // refused (FunctionLimitsValidator). What is shown is also what actually runs.
+            Limits = (function.Limits ?? new FunctionLimits()).Clamp(),
             Retry = function.Retry,
             Trigger = function.Trigger,
             OutputActions = function.OutputActions,

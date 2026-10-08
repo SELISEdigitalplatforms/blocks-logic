@@ -9,7 +9,7 @@ export const NodeGuideActionSendMailV1 = () => (
       "Choose the Language version of that template.",
       "Enter the recipient in To Email. You can use an expression when the recipient comes from the input item.",
       "Use Map (Body) to provide values for the dynamic keys found in the selected template body. Mapped values can also use expressions.",
-      "Optionally add one or more Attachments. Each entry can be a literal storage File ID, or an expression such as {{$json.output.fileId}} or {{$node[\"NodeName\"].json.output.fileId}} that resolves to one.",
+      "Optionally add one or more Attachments. Each entry can be a literal storage File ID, or an expression such as {{$json.fileId}} or {{$node[\"NodeName\"].json.output.fileId}} that resolves to one.",
       "Test with a safe recipient or sample data before enabling it in a live path.",
     ]}
     notes={[

@@ -50,7 +50,7 @@ namespace Blocks.FunctionRunner.Builds
         public string? Log { get; set; }
     }
 
-    public sealed class BuildProcessor
+    public sealed partial class BuildProcessor
     {
         /// <summary>
         /// Lockfiles that are dropped: every other package manager's, and npm's anywhere but the
@@ -266,7 +266,8 @@ namespace Blocks.FunctionRunner.Builds
                     : await BuildImageAsync(dirs.Context, tag, ImageKind.Function, log, timeout.Token).ConfigureAwait(false);
                 if (!built)
                 {
-                    await PublishAsync(job, outcome, "FAILED", null, null, PublishableLog(), "the image build failed")
+                    await PublishAsync(job, outcome, "FAILED", null, null, PublishableLog(),
+                            SyntaxErrorFailure(log.ToString()) ?? "the image build failed")
                         .ConfigureAwait(false);
                     return outcome;
                 }
@@ -558,9 +559,60 @@ namespace Blocks.FunctionRunner.Builds
 
                 """);
 
-        /// <summary>The test's own layer: the source, read-only as the build context carries it.</summary>
+        /// <summary>
+        /// The test's own layer: the source, read-only as the build context carries it, then the same
+        /// syntax check a deployed build runs. The dependency image already set USER 10001:10001.
+        /// </summary>
         internal static string TestSourceDockerfile(string depsImage) =>
-            $"FROM {depsImage}\nCOPY src/ /function/\n";
+            $"FROM {depsImage}\nCOPY src/ /function/\n{SyntaxCheckRun}\n";
+
+        /// <summary>
+        /// Parses every tenant .js/.mjs/.cjs file outside node_modules with <c>node --check</c>, which
+        /// never runs the code (FN-30). The same instruction is in <c>function.Dockerfile.tmpl</c>.
+        /// </summary>
+        internal const string SyntaxCheckRun =
+            "RUN set -eu; cd /function; find . -path ./node_modules -prune -o -type f \\( -name '*.js' -o -name '*.mjs' -o -name '*.cjs' \\) -print"
+            + " | while IFS= read -r file; do node --check \"$file\" || { echo \"" + SyntaxErrorMarker + " ${file#./}\" >&2; exit 1; }; done";
+
+        internal const string SyntaxErrorMarker = "BLOCKS_SYNTAX_ERROR";
+
+        [System.Text.RegularExpressions.GeneratedRegex("\u001b\\[[0-9;]*m")]
+        private static partial System.Text.RegularExpressions.Regex AnsiColour();
+
+        /// <summary>
+        /// Turns the syntax check's output in a failed build log into a message the developer can act
+        /// on — file, line and Node's own reason — or null when the build failed for another reason.
+        /// </summary>
+        internal static string? SyntaxErrorFailure(string log)
+        {
+            // The Engine wraps a step's stderr in ANSI colour codes ("\u001b[91m"), so strip them first.
+            var lines = AnsiColour().Replace(log, string.Empty).Split('\n').Select(l => l.TrimEnd('\r')).ToArray();
+            var markerAt = Array.FindIndex(lines, l => l.StartsWith(SyntaxErrorMarker + " ", StringComparison.Ordinal));
+            if (markerAt < 0) return null;
+
+            var file = lines[markerAt][(SyntaxErrorMarker.Length + 1)..].Trim();
+            string? reason = null;
+            string? line = null;
+            for (var i = markerAt - 1; i >= 0 && (reason is null || line is null); i--)
+            {
+                var text = lines[i];
+                if (reason is null && text.StartsWith("SyntaxError: ", StringComparison.Ordinal))
+                {
+                    reason = text["SyntaxError: ".Length..].Trim();
+                }
+                else if (line is null && text.StartsWith("/function/" + file + ":", StringComparison.Ordinal))
+                {
+                    line = text[("/function/" + file + ":").Length..].Trim();
+                }
+                else if (text.StartsWith(SyntaxErrorMarker + " ", StringComparison.Ordinal))
+                {
+                    break;
+                }
+            }
+
+            var where = line is { Length: > 0 } && line.All(char.IsAsciiDigit) ? $"{file} line {line}" : file;
+            return reason is null ? $"syntax error in {where}" : $"syntax error in {where}: {reason}";
+        }
 
         private async Task<bool> LocalImageExistsAsync(string reference, CancellationToken token)
         {

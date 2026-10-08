@@ -284,7 +284,9 @@ namespace XUnitTest.Functions
 
             var act = () => DeployAsync(Service());
 
-            (await act.Should().ThrowAsync<FunctionValidationException>()).Which.Message.Should().Contain("npm error 404");
+            var thrown = (await act.Should().ThrowAsync<FunctionBuildFailedException>()).Which;
+            thrown.Message.Should().Contain("npm error 404");
+            thrown.BuildId.Should().Be("b-f", "the editor opens this build's log (PKG-14)");
         }
     }
 }

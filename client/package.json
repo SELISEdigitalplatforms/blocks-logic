@@ -53,6 +53,7 @@
     "cmdk": "1.0.4",
     "date-fns": "^3.0.0",
     "lucide-react": "^0.445.0",
+    "monaco-editor": "0.55.1",
     "nuqs": "^2.9.0",
     "react": "^19.2.8",
     "react-day-picker": "8.10.2",

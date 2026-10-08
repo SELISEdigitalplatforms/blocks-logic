@@ -249,13 +249,21 @@ export const FunctionDetailPage = () => {
   // Held in state and written from an effect: reading the clock during render is the very thing
   // that made this value unstable, and `react-hooks/purity` is right to reject it. Recomputed when
   // the range changes, then once a minute so a page left open does not keep a stale window.
+  // fromUtc is part of the runs query key, so that minute tick reloads the table: it runs only
+  // while auto-refresh is on (FN-59). Turning it off keeps the window the table was showing.
   const [runsFromUtc, setRunsFromUtc] = useState("");
+  const runsWindowRange = useRef<string | null>(null);
   useEffect(() => {
     const apply = () => setRunsFromUtc(rangeStart(queryParams.runRange, Date.now()));
-    apply();
+    // Only a new range moves the window at once; toggling auto-refresh alone does not.
+    if (runsWindowRange.current !== queryParams.runRange) {
+      runsWindowRange.current = queryParams.runRange;
+      apply();
+    }
+    if (!isRunsAutoRefresh) return;
     const timer = window.setInterval(apply, 60_000);
     return () => window.clearInterval(timer);
-  }, [queryParams.runRange]);
+  }, [queryParams.runRange, isRunsAutoRefresh]);
 
   const runsFilter: RunsFilterValue = {
     status: queryParams.runStatus,

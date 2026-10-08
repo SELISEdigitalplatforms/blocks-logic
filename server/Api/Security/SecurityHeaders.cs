@@ -78,6 +78,13 @@ public static class SecurityHeaders
                     headers["Content-Security-Policy-Report-Only"] = policy;
                     break;
             }
+
+            // The group the policy's report-to names. Same origin, so relative is enough.
+            if (mode != CspMode.Off)
+            {
+                SetIfAbsent(headers, "Reporting-Endpoints",
+                    $"{ContentSecurityPolicy.ReportGroup}=\"{ContentSecurityPolicy.ReportPath}\"");
+            }
         }
 
         var value = path.Value ?? "";
