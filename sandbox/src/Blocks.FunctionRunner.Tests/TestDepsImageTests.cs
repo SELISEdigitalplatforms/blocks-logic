@@ -271,14 +271,14 @@ namespace Blocks.FunctionRunner.Tests
             {
                 await _docker!.Images.BuildImageFromDockerfileAsync(
                     new ImageBuildParameters { Dockerfile = "Dockerfile", Tags = [BrokenImage], Remove = true, ForceRemove = true },
-                    context, null, null, new Progress<JSONMessage>(m =>
+                    context, null, null, new SyncProgress<JSONMessage>(m =>
                     {
                         if (!string.IsNullOrEmpty(m.Stream)) log.Append(m.Stream);
                         if (!string.IsNullOrEmpty(m.ErrorMessage)) failed = true;
                     }));
             }
 
-            failed.Should().BeTrue();
+            failed.Should().BeTrue(log.ToString());
             BuildProcessor.SyntaxErrorFailure(log.ToString()).Should().StartWith("syntax error in lib/a.mjs line 1: ");
 
             // The same source without the broken file builds.
@@ -292,7 +292,7 @@ namespace Blocks.FunctionRunner.Tests
             var errors = new List<string>();
             await _docker!.Images.BuildImageFromDockerfileAsync(
                 new ImageBuildParameters { Dockerfile = "Dockerfile", Tags = [tag], Remove = true, ForceRemove = true },
-                tar, null, null, new Progress<JSONMessage>(m => { if (!string.IsNullOrEmpty(m.ErrorMessage)) errors.Add(m.ErrorMessage); }));
+                tar, null, null, new SyncProgress<JSONMessage>(m => { if (!string.IsNullOrEmpty(m.ErrorMessage)) errors.Add(m.ErrorMessage); }));
             errors.Should().BeEmpty();
         }
 

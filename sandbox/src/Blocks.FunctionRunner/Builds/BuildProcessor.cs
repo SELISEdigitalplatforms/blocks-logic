@@ -660,7 +660,7 @@ namespace Blocks.FunctionRunner.Builds
             };
 
             var failed = false;
-            var progress = new Progress<JSONMessage>(message =>
+            var progress = new SyncProgress<JSONMessage>(message =>
             {
                 if (!string.IsNullOrEmpty(message.Stream)) log.Append(message.Stream);
                 if (!string.IsNullOrEmpty(message.ErrorMessage))
@@ -859,7 +859,7 @@ namespace Blocks.FunctionRunner.Builds
                     name,
                     new ImagePushParameters { Tag = imageTag },
                     authConfig: null,
-                    new Progress<JSONMessage>(m =>
+                    new SyncProgress<JSONMessage>(m =>
                     {
                         if (string.IsNullOrEmpty(m.ErrorMessage)) return;
                         pushError ??= m.ErrorMessage;
