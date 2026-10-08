@@ -440,7 +440,8 @@ namespace Workflow.DomainService.Services
 
         public async Task<BaseMutationResponse> UpdateAsync(string tenantId, WorkflowUpdateRequestDto dto)
         {
-            _logger.LogInformation("Updating workflow with Dto: {Dto}", JsonConvert.SerializeObject(dto));
+            // Never the DTO itself: node parameters carry secrets (e.g. a client-credential ClientSecret).
+            _logger.LogInformation("Updating workflow {WorkflowId} with {NodeCount} node(s)", dto.ItemId, dto.Nodes?.Count ?? 0);
 
             var (workflow, errorResponse) = await TryGetWorkflowAsync(tenantId, dto.ItemId, "updating workflow");
             if (errorResponse != null)
