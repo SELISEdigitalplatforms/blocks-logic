@@ -3,7 +3,7 @@ import { SheetHeader, SheetTitle } from "@/components/ui-kits/sheet/sheet";
 import { useWorkflow, useHandleExecuteStep } from "@blocks-workflow/hooks";
 import { BookOpen, Pen, Rocket, X } from "lucide-react";
 import { getNodeDefinition } from "../node-library-panel";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { showErrorToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@radix-ui/react-tooltip";
 
@@ -29,11 +29,14 @@ export const NodeInspectorHeader = ({
   const [isRenaming, setIsRenaming] = useState(false);
   const [editName, setEditName] = useState(selectedNode?.name || "");
 
-  useEffect(() => {
+  // While not renaming, the edit box follows the node's current name.
+  const [syncedName, setSyncedName] = useState({ name: selectedNode?.name, isRenaming });
+  if (syncedName.name !== selectedNode?.name || syncedName.isRenaming !== isRenaming) {
+    setSyncedName({ name: selectedNode?.name, isRenaming });
     if (!isRenaming && selectedNode?.name) {
       setEditName(selectedNode.name);
     }
-  }, [selectedNode?.name, isRenaming]);
+  }
 
   if (!selectedNode) return null;
 

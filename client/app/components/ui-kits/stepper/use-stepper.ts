@@ -8,6 +8,9 @@ function usePrevious<T>(value: T): T | undefined {
 		ref.current = value;
 	}, [value]);
 
+	// Deliberately the value from the previous render (not the previous distinct value): the
+	// vertical stepper only scrolls step 0 into view on the render right after a reset.
+	// eslint-disable-next-line react-hooks/refs -- intentional previous-render read, see above
 	return ref.current;
 }
 

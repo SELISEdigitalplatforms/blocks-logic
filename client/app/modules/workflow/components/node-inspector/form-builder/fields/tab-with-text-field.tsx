@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { FieldProps } from "../form-field.types";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui-kits/tabs/tabs";
 import { TextField } from "./text-field";
@@ -21,11 +21,15 @@ export const TabWithTextField = ({
   const configVal = field.key === "executionMode" && config && 'executionMode' in config ? config.executionMode : undefined;
   const dataVal = data[field.key];
   
-  const [localValue, setLocalValue] = useState<unknown>(dataVal !== undefined ? dataVal : configVal);
+  const sourceValue = dataVal !== undefined ? dataVal : configVal;
+  const [localValue, setLocalValue] = useState<unknown>(() => sourceValue);
 
-  useEffect(() => {
-    setLocalValue(dataVal !== undefined ? dataVal : configVal);
-  }, [dataVal, configVal]);
+  // A new value from the form data (or the config fallback) replaces the local selection.
+  const [syncedSourceValue, setSyncedSourceValue] = useState<unknown>(() => sourceValue);
+  if (!Object.is(syncedSourceValue, sourceValue)) {
+    setSyncedSourceValue(() => sourceValue);
+    setLocalValue(() => sourceValue);
+  }
 
   const selectedValue = localValue !== undefined ? String(localValue) : String(options[0]?.value ?? "");
 

@@ -4,7 +4,7 @@ import {
   useWorkflow,
 } from "@blocks-workflow/hooks";
 import { Background, BackgroundVariant, ReactFlow } from "@xyflow/react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2, Play, ScrollText } from "lucide-react";
 import { Button } from "@/components/ui-kits/button/button";
 import { ExecutionLogsPanel } from "./execution-logs-panel";
@@ -78,62 +78,78 @@ export const WorkflowExecutionEditor = ({
     }
   }, [setEditorMode, setExecutionMode, execution]);
 
-  useEffect(() => {
-    if (data?.workflowSnapshot && isFetched) {
-      const workflowData = data.workflowSnapshot;
+  // The executed workflow, styled by execution status. Built as new objects so the cached
+  // query data is never modified in place.
+  const styledSnapshot = useMemo(() => {
+    if (!data?.workflowSnapshot) return undefined;
+    const workflowData = data.workflowSnapshot;
 
-      // Build the actually-executed subgraph via BFS
-      const { reachableNodeIds, traversedEdgeIds } = buildExecutedSubgraph(
-        workflowData.nodes,
-        workflowData.edges,
-        data.nodeExecutions,
-        data.items,
-      );
+    // Build the actually-executed subgraph via BFS
+    const { reachableNodeIds, traversedEdgeIds } = buildExecutedSubgraph(
+      workflowData.nodes,
+      workflowData.edges,
+      data.nodeExecutions,
+      data.items,
+    );
 
-      const nodeExecutionMap = new Map(
-        data.nodeExecutions.map((ne) => [ne.nodeId, ne]),
-      );
+    const nodeExecutionMap = new Map(
+      data.nodeExecutions.map((ne) => [ne.nodeId, ne]),
+    );
 
-      // Style nodes — only colour nodes on the executed path
-      workflowData.nodes.forEach((node) => {
-        node.data = {
+    // Style nodes — only colour nodes on the executed path
+    const nodes = workflowData.nodes.map((node) => {
+      const styledNode: typeof node = {
+        ...node,
+        data: {
           ...node.data,
           isWorkflowExecuted: true,
           hasToolbar: false,
           hasHandleArrow: false,
-        };
+        },
+      };
 
-        if (reachableNodeIds.has(node.id)) {
-          const execNode = nodeExecutionMap.get(node.id)!;
-          const styles = getStatusStyles(execNode.status);
-          node.className = styles.nodeClass;
-          node.data.executionStatus = execNode.status;
-        }
-      });
-
-      // Style edges — only colour edges that were actually traversed
-      for (const edge of workflowData.edges) {
-        if (traversedEdgeIds.has(edge.id)) {
-          const sourceExec = nodeExecutionMap.get(edge.source);
-          if (sourceExec) {
-            const styles = getStatusStyles(sourceExec.status);
-            edge.markerEnd = {
-              type: "arrow",
-              color: styles.edgeColor,
-              height: 25,
-              width: 25,
-            };
-            edge.className = styles.edgeClass;
-            edge.style = { stroke: styles.edgeColor };
-          }
-        }
+      if (reachableNodeIds.has(node.id)) {
+        const execNode = nodeExecutionMap.get(node.id)!;
+        const styles = getStatusStyles(execNode.status);
+        styledNode.className = styles.nodeClass;
+        styledNode.data.executionStatus = execNode.status;
       }
+      return styledNode;
+    });
 
-      workflowData.items = data.items;
-      workflowData.nodeExecutions = data.nodeExecutions;
-      setWorkflow(workflowData);
+    // Style edges — only colour edges that were actually traversed
+    const edges = workflowData.edges.map((edge) => {
+      if (!traversedEdgeIds.has(edge.id)) return edge;
+      const sourceExec = nodeExecutionMap.get(edge.source);
+      if (!sourceExec) return edge;
+      const styles = getStatusStyles(sourceExec.status);
+      return {
+        ...edge,
+        markerEnd: {
+          type: "arrow" as const,
+          color: styles.edgeColor,
+          height: 25,
+          width: 25,
+        },
+        className: styles.edgeClass,
+        style: { stroke: styles.edgeColor },
+      };
+    });
+
+    return {
+      ...workflowData,
+      nodes,
+      edges,
+      items: data.items,
+      nodeExecutions: data.nodeExecutions,
+    };
+  }, [data]);
+
+  useEffect(() => {
+    if (styledSnapshot && isFetched) {
+      setWorkflow(styledSnapshot);
     }
-  }, [data, isFetched, setWorkflow]);
+  }, [styledSnapshot, isFetched, setWorkflow]);
 
   if (!id) {
     return (
@@ -152,8 +168,8 @@ export const WorkflowExecutionEditor = ({
   return (
     <div className="relative h-full w-full flex-1">
       <ReactFlow
-        nodes={data?.workflowSnapshot.nodes || []}
-        edges={data?.workflowSnapshot.edges || []}
+        nodes={styledSnapshot?.nodes || []}
+        edges={styledSnapshot?.edges || []}
         // onNodesChange={onNodesChange}
         // onEdgesChange={onEdgesChange}
         // onConnect={onConnect}

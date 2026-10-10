@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { useWorkflowStore, useWorkflowStoreApi } from "../store";
 import { WorkflowNode } from "@blocks-workflow/models/node.model";
 import { useUpdateWorkflow } from "./use-workflow-api";
@@ -22,12 +22,15 @@ export const useAutoSaveWorkflow = ({
   const store = useWorkflowStoreApi();
   const { mutateAsync, isPending } = useUpdateWorkflow();
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // The ref guards against overlapping saves; the state mirrors it for rendering.
   const isSavingRef = useRef(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const saveWorkflow = useCallback(async () => {
     if (!hasUnsavedChanges || isSavingRef.current) return;
 
     isSavingRef.current = true;
+    setIsSaving(true);
 
     try {
       const { nodesMap, edgesMap } = store.getState();
@@ -46,6 +49,7 @@ export const useAutoSaveWorkflow = ({
       onSaveError?.(error as Error);
     } finally {
       isSavingRef.current = false;
+      setIsSaving(false);
     }
   }, [hasUnsavedChanges, workflowId, mutateAsync, onSaveSuccess, onSaveError, store]);
 
@@ -77,7 +81,7 @@ export const useAutoSaveWorkflow = ({
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
-    isSaving: isPending || isSavingRef.current,
+    isSaving: isPending || isSaving,
     saveNow: saveWorkflow,
   };
 };

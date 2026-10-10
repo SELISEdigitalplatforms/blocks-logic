@@ -106,13 +106,21 @@ export const InfiniteScroll = <T,>({
     return () => clearInterval(interval);
   }, [handleFetchNewerData, pollingInterval]);
 
+  // Clicking the "new data" indicator asks for a scroll to the bottom; the effect below performs
+  // it, so the handler handed to bottomIndicator() during render never touches the ref.
+  const [scrollToBottomRequest, setScrollToBottomRequest] = useState(0);
   const bottomIndicatorHanlder = () => {
+    setScrollToBottomRequest((n) => n + 1);
+    setNewDataAvailable(false);
+  };
+
+  useEffect(() => {
+    if (!scrollToBottomRequest) return;
     scrollContainerRef.current?.scrollTo({
       top: scrollContainerRef.current?.scrollHeight,
       behavior: "smooth",
     });
-    setNewDataAvailable(false);
-  };
+  }, [scrollToBottomRequest]);
 
   useEffect(() => {
     if (scrollContainerRef.current) {

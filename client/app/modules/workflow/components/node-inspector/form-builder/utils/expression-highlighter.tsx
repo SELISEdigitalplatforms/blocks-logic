@@ -153,6 +153,13 @@ export type VariablePickerConfig = {
 
 type Control = HTMLInputElement | HTMLTextAreaElement;
 
+
+/** Hands `node` to a ref the caller attached to the child (callback or object ref). */
+function assignChildRef<T>(ref: React.Ref<T> | undefined, node: T | null) {
+  if (typeof ref === "function") ref(node);
+  else if (ref && typeof ref === "object") (ref as React.MutableRefObject<T | null>).current = node;
+}
+
 export const ExpressionHighlighter = ({
   children,
   value,
@@ -269,9 +276,7 @@ export const ExpressionHighlighter = ({
   const refProps = {
     ref: (node: Control | null) => {
       attachControl(node);
-      if (typeof childRef === "function") childRef(node);
-      else if (childRef && typeof childRef === "object")
-        (childRef as React.MutableRefObject<Control | null>).current = node;
+      assignChildRef(childRef, node);
     },
   };
 

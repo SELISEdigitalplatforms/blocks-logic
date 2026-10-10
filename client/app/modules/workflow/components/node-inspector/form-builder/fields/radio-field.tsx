@@ -26,11 +26,14 @@ export const RadioField = ({
   }, [config, data, field]);
 
   // Update options if they change and are static
-  useEffect(() => {
+  // Wrapped in functions: `field.options` may itself be a function (an async loader).
+  const [syncedOptionsSource, setSyncedOptionsSource] = useState(() => field.options);
+  if (syncedOptionsSource !== field.options) {
+    setSyncedOptionsSource(() => field.options);
     if (Array.isArray(field.options)) {
       setOptions(field.options);
     }
-  }, [field.options]);
+  }
 
   return (
     <RadioGroup

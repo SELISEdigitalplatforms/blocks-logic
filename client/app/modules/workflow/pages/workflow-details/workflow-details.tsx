@@ -14,7 +14,7 @@ import { format } from "date-fns";
 import { useGetWorkflowById } from "@blocks-workflow/hooks/use-workflow-api";
 import { WorkflowExecutions } from "@blocks-workflow/components/workflow-execution";
 import { useNavigate, useParams } from "react-router";
-import { BREADCRUMB_CUSTOM_TITLES } from "@/constants/breadcrumb-custom-title";
+import { setBreadcrumbTitle } from "@/constants/breadcrumb-custom-title";
 import { showErrorToast } from "@/hooks/use-toast";
 import { PublishWorkflowAction } from "../../components/publish-workflow-action";
 import { WorkflowVersions } from "../../components/workflow-version";
@@ -69,11 +69,15 @@ export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) 
   const showDirtyBanner =
     !isLoading && isFetchedAfterMount && data?.data?.isDirty && !isDirtyBannerDismissed;
 
-  useEffect(() => {
+  // A different workflow, or a change in its dirty flag, brings the dismissed banner back.
+  const isDirty = data?.data?.isDirty;
+  const [bannerResetKey, setBannerResetKey] = useState({ workflowId, isDirty });
+  if (bannerResetKey.workflowId !== workflowId || bannerResetKey.isDirty !== isDirty) {
+    setBannerResetKey({ workflowId, isDirty });
     setIsDirtyBannerDismissed(false);
-  }, [workflowId, data?.data?.isDirty]);
+  }
 
-  BREADCRUMB_CUSTOM_TITLES[`/workflow/${workflowId}`] = data?.data?.name || "Workflow Details";
+  setBreadcrumbTitle(`/workflow/${workflowId}`, data?.data?.name || "Workflow Details");
   return (
     <>
       <div className="flex h-full flex-col">

@@ -196,7 +196,13 @@ export const ProxyForm = ({
 
   return (
     <Form {...form}>
-      <form noValidate onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+      <form
+        noValidate
+        // Built inside the event: handleSubmit reads the seeded-version ref, which can't be
+        // handed to react-hook-form while rendering.
+        onSubmit={(event) => form.handleSubmit(handleSubmit)(event)}
+        className="space-y-6"
+      >
         <div className="sticky top-0 z-30 -mx-6 -mt-4 bg-surface-app px-6 pb-4 pt-4 shadow-xs">
           {headerContent ? <div className="pb-6">{headerContent}</div> : null}
           <ProxyFormHeader isEdit={isEdit} isPending={isPending} onCancel={onCancel} />
