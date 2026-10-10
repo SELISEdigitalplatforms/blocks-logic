@@ -551,7 +551,7 @@ export const ProxyDetails = () => {
           </div>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 !mt-0">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 mt-0!">
           <div>
             <div className="sm:hidden">
               <Select value={activeTab} onValueChange={setActiveTab}>

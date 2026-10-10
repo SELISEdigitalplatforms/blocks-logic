@@ -135,7 +135,7 @@ export const RunsTable = ({
                 key={run.id}
                 role="row"
                 tabIndex={0}
-                className={`${GRID} cursor-pointer border-b px-4 py-3 last:border-b-0 hover:bg-surface-app focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring`}
+                className={`${GRID} cursor-pointer border-b px-4 py-3 last:border-b-0 hover:bg-surface-app focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring`}
                 onClick={() => onOpenRun(run.id)}
                 onKeyDown={(event) => {
                   if (event.key !== "Enter" && event.key !== " ") return;

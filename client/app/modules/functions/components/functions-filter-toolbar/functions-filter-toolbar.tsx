@@ -62,7 +62,7 @@ export const FunctionsFilterToolBar = () => {
             aria-pressed={queryParams.status === option.value}
             className={cn(
               "px-3 py-1.5 text-xs font-semibold transition-colors",
-              "focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "focus-visible:relative focus-visible:z-10 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
               queryParams.status === option.value
                 ? "bg-primary text-primary-foreground"
                 : "bg-background text-medium-emphasis hover:bg-surface-app",

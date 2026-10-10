@@ -34,7 +34,7 @@ export const PathListField = ({ field, value, className }: FieldProps<string[]>)
           <li
             key={path}
             title={path}
-            className="break-all rounded-md border border-border/80 bg-white px-1.5 py-0.5 font-mono text-xs shadow-sm dark:bg-gray-800"
+            className="break-all rounded-md border border-border/80 bg-white px-1.5 py-0.5 font-mono text-xs shadow-xs dark:bg-gray-800"
           >
             <span className="text-low-emphasis">{parent}</span>
             <span className="text-high-emphasis">{leaf}</span>

@@ -287,7 +287,7 @@ export const TriggerHttpCard = ({ value, onChange, functionId }: TriggerHttpCard
                 <Tabs
                   value={value.combine}
                   onValueChange={(combine) => patch({ combine: combine as AccessCombine })}
-                  className="w-auto flex-shrink-0"
+                  className="w-auto shrink-0"
                 >
                   <TabsList
                     className="grid h-8 grid-cols-2 rounded-md bg-muted p-0.5"

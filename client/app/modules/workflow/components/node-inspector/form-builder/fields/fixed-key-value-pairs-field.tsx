@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Input } from "@/components/ui-kits/input/input";
 import { Textarea } from "@/components/ui-kits/textarea/textarea";
 import { FieldProps } from "../form-field.types";
@@ -54,6 +54,8 @@ function DroppableValueTextarea({ id, value, onChange, placeholder, disabled, re
   );
 }
 
+const NO_KEYS: string[] = [];
+
 export const FixedKeyValuePairsField = ({
   field,
   value,
@@ -63,21 +65,21 @@ export const FixedKeyValuePairsField = ({
   config,
   variablePicker,
 }: FieldProps<Record<string, unknown>>) => {
-  const initialKeys = useMemo(
-    () => (Array.isArray(field.fixedKeys) ? field.fixedKeys : []),
-    [field.fixedKeys],
+  // Keys resolved by an async `fixedKeys` loader, tagged with the dependency snapshot they were
+  // loaded for. Static (array) keys are used directly and never stored.
+  const [fetchedKeys, setFetchedKeys] = useState<{ depString: string; keys: string[] } | null>(
+    null,
   );
-  const [keys, setKeys] = useState<string[]>(initialKeys);
-  const [isLoading, setIsLoading] = useState(false);
-  const hasLoadedKeysRef = useRef(Array.isArray(field.fixedKeys));
 
   // Refs to hold latest onChange and value so the sync effect doesn't
   // re-fire on every parent render (onChange is a new closure each time
   // any form field changes, and currentValue is a new object reference).
   const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
   const valueRef = useRef(value);
-  valueRef.current = value;
+  useLayoutEffect(() => {
+    onChangeRef.current = onChange;
+    valueRef.current = value;
+  });
 
   const depValues = useMemo(() => {
     if (field.fixedKeysDependencies) {
@@ -92,34 +94,28 @@ export const FixedKeyValuePairsField = ({
       : JSON.stringify(data);
   }, [depValues, data]);
 
-  useEffect(() => {
-    if (Array.isArray(field.fixedKeys)) {
-      hasLoadedKeysRef.current = true;
-      setKeys(field.fixedKeys);
-      return;
-    }
+  const isStaticKeys = Array.isArray(field.fixedKeys);
+  const isAsyncKeys = typeof field.fixedKeys === "function";
+  const keys: string[] = isStaticKeys
+    ? (field.fixedKeys as string[])
+    : (fetchedKeys?.keys ?? NO_KEYS);
+  // Loading until the loader has answered for the current dependency snapshot.
+  const isLoading = isAsyncKeys && fetchedKeys?.depString !== depString;
+  const hasLoadedKeys = isStaticKeys || fetchedKeys !== null;
 
+  useEffect(() => {
     if (typeof field.fixedKeys !== "function") return;
 
     let isActive = true;
-    setIsLoading(true);
+    const requestedFor = depString;
 
     field
       .fixedKeys(data, config)
       .then((resolvedKeys) => {
-        if (isActive) {
-          hasLoadedKeysRef.current = true;
-          setKeys(resolvedKeys);
-        }
+        if (isActive) setFetchedKeys({ depString: requestedFor, keys: resolvedKeys });
       })
       .catch(() => {
-        if (isActive) {
-          hasLoadedKeysRef.current = true;
-          setKeys([]);
-        }
-      })
-      .finally(() => {
-        if (isActive) setIsLoading(false);
+        if (isActive) setFetchedKeys({ depString: requestedFor, keys: [] });
       });
 
     return () => {
@@ -133,7 +129,7 @@ export const FixedKeyValuePairsField = ({
   // Sync the value shape when keys change — uses refs so this only
   // fires when the resolved keys actually change, not on every render.
   useEffect(() => {
-    if (!hasLoadedKeysRef.current) return;
+    if (!hasLoadedKeys) return;
 
     const current = toRecord(valueRef.current);
     const nextValue = buildValueForKeys(keys, current);
@@ -141,7 +137,7 @@ export const FixedKeyValuePairsField = ({
     if (!areRecordsEqual(nextValue, current)) {
       onChangeRef.current(nextValue);
     }
-  }, [keys]);
+  }, [keys, hasLoadedKeys]);
 
   const picker = showsVariablePicker(field, readOnly, variablePicker);
 

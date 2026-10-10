@@ -165,7 +165,7 @@ export const OutputPanel = ({
           className="mt-2 flex max-h-32 shrink-0 gap-2 overflow-y-auto rounded border border-error/40 bg-error/5 p-2 text-xs text-error"
         >
           <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          <p className="whitespace-pre-wrap break-words">{failedRunError}</p>
+          <p className="whitespace-pre-wrap wrap-break-word">{failedRunError}</p>
         </div>
       )}
 

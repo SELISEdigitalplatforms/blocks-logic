@@ -416,7 +416,7 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
           <Tabs
             value={showSelect ? "select" : "all"}
             onValueChange={onTabChange}
-            className="w-full flex-shrink-0 sm:w-auto"
+            className="w-full shrink-0 sm:w-auto"
           >
             <TabsList className="grid h-10 w-full grid-cols-2 rounded-lg bg-muted p-1 sm:w-auto">
               <TabsTrigger value="all" className="gap-1.5 rounded-md px-3 text-sm">

@@ -291,7 +291,7 @@ export const ProxyAccessCard = ({ control }: Props) => {
               <Tabs
                 value={access.combine}
                 onValueChange={(value) => update({ combine: value as ProxyAccessCombine })}
-                className="w-auto flex-shrink-0"
+                className="w-auto shrink-0"
               >
                 <TabsList
                   className="grid h-8 grid-cols-2 rounded-md bg-muted p-0.5"

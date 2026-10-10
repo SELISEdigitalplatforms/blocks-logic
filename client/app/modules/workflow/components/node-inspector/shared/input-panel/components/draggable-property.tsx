@@ -74,7 +74,7 @@ export function DraggableProperty({
         className={`font-mono flex items-center ${isDraggable ? "cursor-grab active:cursor-grabbing text-high-emphasis" : "text-medium-emphasis"}`}
       >
         <span
-          className={`rounded-md border border-border/80 px-1.5 py-0.5 mr-0.5 shadow-sm ${isDraggable && "bg-white dark:bg-gray-800"}`}
+          className={`rounded-md border border-border/80 px-1.5 py-0.5 mr-0.5 shadow-xs ${isDraggable && "bg-white dark:bg-gray-800"}`}
         >
           {displayLabel}
         </span>
@@ -124,7 +124,7 @@ export function DraggableArrayIndex({
         className={`font-mono flex items-center ${isDraggable ? "cursor-grab active:cursor-grabbing text-high-emphasis" : "text-medium-emphasis"}`}
       >
         <span
-          className={`rounded-md border border-border/80 px-1.5 py-0.5 mr-0.5 shadow-sm ${isDraggable && "bg-white dark:bg-gray-800"}`}
+          className={`rounded-md border border-border/80 px-1.5 py-0.5 mr-0.5 shadow-xs ${isDraggable && "bg-white dark:bg-gray-800"}`}
         >
           {label || `[${lastSegment ?? 0}]`}
         </span>

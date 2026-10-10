@@ -105,7 +105,7 @@ export const VersionsTable = ({
                 </div>
 
                 <span
-                  className="min-w-0 break-words font-mono text-xs text-medium-emphasis"
+                  className="min-w-0 wrap-break-word font-mono text-xs text-medium-emphasis"
                   role="cell"
                 >
                   {version.packages || "no dependencies"}

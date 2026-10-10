@@ -5,7 +5,7 @@ import { CalendarIcon } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import useIsMobile from "@/hooks/use-is-mobile";
 import { Separator } from "@/components/ui-kits/separator/separator";
-import { MouseEvent, useEffect, useState } from "react";
+import { MouseEvent, useState } from "react";
 
 type DateRangeType = { from?: Date; to?: Date } | null;
 
@@ -20,11 +20,14 @@ export function DateRange({ label, value, onChange }: DateRangeFilterProps) {
   const [open, setOpen] = useState<boolean>(false);
   const [date, setDate] = useState<DateRangeType>(value);
 
-  useEffect(() => {
+  // While closed, the draft range follows the applied value.
+  const [syncedFrom, setSyncedFrom] = useState({ open, value });
+  if (syncedFrom.open !== open || syncedFrom.value !== value) {
+    setSyncedFrom({ open, value });
     if (!open) {
       setDate(value);
     }
-  }, [open, value]);
+  }
 
   const handleDateSelect = (selectedDateRange: DateRangeType | undefined) => {
     if (!selectedDateRange) return setDate(null);

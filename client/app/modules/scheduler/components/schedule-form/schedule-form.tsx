@@ -83,7 +83,7 @@ const DatePopoverField = ({ value, onChange, placeholder }: DatePopoverFieldProp
             <span
               role="button"
               tabIndex={0}
-              className="ml-auto rounded-sm opacity-60 transition-opacity hover:opacity-100 focus:outline-none"
+              className="ml-auto rounded-sm opacity-60 transition-opacity hover:opacity-100 focus:outline-hidden"
               onClick={(event) => {
                 event.stopPropagation();
                 onChange("");
@@ -289,7 +289,7 @@ export const ScheduleForm = ({
         </div>
 
         {/* Card Body */}
-        <Card className="w-full border shadow-sm">
+        <Card className="w-full border shadow-xs">
           <CardContent className="p-2">
             {/* 2-Column Form Body */}
             <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
@@ -359,7 +359,7 @@ export const ScheduleForm = ({
                                 "rounded-md border px-2.5 py-1 text-xs transition-all",
                                 field.value === preset.value
                                   ? "border-primary bg-primary/10 font-medium text-primary"
-                                  : "border-input bg-background text-muted-foreground hover:border-muted-foreground/30 hover:shadow-sm",
+                                  : "border-input bg-background text-muted-foreground hover:border-muted-foreground/30 hover:shadow-xs",
                               )}
                               onClick={() => field.onChange(preset.value)}
                             >

@@ -281,7 +281,7 @@ export const ExecutionLogsPanel = ({
         {hasNewBelow && (
           <Button
             size="sm"
-            className="absolute bottom-3 left-1/2 h-7 -translate-x-1/2 gap-1 rounded-full px-3 text-xs shadow"
+            className="absolute bottom-3 left-1/2 h-7 -translate-x-1/2 gap-1 rounded-full px-3 text-xs shadow-[0_1px_3px_0_rgb(0_0_0/0.1),0_1px_2px_-1px_rgb(0_0_0/0.1)]"
             onClick={scrollToBottom}
           >
             New logs <ArrowDown className="h-3 w-3" />
@@ -492,7 +492,7 @@ const LogRow = ({
       ) : (
         <span className="shrink-0 rounded bg-muted px-1.5 font-medium">Workflow</span>
       )}
-      <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">{entry.message}</span>
+      <span className="min-w-0 flex-1 whitespace-pre-wrap wrap-break-word">{entry.message}</span>
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useWorkflowStore } from "../store";
 import { useWorkflow } from "./use-workflow";
 import { workflowService } from "../services/workflow.service";
@@ -378,23 +378,28 @@ export const useWorkflowExecutionHistory = (workflowId: string) => {
   const [initialSettled, setInitialSettled] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [prependCount, setPrependCount] = useState(0);
+  // Rows loaded so far through the paged snapshot, and the server's total for it.
+  const [snapshotCount, setSnapshotCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+  // The workflow whose first page has been applied to `rows`.
+  const [appliedForWorkflow, setAppliedForWorkflow] = useState<string | null>(null);
+  // The initial-query result (per workflow) already handled below.
+  const [handledInitialResult, setHandledInitialResult] = useState<string | null>(null);
 
   const rowsRef = useRef<WorkflowExecution[]>([]);
   const refreshIdsRef = useRef<string[]>([]);
   const loadingMoreRef = useRef(false);
-  const snapshotCountRef = useRef(0);
-  const totalCountRef = useRef(0);
-  const appliedForWorkflow = useRef<string | null>(null);
   const mergedAtRef = useRef(0);
-  const seenWorkflow = useRef(workflowId);
 
-  const switched = seenWorkflow.current !== workflowId;
+  // Switching workflows starts over from an empty list.
+  const [seenWorkflow, setSeenWorkflow] = useState(workflowId);
+  const switched = seenWorkflow !== workflowId;
   if (switched) {
-    seenWorkflow.current = workflowId;
-    snapshotCountRef.current = 0;
-    totalCountRef.current = 0;
-    appliedForWorkflow.current = null;
-    mergedAtRef.current = 0;
+    setSeenWorkflow(workflowId);
+    setSnapshotCount(0);
+    setTotalCount(0);
+    setAppliedForWorkflow(null);
+    setHandledInitialResult(null);
     setRows([]);
     setHasMore(false);
     setInitialSettled(false);
@@ -402,11 +407,19 @@ export const useWorkflowExecutionHistory = (workflowId: string) => {
     setIsLoadingMore(false);
   }
 
-  rowsRef.current = switched ? [] : rows;
-  refreshIdsRef.current = rowsRef.current
-    .filter((row) => NON_TERMINAL_STATUSES.has(row.status))
-    .slice(0, MAX_REFRESH_IDS)
-    .map((row) => row.id);
+  useEffect(() => {
+    mergedAtRef.current = 0;
+  }, [workflowId]);
+
+  // Latest rows (and the in-flight ids to refresh) for the query function, the merge effect and
+  // loadMore. Layout effects run before any of those read them.
+  useLayoutEffect(() => {
+    rowsRef.current = rows;
+    refreshIdsRef.current = rows
+      .filter((row) => NON_TERMINAL_STATUSES.has(row.status))
+      .slice(0, MAX_REFRESH_IDS)
+      .map((row) => row.id);
+  });
 
   const initialQuery = useQuery({
     queryKey: ["workflow-executions", workflowId, "page", pageSize],
@@ -438,33 +451,31 @@ export const useWorkflowExecutionHistory = (workflowId: string) => {
     refetchInterval: EXECUTION_POLL_MS,
   });
 
-  useEffect(() => {
-    if (!workflowId || !initialQuery.isFetched) return;
+  // Apply each initial-query result once: the first page replaces the list, a later result for a
+  // workflow whose rows are already showing only settles the loading state.
+  const initialResult = `${workflowId}|${initialQuery.dataUpdatedAt}|${initialQuery.errorUpdatedAt}`;
+  if (
+    !switched &&
+    workflowId &&
+    initialQuery.isFetched &&
+    handledInitialResult !== initialResult
+  ) {
+    setHandledInitialResult(initialResult);
     if (initialQuery.isError) {
       setInitialSettled(true);
-      return;
-    }
-    if (appliedForWorkflow.current === workflowId && rowsRef.current.length > 0) {
+    } else if (appliedForWorkflow === workflowId && rows.length > 0) {
       setInitialSettled(true);
-      return;
+    } else {
+      const data = initialQuery.data?.data ?? [];
+      const total = initialQuery.data?.totalCount ?? data.length;
+      setSnapshotCount(data.length);
+      setTotalCount(total);
+      setRows((current) => (current.length === 0 && data.length === 0 ? current : data));
+      setHasMore(data.length === pageSize && data.length < total);
+      setAppliedForWorkflow(workflowId);
+      setInitialSettled(true);
     }
-
-    const data = initialQuery.data?.data ?? [];
-    const total = initialQuery.data?.totalCount ?? data.length;
-    snapshotCountRef.current = data.length;
-    totalCountRef.current = total;
-    setRows((current) => (current.length === 0 && data.length === 0 ? current : data));
-    setHasMore(data.length === pageSize && data.length < total);
-    appliedForWorkflow.current = workflowId;
-    setInitialSettled(true);
-  }, [
-    workflowId,
-    initialQuery.isFetched,
-    initialQuery.isError,
-    initialQuery.data,
-    initialQuery.dataUpdatedAt,
-    pageSize,
-  ]);
+  }
 
   useEffect(() => {
     const pull = newerQuery.data;
@@ -500,16 +511,17 @@ export const useWorkflowExecutionHistory = (workflowId: string) => {
       const appended = page.filter((row) => row.id && !seen.has(row.id));
       const next = appended.length > 0 ? [...rowsRef.current, ...appended] : rowsRef.current;
       rowsRef.current = next;
-      snapshotCountRef.current += appended.length;
+      const loaded = snapshotCount + appended.length;
+      setSnapshotCount(loaded);
       setRows(next);
-      setHasMore(page.length === pageSize && snapshotCountRef.current < totalCountRef.current);
+      setHasMore(page.length === pageSize && loaded < totalCount);
     } catch {
       // Keep the rows already on screen.
     } finally {
       loadingMoreRef.current = false;
       setIsLoadingMore(false);
     }
-  }, [workflowId, hasMore, pageSize]);
+  }, [workflowId, hasMore, pageSize, snapshotCount, totalCount]);
 
   return {
     rows: switched ? [] : rows,

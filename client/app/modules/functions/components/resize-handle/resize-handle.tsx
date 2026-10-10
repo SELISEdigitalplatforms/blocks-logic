@@ -105,7 +105,7 @@ export const ResizeHandle = ({
       className={cn(
         "flex h-3 shrink-0 cursor-row-resize touch-none select-none items-center justify-center",
         "text-low-emphasis hover:bg-surface-app hover:text-foreground",
-        "focus-visible:bg-surface-app focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary",
+        "focus-visible:bg-surface-app focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-primary",
         className,
       )}
       onPointerDown={handlePointerDown}

@@ -126,15 +126,15 @@ export const EditorNodeHandleArrow = ({ className }: NodeHandleArrowProps) => {
     <div
       className={cn(
         "relative bg-border-medium-emphasis dark:bg-accent",
-        position === Position.Left && "mr-[8px] mt-[3px] h-0.5 w-20 translate-x-[-100%] transform",
+        position === Position.Left && "mr-[8px] mt-[3px] h-0.5 w-20 -translate-x-full transform",
         position === Position.Right && "ml-[8px] mt-[3px] h-0.5 w-20",
-        position === Position.Top && "ml-[3px] h-20 w-0.5 translate-y-[-100%] transform",
+        position === Position.Top && "ml-[3px] h-20 w-0.5 -translate-y-full transform",
         position === Position.Bottom && "ml-[3px] mt-[8px] h-20 w-0.5",
         className,
       )}
     >
       {label && (
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-md border border-medium-emphasis bg-background px-1.5 py-0.5 text-[10px] tracking-wider text-medium-emphasis shadow-sm dark:border-accent dark:text-primary">
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-md border border-medium-emphasis bg-background px-1.5 py-0.5 text-[10px] tracking-wider text-medium-emphasis shadow-xs dark:border-accent dark:text-primary">
           {label}
         </div>
       )}

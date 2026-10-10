@@ -159,7 +159,7 @@ export const NodeLibraryPanel = ({
                   key={option.id}
                   onClick={() => handleSelectOption(option)}
                   className={cn(
-                    "flex w-full cursor-pointer flex-col gap-1.5 rounded-sm p-4 text-left text-medium-emphasis transition-colors hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+                    "flex w-full cursor-pointer flex-col gap-1.5 rounded-sm p-4 text-left text-medium-emphasis transition-colors hover:bg-accent focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2",
                   )}
                 >
                   <div className="mt-0.5 flex items-center gap-1">

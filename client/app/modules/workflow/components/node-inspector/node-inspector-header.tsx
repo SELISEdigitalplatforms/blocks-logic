@@ -3,7 +3,7 @@ import { SheetHeader, SheetTitle } from "@/components/ui-kits/sheet/sheet";
 import { useWorkflow, useHandleExecuteStep } from "@blocks-workflow/hooks";
 import { BookOpen, Pen, Rocket, X } from "lucide-react";
 import { getNodeDefinition } from "../node-library-panel";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { showErrorToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@radix-ui/react-tooltip";
 
@@ -29,11 +29,14 @@ export const NodeInspectorHeader = ({
   const [isRenaming, setIsRenaming] = useState(false);
   const [editName, setEditName] = useState(selectedNode?.name || "");
 
-  useEffect(() => {
+  // While not renaming, the edit box follows the node's current name.
+  const [syncedName, setSyncedName] = useState({ name: selectedNode?.name, isRenaming });
+  if (syncedName.name !== selectedNode?.name || syncedName.isRenaming !== isRenaming) {
+    setSyncedName({ name: selectedNode?.name, isRenaming });
     if (!isRenaming && selectedNode?.name) {
       setEditName(selectedNode.name);
     }
-  }, [selectedNode?.name, isRenaming]);
+  }
 
   if (!selectedNode) return null;
 
@@ -75,8 +78,8 @@ export const NodeInspectorHeader = ({
             <input
               autoFocus
               maxLength={80}
-              // className="mt-2 min-w-24 max-w-50 bg-accent border-b border-primary px-2 py-1 text-center text-sm outline-none"
-              className="left-1/2 min-w-32 rounded border border-primary bg-background px-2 py-1 text-md outline-none"
+              // className="mt-2 min-w-24 max-w-50 bg-accent border-b border-primary px-2 py-1 text-center text-sm outline-hidden"
+              className="left-1/2 min-w-32 rounded border border-primary bg-background px-2 py-1 text-md outline-hidden"
               value={editName}
               onChange={(e) => setEditName(e.target.value)}
               onBlur={handleRenameSubmit}

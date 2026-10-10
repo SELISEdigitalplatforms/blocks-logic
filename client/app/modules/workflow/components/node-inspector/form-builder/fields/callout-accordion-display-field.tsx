@@ -39,7 +39,7 @@ export const CalloutAccordionDisplayField = ({
               ? {
                   ...MarkdownComponentsMap,
                   p: (props) => (
-                    <span className="break-words whitespace-pre-wrap">{props.children}</span>
+                    <span className="wrap-break-word whitespace-pre-wrap">{props.children}</span>
                   ),
                 }
               : MarkdownComponentsMap

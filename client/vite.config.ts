@@ -1,3 +1,4 @@
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import { defineConfig, loadEnv, type Plugin } from "vite";
@@ -80,7 +81,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     envPrefix: ["BLOCKS_"],
-    plugins: [react(), selfHostMonaco()],
+    plugins: [react(), tailwindcss(), selfHostMonaco()],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./app"),

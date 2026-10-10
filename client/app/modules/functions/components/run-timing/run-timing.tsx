@@ -87,7 +87,7 @@ export const RunTiming = ({ run }: Readonly<{ run: IRunDetail }>) => {
             </span>
           </div>
           {row.steps.length > 0 && (
-            <span className="break-words text-[10px] text-low-emphasis">
+            <span className="wrap-break-word text-[10px] text-low-emphasis">
               {row.steps.map((s) => `${s.step} ${s.ms} ms`).join(" · ")}
             </span>
           )}

@@ -58,7 +58,7 @@ export const BuildProgress = ({ buildId }: { buildId?: string }) => {
       {/* Not truncated: the message carries the reason, and clipping it at the panel width is how
           a build failure turns into a trip to the network tab. */}
       {build.status === "Failed" && build.errorMessage && (
-        <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-error">
+        <pre className="whitespace-pre-wrap wrap-break-word font-mono text-xs leading-relaxed text-error">
           {build.errorMessage}
         </pre>
       )}
@@ -67,7 +67,7 @@ export const BuildProgress = ({ buildId }: { buildId?: string }) => {
         <pre
           className={cn(
             "max-h-64 overflow-auto rounded-md border bg-surface-app p-2.5",
-            "whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed",
+            "whitespace-pre-wrap wrap-break-word font-mono text-[11px] leading-relaxed",
           )}
         >
           {build.log}
@@ -77,7 +77,7 @@ export const BuildProgress = ({ buildId }: { buildId?: string }) => {
       {/* What the build actually resolved, as recorded on the build — with no lockfile, this is
           the only statement of which versions the image contains. */}
       {build.status === "Succeeded" && build.packages && build.packages !== "[]" && (
-        <p className="break-words font-mono text-[11px] leading-relaxed text-low-emphasis">
+        <p className="wrap-break-word font-mono text-[11px] leading-relaxed text-low-emphasis">
           Installed {build.packages}
         </p>
       )}

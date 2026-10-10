@@ -61,16 +61,16 @@ export const VersionHistorySidebar = ({ onClose, onSelectVersion, selectedVersio
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 overflow-hidden">
                   {version.isPublished ? (
-                    <div className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />
+                    <div className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
                   ) : (
-                    <div className="w-2 h-2 rounded-full border-2 border-muted-foreground flex-shrink-0" />
+                    <div className="w-2 h-2 rounded-full border-2 border-muted-foreground shrink-0" />
                   )}
                   <span className="font-medium text-sm truncate">{version.name || "Unnamed Version"}</span>
                   <span className="font-medium text-sm">{version.isPublished && " (Published)"}</span>
 
                 </div>
                 <WorkflowVersionActionDropdown version={version}>
-                  <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                  <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                     <MoreVertical className="h-4 w-4" />
                   </Button>
                 </WorkflowVersionActionDropdown>
@@ -89,7 +89,7 @@ export const VersionHistorySidebar = ({ onClose, onSelectVersion, selectedVersio
                         <Info className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground transition-colors" />
                       </div>
                     </TooltipTrigger>
-                    <TooltipContent side="bottom" className="max-w-[250px] whitespace-normal z-[100]">
+                    <TooltipContent side="bottom" className="max-w-[250px] whitespace-normal z-100">
                       <p className="text-sm">{version.description}</p>
                     </TooltipContent>
                   </Tooltip>
