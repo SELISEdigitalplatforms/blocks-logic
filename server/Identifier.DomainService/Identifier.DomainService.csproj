@@ -5,7 +5,6 @@
 	  <PackageReference Include="FluentValidation" />
 	
 	  <PackageReference Include="SeliseBlocks.StorageDriver.OS" />
-	  <PackageReference Include="SixLabors.Fonts" />
     <PackageReference Include="SeliseBlocks.Genesis.OS" />
   </ItemGroup>
 
