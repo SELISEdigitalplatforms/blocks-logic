@@ -661,7 +661,7 @@ export const FunctionDetailPage = () => {
             <Tabs
               value={sidePanel}
               onValueChange={(value) => setSidePanel(value as SidePanel)}
-              className="flex min-w-0 flex-col gap-3 xl:h-[max(400px,calc(100dvh_-_264px))]"
+              className="flex min-w-0 flex-col gap-3 xl:h-[max(400px,calc(100dvh-264px))]"
             >
               {/* Same segmented pills as the page tabs above, so the two strips read as one family. */}
               <TabsList className="grid h-[42px] w-full shrink-0 grid-cols-4 bg-blocks-primary-shades-300">

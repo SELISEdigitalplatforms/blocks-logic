@@ -85,7 +85,7 @@ export const EditorNodeSimple = ({ id }: Node) => {
         })}
       </div>
       {StatusIcon && statusConfig && (
-        <div className="absolute -bottom-2 -right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-background shadow-sm border">
+        <div className="absolute -bottom-2 -right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-background shadow-xs border">
             <StatusIcon className={cn("h-4 w-4", statusConfig.textClass, executionStatus === WorkflowExecutionStatus.Running && "animate-spin")} />
         </div>
       )}

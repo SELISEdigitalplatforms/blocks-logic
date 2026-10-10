@@ -201,7 +201,7 @@ export const ConnectionsCard = ({
               const preset = presetForPackage(name);
               return (
                 <SetupIssue key={name}>
-                  <span className="min-w-0 [overflow-wrap:anywhere]">
+                  <span className="min-w-0 wrap-anywhere">
                     <code className="font-mono">{name}</code> is imported but not in package.json.
                   </span>
                   {preset ? (
@@ -221,7 +221,7 @@ export const ConnectionsCard = ({
             })}
             {setup.missingVariables.length > 0 && (
               <SetupIssue>
-                <span className="min-w-0 [overflow-wrap:anywhere]">
+                <span className="min-w-0 wrap-anywhere">
                   {setup.missingVariables.map((key) => (
                     <Fragment key={key}>
                       <code className="font-mono">ctx.env.{key}</code>{" "}
@@ -242,7 +242,7 @@ export const ConnectionsCard = ({
             )}
             {setup.emptyVariables.length > 0 && (
               <SetupIssue>
-                <span className="min-w-0 [overflow-wrap:anywhere]">
+                <span className="min-w-0 wrap-anywhere">
                   {setup.emptyVariables.map((key) => (
                     <Fragment key={key}>
                       <code className="font-mono">{key}</code>{" "}

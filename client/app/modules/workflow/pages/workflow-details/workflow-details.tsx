@@ -94,7 +94,7 @@ export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) 
                 type="button"
                 aria-label="Dismiss unadapted changes warning"
                 onClick={() => setIsDirtyBannerDismissed(true)}
-                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-yellow-700 transition-colors hover:bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-yellow-500 dark:text-yellow-300 dark:hover:bg-yellow-900/70"
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-yellow-700 transition-colors hover:bg-yellow-100 focus:outline-hidden focus:ring-2 focus:ring-yellow-500 dark:text-yellow-300 dark:hover:bg-yellow-900/70"
               >
                 <X className="h-4 w-4" />
               </button>

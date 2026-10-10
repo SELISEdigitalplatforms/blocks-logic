@@ -474,7 +474,7 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
               {/* Verbatim, wrapped and selectable: the message the runner sent is the thing worth
                   reading, and the hint under it is only a hint. */}
               {run?.errorMessage && (
-                <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-error">
+                <pre className="whitespace-pre-wrap wrap-break-word font-mono text-[11px] leading-relaxed text-error">
                   {run.errorMessage}
                 </pre>
               )}
@@ -489,7 +489,7 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
               <p className="px-4 pt-2.5 text-xs font-semibold">Returned</p>
               <pre
                 aria-label="Returned value"
-                className="max-h-52 overflow-auto whitespace-pre-wrap break-words px-4 py-2 font-mono text-[11px] leading-relaxed"
+                className="max-h-52 overflow-auto whitespace-pre-wrap wrap-break-word px-4 py-2 font-mono text-[11px] leading-relaxed"
               >
                 {result}
               </pre>
@@ -514,11 +514,11 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
                     >
                       {line.level}
                     </span>
-                    <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">
+                    <span className="min-w-0 flex-1 whitespace-pre-wrap wrap-break-word">
                       {line.message}
                       {/* ctx.log's structured payload, which was being dropped on the floor. */}
                       {line.data && (
-                        <span className="mt-0.5 block whitespace-pre-wrap break-words text-low-emphasis">
+                        <span className="mt-0.5 block whitespace-pre-wrap wrap-break-word text-low-emphasis">
                           {line.data}
                         </span>
                       )}

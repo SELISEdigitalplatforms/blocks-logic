@@ -112,7 +112,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
 
       <div
         className={cn(
-          "absolute -top-12 left-1/2 flex -translate-x-1/2 transform gap-1 rounded-md bg-background px-3 py-2 opacity-0 shadow-sm transition-opacity hover:opacity-100 peer-hover:opacity-100 after:absolute after:content-[''] after:-bottom-6 after:left-0 after:h-6 after:w-full",
+          "absolute -top-12 left-1/2 flex -translate-x-1/2 transform gap-1 rounded-md bg-background px-3 py-2 opacity-0 shadow-xs transition-opacity hover:opacity-100 peer-hover:opacity-100 after:absolute after:content-[''] after:-bottom-6 after:left-0 after:h-6 after:w-full",
           isToolbarVisible && "opacity-100",
           node.data?.hasToolbar === false && "hidden",
         )}
@@ -251,7 +251,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
         <input
           autoFocus
           maxLength={80}
-          className="absolute left-1/2 mt-2 w-full min-w-24 -translate-x-1/2 transform rounded border border-primary bg-background px-2 py-1 text-center text-sm outline-none"
+          className="absolute left-1/2 mt-2 w-full min-w-24 -translate-x-1/2 transform rounded border border-primary bg-background px-2 py-1 text-center text-sm outline-hidden"
           value={editName}
           onChange={(e) => setEditName(e.target.value)}
           onBlur={handleRenameSubmit}

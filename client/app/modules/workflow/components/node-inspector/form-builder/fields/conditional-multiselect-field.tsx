@@ -109,10 +109,10 @@ export const ConditionalMultiselectField = ({
       <Popover open={open} onOpenChange={setOpen}>
         <div
           className={cn(
-            "group flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm shadow-sm transition-all",
+            "group flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm shadow-xs transition-all",
             "hover:border-primary/40 hover:shadow-md",
             "focus-within:border-primary/60 focus-within:ring-2 focus-within:ring-primary/20",
-            disabled && "cursor-not-allowed opacity-60 hover:border-input hover:shadow-sm",
+            disabled && "cursor-not-allowed opacity-60 hover:border-input hover:shadow-xs",
             open && "border-primary/60 ring-2 ring-primary/20",
           )}
         >
@@ -122,7 +122,7 @@ export const ConditionalMultiselectField = ({
               role="combobox"
               aria-expanded={open}
               disabled={disabled || isLoading}
-              className="flex flex-1 items-center justify-between gap-2 truncate text-left outline-none disabled:cursor-not-allowed"
+              className="flex flex-1 items-center justify-between gap-2 truncate text-left outline-hidden disabled:cursor-not-allowed"
             >
               <span className="flex items-center gap-1.5 truncate">
                 {isLoading ? (
@@ -132,7 +132,7 @@ export const ConditionalMultiselectField = ({
                     {previewItems.map((v) => (
                       <span
                         key={v}
-                        className="inline-flex max-w-[8rem] items-center truncate rounded-md bg-muted px-1.5 py-0.5 text-xs font-medium"
+                        className="inline-flex max-w-32 items-center truncate rounded-md bg-muted px-1.5 py-0.5 text-xs font-medium"
                       >
                         <span className="truncate">{labelFor(v)}</span>
                       </span>
@@ -143,7 +143,7 @@ export const ConditionalMultiselectField = ({
                           <TooltipTrigger asChild>
                             <span
                               tabIndex={0}
-                              className="inline-flex cursor-help items-center rounded-md bg-muted px-1.5 py-0.5 text-xs font-semibold text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                              className="inline-flex cursor-help items-center rounded-md bg-muted px-1.5 py-0.5 text-xs font-semibold text-muted-foreground outline-hidden focus-visible:ring-2 focus-visible:ring-primary/40"
                             >
                               +{overflowCount}
                             </span>
@@ -185,8 +185,8 @@ export const ConditionalMultiselectField = ({
             title={`Match ${matchLabel.toLowerCase()} of the selected items`}
             className={cn(
               "inline-flex shrink-0 items-center justify-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-wide transition-colors",
-              "min-w-[4.25rem]",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+              "min-w-17",
+              "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/40",
               "disabled:cursor-not-allowed disabled:opacity-50",
               currentValue.mode === "and"
                 ? "bg-primary/10 text-primary hover:bg-primary/20"
@@ -198,7 +198,7 @@ export const ConditionalMultiselectField = ({
           </button>
         </div>
 
-        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
           <Command shouldFilter={typeof field.options === "function" ? false : undefined}>
             <CommandInput placeholder={field.placeholder || "Search..."} className="h-9" />
             <CommandList>

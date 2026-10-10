@@ -86,7 +86,7 @@ export const MultiselectField = ({
             </span>
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
           <Command shouldFilter={typeof field.options === "function" ? false : undefined}>
             <CommandInput placeholder={field.placeholder || "Search..."} className="h-9" />
             <CommandList>

@@ -48,7 +48,7 @@ export const WorkflowEditor = ({ isReadonly = false }: WorkflowEditorProps) => {
       if (node.id === listeningNodeId) {
         return {
           ...node,
-          className: `${node.className || ""} !ring-2 !ring-green-500 rounded-md`.trim(),
+          className: `${node.className || ""} ring-2! ring-green-500! rounded-md`.trim(),
         };
       }
       return node;

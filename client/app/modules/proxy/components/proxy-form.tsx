@@ -197,13 +197,13 @@ export const ProxyForm = ({
   return (
     <Form {...form}>
       <form noValidate onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
-        <div className="sticky top-0 z-30 -mx-6 -mt-4 bg-surface-app px-6 pb-4 pt-4 shadow-sm">
+        <div className="sticky top-0 z-30 -mx-6 -mt-4 bg-surface-app px-6 pb-4 pt-4 shadow-xs">
           {headerContent ? <div className="pb-6">{headerContent}</div> : null}
           <ProxyFormHeader isEdit={isEdit} isPending={isPending} onCancel={onCancel} />
         </div>
 
         {/* Connection: the vendor, and the credential that never reaches the client. */}
-        <Card className="rounded-xl !mt-0">
+        <Card className="rounded-xl mt-0!">
           <CardContent className="space-y-6 p-0">
             <div>
               <p className="text-sm font-semibold">Connection</p>

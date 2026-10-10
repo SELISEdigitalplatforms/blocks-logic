@@ -85,7 +85,7 @@ export const WorkflowVersionEditor = ({ version }: { version: WorkflowVersion | 
       </ReactFlow>
       {version && (
         <div className="absolute px-4 left-4 top-6 z-50 flex w-[calc(100%-2rem)] justify-between">
-          <div className="flex items-center gap-2 rounded-md border bg-background/95 px-3 py-2 shadow-sm backdrop-blur-sm">
+          <div className="flex items-center gap-2 rounded-md border bg-background/95 px-3 py-2 shadow-xs backdrop-blur-xs">
             <span className="text-sm font-medium">Version:</span>
             <span className="text-sm text-muted-foreground">
               {version?.name || "Unnamed Version"}
@@ -93,7 +93,7 @@ export const WorkflowVersionEditor = ({ version }: { version: WorkflowVersion | 
           </div>
 
           <WorkflowVersionActionDropdown version={version}>
-            <Button variant="outline" size="sm" className="bg-background/95 shadow-sm backdrop-blur-sm">
+            <Button variant="outline" size="sm" className="bg-background/95 shadow-xs backdrop-blur-xs">
               Action
               <ChevronDown className="ml-2 h-4 w-4" />
             </Button>

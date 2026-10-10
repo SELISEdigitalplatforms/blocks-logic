@@ -87,12 +87,12 @@ export const WorkflowEditorEdgeDefault = ({
             className="flex flex-col items-center gap-1"
           >
             {label && (
-              <div className="rounded-md border border-medium-emphasis bg-background px-1.5 py-0.5 text-[10px] tracking-wider text-medium-emphasis shadow-sm dark:border-accent dark:text-primary">
+              <div className="rounded-md border border-medium-emphasis bg-background px-1.5 py-0.5 text-[10px] tracking-wider text-medium-emphasis shadow-xs dark:border-accent dark:text-primary">
                 {label}
               </div>
             )}
             {itemCountLabel && (
-              <div className="rounded-full bg-secondary px-2 py-0.5 text-[9px] font-semibold text-secondary-foreground shadow-sm">
+              <div className="rounded-full bg-secondary px-2 py-0.5 text-[9px] font-semibold text-secondary-foreground shadow-xs">
                 {itemCountLabel}
               </div>
             )}

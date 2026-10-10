@@ -129,7 +129,7 @@ export const KeyValueFieldArray = ({
       type="button"
       variant="outline"
       size="xs"
-      className="gap-1.5 border-dashed bg-background shadow-sm hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
+      className="gap-1.5 border-dashed bg-background shadow-xs hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
       onClick={() => {
         if (sendAsColumn) {
           const credential: ProxyCredentialRow = { key: "", value: "", sendAs: "header" };

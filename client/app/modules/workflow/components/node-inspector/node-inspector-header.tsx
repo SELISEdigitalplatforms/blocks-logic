@@ -75,8 +75,8 @@ export const NodeInspectorHeader = ({
             <input
               autoFocus
               maxLength={80}
-              // className="mt-2 min-w-24 max-w-50 bg-accent border-b border-primary px-2 py-1 text-center text-sm outline-none"
-              className="left-1/2 min-w-32 rounded border border-primary bg-background px-2 py-1 text-md outline-none"
+              // className="mt-2 min-w-24 max-w-50 bg-accent border-b border-primary px-2 py-1 text-center text-sm outline-hidden"
+              className="left-1/2 min-w-32 rounded border border-primary bg-background px-2 py-1 text-md outline-hidden"
               value={editName}
               onChange={(e) => setEditName(e.target.value)}
               onBlur={handleRenameSubmit}

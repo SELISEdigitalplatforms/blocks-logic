@@ -128,7 +128,7 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
                 aria-label={`Action ${index + 1} on`}
                 checked={isEnabled}
                 onCheckedChange={(checked) => update(index, { enabled: checked })}
-                className="flex-shrink-0"
+                className="shrink-0"
               />
               <Button
                 type="button"

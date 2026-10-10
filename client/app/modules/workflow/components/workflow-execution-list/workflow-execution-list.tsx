@@ -29,7 +29,7 @@ const LoadingSkeleton = () => {
       {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]?.map((execution) => (
         <div
           key={execution}
-          className={`flex cursor-pointer shadow-sm`}
+          className={`flex cursor-pointer shadow-xs`}
         >
           <div className="w-1 bg-accent"></div>
           <div className="flex w-full flex-col gap-1 p-4">
@@ -104,7 +104,7 @@ export const WorkflowExecutionList = forwardRef<HTMLDivElement, WorkflowExecutio
             <div
               key={execution.id}
               className={cn(
-                "flex cursor-pointer shadow transition-all hover:bg-accent",
+                "flex cursor-pointer shadow-[0_1px_3px_0_rgb(0_0_0/0.1),0_1px_2px_-1px_rgb(0_0_0/0.1)] transition-all hover:bg-accent",
                 selectedExecutionId === execution.id && "bg-accent",
               )}
               onClick={() => onSelectExecution?.(execution)}

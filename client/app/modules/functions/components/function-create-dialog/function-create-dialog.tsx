@@ -137,7 +137,7 @@ export const FunctionCreateDialog = ({ open, onOpenChange }: FunctionCreateDialo
                           className={cn(
                             "mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border bg-background",
                             field.value === template.value
-                              ? "border-[4px] border-primary"
+                              ? "border-4 border-primary"
                               : "border-border-medium-emphasis",
                           )}
                         />

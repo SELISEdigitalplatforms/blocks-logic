@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 
 export const MarkdownComponentsMap: Partial<Components> = {
   p: (props) => (
-    <p className="my-1 whitespace-pre-wrap break-words leading-relaxed">{props.children}</p>
+    <p className="my-1 whitespace-pre-wrap wrap-break-word leading-relaxed">{props.children}</p>
   ),
 
   a: (props) => (
@@ -26,7 +26,7 @@ export const MarkdownComponentsMap: Partial<Components> = {
     <th className="min-w-[150px] max-w-[350px] break-all border p-2">{props.children}</th>
   ),
   td: (props) => (
-    <td className="min-w-[150px] max-w-[350px] break-words border p-2">{props.children}</td>
+    <td className="min-w-[150px] max-w-[350px] wrap-break-word border p-2">{props.children}</td>
   ),
 };
 

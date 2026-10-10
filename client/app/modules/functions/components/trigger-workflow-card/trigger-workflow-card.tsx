@@ -35,7 +35,7 @@ export const TriggerWorkflowCard = ({ value, onChange }: TriggerWorkflowCardProp
           aria-label="Use in workflows"
           checked={value.workflowEnabled}
           onCheckedChange={(checked) => onChange({ ...value, workflowEnabled: checked })}
-          className="flex-shrink-0"
+          className="shrink-0"
         />
       </div>
 

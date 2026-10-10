@@ -68,7 +68,7 @@ export const SelectWithDescriptionField = ({
                   {option.label}
                 </span>
                 {option.description && (
-                  <span className="text-xs text-muted-foreground font-normal whitespace-normal break-words leading-normal block">
+                  <span className="text-xs text-muted-foreground font-normal whitespace-normal wrap-break-word leading-normal block">
                     {option.description}
                   </span>
                 )}

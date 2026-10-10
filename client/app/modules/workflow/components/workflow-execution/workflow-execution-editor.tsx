@@ -176,7 +176,7 @@ export const WorkflowExecutionEditor = ({
       </ReactFlow>
       {execution && (
         <div className="absolute left-4 top-4 z-50 flex items-center gap-2">
-          <div className="flex items-center gap-2 rounded-md border bg-background/95 px-3 py-2 shadow-sm backdrop-blur-sm">
+          <div className="flex items-center gap-2 rounded-md border bg-background/95 px-3 py-2 shadow-xs backdrop-blur-xs">
             <span className="text-sm font-medium">Status:</span>
             <div className="flex items-center gap-1.5">
               <div

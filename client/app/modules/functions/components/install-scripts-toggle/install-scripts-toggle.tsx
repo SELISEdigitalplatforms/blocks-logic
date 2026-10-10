@@ -24,7 +24,7 @@ export const InstallScriptsToggle = ({ checked, onChange }: InstallScriptsToggle
       aria-label="Allow package install scripts"
       checked={checked}
       onCheckedChange={onChange}
-      className="flex-shrink-0"
+      className="shrink-0"
     />
   </div>
 );

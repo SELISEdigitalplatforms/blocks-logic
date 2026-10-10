@@ -56,7 +56,7 @@ export function MobileMenuItem({ menu, onClick }: { menu: MenuItemType; onClick?
       <div
         className={cn(
           "flex h-10 items-center justify-between px-4 py-1.5 text-base text-[hsl(var(--low-emphasis))] hover:text-[hsl(var(--high-emphasis))]",
-          isActiveMenu && "!text-primary",
+          isActiveMenu && "text-primary!",
         )}
       >
         <Link to={menu.path} className={cn("flex items-center gap-3", menu.disabled && "pointer-events-none opacity-50")} onClick={onClick}>
@@ -83,7 +83,7 @@ export function MobileMenuItem({ menu, onClick }: { menu: MenuItemType; onClick?
         <div
           className={cn(
             "flex h-10 items-center justify-between px-4 py-1.5 text-base text-[hsl(var(--low-emphasis))] hover:text-[hsl(var(--high-emphasis))]",
-            isActiveMenu && "!text-primary",
+            isActiveMenu && "text-primary!",
           )}
         >
           <div className="flex items-center gap-3">
@@ -96,7 +96,7 @@ export function MobileMenuItem({ menu, onClick }: { menu: MenuItemType; onClick?
       <SheetContent className="w-full p-0" aria-describedby={undefined} hideClose>
         <SheetHeader className="flex-row items-center justify-between px-4 py-3">
           <SheetTitle>{menu.name}</SheetTitle>
-          <SheetClose className="!mt-0">
+          <SheetClose className="mt-0!">
             <X className="h-4 w-4" />
           </SheetClose>
         </SheetHeader>

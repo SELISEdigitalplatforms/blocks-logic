@@ -398,7 +398,7 @@ export const RunDetail = ({
           data-testid="discard-reason"
         >
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span className="min-w-0 break-words">
+          <span className="min-w-0 wrap-break-word">
             Sandbox replaced after this call:{" "}
             {explainDiscardReason(run.discardReason) ? (
               <Tooltip>
@@ -428,7 +428,7 @@ export const RunDetail = ({
                 to be shown *instead* of this, which left the real message — the missing package,
                 the offending line — readable only in the network tab. */}
             {run.errorMessage && (
-              <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-error">
+              <pre className="whitespace-pre-wrap wrap-break-word font-mono text-xs leading-relaxed text-error">
                 {run.errorMessage}
               </pre>
             )}
@@ -451,7 +451,7 @@ export const RunDetail = ({
                 Attempt {attempt.number}
               </span>
               <RunStatusChip status={attempt.status} />
-              <span className="min-w-0 flex-1 break-words text-xs text-medium-emphasis">
+              <span className="min-w-0 flex-1 wrap-break-word text-xs text-medium-emphasis">
                 {attempt.errorMessage ??
                   (attempt.durationMs != null
                     ? `finished in ${formatDuration(attempt.durationMs)}`
@@ -525,12 +525,12 @@ export const RunDetail = ({
               >
                 {line.level}
               </span>
-              <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">
+              <span className="min-w-0 flex-1 whitespace-pre-wrap wrap-break-word">
                 {line.message}
                 {/* ctx.log's second argument. Dropping it hid exactly the structured detail a
                     developer logs it for. */}
                 {line.data && (
-                  <span className="mt-0.5 block whitespace-pre-wrap break-words text-low-emphasis">
+                  <span className="mt-0.5 block whitespace-pre-wrap wrap-break-word text-low-emphasis">
                     {line.data}
                   </span>
                 )}
