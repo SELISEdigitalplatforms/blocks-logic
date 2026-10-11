@@ -4,11 +4,12 @@ import { useWorkflowStore } from "@blocks-workflow/store";
 import { copyToClipboard } from "@blocks-workflow/utils/copy-to-clipboard";
 import { useCallback, useMemo, useState } from "react";
 import { inferSchemaFromRuntimeRows } from "@blocks-workflow/utils/runtime-node-data";
-import { ChevronDown, ChevronUp, Copy, Pin, PencilOff, TriangleAlert } from "lucide-react";
+import { ChevronDown, ChevronUp, Copy, Pencil, Pin, PinOff, TriangleAlert } from "lucide-react";
 import { useWorkflow } from "@blocks-workflow/hooks/use-workflow";
 import { Badge } from "@/components/ui-kits/badge/badge";
 import { Button } from "@/components/ui-kits/button/button";
 import { Textarea } from "@/components/ui-kits/textarea/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
 import { showErrorToast } from "@/hooks/use-toast";
 import { NodeExecutionStatus } from "@blocks-workflow/utils/workflow-execution-editor.util";
 import type { ExecutedNode } from "@blocks-workflow/models/workflow.model";
@@ -143,30 +144,58 @@ export const OutputPanel = ({
         <div className="flex items-center gap-2">
           <h3 className="font-medium text-high-emphasis">Output</h3>
           {hasMockData && (
-            <Badge variant="warning" className="gap-1 px-1.5 py-0.5 text-[11px]">
-              <Pin className="h-3 w-3" aria-hidden="true" />
-              Mock data
-            </Badge>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="warning" className="gap-1 px-1.5 py-0.5 text-[11px]">
+                  <Pin className="h-3 w-3" aria-hidden="true" />
+                  Mock data
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent className="text-xs">
+                Showing mock data. Runs use it as this step's output instead of running the step.
+              </TooltipContent>
+            </Tooltip>
           )}
         </div>
         <div className="flex items-center gap-2">
-          {!isEditingMock && editorMode === "editor" && (
+          {!isEditingMock && editorMode === "editor" && !hasMockData && (
             <Button variant="outline" size="xs" onClick={handleSetMockDataClick}>
-              {hasMockData ? "Edit mock data" : "Set mock data"}
+              Set mock data
             </Button>
           )}
           {!isEditingMock && editorMode === "editor" && hasMockData && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="xxs"
-              className="h-7 px-2 text-low-emphasis"
-              aria-label="Remove mock data"
-              title="Remove mock data"
-              onClick={handleRemoveMockData}
-            >
-              <PencilOff className="h-4 w-4" />
-            </Button>
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xxs"
+                    className="h-7 px-2 text-low-emphasis"
+                    aria-label="Edit mock data"
+                    onClick={handleSetMockDataClick}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="text-xs">Edit mock data</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xxs"
+                    className="h-7 px-2 text-low-emphasis"
+                    aria-label="Remove mock data"
+                    onClick={handleRemoveMockData}
+                  >
+                    <PinOff className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="text-xs">Remove mock data</TooltipContent>
+              </Tooltip>
+            </>
           )}
           {!isEditingMock && (
             <Tabs value={tab} onValueChange={setTab}>
@@ -219,11 +248,6 @@ export const OutputPanel = ({
         </div>
       ) : (
         <>
-          {!isCollapsed && hasMockData && (
-            <p className="mt-2 shrink-0 rounded border border-warning-200 bg-warning-50 px-2 py-1 text-[11px] text-warning-800">
-              Showing mock data. Runs use it as this step's output instead of running the step.
-            </p>
-          )}
           {!isCollapsed && tab === "schema" && (
             <div className="mt-2 flex-1 overflow-y-auto rounded bg-surface-app p-2">
           {runtimeOutputRows.length === 0 ? (

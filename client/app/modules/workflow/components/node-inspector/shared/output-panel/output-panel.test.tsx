@@ -65,7 +65,7 @@ describe("OutputPanel", () => {
       },
     });
     expect(screen.getByText("Mock data")).toBeTruthy();
-    expect(screen.getByText("Edit mock data")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Edit mock data" })).toBeTruthy();
     expect(screen.getByText("name:")).toBeTruthy();
     expect(screen.queryByText("city:")).toBeNull();
 
