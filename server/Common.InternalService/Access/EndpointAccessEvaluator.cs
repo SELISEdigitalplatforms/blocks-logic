@@ -61,6 +61,45 @@ namespace Common.InternalService.Access
                 : configured.Any(pass => pass);
         }
 
+        /// <summary>
+        /// Why <paramref name="principal"/> fails <paramref name="policy"/> — which organization, roles or
+        /// permissions are missing — or <c>null</c> when it passes. For the server log only: the 403 answer
+        /// stays generic, because naming the rules tells any caller which role to go after (FN-36).
+        /// </summary>
+        public static string? ExplainDenial(ClaimsPrincipal principal, EndpointAccessPolicy policy)
+        {
+            if (Evaluate(principal, policy)) return null;
+
+            if (!string.IsNullOrEmpty(policy.OrganizationId))
+            {
+                var callerOrg = GetOrganization(principal);
+                if (string.IsNullOrEmpty(callerOrg)) callerOrg = "default";
+                if (!string.Equals(callerOrg, policy.OrganizationId, StringComparison.Ordinal))
+                {
+                    return $"organization '{policy.OrganizationId}' required, caller is in '{callerOrg}'";
+                }
+            }
+
+            var reasons = new List<string>(2);
+            if (policy.Roles.IsConfigured && !policy.Roles.IsSatisfiedBy(GetRoles(principal)))
+            {
+                reasons.Add(DescribeMissing("role", policy.Roles, GetRoles(principal)));
+            }
+
+            if (policy.Permissions.IsConfigured && !policy.Permissions.IsSatisfiedBy(GetPermissions(principal)))
+            {
+                reasons.Add(DescribeMissing("permission", policy.Permissions, GetPermissions(principal)));
+            }
+
+            var combine = policy.Combine == EndpointAccessCombine.And ? "all rules" : "any rule";
+            return reasons.Count == 0 ? "the access rules are not met" : $"{string.Join("; ", reasons)} ({combine} must pass)";
+        }
+
+        private static string DescribeMissing(string kind, EndpointAccessRule rule, IReadOnlySet<string> held) =>
+            rule.RequiresAll
+                ? $"missing {kind}(s): {string.Join(", ", rule.Values.Where(v => !held.Contains(v)))}"
+                : $"needs one {kind} of: {string.Join(", ", rule.Values)}";
+
         // ---- claim readers ----
 
         public static string GetUserId(ClaimsPrincipal principal)

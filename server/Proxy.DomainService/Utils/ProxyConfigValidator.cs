@@ -41,6 +41,15 @@ namespace Proxy.DomainService.Utils
         /// </summary>
         public List<ProxyRouteConfig> Routes { get; set; } = new();
 
+        /// <summary>
+        /// The proxy-wide timeout / retry / breaker settings, or <c>null</c> when the tenant configured
+        /// none — which is the same as never having configured them.
+        /// </summary>
+        public ProxyResilienceConfig? Resilience { get; set; }
+
+        /// <summary>The tenant's own gateway calls-per-minute limit, or <c>null</c> for the default (P-3).</summary>
+        public int? RequestsPerMinute { get; set; }
+
         /// <summary>Normalized response-body treatment. Defaults to <see cref="ProxyResponseMode.All"/>.</summary>
         public ProxyResponseMode ResponseMode { get; set; } = ProxyResponseMode.All;
 
@@ -80,7 +89,9 @@ namespace Proxy.DomainService.Utils
             string? responseMode = null,
             IEnumerable<string>? responseInclude = null,
             IEnumerable<ProxyRouteConfigInputDto>? routes = null,
-            ProxyAccessInputDto? access = null)
+            ProxyAccessInputDto? access = null,
+            ProxyResilienceInputDto? resilience = null,
+            int? requestsPerMinute = null)
         {
             var result = new ProxyConfigValidationResult();
 
@@ -94,8 +105,31 @@ namespace Proxy.DomainService.Utils
             NormalizeResponseFilter(responseMode, responseInclude, result);
             result.Routes = NormalizeRoutes(routes, result);
             result.Access = NormalizeAccess(access, result);
+            result.Resilience = NormalizeResilience(resilience, "this proxy", "resilience", result);
+            result.RequestsPerMinute = NormalizeRequestsPerMinute(requestsPerMinute, result);
 
             return result;
+        }
+
+        /// <summary>The highest gateway calls-per-minute limit a tenant may set; the same ceiling as a function's (FN-19).</summary>
+        public const int MaxRequestsPerMinute = 100_000;
+
+        /// <summary>
+        /// <c>null</c> keeps the default for the proxy's access. Zero or a negative number is refused rather
+        /// than read as "no limit": a Public proxy must not be able to switch its limit off by accident.
+        /// </summary>
+        private static int? NormalizeRequestsPerMinute(int? value, ProxyConfigValidationResult result)
+        {
+            if (value is null) return null;
+
+            if (value < 1 || value > MaxRequestsPerMinute)
+            {
+                result.Errors["requestsPerMinute"] =
+                    $"The rate limit must be a whole number from 1 to {MaxRequestsPerMinute} calls per minute.";
+                return null;
+            }
+
+            return value;
         }
 
         internal const int MaxAccessValues = 50;
@@ -175,7 +209,7 @@ namespace Proxy.DomainService.Utils
 
                 if (value.Length > MaxAccessValueLength)
                 {
-                    result.Errors[$"access.{label}"] = $"Each {label} entry must be at most {MaxAccessValueLength} characters.";
+                    result.Errors[$"access.{label}"] = $"Each {label} entry is too long.";
                     continue;
                 }
 
@@ -190,7 +224,7 @@ namespace Proxy.DomainService.Utils
 
             if (normalized.Values.Count > MaxAccessValues)
             {
-                result.Errors[$"access.{label}"] = $"At most {MaxAccessValues} {label} entries.";
+                result.Errors[$"access.{label}"] = $"Too many {label} entries.";
             }
 
             return normalized;
@@ -209,6 +243,124 @@ namespace Proxy.DomainService.Utils
         /// proxy-wide default, which is the case this whole layer exists to serve.
         /// </para>
         /// </summary>
+        /// <summary>Bounds for the resilience settings. Ceilings, not defaults — nothing here is filled in.</summary>
+        internal const int MaxTimeoutSeconds = 30;
+        internal const int MaxRetryAttempts = 3;
+        internal const int MaxRetryDelaySeconds = 30;
+        internal const int MaxBreakerThreshold = 100;
+        internal const int MaxBreakerOpenSeconds = 600;
+
+        /// <summary>
+        /// Turns the submitted resilience settings into a stored config, or <c>null</c> when nothing was
+        /// asked for.
+        /// <para>
+        /// Nothing is defaulted. An absent member stays absent, and an object that asks for nothing comes
+        /// back as <c>null</c> so it is stored exactly like "never configured" — which keeps a route that
+        /// was saved through a form it did not fill in behaving as it always did.
+        /// </para>
+        /// <para>
+        /// The ceiling on the timeout is not a product opinion. The gateway holds a connection and a
+        /// request thread for the whole forward, so an unbounded value is a denial of service against this
+        /// host; the tenant picks any value up to it.
+        /// </para>
+        /// </summary>
+        internal static ProxyResilienceConfig? NormalizeResilience(
+            ProxyResilienceInputDto? input, string where, string field, ProxyConfigValidationResult result)
+        {
+            if (input is null) return null;
+
+            var config = new ProxyResilienceConfig();
+
+            if (input.TimeoutSeconds is { } timeout)
+            {
+                if (timeout < 1 || timeout > MaxTimeoutSeconds)
+                {
+                    result.Errors[field] = $"The timeout for {where} must be between 1 and {MaxTimeoutSeconds} seconds.";
+                    return null;
+                }
+
+                config.TimeoutSeconds = timeout;
+            }
+
+            if (input.Retry is { } retry)
+            {
+                var attempts = retry.Attempts ?? 1;
+                if (attempts < 1 || attempts > MaxRetryAttempts)
+                {
+                    result.Errors[field] = $"Retry attempts for {where} must be between 1 and {MaxRetryAttempts}.";
+                    return null;
+                }
+
+                // The rule this whole setting exists to enforce. The platform cannot tell whether an
+                // upstream tolerates the same request twice, and guessing wrong bills someone twice, so
+                // more than one attempt requires the tenant to say so in as many words.
+                if (attempts > 1 && retry.Idempotent != true)
+                {
+                    result.Errors[field] =
+                        $"Retries for {where} need 'idempotent' set to true — confirmation that sending this "
+                        + "request more than once is safe. GET and HEAD usually are; POST usually is not.";
+                    return null;
+                }
+
+                var backoff = ProxyBackoffKind.None;
+                if (!string.IsNullOrWhiteSpace(retry.Backoff)
+                    && !Enum.TryParse(retry.Backoff.Trim(), ignoreCase: true, out backoff))
+                {
+                    result.Errors[field] = $"The retry backoff for {where} must be 'None', 'Fixed' or 'Exponential'.";
+                    return null;
+                }
+
+                var delay = retry.InitialDelaySeconds ?? 1;
+                if (delay < 1 || delay > MaxRetryDelaySeconds)
+                {
+                    result.Errors[field] =
+                        $"The retry delay for {where} must be at least one second and not too long.";
+                    return null;
+                }
+
+                // One attempt is no retry at all, so it is stored as "not configured" rather than as a
+                // policy that happens to do nothing.
+                if (attempts > 1)
+                {
+                    config.Retry = new ProxyRetryConfig
+                    {
+                        Attempts = attempts,
+                        Backoff = backoff,
+                        InitialDelaySeconds = delay,
+                        Idempotent = true,
+                    };
+                }
+            }
+
+            if (input.Breaker is { } breaker)
+            {
+                var threshold = breaker.FailureThreshold ?? 0;
+                var openSeconds = breaker.OpenSeconds ?? 0;
+
+                if (threshold < 1 || threshold > MaxBreakerThreshold)
+                {
+                    result.Errors[field] =
+                        $"The breaker failure threshold for {where} must be at least one and not too high.";
+                    return null;
+                }
+
+                if (openSeconds < 1 || openSeconds > MaxBreakerOpenSeconds)
+                {
+                    result.Errors[field] =
+                        $"The breaker open duration for {where} must be at least one second and not too long.";
+                    return null;
+                }
+
+                config.Breaker = new ProxyBreakerConfig
+                {
+                    FailureThreshold = threshold,
+                    OpenSeconds = openSeconds,
+                };
+            }
+
+            return config.IsEmpty ? null : config;
+        }
+
         private static List<ProxyRouteConfig> NormalizeRoutes(
             IEnumerable<ProxyRouteConfigInputDto>? routes, ProxyConfigValidationResult result)
         {
@@ -304,12 +456,14 @@ namespace Proxy.DomainService.Utils
                     BodyMerge = routeBodyMerge,
                     ResponseMode = routeResponseMode,
                     ResponseInclude = routeResponseInclude,
+                    Resilience = NormalizeResilience(
+                        entry.Resilience, $"route '{method.Wire()} /{path}'", "routes", result),
                 });
             }
 
             if (normalized.Count > ProxyRoutePath.MaxRoutes)
             {
-                result.Errors["routes"] = $"At most {ProxyRoutePath.MaxRoutes} routes.";
+                result.Errors["routes"] = "Too many routes.";
             }
 
             return normalized;
@@ -362,7 +516,7 @@ namespace Proxy.DomainService.Utils
 
             if (normalized.Count > ProxyResponsePath.MaxPaths)
             {
-                result.Errors["routes"] = $"At most {ProxyResponsePath.MaxPaths} response fields on a route.";
+                result.Errors["routes"] = "Too many response fields on a route.";
                 return normalized;
             }
 
@@ -415,7 +569,7 @@ namespace Proxy.DomainService.Utils
 
             if (normalized.Count > ProxyResponsePath.MaxPaths)
             {
-                result.Errors["responseInclude"] = $"At most {ProxyResponsePath.MaxPaths} response fields.";
+                result.Errors["responseInclude"] = "Too many response fields.";
             }
             else
             {
@@ -442,7 +596,7 @@ namespace Proxy.DomainService.Utils
             result.Name = trimmed;
             if (trimmed.Length == 0 || trimmed.Length > MaxNameLength)
             {
-                result.Errors["name"] = $"Name is required and must be {MaxNameLength} characters or fewer.";
+                result.Errors["name"] = "Name is required and must not be too long.";
                 return;
             }
 
@@ -460,7 +614,15 @@ namespace Proxy.DomainService.Utils
 
             if (trimmed.Length > MaxUpstreamLength)
             {
-                result.Errors["upstream"] = $"Upstream URL must be {MaxUpstreamLength} characters or fewer.";
+                result.Errors["upstream"] = "Upstream URL is too long.";
+                return;
+            }
+
+            // PS-11: a password in the URL would show in the masked view and in every log row.
+            if (Uri.TryCreate(trimmed, UriKind.Absolute, out var parsed) && !string.IsNullOrEmpty(parsed.UserInfo))
+            {
+                result.Errors["upstream"] =
+                    "Do not put a user name or password in the URL. Send it as a header with a {{$VAR}} secret.";
                 return;
             }
 
@@ -476,11 +638,15 @@ namespace Proxy.DomainService.Utils
             }
         }
 
-        /// <summary><c>true</c> when <paramref name="value"/> is an absolute <c>https://</c> URL with a host.</summary>
+        /// <summary>
+        /// <c>true</c> when <paramref name="value"/> is an absolute <c>https://</c> URL with a host and no user
+        /// info (PS-11: a credential in the URL is never accepted, on the proxy or on a per-method override).
+        /// </summary>
         internal static bool IsAbsoluteHttps(string value) =>
             Uri.TryCreate(value, UriKind.Absolute, out var uri)
             && uri.Scheme == Uri.UriSchemeHttps
-            && !string.IsNullOrEmpty(uri.Host);
+            && !string.IsNullOrEmpty(uri.Host)
+            && string.IsNullOrEmpty(uri.UserInfo);
 
         /// <summary>
         /// Normalizes the per-method override layer (SPEC D-feature &sect;3.1). Each entry must target a method
@@ -527,7 +693,7 @@ namespace Proxy.DomainService.Utils
                     result.Errors["methodConfigs"] = mcGuardReason;
                 }
 
-                var overrideHeaders = entry.Headers is null ? null : NormalizePairs(entry.Headers, "methodConfigs", result);
+                var overrideHeaders = entry.Headers is null ? null : NormalizePairs(entry.Headers, "methodConfigs", result, areHeaders: true);
                 var overrideQuery = entry.Query is null ? null : NormalizePairs(entry.Query, "methodConfigs", result);
                 if (overrideHeaders is { Count: 0 })
                 {
@@ -592,8 +758,10 @@ namespace Proxy.DomainService.Utils
         }
 
         private static List<ProxyKeyValue> NormalizePairs(
-            IEnumerable<ProxyKeyValueInputDto>? pairs, string field, ProxyConfigValidationResult result)
+            IEnumerable<ProxyKeyValueInputDto>? pairs, string field, ProxyConfigValidationResult result,
+            bool areHeaders = false)
         {
+            areHeaders |= field == "headers";
             var normalized = new List<ProxyKeyValue>();
             var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             // Body-merge keys are JSON object keys: case-sensitive, so dedupe them ordinally, unlike headers.
@@ -607,9 +775,15 @@ namespace Proxy.DomainService.Utils
                 if (string.IsNullOrWhiteSpace(key) || key.Length > MaxKeyLength || key.Trim().Length != key.Length)
                 {
                     result.Errors[field] =
-                        $"Each {field} key is required, must be {MaxKeyLength} characters or fewer, and must not have leading or trailing whitespace.";
+                        $"Each {field} key is required, must not be too long, and must not have leading or trailing whitespace.";
                 }
-                else if (field == "headers" && !seenKeys.Add(key.Trim()))
+                else if (areHeaders && ProxyReservedHeaders.IsReserved(key))
+                {
+                    // PS-10: these steer where and how the request travels; Blocks sets them, the config may not.
+                    result.Errors[field] =
+                        $"The header \"{key.Trim()}\" cannot be set by a proxy. Not allowed: {ProxyReservedHeaders.Description}.";
+                }
+                else if (areHeaders && !seenKeys.Add(key.Trim()))
                 {
                     // A repeated header key would otherwise be sent as multiple header lines upstream.
                     result.Errors[field] = "Each header key must be unique (case-insensitive).";
@@ -621,7 +795,7 @@ namespace Proxy.DomainService.Utils
 
                 if (value.Length > MaxValueLength)
                 {
-                    result.Errors[field] = $"Each {field} value must be {MaxValueLength} characters or fewer.";
+                    result.Errors[field] = $"Each {field} value is too long.";
                 }
 
                 normalized.Add(new ProxyKeyValue

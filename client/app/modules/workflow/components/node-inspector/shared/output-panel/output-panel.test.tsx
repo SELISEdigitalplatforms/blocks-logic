@@ -52,6 +52,38 @@ describe("OutputPanel", () => {
     fireEvent.click(screen.getByText("name:"));
   });
 
+  it("marks pinned output as mock data and removes it back to the run output", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let store: any;
+    renderWithProviders(<OutputPanel />, {
+      seedWorkflow: (s) => {
+        store = s;
+        seedSelected({ pinData: [{ name: "Ada" }] })(s);
+        s.setState({
+          executedItems: [{ nodeId: "n1", itemIndex: 0, branch: "default", data: { Output: { city: "Paris" } } }],
+        });
+      },
+    });
+    expect(screen.getByText("Mock data")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Edit mock data" })).toBeTruthy();
+    expect(screen.getByText("name:")).toBeTruthy();
+    expect(screen.queryByText("city:")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove mock data" }));
+
+    expect(store.getState().nodesMap.n1.pinData).toBeNull();
+    expect(screen.queryByText("Mock data")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove mock data" })).toBeNull();
+    expect(screen.getByText("Set mock data")).toBeTruthy();
+    expect(screen.getByText("city:")).toBeTruthy();
+  });
+
+  it("shows no mock-data indicator or remove button without pinned data", () => {
+    renderWithProviders(<OutputPanel />, { seedWorkflow: seedSelected({ pinData: null }) });
+    expect(screen.queryByText("Mock data")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove mock data" })).toBeNull();
+  });
+
   it("shows the no-schema message when there is no output", () => {
     renderWithProviders(<OutputPanel />, { seedWorkflow: seedSelected() });
     expect(
@@ -173,5 +205,72 @@ describe("OutputPanel", () => {
     // header still shows, but the schema field is not rendered when collapsed
     expect(screen.getByText("Output")).toBeTruthy();
     expect(screen.queryByText("name:")).toBeNull();
+  });
+
+  describe("failed run error (WF-40)", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const run = (extra: Record<string, unknown>): any => ({
+      id: `ne-${String(extra.runIndex)}`,
+      nodeId: "n1",
+      nodeName: "n1",
+      runIndex: 1,
+      status: 4,
+      error: null,
+      ...extra,
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const seedWithRuns = (runs: unknown[]) => (store: any) => {
+      seedSelected()(store);
+      store.setState({ executedNodes: runs });
+    };
+
+    it("shows the error of the node's failed run", () => {
+      renderWithProviders(<OutputPanel />, {
+        seedWorkflow: seedWithRuns([run({ status: 5, error: "Field 'amount' is missing." })]),
+      });
+      expect(screen.getByRole("alert").textContent).toBe("Field 'amount' is missing.");
+    });
+
+    it("shows nothing when the latest run succeeded", () => {
+      renderWithProviders(<OutputPanel />, {
+        seedWorkflow: seedWithRuns([
+          run({ runIndex: 1, status: 5, error: "old failure" }),
+          run({ runIndex: 2, status: 4 }),
+        ]),
+      });
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("ignores another node's failure", () => {
+      renderWithProviders(<OutputPanel />, {
+        seedWorkflow: seedWithRuns([run({ nodeId: "other", status: 5, error: "boom" })]),
+      });
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("cuts an old stored stack trace and its exception prefix", () => {
+      renderWithProviders(<OutputPanel />, {
+        seedWorkflow: seedWithRuns([
+          run({ status: 5, error: "System.Exception: Bad input.\n   at Workflow.Engine.Run() in /src/Engine.cs:line 12" }),
+        ]),
+      });
+      const text = screen.getByRole("alert").textContent ?? "";
+      expect(text).toBe("Bad input.");
+      expect(text).not.toContain("Engine.cs");
+    });
+
+    it("falls back to a generic text when no error was saved", () => {
+      renderWithProviders(<OutputPanel />, { seedWorkflow: seedWithRuns([run({ status: 5, error: null })]) });
+      expect(screen.getByRole("alert").textContent).toBe("This step failed.");
+    });
+
+    it("renders error text as text, not HTML", () => {
+      renderWithProviders(<OutputPanel />, {
+        seedWorkflow: seedWithRuns([run({ status: 5, error: "<img src=x onerror=alert(1)>" })]),
+      });
+      const alert = screen.getByRole("alert");
+      expect(alert.querySelector("img")).toBeNull();
+      expect(alert.textContent).toBe("<img src=x onerror=alert(1)>");
+    });
   });
 });

@@ -26,13 +26,25 @@ namespace Api.Controllers
             _logger = logger;
         }
 
+        // Shape only, never the payload: ResponseValue / DenormalizedPayload can carry a secret
+        // (SendSecretNotification is the secrets pipeline). User rule 2026-10-08.
+        private void LogReceived(NotifyRequest notifyRequest) =>
+            _logger.LogInformation(
+                "Received notification request: configuration {ConfigurationName}, {UserCount} user id(s), {RoleCount} role(s), {FilterCount} filter(s)",
+                notifyRequest?.ConfigurationName, notifyRequest?.UserIds?.Count ?? 0, notifyRequest?.Roles?.Count ?? 0,
+                notifyRequest?.SubscriptionFilters?.Count ?? 0);
+
+        private void LogHandled(BaseResponse response) =>
+            _logger.LogInformation("Notification handled: success {IsSuccess}, {ErrorCount} error(s)",
+                response?.IsSuccess, response?.Errors?.Count ?? 0);
+
         /// <summary><c>POST</c> — delivers a notification through the configured channels.</summary>
         [HttpPost]
         public async Task<BaseResponse> Notify([FromBody] NotifyRequest notifyRequest)
         {
-            _logger.LogInformation("Received notification request: {@NotifyRequest}", notifyRequest);
+            LogReceived(notifyRequest);
             var response= await _notificationService.NotifyAsync(notifyRequest);
-            _logger.LogInformation("Notification response: {@Response}", response);
+            LogHandled(response);
             return response;
         }
 
@@ -44,11 +56,11 @@ namespace Api.Controllers
         [HttpPost]
         public async Task<BaseResponse> SendSecretNotification([FromBody] NotifyRequest notifyRequest)
         {
-            _logger.LogInformation("Received notification request: {@NotifyRequest}", notifyRequest);
+            LogReceived(notifyRequest);
 
             var response = await _notificationService.NotifyAsync(notifyRequest);
 
-            _logger.LogInformation("Notification response: {@Response}", response);
+            LogHandled(response);
             return response;
         }
 

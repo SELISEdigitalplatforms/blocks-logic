@@ -84,10 +84,15 @@ namespace Workflow.DomainService.Services
                 }
             });
 
+            // The same configuration as execution events: it exists wherever workflows run, and the console
+            // already listens to its event (`WorkflowNotification`). A `workflow-import` configuration was
+            // never created anywhere, so the import's result never reached the page (2026-10-08). The
+            // page matches the result by correlationId; execution handlers ignore it (no Information).
+            var configurationName = _configuration["WORKFLOW_NOTIFICATION_CONFIGURATION_NAME"];
             return SendNotifyAsync(
                 userIds,
                 denormalizedPayload,
-                LogicConstants.WorkflowImportNotificationConfigurationName,
+                string.IsNullOrWhiteSpace(configurationName) ? LogicConstants.WorkflowImportNotificationConfigurationName : configurationName,
                 correlationId,
                 isSuccess.ToString());
         }
@@ -145,7 +150,8 @@ namespace Workflow.DomainService.Services
                     }
                     catch (JsonException ex)
                     {
-                        _logger.LogWarning(ex, "Failed to deserialize notification response. Raw response: {RawResponse}", rawResponse);
+                        // Length only: the body is the notifier's echo and is not ours to log (user rule 2026-10-08).
+                        _logger.LogWarning("Failed to deserialize notification response ({ErrorKind}); body {BodyLength} chars.", ex.GetType().Name, rawResponse.Length);
                     }
                 }
 

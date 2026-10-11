@@ -196,8 +196,7 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
       const trail = pathTo(tree, node.id) ?? [];
       const ancestors = trail.slice(0, -1);
       const inherited = ancestors.some((ancestor) => current.has(ancestor.id));
-      const on =
-        inherited || current.has(node.id) || hasCheckedDescendant(node, current);
+      const on = inherited || current.has(node.id) || hasCheckedDescendant(node, current);
 
       if (on) {
         // Expand any checked ancestor into its direct children so unchecking this node does not
@@ -224,9 +223,7 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
   };
 
   const renameNode = (id: string, key: string) => {
-    setTree((current) =>
-      mapTree(current, (node) => (node.id === id ? { ...node, key } : node)),
-    );
+    setTree((current) => mapTree(current, (node) => (node.id === id ? { ...node, key } : node)));
     resyncSkeleton();
   };
 
@@ -359,8 +356,7 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
 
   // ---- skeleton editor ----------------------------------------------------
 
-  const skeletonText =
-    skeletonDraft ?? JSON.stringify(treeToSkeleton(tree, checked), null, 2);
+  const skeletonText = skeletonDraft ?? JSON.stringify(treeToSkeleton(tree, checked), null, 2);
 
   const onSkeletonChange = (value: string) => {
     touchedRef.current = true;
@@ -475,9 +471,7 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
                 {summary}
               </span>
             </div>
-            {sampleNote ? (
-              <p className="text-xs text-muted-foreground">{sampleNote}</p>
-            ) : null}
+            {sampleNote ? <p className="text-xs text-muted-foreground">{sampleNote}</p> : null}
 
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="flex max-h-[420px] flex-col overflow-y-auto rounded-lg border bg-card p-3">

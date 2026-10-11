@@ -223,7 +223,10 @@ describe("response field filtering helpers", () => {
   it("mergeSchemaIntoTree keeps manual nodes and checks, adds discovered nodes as checked", () => {
     const { tree, checked } = pathsToTree(["data.id"]);
     const beforeCount = checked.size;
-    const { tree: schema } = deriveResponseSchema({ data: { id: 1, name: "x" }, meta: { page: 1 } });
+    const { tree: schema } = deriveResponseSchema({
+      data: { id: 1, name: "x" },
+      meta: { page: 1 },
+    });
 
     const merged = mergeSchemaIntoTree(tree, checked, schema);
     const paths = treeToPaths(merged.tree, merged.checked).sort();
@@ -282,7 +285,7 @@ describe("buildProxyCurl", () => {
     expect(buildProxyCurl(base, "https://dev-logic.blocksdevelopers.com")).toBe(
       [
         "curl -X GET 'https://dev-logic.blocksdevelopers.com/api/proxy/gateway/search-tickets' \\",
-        "  -H 'x-blocks-key: <your tenant id>' \\",
+        "  -H 'x-blocks-key: <your x-blocks-key>' \\",
         "  -H 'Authorization: Bearer <token issued for that tenant>'",
       ].join("\n"),
     );

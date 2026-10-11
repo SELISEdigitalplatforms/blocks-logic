@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Blocks.Genesis;
 using Workflow.DomainService.Dtos;
 using Workflow.DomainService.Services;
+using Workflow.DomainService.Logging;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 
@@ -21,18 +22,21 @@ namespace Utilities.Api.Controllers
         private readonly IWorkflowVersionService _workflowVersionService;
         private readonly IWorkflowExecutionService _workflowExecutionService;
         private readonly IWorkflowImportService _workflowImportService;
+        private readonly IExecutionLogService _executionLogService;
 
-        /// <summary>Takes the workflow, version, execution and import services.</summary>
+        /// <summary>Takes the workflow, version, execution, import and execution log services.</summary>
         public WorkflowController(
             IWorkflowService workflowService,
             IWorkflowVersionService workflowVersionService,
             IWorkflowExecutionService workflowExecutionService,
-            IWorkflowImportService workflowImportService)
+            IWorkflowImportService workflowImportService,
+            IExecutionLogService executionLogService)
         {
             _workflowService = workflowService;
             _workflowVersionService = workflowVersionService;
             _workflowExecutionService = workflowExecutionService;
             _workflowImportService = workflowImportService;
+            _executionLogService = executionLogService;
         }
 
         /// <summary><c>POST</c> — the tenant's workflows, filtered and paged by the request body.</summary>
@@ -223,6 +227,10 @@ namespace Utilities.Api.Controllers
             {
                 return StatusCode(401, new { message = "Unauthorized" });
             }
+            catch (InvalidWebhookBodyException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
 
         }
 
@@ -248,6 +256,10 @@ namespace Utilities.Api.Controllers
             catch (UnauthorizedAccessException)
             {
                 return StatusCode(401, new { message = "Unauthorized" });
+            }
+            catch (InvalidWebhookBodyException ex)
+            {
+                return BadRequest(new { message = ex.Message });
             }
 
         }
@@ -281,6 +293,10 @@ namespace Utilities.Api.Controllers
             {
                 return StatusCode(401, new { message = "Unauthorized" });
             }
+            catch (InvalidWebhookBodyException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
         /// <summary>
@@ -311,6 +327,10 @@ namespace Utilities.Api.Controllers
             catch (UnauthorizedAccessException)
             {
                 return StatusCode(401, new { message = "Unauthorized" });
+            }
+            catch (InvalidWebhookBodyException ex)
+            {
+                return BadRequest(new { message = ex.Message });
             }
         }
 
@@ -358,6 +378,29 @@ namespace Utilities.Api.Controllers
             var tenantId = GetTenantId();
             var execution = await _workflowExecutionService.GetExecutionByIdAsync(tenantId, dto);
             return Ok(execution);
+        }
+
+        /// <summary>
+        /// <c>POST</c> — continues a failed run from where it stopped. Steps that completed are not run again,
+        /// and a function step does not call again the items that already succeeded. 409 when it cannot be resumed.
+        /// </summary>
+        [Authorize]
+        [HttpPost]
+        public async Task<IActionResult> ResumeExecution([FromBody] WorkflowExecutionGetRequestDto dto)
+        {
+            var tenantId = GetTenantId();
+            var result = await _workflowExecutionService.ResumeExecutionAsync(tenantId, dto);
+            return result.IsSuccess ? Ok(result) : Conflict(result);
+        }
+
+        /// <summary><c>GET</c> — the stage log lines of one execution (stages and counts only, never data values),
+        /// with whether they are available, expired or still arriving.</summary>
+        [Authorize]
+        [HttpGet]
+        public async Task<IActionResult> GetExecutionLogs([FromQuery] WorkflowExecutionLogsGetRequestDto dto)
+        {
+            var tenantId = GetTenantId();
+            return Ok(await _executionLogService.GetAsync(tenantId, dto, HttpContext?.RequestAborted ?? default));
         }
 
         /// <summary><c>GET</c> — the most recent successful execution, used to prefill node inputs from real data.</summary>

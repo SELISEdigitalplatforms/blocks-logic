@@ -31,7 +31,10 @@ export const useIamPermissions = () =>
     queryFn: async (): Promise<AccessOption[]> => {
       const res = await iamService.getPermissions({});
       return (res?.data ?? [])
-        .filter((permission) => typeof permission?.resource === "string" && permission.resource.length > 0)
+        .filter(
+          (permission) =>
+            typeof permission?.resource === "string" && permission.resource.length > 0,
+        )
         .map((permission) => ({
           label: permission.name || permission.resource,
           value: permission.resource,

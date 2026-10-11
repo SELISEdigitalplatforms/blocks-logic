@@ -16,7 +16,7 @@ export const Proxies = () => {
   const { queryParams, setQueryParams } = useProxyFilterQueryParams();
 
   const { data, isLoading, isFetching } = useGetProxies({
-    searchKey: queryParams.search,
+    search: queryParams.search,
     isActive: queryParams.isActive === "all" ? undefined : queryParams.isActive === "1",
     pageNumber: queryParams.page,
     pageSize: queryParams.pageSize,
@@ -39,8 +39,8 @@ export const Proxies = () => {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Proxy</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Your client calls Blocks, Blocks adds the key and calls the third party. The vendor URL
-          and secret never reach the browser.
+          Your client calls Blocks, Blocks adds the key and calls the third party. Your client never
+          sees the vendor URL or the key. Store keys as secrets.
         </p>
       </div>
       <Card>

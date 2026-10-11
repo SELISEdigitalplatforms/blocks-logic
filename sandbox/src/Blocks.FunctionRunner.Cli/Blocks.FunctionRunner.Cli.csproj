@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>fnctl</AssemblyName>
+    <RootNamespace>Blocks.FunctionRunner.Cli</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="StackExchange.Redis" />
+    <PackageReference Include="Docker.DotNet" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Blocks.FunctionRunner.Contracts/Blocks.FunctionRunner.Contracts.csproj" />
+    <!-- fnctl is this runner's operator tool, so it drives the runner's own maintenance code
+         rather than reimplementing it — a second implementation of "what is safe to prune"
+         is exactly the kind of thing that drifts. -->
+    <ProjectReference Include="../Blocks.FunctionRunner/Blocks.FunctionRunner.csproj" />
+  </ItemGroup>
+</Project>

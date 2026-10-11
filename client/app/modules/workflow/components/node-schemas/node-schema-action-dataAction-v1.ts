@@ -29,7 +29,6 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
           description: React.createElement(
             "span",
             null,
-            "Guided query fields are being phased out and will be removed soon. Please use ",
             React.createElement(
               "code",
               {
@@ -38,7 +37,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
               },
               "Raw Query",
             ),
-            " for new data action configurations.",
+            " is recommended for new nodes.",
           ),
         }),
       },
@@ -57,6 +56,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
         key: "authenticationType",
         required: false,
         options: [
+          { label: "None", value: "" },
           { label: "Client Credential", value: "clientCredential" },
           { label: "Blocks Authentication", value: "blocksAuthentication" },
           // { label: "Trigger Node Cookie", value: "triggerNodeCookie" },
@@ -102,7 +102,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
         id: "rawQuery",
         type: "graphql-code-editor",
         label: "Raw Query",
-        info: "Enter the raw GraphQL query to send to the Data Gateway API",
+        info: "Enter the raw GraphQL query to send to the Data Gateway API. {{$json.field}} reads a field of the current item (same as {{$json.output.field}}); values inside \"…\" strings are escaped automatically.",
         key: "rawQuery",
         dependsOn: {
           key: "rawQueryMode",

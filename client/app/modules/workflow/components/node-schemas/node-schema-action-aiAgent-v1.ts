@@ -14,7 +14,7 @@ export const NodeSchemaActionAiAgentV1: NodeSchemaDefinition = {
         id: "agent",
         type: "select",
         label: "Agent",
-        info: "The HTTP method that will trigger this webhook",
+        info: "The AI agent this step sends the message to.",
         key: "agent",
         required: true,
         options: (_data, config) => {

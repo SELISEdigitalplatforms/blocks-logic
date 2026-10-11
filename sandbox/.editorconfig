@@ -1,0 +1,14 @@
+# The runner's delta on top of the repository's .editorconfig.
+#
+# Deliberately NOT `root = true`: everything the rest of blocks-logic is written to — charset,
+# indentation, the naming rules, the analyzer severities — cascades down from /.editorconfig and
+# is not repeated here. This file holds only what is specific to this subtree, so the two can
+# never drift apart the way a copied-and-edited duplicate does.
+
+[*.cs]
+# The runner is written block-scoped throughout, and its projects build with
+# TreatWarningsAsErrors (see src/Directory.Build.props), so this makes a file-scoped declaration
+# fail the build here rather than drift in unnoticed. It is scoped to this directory on purpose:
+# nine files elsewhere in the repository are file-scoped, and flagging them is a separate
+# decision from how the runner is written.
+csharp_style_namespace_declarations = block_scoped:warning

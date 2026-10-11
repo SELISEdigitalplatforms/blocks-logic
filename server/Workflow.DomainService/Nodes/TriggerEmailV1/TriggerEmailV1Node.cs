@@ -1,3 +1,4 @@
+using Workflow.DomainService.Logging;
 using System.Text.Json;
 using MongoDB.Bson;
 using System.Diagnostics.CodeAnalysis;
@@ -18,6 +19,7 @@ namespace Workflow.DomainService.Nodes.TriggerEmailV1
             try
             {
                 var inputItems = context.WorkflowContext["Input"].AsBsonArray;
+                context.Log.Info(ExecutionLogStages.TriggerRead, "Read {Count} item(s) from the trigger event.", inputItems.Count);
                 var outputItems = inputItems.Select(item => new NodeOutputItem
                 {
                     Data = new NodeOutputItemData

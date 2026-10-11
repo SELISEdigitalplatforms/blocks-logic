@@ -58,7 +58,7 @@ describe("ProxyService HTTP wiring", () => {
       totalCount: 1,
     });
 
-    const page = await proxyService.getAll({ searchKey: "stri" });
+    const page = await proxyService.getAll({ search: "stri" });
 
     expect(logicService.get).toHaveBeenCalledWith(
       "/api/Proxies?search=stri&pageSize=200&pageNumber=0",
@@ -111,6 +111,8 @@ describe("ProxyService HTTP wiring", () => {
         permissions: { mode: "any", values: [] },
         organizationId: "",
       },
+      resilience: null,
+      requestsPerMinute: null,
       enabled: true,
     });
     expect(res).toMatchObject({ isSuccess: true, itemId: "p9" });
@@ -161,9 +163,43 @@ describe("ProxyService HTTP wiring", () => {
     expect(logicService.delete).toHaveBeenCalledWith("/api/Proxies/p1");
   });
 
-  it("PATCHes only the enabled flag, with the id in the path rather than the body", async () => {
+  it("PATCHes the enabled flag and the loaded version, with the id in the path", async () => {
     await proxyService.toggle({ id: "p1", enabled: false });
-    expect(logicService.patch).toHaveBeenCalledWith("/api/Proxies/p1", { enabled: false });
+    expect(logicService.patch).toHaveBeenCalledWith("/api/Proxies/p1", {
+      enabled: false,
+      expectedVersion: null,
+    });
+
+    await proxyService.toggle({ id: "p1", enabled: true, expectedVersion: 4 });
+    expect(logicService.patch).toHaveBeenLastCalledWith("/api/Proxies/p1", {
+      enabled: true,
+      expectedVersion: 4,
+    });
+  });
+
+  it("passes a 409 version conflict through with the server's message (PX-16)", async () => {
+    logicService.put.mockRejectedValueOnce(
+      new FakeHttpError(409, {
+        isSuccess: false,
+        errors: null,
+        code: "PROXY_VERSION_CONFLICT",
+        message: "Someone else changed this proxy. Reload to see their changes, then try again.",
+      }),
+    );
+    const res = await proxyService.update({
+      id: "p1",
+      expectedVersion: 2,
+      values: { name: "S", upstreamUrl: "https://api.stripe.com", methods: ["GET"], headers: [], query: [] },
+    });
+    expect(logicService.put).toHaveBeenCalledWith(
+      "/api/Proxies/p1",
+      expect.objectContaining({ expectedVersion: 2 }),
+    );
+    expect(res).toMatchObject({
+      isSuccess: false,
+      code: "PROXY_VERSION_CONFLICT",
+      errors: "Someone else changed this proxy. Reload to see their changes, then try again.",
+    });
   });
 
   it("maps ProxyLogFilter to a statusClass query param on the executions sub-resource", async () => {
@@ -219,5 +255,66 @@ describe("ProxyService HTTP wiring", () => {
         },
       }),
     ).resolves.toMatchObject({ ok: false, status: 400 });
+  });
+});
+
+describe("ProxyService OpenAPI preview", () => {
+  it("posts the document and maps what the server says it would produce", async () => {
+    logicService.post.mockResolvedValueOnce({
+      baseUrl: "https://api.vendor.com/v1",
+      operations: [
+        {
+          operationId: "getOrder",
+          method: "get",
+          path: "/orders/{id}",
+          queryParameters: ["expand"],
+          securityHeaders: ["X-Api-Key"],
+          alreadyExists: false,
+        },
+        // A verb the gateway cannot forward. The server reports the skip as a warning; listing it as
+        // an unimportable row would make that warning read like a bug.
+        { operationId: "traced", method: "TRACE", path: "/health" },
+      ],
+      warnings: ["TRACE /health is not a method this gateway can forward."],
+    });
+
+    const preview = await proxyService.previewOpenApi({ specJson: "{}", proxyId: "p1" });
+
+    expect(logicService.post).toHaveBeenCalledWith("/api/Proxies/openapi/preview", {
+      specJson: "{}",
+      specUrl: null,
+      proxyId: "p1",
+    });
+    expect(preview.operations).toHaveLength(1);
+    expect(preview.operations[0]).toMatchObject({
+      method: "GET",
+      path: "orders/{id}",
+      queryParameters: ["expand"],
+      securityHeaders: ["X-Api-Key"],
+    });
+    expect(preview.warnings).toHaveLength(1);
+  });
+
+  it("a refused document comes back as reasons rather than as a thrown error", async () => {
+    // These sentences are the answer to "why did my paste produce nothing", so the dialog needs them
+    // in hand — not an exception to catch somewhere above it.
+    logicService.post.mockRejectedValueOnce(
+      new FakeHttpError(400, {
+        code: "PROXY_VALIDATION",
+        errors: ["That is valid JSON but not an OpenAPI document."],
+      }),
+    );
+
+    const preview = await proxyService.previewOpenApi({ specJson: "{}" });
+
+    expect(preview.errors).toEqual(["That is valid JSON but not an OpenAPI document."]);
+    expect(preview.operations).toEqual([]);
+  });
+
+  it("says something true even when the failure carries no reasons", async () => {
+    logicService.post.mockRejectedValueOnce(new Error("socket hang up"));
+
+    expect((await proxyService.previewOpenApi({ specUrl: "https://x/openapi.json" })).errors)
+      .toEqual(["The specification could not be read."]);
   });
 });

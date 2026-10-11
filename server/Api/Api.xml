@@ -65,6 +65,229 @@
         <member name="M:BlocksTemplate.Api.Controllers.DeploymentController.UpdateRepoDomain(Devops.DomainService.Deployment.Models.Request.RepoDomainUpdateRequest)">
             <summary><c>POST</c> — points a repository at a different deployment domain.</summary>
         </member>
+        <member name="T:BlocksTemplate.Api.Controllers.FunctionsController">
+            <summary>
+            Every HTTP entry point for functions, in two parts that do not share a security model.
+            <list type="bullet">
+            <item>
+            The <b>management surface</b> — everything a tenant does to their own functions in the
+            Blocks Studio. Routed by convention to <c>/api/functions/{action}</c>, and every action
+            carries its own <c>[ProtectedEndPoint]</c>: an authenticated, already-authorized caller
+            is assumed throughout.
+            </item>
+            <item>
+            The <b>public invocation surface</b> at the bottom of this file — <c>/api/fn/…</c>,
+            reached by callers who are not necessarily Blocks users at all. It is built the way the
+            proxy gateway is: a catch-all route on every method, anonymous at the framework level, the
+            tenant resolved from <c>x-blocks-key</c> by the shared access authorizer, and the stored
+            "Who can call it" enforced per call. Its routes are absolute (<c>~/api/…</c>) because they
+            do not follow the controller's template.
+            </item>
+            </list>
+            <para>
+            <b>Do not put a class-level <c>[Authorize]</c> or <c>[ProtectedEndPoint]</c> on this
+            type.</b> It would shut off public invocation for every tenant, and the failure would
+            show up as callers' 401s rather than as anything failing here. Authorization on this
+            controller is per-action, on purpose — a new action gets nothing by default, so give it
+            the attribute it needs.
+            </para>
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.#ctor(Functions.DomainService.Services.IFunctionService,Functions.DomainService.Services.IFunctionDeploymentService,Functions.DomainService.Services.IFunctionInvocationService,Functions.DomainService.Services.IFunctionRunService,Functions.DomainService.Services.IFunctionBuildService,Functions.DomainService.Services.IFunctionAuditService,Common.InternalService.Access.IEndpointAccessAuthorizer,Functions.DomainService.Services.IFunctionPollTokenService,Microsoft.Extensions.Logging.ILogger{BlocksTemplate.Api.Controllers.FunctionsController})">
+            <summary>
+            The management services, plus the shared access authorizer that resolves the tenant on
+            the anonymous <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.Invoke(System.String,System.String)"/> route — the same one the proxy gateway uses — and the
+            poll-token service behind the anonymous <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.PollRunResult(System.String)"/>.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.MapInvokeRefusalsAsync(System.Func{System.Threading.Tasks.Task{Functions.DomainService.Dtos.Responses.InvokeResultDto}})">
+            <summary>
+            The two refusals a Studio-side invocation (Test, Replay) can hit that are the caller's
+            to act on, answered as such instead of escaping as a 500: a credential-shaped key the
+            control plane refused to put in an envelope (400), the function's own rate limit
+            (429 with <c>Retry-After</c>), and a run queue that refused the run (503 with <c>Retry-After</c>). Everything else keeps the pipeline's existing handling.
+            </summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Controllers.FunctionsController.InvokeHardBodyLimitBytes">
+            <summary>
+            Same shape as the proxy gateway's own cap: a little above the service's ceiling, so the
+            service — not Kestrel's generic 413 — is what answers an oversized body, with the
+            documented error shape. Kestrel still stops a runaway upload here.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.Invoke(System.String,System.String)">
+            <summary>
+            The public function endpoint (DECISIONS D5): <c>{METHOD} /api/fn/{functionId}/{**path}</c>.
+            A tenant's client calls this instead of hosting the code. The route is registered for
+            GET, POST, PUT, PATCH and DELETE; the trigger lists the ones it answers (or, when it
+            lists none, its single legacy method), and every other verb is refused with 405 and an
+            <c>Allow</c> header once the caller is authorized. Anything after the id is passed to the handler as
+            <c>input.path</c>, with the method, query, allow-listed headers and body alongside it
+            (see <c>FunctionHttpInputBuilder</c>).
+            <para>
+            The tenant comes from <c>x-blocks-key</c> (or the tenant claim of a presented token),
+            resolved by the shared <see cref="T:Common.InternalService.Access.IEndpointAccessAuthorizer"/>, never from the route, the
+            query or the body. There is exactly one tenant in this request and it is the one whose
+            certificate then has to validate any token presented — a second, unvalidated tenant id
+            in the path would let any valid key reach a <c>Public</c> function in whatever other
+            tenant the caller could name.
+            </para>
+            <para>
+            <see cref="T:Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute"/> at the framework level, like the proxy gateway: a
+            tenant key identifies a tenant but authenticates no user, and whether a caller may
+            proceed is the deployed version's own "Who can call it" (public, or a Blocks token
+            optionally narrowed by roles / permissions), decided per stored policy inside
+            <c>FunctionInvocationService.InvokeHttpAsync</c>. The Genesis bearer handler skips
+            anonymous actions entirely, so that service is where the token is validated. Saying
+            anonymous explicitly also keeps the endpoint public if this class ever acquires a
+            type-level authorization attribute.
+            </para>
+            <para>
+            The route is absolute (<c>~/</c>) so it stays <c>/api/fn/…</c> whatever this controller
+            or method is called: it is a published contract clients hard-code. That also puts it
+            outside <c>GlobalApiRoutePrefixConvention</c>, which only prefixes controller-level
+            templates — hence the <c>api</c> segment written out here, once.
+            </para>
+            <para>
+            Errors use the gateway's body shape, <c>{ code, message, instance }</c>, with
+            <c>FUNCTION_INVOKE_*</c> codes: 401 for no tenant or no usable token, 403 when the token
+            validates but the rules refuse it (or HTTP is switched off), 404 for an unknown or
+            undeployed function — but only to a caller who could have reached it, so 401 comes
+            first — 405 with an <c>Allow</c> header for the method the trigger does not take, 413
+            over the body ceiling, 400 for input the sandbox cannot be given, 429 with
+            <c>Retry-After</c> when the function's own rate limit refuses the call (only with
+            <c>Functions:RateLimits:Enabled</c>).
+            </para>
+            <para>
+            <b>Asynchronous by default.</b> The answer is 202 with a run id and a <c>pollToken</c>; the
+            caller collects the outcome from <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.PollRunResult(System.String)"/>. That stays byte-for-byte
+            what a caller gets unless it asks for more (sandbox/REUSE.md).
+            </para>
+            <para>
+            <b>Synchronous only for a function deployed as sync.</b> When the deployed trigger's
+            <c>ResponseMode</c> is <c>sync</c>, the request is held until the run finishes and the
+            function's own answer is the HTTP response (<see cref="T:Functions.DomainService.Services.FunctionHttpResponseMapper"/>: its
+            <c>{ statusCode, headers, body }</c> through a header allow-list, or 200 JSON; 502 for a
+            failed run, 504 for a timed-out one, both with the run id). The caller may shorten the
+            wait with <c>Prefer: wait=&lt;seconds&gt;</c> or skip it with <c>Prefer: respond-async</c>;
+            on an async function <c>Prefer</c> changes nothing. A failure that is about to be retried
+            is not an answer — the caller gets the 202. Sync was removed once, for three reasons, and
+            each is answered now:
+            <list type="bullet">
+            <item><i>Latency bought too little.</i> A run was always a fresh sandbox (~2.6 s of
+            platform start). With <c>ReuseSandbox</c> a warm sandbox answers in milliseconds, so
+            holding the request is worth it.</item>
+            <item><i>The connection was held for the whole run, past ingress timeouts.</i> The wait is
+            bounded: never longer than <c>Functions:HttpSyncWaitMaxSeconds</c> (30 s by default, under
+            typical 60 s ingress idle timeouts), never longer than the caller's own <c>wait=</c>, and
+            at most <c>Functions:MaxConcurrentSyncWaits</c> (256) requests are held per process —
+            beyond that a call is answered async at once.</item>
+            <item><i>A dropped connection lost the result.</i> Not any more: the run is queued, with
+            its record written, before the wait starts, and nothing in the wait can cancel it. A run
+            that has not finished in the window is answered with exactly the async 202 + poll token,
+            so the caller can always collect the result — and a caller that went away simply never
+            reads an answer the run still produces and records.</item>
+            </list>
+            The <c>wait</c> query parameter is still accepted and ignored (and not passed to the
+            handler), so an older client gets an answer rather than a 400.
+            </para>
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.SyncAnswer(Functions.DomainService.Services.FunctionHttpResponseMapper.Response)">
+            <summary>The mapped synchronous answer as an action result; see <see cref="T:BlocksTemplate.Api.Controllers.FunctionSyncAnswerResult"/>.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.ParsePrefer(Microsoft.Extensions.Primitives.StringValues)">
+            <summary>
+            Reads RFC 7240 <c>Prefer</c>: <c>respond-async</c> and <c>wait=&lt;seconds&gt;</c>, in
+            any order, across any number of header lines, case-insensitively. Anything else in the
+            header — and a <c>wait</c> that is not a whole number — is ignored, as the RFC asks of
+            preferences a server does not understand.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.ReadBodyAsync(System.Threading.CancellationToken)">
+            <summary>
+            Reads the body up to <see cref="F:Functions.DomainService.Services.FunctionHttpInputBuilder.MaxBodyBytes"/>, the same way the
+            proxy gateway buffers its own. Returns <c>(null, true)</c> the moment the cap is passed —
+            by the declared length, or by the bytes actually read — so nothing over it is held.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.InvokeError(System.Int32,System.String,System.String,System.String)">
+            <summary>Blocks-generated error body, the gateway's shape: <c>{ code: "FUNCTION_INVOKE_&lt;OUTCOME&gt;", message, instance }</c>.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.TryIssuePollTokenAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Mints the 202's poll token. A failure here (Redis unavailable) must not fail the call:
+            the run is already queued, and a 5xx would only invite a retry that queues it twice.
+            The caller then gets a 202 without a token — the same as before tokens existed.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.PollRun(System.String)">
+            <summary>
+            The poll half of Fire/Poll for a Blocks user: <c>GET /api/fn/runs/{runId}</c>. The full
+            run record — input included — so it takes the same <c>function::read</c> permission as
+            <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.GetRun(System.String)"/>, and reads only within the caller's own tenant. A signed-in user
+            without that permission polls with the run's token instead (<see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.PollRunResult(System.String)"/>).
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.PollRunResult(System.String)">
+            <summary>
+            The anonymous poll: <c>GET /api/fn/runs/{runId}/result</c> with the <c>x-poll-token</c>
+            header from the 202, and the same <c>x-blocks-key</c> the invoke used. Answers status,
+            result and error only — never the input or headers.
+            <para>
+            The token rides in a header, not the query, so it does not land in access logs. Every
+            refusal after the tenant check — missing, malformed, wrong or expired token, a token for
+            another tenant's run, a run that no longer exists — is the same 404, so the route says
+            nothing about which run ids exist. Anonymous at the framework level for the same reason
+            <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.Invoke(System.String,System.String)"/> is.
+            </para>
+            </summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Controllers.FunctionsController.PollTokenHeader">
+            <summary>The request header that carries the 202's poll token.</summary>
+        </member>
+        <member name="T:BlocksTemplate.Api.Controllers.FunctionSyncAnswerResult">
+            <summary>
+            Writes a function's synchronous answer exactly: its status, its filtered headers (a repeated
+            name, e.g. several <c>Set-Cookie</c>, is appended, not replaced) and its body as raw bytes,
+            so a string body reaches the caller as the function returned it with no second JSON
+            encoding and no output formatter in between.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionSyncAnswerResult.#ctor(Functions.DomainService.Services.FunctionHttpResponseMapper.Response)">
+            <summary>
+            Writes a function's synchronous answer exactly: its status, its filtered headers (a repeated
+            name, e.g. several <c>Set-Cookie</c>, is appended, not replaced) and its body as raw bytes,
+            so a string body reaches the caller as the function returned it with no second JSON
+            encoding and no output formatter in between.
+            </summary>
+        </member>
+        <member name="T:BlocksTemplate.Api.Controllers.FunctionStreamResult">
+            <summary>
+            A streamed answer (F-5): 200, then each piece the moment the runner relays it — as plain
+            chunked text, or as Server-Sent Events when the caller accepts <c>text/event-stream</c>
+            (each piece one <c>data:</c> event; a final <c>event: done</c>, or <c>event: error</c>
+            with the run's status). A plain-text stream whose run fails after it started has no way to
+            say so but to stop short: the connection is aborted, so the client sees an incomplete body
+            rather than a clean end. The run id is in <c>x-blocks-run-id</c> for looking it up.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionStreamResult.#ctor(System.String,System.Boolean)">
+            <summary>
+            A streamed answer (F-5): 200, then each piece the moment the runner relays it — as plain
+            chunked text, or as Server-Sent Events when the caller accepts <c>text/event-stream</c>
+            (each piece one <c>data:</c> event; a final <c>event: done</c>, or <c>event: error</c>
+            with the run's status). A plain-text stream whose run fails after it started has no way to
+            say so but to stop short: the connection is aborted, so the client sees an incomplete body
+            rather than a clean end. The run id is in <c>x-blocks-run-id</c> for looking it up.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionStreamResult.SseData(System.String)">
+            <summary>One SSE event: every line of the piece as its own <c>data:</c> line.</summary>
+        </member>
+        <member name="T:BlocksTemplate.Api.Controllers.DeployPendingDto">
+            <summary>A deploy whose build is still running: watch <see cref="P:BlocksTemplate.Api.Controllers.DeployPendingDto.BuildId"/>, then deploy it.</summary>
+        </member>
         <member name="T:BlocksTemplate.Api.Controllers.HealthController">
             <summary>
             Health-check configuration and the heartbeat endpoint monitored services call, routed as
@@ -264,11 +487,167 @@
         <member name="M:BlocksTemplate.Api.Controllers.StorageController.DeleteFile(DomainService.Storage.DeleteFileRequest)">
             <summary><c>DELETE</c> via <c>POST</c> — removes a file from the provider.</summary>
         </member>
+        <member name="T:BlocksTemplate.Api.FunctionExceptionFilter">
+            <summary>
+            Maps the function domain's exceptions onto HTTP status codes for the <b>management</b>
+            surface — everything the Studio calls at <c>/api/functions/…</c>.
+            </summary>
+            <remarks>
+            The public invocation surface does its own mapping inline, because it answers in the
+            invoke error envelope (<c>{ error: { code, message } }</c>) that non-Blocks callers see, not
+            in <see cref="T:Blocks.Genesis.BaseResponse"/>. That path catches every one of these before they reach a
+            filter, so this only ever fires for the management actions.
+            <para>
+            Those actions return their DTO directly rather than an <see cref="T:Microsoft.AspNetCore.Mvc.ActionResult"/>, so
+            before this existed a validation failure — an empty name, a note over its length, a rollback
+            to a version that is not there — left the domain exception unhandled and the caller got a
+            bare 500. A 500 tells a client to retry something that will fail identically every time.
+            </para>
+            <para>
+            Modelled on <c>SecretExceptionFilter</c>, and deliberately the same response shape: the
+            client's error handling reads <c>errors</c> off the body and shows it, whichever endpoint
+            produced it.
+            </para>
+            </remarks>
+        </member>
         <member name="T:BlocksTemplate.Api.GlobalApiRoutePrefixConvention">
             <summary>Prepends a segment (e.g. <c>api</c>) to every controller’s attribute route template.</summary>
         </member>
         <member name="M:BlocksTemplate.Api.GlobalApiRoutePrefixConvention.#ctor(System.String)">
             <summary>Prepends a segment (e.g. <c>api</c>) to every controller’s attribute route template.</summary>
+        </member>
+        <member name="T:BlocksTemplate.Api.Security.ContentSecurityPolicy">
+            <summary>
+            Builds the SPA's Content-Security-Policy from configuration.
+            <para>
+            The origins come from the same <c>FrontendRuntime</c> section that fills the SPA's runtime
+            config, so the policy describes whatever environment the host is actually running in (one
+            image runs on dev, stg and prod). Same pattern as blocks-os / blocks-iam / blocks-data
+            <c>server/Api/Security/ContentSecurityPolicy.cs</c>. Anything no runtime key describes goes in
+            <c>Csp:ExtraConnectSrc</c> / <c>Csp:ExtraFormAction</c> rather than back into code.
+            </para>
+            </summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.ContentSecurityPolicy.ConnectOriginKeys">
+            <summary><c>FrontendRuntime</c> keys holding an origin the SPA makes requests to.</summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.ContentSecurityPolicy.WebSocketOriginKeys">
+            <summary>
+            Hosts the SPA opens a WebSocket to: the notification hub. CSP does not let an
+            <c>https:</c> source match a <c>wss:</c> URL, so the <c>wss:</c> twin is emitted too.
+            </summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.ContentSecurityPolicy.FormActionOriginKeys">
+            <summary>Where a login POST may be sent: the identity host and the portal.</summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.ContentSecurityPolicy.ReportPath">
+            <summary>
+            Where the browser sends CSP violation reports (<see cref="T:BlocksTemplate.Api.Security.CspReportEndpoint"/>). Same
+            origin, outside <c>/api</c> so tenant validation and auth do not reject the browser's
+            anonymous POST.
+            </summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.ContentSecurityPolicy.ReportGroup">
+            <summary>Reporting API group name used by <c>report-to</c> and <c>Reporting-Endpoints</c>.</summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.ContentSecurityPolicy.BlobStorageFallback">
+            <summary>
+            Used only when <c>Csp:BlobStorageSrc</c> is not set: workflow import PUTs the file to a
+            pre-signed Azure Blob URL and the storage account differs per environment, so an
+            unconfigured environment keeps working. Set the exact account(s) to drop the wildcard.
+            </summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.ContentSecurityPolicy.FixedConnectSources">
+            <summary>Fixed third parties the SPA calls: Rollbar (genesis-os error reporting).</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.ContentSecurityPolicy.BuildPolicy(System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String})">
+            <summary>
+            The policy itself, separated from configuration so it can be asserted directly.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.ContentSecurityPolicy.Normalize(System.Collections.Generic.IEnumerable{System.String})">
+            <summary>
+            Reduce configured values to distinct, sorted origins. The blob fallback is the one
+            wildcard kept as is (a URI parser rejects <c>*.</c> hosts, and config cannot add it).
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.ContentSecurityPolicy.ToOrigin(System.String)">
+            <summary>
+            A CSP source is an origin, so any path, query or trailing slash is dropped. A value that
+            is not an absolute http(s)/ws(s) URL -- including an unfilled <c>__BLOCKS_*__</c>
+            placeholder -- is ignored rather than emitted verbatim, so a malformed secret cannot
+            inject a directive.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.ContentSecurityPolicy.ToWebSocketOrigin(System.String)">
+            <summary>
+            The wss origin a browser uses to open a socket to an https host, or null. Plain http and
+            ws hosts get no socket allowance: the socket would carry the session token in clear text.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.ContentSecurityPolicy.Split(System.String)">
+            <summary>Space-, comma- or semicolon-separated list, for origins no runtime key describes.</summary>
+        </member>
+        <member name="T:BlocksTemplate.Api.Security.CspReportEndpoint">
+            <summary>
+            Receives the browser's CSP violation reports (<c>report-to</c> / <c>report-uri</c>) and logs
+            them, so a policy that blocks something real shows up in the logs instead of only in a
+            user's console.
+            <para>
+            The endpoint is anonymous by nature (browsers send no credentials), so it trusts nothing:
+            the body is capped, only report content types are read, control characters are stripped
+            before logging, and logging is capped per minute so a flood cannot fill the logs. It always
+            answers 204 for an accepted report and never echoes input.
+            </para>
+            </summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.CspReportEndpoint.MaxBodyBytes">
+            <summary>A real report is well under 2 KB; a batch of a few stays under this.</summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.CspReportEndpoint.MaxLoggedChars">
+            <summary>What is kept of one body in the log line.</summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.CspReportEndpoint.MaxLogsPerMinute">
+            <summary>Log lines per minute per process; the rest are counted, not logged.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.CspReportEndpoint.TakeLogSlot(System.DateTimeOffset,System.Int32@)">
+            <summary>One shared budget per minute. Returns how many reports were dropped before this one.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.CspReportEndpoint.Sanitize(System.String)">
+            <summary>Strip control characters (no forged log lines) and cut to <see cref="F:BlocksTemplate.Api.Security.CspReportEndpoint.MaxLoggedChars"/>.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.CspReportEndpoint.ResetForTests">
+            <summary>Test hook: start every test from an empty budget.</summary>
+        </member>
+        <member name="T:BlocksTemplate.Api.Security.CspMode">
+            <summary>How the CSP header is sent. Set by <c>Csp:Mode</c> (env var <c>Csp__Mode</c>).</summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.CspMode.Enforce">
+            <summary>Default. The browser blocks what the policy does not allow.</summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.CspMode.ReportOnly">
+            <summary>
+            Kill switch without a rebuild: sent as Content-Security-Policy-Report-Only, so the
+            browser only logs violations in the console and blocks nothing.
+            </summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.CspMode.Off">
+            <summary>No CSP header at all. The other security headers stay.</summary>
+        </member>
+        <member name="T:BlocksTemplate.Api.Security.SecurityHeaders">
+            <summary>
+            Browser-facing security headers for the SPA, its static files and the API.
+            <para>
+            Never overwrites a header the response already carries: proxy gateway and public function
+            answers set their own <c>Content-Security-Policy: sandbox</c>, <c>X-Content-Type-Options</c>
+            and <c>Cache-Control</c> (ProxiesController.AddGatewaySecurityHeaders,
+            FunctionHttpResponseMapper), and those must reach the client unchanged.
+            </para>
+            <para>
+            The SPA policy and frame/permissions headers go only on pages and static files, not on
+            <c>/api</c> (JSON and user-defined function responses) or <c>/swagger</c> (its own UI).
+            </para>
+            </summary>
         </member>
         <member name="T:Api.Controllers.NotifierController">
             <summary>
@@ -352,7 +731,9 @@
             <c>/versions</c>, <c>/executions</c> and <c>/overview</c> sub-resources. The controller segment still
             comes from <c>[controller]</c> plus the global <c>api</c> prefix
             (<see cref="T:BlocksTemplate.Api.GlobalApiRoutePrefixConvention"/>); only the sub-paths are explicit.
-            Every action requires a bearer token and the tenant is taken from <see cref="T:Blocks.Genesis.BlocksContext"/>.
+            Every action requires a bearer token and a permission: <c>blocks-logic::proxy::read</c> to see
+            proxies, versions and execution logs, <c>blocks-logic::proxy::manage</c> to change them, test them or
+            preview an OpenAPI spec. The tenant is taken from <see cref="T:Blocks.Genesis.BlocksContext"/>.
             Where a service result carries its own <c>HttpStatus</c> the controller honours it, so the service
             stays the single source of truth for the SPEC §3.4 error contract.</item>
             <item><b>Data plane</b> (Phase 2) — <see cref="M:Utilities.Api.Controllers.ProxiesController.Gateway(System.String,System.String)"/> at
@@ -374,9 +755,9 @@
         <member name="F:Utilities.Api.Controllers.ProxiesController.GatewayHardBodyLimitBytes">
             <summary>
             Kestrel-level backstop on the gateway body, deliberately ABOVE
-            <see cref="P:Proxy.DomainService.Services.ProxyGatewayService.MaxRequestBodyBytes"/> (10 MB) rather than equal to it.
+            <see cref="P:Proxy.DomainService.Services.ProxyGatewayService.MaxRequestBodyBytes"/> (1 MB) rather than equal to it.
             <para>
-            The 10 MB cap has to stay in application code: exceeding it is a documented outcome
+            The 1 MB cap has to stay in application code: exceeding it is a documented outcome
             (<c>RequestTooLarge</c>) that answers 413 with the Blocks error body and still records an execution
             row. A framework-level limit set to the same value would pre-empt that and return a bare Kestrel
             413 with no row and no <c>code</c>. This one only catches a client streaming far past the point
@@ -384,7 +765,7 @@
             </para>
             </summary>
         </member>
-        <member name="M:Utilities.Api.Controllers.ProxiesController.#ctor(Proxy.DomainService.Services.IProxyService,Proxy.DomainService.Services.IProxyVersionService,Proxy.DomainService.Services.IProxyTestService,Proxy.DomainService.Services.IProxyExecutionService,Proxy.DomainService.Services.IProxyGatewayService,Common.InternalService.Access.IEndpointAccessAuthorizer,Microsoft.Extensions.Logging.ILogger{Utilities.Api.Controllers.ProxiesController})">
+        <member name="F:Utilities.Api.Controllers.ProxiesController._openApiImport">
             <summary>
             Takes the four control-plane services, the data-plane gateway service, and the shared access
             authorizer that enforces each proxy's "Who can call it" policy on the gateway route.
@@ -453,6 +834,22 @@
             The tenant is taken from <see cref="T:Blocks.Genesis.BlocksContext"/>; no <c>X-Blocks-Key</c> is required here.
             </summary>
         </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.PreviewOpenApi(Proxy.DomainService.Dtos.ProxyOpenApiPreviewRequestDto,System.Threading.CancellationToken)">
+            <summary>
+            <c>POST /api/Proxies/openapi/preview</c> — reads an OpenAPI document and lists the routes it
+            would produce, so the caller can review them before anything is saved.
+            <para>
+            This writes nothing. The chosen operations come back through the ordinary create/update call,
+            which is what keeps an import inside the same validation, versioning and audit as a route typed
+            by hand rather than around them.
+            </para>
+            <para>
+            A specification may be pasted (<c>specJson</c>) or named by URL (<c>specUrl</c>); the URL is
+            fetched through the same guard as any upstream, because otherwise this endpoint is a request
+            this server makes to wherever a caller points it.
+            </para>
+            </summary>
+        </member>
         <member name="M:Utilities.Api.Controllers.ProxiesController.ListExecutions(System.String,Proxy.DomainService.Dtos.ProxyGetExecutionsRequestDto)">
             <summary>
             <c>GET /api/Proxies/{proxyId}/executions</c> — SPEC3 §3.1, the <em>Request logs</em> list for one
@@ -501,6 +898,16 @@
             </para>
             </summary>
         </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.AddGatewaySecurityHeaders(Microsoft.AspNetCore.Http.HttpResponse)">
+            <summary>
+            The two headers every gateway answer carries (PS-1), the same pair Functions sends
+            (<c>FunctionHttpResponseMapper.SecurityHeaders</c>). The body is a tenant's upstream content served
+            from the platform origin: <c>nosniff</c> stops a browser re-reading JSON or text as HTML, and
+            <c>Content-Security-Policy: sandbox</c> puts any HTML or SVG an upstream returns in an opaque origin
+            with scripts off, so it cannot read the console's storage or act as the signed-in user. An
+            upstream's own CSP is never relayed, so it cannot loosen this.
+            </summary>
+        </member>
         <member name="M:Utilities.Api.Controllers.ProxiesController.Relay(Proxy.DomainService.Services.ProxyForwardResult)">
             <summary>Relays the upstream status, body, and Content-Type byte-for-byte. No other header is relayed.</summary>
         </member>
@@ -522,8 +929,8 @@
             token; the tenant always comes from <see cref="T:Blocks.Genesis.BlocksContext"/> and is never taken from the payload.
             </summary>
         </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.#ctor(Workflow.DomainService.Services.IWorkflowService,Workflow.DomainService.Services.IWorkflowVersionService,Workflow.DomainService.Services.IWorkflowExecutionService,Workflow.DomainService.Services.IWorkflowImportService)">
-            <summary>Takes the workflow, version, execution and import services.</summary>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.#ctor(Workflow.DomainService.Services.IWorkflowService,Workflow.DomainService.Services.IWorkflowVersionService,Workflow.DomainService.Services.IWorkflowExecutionService,Workflow.DomainService.Services.IWorkflowImportService,Workflow.DomainService.Logging.IExecutionLogService)">
+            <summary>Takes the workflow, version, execution, import and execution log services.</summary>
         </member>
         <member name="M:Utilities.Api.Controllers.WorkflowController.GetAll(Workflow.DomainService.Dtos.WorkflowGetsRequestDto)">
             <summary><c>POST</c> — the tenant's workflows, filtered and paged by the request body.</summary>
@@ -612,6 +1019,16 @@
         </member>
         <member name="M:Utilities.Api.Controllers.WorkflowController.GetExecution(Workflow.DomainService.Dtos.WorkflowExecutionGetRequestDto)">
             <summary><c>GET</c> — one execution, including per-node results.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.ResumeExecution(Workflow.DomainService.Dtos.WorkflowExecutionGetRequestDto)">
+            <summary>
+            <c>POST</c> — continues a failed run from where it stopped. Steps that completed are not run again,
+            and a function step does not call again the items that already succeeded. 409 when it cannot be resumed.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.GetExecutionLogs(Workflow.DomainService.Dtos.WorkflowExecutionLogsGetRequestDto)">
+            <summary><c>GET</c> — the stage log lines of one execution (stages and counts only, never data values),
+            with whether they are available, expired or still arriving.</summary>
         </member>
         <member name="M:Utilities.Api.Controllers.WorkflowController.LastSuccessfullExecution(Workflow.DomainService.Dtos.LastSuccessfullExecutionRequestDto)">
             <summary><c>GET</c> — the most recent successful execution, used to prefill node inputs from real data.</summary>

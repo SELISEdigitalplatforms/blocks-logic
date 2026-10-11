@@ -1,10 +1,13 @@
 import {
   useGetWorkflowExecutionById,
+  useResumeWorkflowExecution,
   useWorkflow,
 } from "@blocks-workflow/hooks";
 import { Background, BackgroundVariant, ReactFlow } from "@xyflow/react";
-import { useEffect } from "react";
-import { Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Loader2, Play, ScrollText } from "lucide-react";
+import { Button } from "@/components/ui-kits/button/button";
+import { ExecutionLogsPanel } from "./execution-logs-panel";
 import {
   WorkflowEditorDefaultEdgeOptions,
   WorkflowEditorNodeTypes,
@@ -17,7 +20,8 @@ import {
 import { NodeInspector } from "../node-inspector";
 import { EditorFitConfig, WorkflowEditorControls } from "../workflow-editor-controls";
 
-import { getStatusConfig } from "../../utils/workflow-execution-list.util";
+import { getStatusConfig, shownExecutionStatus, WorkflowExecutionStatus } from "../../utils/workflow-execution-list.util";
+import { WorkflowExecutionMode } from "../../models/workflow.model";
 import { WorkflowExecution } from "@blocks-workflow/types/workflow.service.type";
 import { cn } from "@/lib/utils";
 
@@ -27,13 +31,45 @@ export const WorkflowExecutionEditor = ({
   execution?: WorkflowExecution;
 }) => {
   const id = execution?.id || "";
-  const { setWorkflow, onNodeClick, selectedNode, setEditorMode, setExecutionMode } = useWorkflow();
+  const { setWorkflow, onNodeClick, selectedNode, deselectNode, setEditorMode, setExecutionMode } = useWorkflow();
   const { data: responseData, isFetched, isLoading } = useGetWorkflowExecutionById({
     executionId: id,
   });
 
   const data = responseData?.data;
   const status = data?.status ?? execution?.status;
+  // What the badge says; `status` (as stored) still decides Resume, which the server allows only on Failed.
+  const shownStatus = shownExecutionStatus(status, data?.nodeExecutions);
+
+  // Resume: only a failed production run. Completed steps are not run again; only a function step skips its already-done items.
+  const resume = useResumeWorkflowExecution();
+  const [resumeError, setResumeError] = useState<string | null>(null);
+  const canResume =
+    status === WorkflowExecutionStatus.Failed && execution?.executionMode === WorkflowExecutionMode.Production;
+  const onResume = () => {
+    setResumeError(null);
+    resume.mutate(
+      { executionId: id },
+      {
+        onSuccess: (result) => {
+          if (!result?.isSuccess) setResumeError(result?.error ?? "This run cannot be resumed.");
+        },
+        onError: () => setResumeError("This run cannot be resumed."),
+      },
+    );
+  };
+
+  // At most one right-side panel: opening the logs closes the Node Inspector, and selecting a node closes the logs.
+  const [logsOpen, setLogsOpen] = useState(false);
+  const toggleLogs = () => {
+    if (!logsOpen) deselectNode();
+    setLogsOpen(!logsOpen);
+  };
+  const [previousSelectedNode, setPreviousSelectedNode] = useState(selectedNode);
+  if (selectedNode !== previousSelectedNode) {
+    setPreviousSelectedNode(selectedNode);
+    if (selectedNode) setLogsOpen(false);
+  }
 
   useEffect(() => {
     setEditorMode("execution");
@@ -139,30 +175,65 @@ export const WorkflowExecutionEditor = ({
         <WorkflowEditorControls readonly />
       </ReactFlow>
       {execution && (
-        <div className="absolute left-4 top-4 z-50">
+        <div className="absolute left-4 top-4 z-50 flex items-center gap-2">
           <div className="flex items-center gap-2 rounded-md border bg-background/95 px-3 py-2 shadow-sm backdrop-blur-sm">
             <span className="text-sm font-medium">Status:</span>
             <div className="flex items-center gap-1.5">
               <div
                 className={cn(
                   "h-2 w-2 rounded-full",
-                  getStatusConfig(status ?? execution.status).color,
+                  getStatusConfig(shownStatus ?? execution.status).color,
                 )}
               ></div>
               <span
                 className={cn(
                   "text-sm font-medium",
-                  getStatusConfig(status ?? execution.status).textClass,
+                  getStatusConfig(shownStatus ?? execution.status).textClass,
                 )}
               >
-                {getStatusConfig(status ?? execution.status).label}
+                {getStatusConfig(shownStatus ?? execution.status).label}
               </span>
             </div>
           </div>
-          
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 bg-background/95"
+            onClick={toggleLogs}
+            aria-pressed={logsOpen}
+            data-testid="execution-logs-button"
+          >
+            <ScrollText className="h-4 w-4" /> Execution Logs
+          </Button>
+          {canResume && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 bg-background/95"
+              onClick={onResume}
+              disabled={resume.isPending}
+              title="Continue from the failed step. Finished steps are not run again. Function steps also skip items that already succeeded; other steps run all their items again."
+              data-testid="execution-resume-button"
+            >
+              {resume.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} Resume
+            </Button>
+          )}
+          {resumeError && (
+            <span className="rounded-md bg-background/95 px-2 py-1 text-sm text-destructive" role="alert">
+              {resumeError}
+            </span>
+          )}
         </div>
       )}
       {selectedNode && <NodeInspector key={selectedNode.id} />}
+      {execution && (
+        <ExecutionLogsPanel
+          execution={execution}
+          nodeExecutions={data?.nodeExecutions ?? []}
+          open={logsOpen}
+          onOpenChange={setLogsOpen}
+        />
+      )}
     </div>
   );
 };

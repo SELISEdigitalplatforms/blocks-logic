@@ -54,8 +54,7 @@ const buildProxy = (values: ProxyFormValues, existing?: Proxy): Proxy => {
     headers: compactKeyValues(values.headers),
     query: compactKeyValues(values.query),
     // Mirror the mapper's tab gate: a "passthrough" save persists [] regardless of typed rows.
-    bodyMerge:
-      values.bodyMode === "passthrough" ? [] : compactKeyValues(values.bodyMerge ?? []),
+    bodyMerge: values.bodyMode === "passthrough" ? [] : compactKeyValues(values.bodyMerge ?? []),
     methodConfigs: (values.methodConfigs ?? [])
       .filter((entry) => values.methods.includes(entry.method))
       .map((entry) => {
@@ -77,6 +76,9 @@ const buildProxy = (values: ProxyFormValues, existing?: Proxy): Proxy => {
         ? [...new Set(values.responseInclude.map((path) => path.trim()).filter(Boolean))]
         : [],
     access: values.access ?? defaultProxyAccess(),
+    resilience: values.resilience ?? null,
+    requestsPerMinute: values.requestsPerMinute ?? null,
+    version: (existing?.version ?? 0) + 1,
     calls24h: existing?.calls24h ?? 0,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
@@ -152,8 +154,7 @@ const applyProxyField = (proxy: Proxy, field: string, value: string | null): Pro
   }
 
   const [prefix, key] = [field.slice(0, field.indexOf(":")), field.slice(field.indexOf(":") + 1)];
-  const listKey =
-    prefix === "header" ? "headers" : prefix === "body" ? "bodyMerge" : "query";
+  const listKey = prefix === "header" ? "headers" : prefix === "body" ? "bodyMerge" : "query";
   const rows = proxy[listKey].filter((row) => row.key !== key);
   if (value !== null) rows.push({ key, value });
   return { ...proxy, [listKey]: rows };
@@ -191,7 +192,7 @@ export const mockProxyService = {
 
   getAll: async (params: ProxyListParams = {}): Promise<ProxyListPage> => {
     await waitForMock();
-    const search = params.searchKey?.trim().toLowerCase();
+    const search = params.search?.trim().toLowerCase();
     let matches = search
       ? proxyStore.filter((proxy) =>
           [proxy.name, proxy.slug, proxy.upstreamMasked].some((value) =>
@@ -265,14 +266,9 @@ export const mockProxyService = {
     };
   },
 
-  getExecution: async (
-    proxyId: string,
-    executionId: string,
-  ): Promise<ProxyExecutionLog | null> => {
+  getExecution: async (proxyId: string, executionId: string): Promise<ProxyExecutionLog | null> => {
     await waitForMock();
-    return (
-      proxyLogs.find((log) => log.proxyId === proxyId && log.id === executionId) ?? null
-    );
+    return proxyLogs.find((log) => log.proxyId === proxyId && log.id === executionId) ?? null;
   },
 
   getOverview: async (proxyId: string): Promise<ProxyOverview | null> => {

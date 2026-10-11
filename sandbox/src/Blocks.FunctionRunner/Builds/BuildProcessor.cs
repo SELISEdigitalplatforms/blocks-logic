@@ -1,0 +1,1261 @@
+using System.Globalization;
+using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using Blocks.FunctionRunner.Contracts;
+using Blocks.FunctionRunner.Options;
+using Docker.DotNet;
+using Docker.DotNet.Models;
+using ICSharpCode.SharpZipLib.Tar;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using StackExchange.Redis;
+
+namespace Blocks.FunctionRunner.Builds
+{
+    /// <summary>
+    /// Turns a tenant's source bundle into an immutable, digest-pinned image.
+    /// <para>
+    /// This is the most dangerous step in the pipeline, because installing dependencies means
+    /// running code the tenant chose on a host that can reach the Docker Engine. It is confined
+    /// the same way an execution is, and that phrase is now literal: the install happens in a
+    /// gVisor sandbox of its own (<see cref="DependencyInstaller"/>), because <c>docker build</c>
+    /// cannot be told which runtime to use and its RUN steps therefore land on the Engine's
+    /// default, <c>runc</c>. The image build that follows copies in what the sandbox produced and
+    /// runs nothing but commands this repository wrote. Beyond the kernel boundary:
+    /// <c>--ignore-scripts</c> unless the function explicitly opts in and the host has not vetoed
+    /// it, no platform credentials in the build environment, the same restricted egress network
+    /// as a run, and hard CPU, memory and time budgets. What is built is content-addressed, so
+    /// Test and Deploy share one image (DECISIONS D3).
+    /// </para>
+    /// <para>
+    /// Dependencies resolve fresh from <c>package.json</c> unless the bundle carries a root
+    /// <c>package-lock.json</c>, which is then screened entry by entry (<see cref="LockfileValidator"/>)
+    /// and installed exactly with <c>npm ci</c>. Every install is followed by an advisory check
+    /// (<see cref="NpmAudit"/>). Either way the versions npm actually resolved are read back out of
+    /// the build log and stored on the build record — a range is a request, and only the resolved
+    /// list says what shipped.
+    /// </para>
+    /// </summary>
+    /// <summary>What a build published: success and the image, or the reason it failed.</summary>
+    public sealed class BuildOutcome
+    {
+        public bool Succeeded { get; set; }
+
+        /// <summary>The pushed digest, or for a local-only build the image id.</summary>
+        public string? Image { get; set; }
+
+        public string? Error { get; set; }
+        public string? Log { get; set; }
+    }
+
+    public sealed partial class BuildProcessor
+    {
+        /// <summary>
+        /// Lockfiles that are dropped: every other package manager's, and npm's anywhere but the
+        /// bundle root. The root <c>package-lock.json</c> is honoured after screening (F-8).
+        /// </summary>
+        internal static readonly string[] LockfileNames =
+        [
+            "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml",
+        ];
+
+        private readonly IDatabase _db;
+        private readonly IDockerClient _docker;
+        private readonly IDependencyInstaller _installer;
+        private readonly Maintenance.IRegistryClient _registry;
+        private readonly RunnerOptions _options;
+        private readonly ILogger<BuildProcessor> _logger;
+        private readonly string _template;
+
+        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly IDependencyCache _dependencies;
+        private readonly Maintenance.IImageUsageLog? _usage;
+
+        public BuildProcessor(
+            IDatabase db,
+            IDockerClient docker,
+            IDependencyInstaller installer,
+            Maintenance.IRegistryClient registry,
+            IHttpClientFactory httpClientFactory,
+            IDependencyCache dependencies,
+            IOptions<RunnerOptions> options,
+            ILogger<BuildProcessor> logger,
+            Maintenance.IImageUsageLog? usage = null)
+        {
+            _httpClientFactory = httpClientFactory;
+            // Marks a test's dependency image as used, so Image GC keeps the busy ones. Optional:
+            // without it those images simply age out (see ImageGc.TestDepsIdle).
+            _usage = usage;
+            _dependencies = dependencies;
+            _db = db;
+            _docker = docker;
+            _installer = installer;
+            // Used to confirm a push actually landed: the daemon reporting a digest is not the
+            // same question as the registry being able to serve it. See PushAsync.
+            _registry = registry;
+            _options = options.Value;
+            _logger = logger;
+            _template = LoadTemplate();
+        }
+
+        /// <summary>
+        /// Builds one job and publishes its result. Returns what was published, so a caller that
+        /// builds for itself (a test run) can go straight on to use the image.
+        /// </summary>
+        public async Task<BuildOutcome> ProcessAsync(BuildJob job, CancellationToken token)
+        {
+            ArgumentNullException.ThrowIfNull(job);
+            var outcome = new BuildOutcome();
+
+            var workspace = Path.Combine(_options.BuildsDir, job.BuildId);
+            var log = new StringBuilder();
+
+            // Unguessable per build, so a lifecycle script — the one thing in a build that can
+            // write to this log at the tenant's direction — cannot echo a fake resolved-package
+            // block and have it believed.
+            var nonce = Guid.NewGuid().ToString("n");
+            var beginMarker = PackagesMarker(nonce, "begin");
+            var endMarker = PackagesMarker(nonce, "end");
+
+            // The fenced block is machinery, not something a tenant should have to read, and at
+            // a few hundred packages it would crowd the real npm output out of the 16 KB tail.
+            var auditBegin = NpmAudit.BeginMarker(beginMarker);
+            var auditEnd = NpmAudit.EndMarker(endMarker);
+            // The audit block first: its markers extend the packages markers, so stripping the
+            // packages block first would leave them half-blanked.
+            string PublishableLog() => Tail(StripPackagesBlock(
+                StripPackagesBlock(log.ToString(), auditBegin, auditEnd), beginMarker, endMarker));
+
+            try
+            {
+                // --- fetch and screen the source ---------------------------------------
+                var bundle = await _db.StringGetAsync(job.SourceKey).ConfigureAwait(false);
+                if (!bundle.HasValue)
+                {
+                    await PublishAsync(job, outcome, "FAILED", null, null, log.ToString(),
+                        $"the source bundle at '{job.SourceKey}' has expired or was never written").ConfigureAwait(false);
+                    return outcome;
+                }
+
+                List<SourceFile> files;
+                try
+                {
+                    files = ParseBundle(bundle!);
+                }
+                catch (JsonException ex)
+                {
+                    await PublishAsync(job, outcome, "FAILED", null, null, log.ToString(),
+                        $"the source bundle is not valid JSON: {ex.Message}").ConfigureAwait(false);
+                    return outcome;
+                }
+
+                // --- the host's veto over allowScripts -----------------------------------
+                // Checked before the validator, so the message a tenant gets names the real
+                // reason rather than a lifecycle script the validator would have allowed.
+                if (job.AllowScripts && _options.DenyPrivateScriptsOnBuild)
+                {
+                    _logger.LogWarning(
+                        "Build {BuildId} asked to run npm lifecycle scripts; this host denies them",
+                        job.BuildId);
+                    await PublishAsync(job, outcome, "FAILED", null, null, log.ToString(),
+                        "this runner does not permit npm lifecycle scripts (DenyPrivateScriptsOnBuild)")
+                        .ConfigureAwait(false);
+                    return outcome;
+                }
+
+                var validation = SourceValidator.Validate(files, job.AllowScripts);
+                var lockfile = files.FirstOrDefault(f => f.Path is LockfileValidator.FileName)?.Content;
+                if (validation.Ok && lockfile is not null) validation = LockfileValidator.Validate(lockfile);
+                if (!validation.Ok)
+                {
+                    _logger.LogWarning("Build {BuildId} rejected: {Reason}", job.BuildId, validation.Reason);
+                    await PublishAsync(job, outcome, "FAILED", null, null, log.ToString(), validation.Reason)
+                        .ConfigureAwait(false);
+                    return outcome;
+                }
+
+                // --- lay out the build context -----------------------------------------
+                var dirs = PrepareWorkspace(workspace, files);
+
+                if (job.AllowScripts)
+                {
+                    _logger.LogWarning(
+                        "Build {BuildId} runs npm lifecycle scripts at the function's request", job.BuildId);
+                }
+
+                // One deadline covers the install and the image build together: they are two
+                // halves of the same job and a tenant was promised one time limit, not two.
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+                timeout.CancelAfter(TimeSpan.FromSeconds(_options.BuildTimeoutSeconds));
+
+                // --- dependencies --------------------------------------------------------
+                // Installing is the expensive half of a build, and the manifest is the only thing
+                // that can legitimately change what it produces. So if this exact manifest was
+                // installed before, reuse that tree: editing index.js, or just testing with a
+                // different input, no longer costs a full install.
+                var manifest = files.FirstOrDefault(f => f.Path is "package.json")?.Content;
+                // A lockfile changes what the install produces, so it is part of the cache key. Without
+                // one the key is the manifest alone, as before, so existing cache entries stay valid.
+                var dependencyKey = manifest is null || lockfile is null ? manifest : manifest + "\n\0lock\n" + lockfile;
+                var archivePath = Path.Combine(dirs.Work, BuildSandboxProfile.DepsArchiveName);
+                var restored = dependencyKey is not null
+                    && _dependencies.TryRestore(job.TenantId, dependencyKey, archivePath);
+
+                if (restored)
+                {
+                    // Not audited again: this exact tree passed the check when it was installed.
+                    log.AppendLine("dependencies reused from a previous build of this manifest");
+                }
+                else
+                {
+                    // The only step that runs code the tenant chose, and the reason it is not a RUN
+                    // instruction: docker build has no runtime selector, so a RUN would execute on
+                    // the Engine default (runc) and put tenant code on the host kernel.
+                    var install = await _installer.InstallAsync(
+                        job.BuildId, dirs.Work, job.AllowScripts, beginMarker, endMarker, timeout.Token)
+                        .ConfigureAwait(false);
+
+                    log.Append(install.Log);
+
+                    if (!install.Ok)
+                    {
+                        await PublishAsync(job, outcome, "FAILED", null, null, PublishableLog(), install.Failure)
+                            .ConfigureAwait(false);
+                        return outcome;
+                    }
+
+                    // --- advisories (F-8) ------------------------------------------------------
+                    var audit = NpmAudit.Parse(install.Log, auditBegin, auditEnd);
+                    log.AppendLine(NpmAudit.Summary(audit));
+                    var blocked = NpmAudit.Failure(audit, _options.AuditFailLevel);
+                    if (blocked is not null)
+                    {
+                        _logger.LogWarning("Build {BuildId} refused: {Reason}", job.BuildId, blocked);
+                        await PublishAsync(job, outcome, "FAILED", null, null, PublishableLog(), blocked)
+                            .ConfigureAwait(false);
+                        return outcome;
+                    }
+
+                    // Only a tree that installed cleanly and passed the check is worth keeping.
+                    if (dependencyKey is not null)
+                    {
+                        _dependencies.Save(job.TenantId, dependencyKey, archivePath);
+                    }
+                }
+
+                // The archive moves into the context now rather than being written there, so the
+                // sandbox never held a writable path inside the directory that becomes an image.
+                File.Move(
+                    Path.Combine(dirs.Work, BuildSandboxProfile.DepsArchiveName),
+                    Path.Combine(dirs.Context, BuildSandboxProfile.DepsArchiveName));
+
+                var dockerfile = _template
+                    .Replace("{{BASE_IMAGE}}", _options.BaseImage, StringComparison.Ordinal)
+                    .Replace("{{DEPS_ARCHIVE}}", BuildSandboxProfile.DepsArchiveName, StringComparison.Ordinal)
+                    .Replace("{{MAX_OLD_SPACE_MB}}",
+                        RunLimits.Default.MaxOldSpaceMb.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal);
+                await File.WriteAllTextAsync(Path.Combine(dirs.Context, "Dockerfile"), dockerfile, token)
+                    .ConfigureAwait(false);
+
+                // --- build ---------------------------------------------------------------
+                var tag = job.ImageRef;
+                var built = job.LocalOnly
+                    ? await BuildTestImageAsync(job, dirs, manifest, tag, log, timeout.Token).ConfigureAwait(false)
+                    : await BuildImageAsync(dirs.Context, tag, ImageKind.Function, log, timeout.Token).ConfigureAwait(false);
+                if (!built)
+                {
+                    await PublishAsync(job, outcome, "FAILED", null, null, PublishableLog(),
+                            SyntaxErrorFailure(log.ToString()) ?? "the image build failed")
+                        .ConfigureAwait(false);
+                    return outcome;
+                }
+
+                // --- publish and pin by digest -------------------------------------------
+                // A test build is for this host alone: it runs here, in the same job, and is
+                // deleted straight after. It never goes near a registry, so no other host can be
+                // asked for it and no registry copy is left behind.
+                // Three ways to publish, and which one applies is decided by the job, not by
+                // configuration — so a control plane on the old path and one on the new can both be
+                // served by this runner without a flag to get wrong.
+                //
+                // A test build stays here: it runs on this host, in this job, and is deleted after.
+                // An artifact upload is the new path — the context goes to the store and every host
+                // builds its own image from it. A push is the old one.
+                string? digest = null;
+                string? artifactSha = null;
+
+                if (job.LocalOnly)
+                {
+                    digest = await LocalImageIdAsync(tag, log, token).ConfigureAwait(false);
+                }
+                else if (!string.IsNullOrWhiteSpace(job.ArtifactUploadUrl))
+                {
+                    artifactSha = await UploadArtifactAsync(job, dirs.Context, log, token).ConfigureAwait(false);
+                }
+                else
+                {
+                    digest = await PushAsync(tag, log, token).ConfigureAwait(false);
+                }
+
+                if (digest is null && artifactSha is null)
+                {
+                    await PublishAsync(
+                        job, outcome, "FAILED", null, null, PublishableLog(),
+                        job.ArtifactUploadUrl is null
+                            ? "the image could not be pushed"
+                            : "the build artifact could not be uploaded")
+                        .ConfigureAwait(false);
+                    return outcome;
+                }
+
+                var installed = ExtractResolvedPackages(log.ToString(), beginMarker, endMarker);
+                if (installed is null)
+                {
+                    _logger.LogWarning(
+                        "Build {BuildId} produced no resolved-package list; falling back to the " +
+                        "ranges package.json asked for, which are not what was installed", job.BuildId);
+                }
+
+                var packages = installed ?? DescribeRequestedPackages(files);
+
+                // Deliberately not pinned in functions:images:keep here. A build is not a promise
+                // that anything will use its image: pinning at build time meant every Test of
+                // changed source pinned an image for good, and when the build record later expired
+                // there was nothing left to say which digest that was. The control plane pins a
+                // digest when it becomes a deployed version and unpins it when that version goes.
+                // Until then the image is protected by Image GC's grace window, and a Test whose
+                // image has been reclaimed rebuilds rather than failing (DECISIONS D3).
+                await PublishAsync(job, outcome, "SUCCEEDED", digest, packages, PublishableLog(), null, artifactSha)
+                    .ConfigureAwait(false);
+
+                _logger.LogInformation("Build {BuildId} produced {Digest}", job.BuildId, digest);
+            }
+            catch (OperationCanceledException)
+            {
+                await PublishAsync(job, outcome, "FAILED", null, null, PublishableLog(),
+                    $"the build exceeded its {_options.BuildTimeoutSeconds}s time limit").ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Build {BuildId} failed unexpectedly", job.BuildId);
+                await PublishAsync(job, outcome, "FAILED", null, null, PublishableLog(), ex.Message).ConfigureAwait(false);
+            }
+            finally
+            {
+                CleanUp(workspace);
+            }
+
+            return outcome;
+        }
+
+        /// <summary>The two directories one build works in, and the root that holds both.</summary>
+        /// <param name="Root">Deleted wholesale when the build ends.</param>
+        /// <param name="Context">What is tarred and sent to the Engine as the build context.</param>
+        /// <param name="Work">Bind-mounted read-write into the install sandbox.</param>
+        internal sealed record BuildDirectories(string Root, string Context, string Work);
+
+        /// <summary>
+        /// Lays out the two directories a build needs.
+        /// <para>
+        /// <c>context/</c> is what becomes the image: <c>manifest/</c> holds package.json,
+        /// <c>src/</c> holds everything else, and the dependency archive is moved in later.
+        /// <c>work/</c> is separate and deliberately outside the context, because it is the one
+        /// directory a sandbox can write to — anything it produced that was not asked for must
+        /// not be able to ride into an image just by existing.
+        /// </para>
+        /// <para>
+        /// The root <c>package-lock.json</c> (already screened) goes to <c>work/</c> only, for
+        /// <c>npm ci</c>; any other lockfile is dropped, since it would pin versions nothing screened.
+        /// </para>
+        /// </summary>
+        internal static BuildDirectories PrepareWorkspace(string workspace, IReadOnlyList<SourceFile> files)
+        {
+            ArgumentNullException.ThrowIfNull(files);
+
+            if (Directory.Exists(workspace)) Directory.Delete(workspace, recursive: true);
+
+            var context = Path.Combine(workspace, "context");
+            var work = Path.Combine(workspace, "work");
+            Directory.CreateDirectory(Path.Combine(context, "manifest"));
+            Directory.CreateDirectory(Path.Combine(context, "src"));
+            Directory.CreateDirectory(work);
+
+            foreach (var file in files)
+            {
+                // The one honoured lockfile goes where the install reads it, and nowhere else: the
+                // image needs the installed tree, not the file. Already screened by the caller.
+                if (file.Path is LockfileValidator.FileName)
+                {
+                    File.WriteAllText(Path.Combine(work, LockfileValidator.FileName), file.Content);
+                    continue;
+                }
+                if (IsLockfile(file.Path)) continue;
+
+                var isManifest = file.Path is "package.json";
+                var root = Path.GetFullPath(Path.Combine(context, isManifest ? "manifest" : "src"));
+                var full = Path.GetFullPath(Path.Combine(root, file.Path));
+
+                // Belt and braces: the validator already refused escaping paths, but the file
+                // system is the thing that would actually be damaged, so check again here. The
+                // bound is the subdirectory, not the workspace: a single '..' stays inside the
+                // context and would drop a tenant file beside the generated Dockerfile.
+                if (!full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"refusing to write '{file.Path}' outside the build context");
+                }
+
+                Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+                File.WriteAllText(full, file.Content);
+
+                // The install needs the manifest, and only the manifest: the sandbox resolves
+                // dependencies, it does not see the function's source.
+                if (isManifest) File.WriteAllText(Path.Combine(work, "package.json"), file.Content);
+            }
+
+            OpenWorkspaceToSandbox(work);
+            return new BuildDirectories(workspace, context, work);
+        }
+
+        /// <summary>
+        /// Lets uid 10001 write to the install workspace.
+        /// <para>
+        /// The sandbox runs as the same unprivileged uid a function does, which is not the uid
+        /// that owns this directory, so the directory is opened to it rather than the sandbox
+        /// being handed the runner's identity. That is safe here and nowhere else: the parent
+        /// (<c>/var/lib/blocks-runner/builds</c>) is not traversable by anyone but root and the
+        /// runner, so "other" means the sandbox and nothing else on this single-purpose VM.
+        /// </para>
+        /// </summary>
+        private static void OpenWorkspaceToSandbox(string work)
+        {
+            if (OperatingSystem.IsWindows()) return;
+
+            File.SetUnixFileMode(
+                work,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+                UnixFileMode.OtherRead | UnixFileMode.OtherWrite | UnixFileMode.OtherExecute);
+        }
+
+        /// <summary>A lockfile anywhere in the bundle, not only at its root.</summary>
+        internal static bool IsLockfile(string path) =>
+            LockfileNames.Contains(Path.GetFileName(path), StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>What an image is for; decides its labels and so how Image GC treats it.</summary>
+        internal enum ImageKind { Function, Test, TestDeps }
+
+        /// <summary>
+        /// A test's image, in two steps (FN-14, 2026-10-07).
+        /// <para>
+        /// The template's one image cost 11–18 s per test even with the install skipped: its
+        /// <c>chown -R</c>/<c>chmod -R</c> comes after the source, so every edit re-walked the whole
+        /// dependency tree, the metadata steps each started a container, and deleting the test image
+        /// pruned the dependency layers with it. So a test builds on a <b>dependency image</b> — base,
+        /// manifest, dependencies, permissions, env, user, entrypoint — built once per tenant and
+        /// exact dependency tree and kept on this host, and adds only the source on top (~1 s).
+        /// </para>
+        /// <para>
+        /// The result is the same image as the template's: the source goes in root-owned and
+        /// read-only because the build context carries it that way (0555, files and directories) —
+        /// what the template's <c>RUN chmod -R a-w,a+rX</c> makes of this tar's entries, whose
+        /// files carry an execute bit. Checked against a real build in TestDepsImageTests.
+        /// Deployed builds keep the template.
+        /// </para>
+        /// </summary>
+        private async Task<bool> BuildTestImageAsync(
+            BuildJob job, BuildDirectories dirs, string? manifest, string tag, StringBuilder log, CancellationToken token)
+        {
+            var source = Path.Combine(dirs.Context, "src");
+            if (!File.Exists(Path.Combine(source, "index.js")))
+            {
+                // The template's own check, made here because the source layer has no RUN step.
+                log.AppendLine("index.js is missing from the function source");
+                return false;
+            }
+
+            var archive = Path.Combine(dirs.Context, BuildSandboxProfile.DepsArchiveName);
+            string archiveSha;
+            await using (var stream = File.OpenRead(archive))
+            {
+                archiveSha = Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, token).ConfigureAwait(false));
+            }
+
+            var depsTag = TestDepsImageRef(job.TenantId, _options.BaseImage, RunLimits.Default.MaxOldSpaceMb, manifest, archiveSha);
+            if (await LocalImageExistsAsync(depsTag, token).ConfigureAwait(false))
+            {
+                log.AppendLine("dependency image reused; only the source is added");
+            }
+            else
+            {
+                var depsContext = Path.Combine(dirs.Root, "deps-context");
+                Directory.CreateDirectory(depsContext);
+                Directory.Move(Path.Combine(dirs.Context, "manifest"), Path.Combine(depsContext, "manifest"));
+                File.Move(archive, Path.Combine(depsContext, BuildSandboxProfile.DepsArchiveName));
+                await File.WriteAllTextAsync(
+                    Path.Combine(depsContext, "Dockerfile"),
+                    TestDepsDockerfile(_options.BaseImage, BuildSandboxProfile.DepsArchiveName, RunLimits.Default.MaxOldSpaceMb),
+                    token).ConfigureAwait(false);
+
+                log.AppendLine("building the dependency image for this package.json; later tests reuse it");
+                if (!await BuildImageAsync(depsContext, depsTag, ImageKind.TestDeps, log, token).ConfigureAwait(false))
+                {
+                    return false;
+                }
+            }
+
+            _usage?.Touch(depsTag);
+
+            var testContext = Path.Combine(dirs.Root, "test-context");
+            Directory.CreateDirectory(testContext);
+            Directory.Move(source, Path.Combine(testContext, "src"));
+            await File.WriteAllTextAsync(
+                Path.Combine(testContext, "Dockerfile"), TestSourceDockerfile(depsTag), token).ConfigureAwait(false);
+
+            return await BuildImageAsync(testContext, tag, ImageKind.Test, log, token, readOnlySource: true)
+                .ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Bumped when <see cref="TestDepsDockerfile"/> changes, so no host reuses a dependency
+        /// image laid out the old way.
+        /// </summary>
+        internal const int TestDepsLayout = 1;
+
+        /// <summary>
+        /// The local name of a test's dependency image. Everything that decides its contents is in
+        /// the key: the tenant (never shared across tenants), the runtime, the heap size, the
+        /// manifest and the exact dependency archive (a fresh install of the same manifest can
+        /// resolve newer versions, and must not reuse the old tree).
+        /// </summary>
+        internal static string TestDepsImageRef(string? tenantId, string baseImage, int maxOldSpaceMb, string? manifest, string archiveSha)
+        {
+            var key = string.Join('\n',
+                TestDepsLayout.ToString(CultureInfo.InvariantCulture), tenantId ?? string.Empty, baseImage,
+                maxOldSpaceMb.ToString(CultureInfo.InvariantCulture), archiveSha, manifest ?? string.Empty);
+            var hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(key)));
+            return $"blocks-test-deps/{hash[..40]}:local";
+        }
+
+        /// <summary>
+        /// Everything of <c>function.Dockerfile.tmpl</c> except the source: same base, layout,
+        /// permissions, heap size, user and entrypoint. Keep the two in step.
+        /// </summary>
+        internal static string TestDepsDockerfile(string baseImage, string depsArchive, int maxOldSpaceMb) =>
+            string.Create(CultureInfo.InvariantCulture, $$"""
+                FROM {{baseImage}}
+                USER root
+                WORKDIR /function
+                COPY manifest/ /function/
+                ADD {{depsArchive}} /function/
+                RUN set -eux; \
+                    chown -R root:root /function; \
+                    chmod -R a-w,a+rX /function; \
+                    test -d /function/node_modules || { echo "node_modules is missing from the build" >&2; exit 1; }
+                ENV NODE_OPTIONS=--max-old-space-size={{maxOldSpaceMb}}
+                USER 10001:10001
+                ENTRYPOINT ["node", "/runtime/bootstrap.mjs"]
+
+                """);
+
+        /// <summary>
+        /// The test's own layer: the source, read-only as the build context carries it, then the same
+        /// syntax check a deployed build runs. The dependency image already set USER 10001:10001.
+        /// </summary>
+        internal static string TestSourceDockerfile(string depsImage) =>
+            $"FROM {depsImage}\nCOPY src/ /function/\n{SyntaxCheckRun}\n";
+
+        /// <summary>
+        /// Parses every tenant .js/.mjs/.cjs file outside node_modules with <c>node --check</c>, which
+        /// never runs the code (FN-30). The same instruction is in <c>function.Dockerfile.tmpl</c>.
+        /// </summary>
+        internal const string SyntaxCheckRun =
+            "RUN set -eu; cd /function; find . -path ./node_modules -prune -o -type f \\( -name '*.js' -o -name '*.mjs' -o -name '*.cjs' \\) -print"
+            + " | while IFS= read -r file; do node --check \"$file\" || { echo \"" + SyntaxErrorMarker + " ${file#./}\" >&2; exit 1; }; done";
+
+        internal const string SyntaxErrorMarker = "BLOCKS_SYNTAX_ERROR";
+
+        [System.Text.RegularExpressions.GeneratedRegex("\u001b\\[[0-9;]*m")]
+        private static partial System.Text.RegularExpressions.Regex AnsiColour();
+
+        /// <summary>
+        /// Turns the syntax check's output in a failed build log into a message the developer can act
+        /// on — file, line and Node's own reason — or null when the build failed for another reason.
+        /// </summary>
+        internal static string? SyntaxErrorFailure(string log)
+        {
+            // The Engine wraps a step's stderr in ANSI colour codes ("\u001b[91m"), so strip them first.
+            var lines = AnsiColour().Replace(log, string.Empty).Split('\n').Select(l => l.TrimEnd('\r')).ToArray();
+            var markerAt = Array.FindIndex(lines, l => l.StartsWith(SyntaxErrorMarker + " ", StringComparison.Ordinal));
+            if (markerAt < 0) return null;
+
+            var file = lines[markerAt][(SyntaxErrorMarker.Length + 1)..].Trim();
+            string? reason = null;
+            string? line = null;
+            for (var i = markerAt - 1; i >= 0 && (reason is null || line is null); i--)
+            {
+                var text = lines[i];
+                if (reason is null && text.StartsWith("SyntaxError: ", StringComparison.Ordinal))
+                {
+                    reason = text["SyntaxError: ".Length..].Trim();
+                }
+                else if (line is null && text.StartsWith("/function/" + file + ":", StringComparison.Ordinal))
+                {
+                    line = text[("/function/" + file + ":").Length..].Trim();
+                }
+                else if (text.StartsWith(SyntaxErrorMarker + " ", StringComparison.Ordinal))
+                {
+                    break;
+                }
+            }
+
+            var where = line is { Length: > 0 } && line.All(char.IsAsciiDigit) ? $"{file} line {line}" : file;
+            return reason is null ? $"syntax error in {where}" : $"syntax error in {where}: {reason}";
+        }
+
+        private async Task<bool> LocalImageExistsAsync(string reference, CancellationToken token)
+        {
+            try
+            {
+                await _docker.Images.InspectImageAsync(reference, token).ConfigureAwait(false);
+                return true;
+            }
+            catch (DockerImageNotFoundException)
+            {
+                return false;
+            }
+        }
+
+        private async Task<bool> BuildImageAsync(
+            string contextDir, string tag, ImageKind kind, StringBuilder log, CancellationToken token, bool readOnlySource = false)
+        {
+            using var context = CreateTarContext(contextDir, readOnlySource);
+
+            var parameters = new ImageBuildParameters
+            {
+                Dockerfile = "Dockerfile",
+                Tags = [tag],
+                Remove = true,
+                ForceRemove = true,
+                NoCache = false,
+                // The build gets the same confined egress as an execution: npm reaches the public
+                // registry and nothing private.
+                NetworkMode = _options.Network,
+                Memory = (long)_options.BuildMemoryMb * 1024 * 1024,
+                MemorySwap = (long)_options.BuildMemoryMb * 1024 * 1024,
+                // The image build is host work too — unpacking layers and chowning a whole
+                // dependency tree is thousands of file operations. Same reasoning as the install
+                // sandbox: a share rather than a quota, so it fills idle CPU and yields to runs.
+                // A quota is applied only when BuildCpus asks for one.
+                CPUShares = _options.BuildCpuShares,
+                CPUQuota = _options.BuildCpus > 0 ? _options.BuildCpus * 100_000L : 0,
+                CPUPeriod = _options.BuildCpus > 0 ? 100_000L : 0,
+                Labels = kind switch
+                {
+                    ImageKind.Test => new Dictionary<string, string> { [FunctionImageLabel] = "true", [TestImageLabel] = "true" },
+                    ImageKind.TestDeps => new Dictionary<string, string> { [FunctionImageLabel] = "true", [TestDepsImageLabel] = "true" },
+                    _ => new Dictionary<string, string> { [FunctionImageLabel] = "true" },
+                },
+            };
+
+            var failed = false;
+            var progress = new SyncProgress<JSONMessage>(message =>
+            {
+                if (!string.IsNullOrEmpty(message.Stream)) log.Append(message.Stream);
+                if (!string.IsNullOrEmpty(message.ErrorMessage))
+                {
+                    log.Append(message.ErrorMessage);
+                    failed = true;
+                }
+            });
+
+            try
+            {
+                await _docker.Images.BuildImageFromDockerfileAsync(
+                    parameters, context, authConfigs: null, headers: null, progress, token).ConfigureAwait(false);
+            }
+            catch (DockerApiException ex)
+            {
+                log.Append(ex.Message);
+                return false;
+            }
+
+            return !failed;
+        }
+
+        /// <summary>Label on every tenant image; Image GC only ever looks at these.</summary>
+        public const string FunctionImageLabel = "dev.selise.blocks.function";
+
+        /// <summary>
+        /// Label on a test build's image: local to one host, used by one run, deleted after it.
+        /// Image GC removes any that a crashed runner left behind, without waiting for the keep set.
+        /// </summary>
+        public const string TestImageLabel = "dev.selise.blocks.test";
+
+        /// <summary>
+        /// Label on a test's dependency image: local to one host, shared by that tenant's tests of
+        /// one dependency tree. Image GC removes it once idle (<c>ImageGc.TestDepsIdle</c>).
+        /// </summary>
+        public const string TestDepsImageLabel = "dev.selise.blocks.test-deps";
+
+        /// <summary>The image id of a local-only build — what the run then executes.</summary>
+        private async Task<string?> LocalImageIdAsync(string tag, StringBuilder log, CancellationToken token)
+        {
+            try
+            {
+                var inspect = await _docker.Images.InspectImageAsync(tag, token).ConfigureAwait(false);
+                return inspect.ID;
+            }
+            catch (DockerApiException ex)
+            {
+                log.Append(ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Pushes the built tag and returns the digest-pinned reference a later run can pull, or
+        /// null when it could not be established — in which case the build is published FAILED.
+        /// <para>
+        /// Three things here are load-bearing, and each replaces something that produced a
+        /// deployed version pointing at an image nothing could ever pull:
+        /// <list type="number">
+        /// <item>A push failure arrives as an <c>ErrorMessage</c> on the progress stream, not as
+        /// an exception. It used to be appended to the log and otherwise ignored, so a push that
+        /// failed still returned a digest and the build was published SUCCEEDED.</item>
+        /// <item>The digest is taken from the repository that was pushed to, not
+        /// <c>RepoDigests.FirstOrDefault()</c> — an image that is also tagged into another
+        /// function's repository carries that one's reference too, and picking it silently pinned
+        /// a version to a digest served under a different name.</item>
+        /// <item>There is no fallback to the image id. With the containerd image store the daemon
+        /// assigns a manifest digest locally, before and independently of any push, so
+        /// <c>?? inspect.ID</c> produced a plausible-looking <c>sha256:…</c> that the registry had
+        /// never heard of. Every run of that version then failed IMAGE_PULL_FAILED with "manifest
+        /// unknown", on every attempt, until someone redeployed.</item>
+        /// </list>
+        /// Finally the digest is confirmed against the registry itself, because that is the
+        /// question a pull actually asks. An inconclusive check (registry unreachable) is not
+        /// treated as failure: the push reported success, and refusing the build on a flaky
+        /// admin call would trade a rare silent failure for a common loud one.
+        /// </para>
+        /// </summary>
+        /// <summary>
+        /// Tars the build context and uploads it to the one blob the job's signed URL allows.
+        /// <para>
+        /// The <i>context</i>, not the image: manifest, the installed dependency tree and the source,
+        /// which is exactly what a host needs to build this function from the shared base. Shipping
+        /// the image instead would carry a copy of Node in every function's artifact.
+        /// </para>
+        /// <para>
+        /// The image was still built above, and deliberately — it is the cheapest validation there
+        /// is, and a function that cannot build should fail here, where the log reaches the build
+        /// record, rather than later on whichever host first tries to run it.
+        /// </para>
+        /// </summary>
+        /// <returns>The artifact's SHA-256, or null when it could not be uploaded.</returns>
+        private async Task<string?> UploadArtifactAsync(
+            BuildJob job, string contextDir, StringBuilder log, CancellationToken token)
+        {
+            var archive = Path.Combine(Path.GetTempPath(), $"fn-artifact-{job.BuildId}.tar");
+
+            try
+            {
+                // Same flags the dependency archive uses: a fixed sort order and zeroed timestamps,
+                // so an unchanged context produces byte-identical bytes and the hash means something.
+                var tar = await RunToolAsync(
+                    "tar",
+                    ["--sort=name", "--mtime=@0", "--owner=0", "--group=0", "--numeric-owner",
+                     "-cf", archive, "-C", contextDir, "."],
+                    token).ConfigureAwait(false);
+
+                if (tar != 0)
+                {
+                    log.AppendLine($"packing the build context failed (tar exited {tar})");
+                    return null;
+                }
+
+                string sha;
+                await using (var stream = File.OpenRead(archive))
+                {
+                    sha = Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, token).ConfigureAwait(false));
+                }
+
+                var client = _httpClientFactory.CreateClient(ArtifactUploadClientName);
+                using var content = new StreamContent(File.OpenRead(archive));
+
+                // Azure block blobs refuse a PUT without this header; it is the one piece of the
+                // storage protocol the builder has to know, and it keeps the SAS doing everything
+                // else.
+                content.Headers.Add("x-ms-blob-type", "BlockBlob");
+
+                using var response = await client
+                    .PutAsync(job.ArtifactUploadUrl, content, token)
+                    .ConfigureAwait(false);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    log.AppendLine($"uploading the build artifact failed with {(int)response.StatusCode}");
+                    _logger.LogError(
+                        "Build {BuildId} could not upload its artifact: {Status}", job.BuildId, (int)response.StatusCode);
+                    return null;
+                }
+
+                _logger.LogInformation(
+                    "Build {BuildId} uploaded its artifact ({Bytes} bytes, sha256 {Sha})",
+                    job.BuildId, new FileInfo(archive).Length, sha);
+
+                return sha;
+            }
+            catch (Exception ex) when (ex is HttpRequestException or IOException)
+            {
+                log.AppendLine($"uploading the build artifact failed: {ex.Message}");
+                _logger.LogError(ex, "Build {BuildId} could not upload its artifact", job.BuildId);
+                return null;
+            }
+            finally
+            {
+                try
+                {
+                    File.Delete(archive);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    _logger.LogDebug("Could not delete {Path}: {Message}", archive, ex.Message);
+                }
+            }
+        }
+
+        private static async Task<int> RunToolAsync(string file, string[] arguments, CancellationToken token)
+        {
+            var info = new System.Diagnostics.ProcessStartInfo(file)
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+
+            foreach (var argument in arguments)
+            {
+                info.ArgumentList.Add(argument);
+            }
+
+            using var process = System.Diagnostics.Process.Start(info)
+                ?? throw new InvalidOperationException($"could not start {file}");
+            await process.WaitForExitAsync(token).ConfigureAwait(false);
+            return process.ExitCode;
+        }
+
+        /// <summary>The named client used to PUT an artifact. Its timeout suits a large, slow body.</summary>
+        public const string ArtifactUploadClientName = "fn-artifact-upload";
+
+        private async Task<string?> PushAsync(string tag, StringBuilder log, CancellationToken token)
+        {
+            var (name, imageTag) = Sandbox.ImageResolver.SplitReference(tag);
+            string? pushError = null;
+
+            try
+            {
+                await _docker.Images.PushImageAsync(
+                    name,
+                    new ImagePushParameters { Tag = imageTag },
+                    authConfig: null,
+                    new SyncProgress<JSONMessage>(m =>
+                    {
+                        if (string.IsNullOrEmpty(m.ErrorMessage)) return;
+                        pushError ??= m.ErrorMessage;
+                        log.Append(m.ErrorMessage);
+                    }),
+                    token).ConfigureAwait(false);
+            }
+            catch (DockerApiException ex)
+            {
+                log.Append(ex.Message);
+                return null;
+            }
+
+            if (pushError is not null)
+            {
+                _logger.LogError("Push of {Tag} failed: {Message}", tag, pushError);
+                return null;
+            }
+
+            ImageInspectResponse inspect;
+            try
+            {
+                inspect = await _docker.Images.InspectImageAsync(tag, token).ConfigureAwait(false);
+            }
+            catch (DockerApiException ex)
+            {
+                log.Append(ex.Message);
+                return null;
+            }
+
+            var digest = SelectPushedDigest(inspect.RepoDigests, name);
+            if (digest is null)
+            {
+                var message =
+                    $"the push of {tag} reported success but the daemon lists no digest for {name}";
+                log.Append(message);
+                _logger.LogError("{Message}", message);
+                return null;
+            }
+
+            var exists = await _registry.ManifestExistsAsync(digest, token).ConfigureAwait(false);
+            if (exists == false)
+            {
+                var message =
+                    $"{digest} is not in the registry after pushing {tag}; refusing to publish a " +
+                    "reference no run could pull";
+                log.Append(message);
+                _logger.LogError("{Message}", message);
+                return null;
+            }
+
+            return digest;
+        }
+
+        /// <summary>
+        /// The repo digest belonging to <paramref name="repository"/>, out of every repository the
+        /// image happens to be tagged into.
+        /// </summary>
+        internal static string? SelectPushedDigest(IList<string>? repoDigests, string repository)
+        {
+            if (repoDigests is null || repository.Length == 0) return null;
+
+            var prefix = repository + "@";
+            foreach (var candidate in repoDigests)
+            {
+                if (candidate.StartsWith(prefix, StringComparison.Ordinal)) return candidate;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Packs the context into the tar stream the Engine's build API expects.
+        /// <para>
+        /// Spooled to a file rather than held in memory: the context now carries the dependency
+        /// archive, which for a real manifest is tens or hundreds of megabytes, and a runner that
+        /// buffered that per concurrent build would fall over long before the Engine did. The
+        /// file deletes itself when the stream closes.
+        /// </para>
+        /// </summary>
+        /// <param name="readOnlySource">
+        /// Every file and directory goes in as 0555 — what the template's chmod leaves — so the
+        /// image gets them read-only without a RUN step (a test's source layer; see <see cref="BuildTestImageAsync"/>).
+        /// </param>
+        internal static FileStream CreateTarContext(string contextDir, bool readOnlySource = false)
+        {
+            var path = Path.Combine(
+                Path.GetDirectoryName(contextDir.TrimEnd(Path.DirectorySeparatorChar))!,
+                "context.tar");
+
+            var buffer = new FileStream(
+                path, FileMode.Create, FileAccess.ReadWrite, FileShare.None,
+                bufferSize: 64 * 1024, FileOptions.DeleteOnClose);
+
+            using (var archive = TarArchive.CreateOutputTarArchive(buffer, TarBuffer.DefaultBlockFactor))
+            {
+                archive.IsStreamOwner = false;
+                archive.RootPath = contextDir.Replace('\\', '/').TrimEnd('/');
+
+                if (readOnlySource)
+                {
+                    foreach (var directory in Directory.EnumerateDirectories(contextDir, "*", SearchOption.AllDirectories)
+                                 .OrderBy(d => d, StringComparer.Ordinal))
+                    {
+                        var entry = TarEntry.CreateTarEntry(Path.GetRelativePath(contextDir, directory).Replace('\\', '/') + "/");
+                        entry.TarHeader.TypeFlag = TarHeader.LF_DIR;
+                        entry.TarHeader.Mode = ReadOnlyMode;
+                        entry.ModTime = DateTime.UtcNow;
+                        archive.WriteEntry(entry, recurse: false);
+                    }
+                }
+
+                foreach (var file in Directory.EnumerateFiles(contextDir, "*", SearchOption.AllDirectories))
+                {
+                    var entry = TarEntry.CreateEntryFromFile(file);
+                    entry.Name = Path.GetRelativePath(contextDir, file).Replace('\\', '/');
+                    if (readOnlySource && entry.Name != "Dockerfile") entry.TarHeader.Mode = ReadOnlyMode;
+                    archive.WriteEntry(entry, recurse: false);
+                }
+            }
+
+            buffer.Position = 0;
+            return buffer;
+        }
+
+        /// <summary>0555: read and traverse for all, write for none.</summary>
+        internal const int ReadOnlyMode = 0x16D;
+
+        private static List<SourceFile> ParseBundle(string json)
+        {
+            // The control plane sends { "files": { "path": "content", … } }.
+            using var doc = JsonDocument.Parse(json);
+            var files = new List<SourceFile>();
+
+            if (!doc.RootElement.TryGetProperty("files", out var map) || map.ValueKind != JsonValueKind.Object)
+            {
+                return files;
+            }
+
+            foreach (var property in map.EnumerateObject())
+            {
+                files.Add(new SourceFile(property.Name, property.Value.GetString() ?? string.Empty));
+            }
+            return files;
+        }
+
+        /// <summary>At most this many packages are recorded on a build, so one pathological
+        /// manifest cannot write an unbounded document into the build record.</summary>
+        internal const int MaxPackagesRecorded = 500;
+
+        internal static string PackagesMarker(string nonce, string kind) =>
+            $"---blocks-packages-{nonce}-{kind}---";
+
+        /// <summary>
+        /// The versions npm actually resolved, read back from the <c>npm ls</c> block the install
+        /// sandbox fenced with this build's nonce. Returns <c>null</c> — not an empty list — when
+        /// the block is absent or unreadable, so the caller can say so rather than claim a
+        /// dependency-free function.
+        /// <para>
+        /// Markers are matched as whole lines, and the last fenced block wins. Both rules earn
+        /// their keep against a lifecycle script, which is the one thing in a build that can
+        /// write to this log at the tenant's direction: the nonce means it cannot guess the
+        /// fence, and taking the last block means a forged earlier one is passed over.
+        /// </para>
+        /// </summary>
+        internal static string? ExtractResolvedPackages(string log, string beginMarker, string endMarker)
+        {
+            var json = ExtractBlock(log, beginMarker, endMarker);
+            if (json is null) return null;
+
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.ValueKind != JsonValueKind.Object) return null;
+
+                var packages = new List<object>();
+                if (doc.RootElement.TryGetProperty("dependencies", out var deps) &&
+                    deps.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var dep in deps.EnumerateObject())
+                    {
+                        if (packages.Count >= MaxPackagesRecorded) break;
+                        var version = dep.Value.ValueKind == JsonValueKind.Object &&
+                                      dep.Value.TryGetProperty("version", out var v) &&
+                                      v.ValueKind == JsonValueKind.String
+                            ? v.GetString()
+                            : null;
+                        packages.Add(new { name = dep.Name, version });
+                    }
+                }
+
+                return JsonSerializer.Serialize(packages);
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// The text of the last block fenced by these markers (whole lines), or null when there is
+        /// none, it is unterminated, or it is empty. Shared by the packages and audit blocks.
+        /// </summary>
+        internal static string? ExtractBlock(string log, string beginMarker, string endMarker)
+        {
+            if (string.IsNullOrEmpty(log)) return null;
+
+            var lines = log.Split('\n');
+            var begin = -1;
+            for (var i = lines.Length - 1; i >= 0; i--)
+            {
+                if (lines[i].Trim() == beginMarker) { begin = i; break; }
+            }
+            if (begin < 0) return null;
+
+            var end = -1;
+            for (var i = begin + 1; i < lines.Length; i++)
+            {
+                if (lines[i].Trim() == endMarker) { end = i; break; }
+            }
+            // An unterminated block means the build died mid-print; nothing in it can be trusted.
+            if (end < 0) return null;
+
+            var text = string.Join('\n', lines[(begin + 1)..end]).Trim();
+            return text.Length == 0 ? null : text;
+        }
+
+        /// <summary>Removes the fenced block, markers included, from a log shown to tenants.</summary>
+        internal static string StripPackagesBlock(string log, string beginMarker, string endMarker)
+        {
+            if (string.IsNullOrEmpty(log)) return log;
+            if (!log.Contains(beginMarker, StringComparison.Ordinal)) return log;
+
+            var kept = new List<string>();
+            var inside = false;
+            foreach (var line in log.Split('\n'))
+            {
+                var trimmed = line.Trim();
+                if (!inside && trimmed == beginMarker) { inside = true; continue; }
+                if (inside)
+                {
+                    if (trimmed == endMarker) inside = false;
+                    continue;
+                }
+                kept.Add(line);
+            }
+
+            // The Engine echoes the whole RUN instruction as a Step line, so the markers also
+            // appear inside a line that is worth keeping. Blank them there rather than dropping
+            // the step: what is left reads as a normal command.
+            return string.Join('\n', kept)
+                .Replace(beginMarker, string.Empty, StringComparison.Ordinal)
+                .Replace(endMarker, string.Empty, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// What the manifest asked for — used only when the resolved list could not be read.
+        /// These are ranges, not versions: <c>^1.7.0</c> is a request, and with no lockfile in
+        /// the pipeline two builds of it can legitimately differ.
+        /// </summary>
+        internal static string DescribeRequestedPackages(IReadOnlyList<SourceFile> files)
+        {
+            var manifest = files.FirstOrDefault(f => f.Path is "package.json");
+            if (manifest is null) return "[]";
+
+            try
+            {
+                using var doc = JsonDocument.Parse(manifest.Content);
+                if (doc.RootElement.ValueKind != JsonValueKind.Object) return "[]";
+
+                var packages = new List<object>();
+                // devDependencies are omitted because --omit=dev means they are never installed.
+                foreach (var section in new[] { "dependencies", "optionalDependencies" })
+                {
+                    if (!doc.RootElement.TryGetProperty(section, out var deps) ||
+                        deps.ValueKind != JsonValueKind.Object)
+                    {
+                        continue;
+                    }
+
+                    foreach (var dep in deps.EnumerateObject())
+                    {
+                        if (packages.Count >= MaxPackagesRecorded) break;
+                        var requested = dep.Value.ValueKind == JsonValueKind.String ? dep.Value.GetString() : null;
+                        packages.Add(new { name = dep.Name, version = requested });
+                    }
+                }
+
+                return JsonSerializer.Serialize(packages);
+            }
+            catch (JsonException)
+            {
+                return "[]";
+            }
+        }
+
+        private Task<RedisValue> PublishAsync(
+            BuildJob job, BuildOutcome outcome, string status, string? digest, string? packages, string? log,
+            string? error, string? artifactSha256 = null)
+        {
+            outcome.Succeeded = status == "SUCCEEDED";
+            outcome.Image = digest;
+            outcome.Error = error;
+            outcome.Log = log;
+
+            if (!outcome.Succeeded)
+            {
+                // A failed build used to leave nothing on this host at all: the reason and the
+                // npm output went only to the result stream, and from there to a build record
+                // the operator of the machine cannot read. The one person able to see the host
+                // was the one person with no way to see why its build failed, and a test build
+                // compounds it — its record is ephemeral and the run that owns it reports only
+                // the summary line. The tail is capped at BuildLogTail so one bad build cannot
+                // flood the journal.
+                _logger.LogError(
+                    "Build {BuildId} for function {FunctionId} FAILED: {Error}\n--- build log (tail) ---\n{Log}",
+                    job.BuildId, job.FunctionId, error ?? "(no reason given)",
+                    Tail(log ?? string.Empty, BuildLogTail));
+            }
+
+            return _db.StreamAddAsync(RedisKeys.BuildResultsStream,
+            [
+                new NameValueEntry("buildId", job.BuildId),
+                new NameValueEntry("functionId", job.FunctionId),
+                new NameValueEntry("tenantId", job.TenantId ?? string.Empty),
+                new NameValueEntry("status", status),
+                new NameValueEntry("imageDigest", digest ?? string.Empty),
+                new NameValueEntry(RedisKeys.BuildArtifactSha256Field, artifactSha256 ?? string.Empty),
+                new NameValueEntry(RedisKeys.BuildBaseImageField, _options.BaseImage),
+                new NameValueEntry("packages", packages ?? "[]"),
+                new NameValueEntry("log", log ?? string.Empty),
+                new NameValueEntry("errorMessage", error ?? string.Empty),
+                new NameValueEntry("protocol", RedisKeys.ProtocolVersion),
+            ]);
+        }
+
+        /// <summary>How much of a failed build's log reaches this host's journal.</summary>
+        internal const int BuildLogTail = 4 * 1024;
+
+        /// <summary>Build logs are shown to tenants; keep the tail, which is where failures are.</summary>
+        private static string Tail(StringBuilder log, int max = 16 * 1024) => Tail(log.ToString(), max);
+
+        private static string Tail(string text, int max = 16 * 1024) =>
+            text.Length <= max ? text : text[^max..];
+
+        private static string LoadTemplate()
+        {
+            // The template ships beside the binaries so a change to it is a deployment, not a
+            // rebuild of the runner.
+            var candidates = new[]
+            {
+                Path.Combine(AppContext.BaseDirectory, "function.Dockerfile.tmpl"),
+                "/opt/blocks-function-runner/function.Dockerfile.tmpl",
+            };
+
+            foreach (var candidate in candidates)
+            {
+                if (!File.Exists(candidate)) continue;
+
+                var template = File.ReadAllText(candidate);
+
+                // Because the template deploys separately from the runner, a half-finished
+                // install can pair new code with the template that still ran `npm install` as a
+                // RUN step. That template would render with an unsubstituted placeholder and fail
+                // somewhere deep in npm, having first put tenant code back on the host kernel —
+                // the exact thing the install sandbox exists to prevent. Refuse it by name.
+                if (template.Contains("{{NPM_FLAGS}}", StringComparison.Ordinal) ||
+                    !template.Contains("{{DEPS_ARCHIVE}}", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"'{candidate}' is the pre-sandbox build template: it installs dependencies " +
+                        "in a RUN step, which executes on the Engine's default runtime rather than " +
+                        "under gVisor. Deploy the current runtime-image/function.Dockerfile.tmpl.");
+                }
+
+                return template;
+            }
+
+            throw new FileNotFoundException(
+                "function.Dockerfile.tmpl was not found; it must be deployed beside the runner",
+                candidates[0]);
+        }
+
+        private void CleanUp(string workspace)
+        {
+            try
+            {
+                if (Directory.Exists(workspace)) Directory.Delete(workspace, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Never fatal: it runs after the result is published, and escaping from here used
+                // to skip acknowledging the build, so the entry was reclaimed and built again.
+                // The reaper retries the directory later.
+                _logger.LogWarning("Could not remove build workspace {Dir}: {Message}", workspace, ex.Message);
+            }
+        }
+    }
+}

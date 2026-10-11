@@ -27,8 +27,6 @@ const OPERATORS = [
   { value: "less_than", label: "Less than" },
   { value: "greater_or_equal", label: "Greater or equal" },
   { value: "less_or_equal", label: "Less or equal" },
-  { value: "in", label: "In (array)" },
-  { value: "not_in", label: "Not in (array)" },
   { value: "is_true", label: "Is true" },
   { value: "is_false", label: "Is false" },
 ];
@@ -47,8 +45,9 @@ const TYPE_OPERATORS: Record<string, { value: string; label: string }[]> = {
     { value: "not_equals", label: "Not equals" },
     { value: "contains", label: "Contains" },
     { value: "not_contains", label: "Not contains" },
-    { value: "in", label: "In (array)" },
-    { value: "not_in", label: "Not in (array)" },
+    // Server: the left value exactly equals (case-sensitive) one entry of the right list. Empty list = false.
+    { value: "in", label: "Equals one of (list)" },
+    { value: "not_in", label: "Equals none of (list)" },
   ],
   number: [
     { value: "equals", label: "Equals" },
@@ -59,10 +58,12 @@ const TYPE_OPERATORS: Record<string, { value: string; label: string }[]> = {
     { value: "less_or_equal", label: "Less or equal" },
   ],
   array: [
-    { value: "contains", label: "Contains" },
-    { value: "not_contains", label: "Not contains" },
-    { value: "in", label: "In (array)" },
-    { value: "not_in", label: "Not in (array)" },
+    // The server compares the two lists: "contains" is true when they share at least one value.
+    { value: "contains", label: "Shares any value with" },
+    { value: "not_contains", label: "Shares no value with" },
+    // Server: every left value is in the right list (subset). An empty left list = false.
+    { value: "in", label: "All values are in (list)" },
+    { value: "not_in", label: "Not all values are in (list)" },
   ],
   boolean: [
     { value: "is_true", label: "Is true" },
@@ -79,6 +80,10 @@ const TYPE_OPERATORS: Record<string, { value: string; label: string }[]> = {
     { value: "less_or_equal", label: "On or before" },
   ],
 };
+
+/** Operators whose right side is a list. */
+const LIST_OPERATORS = new Set(["in", "not_in"]);
+const LIST_HINT = "List: JSON array or comma-separated values";
 
 function DroppableConditionInput({ id, value, onChange, placeholder, disabled, readOnly, isMultiline, variablePicker }: { id: string; value: string; onChange: (v: string) => void; placeholder?: string; disabled?: boolean; readOnly?: boolean; isMultiline: boolean; variablePicker?: VariablePickerConfig | null }) {
   return (
@@ -225,6 +230,7 @@ export const ConditionsField = ({
                   <Label className="text-[12px] text-muted-foreground">Right Operand</Label>
                   <DroppableConditionInput
                     id={`${field.id}-right-${idx}`}
+                    placeholder={LIST_OPERATORS.has(cond.operator) ? LIST_HINT : undefined}
                     value={cond.right || ""}
                     onChange={(v) => handleRightChange(idx, v)}
                     readOnly={readOnly}

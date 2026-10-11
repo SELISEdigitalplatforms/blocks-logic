@@ -1,4 +1,3 @@
-using System.Text;
 using Microsoft.Extensions.Logging;
 using Proxy.DomainService.Dtos;
 using Proxy.DomainService.Entities;
@@ -26,9 +25,6 @@ namespace Proxy.DomainService.Services
 
         /// <summary>Max <c>pageSize</c> accepted by <c>GetExecutions</c> (SPEC &sect;3 / C1).</summary>
         internal const int MaxPageSize = 200;
-
-        /// <summary>Transport guard for <c>GetExecution.responseBody</c> (SPEC &sect;3.2 / C6). The stored row is untouched.</summary>
-        internal const int ResponseBodyDisplayLimitBytes = 64 * 1024;
 
         private readonly IProxyExecutionRepository _executionRepository;
         private readonly IProxyRepository _proxyRepository;
@@ -169,11 +165,11 @@ namespace Proxy.DomainService.Services
                 return new ProxyGetExecutionResponseDto { Data = null };
             }
 
-            var (body, truncated) = ClipForDisplay(row.ResponseBody);
-
+            // No body is returned: Blocks never stores one, and old rows that still hold a raw body are never
+            // read back (the entity no longer maps it).
             _logger.LogInformation(
-                "GetExecution for tenant {TenantId}: returned itemId {ItemId} (status {StatusCode}, body clipped: {Truncated}).",
-                tenantId, itemId, row.StatusCode, truncated);
+                "GetExecution for tenant {TenantId}: returned itemId {ItemId} (status {StatusCode}).",
+                tenantId, itemId, row.StatusCode);
 
             return new ProxyGetExecutionResponseDto
             {
@@ -187,8 +183,9 @@ namespace Proxy.DomainService.Services
                     LatencyMs = row.LatencyMs,
                     RequestMethod = row.RequestMethod,
                     RequestPath = row.RequestPath,
-                    RequestQuery = row.RequestQuery,
-                    UpstreamUrl = row.UpstreamUrl,
+                    // Redacted again on read, for rows stored before the write path redacted them.
+                    RequestQuery = ProxySecretRedactor.RedactQuery(row.RequestQuery),
+                    UpstreamUrl = ProxySecretRedactor.RedactUrl(row.UpstreamUrl),
                     UpstreamHost = row.UpstreamHost,
                     InjectedHeaderKeys = new List<string>(row.InjectedHeaderKeys),
                     InjectedQueryKeys = new List<string>(row.InjectedQueryKeys),
@@ -214,8 +211,6 @@ namespace Proxy.DomainService.Services
                     ResponseFilterApplied = row.ResponseFilterApplied,
                     ResponseFilterNote = row.ResponseFilterNote,
                     ResponseBodyBytes = row.ResponseBodyBytes,
-                    ResponseBody = body,
-                    ResponseBodyTruncatedForDisplay = truncated,
                 },
             };
         }
@@ -357,24 +352,6 @@ namespace Proxy.DomainService.Services
             }
 
             return new TailCursor(reference.StartedAtUtc, reference.ItemId);
-        }
-
-        private static (string? Body, bool Truncated) ClipForDisplay(string? body)
-        {
-            if (string.IsNullOrEmpty(body))
-            {
-                return (body, false);
-            }
-
-            var bytes = Encoding.UTF8.GetByteCount(body);
-            if (bytes <= ResponseBodyDisplayLimitBytes)
-            {
-                return (body, false);
-            }
-
-            var raw = Encoding.UTF8.GetBytes(body);
-            var clipped = Encoding.UTF8.GetString(raw, 0, ResponseBodyDisplayLimitBytes);
-            return (clipped, true);
         }
 
         private static List<string> CredentialRefsOf(ProxyDetailEntity? proxy)

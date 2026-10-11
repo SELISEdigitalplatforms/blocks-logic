@@ -8,4 +8,3 @@ export const ProxyMethodChips = ({ methods }: { methods: ProxyMethod[] }) => (
     ))}
   </div>
 );
-

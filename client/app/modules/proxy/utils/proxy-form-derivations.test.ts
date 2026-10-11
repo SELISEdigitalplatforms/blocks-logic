@@ -16,7 +16,11 @@ const route = (method: ProxyRoute["method"], path = ""): ProxyRoute => ({
 describe("deriveProxyMethods", () => {
   it("is the set of methods the endpoints use, in first-seen order", () => {
     expect(
-      deriveProxyMethods([route("POST", "orders"), route("GET", "orders/{id}"), route("POST", "refunds")]),
+      deriveProxyMethods([
+        route("POST", "orders"),
+        route("GET", "orders/{id}"),
+        route("POST", "refunds"),
+      ]),
     ).toEqual(["POST", "GET"]);
   });
 

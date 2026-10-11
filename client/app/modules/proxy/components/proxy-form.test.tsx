@@ -73,6 +73,34 @@ describe("ProxyForm", () => {
     expect(saved?.methodConfigs).toEqual([]);
   });
 
+  it("saves a timeout the user configured, and nothing when they configure nothing", async () => {
+    // Both halves matter. The console sends every field back on save, so a number that appeared on
+    // its own would be stored as though somebody had chosen it.
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+    renderWithProviders(
+      <MemoryRouter>
+        <ProxyForm mode="create" onSuccess={onSuccess} />
+      </MemoryRouter>,
+    );
+
+    fillConnection("Slow Vendor", "https://api.example.com");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+    expect((await proxyService.get(onSuccess.mock.calls[0][0]))?.resilience).toBeNull();
+
+    await user.click(screen.getByLabelText("Set a timeout for this proxy"));
+    fireEvent.change(screen.getByLabelText("Seconds"), { target: { value: "8" } });
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(2));
+    expect((await proxyService.get(onSuccess.mock.calls[1][0]))?.resilience).toEqual({
+      timeoutSeconds: 8,
+      retry: null,
+      breaker: null,
+    });
+  });
+
   it("stores credential rows as headers or query by their delivery slot", async () => {
     const user = userEvent.setup();
     const onSuccess = vi.fn();
@@ -129,6 +157,159 @@ describe("ProxyForm", () => {
     expect(saved?.responseInclude).toEqual([]);
   });
 
+  it("saves against the version it was loaded from, even after a background refetch (PX-16)", async () => {
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+    const p1 = (await proxyService.get("p1"))!;
+    const update = vi.spyOn(proxyService, "update");
+
+    const { rerender } = renderWithProviders(
+      <MemoryRouter>
+        <ProxyForm mode="edit" proxy={{ ...p1, version: 5 }} onSuccess={onSuccess} />
+      </MemoryRouter>,
+    );
+    // A refetch brings someone else's newer version; the form's edits are still based on v5.
+    rerender(
+      <MemoryRouter>
+        <ProxyForm mode="edit" proxy={{ ...p1, version: 6 }} onSuccess={onSuccess} />
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith(expect.objectContaining({ id: "p1", expectedVersion: 5 })),
+    );
+  });
+
+  it("shows the conflict and does not leave the form when someone else saved first (PX-16)", async () => {
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+    const p1 = (await proxyService.get("p1"))!;
+    const message = "Someone else changed this proxy. Reload to see their changes, then try again.";
+    vi.spyOn(proxyService, "update").mockResolvedValueOnce({
+      isSuccess: false,
+      errors: message,
+      code: "PROXY_VERSION_CONFLICT",
+      message,
+    });
+
+    renderWithProviders(
+      <MemoryRouter>
+        <ProxyForm mode="edit" proxy={p1} onSuccess={onSuccess} />
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(toasts.showErrorToast).toHaveBeenCalledWith({ errors: message }));
+    expect(onSuccess).not.toHaveBeenCalled();
+  });
+
+  it("keeps a proxy-wide response filter set outside the console when the proxy is saved", async () => {
+    // Sending "all" here would silently drop the filter and relay fields the owner chose to hide.
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+    const p1 = (await proxyService.get("p1"))!;
+    const proxy = { ...p1, responseMode: "select" as const, responseInclude: ["data.id"] };
+
+    renderWithProviders(
+      <MemoryRouter>
+        <ProxyForm mode="edit" proxy={proxy} onSuccess={onSuccess} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Proxy-wide response filter is on")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+    const saved = await proxyService.get("p1");
+    expect(saved?.responseMode).toBe("select");
+    expect(saved?.responseInclude).toEqual(["data.id"]);
+  });
+
+  it("turns the proxy-wide response filter off only when the owner asks", async () => {
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+    const p1 = (await proxyService.get("p1"))!;
+    const proxy = { ...p1, responseMode: "select" as const, responseInclude: ["data.id"] };
+
+    renderWithProviders(
+      <MemoryRouter>
+        <ProxyForm mode="edit" proxy={proxy} onSuccess={onSuccess} />
+      </MemoryRouter>,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Turn off: Proxy-wide response filter is on" }),
+    );
+    expect(screen.queryByText("Proxy-wide response filter is on")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+    const saved = await proxyService.get("p1");
+    expect(saved?.responseMode).toBe("all");
+    expect(saved?.responseInclude).toEqual([]);
+  });
+
+  it("keeps proxy-wide body fields and per-method overrides set outside the console on save", async () => {
+    // p1 carries both, set through the API. A save that sent them empty would change what the vendor
+    // receives (body fields) and where POST calls go (per-method upstream).
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+    const proxy = (await proxyService.get("p1"))!;
+    expect(proxy.bodyMerge.length).toBeGreaterThan(0);
+    expect(proxy.methodConfigs.length).toBeGreaterThan(0);
+
+    renderWithProviders(
+      <MemoryRouter>
+        <ProxyForm mode="edit" proxy={proxy} onSuccess={onSuccess} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Proxy-wide body fields are on")).toBeTruthy();
+    expect(screen.getByText("Per-method overrides are on")).toBeTruthy();
+    // Body-merge values can hold a credential; the card names keys only.
+    for (const row of proxy.bodyMerge) {
+      expect(screen.queryByText(row.value)).toBeNull();
+    }
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+    const saved = await proxyService.get("p1");
+    expect(saved?.bodyMerge).toEqual(proxy.bodyMerge);
+    expect(saved?.methodConfigs).toEqual(proxy.methodConfigs);
+  });
+
+  it("clears proxy-wide body fields and per-method overrides only when the owner turns them off", async () => {
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+    const proxy = (await proxyService.get("p1"))!;
+
+    renderWithProviders(
+      <MemoryRouter>
+        <ProxyForm mode="edit" proxy={proxy} onSuccess={onSuccess} />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Turn off: Proxy-wide body fields are on" }));
+    await user.click(screen.getByRole("button", { name: "Turn off: Per-method overrides are on" }));
+    expect(screen.queryByTestId("proxy-api-only-settings")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+    const saved = await proxyService.get("p1");
+    expect(saved?.bodyMerge).toEqual([]);
+    expect(saved?.methodConfigs).toEqual([]);
+  });
+
+  it("shows no proxy-wide settings card for a new proxy", () => {
+    renderWithProviders(
+      <MemoryRouter>
+        <ProxyForm mode="create" />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByTestId("proxy-api-only-settings")).toBeNull();
+  });
+
   it("edits an existing proxy, seeding its credential from headers, and has no delete action", async () => {
     const user = userEvent.setup();
     const onSuccess = vi.fn();
@@ -163,7 +344,7 @@ describe("ProxyForm", () => {
     );
   });
 
-  it("replaces endpoint override values with configuration variables", async () => {
+  it("replaces endpoint override values with picked configuration variables", async () => {
     const user = userEvent.setup();
     renderWithProviders(
       <MemoryRouter>
@@ -173,16 +354,16 @@ describe("ProxyForm", () => {
 
     await user.click(screen.getByRole("button", { name: "What this endpoint sends and returns" }));
     await user.click(screen.getByRole("switch", { name: "Extra headers for endpoint 1" }));
-    await user.type(screen.getByPlaceholderText("Enter value"), "Bearer old");
+    await user.type(screen.getByPlaceholderText("Enter value"), "Bearer ");
     await user.click(
       await screen.findByRole("button", {
         name: "Insert a configuration variable into extra headers value",
       }),
     );
-    await user.click(await screen.findByRole("menuitem", { name: "stripe-api-key" }));
+    await user.click(await screen.findByRole("option", { name: /stripe-api-key/ }));
 
     expect(screen.getByDisplayValue("{{$VAR.stripe-api-key}}")).toBeTruthy();
-    expect(screen.queryByText("variable")).toBeNull();
+    expect(screen.getByText(/uses a variable/i)).toBeTruthy();
   });
 
   it("shows an inline url validation message instead of relying on native validation", async () => {

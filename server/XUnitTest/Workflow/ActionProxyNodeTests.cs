@@ -124,6 +124,18 @@ namespace XUnitTest.Workflow
 
         // ----- Required selections --------------------------------------------------
 
+        /// <summary>
+        /// Since "Refactor error handling" (c2986972, 2026-09-16) a per-item failure is a synthetic error
+        /// item on the "source" branch and the step still succeeds (same as the HTTP Request node); only a
+        /// node-level problem (no proxy / no endpoint) fails the step. Returns that single item's message.
+        /// </summary>
+        private static string ItemError(NodeExecutionResult result)
+        {
+            var output = result.OutputItems.Should().ContainSingle().Subject.Data.Output.AsBsonDocument;
+            output["error"].AsBoolean.Should().BeTrue();
+            return output["message"].AsString;
+        }
+
         [Fact]
         public async Task RunAsync_NoProxySelected_FailsWithoutCallingTheGateway()
         {
@@ -191,8 +203,8 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(parameters));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("cannot contain");
+            result.IsSuccess.Should().BeFalse("a failed item fails the step, so the run ends Failed (C-9, 2026-10-08); the error item is kept");
+            ItemError(result).Should().Contain("cannot contain");
             _sent.Should().BeEmpty();
         }
 
@@ -205,8 +217,8 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(parameters));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("not valid");
+            result.IsSuccess.Should().BeFalse("a failed item fails the step, so the run ends Failed (C-9, 2026-10-08); the error item is kept");
+            ItemError(result).Should().Contain("not valid");
             _sent.Should().BeEmpty();
         }
 
@@ -215,8 +227,8 @@ namespace XUnitTest.Workflow
         {
             var result = await Node().RunAsync(Context(Parameters(routePath: "orders/{id}")));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("id");
+            result.IsSuccess.Should().BeFalse("a failed item fails the step, so the run ends Failed (C-9, 2026-10-08); the error item is kept");
+            ItemError(result).Should().Contain("id");
             _sent.Should().BeEmpty();
         }
 
@@ -272,9 +284,58 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(parameters));
 
+            // A body that is not JSON after filling is a config error: the step fails (PKG-23),
+            // it is no longer an error item on a successful step.
             result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().StartWith("Invalid JSON body:");
+            result.ErrorMessage.Should().StartWith("Body is not valid JSON after filling in values:")
+                .And.Contain("(line 1, position").And.EndWith("(item 1)");
+            result.OutputItems.Should().BeEmpty();
             _sent.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task RunAsync_BodyValuesWithQuotesAndBackslashes_AreEscapedInsideStrings()
+        {
+            var item = Item("item-1", new BsonDocument { { "name", "Bob \"B\" \\ Smith\nline2" }, { "n", 3 } });
+            var parameters = Parameters(method: "POST", haveBody: true,
+                body: "{\"name\": \"{{$json.name}}\", \"raw\": {{$json.name}}, \"n\": {{$json.output.n}}}");
+
+            var result = await Node().RunAsync(Context(parameters, new List<WorkflowItemExecutionEntity> { item }));
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            using var doc = System.Text.Json.JsonDocument.Parse(_sent.Single().Body!);
+            doc.RootElement.GetProperty("name").GetString().Should().Be("Bob \"B\" \\ Smith\nline2");
+            doc.RootElement.GetProperty("raw").GetString().Should().Be("Bob \"B\" \\ Smith\nline2");
+            doc.RootElement.GetProperty("n").GetInt32().Should().Be(3);
+        }
+
+        [Fact]
+        public async Task RunAsync_BodyThatIsOnlyAMissingValue_SendsNoBody()
+        {
+            var parameters = Parameters(method: "POST", haveBody: true, body: "{{$json.payload}}");
+
+            var result = await Node().RunAsync(Context(parameters));
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            _sent.Single().Body.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task RunAsync_InvalidBodyOnALaterItem_FailsTheStepAndKeepsEarlierItems()
+        {
+            var items = new List<WorkflowItemExecutionEntity>
+            {
+                Item("item-1", new BsonDocument("v", 5)),
+                Item("item-2", new BsonDocument("v", "x")),
+            };
+            var parameters = Parameters(method: "POST", haveBody: true, body: "{\"a\": 1{{$json.v}}}");
+
+            var result = await Node().RunAsync(Context(parameters, items));
+
+            result.IsSuccess.Should().BeFalse();
+            result.ErrorMessage.Should().EndWith("(item 2)");
+            _sent.Should().ContainSingle();
+            result.OutputItems.Should().ContainSingle();
         }
 
         [Fact]
@@ -375,8 +436,8 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(Parameters()));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("text/html");
+            result.IsSuccess.Should().BeFalse("a failed item fails the step, so the run ends Failed (C-9, 2026-10-08); the error item is kept");
+            ItemError(result).Should().Contain("text/html");
         }
 
         // ----- Gateway refusals -----------------------------------------------------
@@ -392,9 +453,9 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(Parameters(routePath: "orders")));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("does not declare the endpoint GET orders");
-            result.ErrorMessage.Should().Contain("re-select the endpoint");
+            result.IsSuccess.Should().BeFalse("a failed item fails the step, so the run ends Failed (C-9, 2026-10-08); the error item is kept");
+            ItemError(result).Should().Contain("does not declare the endpoint GET orders");
+            ItemError(result).Should().Contain("re-select the endpoint");
         }
 
         [Fact]
@@ -409,9 +470,9 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(Parameters(method: "DELETE")));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("does not allow DELETE");
-            result.ErrorMessage.Should().Contain("GET, POST");
+            result.IsSuccess.Should().BeFalse("a failed item fails the step, so the run ends Failed (C-9, 2026-10-08); the error item is kept");
+            ItemError(result).Should().Contain("does not allow DELETE");
+            ItemError(result).Should().Contain("GET, POST");
         }
 
         [Fact]
@@ -427,9 +488,9 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(Parameters()));
 
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("503");
-            result.ErrorMessage.Should().Contain("Could not connect to the upstream endpoint");
+            result.IsSuccess.Should().BeFalse("a failed item fails the step, so the run ends Failed (C-9, 2026-10-08); the error item is kept");
+            ItemError(result).Should().Contain("503");
+            ItemError(result).Should().Contain("Could not connect to the upstream endpoint");
         }
     }
 }

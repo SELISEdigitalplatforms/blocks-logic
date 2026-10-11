@@ -33,5 +33,8 @@ namespace Proxy.DomainService.Dtos
 
         /// <summary>Response field paths kept for this route. Omitted ⇒ inherit the proxy's list.</summary>
         public List<string>? ResponseInclude { get; set; }
+
+        /// <summary><c>null</c> ⇒ inherit the proxy's, which is itself only set if the tenant set it.</summary>
+        public ProxyResilienceInputDto? Resilience { get; set; }
     }
 }

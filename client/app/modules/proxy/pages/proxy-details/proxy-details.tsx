@@ -25,14 +25,14 @@ import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { getProxyClientUrl } from "../../constants";
 import { useGetProxyById, useGetProxyOverview, useToggleProxy } from "../../hooks";
-import { Proxy, ProxyKeyValue, ProxyRoute, ResponseFieldNode } from "../../types";
-import { describeProxyAccess, pathsToTree } from "../../utils";
+import { Proxy, ProxyKeyValue, ProxyResilience, ProxyRoute, ResponseFieldNode } from "../../types";
+import { describeProxyAccess, describeResilience, pathsToTree } from "../../utils";
 import { ProxyMethodBadge } from "../../components/proxy-method-badge";
 import { ProxyMethodChips } from "../../components/proxy-method-chips";
 import { ProxyStatusBadge } from "../../components/proxy-status-badge";
 import { ProxyLogsTab } from "../../components/proxy-logs-tab";
-import { ProxyHistoryTab } from "../../components/proxy-history-tab";
 import { ProxyTestTab } from "../../components/proxy-test-tab";
+import { ProxyHistoryTab } from "../../components/proxy-history-tab";
 import { DeleteProxyDialog } from "../../components/delete-proxy-dialog";
 
 const pluralize = (count: number, singular: string, plural = `${singular}s`) =>
@@ -106,20 +106,31 @@ const EndpointRow = ({
   route,
   clientUrl,
   upstreamUrl,
+  inherited,
+  proxyWide,
 }: {
   route: ProxyRoute;
   clientUrl: string;
   upstreamUrl: string;
+  /** The proxy's policy, used when this endpoint sets none. Inherited whole, as the gateway reads it. */
+  inherited: ProxyResilience | null;
+  /** Proxy-wide body merge and response filter. Inherited field by field, as the gateway reads it. */
+  proxyWide: Pick<Proxy, "bodyMerge" | "responseMode" | "responseInclude">;
 }) => {
   const forwardPath = (route.upstreamPath ?? route.path).replace(/^\/+|\/+$/g, "");
   const forwardsTo = forwardPath
     ? `${upstreamUrl.replace(/\/+$/, "")}/${forwardPath}`
     : upstreamUrl;
-  const filters = route.responseMode === "select";
-  const paths = route.responseInclude ?? [];
+  const filters = (route.responseMode ?? proxyWide.responseMode) === "select";
+  const paths = route.responseInclude ?? proxyWide.responseInclude ?? [];
+  const filterFromProxy = filters && !route.responseMode;
   const { tree } = pathsToTree(paths);
   const extras = [
-    route.bodyMerge?.length ? pluralize(route.bodyMerge.length, "body field") : null,
+    route.bodyMerge?.length
+      ? pluralize(route.bodyMerge.length, "body field")
+      : !route.bodyMerge && proxyWide.bodyMerge.length
+        ? `${pluralize(proxyWide.bodyMerge.length, "body field")} from the proxy-wide settings`
+        : null,
     route.headers?.length ? pluralize(route.headers.length, "extra header") : null,
     route.query?.length ? pluralize(route.query.length, "extra query param") : null,
   ].filter(Boolean);
@@ -136,20 +147,35 @@ const EndpointRow = ({
         <dt className="text-muted-foreground">Forwards to</dt>
         <dd className="break-all font-mono">{forwardsTo}</dd>
         <dt className="text-muted-foreground">Sends</dt>
-        <dd>{extras.length ? extras.join(" · ") : "Only the connection’s headers and query"}</dd>
+        <dd>{extras.length ? extras.join(" · ") : "The connection’s headers and query (plus the caller’s query)"}</dd>
         <dt className="text-muted-foreground">Returns</dt>
         <dd>
           {!filters ? (
-            "The vendor’s whole response"
+            "The vendor’s status and body (secret values masked)"
           ) : paths.length ? (
             <div className="space-y-1">
-              <span>Only {pluralize(paths.length, "field")}:</span>
+              <span>
+                Only {pluralize(paths.length, "field")}:
+                {filterFromProxy ? (
+                  <span className="text-muted-foreground"> — from the proxy-wide filter</span>
+                ) : null}
+              </span>
               <ResponseFilterTree nodes={tree} />
             </div>
           ) : (
             <>
-              An empty object (<code>{"{}"}</code>) — no fields selected yet
+              An empty object (<code>{"{}"}</code>) — no fields selected yet. Vendor errors return 502
+              {filterFromProxy ? (
+                <span className="text-muted-foreground"> — from the proxy-wide filter</span>
+              ) : null}
             </>
+          )}
+        </dd>
+        <dt className="text-muted-foreground">If it fails</dt>
+        <dd>
+          {describeResilience(route.resilience ?? inherited)}
+          {route.resilience ? null : (
+            <span className="text-muted-foreground"> — from the connection</span>
           )}
         </dd>
       </dl>
@@ -177,6 +203,7 @@ const EndpointsSection = ({
         bodyMerge: null,
         responseMode: null,
         responseInclude: null,
+        resilience: null,
       }));
 
   return (
@@ -194,6 +221,8 @@ const EndpointsSection = ({
             route={route}
             clientUrl={clientUrlFor(route.path)}
             upstreamUrl={proxy.upstreamUrl}
+            inherited={proxy.resilience}
+            proxyWide={proxy}
           />
         ))}
       </ul>
@@ -409,7 +438,11 @@ export const ProxyDetails = () => {
 
   const handleToggleEnabled = async () => {
     const enabled = !proxy.enabled;
-    const res = await toggleProxy.mutateAsync({ id: proxy.id, enabled });
+    const res = await toggleProxy.mutateAsync({
+      id: proxy.id,
+      enabled,
+      expectedVersion: proxy.version,
+    });
     if (!res.isSuccess)
       return showErrorToast({
         errors: res.errors || (enabled ? "Failed to resume proxy" : "Failed to pause proxy"),
@@ -549,7 +582,7 @@ export const ProxyDetails = () => {
             ) : (
               <>
                 <div className="grid gap-4 md:grid-cols-3">
-                  <MetricCard label="Last 24h calls" value={calls24h.toLocaleString()} />
+                  <MetricCard label="Recent calls" value={calls24h.toLocaleString()} />
                   <MetricCard label="Avg latency" value={`${averageLatency} ms`} />
                   <MetricCard label="Error rate" value={`${errorRate}%`} danger={errorRateIsHigh} />
                 </div>
@@ -601,6 +634,19 @@ export const ProxyDetails = () => {
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {describeProxyAccess(proxy.access)}
+                      </p>
+                    </div>
+                    <div data-testid="proxy-resilience-summary">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        If the vendor is slow or down
+                      </p>
+                      <p className="mt-1 text-sm font-medium">
+                        {describeResilience(proxy.resilience)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {proxy.resilience
+                          ? "Endpoints use this unless they set their own."
+                          : "Not set for the proxy. Endpoints with their own settings use those; the rest wait up to 30 s and are never sent twice."}
                       </p>
                     </div>
                     <EndpointsSection proxy={proxy} clientUrlFor={clientUrlFor} />

@@ -56,5 +56,12 @@ namespace Proxy.DomainService.Entities
 
         /// <summary><c>null</c> ⇒ inherit the shared <see cref="ProxyDetailEntity.ResponseInclude"/>.</summary>
         public List<string>? ResponseInclude { get; set; }
+
+        /// <summary>
+        /// <c>null</c> ⇒ inherit the shared <see cref="ProxyDetailEntity.Resilience"/>, which is itself
+        /// <c>null</c> unless the tenant configured one. Nothing here is defaulted: a route with no
+        /// resilience behaves exactly as every route did before the setting existed.
+        /// </summary>
+        public ProxyResilienceConfig? Resilience { get; set; }
     }
 }

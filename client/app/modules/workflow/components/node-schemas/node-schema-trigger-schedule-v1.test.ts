@@ -196,22 +196,21 @@ describe("deriveScheduleFields via defaultValue", () => {
     ).toEqual(["1"]);
   });
 
-  it("parses months fields with a wildcard month token", () => {
-    expect(
-      p("monthsBetweenTriggers").defaultValue({
-        triggerInterval: "months",
-        cronExpression: "0 6 5 * *",
-      }),
-    ).toBe(1);
+  it("offers no months interval and no months-only fields", () => {
+    const intervals = p("triggerInterval").options.map((o: { value: string }) => o.value);
+    expect(intervals).not.toContain("months");
+    expect(p("monthsBetweenTriggers")).toBeUndefined();
+    expect(p("triggerAtDayOfMonth")).toBeUndefined();
   });
 
-  it("parses months step token", () => {
-    expect(
-      p("monthsBetweenTriggers").defaultValue({
-        triggerInterval: "months",
-        cronExpression: "0 6 5 */3 *",
-      }),
-    ).toBe(3);
+  it("keeps a legacy months cron with a wildcard month when the minute changes", () => {
+    const change = p("triggerAtMinute").onChange(15, {
+      triggerInterval: "months",
+      cronExpression: "0 6 5 * *",
+      triggerAtMinute: 15,
+    });
+    // The generator writes a step of 1 as "*/1" (same schedule as "*").
+    expect(change.cronExpression).toBe("15 6 5 */1 *");
   });
 
   it("falls back to default for an unknown interval", () => {

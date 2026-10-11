@@ -1,0 +1,211 @@
+import { describe, expect, it, vi, beforeEach } from "vitest";
+import { screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { renderWithProviders } from "@/test-utils/test-providers/render";
+import { RunDetail } from "./run-detail";
+
+const getRun = vi.fn();
+const getRunLogs = vi.fn();
+
+vi.mock("../../services/function.service", () => ({
+  functionService: {
+    getRun: (...args: unknown[]) => getRun(...args),
+    getRunLogs: (...args: unknown[]) => getRunLogs(...args),
+    replayRun: vi.fn(),
+    cancelRun: vi.fn(),
+  },
+}));
+
+const RAW_MESSAGE =
+  "the function module failed to load: Cannot find package 'ky' imported from /function/index.js";
+
+const run = (overrides: Record<string, unknown> = {}) => ({
+  id: "run_1",
+  functionId: "fn_1",
+  status: "Failed",
+  versionNumber: 0,
+  attempts: [],
+  attempt: 1,
+  maxAttempts: 1,
+  createdDate: "2026-09-13T09:44:38.136Z",
+  input: "{}",
+  outputResults: [],
+  logsTruncated: false,
+  ...overrides,
+});
+
+describe("RunDetail", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getRunLogs.mockResolvedValue({ data: [], totalCount: 0 });
+  });
+
+  it("shows the runner's own message, not just the friendly summary of its code", async () => {
+    // This is the whole complaint: with a known error code the portal showed the generic
+    // sentence and the actual message — which package, which file — was readable only by
+    // opening the network tab.
+    getRun.mockResolvedValue(run({ errorCode: "UserRuntimeError", errorMessage: RAW_MESSAGE }));
+
+    renderWithProviders(<RunDetail runId="run_1" />);
+
+    await waitFor(() => expect(screen.getByText(RAW_MESSAGE)).toBeTruthy());
+    expect(screen.getByText("UserRuntimeError")).toBeTruthy();
+    // The hint reads the message, not just the code: this run died while importing the module,
+    // so "the handler threw, the stack is in the logs" would point at logs that cannot exist.
+    expect(screen.getByText(/Add the package to package\.json/)).toBeTruthy();
+    expect(screen.queryByText(/The handler threw/)).toBeNull();
+  });
+
+  it("names the handler's scope when ctx was used at module level", async () => {
+    getRun.mockResolvedValue(
+      run({
+        errorCode: "UserRuntimeError",
+        errorMessage: "the function module failed to load: ctx is not defined",
+      }),
+    );
+
+    renderWithProviders(<RunDetail runId="run_1" />);
+
+    await waitFor(() => expect(screen.getByText(/parameters of your handler/)).toBeTruthy());
+  });
+
+  it("still explains a code that arrives with no message", async () => {
+    getRun.mockResolvedValue(run({ errorCode: "TimedOut", errorMessage: null }));
+
+    renderWithProviders(<RunDetail runId="run_1" />);
+
+    await waitFor(() => expect(screen.getByText(/passed its timeout/)).toBeTruthy());
+  });
+
+  it("shows a message that arrives with no code at all", async () => {
+    getRun.mockResolvedValue(run({ errorCode: null, errorMessage: "something unmapped broke" }));
+
+    renderWithProviders(<RunDetail runId="run_1" />);
+
+    await waitFor(() => expect(screen.getByText("something unmapped broke")).toBeTruthy());
+  });
+
+  it("keeps the structured payload a developer logged", async () => {
+    // ctx.log("x", { orderId: 7 }) — the second argument was being dropped on the floor.
+    getRun.mockResolvedValue(run({ status: "Succeeded" }));
+    getRunLogs.mockResolvedValue({
+      data: [
+        {
+          seq: 1,
+          timestamp: "2026-09-13T09:44:39.000Z",
+          level: "info",
+          message: "reconciling",
+          data: '{"orderId":7}',
+        },
+      ],
+      totalCount: 1,
+    });
+
+    renderWithProviders(<RunDetail runId="run_1" />);
+
+    await waitFor(() => expect(screen.getByText("reconciling")).toBeTruthy());
+    expect(screen.getByText('{"orderId":7}')).toBeTruthy();
+  });
+
+  it("says nothing about errors when the run succeeded", async () => {
+    getRun.mockResolvedValue(run({ status: "Succeeded", errorCode: null, errorMessage: null }));
+
+    renderWithProviders(<RunDetail runId="run_1" />);
+
+    await waitFor(() => expect(screen.getByText("No logs recorded.")).toBeTruthy());
+    expect(screen.queryByText(/UserRuntimeError/)).toBeNull();
+  });
+
+  it("says a reused run was warm, and keeps its handover time in the Timing group", async () => {
+    getRun.mockResolvedValue(run({ status: "Succeeded", reused: true, handoverMs: 4 }));
+
+    renderWithProviders(<RunDetail runId="run_1" />);
+
+    await waitFor(() => expect(screen.getByText("Warm (reused)")).toBeTruthy());
+    expect(screen.queryByText("4 ms handover")).toBeNull();
+    const timing = screen.getByTestId("run-timing");
+    expect(timing.textContent).toContain("Handover to sandbox");
+    expect(timing.textContent).toContain("4 ms");
+    expect(screen.queryByTestId("discard-reason")).toBeNull();
+  });
+
+  it("shows every stage of the call's time with its steps", async () => {
+    getRun.mockResolvedValue(
+      run({
+        status: "Succeeded",
+        reused: true,
+        durationMs: 120,
+        timings: [
+          { group: "api", step: "function", ms: 35 },
+          { group: "api", step: "insert", ms: 40 },
+          { group: "queue", step: "queue", ms: 12 },
+          { group: "handover", step: "secrets", ms: 170 },
+          { group: "handover", step: "token", ms: 70 },
+          { group: "handover", step: "total", ms: 300 },
+          { group: "result", step: "queued", ms: 5 },
+          { group: "result", step: "publish", ms: 30 },
+        ],
+      }),
+    );
+
+    renderWithProviders(<RunDetail runId="run_1" />);
+
+    const timing = await screen.findByTestId("run-timing");
+    const text = timing.textContent ?? "";
+    expect(text).toContain("Api, before queue");
+    expect(text).toContain("75 ms");
+    expect(text).toContain("function 35 ms · insert 40 ms");
+    expect(text).toContain("Waiting for a runner");
+    // The runner's own total, not the overlapping steps added up.
+    expect(text).toContain("300 ms");
+    expect(text).toContain("secrets 170 ms · token 70 ms");
+    expect(text).toContain("Your code");
+    expect(text).toContain("Saving the result");
+    expect(text).toContain("35 ms");
+  });
+
+  it("shows no Timing group for a run with no timings at all", async () => {
+    getRun.mockResolvedValue(run({ status: "Queued", durationMs: null, handoverMs: null, timings: null }));
+
+    renderWithProviders(<RunDetail runId="run_1" />);
+
+    await waitFor(() => expect(screen.getByText("No logs recorded.")).toBeTruthy());
+    expect(screen.queryByTestId("run-timing")).toBeNull();
+  });
+
+  it("says cold start when the run started a fresh sandbox", async () => {
+    getRun.mockResolvedValue(run({ status: "Succeeded", reused: false }));
+
+    renderWithProviders(<RunDetail runId="run_1" />);
+
+    await waitFor(() => expect(screen.getByText("Cold start")).toBeTruthy());
+  });
+
+  it("shows nothing about the sandbox for a run without reuse", async () => {
+    getRun.mockResolvedValue(run({ status: "Succeeded" }));
+
+    renderWithProviders(<RunDetail runId="run_1" />);
+
+    await waitFor(() => expect(screen.getByText("run_1")).toBeTruthy());
+    expect(screen.queryByText("Warm (reused)")).toBeNull();
+    expect(screen.queryByText("Cold start")).toBeNull();
+  });
+
+  it("warns when the sandbox was replaced, and explains a dirty reason in plain words", async () => {
+    getRun.mockResolvedValue(
+      run({ status: "Succeeded", reused: true, discardReason: "dirty:Timeout" }),
+    );
+    const user = userEvent.setup();
+
+    renderWithProviders(<RunDetail runId="run_1" />);
+
+    await waitFor(() => expect(screen.getByTestId("discard-reason")).toBeTruthy());
+    expect(screen.getByTestId("discard-reason").textContent).toContain(
+      "Sandbox replaced after this call: dirty:Timeout",
+    );
+    await user.hover(screen.getByText("dirty:Timeout"));
+    expect(
+      (await screen.findAllByText(/left a timer running after it answered/)).length,
+    ).toBeGreaterThan(0);
+  });
+});

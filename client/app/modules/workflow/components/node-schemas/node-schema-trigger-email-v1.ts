@@ -37,7 +37,7 @@ export const NodeSchemaTriggerEmailV1: NodeSchemaDefinition = {
               },
               "Test Subject",
             ),
-            " (case-insensitive), this execution runs in Test mode against the current draft workflow. Other inbound mail uses the published version.",
+            " (case-insensitive), this execution runs in Test mode against the current draft workflow. Other inbound mail uses the published version, but only while the draft still uses the same mailbox.",
           ),
         }),
       },

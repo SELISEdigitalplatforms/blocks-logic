@@ -7,6 +7,8 @@ using MongoDB.Bson;
 using System.Diagnostics.CodeAnalysis;
 using Workflow.DomainService.Entities;
 using Blocks.Genesis;
+using System.Diagnostics;
+using Workflow.DomainService.Logging;
 
 namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
 {
@@ -40,25 +42,39 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
             var parameters = nodeparameters ?? new ActionHttpRequestV1Parameters();
             parameters.HaveBody = ReadHaveBody(context.Parameters, parameters.HaveBody);
             var outputItems = new List<NodeOutputItem>();
+            var requestLog = PerItemRequestLog.ForHttp(context.Log, context.IterationCount);
 
             for (int i = 0; i < context.IterationCount; i++)
             {
                 try
                 {
-                    var (url, httpMethod, headers, bodyContent, contentType) = PrepareRequest(parameters, context.InputItems[i], context);
-                    if (url == null)
+                    string url, httpMethod, bodyContent, contentType;
+                    Dictionary<string, string> headers;
+                    try
                     {
-                        AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), bodyContent);
-                        continue;
+                        (url, httpMethod, headers, bodyContent, contentType) = PrepareRequest(parameters, context.InputItems[i], context);
+                    }
+                    catch (InvalidFilledJsonException ex)
+                    {
+                        // Nothing was sent for this item. The configured body is broken, so the step
+                        // fails; items before it already ran and are kept.
+                        requestLog.Failed(i, "InvalidJsonBody");
+                        return NodeExecutionResult.Failed(ex.ForItem(i), outputItems);
                     }
 
                     await ApplyAuthenticationAsync(parameters, headers, context.TenantId);
 
-                    var responseBody = await SendHttpRequestAsync(httpMethod, url, headers, bodyContent, contentType);
+                    requestLog.Sending(i);
+                    var stopwatch = Stopwatch.StartNew();
+                    var index = i;
+                    var responseBody = await SendHttpRequestAsync(httpMethod, url, headers, bodyContent, contentType,
+                        onStatus: status => requestLog.Response(index, status, stopwatch.ElapsedMilliseconds));
                     BuildOutputItems(outputItems, responseBody, context, parameters, i);
                 }
                 catch (Exception ex)
                 {
+                    // The type only: the message can carry the URL or the response.
+                    requestLog.Failed(i, (ex.InnerException ?? ex).GetType().Name);
                     AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
                 }
             }
@@ -68,7 +84,8 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
         /// <summary>
         /// Adds a bearer token when Authentication is Blocks Authentication or Client Credential
         /// and no Authorization header was already set manually (manual value always wins).
-        /// Best effort: silently leaves headers untouched when no token is available.
+        /// Blocks Authentication without a delegated token throws <see cref="NoDelegatedTokenException"/>
+        /// (the item fails). Client Credential keeps its behaviour.
         /// </summary>
         private async Task ApplyAuthenticationAsync(
             ActionHttpRequestV1Parameters parameters,
@@ -85,9 +102,11 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
             string? token = null;
             if (string.Equals(mode, "blocksAuthentication", StringComparison.OrdinalIgnoreCase))
             {
+                // Delegated token only. Never the caller's raw BlocksContext.OAuthToken, and never an
+                // unauthenticated send: no token fails this item (WS-1).
                 token = await _workflowAuthService.CreateBlocksAuthorizationTokenAsync();
                 if (string.IsNullOrWhiteSpace(token))
-                    token = BlocksContext.GetContext()?.OAuthToken;
+                    throw new NoDelegatedTokenException();
             }
             else if (string.Equals(mode, "clientCredential", StringComparison.OrdinalIgnoreCase)
                 && !string.IsNullOrWhiteSpace(parameters.ClientId)
@@ -102,7 +121,7 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
             headers[AuthorizationHeaderName] = $"Bearer {token}";
         }
 
-        private (string? url, string httpMethod, Dictionary<string, string> headers, string bodyContent, string contentType) PrepareRequest(
+        private (string url, string httpMethod, Dictionary<string, string> headers, string bodyContent, string contentType) PrepareRequest(
             ActionHttpRequestV1Parameters parameters, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
         {
             var url = parseExpression<string>(parameters.Url, inputItem, context) ?? "";
@@ -132,16 +151,19 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
             var bodyContent = string.Empty;
             if (parameters.HaveBody)
             {
-                bodyContent = parseExpression<string>(parameters.Body.Trim(), inputItem, context);
-
-                if (parameters.BodyContentType.ToLower() == "json")
+                var body = (parameters.Body ?? string.Empty).Trim();
+                if (string.Equals(parameters.BodyContentType, "json", StringComparison.OrdinalIgnoreCase))
                 {
-                    try { JsonDocument.Parse(bodyContent); }
-                    catch (JsonException ex)
-                    {
-                        _logger.LogError(bodyContent);
-                        return (null, httpMethod, headers, $"Invalid JSON body: {ex.Message}", "");
-                    }
+                    // Values are filled JSON-safe (escaped inside "…", typed outside), then the body must be
+                    // valid JSON or the step fails. A blank body sends no body, as for other content types.
+                    // The body is never logged: it can carry secrets.
+                    bodyContent = body.Length == 0
+                        ? string.Empty
+                        : FillJsonTemplateOrThrow(body, "Body", inputItem, context);
+                }
+                else
+                {
+                    bodyContent = parseExpression<string>(body, inputItem, context) ?? string.Empty;
                 }
             }
 
@@ -173,7 +195,7 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
             }
         }
         // Send HTTP request and get response as list of items (to support array responses) like if response is an array, each element will be a separate item; if response is an object, it will be a single item
-        private async Task<JsonElement> SendHttpRequestAsync(string httpMethod, string url, Dictionary<string, string> headers, string bodyContent, string contentType = "application/json")
+        private async Task<JsonElement> SendHttpRequestAsync(string httpMethod, string url, Dictionary<string, string> headers, string bodyContent, string contentType = "application/json", Action<int>? onStatus = null)
         {
             var httpClient = _httpClientFactory.CreateClient();
             var request = new HttpRequestMessage(new HttpMethod(httpMethod), url);
@@ -192,6 +214,7 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
             {
                 HttpResponseMessage response;
                 response = await httpClient.SendAsync(request);
+                onStatus?.Invoke((int)response.StatusCode);
                 response.EnsureSuccessStatusCode();
                 var responseString = await response.Content.ReadAsStringAsync();
                 return JsonDocument.Parse(responseString).RootElement.Clone();

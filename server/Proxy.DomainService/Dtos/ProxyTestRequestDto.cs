@@ -22,7 +22,7 @@ namespace Proxy.DomainService.Dtos
         /// <summary>Extra raw query string; default <c>""</c>.</summary>
         public string? Query { get; set; }
 
-        /// <summary>Request body; default none. The 10 MB cap still applies.</summary>
+        /// <summary>Request body; default none. The 1 MB cap still applies.</summary>
         public string? Body { get; set; }
 
         /// <summary>Defaults to <c>application/json</c> when <see cref="Body"/> is present.</summary>
@@ -66,5 +66,12 @@ namespace Proxy.DomainService.Dtos
         /// same way it would fail Save; it is not enforced on the Test call itself (the console user is the caller).
         /// </summary>
         public ProxyAccessInputDto? Access { get; set; }
+
+        /// <summary>
+        /// The draft's timeout / retry / breaker. Carried so a Test behaves like the call it stands in for:
+        /// a timeout somebody has just configured has to be the timeout the Test runs under, or the panel
+        /// answers a question nobody asked. Validated like Create / Update, so bounds are refused here too.
+        /// </summary>
+        public ProxyResilienceInputDto? Resilience { get; set; }
     }
 }

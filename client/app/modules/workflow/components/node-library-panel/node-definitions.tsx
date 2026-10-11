@@ -11,6 +11,7 @@ import {
 	Clock,
 	DatabaseZap,
 	Code2,
+	FunctionSquare,
 	Waypoints,
 } from "lucide-react";
 
@@ -20,7 +21,7 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		icon: <Webhook className="h-5 w-5 text-error" />,
 		title: "Webhook",
 		description:
-			"Start the workflow by clicking the Execute button. Ideal for quick tests and simple runs.",
+			"Starts the workflow when another app sends a POST request to its URL.",
 		type: "webhook",
 		category: "trigger",
 		version: "v1",
@@ -147,6 +148,21 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		},
 	},
 	{
+		id: "action-function-v1",
+		icon: <FunctionSquare className="h-5 w-5 text-primary" />,
+		title: "Function",
+		description:
+			"Run a deployed function and pass its result to the next node.",
+		category: "action",
+		type: "function",
+		version: "v1",
+		defaultName: "Function",
+		handleSpec: {
+			source: ["source"],
+			target: ["target"],
+		},
+	},
+	{
 		id: "logic-if-v1",
 		icon: <GitFork className="h-5 w-5 text-success" />,
 		title: "If",
@@ -180,7 +196,7 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		icon: <Code2 className="h-5 w-5 text-blue-500" />,
 		title: "Code",
 		description:
-			"Run custom JavaScript or Python to transform data or implement custom logic.",
+			"Run custom JavaScript to transform data or implement custom logic.",
 		type: "code",
 		category: "transform",
 		version: "v1",

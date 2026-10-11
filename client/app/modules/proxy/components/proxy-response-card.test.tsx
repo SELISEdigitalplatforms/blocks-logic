@@ -189,9 +189,7 @@ describe("ProxyResponseCard", () => {
   it("rejects an oversized sample without parsing it", async () => {
     const user = userEvent.setup();
     const parseSpy = vi.spyOn(JSON, "parse");
-    const runSample = vi.fn(async () =>
-      okSample({ bytes: 6 * 1024 * 1024, body: "{}" }),
-    );
+    const runSample = vi.fn(async () => okSample({ bytes: 6 * 1024 * 1024, body: "{}" }));
     renderWithProviders(<Harness runSample={runSample} />);
 
     await user.click(screen.getByRole("button", { name: /fill from test run/i }));
@@ -249,9 +247,7 @@ describe("ProxyResponseCard", () => {
   });
 
   it("skeleton edits after an edit-mode seed reach the form and stick", async () => {
-    const { container } = renderWithProviders(
-      <EditHarness resetTo={["data.id", "data.name"]} />,
-    );
+    const { container } = renderWithProviders(<EditHarness resetTo={["data.id", "data.name"]} />);
     await screen.findByDisplayValue("data");
     await waitFor(() => expect(paths().sort()).toEqual(["data.id", "data.name"]));
 

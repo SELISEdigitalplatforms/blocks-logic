@@ -120,7 +120,7 @@ export const NodeSchemaActionSendMailV1: NodeSchemaDefinition = {
         id: "attachments",
         type: "expression-list",
         label: "Attachments",
-        info: 'Storage File IDs to attach. Use a literal File ID, or an expression such as {{$json.output.fileId}} or {{$node["NodeName"].json.output.fileId}} to resolve it per run.',
+        info: 'Storage File IDs to attach. Use a literal File ID, or an expression such as {{$json.fileId}} or {{$node["NodeName"].json.output.fileId}} to resolve it per run.',
         key: "Attachments",
         required: false,
         placeholder: "File ID or {{ expression }}",

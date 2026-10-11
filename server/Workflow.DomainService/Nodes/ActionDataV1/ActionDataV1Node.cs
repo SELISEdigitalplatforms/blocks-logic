@@ -1,3 +1,4 @@
+using Workflow.DomainService.Logging;
 using Blocks.Genesis;
 using Workflow.DomainService.Services;
 using Microsoft.Extensions.Configuration;
@@ -64,6 +65,7 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
             if (parameters.RawQueryMode)
             {
                 await ExecuteRawQueryAsync(context, parameters, outputItems);
+                LogFinished(context, outputItems);
                 return NodeExecutionResult.Successful(outputItems);
             }
 
@@ -85,7 +87,16 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                     return NodeExecutionResult.Failed($"Unknown action type: {parameters.ActionType}", outputItems);
             }
 
+            LogFinished(context, outputItems);
             return NodeExecutionResult.Successful(outputItems);
+        }
+
+        /// <summary>Counts only: never the collection, query or data.</summary>
+        private static void LogFinished(NodeExecutionContext context, List<NodeOutputItem> outputItems)
+        {
+            var failed = outputItems.Count(IsErrorItem);
+            context.Log.Info(ExecutionLogStages.DataFinished, "Data action finished: {Ok} succeeded, {Failed} failed.",
+                outputItems.Count - failed, failed);
         }
 
 
@@ -109,7 +120,7 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                     ? $"{{ get{parameters.SchemaName}s {{ items {{ {fieldsList} }} totalCount }} }}"
                     : $"{{ get{parameters.SchemaName}s(where: {{ {whereClause} }}) {{ items {{ {fieldsList} }} totalCount }} }}";
 
-                var response = await SendGraphQLRequestAsync(parameters, graphqlQuery, context.TenantId);
+                var response = await SendGraphQLRequestAsync(parameters, graphqlQuery, context.TenantId, context.Log, logToken: true);
                 response.EnsureSuccessStatusCode();
                 var responseString = await response.Content.ReadAsStringAsync();
                 var responseJson = JsonDocument.Parse(responseString).RootElement;
@@ -181,7 +192,7 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                     var inputFields = BuildGraphQLInputFields(data);
                     var graphqlQuery = $"mutation {{ insert{parameters.SchemaName}(input: {{ {inputFields} }}) {{ acknowledged totalImpactedData itemId }} }}";
 
-                    var response = await SendGraphQLRequestAsync(parameters, graphqlQuery, context.TenantId);
+                    var response = await SendGraphQLRequestAsync(parameters, graphqlQuery, context.TenantId, context.Log, logToken: i == 0);
                     response.EnsureSuccessStatusCode();
                     var responseString = await response.Content.ReadAsStringAsync();
                     var responseJson = ParseMutationResponse(responseString, $"insert{parameters.SchemaName}");
@@ -229,7 +240,7 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                     var inputFields = BuildGraphQLInputFields(data);
                     var graphqlQuery = $"mutation {{ update{parameters.SchemaName}(where: {{ {whereClause} }}, input: {{ {inputFields} }}) {{ acknowledged totalImpactedData itemId }} }}";
 
-                    var response = await SendGraphQLRequestAsync(parameters, graphqlQuery, context.TenantId);
+                    var response = await SendGraphQLRequestAsync(parameters, graphqlQuery, context.TenantId, context.Log, logToken: i == 0);
                     response.EnsureSuccessStatusCode();
                     var responseString = await response.Content.ReadAsStringAsync();
                     var responseJson = ParseMutationResponse(responseString, $"update{parameters.SchemaName}");
@@ -276,7 +287,7 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                     var whereClause = BuildWhereClause(parameters, context.InputItems[i], context);
                     var graphqlQuery = $"mutation {{ delete{parameters.SchemaName}(where: {{ {whereClause} }}) {{ acknowledged totalImpactedData itemId message }} }}";
 
-                    var response = await SendGraphQLRequestAsync(parameters, graphqlQuery, context.TenantId);
+                    var response = await SendGraphQLRequestAsync(parameters, graphqlQuery, context.TenantId, context.Log, logToken: i == 0);
                     response.EnsureSuccessStatusCode();
                     var responseString = await response.Content.ReadAsStringAsync();
                     var responseJson = ParseMutationResponse(responseString, $"delete{parameters.SchemaName}");
@@ -321,10 +332,13 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
             {
                 try
                 {
-                    var resolvedQuery = parseExpression<string>(parameters.RawQuery, context.InputItems[i], context)
-                        ?? parameters.RawQuery;
+                    // Values inside "…" string literals are escaped (a quote in a value cannot end the
+                    // literal); values outside a string are inserted as before. Not validated.
+                    var resolvedQuery = string.IsNullOrEmpty(parameters.RawQuery)
+                        ? parameters.RawQuery
+                        : ResolveGraphQlTemplate(parameters.RawQuery, context.InputItems[i], context);
 
-                    var response = await SendGraphQLRequestAsync(parameters, resolvedQuery, context.TenantId);
+                    var response = await SendGraphQLRequestAsync(parameters, resolvedQuery, context.TenantId, context.Log, logToken: i == 0);
                     response.EnsureSuccessStatusCode();
                     var responseString = await response.Content.ReadAsStringAsync();
                     var responseJson = JsonDocument.Parse(responseString).RootElement;
@@ -368,8 +382,11 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
         /// Sends a GraphQL request to UDS gateway with optional authentication
         /// (client credentials or Blocks delegated token). Shared by all action types.
         /// </summary>
+        /// <param name="logToken">Write the token stage line; true for the first request of a run only, so the
+        /// line appears once rather than once per item.</param>
         private async Task<HttpResponseMessage> SendGraphQLRequestAsync(
-            ActionDataV1Parameters parameters, string graphqlQuery, string tenantId)
+            ActionDataV1Parameters parameters, string graphqlQuery, string tenantId,
+            NodeExecutionLog? log = null, bool logToken = false)
         {
             var httpClient = _httpClientFactory.CreateClient();
             var requestUrl = $"{parameters.ApiBaseUrl}/api/gateway";
@@ -377,11 +394,13 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
             // Authenticate based on selected authentication type
             if (string.Equals(parameters.AuthenticationType, "blocksAuthentication", StringComparison.OrdinalIgnoreCase))
             {
+                // Delegated token only. Never the caller's raw BlocksContext.OAuthToken, and never an
+                // unauthenticated send: no token fails this item (WS-1).
                 var token = await _workflowAuthService.CreateBlocksAuthorizationTokenAsync();
+                if (logToken) LogToken(log, token);
                 if (string.IsNullOrWhiteSpace(token))
-                    token = BlocksContext.GetContext()?.OAuthToken;
-                if (!string.IsNullOrWhiteSpace(token))
-                    request.Headers.Add("Authorization", $"Bearer {token}");
+                    throw new NoDelegatedTokenException();
+                request.Headers.Add("Authorization", $"Bearer {token}");
             }
             else if (parameters.AuthenticationType == "clientCredential"
                 && !string.IsNullOrWhiteSpace(parameters.ClientId) && !string.IsNullOrWhiteSpace(parameters.ClientSecret))
@@ -393,6 +412,7 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                 };
                 var token = await _clientCredentialTokenService.GetTokenAsync(clientCredentialEntity, tenantId);
                 request.Headers.Add("Authorization", $"Bearer {token}");
+                if (logToken) LogToken(log, token);
             }
 
             request.Headers.Add("x-blocks-key", tenantId);
@@ -402,6 +422,16 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                 "application/json");
 
             return await httpClient.SendAsync(request);
+        }
+
+        /// <summary>Whether a token was obtained, never the token itself.</summary>
+        private static void LogToken(NodeExecutionLog? log, string? token)
+        {
+            if (log is null) return;
+            if (string.IsNullOrWhiteSpace(token))
+                log.Error(ExecutionLogStages.DataTokenFailed, "Access token request failed.");
+            else
+                log.Info(ExecutionLogStages.DataToken, "Access token obtained.");
         }
 
         /// <summary>
@@ -429,8 +459,8 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                 if (!response.IsSuccessStatusCode)
                 {
                     var errorContent = await response.Content.ReadAsStringAsync();
-                    _logger.LogError("Failed to get token via refresh_token. Status: {StatusCode}, Error: {Error}",
-                        response.StatusCode, errorContent);
+                    _logger.LogError("Failed to get token via refresh_token. Status: {StatusCode}, Error: {Error}, body {BodyLength} chars",
+                        response.StatusCode, Services.TokenErrorBody.Code(errorContent), errorContent.Length);
                     return null;
                 }
 
@@ -788,8 +818,9 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
             }
             catch (Exception ex)
             {
-                _logger.LogWarning("Failed to convert value '{Value}' to type '{Type}': {Error}. Storing as string.",
-                    value, fieldType, ex.Message);
+                // Never the value or the parse message that quotes it: a mapped field can hold a secret.
+                _logger.LogWarning("Failed to convert a value to type '{Type}' ({ErrorKind}). Storing as string.",
+                    fieldType, ex.GetType().Name);
                 return BsonValue.Create(value);
             }
         }

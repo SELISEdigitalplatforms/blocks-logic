@@ -228,3 +228,15 @@ code {
   font-family: var(--font-dm-mono, monospace) !important;
   font-size: 14px !important;
 }
+
+/* Monaco's button tooltips (the find widget's close, match-case, regex…) render in a
+   `.context-view` on <body> and position themselves wrongly inside this app's layout, often
+   right on top of the button they describe. The tooltip then takes the pointer: the button
+   gets mouseleave, the tooltip hides, mouseenter shows it again — so it blinks, and the click
+   lands on the tooltip instead of the button. These tooltips carry no links, so letting the
+   pointer pass through costs nothing. The editor's own code hover is not a `.workbench-hover`
+   and stays interactive. */
+.context-view:has(.workbench-hover),
+.context-view:has(.workbench-hover) * {
+  pointer-events: none !important;
+}

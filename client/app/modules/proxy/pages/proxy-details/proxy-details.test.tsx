@@ -74,10 +74,29 @@ describe("ProxyDetails page", () => {
 
     expect(await screen.findByRole("heading", { name: "Stripe Payments" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Overview" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Test" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Logs" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "History" })).toBeTruthy();
     expect(screen.queryByRole("tab", { name: /Logs\s+\d+/i })).toBeNull();
     expect(screen.queryByRole("tab", { name: /History\s+\d+/i })).toBeNull();
+  });
+
+  it("runs a test request from the Test tab", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <MemoryRouter initialEntries={["/proxy/p1"]}>
+        <Routes>
+          <Route path="/proxy/:proxyId" element={<ProxyDetails />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await user.click(await screen.findByRole("tab", { name: "Test" }));
+    expect(await screen.findByLabelText("Test method")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: /send test request/i }));
+    expect(await screen.findByText("200")).toBeTruthy();
   });
 
   it("shows selected response fields as a nested tree", async () => {
@@ -99,6 +118,39 @@ describe("ProxyDetails page", () => {
     expect(screen.getByText("text")).toBeTruthy();
     expect(screen.queryByText("location.name")).toBeNull();
     expect(screen.queryByText("current.condition.text")).toBeNull();
+  });
+
+  it("shows the proxy-wide filter on an endpoint that sets none, not the whole response", async () => {
+    const p3 = PROXY_MOCK_DATA.find((proxy) => proxy.id === "p3")!;
+    vi.spyOn(mockProxyService, "get").mockResolvedValue({
+      ...p3,
+      routes: p3.routes.map((route) => ({ ...route, responseMode: null, responseInclude: null })),
+    });
+
+    renderWithProviders(
+      <MemoryRouter initialEntries={["/proxy/p3"]}>
+        <Routes>
+          <Route path="/proxy/:proxyId" element={<ProxyDetails />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(/Only 3 fields/)).toBeTruthy();
+    expect(screen.getByText(/from the proxy-wide filter/)).toBeTruthy();
+    expect(screen.queryByText("The vendor’s status and body (secret values masked)")).toBeNull();
+  });
+
+  it("shows proxy-wide body fields on an endpoint that sets none", async () => {
+    renderWithProviders(
+      <MemoryRouter initialEntries={["/proxy/p1"]}>
+        <Routes>
+          <Route path="/proxy/:proxyId" element={<ProxyDetails />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Stripe Payments" })).toBeTruthy();
+    expect((await screen.findAllByText(/from the proxy-wide settings/)).length).toBeGreaterThan(0);
   });
 
   it("redirects unknown proxies back to the list", async () => {
@@ -140,7 +192,9 @@ describe("ProxyDetails page", () => {
 
     await user.click(resume);
 
-    await waitFor(() => expect(toggleSpy).toHaveBeenCalledWith({ id: "p3", enabled: true }));
+    await waitFor(() =>
+      expect(toggleSpy).toHaveBeenCalledWith({ id: "p3", enabled: true, expectedVersion: 1 }),
+    );
     await waitFor(() =>
       expect(toasts.showSuccessToast).toHaveBeenCalledWith({ description: "Proxy resumed." }),
     );

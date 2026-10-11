@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { mapProxyDetailDtoToProxy, mapProxyToCreatePayload, toAccess, toAccessPayload } from "./mappers/proxy.mapper";
+import {
+  mapProxyDetailDtoToProxy,
+  mapProxyToCreatePayload,
+  toAccess,
+  toAccessPayload,
+} from "./mappers/proxy.mapper";
 import { ProxyDetailDto, ProxyFormValues } from "./types";
-import { defaultProxyAccess, describeProxyAccess, proxyFormDefaultValues, validateProxyAccess } from "./utils";
+import {
+  defaultProxyAccess,
+  describeProxyAccess,
+  proxyFormDefaultValues,
+  validateProxyAccess,
+} from "./utils";
 
 const formValues = (over: Partial<ProxyFormValues> = {}): ProxyFormValues => ({
   ...proxyFormDefaultValues,
@@ -78,7 +88,9 @@ describe("proxy access — wire mapping", () => {
 
   it("is carried on the create payload", () => {
     const payload = mapProxyToCreatePayload(
-      formValues({ access: { ...defaultProxyAccess(), roles: { mode: "any", values: ["admin"] } } }),
+      formValues({
+        access: { ...defaultProxyAccess(), roles: { mode: "any", values: ["admin"] } },
+      }),
     );
     expect(payload.access).toEqual({
       kind: "BlocksToken",
@@ -92,13 +104,18 @@ describe("proxy access — wire mapping", () => {
 
 describe("proxy access — wording and guards", () => {
   it("describes each shape of policy", () => {
-    expect(describeProxyAccess({ ...defaultProxyAccess(), kind: "public" })).toMatch(/Anyone with the URL/);
+    expect(describeProxyAccess({ ...defaultProxyAccess(), kind: "public" })).toMatch(
+      /Anyone with the URL/,
+    );
     expect(describeProxyAccess(defaultProxyAccess())).toMatch(/No extra restriction/);
     expect(
       describeProxyAccess({ ...defaultProxyAccess(), roles: { mode: "any", values: ["admin"] } }),
     ).toBe("Callers must hold the role admin.");
     expect(
-      describeProxyAccess({ ...defaultProxyAccess(), roles: { mode: "all", values: ["admin", "editor"] } }),
+      describeProxyAccess({
+        ...defaultProxyAccess(),
+        roles: { mode: "all", values: ["admin", "editor"] },
+      }),
     ).toBe("Callers must hold all of the roles admin, editor.");
     expect(
       describeProxyAccess({
@@ -113,10 +130,17 @@ describe("proxy access — wording and guards", () => {
   it("blocks the combinations the server rejects", () => {
     expect(validateProxyAccess(defaultProxyAccess())).toBeNull();
     expect(
-      validateProxyAccess({ ...defaultProxyAccess(), kind: "public", roles: { mode: "any", values: ["a"] } }),
+      validateProxyAccess({
+        ...defaultProxyAccess(),
+        kind: "public",
+        roles: { mode: "any", values: ["a"] },
+      }),
     ).toMatch(/public endpoint/);
     expect(
-      validateProxyAccess({ ...defaultProxyAccess(), permissions: { mode: "any", values: ["a,b"] } }),
+      validateProxyAccess({
+        ...defaultProxyAccess(),
+        permissions: { mode: "any", values: ["a,b"] },
+      }),
     ).toMatch(/comma/);
   });
 });

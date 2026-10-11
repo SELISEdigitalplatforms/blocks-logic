@@ -438,6 +438,22 @@ namespace XUnitTest.Proxy
         // =========================== GetExecution ===========================
 
         [Fact] // H4
+        public async Task GetExecution_OldRow_RedactsItsQuery()
+        {
+            // A row written before 2026-10-07: raw body, raw caller credential in the query.
+            var row = Row("e9", 200, "GET", 10);
+            row.RequestQuery = "q=1&api_key=old_secret_1";
+            row.UpstreamUrl = "https://user:pw@api.x.com/v1?api_key=old_secret_1";
+            row.ResponseContentType = "application/json";
+            _executions.Setup(r => r.GetByIdAsync(Tenant, ProxyId, "e9")).ReturnsAsync(row);
+
+            var dto = (await _service.GetExecutionAsync(Tenant, new ProxyGetExecutionRequestDto { ItemId = "e9", ProxyId = ProxyId })).Data!;
+
+            dto.RequestQuery.Should().Be("q=1&api_key=***");
+            dto.UpstreamUrl.Should().Be("https://api.x.com/v1?api_key=***");
+        }
+
+        [Fact]
         public async Task GetExecution_Match_ReturnsFullDetail()
         {
             var row = Row("e4", 500, "POST", 300);
@@ -448,7 +464,6 @@ namespace XUnitTest.Proxy
             row.UpstreamStatusCode = 500;
             row.ErrorMessage = null;
             row.ResponseContentType = "application/json";
-            row.ResponseBody = "{\"error\":\"boom\"}";
             row.ResponseBodyBytes = 16;
             _executions.Setup(r => r.GetByIdAsync(Tenant, ProxyId, "e4")).ReturnsAsync(row);
 
@@ -462,23 +477,7 @@ namespace XUnitTest.Proxy
             dto.InjectedQueryKeys.Should().Equal("account");
             dto.UpstreamStatusCode.Should().Be(500);
             dto.ResponseContentType.Should().Be("application/json");
-            dto.ResponseBody.Should().Be("{\"error\":\"boom\"}");
-            dto.ResponseBodyTruncatedForDisplay.Should().BeFalse();
-        }
-
-        [Fact] // C6
-        public async Task GetExecution_BodyOverDisplayLimit_ClipsAndFlags_WithoutMutatingRow()
-        {
-            var big = new string('x', ProxyExecutionService.ResponseBodyDisplayLimitBytes + 500);
-            var row = Row("e7", 200, "GET", 10);
-            row.ResponseBody = big;
-            _executions.Setup(r => r.GetByIdAsync(Tenant, ProxyId, "e7")).ReturnsAsync(row);
-
-            var result = await _service.GetExecutionAsync(Tenant, new ProxyGetExecutionRequestDto { ItemId = "e7", ProxyId = ProxyId });
-
-            result.Data!.ResponseBodyTruncatedForDisplay.Should().BeTrue();
-            Encoding.UTF8.GetByteCount(result.Data!.ResponseBody!).Should().BeLessThanOrEqualTo(ProxyExecutionService.ResponseBodyDisplayLimitBytes);
-            row.ResponseBody.Should().Be(big); // stored row untouched
+            dto.ResponseBodyBytes.Should().Be(16, "the size is kept; the body never is");
         }
 
         [Fact] // C3

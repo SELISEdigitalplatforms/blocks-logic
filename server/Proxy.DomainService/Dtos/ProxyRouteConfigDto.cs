@@ -23,5 +23,8 @@ namespace Proxy.DomainService.Dtos
         public string? ResponseMode { get; set; }
 
         public List<string>? ResponseInclude { get; set; }
+
+
+        public ProxyResilienceDto? Resilience { get; set; }
     }
 }

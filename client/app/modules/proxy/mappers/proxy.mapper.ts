@@ -1,4 +1,5 @@
 import { compactKeyValues, defaultProxyAccess, isResponsePath, maskUpstreamUrl } from "../utils";
+import { PROXY_METHODS } from "../constants";
 import {
   BaseMutationResponseDto,
   Proxy,
@@ -22,6 +23,8 @@ import {
   ProxyMutationResponse,
   ProxyFieldChange,
   ProxyOverview,
+  ProxyOpenApiPreview,
+  ProxyOpenApiPreviewDto,
   ProxyOverviewDto,
   ProxyRoute,
   ProxyRouteDto,
@@ -31,6 +34,8 @@ import {
   ProxyTestResponseDto,
   ProxyVersionDto,
   ProxyVersionHistory,
+  ProxyResilience,
+  ProxyResilienceDto,
 } from "../types";
 
 const VALID_METHODS: ProxyMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
@@ -201,10 +206,16 @@ export const mapProxyToCreatePayload = (values: ProxyFormValues) => ({
   routes: toRouteInputs(values.routes),
   ...toResponseFilter(values),
   access: toAccessPayload(values.access),
+  resilience: toResilienceInput(values.resilience ?? null),
+  requestsPerMinute: values.requestsPerMinute ?? null,
   enabled: true,
 });
 
-export const mapProxyToUpdatePayload = (id: string, values: ProxyFormValues) => ({
+export const mapProxyToUpdatePayload = (
+  id: string,
+  values: ProxyFormValues,
+  expectedVersion: number | null = null,
+) => ({
   itemId: id,
   name: values.name.trim(),
   upstream: values.upstreamUrl.trim(),
@@ -216,6 +227,11 @@ export const mapProxyToUpdatePayload = (id: string, values: ProxyFormValues) => 
   routes: toRouteInputs(values.routes),
   ...toResponseFilter(values),
   access: toAccessPayload(values.access),
+  resilience: toResilienceInput(values.resilience ?? null),
+  // Always sent: the server reads an omitted value as "back to the default".
+  requestsPerMinute: values.requestsPerMinute ?? null,
+  // The version the form was loaded from; the server answers 409 if the proxy changed since (PX-16).
+  expectedVersion,
 });
 
 export const mapProxyTestRequestToPayload = (request: ProxyTestRequest) => ({
@@ -233,6 +249,9 @@ export const mapProxyTestRequestToPayload = (request: ProxyTestRequest) => ({
         routes: toRouteInputs(request.draft.routes),
         ...toResponseFilter(request.draft),
         access: toAccessPayload(request.draft.access),
+        // A Test has to run under the policy the form is showing, or it answers a different question
+        // than the one being asked. The server validates it exactly as it does on Save.
+        resilience: toResilienceInput(request.draft.resilience ?? null),
       }
     : undefined,
   method: request.method,
@@ -274,7 +293,9 @@ const trimSlashes = (value: string | null | undefined) => (value ?? "").replace(
  * that inherits it, so the distinction is preserved in both directions.
  */
 const toRouteOverride = (value: ProxyKeyValueDto[] | null | undefined): ProxyKeyValue[] | null =>
-  Array.isArray(value) ? value.map((row) => ({ key: row.key ?? "", value: row.value ?? "" })) : null;
+  Array.isArray(value)
+    ? value.map((row) => ({ key: row.key ?? "", value: row.value ?? "" }))
+    : null;
 
 const toRoutes = (value: ProxyRouteDto[] | null | undefined): ProxyRoute[] =>
   Array.isArray(value)
@@ -283,7 +304,8 @@ const toRoutes = (value: ProxyRouteDto[] | null | undefined): ProxyRoute[] =>
         .map((route) => ({
           method: route.method.toUpperCase() as ProxyMethod,
           path: trimSlashes(route.path),
-          upstreamPath: typeof route.upstreamPath === "string" ? trimSlashes(route.upstreamPath) : null,
+          upstreamPath:
+            typeof route.upstreamPath === "string" ? trimSlashes(route.upstreamPath) : null,
           headers: toRouteOverride(route.headers),
           query: toRouteOverride(route.query),
           bodyMerge: toRouteOverride(route.bodyMerge),
@@ -294,8 +316,78 @@ const toRoutes = (value: ProxyRouteDto[] | null | undefined): ProxyRoute[] =>
                 ? "all"
                 : null,
           responseInclude: Array.isArray(route.responseInclude) ? [...route.responseInclude] : null,
+          resilience: toResilience(route.resilience),
         }))
     : [];
+
+/**
+ * Reads the server's resilience object, keeping "not configured" distinct from "configured".
+ *
+ * Absent stays absent all the way through: substituting a number here would make the console show a
+ * value the tenant never chose, and — because the console sends every field back — would then save
+ * it. A setting that appears by being looked at is worse than one that is missing.
+ */
+const toResilience = (value: ProxyResilienceDto | null | undefined): ProxyResilience | null => {
+  if (!value) return null;
+
+  const retry =
+    value.retry && typeof value.retry.attempts === "number"
+      ? {
+          attempts: value.retry.attempts,
+          backoff:
+            value.retry.backoff?.toLowerCase() === "fixed"
+              ? ("fixed" as const)
+              : value.retry.backoff?.toLowerCase() === "exponential"
+                ? ("exponential" as const)
+                : ("none" as const),
+          initialDelaySeconds: value.retry.initialDelaySeconds ?? 1,
+          idempotent: value.retry.idempotent === true,
+        }
+      : null;
+
+  const breaker =
+    value.breaker &&
+    typeof value.breaker.failureThreshold === "number" &&
+    typeof value.breaker.openSeconds === "number"
+      ? {
+          failureThreshold: value.breaker.failureThreshold,
+          openSeconds: value.breaker.openSeconds,
+        }
+      : null;
+
+  const timeoutSeconds = typeof value.timeoutSeconds === "number" ? value.timeoutSeconds : null;
+
+  // An object that asks for nothing is the same as no object, which is how the server stores it too.
+  return timeoutSeconds === null && retry === null && breaker === null
+    ? null
+    : { timeoutSeconds, retry, breaker };
+};
+
+/**
+ * Sends resilience back exactly as it came. The console does not yet edit these, and the server
+ * replaces the whole route on save — so omitting them here would silently delete a policy configured
+ * through the API the first time somebody renamed a header.
+ */
+const toResilienceInput = (value: ProxyResilience | null): ProxyResilienceDto | null =>
+  value
+    ? {
+        timeoutSeconds: value.timeoutSeconds,
+        retry: value.retry
+          ? {
+              attempts: value.retry.attempts,
+              backoff:
+                value.retry.backoff === "fixed"
+                  ? "Fixed"
+                  : value.retry.backoff === "exponential"
+                    ? "Exponential"
+                    : "None",
+              initialDelaySeconds: value.retry.initialDelaySeconds,
+              idempotent: value.retry.idempotent,
+            }
+          : null,
+        breaker: value.breaker ? { ...value.breaker } : null,
+      }
+    : null;
 
 /**
  * Route payload. Sent on every create and update, including routes the form cannot edit: the server
@@ -309,10 +401,12 @@ const toRouteInputs = (routes: ProxyRoute[] | undefined): ProxyRouteDto[] =>
     headers: route.headers ? compactKeyValues(route.headers) : null,
     query: route.query ? compactKeyValues(route.query) : null,
     bodyMerge: route.bodyMerge ? compactKeyValues(route.bodyMerge) : null,
-    responseMode: route.responseMode === "select" ? "Select" : route.responseMode === "all" ? "All" : null,
+    responseMode:
+      route.responseMode === "select" ? "Select" : route.responseMode === "all" ? "All" : null,
     responseInclude: route.responseInclude
       ? route.responseInclude.map((path) => path.trim()).filter((path) => path.length > 0)
       : null,
+    resilience: toResilienceInput(route.resilience ?? null),
   }));
 
 export const mapProxyListItemDtoToProxy = (dto: ProxyListItemDto): Proxy => ({
@@ -331,6 +425,11 @@ export const mapProxyListItemDtoToProxy = (dto: ProxyListItemDto): Proxy => ({
   responseMode: "all",
   responseInclude: [],
   access: defaultProxyAccess(),
+  // The list row does not carry it, and a placeholder here would read as "not configured" for a
+  // proxy that is. Only the detail read can answer this.
+  resilience: null,
+  requestsPerMinute: null,
+  version: null,
   calls24h: Number(dto.calls24h ?? 0),
   createdAt: dto.createdDate,
   updatedAt: dto.lastUpdatedDate,
@@ -353,6 +452,10 @@ export const mapProxyDetailDtoToProxy = (dto: ProxyDetailDto): Proxy => ({
   responseMode: dto.responseMode?.toLowerCase() === "select" ? "select" : "all",
   responseInclude: Array.isArray(dto.responseInclude) ? dto.responseInclude : [],
   access: toAccess(dto.access),
+  resilience: toResilience(dto.resilience),
+  requestsPerMinute:
+    typeof dto.requestsPerMinute === "number" && dto.requestsPerMinute > 0 ? dto.requestsPerMinute : null,
+  version: typeof dto.currentVersion === "number" ? dto.currentVersion : null,
   calls24h: 0,
   createdAt: dto.createdDate,
   updatedAt: dto.lastUpdatedDate,
@@ -415,12 +518,11 @@ export const mapProxyExecutionListItemDtoToLog = (
   upstreamUrl: "",
   injectedHeaderKeys: [],
   injectedQueryKeys: [],
-  responseBody: "",
   responseContentType: undefined,
   outcome: dto.outcome ?? undefined,
 });
 
-/** `GET /api/Proxies/{proxyId}/executions/{executionId}` — the expanded row with the display-clipped response body. */
+/** `GET /api/Proxies/{proxyId}/executions/{executionId}` — the expanded row (no body: Blocks never stores one). */
 export const mapProxyExecutionDetailDtoToLog = (
   dto: ProxyExecutionDetailDto,
 ): ProxyExecutionLog => ({
@@ -437,7 +539,6 @@ export const mapProxyExecutionDetailDtoToLog = (
   upstreamUrl: dto.upstreamUrl ?? "",
   injectedHeaderKeys: Array.isArray(dto.injectedHeaderKeys) ? dto.injectedHeaderKeys : [],
   injectedQueryKeys: Array.isArray(dto.injectedQueryKeys) ? dto.injectedQueryKeys : [],
-  responseBody: dto.responseBody ?? "",
   responseContentType: dto.responseContentType ?? undefined,
   outcome: dto.outcome ?? undefined,
   errorMessage: dto.errorMessage ?? undefined,
@@ -511,4 +612,37 @@ export const mapMutationResponse = (dto: BaseMutationResponseDto): ProxyMutation
   errors: dto.errors ?? dto.message ?? null,
   code: dto.code ?? null,
   message: dto.message ?? null,
+});
+
+// ---------------------------------------------------------------------------
+// OpenAPI import
+// ---------------------------------------------------------------------------
+
+const strings = (values: string[] | undefined): string[] =>
+  Array.isArray(values) ? values.filter((value): value is string => typeof value === "string") : [];
+
+/**
+ * The preview, as the dialog reads it.
+ *
+ * An operation whose verb the gateway cannot forward is dropped rather than shown as unselectable:
+ * the server already reports the skip as a warning, and listing a row nobody can import would make
+ * the warning read like a bug. Everything else is carried across unchanged — in particular
+ * `alreadyExists`, which the dialog then widens to include the routes in the unsaved form.
+ */
+export const mapOpenApiPreviewDtoToPreview = (dto: ProxyOpenApiPreviewDto): ProxyOpenApiPreview => ({
+  baseUrl: dto.baseUrl ?? "",
+  operations: (dto.operations ?? [])
+    .map((operation) => ({
+      operationId: operation.operationId ?? "",
+      method: (operation.method ?? "").toUpperCase() as ProxyMethod,
+      path: trimSlashes(operation.path ?? ""),
+      summary: operation.summary ?? "",
+      queryParameters: strings(operation.queryParameters),
+      headerParameters: strings(operation.headerParameters),
+      securityHeaders: strings(operation.securityHeaders),
+      alreadyExists: operation.alreadyExists === true,
+    }))
+    .filter((operation) => PROXY_METHODS.includes(operation.method)),
+  errors: strings(dto.errors),
+  warnings: strings(dto.warnings),
 });
