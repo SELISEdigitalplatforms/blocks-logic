@@ -332,8 +332,11 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
             {
                 try
                 {
-                    var resolvedQuery = parseExpression<string>(parameters.RawQuery, context.InputItems[i], context)
-                        ?? parameters.RawQuery;
+                    // Values inside "…" string literals are escaped (a quote in a value cannot end the
+                    // literal); values outside a string are inserted as before. Not validated.
+                    var resolvedQuery = string.IsNullOrEmpty(parameters.RawQuery)
+                        ? parameters.RawQuery
+                        : ResolveGraphQlTemplate(parameters.RawQuery, context.InputItems[i], context);
 
                     var response = await SendGraphQLRequestAsync(parameters, resolvedQuery, context.TenantId, context.Log, logToken: i == 0);
                     response.EnsureSuccessStatusCode();
@@ -391,12 +394,13 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
             // Authenticate based on selected authentication type
             if (string.Equals(parameters.AuthenticationType, "blocksAuthentication", StringComparison.OrdinalIgnoreCase))
             {
+                // Delegated token only. Never the caller's raw BlocksContext.OAuthToken, and never an
+                // unauthenticated send: no token fails this item (WS-1).
                 var token = await _workflowAuthService.CreateBlocksAuthorizationTokenAsync();
-                if (string.IsNullOrWhiteSpace(token))
-                    token = BlocksContext.GetContext()?.OAuthToken;
-                if (!string.IsNullOrWhiteSpace(token))
-                    request.Headers.Add("Authorization", $"Bearer {token}");
                 if (logToken) LogToken(log, token);
+                if (string.IsNullOrWhiteSpace(token))
+                    throw new NoDelegatedTokenException();
+                request.Headers.Add("Authorization", $"Bearer {token}");
             }
             else if (parameters.AuthenticationType == "clientCredential"
                 && !string.IsNullOrWhiteSpace(parameters.ClientId) && !string.IsNullOrWhiteSpace(parameters.ClientSecret))
@@ -455,8 +459,8 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                 if (!response.IsSuccessStatusCode)
                 {
                     var errorContent = await response.Content.ReadAsStringAsync();
-                    _logger.LogError("Failed to get token via refresh_token. Status: {StatusCode}, Error: {Error}",
-                        response.StatusCode, errorContent);
+                    _logger.LogError("Failed to get token via refresh_token. Status: {StatusCode}, Error: {Error}, body {BodyLength} chars",
+                        response.StatusCode, Services.TokenErrorBody.Code(errorContent), errorContent.Length);
                     return null;
                 }
 
@@ -814,8 +818,9 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
             }
             catch (Exception ex)
             {
-                _logger.LogWarning("Failed to convert value '{Value}' to type '{Type}': {Error}. Storing as string.",
-                    value, fieldType, ex.Message);
+                // Never the value or the parse message that quotes it: a mapped field can hold a secret.
+                _logger.LogWarning("Failed to convert a value to type '{Type}' ({ErrorKind}). Storing as string.",
+                    fieldType, ex.GetType().Name);
                 return BsonValue.Create(value);
             }
         }

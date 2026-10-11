@@ -15,6 +15,9 @@ const _freeze = Object.freeze;
 const _isArray = Array.isArray;
 const _min = Math.min;
 const _byteLength = Buffer.byteLength;
+const _TextDecoder = globalThis.TextDecoder;
+const _Uint8Array = Uint8Array;
+const _asyncIterator = Symbol.asyncIterator;
 
 /**
  * Replaces a secret's value wherever it appears in anything this process writes.
@@ -32,6 +35,10 @@ export const LIMITS = _freeze({
   RESULT_BYTES: 5 * 1024 * 1024,
   MESSAGE_CHARS: 8192,        // per-line message cap, so one line cannot eat the budget
   STACK_CHARS: 8192,
+  // Streaming (F-5): chunk lines of one call, encoded. With the 1 MB of logs and the kept text in
+  // the result line this stays inside the runner's per-call output ceiling (2 × logs + result).
+  STREAM_BYTES: 3 * 1024 * 1024,
+  STREAM_KEEP_CHARS: 256 * 1024, // the start of the streamed text, kept as the run's result
 });
 
 export const EXIT = _freeze({
@@ -71,6 +78,7 @@ export class ProtocolWriter {
   #truncated = false;
   #resultWritten = false;
   #startedWritten = false;
+  #streamBytes = 0;
   #sink;
   /** `[{ raw, escaped }]` for every secret-backed value, longest first. */
   #secrets = [];
@@ -231,6 +239,20 @@ export class ProtocolWriter {
    * log budget — but through this writer's redaction, so a crash message that quotes a secret is
    * masked like any log line would be.
    */
+  /**
+   * One piece of a streamed answer (F-5). Not redacted, exactly like the result: it is the
+   * function's answer to its caller. False once the stream budget is spent — nothing is written.
+   */
+  chunk(text) {
+    if (typeof text !== 'string' || text.length === 0) return true;
+    const line = _stringify(this.#tag({ t: 'chunk', data: text })) + '\n';
+    const size = _byteLength(line, 'utf8');
+    if (this.#streamBytes + size > LIMITS.STREAM_BYTES) return false;
+    this.#streamBytes += size;
+    this.#sink(line);
+    return true;
+  }
+
   control(obj) {
     if (!this.#emit(obj)) {
       this.#sink(_stringify({ t: obj?.t ?? 'fatal', message: 'unrepresentable control line' }) + '\n');
@@ -247,6 +269,39 @@ export class ProtocolWriter {
       this.#sink(_stringify(this.#tag({ t: 'result', ok: false, code, message: 'unrepresentable error' })) + '\n');
     }
   }
+}
+
+/** A handler's answer that is streamed rather than returned whole: any async iterable. */
+export function isStream(value) {
+  return value !== null && (typeof value === 'object' || typeof value === 'function')
+    && typeof value[_asyncIterator] === 'function';
+}
+
+/**
+ * Writes a streamed answer as `chunk` lines, piece by piece as the handler yields them, and
+ * returns its start (STREAM_KEEP_CHARS) as the run's result. A string is sent as it is; bytes
+ * (Uint8Array, Buffer, a fetch body) as UTF-8 text; anything else as one JSON line (NDJSON).
+ * Over the stream budget it throws RESULT_TOO_LARGE: what was sent stays sent.
+ */
+export async function pumpStream(iterable, writer) {
+  const decoder = new _TextDecoder();
+  let kept = '';
+  const send = (text) => {
+    if (!text) return;
+    if (!writer.chunk(text)) {
+      throw Object.assign(new Error(`the streamed answer exceeds the ${LIMITS.STREAM_BYTES} byte ceiling`),
+        { __code: CODE.RESULT_TOO_LARGE });
+    }
+    if (kept.length < LIMITS.STREAM_KEEP_CHARS) kept += text.slice(0, LIMITS.STREAM_KEEP_CHARS - kept.length);
+  };
+  for await (const part of iterable) {
+    if (part === null || part === undefined) continue;
+    if (typeof part === 'string') send(part);
+    else if (part instanceof _Uint8Array) send(decoder.decode(part, { stream: true }));
+    else send(_stringify(part) + '\n');
+  }
+  send(decoder.decode());
+  return kept;
 }
 
 export const _internals = _freeze({ clip, isoNow, LEVELS, _isArray, _min, MIN_REDACT_CHARS, REDACTED });

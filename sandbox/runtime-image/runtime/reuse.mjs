@@ -35,7 +35,7 @@ import { AsyncLocalStorage, createHook } from 'node:async_hooks';
 import { createInterface } from 'node:readline';
 import { dirname } from 'node:path';
 import { getCallSites } from 'node:util';
-import { ProtocolWriter, CODE, EXIT } from './protocol.mjs';
+import { ProtocolWriter, CODE, EXIT, isStream, pumpStream } from './protocol.mjs';
 import { parseEnvelope, ACCESS_TOKEN_REMOVED } from './envelope.mjs';
 
 // Captured before any tenant code is imported (see protocol.mjs): a function that later replaces
@@ -477,7 +477,13 @@ export async function runReuse({ functionEntry, describe, patchConsole }) {
     };
     try {
       const run = als.run(tok, () => handler(envelope.input, ctx));
-      const value = deadline ? await _race([run, deadline]) : await run;
+      let value = deadline ? await _race([run, deadline]) : await run;
+      // A streamed answer (F-5): sent piece by piece, inside the same deadline and this call's
+      // async context; its start becomes the result.
+      if (isStream(value)) {
+        const pump = als.run(tok, () => pumpStream(value, writer));
+        value = deadline ? await _race([pump, deadline]) : await pump;
+      }
       measureCpu();
       const problem = writer.result(value);
       if (problem === CODE.RESULT_TOO_LARGE) {
@@ -489,8 +495,8 @@ export async function runReuse({ functionEntry, describe, patchConsole }) {
     } catch (err) {
       measureCpu();
       const d = describe(err);
-      writer.failure(err?.__timeout ? CODE.TIMED_OUT : CODE.USER_RUNTIME_ERROR, d.message,
-        err?.__timeout ? undefined : d.stack);
+      writer.failure(err?.__timeout ? CODE.TIMED_OUT : (err?.__code ?? CODE.USER_RUNTIME_ERROR), d.message,
+        err?.__timeout || err?.__code ? undefined : d.stack);
       if (err?.__timeout) {
         // The handler is still running and cannot be stopped from here: this sandbox is done.
         current.answered = true;

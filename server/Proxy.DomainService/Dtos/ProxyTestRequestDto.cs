@@ -22,7 +22,7 @@ namespace Proxy.DomainService.Dtos
         /// <summary>Extra raw query string; default <c>""</c>.</summary>
         public string? Query { get; set; }
 
-        /// <summary>Request body; default none. The 10 MB cap still applies.</summary>
+        /// <summary>Request body; default none. The 1 MB cap still applies.</summary>
         public string? Body { get; set; }
 
         /// <summary>Defaults to <c>application/json</c> when <see cref="Body"/> is present.</summary>

@@ -137,7 +137,7 @@ describe("ProxyDetails page", () => {
 
     expect(await screen.findByText(/Only 3 fields/)).toBeTruthy();
     expect(screen.getByText(/from the proxy-wide filter/)).toBeTruthy();
-    expect(screen.queryByText("The vendor’s whole response")).toBeNull();
+    expect(screen.queryByText("The vendor’s status and body (secret values masked)")).toBeNull();
   });
 
   it("shows proxy-wide body fields on an endpoint that sets none", async () => {
@@ -192,7 +192,9 @@ describe("ProxyDetails page", () => {
 
     await user.click(resume);
 
-    await waitFor(() => expect(toggleSpy).toHaveBeenCalledWith({ id: "p3", enabled: true }));
+    await waitFor(() =>
+      expect(toggleSpy).toHaveBeenCalledWith({ id: "p3", enabled: true, expectedVersion: 1 }),
+    );
     await waitFor(() =>
       expect(toasts.showSuccessToast).toHaveBeenCalledWith({ description: "Proxy resumed." }),
     );

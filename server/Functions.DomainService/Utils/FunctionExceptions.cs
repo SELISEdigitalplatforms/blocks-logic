@@ -6,6 +6,26 @@ namespace Functions.DomainService.Utils
     /// </summary>
     public class FunctionValidationException(string message) : Exception(message);
 
+    /// <summary>
+    /// A deploy whose build already failed. Still a 400, plus the build's id so the editor can show
+    /// that build's log, not only its one-line reason (PKG-14).
+    /// </summary>
+    public class FunctionBuildFailedException(string message, string buildId) : FunctionValidationException(message)
+    {
+        public string BuildId { get; } = buildId;
+    }
+
+    /// <summary>
+    /// A delete refused because the function is still in use: runs not finished (queued or running)
+    /// and/or workflow steps pointing at it. Still a 400, plus the counts, so the console can say what
+    /// would happen and offer "delete anyway" (force), which cancels the runs (FN-66).
+    /// </summary>
+    public class FunctionDeleteBlockedException(string message, long activeRuns, int workflows) : FunctionValidationException(message)
+    {
+        public long ActiveRuns { get; } = activeRuns;
+        public int Workflows { get; } = workflows;
+    }
+
     /// <summary>The requested function, version, run or build does not exist. Maps to 404.</summary>
     public class FunctionNotFoundException(string message) : Exception(message);
 

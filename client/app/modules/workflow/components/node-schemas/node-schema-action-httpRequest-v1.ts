@@ -70,7 +70,7 @@ export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
         id: "authenticationType",
         type: "select",
         label: "Authentication",
-        info: "Attaches a bearer token to the Authorization header. Blocks Authentication uses the run's delegated token; Client Credential exchanges an IAM credential.",
+        info: "Attaches a bearer token to the Authorization header. Blocks Authentication uses the run's delegated token, or the caller's own token if there is none; if neither exists, no token is sent. Client Credential exchanges an IAM credential.",
         key: "authenticationType",
         required: false,
         options: [
@@ -142,7 +142,7 @@ export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
           value: "json",
         },
         label: "Body",
-        info: "Whether the request has a body or not",
+        info: "JSON body sent with the request. Expressions are resolved for each item: {{$json.field}} reads a field of the current item (same as {{$json.output.field}}). Values inside quotes are escaped automatically. If the body is not valid JSON after that, the step fails.",
         key: "body",
       },
     ],

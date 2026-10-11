@@ -29,7 +29,10 @@ namespace Blocks.FunctionRunner.Sandbox
         private const int DefaultBufferBytes = 16 * 1024;
 
         /// <summary>Reads a Docker multiplexed attach stream (stdout and stderr interleaved).</summary>
-        internal static Task<string> ReadAsync(MultiplexedStream stream, long ceilingBytes, CancellationToken token)
+        /// <param name="onText">Each decoded piece as it arrives, for a caller that must react to
+        /// output while the sandbox still runs (the start-up boost's drop at <c>started</c>).</param>
+        internal static Task<string> ReadAsync(
+            MultiplexedStream stream, long ceilingBytes, CancellationToken token, Action<string>? onText = null)
         {
             ArgumentNullException.ThrowIfNull(stream);
 
@@ -40,7 +43,8 @@ namespace Blocks.FunctionRunner.Sandbox
                     return (read.Count, read.EOF);
                 },
                 ceilingBytes,
-                token);
+                token,
+                onText: onText);
         }
 
         /// <summary>
@@ -48,7 +52,8 @@ namespace Blocks.FunctionRunner.Sandbox
         /// the ceiling — whichever comes first — and returns whatever had arrived by then.
         /// </summary>
         internal static async Task<string> ReadAsync(
-            ReadChunk read, long ceilingBytes, CancellationToken token, int bufferBytes = DefaultBufferBytes)
+            ReadChunk read, long ceilingBytes, CancellationToken token, int bufferBytes = DefaultBufferBytes,
+            Action<string>? onText = null)
         {
             ArgumentNullException.ThrowIfNull(read);
             ArgumentOutOfRangeException.ThrowIfNegative(ceilingBytes);
@@ -80,6 +85,7 @@ namespace Blocks.FunctionRunner.Sandbox
                         total += take;
                         var decoded = decoder.GetChars(buffer, 0, take, chars, 0, flush: false);
                         builder.Append(chars, 0, decoded);
+                        if (onText is not null && decoded > 0) onText(new string(chars, 0, decoded));
                     }
 
                     if (take < count)

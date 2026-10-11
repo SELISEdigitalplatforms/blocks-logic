@@ -49,6 +49,15 @@ namespace Blocks.FunctionRunner.Sandbox
         /// </summary>
         public long? CpuUsageMs { get; init; }
 
+        /// <summary>
+        /// The wall time <see cref="CpuUsageMs"/> covers, set only when that figure is the host's
+        /// counter over the handler's own window (<c>started</c> to <c>result</c>), so the two
+        /// divide into millicores comparable with the limit. Null when the CPU figure is any
+        /// other total (the whole container, or since the last warm call), which must not be
+        /// divided by a duration.
+        /// </summary>
+        public long? CpuWindowMs { get; init; }
+
         /// <summary>Set when the sandbox could not be created or started at all.</summary>
         public string? HostFailure { get; init; }
     }
@@ -91,6 +100,7 @@ namespace Blocks.FunctionRunner.Sandbox
             var containerName = SandboxProfile.ContainerName(runId);
             var stopwatch = Stopwatch.StartNew();
             string? containerId = null;
+            SingleRunBoost? boost = null;
 
             try
             {
@@ -101,7 +111,10 @@ namespace Blocks.FunctionRunner.Sandbox
                 await RemoveByNameAsync(containerName).ConfigureAwait(false);
 
                 // --- create -----------------------------------------------------------
-                var parameters = SandboxProfile.Create(containerName, image, envelopeHostPath, limits, _options);
+                // Started boosted like a warm sandbox (Node and the imports load ~10× faster), and
+                // dropped to the run limit at `started` or the cap — see SingleRunBoost.
+                var startCpus = _options.StartBoostSingleRuns ? SandboxProfile.StartNanoCpus(limits, _options) : limits.NanoCpus;
+                var parameters = SandboxProfile.Create(containerName, image, envelopeHostPath, limits, _options, startCpus);
                 CreateContainerResponse created;
                 try
                 {
@@ -120,7 +133,7 @@ namespace Blocks.FunctionRunner.Sandbox
                 // sandbox on this host. Check, then start.
                 var inspectBefore = await _docker.Containers.InspectContainerAsync(containerId, cancellationToken)
                     .ConfigureAwait(false);
-                var discrepancy = SandboxProfile.Validate(inspectBefore, limits, _options);
+                var discrepancy = SandboxProfile.Validate(inspectBefore, limits, _options, reuse: false, startCpus);
                 if (discrepancy is not null)
                 {
                     _logger.LogError(
@@ -136,6 +149,9 @@ namespace Blocks.FunctionRunner.Sandbox
                     tty: false,
                     new ContainerAttachParameters { Stream = true, Stdout = true, Stderr = true },
                     attachCts.Token).ConfigureAwait(false);
+
+                var id = containerId;
+                if (startCpus != limits.NanoCpus) boost = new SingleRunBoost(() => DropBoostAsync(runId, id, limits));
 
                 var started = await _docker.Containers.StartContainerAsync(
                     containerId, new ContainerStartParameters(), cancellationToken).ConfigureAwait(false);
@@ -165,8 +181,12 @@ namespace Blocks.FunctionRunner.Sandbox
                 using var deadlineCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 deadlineCts.CancelAfter(deadline);
 
-                var readTask = ReadStreamAsync(stream, attachCts.Token);
+                var cpuWindow = new HandlerCpuWindow(() => HostCpu.ReadMicroseconds(id), stopwatch);
+                Action<string> onText = boost is null ? cpuWindow.OnText : text => { boost.OnText(text); cpuWindow.OnText(text); };
+                var readTask = ReadStreamAsync(stream, attachCts.Token, onText);
                 var timedOut = false;
+                using var boostCap = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                if (boost is not null && _options.StartBoostMaxMs > 0) _ = boost.CapAsync(_options.StartBoostMaxMs, boostCap.Token);
 
                 try
                 {
@@ -185,6 +205,13 @@ namespace Blocks.FunctionRunner.Sandbox
                 }
 
                 stopwatch.Stop();
+                boostCap.Cancel();
+
+                // A drop that could not be confirmed killed the sandbox: the host's failure, as at create.
+                if (boost is not null && await boost.CloseAsync().ConfigureAwait(false) is { } boostFailure)
+                {
+                    return HostFailure(stopwatch, boostFailure);
+                }
 
                 // Give the attach a moment to drain, then stop waiting on it regardless: a
                 // sandbox must never be able to hold the runner open.
@@ -196,6 +223,15 @@ namespace Blocks.FunctionRunner.Sandbox
                 // that socket lingers.
                 statsCts.CancelAfter(TimeSpan.FromSeconds(2));
                 var (peakMemoryBytes, cpuUsageMs) = await statsTask.ConfigureAwait(false);
+
+                // The handler's own CPU when the host counter was read at both ends; Docker's
+                // whole-container total (start-up boost included) stays the fallback, with no window.
+                long? cpuWindowMs = null;
+                if (cpuWindow.Measured() is { } handlerCpu)
+                {
+                    cpuUsageMs = handlerCpu.CpuMs;
+                    cpuWindowMs = handlerCpu.WindowMs;
+                }
 
                 // --- post-mortem --------------------------------------------------------
                 var inspect = await _docker.Containers.InspectContainerAsync(containerId, CancellationToken.None)
@@ -241,6 +277,7 @@ namespace Blocks.FunctionRunner.Sandbox
                     DurationMs = stopwatch.ElapsedMilliseconds,
                     PeakMemoryBytes = peakMemoryBytes,
                     CpuUsageMs = cpuUsageMs,
+                    CpuWindowMs = cpuWindowMs,
                 };
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -250,6 +287,8 @@ namespace Blocks.FunctionRunner.Sandbox
             }
             finally
             {
+                // No drop may still be talking to a container that is being removed.
+                if (boost is not null) await boost.CloseAsync().ConfigureAwait(false);
                 if (containerId is not null)
                 {
                     await RemoveAsync(containerId).ConfigureAwait(false);
@@ -262,14 +301,132 @@ namespace Blocks.FunctionRunner.Sandbox
         /// interleaved deliberately: the bootstrap writes protocol lines to stdout, and anything
         /// on stderr is a package misbehaving, which is worth capturing next to it.
         /// </summary>
-        private static Task<string> ReadStreamAsync(MultiplexedStream stream, CancellationToken token)
+        private static Task<string> ReadStreamAsync(MultiplexedStream stream, CancellationToken token, Action<string>? onText = null)
         {
             // Twice the log ceiling plus the result ceiling: enough for a legitimate run, far
             // short of what a flooding sandbox would like to send. Enforced on bytes, and
             // decoded statefully so a character split across two reads survives intact.
             const long ceiling = (2 * Ceilings.LogBytes) + Ceilings.ResultBytes;
 
-            return CappedOutputReader.ReadAsync(stream, ceiling, token);
+            return CappedOutputReader.ReadAsync(stream, ceiling, token, onText);
+        }
+
+        /// <summary>
+        /// Drops a running single run's CPU to its limit and confirms it. Null when done, or when
+        /// the container has already stopped (a fast run can end before the drop lands — nothing
+        /// is left running boosted). Otherwise the sandbox is killed and the reason returned: not
+        /// confirmed → not let run, as for a warm sandbox.
+        /// </summary>
+        private async Task<string?> DropBoostAsync(string runId, string containerId, RunLimits limits)
+        {
+            string? problem;
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                await _docker.Containers.UpdateContainerAsync(
+                    containerId, new ContainerUpdateParameters { NanoCPUs = limits.NanoCpus }, cts.Token).ConfigureAwait(false);
+                var inspect = await _docker.Containers.InspectContainerAsync(containerId, cts.Token).ConfigureAwait(false);
+                problem = SandboxProfile.Validate(inspect, limits, _options);
+                if (problem is null || inspect.State?.Running != true) return null;
+            }
+            catch (Exception ex) when (ex is DockerApiException or HttpRequestException or IOException or OperationCanceledException)
+            {
+                problem = ex.Message;
+                if (!await IsRunningAsync(containerId).ConfigureAwait(false)) return null;
+            }
+
+            _logger.LogError("Killing sandbox for run {RunId}: the start-up CPU could not be dropped — {Problem}", runId, problem);
+            await KillAsync(containerId).ConfigureAwait(false);
+            return $"the start-up CPU could not be dropped: {problem}";
+        }
+
+        /// <summary>Whether the container still runs; true when that cannot be read (fail closed).</summary>
+        private async Task<bool> IsRunningAsync(string containerId)
+        {
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                var inspect = await _docker.Containers.InspectContainerAsync(containerId, cts.Token).ConfigureAwait(false);
+                return inspect.State?.Running == true;
+            }
+            catch (DockerContainerNotFoundException)
+            {
+                return false;
+            }
+            catch (Exception)
+            {
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// The start-up boost of one single run: dropped once, when its <c>started</c> line is read
+        /// (the handler is about to run) or when the cap fires, whichever comes first. A single run
+        /// has no <c>ready</c> to wait for, so the handler's first moments (one <c>docker update</c>,
+        /// ~50 ms under runsc) can still run boosted. Output is only watched, never changed: a fake
+        /// <c>started</c> written by a package only drops the boost early.
+        /// </summary>
+        internal sealed class SingleRunBoost(Func<Task<string?>> drop)
+        {
+            /// <summary>What protocol.mjs writes; inside a JSON-encoded log message the quotes are escaped.</summary>
+            private const string Marker = "\"t\":\"started\"";
+
+            private readonly Lock _gate = new();
+            private Task<string?>? _dropping;
+            private bool _closed;
+            private string _tail = string.Empty;   // a marker split across two reads
+
+            /// <summary>Fed each decoded piece of output, on the reader's thread only.</summary>
+            public void OnText(string text)
+            {
+                if (Dropping) return;
+                var window = _tail + text;
+                if (window.Contains(Marker, StringComparison.Ordinal))
+                {
+                    Drop();
+                    return;
+                }
+                _tail = window.Length > Marker.Length ? window[^Marker.Length..] : window;
+            }
+
+            public async Task CapAsync(int afterMs, CancellationToken token)
+            {
+                try
+                {
+                    await Task.Delay(afterMs, token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                Drop();
+            }
+
+            /// <summary>No drop starts after this; one in flight is waited for. Its failure, or null.</summary>
+            public async Task<string?> CloseAsync()
+            {
+                Task<string?>? dropping;
+                lock (_gate)
+                {
+                    _closed = true;
+                    dropping = _dropping;
+                }
+                return dropping is null ? null : await dropping.ConfigureAwait(false);
+            }
+
+            private bool Dropping
+            {
+                get { lock (_gate) { return _dropping is not null; } }
+            }
+
+            private void Drop()
+            {
+                lock (_gate)
+                {
+                    if (_closed || _dropping is not null) return;
+                    _dropping = drop();
+                }
+            }
         }
 
         /// <summary>

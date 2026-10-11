@@ -175,17 +175,27 @@ namespace Workflow.DomainService.Repositories
         /// regardless of whether step-mode left downstream node IDs in ActiveNodeIds (non-leaf targets).
         /// Idempotent: safe to call when the execution has already been auto-finalized by AtomicCompleteNodeAsync.
         /// </summary>
-        public async Task AtomicFinalizeExecutionAsync(string executionId, string tenantId)
+        public async Task<bool> AtomicFinalizeExecutionAsync(string executionId, string tenantId)
         {
             var collection = GetCollection(tenantId);
-            var filter = Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, executionId);
+            // A Failed execution stays Failed: another branch may have failed while this one reached its target.
+            var filter = Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, executionId) & NotFailed;
             var update = Builders<WorkflowExecutionEntity>.Update
                 .Set(e => e.ActiveNodeIds, new List<string>())
                 .Set(e => e.Status, WorkflowExecutionStatus.Completed)
                 .Set(e => e.FinishedAt, DateTime.UtcNow);
 
-            await collection.UpdateOneAsync(filter, update);
+            var result = await collection.UpdateOneAsync(filter, update);
+            return result.MatchedCount > 0;
         }
+
+        /// <summary>
+        /// Every write that sets an execution Running or Completed carries this. Without it a branch that
+        /// read the execution before another branch failed it set it back to Running, and the run then
+        /// ended "Completed" with a failed node in it.
+        /// </summary>
+        public static readonly FilterDefinition<WorkflowExecutionEntity> NotFailed =
+            Builders<WorkflowExecutionEntity>.Filter.Ne(e => e.Status, WorkflowExecutionStatus.Failed);
 
         /// <summary>
         /// Atomically pushes a new NodeExecution to the NodeExecutions array and sets Status=Running.
@@ -201,6 +211,56 @@ namespace Workflow.DomainService.Repositories
                 .Set(e => e.Status, WorkflowExecutionStatus.Running);
 
             await collection.UpdateOneAsync(filter, update);
+        }
+
+        public async Task<bool> TryReopenFailedExecutionAsync(string executionId, string tenantId)
+        {
+            var filter = Builders<WorkflowExecutionEntity>.Filter;
+            var update = Builders<WorkflowExecutionEntity>.Update
+                .Set(e => e.Status, WorkflowExecutionStatus.Running)
+                .Set(e => e.ErrorMessage, null)
+                .Set(e => e.FinishedAt, null)
+                .Inc(e => e.AttemptNumber, 1);
+
+            var result = await GetCollection(tenantId).UpdateOneAsync(
+                filter.Eq(e => e.Id, executionId)
+                & filter.Eq(e => e.Status, WorkflowExecutionStatus.Failed)
+                & filter.Eq(e => e.ExecutionMode, WorkflowExecutionMode.Production),
+                update);
+            return result.ModifiedCount > 0;
+        }
+
+        public async Task<bool> TryAddFirstNodeExecutionAsync(string executionId, string tenantId, NodeExecutionEntity nodeExecution)
+        {
+            var update = Builders<WorkflowExecutionEntity>.Update
+                .Push(e => e.NodeExecutions, nodeExecution)
+                .Set(e => e.Status, WorkflowExecutionStatus.Running);
+
+            var result = await GetCollection(tenantId).UpdateOneAsync(FirstRunFilter(executionId, nodeExecution.NodeId) & NotFailed, update);
+            return result.MatchedCount > 0;
+        }
+
+        public async Task<bool> TryAddNodeExecutionAsync(string executionId, string tenantId, NodeExecutionEntity nodeExecution)
+        {
+            var update = Builders<WorkflowExecutionEntity>.Update
+                .Push(e => e.NodeExecutions, nodeExecution)
+                .Set(e => e.Status, WorkflowExecutionStatus.Running);
+
+            var result = await GetCollection(tenantId).UpdateOneAsync(
+                Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, executionId) & NotFailed, update);
+            return result.MatchedCount > 0;
+        }
+
+        /// <summary>
+        /// The execution, only while it has no Running or Completed row for <paramref name="nodeId"/>. One
+        /// document, one update: two deliveries of the same node message cannot both pass it.
+        /// </summary>
+        public static FilterDefinition<WorkflowExecutionEntity> FirstRunFilter(string executionId, string nodeId)
+        {
+            var filter = Builders<WorkflowExecutionEntity>.Filter;
+            return filter.Eq(e => e.Id, executionId)
+                & filter.Not(filter.ElemMatch(e => e.NodeExecutions, ne => ne.NodeId == nodeId
+                    && (ne.Status == NodeExecutionStatus.Running || ne.Status == NodeExecutionStatus.Completed)));
         }
 
         /// <summary>
@@ -392,6 +452,10 @@ namespace Workflow.DomainService.Repositories
             List<Dictionary<string, string>> nodeIdBranchPairs,
             string tenantId)
         {
+            // A step with no incoming lines has no parents: no items. Without this the filter below is
+            // `$or: []`, which Mongo rejects, and the step failed before its own checks ran (PKG-25).
+            if (nodeIdBranchPairs is not { Count: > 0 }) return new List<WorkflowItemExecutionEntity>();
+
             var collection = _dbContextProvider.GetCollection<WorkflowItemExecutionEntity>(tenantId, "WorkflowItemExecutions");
 
             var filter = Builders<WorkflowItemExecutionEntity>.Filter.And(

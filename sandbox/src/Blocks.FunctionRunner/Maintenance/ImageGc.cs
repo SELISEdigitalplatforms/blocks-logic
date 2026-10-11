@@ -56,6 +56,13 @@ namespace Blocks.FunctionRunner.Maintenance
         /// </summary>
         public static readonly TimeSpan TestImageMaxAge = TimeSpan.FromMinutes(30);
 
+        /// <summary>
+        /// A test's dependency image is kept while that tenant keeps testing with the same
+        /// dependencies, and removed after this long unused (last use from the usage log; with no
+        /// record, from when it was built). Rebuilding one costs ~10 s on the next test.
+        /// </summary>
+        public static readonly TimeSpan TestDepsIdle = TimeSpan.FromHours(1);
+
         private readonly IDockerClient _docker;
         private readonly IDatabase _db;
         private readonly IRegistryClient _registry;
@@ -154,6 +161,7 @@ namespace Blocks.FunctionRunner.Maintenance
             }, token).ConfigureAwait(false);
 
             var removed = 0;
+            var pruned = new HashSet<string>(StringComparer.Ordinal);
             var cutoff = DateTime.UtcNow - _grace;
 
             foreach (var image in images)
@@ -168,6 +176,13 @@ namespace Blocks.FunctionRunner.Maintenance
                 if (IsTestImage(image.Labels))
                 {
                     if (!IsStaleTestImage(image.Labels, image.Created, DateTime.UtcNow)) continue;
+                }
+                else if (IsTestDepsImage(image.Labels))
+                {
+                    // A running test's own image is its child, so Docker refuses this delete while
+                    // one is built on it; the next sweep tries again.
+                    var lastUsed = _usage?.LastUsedUtc(image.RepoTags?.FirstOrDefault() ?? image.ID) ?? image.Created;
+                    if (lastUsed > DateTime.UtcNow - TestDepsIdle) continue;
                 }
                 else
                 {
@@ -192,6 +207,7 @@ namespace Blocks.FunctionRunner.Maintenance
                         image.ID, new ImageDeleteParameters { Force = false, NoPrune = false }, token)
                         .ConfigureAwait(false);
                     removed++;
+                    pruned.Add(image.ID);
                     _logger.LogInformation("Pruned unreferenced function image {Image}", name);
 
                     // Only after the daemon let go of it: if the local delete is refused because a
@@ -221,7 +237,9 @@ namespace Blocks.FunctionRunner.Maintenance
             }
 
             if (removed > 0) _logger.LogInformation("Image GC pruned {Count} image(s)", removed);
-            removed += await EnforceCacheCapAsync(images, inUse, token).ConfigureAwait(false);
+            // Without the ones just pruned: they no longer take room, and evicting them again fails.
+            var remaining = images.Where(i => i.ID is null || !pruned.Contains(i.ID)).ToList();
+            removed += await EnforceCacheCapAsync(remaining, inUse, token).ConfigureAwait(false);
 
             return removed;
        }
@@ -246,13 +264,14 @@ namespace Blocks.FunctionRunner.Maintenance
         {
             if (_usage is null) return 0;
 
-            var cap = _options.MaxCachedImages > 0
-                ? _options.MaxCachedImages
-                : DeriveCapFromDisk(images);
-            if (cap <= 0) return 0;
+            var budgetBytes = ReadImageBudgetBytes();
+            if (_options.MaxCachedImages <= 0 && budgetBytes <= 0) return 0;
+
+            var baseBytes = await ReadBaseImageBytesAsync(token).ConfigureAwait(false);
 
             var candidates = images
-                .Where(i => i.ID is not null && !inUse.Contains(i.ID) && !IsBaseImage(i) && !IsTestImage(i.Labels))
+                .Where(i => i.ID is not null && !inUse.Contains(i.ID) && !IsBaseImage(i)
+                            && !IsTestImage(i.Labels) && !IsTestDepsImage(i.Labels))
                 .Select(i => new
                 {
                     Image = i,
@@ -269,12 +288,27 @@ namespace Blocks.FunctionRunner.Maintenance
                 .OrderBy(x => x.LastUsed)
                 .ToList();
 
-            var excess = candidates.Count - cap;
+            // Everything else on the disk that this sweep will not evict still takes room: the base
+            // once, plus what in-use, test and test-dependency images add on top of it.
+            var candidateIds = candidates.Select(c => c.Image.ID!).ToHashSet(StringComparer.Ordinal);
+            var otherBytes = baseBytes + images
+                .Where(i => i.ID is not null && !candidateIds.Contains(i.ID) && !IsBaseImage(i))
+                .Sum(i => UniqueBytes(i.Size, baseBytes));
+
+            var excess = EvictionCount(
+                candidates.Select(c => UniqueBytes(c.Image.Size, baseBytes)).ToList(),
+                otherBytes, budgetBytes, _options.MaxCachedImages);
             if (excess <= 0) return 0;
 
             _logger.LogInformation(
-                "Image cache holds {Held} function images, over the cap of {Cap}; evicting the {Excess} coldest",
-                candidates.Count, cap, excess);
+                "Image cache holds {Held} function images ({HeldMb} MB own layers + {OtherMb} MB base and others), " +
+                "over the cap of {Cap} images / {BudgetMb} MB; evicting the {Excess} coldest",
+                candidates.Count,
+                candidates.Sum(c => UniqueBytes(c.Image.Size, baseBytes)) / 1024 / 1024,
+                otherBytes / 1024 / 1024,
+                _options.MaxCachedImages > 0 ? _options.MaxCachedImages : "none",
+                budgetBytes > 0 ? budgetBytes / 1024 / 1024 : "none",
+                excess);
 
             var evicted = 0;
             foreach (var candidate in candidates.Take(excess))
@@ -298,46 +332,112 @@ namespace Blocks.FunctionRunner.Maintenance
         }
 
         /// <summary>
-        /// How many images this host can hold, worked out from the disk rather than guessed.
+        /// How many of the coldest images to evict: the fewest that bring the count under
+        /// <paramref name="maxCount"/> and the bytes under <paramref name="budgetBytes"/>, whichever
+        /// binds harder. Zero or less for either means that limit is off.
         /// <para>
-        /// A hand-set number has to be chosen for the smallest disk anyone might deploy on, and is
-        /// then wrong on every larger one — the same reason <c>HostBudget</c> measures the machine
-        /// instead of reading a constant. So: take the share of the disk images may use, divide by
-        /// what an image here actually costs, and use that.
-        /// </para>
-        /// <para>
-        /// The average is measured from the images present. With none to measure from there is also
-        /// nothing to evict, so the answer does not matter yet.
+        /// Bytes, not an image count derived from an average. Function images differ by orders of
+        /// magnitude — a handler with no dependencies adds a few KB to the base, one with an SDK
+        /// adds hundreds of MB — so an average count evicts small images to make room that big ones
+        /// took, or keeps too many big ones.
         /// </para>
         /// </summary>
-        private int DeriveCapFromDisk(IList<ImagesListResponse> images)
+        /// <param name="coldestFirstBytes">Each evictable image's own bytes, coldest first.</param>
+        /// <param name="otherBytes">What stays on the disk regardless: the base and every image this
+        /// sweep may not evict.</param>
+        internal static int EvictionCount(
+            IReadOnlyList<long> coldestFirstBytes, long otherBytes, long budgetBytes, int maxCount)
         {
-            var functionImages = images.Where(i => !IsBaseImage(i)).ToList();
-            if (functionImages.Count == 0) return 0;
+            var held = coldestFirstBytes.Count;
+            var bytes = otherBytes + coldestFirstBytes.Sum();
+            var evict = 0;
 
-            var averageBytes = (long)functionImages.Average(i => (double)Math.Max(i.Size, 1));
-            if (averageBytes <= 0) return 0;
+            while (evict < held
+                   && ((maxCount > 0 && held - evict > maxCount)
+                       || (budgetBytes > 0 && bytes > budgetBytes)))
+            {
+                bytes -= coldestFirstBytes[evict];
+                evict++;
+            }
 
-            long budgetBytes;
+            return evict;
+        }
+
+        /// <summary>
+        /// What one function image really adds to the disk: its size minus the base it is built on.
+        /// <para>
+        /// Docker reports an image's <c>Size</c> with every parent layer included, so the base
+        /// (~330 MB) was counted once per image — a function that adds 25 MB looked like 355 MB, and
+        /// the cache held about a tenth of what the disk allowed (FN-18, measured 2026-10-07).
+        /// </para>
+        /// <para>
+        /// With the base unknown, or an image no bigger than it (built on an older, larger base),
+        /// the full size is used: over-counting evicts a little early and costs a rebuild;
+        /// under-counting could fill the disk.
+        /// </para>
+        /// </summary>
+        internal static long UniqueBytes(long imageSize, long baseBytes)
+        {
+            var size = Math.Max(imageSize, 0);
+            return baseBytes > 0 && size > baseBytes ? size - baseBytes : size;
+        }
+
+        /// <summary>
+        /// The share of the disk images may use, in bytes. Zero when the disk cannot be read:
+        /// without a reading there is no honest number, and evicting on a guess would throw away
+        /// images for no reason, so only an explicit <c>MaxCachedImages</c> evicts then.
+        /// </summary>
+        private long ReadImageBudgetBytes()
+        {
             try
             {
                 var drive = new DriveInfo(Path.GetPathRoot(_options.RunsDir) ?? "/");
-                budgetBytes = (long)(drive.TotalSize * (_options.ImageDiskPercent / 100.0));
+                return (long)(drive.TotalSize * (_options.ImageDiskPercent / 100.0));
             }
             catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
             {
-                // Without a reading there is no honest number, and evicting on a guess would throw
-                // away images for no reason. Do nothing instead.
                 _logger.LogDebug("Could not read the image disk: {Message}", ex.Message);
                 return 0;
             }
+        }
 
-            var derived = (int)Math.Max(1, budgetBytes / averageBytes);
-            _logger.LogDebug(
-                "Image cache cap derived as {Cap} ({Percent}% of disk, average image {AverageMb} MB)",
-                derived, _options.ImageDiskPercent, averageBytes / 1024 / 1024);
-
-            return derived;
+        /// <summary>
+        /// The size of the configured base image, which every function image is built on. Zero when
+        /// it cannot be found (not pulled yet, Docker error), which makes <see cref="UniqueBytes"/>
+        /// fall back to full sizes — the old, cautious count.
+        /// <para>
+        /// Read from the image <em>list</em>, like the function sizes it is subtracted from. With the
+        /// containerd image store, <c>inspect</c> reports a different figure (81 MB where the list
+        /// says 330 MB for the same base, measured 2026-10-07), and mixing the two would make every
+        /// function image look ~250 MB bigger than it is.
+        /// </para>
+        /// </summary>
+        private async Task<long> ReadBaseImageBytesAsync(CancellationToken token)
+        {
+            var reference = _options.BaseImage;
+            if (string.IsNullOrWhiteSpace(reference)) return 0;
+            try
+            {
+                var all = await _docker.Images.ListImagesAsync(new ImagesListParameters { All = false }, token)
+                    .ConfigureAwait(false);
+                // Pinned as `repo@sha256:…`, but the list may file that digest under another name
+                // (`127.0.0.1:5000/…` pulled, `blocks-functions-node@…` listed) — so match the digest
+                // alone, which with the containerd store is also the image id.
+                var at = reference.IndexOf('@', StringComparison.Ordinal);
+                var digest = at >= 0 ? reference[(at + 1)..] : null;
+                var match = all.FirstOrDefault(i =>
+                    (i.RepoTags?.Contains(reference, StringComparer.Ordinal) ?? false)
+                    || string.Equals(i.ID, reference, StringComparison.Ordinal)
+                    || (digest is not null
+                        && (string.Equals(i.ID, digest, StringComparison.Ordinal)
+                            || (i.RepoDigests?.Any(d => d.EndsWith("@" + digest, StringComparison.Ordinal)) ?? false))));
+                return match is null ? 0 : Math.Max(match.Size, 0);
+            }
+            catch (DockerApiException ex)
+            {
+                _logger.LogDebug("Could not read the base image size: {Message}", ex.Message);
+                return 0;
+            }
         }
 
         private async Task<HashSet<string>> LoadKeepSetAsync()
@@ -393,6 +493,11 @@ namespace Blocks.FunctionRunner.Maintenance
         /// A test image past <see cref="TestImageMaxAge"/>: its run has long ended, so a runner died
         /// before deleting it. Pruned whatever the keep set says — no version points at a test image.
         /// </summary>
+        internal static bool IsTestDepsImage(IDictionary<string, string>? labels) =>
+            labels is not null
+            && labels.TryGetValue(Builds.BuildProcessor.TestDepsImageLabel, out var value)
+            && string.Equals(value, "true", StringComparison.Ordinal);
+
         internal static bool IsStaleTestImage(IDictionary<string, string>? labels, DateTime created, DateTime now) =>
             IsTestImage(labels) && created <= now - TestImageMaxAge;
 

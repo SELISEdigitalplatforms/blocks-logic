@@ -158,14 +158,16 @@ export class ProxyService {
   update = async ({
     id,
     values,
+    expectedVersion = null,
   }: {
     id: string;
     values: ProxyFormValues;
+    expectedVersion?: number | null;
   }): Promise<ProxyMutationResponse> => {
     try {
       const response = await this.logicHttpClient.put<BaseMutationResponseDto>(
         PROXY_ENDPOINTS.byId(id),
-        mapProxyToUpdatePayload(id, values),
+        mapProxyToUpdatePayload(id, values, expectedVersion),
       );
       return mapMutationResponse(response);
     } catch (error) {
@@ -176,14 +178,16 @@ export class ProxyService {
   toggle = async ({
     id,
     enabled,
+    expectedVersion = null,
   }: {
     id: string;
     enabled: boolean;
+    expectedVersion?: number | null;
   }): Promise<ProxyMutationResponse> => {
     try {
       const response = await this.logicHttpClient.patch<BaseMutationResponseDto>(
         PROXY_ENDPOINTS.byId(id),
-        { enabled },
+        { enabled, expectedVersion },
       );
       return mapMutationResponse(response);
     } catch (error) {

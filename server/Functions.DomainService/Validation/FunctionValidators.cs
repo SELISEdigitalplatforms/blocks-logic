@@ -130,17 +130,32 @@ namespace Functions.DomainService.Validation
     }
 
     /// <summary>
-    /// Deliberately empty.
+    /// Checks the one limit a tenant may choose: the HTTP rate limit (FN-19).
     /// <para>
-    /// Limits are not configurable: whatever a request carries is discarded by
-    /// <see cref="FunctionLimits.Clamp"/> before anything runs, and the save stores the platform
-    /// profile rather than what was sent. Rejecting a value that is already ignored would turn a
-    /// harmless leftover field in somebody's script into a failed deploy, so the validator stays and
-    /// says nothing — the shape is still checked, the numbers no longer matter.
+    /// <c>requestsPerMinute</c> must be 1–<see cref="FunctionLimits.Ceiling.MaxRequestsPerMinute"/>
+    /// or null (= the default). <c>requestsPerDay</c> must be null: there is no per-day quota.
+    /// Before this, <see cref="FunctionLimits.Clamp"/> silently turned both into "default", so a
+    /// caller asking for a limit got none and was never told. Clamp still runs on every read, so a
+    /// stored document that carries an old per-day value keeps loading and running.
+    /// </para>
+    /// <para>
+    /// cpu / memory / timeout / concurrency are still not checked: they are fixed, Clamp discards
+    /// them, and refusing a leftover field would fail a save that changes nothing.
     /// </para>
     /// </summary>
     public class FunctionLimitsValidator : AbstractValidator<FunctionLimits>
     {
+        public FunctionLimitsValidator()
+        {
+            RuleFor(x => x.RequestsPerDay)
+                .Null()
+                .WithMessage("requestsPerDay is not supported; use requestsPerMinute");
+
+            RuleFor(x => x.RequestsPerMinute)
+                .InclusiveBetween(1, FunctionLimits.Ceiling.MaxRequestsPerMinute)
+                .When(x => x.RequestsPerMinute.HasValue)
+                .WithMessage($"requestsPerMinute must be between 1 and {FunctionLimits.Ceiling.MaxRequestsPerMinute}");
+        }
     }
 
     /// <summary>Empty for the same reason as <see cref="FunctionLimitsValidator"/>.</summary>

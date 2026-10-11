@@ -30,6 +30,7 @@ import { KeyValueFieldArray } from "./key-value-field-array";
 import { ProxyAccessCard } from "./proxy-access-card";
 import { ProxyApiOnlySettingsCard } from "./proxy-api-only-settings-card";
 import { ProxyResilienceCard } from "./proxy-resilience-card";
+import { ProxyRateLimitCard } from "./proxy-rate-limit-card";
 import { ProxyFormHeader } from "./proxy-form-header";
 import { ProxyRoutesCard, blankRoute } from "./proxy-routes-card";
 import { useProjectStore } from "@seliseblocks/genesis-os";
@@ -102,6 +103,7 @@ export const ProxyForm = ({
       access: values.access ?? defaultProxyAccess(),
       // Proxy-wide, and a real setting rather than a derived one: a route with none inherits this.
       resilience: values.resilience ?? null,
+      requestsPerMinute: values.requestsPerMinute ?? null,
       // Proxy-wide values set outside the console: kept as loaded, never reset by a save.
       bodyMerge: values.bodyMerge ?? [],
       bodyMode: values.bodyMode ?? "passthrough",
@@ -131,9 +133,13 @@ export const ProxyForm = ({
   // would re-run on every React Query background refetch (the query has no `staleTime`), and each
   // fresh reference would `form.reset` the user's in-progress edits back to the server values.
   const seededForId = useRef<string | null>(null);
+  // The version the edits are based on, taken when the form is seeded — NOT from later refetches, or a
+  // background refresh would quietly turn a stale form into a "current" one and overwrite (PX-16).
+  const seededVersion = useRef<number | null>(null);
   useEffect(() => {
     if (isEdit && proxy && seededForId.current !== proxy.id) {
       seededForId.current = proxy.id;
+      seededVersion.current = proxy.version;
       const routes = proxy.routes?.length ? proxy.routes : [blankRoute(proxy.methods[0] ?? "GET")];
       form.reset({
         ...proxyFormDefaultValues,
@@ -146,6 +152,7 @@ export const ProxyForm = ({
         routes,
         access: proxy.access ?? defaultProxyAccess(),
         resilience: proxy.resilience ?? null,
+        requestsPerMinute: proxy.requestsPerMinute ?? null,
         bodyMerge: proxy.bodyMerge,
         bodyMode: proxy.bodyMerge.length ? "merge" : "passthrough",
         methodConfigs: proxy.methodConfigs,
@@ -162,7 +169,11 @@ export const ProxyForm = ({
     const payload = toApiValues(values);
 
     if (isEdit && proxy) {
-      const res = await updateProxy.mutateAsync({ id: proxy.id, values: payload });
+      const res = await updateProxy.mutateAsync({
+        id: proxy.id,
+        values: payload,
+        expectedVersion: seededVersion.current,
+      });
       if (!res.isSuccess) return showErrorToast({ errors: res.errors || "Failed to save proxy" });
       showSuccessToast({ description: "Proxy updated successfully." });
       onSuccess?.(proxy.id);
@@ -258,6 +269,9 @@ export const ProxyForm = ({
 
         {/* Who can call it: one policy shared by every endpoint below. */}
         <ProxyAccessCard control={form.control} />
+
+        {/* How many calls per minute the gateway lets through, from all callers together. */}
+        <ProxyRateLimitCard control={form.control} />
 
         {/* What happens when the vendor is slow or down. Nothing here until it is asked for. */}
         <ProxyResilienceCard control={form.control} />

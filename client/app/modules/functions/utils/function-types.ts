@@ -41,7 +41,7 @@ declare interface FunctionContext {
   readonly context: FunctionCallerContext;
   /** Call Blocks APIs as the caller. */
   readonly blocks: FunctionBlocksAccess;
-  /** Your variables, as plain strings. Secrets are never here. */
+  /** Your variables, as plain strings. A secret-bound variable arrives as its real value, masked in logs. */
   readonly env: FunctionEnv;
   /** This run's own metadata. */
   readonly run: FunctionRun;
@@ -69,9 +69,9 @@ declare interface FunctionBlocksAccess {
   /**
    * A fresh, short-lived Blocks access token for the user who invoked this run — pass it as the
    * \`Authorization: Bearer\` of a Blocks API call, with \`ctx.context.tenantId\` as \`x-blocks-key\`.
-   * Fetched only when you call this (one IAM round trip, once per call; later calls in the same
-   * run get the same token), so a call that never needs it pays nothing. Resolves to
-   * \`undefined\` on a public trigger, a schedule, or when none could be issued. Masked in logs.
+   * In a warm sandbox it is fetched only when you call this (one IAM round trip, once per call;
+   * later calls in the same run get the same token). Resolves to \`undefined\` when there is no
+   * signed-in caller (a public trigger, a scheduled workflow) or none could be issued. Masked in logs.
    */
   getAccessToken(): Promise<string | undefined>;
 }
@@ -87,7 +87,7 @@ declare interface FunctionRun {
   /** 1 for the first try; higher when the retry policy re-ran it. */
   readonly attempt: number;
   readonly invokedBy: {
-    readonly type: "http" | "workflow" | "test" | "replay" | "schedule" | "event";
+    readonly type: "http" | "workflow" | "test" | "replay";
     /** What started the run (e.g. the workflow), or null when there is none. */
     readonly id: string | null;
   };
@@ -111,10 +111,15 @@ declare interface FunctionInput {
   readonly path: string;
   /** A repeated key is an array. */
   readonly query: Record<string, string | string[]>;
-  /** Lower-cased. Content negotiation and provenance only — never a credential. */
+  /** Lower-cased. Content negotiation, provenance and webhook signatures — never a credential. */
   readonly headers: Record<string, string>;
   /** Parsed JSON, the raw text for other content types, null for no body (always null on GET). */
   readonly body: unknown;
+  /**
+   * The exact request bytes, base64 — what a webhook signature is computed over. Null with no
+   * body, or when the body is too large to carry twice.
+   */
+  readonly rawBody: string | null;
 }
 
 /**
@@ -124,7 +129,8 @@ declare interface FunctionInput {
  * once when the sandbox starts — the place for clients, caches and constants — and referencing
  * \`ctx\` there fails the run while the module is still loading, before the handler is called.
  */
-declare type FunctionHandler = (input: FunctionInput, ctx: FunctionContext) => unknown | Promise<unknown>;
+declare type FunctionHandler = (input: FunctionInput, ctx: FunctionContext) =>
+  unknown | Promise<unknown> | AsyncIterable<unknown>; // an async iterable streams (async function*)
 
 /**
  * Return this from the handler to control the HTTP answer when the trigger's Response is
@@ -134,12 +140,12 @@ declare type FunctionHandler = (input: FunctionInput, ctx: FunctionContext) => u
  * - \`headers\`: only content and caching headers pass (content-type, content-language,
  *   content-disposition, cache-control, expires, last-modified, etag, vary, retry-after),
  *   \`location\` on a 3xx to an http(s) or relative URL, and \`x-*\` (except x-forwarded-*,
- *   x-real-ip, x-original-*, x-blocks-*). At most 32 headers / 8 KB. \`set-cookie\` is always
+ *   x-real-ip, x-original-*, x-blocks-*). Header count and size are capped. \`set-cookie\` is always
  *   dropped. X-Content-Type-Options: nosniff and Content-Security-Policy: sandbox are always added.
  * - \`body\`: a string is sent as is; anything else as JSON.
  *
- * A failed run answers 502, a timed-out one 504 (\`{ error, runId }\`). A call that takes longer than
- * the wait (30 s) gets 202 + a poll token instead — the run still finishes.
+ * A failed run answers 502, a timed-out one 504 (\`{ error, runId }\`). A call that takes too long
+ * gets 202 + a poll token instead — the run still finishes.
  * @example return { statusCode: 404, body: { error: "order not found" } };
  */
 declare interface FunctionHttpResponse {

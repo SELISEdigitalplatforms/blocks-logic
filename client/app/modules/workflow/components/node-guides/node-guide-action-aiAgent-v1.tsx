@@ -11,7 +11,7 @@ export const NodeGuideActionAiAgentV1 = () => (
     ]}
     notes={[
       "The node calls the agent once for each input item.",
-      "The output is the message returned by the agent chat response.",
+      "The output is the message returned by the agent chat response. If the agent call fails, the output is empty and no error is raised.",
       "The agent list is loaded from the current project, so the selected project affects which agents are available.",
       "The node stores agent identifiers behind the scenes when you select an agent; reselect the agent if you move or recreate it.",
     ]}

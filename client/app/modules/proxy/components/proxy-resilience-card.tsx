@@ -52,7 +52,7 @@ export const ProxyResilienceCard = ({ control }: Props) => {
           <p className="text-sm font-semibold">If the vendor is slow or down</p>
           <p className="text-xs text-muted-foreground">
             Nothing here is on unless you turn it on, and nothing is chosen for you. Left alone, a
-            call waits for the vendor, is never sent twice, and a vendor that is down is called every
+            call waits up to 30 s for the vendor, is never sent twice, and a vendor that is down is called every
             time anyway.
           </p>
         </div>

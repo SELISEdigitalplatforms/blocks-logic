@@ -48,7 +48,7 @@ describe("Proxy feature", () => {
     expect(screen.getByText(/Your client calls Blocks/i)).toBeTruthy();
     expect(screen.getByText("SendGrid Mail")).toBeTruthy();
     expect(screen.getByText("Weather Lookup")).toBeTruthy();
-    expect(screen.getByText(/1,248 calls 24h/i)).toBeTruthy();
+    expect(screen.getByText(/1,248 recent calls/i)).toBeTruthy();
   });
 
   it("renders detail overview with the upstream endpoint in full", async () => {

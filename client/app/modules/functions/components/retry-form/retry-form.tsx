@@ -19,22 +19,17 @@ export const RetryForm = () => {
   return (
     <div className="flex flex-col gap-3" data-testid="retry-profile">
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-        <dt className="text-medium-emphasis">Attempts</dt>
+        <dt className="text-medium-emphasis">Retries</dt>
         <dd className="font-medium">
-          {profile.attempts}
-          <span className="block text-xs font-normal text-medium-emphasis">
-            {retries === 0
-              ? "No retry — a failure is final."
-              : `The first run plus ${retries === 1 ? "one retry" : `${retries} retries`}.`}
-          </span>
+          {retries === 0 ? "None — a failure is final" : "Automatic, after a short wait"}
         </dd>
-        <dt className="text-medium-emphasis">Wait between</dt>
-        <dd className="font-medium">{profile.retryDelaySeconds} s</dd>
       </dl>
       <p className="text-xs leading-relaxed text-medium-emphasis">
-        One policy for the whole function — a failed run and a failed output action retry the same
-        way, and every attempt carries the same idempotency key. After the last attempt the run is
-        kept as failed and can be replayed by hand.
+        Only HTTP and replayed runs of a deployed function are retried, and only when the platform
+        failed (timeout, memory, sandbox start). An error thrown by your code, a Test run and a
+        workflow step are never retried. A failed output action is retried the same way. Each
+        attempt has its own idempotency key. After the last attempt the run is kept as failed and
+        can be replayed by hand.
       </p>
     </div>
   );

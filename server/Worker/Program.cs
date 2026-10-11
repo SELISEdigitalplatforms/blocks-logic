@@ -77,6 +77,7 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             // upstream credential as a configuration variable fails at forward time.
             services.AddBlocksSecrets();
             services.AddProxyServices();
+            services.AddSingleton<Workflow.DomainService.Utils.NodeQueueLanes>(_ => new Workflow.DomainService.Utils.NodeQueueLanes());
             services.AddSingleton<IConsumer<AddExcuationNodeEvent>, AddExcuationNodeConsumer>();
             services.AddSingleton<IConsumer<WorkflowImportEvent>, WorkflowImportConsumer>();
             services.AddSingleton<IConsumer<DataChangeEvent>, DataTriggerConsumer>();

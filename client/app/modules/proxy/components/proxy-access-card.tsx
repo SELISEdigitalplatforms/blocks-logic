@@ -45,13 +45,13 @@ const KIND_OPTIONS: Array<{
     value: "blocksToken",
     title: "Blocks token",
     description:
-      "The caller sends a Blocks token. Identity, roles and permissions arrive on the request.",
+      "The caller sends a Blocks token. Blocks checks its roles and permissions; the vendor never sees them.",
     icon: KeyRound,
   },
   {
     value: "public",
     title: "Public",
-    description: "Anyone with the URL can call it. No identity, no token-scoped work.",
+    description: "Anyone with the URL and your x-blocks-key can call it. No identity, no token-scoped work.",
     icon: Globe,
   },
 ];

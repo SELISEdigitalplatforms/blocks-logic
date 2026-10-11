@@ -11,9 +11,9 @@ import { findReuseHints } from "../../utils/reuse-hints";
 /** Owner id for the reuse warnings, so they replace each other and never touch other markers. */
 const REUSE_HINT_OWNER = "blocks-reuse-hints";
 
-// Per @monaco-editor/react docs, Monaco is loaded from CDN by default — no bundling, no worker
-// setup, no direct `monaco-editor` import (importing it in a Vite project makes Vite transform
-// its whole ESM tree and exhausts the JS heap).
+// Monaco is loaded by @monaco-editor/react's AMD loader from our own origin (app/lib/monaco-loader.ts)
+// — no bundling, no worker setup, no direct `monaco-editor` import (importing it in a Vite project
+// makes Vite transform its whole ESM tree and exhausts the JS heap).
 
 export type CodeEditorLanguage = "javascript" | "json";
 
@@ -409,7 +409,7 @@ export const CodeEditor = ({
           preview: true,
           insertMode: "replace",
         },
-        hover: { enabled: "on", above: false },
+        hover: { enabled: true, above: false },
         // ── the design's editor rules ───────────────────────────────────────
         tabSize: 2,
         insertSpaces: true,

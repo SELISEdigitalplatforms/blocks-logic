@@ -59,6 +59,9 @@ namespace Proxy.DomainService.Dtos
         /// <summary>Timeout / retry / breaker, or <c>null</c> when the tenant configured none.</summary>
         public ProxyResilienceDto? Resilience { get; set; }
 
+        /// <summary>The tenant's own gateway calls-per-minute limit; <c>null</c> ⇒ the default for the proxy's access.</summary>
+        public int? RequestsPerMinute { get; set; }
+
         public int CurrentVersion { get; set; }
 
         public DateTime CreatedDate { get; set; }

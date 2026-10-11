@@ -111,8 +111,8 @@ export const ProxyResilienceFields = ({ value, onChange, idPrefix, subject, erro
         onToggle={(on) => patch({ timeoutSeconds: on ? startingTimeoutSeconds : null })}
         summary={
           timeout === null
-            ? `Not set — a call runs until Blocks' own ${PROXY_PLATFORM_TIMEOUT_SECONDS}-second limit.`
-            : "The budget for the whole call, retries included."
+            ? `Not set — each try stops after Blocks' own ${PROXY_PLATFORM_TIMEOUT_SECONDS}-second limit.`
+            : "Counts from the first try. Waits between retries are not counted."
         }
       >
         <div className="flex items-end gap-2">
@@ -212,7 +212,8 @@ export const ProxyResilienceFields = ({ value, onChange, idPrefix, subject, erro
             </div>
             <p className="text-[11px] text-muted-foreground">
               {BACKOFF_LABELS.find((option) => option.value === retry.backoff)?.hint} Attempts count
-              the first call, and they all share the timeout above.
+              the first call. With a timeout set, all tries share it; the waits between them are
+              not counted.
             </p>
             <FieldError message={errors?.["retry.attempts"]} />
             <FieldError message={errors?.["retry.initialDelaySeconds"]} />
@@ -306,7 +307,8 @@ export const ProxyResilienceFields = ({ value, onChange, idPrefix, subject, erro
               refused the connection, or ran out of time — calls to it stop for{" "}
               {breaker.openSeconds || "…"} seconds. One is then let through to see whether it is
               back. A vendor that answers is not a failure here, even when it answers with an error.
-              The count is per vendor host, so every endpoint pointing at it pauses together.
+              The count is per vendor host for this proxy, kept separately for public callers,
+              signed-in callers, workflows and tests.
             </p>
             <FieldError message={errors?.["breaker.failureThreshold"]} />
             <FieldError message={errors?.["breaker.openSeconds"]} />

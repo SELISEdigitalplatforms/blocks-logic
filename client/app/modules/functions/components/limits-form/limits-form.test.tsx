@@ -11,29 +11,26 @@ vi.mock("../../hooks/use-functions", () => ({ useGetLimitsOptions }));
 const panelText = () => screen.getByTestId("limits-profile").textContent ?? "";
 
 describe("LimitsForm", () => {
-  it("shows the profile the server reports, not a copy held here", () => {
-    // The point of reading it from GetLimits: if the platform profile moves, this panel moves with
-    // it. A hardcoded 128 in the client would keep telling people the old number.
+  it("never shows an undecided number, even when the server sends one", () => {
+    // decisions.md 2026-10-08: only decided numbers are shown. Memory, timeout and concurrency are
+    // enforced but not decided, so the panel names them without a value.
     useGetLimitsOptions.mockReturnValue({
       data: { ...DEFAULT_LIMITS_OPTIONS, memoryMb: 512, timeoutSeconds: 120, concurrency: 40 },
     });
 
     renderWithProviders(<LimitsForm />);
 
-    expect(panelText()).toContain("512 MB");
-    expect(panelText()).toContain("120 s per run");
-    expect(panelText()).toContain("40 at a time");
+    expect(panelText()).not.toMatch(/512|120|40|128|\bMB\b|\bKB\b/);
+    expect(panelText()).toContain("Memory");
+    expect(panelText()).toContain("Timeout");
+    expect(panelText()).toContain("queue rather than fail");
   });
 
-  it("falls back to the platform profile before GetLimits resolves", () => {
-    // `undefined` data is what the panel sees on first paint. It must show the real numbers, not
-    // blanks that then flicker into place.
+  it("shows the decided CPU share from the server, with a first-paint fallback", () => {
     useGetLimitsOptions.mockReturnValue({ data: undefined });
 
     renderWithProviders(<LimitsForm />);
 
-    expect(panelText()).toContain(`${DEFAULT_LIMITS_OPTIONS.memoryMb} MB`);
-    expect(panelText()).toContain(`${DEFAULT_LIMITS_OPTIONS.timeoutSeconds} s per run`);
     expect(panelText()).toContain(`${DEFAULT_LIMITS_OPTIONS.cpuMillicores}m per run`);
   });
 

@@ -221,5 +221,23 @@ namespace Blocks.FunctionRunner.Tests
 
             text.Should().BeEmpty();
         }
+
+        [Fact]
+        public async Task Each_decoded_piece_is_handed_over_as_it_arrives()
+        {
+            var chunks = new Queue<byte[]>([System.Text.Encoding.UTF8.GetBytes("ab"), System.Text.Encoding.UTF8.GetBytes("cd")]);
+            var seen = new List<string>();
+
+            var text = await CappedOutputReader.ReadAsync((buffer, offset, count, _) =>
+            {
+                if (chunks.Count == 0) return Task.FromResult((0, true));
+                var next = chunks.Dequeue();
+                next.CopyTo(buffer, offset);
+                return Task.FromResult((next.Length, false));
+            }, 1000, CancellationToken.None, onText: seen.Add);
+
+            text.Should().Be("abcd");
+            seen.Should().Equal("ab", "cd");
+        }
     }
 }

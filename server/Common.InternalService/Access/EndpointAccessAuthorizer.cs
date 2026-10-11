@@ -93,9 +93,10 @@ namespace Common.InternalService.Access
 
             if (!EndpointAccessEvaluator.Evaluate(principal, policy))
             {
+                // The reason (which role / permission / organization) goes to the log, not the answer.
                 _logger.LogWarning(
-                    "Endpoint access: caller {UserId} of tenant {TenantId} fails the configured role / permission rules.",
-                    EndpointAccessEvaluator.GetUserId(principal), tenantId);
+                    "Endpoint access: caller {UserId} of tenant {TenantId} fails the configured rules: {Reason}.",
+                    EndpointAccessEvaluator.GetUserId(principal), tenantId, EndpointAccessEvaluator.ExplainDenial(principal, policy));
                 return EndpointAccessDecision.Forbidden("The caller does not hold the required roles or permissions.");
             }
 

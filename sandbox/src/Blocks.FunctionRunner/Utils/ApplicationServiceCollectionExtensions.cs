@@ -67,6 +67,7 @@ namespace Blocks.FunctionRunner.Utils
             services.AddSingleton<IHostSignals, ProcHostSignals>();
             services.AddSingleton<SandboxFootprint>();
             services.AddSingleton<HostBudget>();
+            services.AddSingleton<FleetCapacity>();
             // Typed client: Image GC deletes the registry's copy of an image as well as the
             // daemon's, so the two stores cannot drift apart.
             services.AddHttpClient<IRegistryClient, Maintenance.RegistryClient>();
@@ -75,6 +76,7 @@ namespace Blocks.FunctionRunner.Utils
             // slow body rather than the short calls the registry client makes.
             services.AddHttpClient(Sandbox.ArtifactImageBuilder.HttpClientName,
                 client => client.Timeout = TimeSpan.FromMinutes(10));
+            services.AddSingleton<Sandbox.ImageWorkGate>();
             services.AddSingleton<Sandbox.IArtifactImageBuilder, Sandbox.ArtifactImageBuilder>();
             services.AddSingleton<Maintenance.IImageUsageLog, Maintenance.ImageUsageLog>();
             services.AddSingleton<Builds.IDependencyCache, Builds.DependencyCache>();
@@ -122,6 +124,9 @@ namespace Blocks.FunctionRunner.Utils
         {
             ArgumentNullException.ThrowIfNull(services);
 
+            // First: hosted services start in this order, so envelopes a crashed runner left (they
+            // hold resolved secrets) are gone before any loop below claims work.
+            services.AddHostedService<Maintenance.LeftoverEnvelopeCleaner>();
             services.AddHostedService(sp => sp.GetRequiredService<HeartbeatService>());
             services.AddHostedService<RunConsumerService>();
             // Pre-warm and drain requests, and the idle sweep of the warm pool; idle unless

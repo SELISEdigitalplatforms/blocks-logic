@@ -135,12 +135,8 @@ namespace Proxy.DomainService.Entities
         /// <summary>Size of the upstream response body in bytes (<c>0</c> when none).</summary>
         public long ResponseBodyBytes { get; set; }
 
-        /// <summary>
-        /// The full upstream response body decoded as UTF-8 text, written through
-        /// <see cref="Utils.ExecutionBodyStore.Capture"/> so a later truncation policy is a one-method change.
-        /// <c>null</c> when there was no response body.
-        /// </summary>
-        public string? ResponseBody { get; set; }
+        // No request or response body field: Blocks never stores either (user decision 2026-10-07). Old rows
+        // may still hold ResponseBody / ResponseBodyStored; [BsonIgnoreExtraElements] skips them on read.
 
         /// <summary>Upstream response <c>Content-Type</c> header value, or <c>null</c>.</summary>
         public string? ResponseContentType { get; set; }

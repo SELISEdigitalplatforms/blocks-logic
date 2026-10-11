@@ -154,6 +154,16 @@ export type Proxy = {
   access: ProxyAccess;
   /** Proxy-wide timeout / retry / breaker. `null` unless configured; routes inherit it whole. */
   resilience: ProxyResilience | null;
+  /**
+   * Gateway calls per minute, from all callers together (P-3). `null` ⇒ the default: 600 for a
+   * Public proxy, no limit for a token one. Populated by the detail read; the list row carries null.
+   */
+  requestsPerMinute: number | null;
+  /**
+   * The stored `currentVersion` from the detail read (null on a list row). Sent back as
+   * `expectedVersion` so a save never silently overwrites someone else's newer change (PX-16).
+   */
+  version: number | null;
   calls24h: number;
   createdAt?: string;
   updatedAt?: string;
@@ -203,6 +213,7 @@ export type ProxyFormValues = Pick<
   | "responseInclude"
   | "access"
   | "resilience"
+  | "requestsPerMinute"
 > & {
   bodyMode: ProxyBodyMode;
   /** Form-only. When present it is the source of truth for `headers` and `query`. */
@@ -388,6 +399,7 @@ export type ProxyDetailDto = {
   responseMode?: string | null;
   responseInclude?: string[] | null;
   access?: ProxyAccessDto | null;
+  requestsPerMinute?: number | null;
   currentVersion: number;
   createdDate: string;
   createdBy?: string | null;
@@ -440,8 +452,6 @@ export type ProxyExecutionDetailDto = {
   errorMessage?: string | null;
   responseContentType?: string | null;
   responseBodyBytes: number;
-  responseBody?: string | null;
-  responseBodyTruncatedForDisplay: boolean;
 };
 
 export type ProxyOverviewDto = {
@@ -496,7 +506,6 @@ export type ProxyExecutionLog = {
   upstreamUrl: string;
   injectedHeaderKeys: string[];
   injectedQueryKeys: string[];
-  responseBody: string;
   responseContentType?: string;
   /** Server outcome enum, e.g. "Success" | "UpstreamUnreachable" | "VariableResolutionFailed". */
   outcome?: string;

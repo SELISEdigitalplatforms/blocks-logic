@@ -23,7 +23,21 @@ namespace Proxy.DomainService.Services
         /// partially-resolved request. An empty <paramref name="names"/> set short-circuits with no
         /// <see cref="ISecretService"/> call.
         /// </summary>
+        /// <param name="knownIds">
+        /// The proxy's stored <c>name &rarr; secret id</c> pairs, written when it was saved (PX-9). A name found here
+        /// is read by id at once, with no search; only a name missing from it (a draft under Test, or a proxy saved
+        /// before 2026-10-07) falls back to a name lookup.
+        /// </param>
         Task<IReadOnlyDictionary<string, string>> ResolveAsync(
+            IReadOnlyCollection<string> names, string tenantId,
+            IReadOnlyDictionary<string, string>? knownIds = null, CancellationToken ct = default);
+
+        /// <summary>
+        /// Save-time lookup (PX-9): the exact secret id for each name, reading every page of the search so a
+        /// match is never missed behind the first 50 results. Names not found are left out of the result.
+        /// Throws only when the secret store itself cannot be read.
+        /// </summary>
+        Task<IReadOnlyDictionary<string, string>> LookupIdsAsync(
             IReadOnlyCollection<string> names, string tenantId, CancellationToken ct = default);
     }
 
@@ -43,19 +57,17 @@ namespace Proxy.DomainService.Services
         public IReadOnlyList<string> Names { get; }
     }
 
-    /// <summary>Cache TTLs for <see cref="ProxyVariableResolver"/>. Bound from <c>Proxy:VariableResolver:*</c>.</summary>
+    /// <summary>Cache TTL for <see cref="ProxyVariableResolver"/>. Bound from <c>Proxy:VariableResolver:*</c>.</summary>
     public sealed class ProxyVariableResolverOptions
     {
         /// <summary>How long a resolved name &rarr; id mapping is cached per tenant. Ids are stable, so this is long.</summary>
         public TimeSpan IdCacheTtl { get; set; } = TimeSpan.FromMinutes(5);
-
-        /// <summary>How long a resolved id &rarr; value is cached per tenant. Short, so a rotation is picked up quickly.</summary>
-        public TimeSpan ValueCacheTtl { get; set; } = TimeSpan.FromSeconds(60);
     }
 
     /// <summary>
-    /// <see cref="IProxyVariableResolver"/> over the in-process <see cref="ISecretService"/>. Name &rarr; id and
-    /// id &rarr; value are both done at forward time behind a per-tenant <see cref="IMemoryCache"/>; the stored
+    /// <see cref="IProxyVariableResolver"/> over the in-process <see cref="ISecretService"/>. Name &rarr; id is cached
+    /// per tenant (an id is not a secret). Id &rarr; value is read from the vault on EVERY call and never cached
+    /// (user, 2026-10-07: "never ever cache any secret"), so every use runs the caller's access check. The stored
     /// config row only ever holds the verbatim token. See <c>PROXY-PLAN-config-variables.md</c> &sect;3.2.
     /// <para>
     /// This resolver is a singleton (it sits behind the singleton Proxy/Workflow engine — gateway, node
@@ -88,7 +100,8 @@ namespace Proxy.DomainService.Services
         }
 
         public async Task<IReadOnlyDictionary<string, string>> ResolveAsync(
-            IReadOnlyCollection<string> names, string tenantId, CancellationToken ct = default)
+            IReadOnlyCollection<string> names, string tenantId,
+            IReadOnlyDictionary<string, string>? knownIds = null, CancellationToken ct = default)
         {
             var distinct = names.Where(n => !string.IsNullOrEmpty(n)).Distinct(StringComparer.Ordinal).ToList();
             if (distinct.Count == 0)
@@ -129,7 +142,10 @@ namespace Proxy.DomainService.Services
                 var nameToId = new Dictionary<string, string>(StringComparer.Ordinal);
                 foreach (var name in distinct)
                 {
-                    var id = await ResolveIdAsync(secrets, name, tenantId, ct);
+                    // Stored at save (PX-9): no search on the call path. Only an unknown name looks it up.
+                    var id = knownIds is not null && knownIds.TryGetValue(name, out var known) && !string.IsNullOrEmpty(known)
+                        ? known
+                        : await ResolveIdAsync(secrets, name, tenantId, ct);
                     if (id is null)
                     {
                         missing.Add(name);
@@ -140,47 +156,35 @@ namespace Proxy.DomainService.Services
                     }
                 }
 
-                // --- id -> value (one batched call for every id not already cached) ---
+                // --- id -> value (one batched call; never cached — every use runs the access check) ---
                 var idToValue = new Dictionary<string, string>(StringComparer.Ordinal);
-                var uncachedIds = new List<string>();
-                foreach (var id in nameToId.Values.Distinct(StringComparer.Ordinal))
-                {
-                    if (_cache.TryGetValue(ValueCacheKey(tenantId, id), out string? cachedValue) && cachedValue is not null)
-                    {
-                        idToValue[id] = cachedValue;
-                    }
-                    else
-                    {
-                        uncachedIds.Add(id);
-                    }
-                }
+                var ids = nameToId.Values.Distinct(StringComparer.Ordinal).ToList();
 
-                if (uncachedIds.Count > 0)
+                if (ids.Count > 0)
                 {
                     try
                     {
-                        var fetched = await secrets.GetValuesAsync(uncachedIds, ct);
+                        var fetched = await secrets.GetValuesAsync(ids, ct);
 
-                        foreach (var id in uncachedIds)
+                        foreach (var id in ids)
                         {
                             if (fetched.TryGetValue(id, out var value) && value is not null)
                             {
                                 idToValue[id] = value;
-                                _cache.Set(ValueCacheKey(tenantId, id), value, _options.ValueCacheTtl);
                             }
                         }
                     }
                     catch (Exception ex)
                     {
                         // Unknown / locked / access-denied / vault unreachable, including non-SecretException
-                        // infra failures (Key Vault auth, network, DI): every name backed by an uncached id in
+                        // infra failures (Key Vault auth, network, DI): every name backed by an id in
                         // this batch is unresolvable. Names not affected still resolved above.
                         _logger.LogWarning(ex,
                             "Proxy variable resolver: batched value read failed for tenant {TenantId} ({Count} id(s)).",
-                            tenantId, uncachedIds.Count);
+                            tenantId, ids.Count);
                         foreach (var (name, id) in nameToId)
                         {
-                            if (uncachedIds.Contains(id) && !idToValue.ContainsKey(id))
+                            if (ids.Contains(id) && !idToValue.ContainsKey(id))
                             {
                                 missing.Add(name);
                             }
@@ -235,16 +239,14 @@ namespace Proxy.DomainService.Services
 
             try
             {
-                var found = await secrets.FindAsync(new SecretFilter { Search = name, PageSize = FindPageSize }, ct);
-
-                var match = found.Data?.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.Ordinal));
-                if (match is null || string.IsNullOrEmpty(match.SecretId))
+                var id = await FindExactIdAsync(secrets, name, ct);
+                if (id is null)
                 {
                     return null;
                 }
 
-                _cache.Set(cacheKey, match.SecretId, _options.IdCacheTtl);
-                return match.SecretId;
+                _cache.Set(cacheKey, id, _options.IdCacheTtl);
+                return id;
             }
             catch (SecretException ex)
             {
@@ -261,6 +263,81 @@ namespace Proxy.DomainService.Services
                     "Proxy variable resolver: unexpected error during name lookup for a variable of tenant {TenantId}.",
                     tenantId);
                 return null;
+            }
+        }
+
+        /// <summary>Upper bound on pages read for one name: 100 × 50 = 5,000 secrets whose name or description contains it.</summary>
+        private const int MaxFindPages = 100;
+
+        /// <summary>
+        /// The Secrets service only searches "name or description contains, any case", newest first, one page at a
+        /// time. Reading only the first page missed an exact match on page 2 (PX-9), so every page is read until the
+        /// exact name is found or the results run out.
+        /// </summary>
+        private static async Task<string?> FindExactIdAsync(ISecretService secrets, string name, CancellationToken ct)
+        {
+            for (var page = 1; page <= MaxFindPages; page++)
+            {
+                var found = await secrets.FindAsync(
+                    new SecretFilter { Search = name, PageSize = FindPageSize, PageNumber = page }, ct);
+                var data = found.Data ?? Array.Empty<SecretResult>();
+
+                var match = data.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.Ordinal));
+                if (match is not null && !string.IsNullOrEmpty(match.SecretId))
+                {
+                    return match.SecretId;
+                }
+
+                if (data.Count < FindPageSize || (long)page * FindPageSize >= found.TotalCount)
+                {
+                    return null;
+                }
+            }
+
+            return null;
+        }
+
+        public async Task<IReadOnlyDictionary<string, string>> LookupIdsAsync(
+            IReadOnlyCollection<string> names, string tenantId, CancellationToken ct = default)
+        {
+            var distinct = names.Where(n => !string.IsNullOrEmpty(n)).Distinct(StringComparer.Ordinal).ToList();
+            var ids = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (distinct.Count == 0)
+            {
+                return ids;
+            }
+
+            var restore = BlocksContext.GetContext();
+            var mustSwap = restore is null
+                || !restore.IsAuthenticated
+                || !string.Equals(restore.TenantId, tenantId, StringComparison.Ordinal);
+            if (mustSwap)
+            {
+                EnterTenantContext(tenantId, restore);
+            }
+
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var secrets = scope.ServiceProvider.GetRequiredService<ISecretService>();
+                foreach (var name in distinct)
+                {
+                    var id = await FindExactIdAsync(secrets, name, ct);
+                    if (id is not null)
+                    {
+                        ids[name] = id;
+                        _cache.Set(IdCacheKey(tenantId, name), id, _options.IdCacheTtl);
+                    }
+                }
+
+                return ids;
+            }
+            finally
+            {
+                if (mustSwap)
+                {
+                    BlocksContext.SetContext(restore, restore is not null);
+                }
             }
         }
 
@@ -294,8 +371,6 @@ namespace Proxy.DomainService.Services
         }
 
         private static string IdCacheKey(string tenantId, string name) => $"proxyvar:id:{tenantId}:{name}";
-
-        private static string ValueCacheKey(string tenantId, string id) => $"proxyvar:val:{tenantId}:{id}";
 
         internal static readonly IReadOnlyDictionary<string, string> EmptyMap =
             new Dictionary<string, string>(StringComparer.Ordinal);

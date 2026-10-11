@@ -19,8 +19,9 @@ export const SandboxReuseCard = () => (
       <div className="flex min-w-0 flex-col gap-1">
         <span className="text-base font-semibold">Fast calls: the sandbox is reused</span>
         <span className="text-xs leading-relaxed text-medium-emphasis">
-          Your function stays loaded between HTTP calls, so database connections and caches made at
-          module level are reused. Test runs and workflow steps always use a fresh sandbox.
+          When the runner host has reuse on, your function stays loaded between calls (HTTP and
+          workflow steps), so database connections and caches made at module level are reused. Test
+          runs always use a fresh sandbox.
         </span>
       </div>
       <ul

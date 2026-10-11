@@ -19,7 +19,7 @@ export const NodeSchemaTriggerDataGatewayV1: NodeSchemaDefinition = {
           description: React.createElement(
             "span",
             null,
-            "Editor test mode will only pickup data triggers on records that have the ",
+            "A data change runs the draft workflow in test mode only when every record in it has a ",
             React.createElement(
               "code",
               {
@@ -28,7 +28,7 @@ export const NodeSchemaTriggerDataGatewayV1: NodeSchemaDefinition = {
               },
               "Tags",
             ),
-            " property value of ",
+            " array that contains ",
             React.createElement(
               "code",
               {
@@ -37,7 +37,7 @@ export const NodeSchemaTriggerDataGatewayV1: NodeSchemaDefinition = {
               },
               "mock-data",
             ),
-            ". Whenever a data has mock data value it will be ignored in the published workflow data trigger.",
+            ". This works for Inserted and Deleted only; Updated changes carry no Tags and always use the published workflow. Tagged changes never run the published workflow.",
           ),
         }),
       },

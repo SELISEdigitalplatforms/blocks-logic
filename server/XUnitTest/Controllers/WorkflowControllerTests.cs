@@ -255,6 +255,53 @@ namespace XUnitTest.Controllers
         }
 
         [Fact]
+        public async Task Webhook_InvalidBody_Returns400WithMessage()
+        {
+            _executionService.Setup(s => s.TriggerWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<JsonElement>()))
+                .ThrowsAsync(new InvalidWebhookBodyException("Body must be a JSON object or an array of objects (the body is a number)."));
+
+            var result = await _controller.Webhook("proj1", "wf1", "wh1", EmptyJson());
+
+            var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+            JsonSerializer.Serialize(bad.Value).Should().Contain("Body must be a JSON object or an array of objects");
+        }
+
+        [Fact]
+        public async Task TestWebhook_InvalidBody_Returns400()
+        {
+            _executionService.Setup(s => s.TriggerTestWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<JsonElement>()))
+                .ThrowsAsync(new InvalidWebhookBodyException("Body must be a JSON object or an array of objects"));
+
+            var result = await _controller.TestWebhook("proj1", "wf1", "wh1", EmptyJson());
+
+            result.Should().BeOfType<BadRequestObjectResult>();
+        }
+
+        [Fact]
+        public async Task WebhookByHeader_InvalidBody_Returns400()
+        {
+            SetBlocksKey("proj1");
+            _executionService.Setup(s => s.TriggerWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<JsonElement>()))
+                .ThrowsAsync(new InvalidWebhookBodyException("Body must be a JSON object or an array of objects"));
+
+            var result = await _controller.WebhookByHeader("wf1", "wh1", EmptyJson());
+
+            result.Should().BeOfType<BadRequestObjectResult>();
+        }
+
+        [Fact]
+        public async Task TestWebhookByHeader_InvalidBody_Returns400()
+        {
+            SetBlocksKey("proj1");
+            _executionService.Setup(s => s.TriggerTestWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<JsonElement>()))
+                .ThrowsAsync(new InvalidWebhookBodyException("Body must be a JSON object or an array of objects"));
+
+            var result = await _controller.TestWebhookByHeader("wf1", "wh1", EmptyJson());
+
+            result.Should().BeOfType<BadRequestObjectResult>();
+        }
+
+        [Fact]
         public async Task TestWebhook_Success_ReturnsOk()
         {
             _executionService.Setup(s => s.TriggerTestWebhookAsync("wf1", "wh1", "proj1", It.IsAny<JsonElement>()))

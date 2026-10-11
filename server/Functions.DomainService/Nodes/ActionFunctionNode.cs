@@ -59,10 +59,34 @@ namespace Functions.DomainService.Nodes
             var standalone = context.IterationCount == 0 && !context.HasUpstream;
             var iterations = standalone ? 1 : context.IterationCount;
 
+            // Resumed after a failure: items that already succeeded on the failed attempt are taken from it,
+            // not run again — there is no rollback, so running them again would repeat their side effects.
+            var alreadyDone = AlreadyDone(context);
+
             for (var i = 0; i < iterations; i++)
             {
                 var inputItem = standalone ? StandaloneInputItem(context) : context.InputItems[i];
-                var inputJson = BuildInputJson(parameters, inputItem, context);
+                if (!standalone && alreadyDone.TryGetValue(inputItem.Id, out var done))
+                {
+                    outputItems.Add(new NodeOutputItem
+                    {
+                        Data = done.Data,
+                        Branch = done.Branch,
+                        ParentItemIds = [inputItem.Id],
+                    });
+                    continue;
+                }
+
+                string? inputJson;
+                try
+                {
+                    inputJson = BuildInputJson(parameters, inputItem, context);
+                }
+                catch (InvalidFilledJsonException ex)
+                {
+                    // Nothing was sent for this item; items before it really ran and are kept.
+                    return NodeExecutionResult.Failed(ex.ForItem(i), outputItems);
+                }
 
                 InvokeResultDto result;
                 try
@@ -86,13 +110,14 @@ namespace Functions.DomainService.Nodes
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Function step failed to invoke function {FunctionId}", parameters.FunctionId);
-                    return NodeExecutionResult.Failed(ex.Message);
+                    // The items before this one really ran (side effects included), so they are kept
+                    // on the failed step rather than dropped: the execution must show what was done.
+                    return NodeExecutionResult.Failed(ex.Message, outputItems);
                 }
 
                 if (!string.Equals(result.Status, FunctionQueueKeys.Wire.Succeeded, StringComparison.Ordinal))
                 {
-                    var reason = result.ErrorMessage ?? result.ErrorCode ?? result.Status;
-                    return NodeExecutionResult.Failed($"function run {result.RunId} did not succeed: {reason}");
+                    return NodeExecutionResult.Failed(FailureMessage(result, i, iterations), outputItems);
                 }
 
                 outputItems.Add(new NodeOutputItem
@@ -113,6 +138,39 @@ namespace Functions.DomainService.Nodes
             return NodeExecutionResult.Successful(outputItems);
         }
 
+        /// <summary>The items of the failed attempt, by the input item each was made from.</summary>
+        internal static Dictionary<string, WorkflowItemExecutionEntity> AlreadyDone(NodeExecutionContext context)
+        {
+            var done = new Dictionary<string, WorkflowItemExecutionEntity>(StringComparer.Ordinal);
+            foreach (var item in context.PreviousAttemptItems)
+            {
+                if (item.ParentItemIds is [var parent] && !string.IsNullOrEmpty(parent)) done.TryAdd(parent, item);
+            }
+            return done;
+        }
+
+        /// <summary>
+        /// Why the step stopped at item <paramref name="index"/>. A run the step stopped waiting for is
+        /// not called failed: it may still finish, or (output processing) has already done its work,
+        /// so running the workflow again could do that work twice. The text says so.
+        /// </summary>
+        internal static string FailureMessage(InvokeResultDto result, int index, int iterations)
+        {
+            var item = iterations > 1 ? $" (item {index + 1} of {iterations}; items before it succeeded)" : string.Empty;
+            if (IsUnfinished(result.Status))
+            {
+                return $"function run {result.RunId} did not finish in time{item}: it was still {result.Status}. "
+                    + "It may still finish or may already have done its work. Check the run before running this workflow again.";
+            }
+
+            var reason = result.ErrorMessage ?? result.ErrorCode ?? result.Status;
+            return $"function run {result.RunId} did not succeed{item}: {reason}";
+        }
+
+        private static bool IsUnfinished(string? status) => status is
+            FunctionQueueKeys.Wire.Queued or FunctionQueueKeys.Wire.Claimed or FunctionQueueKeys.Wire.Starting
+            or FunctionQueueKeys.Wire.Running or FunctionQueueKeys.Wire.OutputProcessing;
+
         /// <summary>
         /// The stand-in input item for a function node with nothing wired to it. Carries an empty
         /// payload, so "item" mode sends no input and an expression resolving against
@@ -132,24 +190,19 @@ namespace Functions.DomainService.Nodes
 
         /// <summary>
         /// "item" passes the current input item's own output through as the function's input,
-        /// unchanged; "expression" evaluates <see cref="ActionFunctionParameters.InputExpression"/>
-        /// the same way every other node's expression fields are evaluated.
+        /// unchanged; "expression" fills <see cref="ActionFunctionParameters.InputExpression"/> as a JSON
+        /// template (values inside "…" are escaped, a plain <c>{{$json.email}}</c> becomes a JSON string)
+        /// and must then be valid JSON, else <see cref="InvalidFilledJsonException"/> fails the step.
+        /// A blank expression, or one that fills to JSON <c>null</c>, sends no input.
         /// </summary>
         private string? BuildInputJson(
             ActionFunctionParameters parameters, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
         {
             if (string.Equals(parameters.InputMode, "expression", StringComparison.OrdinalIgnoreCase))
             {
-                var resolved = parseExpression<object>(parameters.InputExpression, inputItem, context);
-                return resolved switch
-                {
-                    null => null,
-                    // The shared expression parser hands back Newtonsoft tokens for JSON (JObject,
-                    // JArray, JValue). System.Text.Json does not know them and wrote every object as
-                    // nested empty arrays: {"a":1} reached the function as {"a":[]} (WF-11, 2026-10-06).
-                    Newtonsoft.Json.Linq.JToken token => token.ToString(Newtonsoft.Json.Formatting.None),
-                    _ => JsonSerializer.Serialize(resolved),
-                };
+                if (string.IsNullOrWhiteSpace(parameters.InputExpression)) return null;
+                var filled = FillJsonTemplateOrThrow(parameters.InputExpression, "Input", inputItem, context).Trim();
+                return filled == "null" ? null : filled;
             }
 
             return inputItem.Data.Output is null

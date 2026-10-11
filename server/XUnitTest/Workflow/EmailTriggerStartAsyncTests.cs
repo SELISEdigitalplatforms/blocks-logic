@@ -161,6 +161,89 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
+        public async Task EmailTriggerStartAsync_ShouldRunPublishedVersion_WhenDraftNoLongerUsesTheMailbox()
+        {
+            // Draft moved to another mailbox after publish; the published version still listens to config-1.
+            var draft = CreateWorkflow("wf-1", "config-OTHER", testSubject: "", isPublished: true, publishedVersionId: "ver-1");
+            var snapshot = CreateWorkflow("wf-1", "config-1", testSubject: "", isPublished: true, publishedVersionId: "ver-1");
+            _workflows
+                .Setup(r => r.GetWorkflowsByMailServerConfigurationIdAsync("tenant-1", "config-1"))
+                .ReturnsAsync(new List<WorkflowEntity> { draft });
+            _versions
+                .Setup(r => r.GetWorkflowVersionsAsync("tenant-1", It.Is<string[]>(ids => ids.Contains("wf-1"))))
+                .ReturnsAsync(new List<WorkflowVersionEntity>
+                {
+                    new() { TenantId = "tenant-1", ItemId = "ver-1", WorkflowId = "wf-1", Name = "v1", Snapshot = snapshot }
+                });
+
+            await _sut.EmailTriggerStartAsync(CreateEvent("real inbound"));
+
+            _executions.Verify(r => r.CreateAsync(It.Is<WorkflowExecutionEntity>(e =>
+                e.ExecutionMode == WorkflowExecutionMode.Production && e.WorkflowSnapshot == snapshot
+                && e.TriggerMetadata.TriggerNodeId == "node-wf-1")), Times.Once);
+        }
+
+        [Fact]
+        public async Task EmailTriggerStartAsync_ShouldNotRunTest_WhenOnlyThePublishedVersionUsesTheMailbox()
+        {
+            // The test subject matches, but test mode follows the draft, which no longer uses config-1:
+            // so this is a production run of the published version, never a test run.
+            var draft = CreateWorkflow("wf-1", "config-OTHER", testSubject: "TEST MAIL", isPublished: true, publishedVersionId: "ver-1");
+            var snapshot = CreateWorkflow("wf-1", "config-1", testSubject: "", isPublished: true, publishedVersionId: "ver-1");
+            _workflows
+                .Setup(r => r.GetWorkflowsByMailServerConfigurationIdAsync("tenant-1", "config-1"))
+                .ReturnsAsync(new List<WorkflowEntity> { draft });
+            _versions
+                .Setup(r => r.GetWorkflowVersionsAsync("tenant-1", It.IsAny<string[]>()))
+                .ReturnsAsync(new List<WorkflowVersionEntity>
+                {
+                    new() { TenantId = "tenant-1", ItemId = "ver-1", WorkflowId = "wf-1", Name = "v1", Snapshot = snapshot }
+                });
+
+            await _sut.EmailTriggerStartAsync(CreateEvent("test mail"));
+
+            _executions.Verify(r => r.CreateAsync(It.Is<WorkflowExecutionEntity>(e => e.ExecutionMode == WorkflowExecutionMode.Test)), Times.Never);
+            _executions.Verify(r => r.CreateAsync(It.Is<WorkflowExecutionEntity>(e => e.ExecutionMode == WorkflowExecutionMode.Production)), Times.Once);
+        }
+
+        [Fact]
+        public async Task EmailTriggerStartAsync_ShouldSkipProduction_WhenPublishedVersionDoesNotUseTheMailbox()
+        {
+            // Draft added config-1 after publish; the published version does not listen to it yet.
+            var draft = CreateWorkflow("wf-1", "config-1", testSubject: "", isPublished: true, publishedVersionId: "ver-1");
+            var snapshot = CreateWorkflow("wf-1", "config-OLD", testSubject: "", isPublished: true, publishedVersionId: "ver-1");
+            _workflows
+                .Setup(r => r.GetWorkflowsByMailServerConfigurationIdAsync("tenant-1", "config-1"))
+                .ReturnsAsync(new List<WorkflowEntity> { draft });
+            _versions
+                .Setup(r => r.GetWorkflowVersionsAsync("tenant-1", It.IsAny<string[]>()))
+                .ReturnsAsync(new List<WorkflowVersionEntity>
+                {
+                    new() { TenantId = "tenant-1", ItemId = "ver-1", WorkflowId = "wf-1", Name = "v1", Snapshot = snapshot }
+                });
+
+            await _sut.EmailTriggerStartAsync(CreateEvent("real inbound"));
+
+            _executions.Verify(r => r.CreateAsync(It.IsAny<WorkflowExecutionEntity>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task EmailTriggerStartAsync_ShouldSkip_WhenPublishedVersionIsMissing()
+        {
+            var draft = CreateWorkflow("wf-1", "config-1", testSubject: "", isPublished: true, publishedVersionId: "ver-gone");
+            _workflows
+                .Setup(r => r.GetWorkflowsByMailServerConfigurationIdAsync("tenant-1", "config-1"))
+                .ReturnsAsync(new List<WorkflowEntity> { draft });
+            _versions
+                .Setup(r => r.GetWorkflowVersionsAsync("tenant-1", It.IsAny<string[]>()))
+                .ReturnsAsync(new List<WorkflowVersionEntity>());
+
+            await _sut.EmailTriggerStartAsync(CreateEvent("real inbound"));
+
+            _executions.Verify(r => r.CreateAsync(It.IsAny<WorkflowExecutionEntity>()), Times.Never);
+        }
+
+        [Fact]
         public void EmailTriggerQueue_ShouldMatchCommunicationConstants()
         {
             LogicConstants.EmailTriggerQueue.Should().Be(CommunicationConstants.EmailTriggerQueueName);

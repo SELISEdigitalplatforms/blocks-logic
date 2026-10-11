@@ -25,7 +25,8 @@ namespace Functions.DomainService.Repositories
     /// <c>reused</c>, <c>discard</c>, <c>handoverMs</c>. Every member is null when the runner did
     /// not send it — an older runner sends none — and null is written as null, never as a guess.
     /// </summary>
-    public sealed record RunSandboxReport(bool? Reused, string? DiscardReason, long? HandoverMs);
+    /// <param name="CpuWindowMs">The wall ms the run's CPU figure covers when it is the handler's own window; null = a total, not divisible.</param>
+    public sealed record RunSandboxReport(bool? Reused, string? DiscardReason, long? HandoverMs, long? CpuWindowMs = null);
 
     /// <summary>What <see cref="IFunctionRunRepository.ApplyResultAsync"/> did with a result.</summary>
     public enum ApplyResultOutcome

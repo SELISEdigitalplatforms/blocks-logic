@@ -22,6 +22,10 @@ namespace Proxy.DomainService.Utils
         private const string ResponseModeAll = "All";
         private const string ResponseModeSelect = "Select";
 
+        // The tenant's own gateway calls-per-minute limit, stored as the number; null = the default for the
+        // proxy's access. Raw (not words) so Revert can parse it back.
+        private const string RateLimitField = "rateLimit";
+
         // "Who can call it". The kind and combinator are stored as the enum names; a rule is stored as
         // "<any|all> of <v1>, <v2>" (null when it carries no values), which the history can show verbatim and
         // ApplyField can parse back. The validator forbids commas inside a value so the encoding is unambiguous.
@@ -95,6 +99,17 @@ namespace Proxy.DomainService.Utils
             DiffResponseInclude(before.ResponseInclude, after.ResponseInclude, changes);
             DiffResilience(before.Resilience, after.Resilience, changes);
 
+            if (before.RequestsPerMinute != after.RequestsPerMinute)
+            {
+                changes.Add(new ProxyFieldChange
+                {
+                    Field = RateLimitField,
+                    Label = "rate limit (calls/min)",
+                    Before = RateLimitValue(before.RequestsPerMinute),
+                    After = RateLimitValue(after.RequestsPerMinute),
+                });
+            }
+
             return changes;
         }
 
@@ -158,6 +173,9 @@ namespace Proxy.DomainService.Utils
                 : $"opens after {breaker.FailureThreshold} failures, stays open {breaker.OpenSeconds}s";
 
         private const string NotSetWord = "not set";
+
+        private static string? RateLimitValue(int? perMinute) =>
+            perMinute?.ToString(System.Globalization.CultureInfo.InvariantCulture);
         private const string OffWord = "off";
 
         private static void DiffRoutes(
@@ -395,6 +413,42 @@ namespace Proxy.DomainService.Utils
         };
 
         /// <summary>
+        /// A history value as it may be shown (PS-7, user 2026-10-07 "never ever show any secret"): a literal
+        /// header / query / body value under a credential-looking key becomes <c>***</c>, also inside a route's
+        /// overrides. <c>{{$VAR}}</c> references are shown. The stored row is untouched, so Revert still works.
+        /// </summary>
+        public static string? MaskForDisplay(string field, string? value)
+        {
+            if (value is null) return null;
+
+            if (TrySplitRouteField(field, out var routeAddress))
+            {
+                var route = ProxyRouteCodec.Decode(routeAddress, value);
+                if (route is null) return ProxySecretRedactor.Mask; // unreadable: never risk showing it raw
+
+                route.Headers = MaskPairs(route.Headers);
+                route.Query = MaskPairs(route.Query);
+                route.BodyMerge = MaskPairs(route.BodyMerge);
+                return ProxyRouteCodec.Encode(route);
+            }
+
+            var tail = TryParseMethodField(field, out _, out var methodTail) ? methodTail : field;
+            if (TrySplitPair(tail, out _, out var key) || TrySplitBodyField(tail, out key))
+            {
+                return ProxySecretRedactor.MaskConfiguredValue(key, value);
+            }
+
+            return value;
+
+            static List<ProxyKeyValue>? MaskPairs(List<ProxyKeyValue>? pairs) =>
+                pairs?.Select(kv => new ProxyKeyValue
+                {
+                    Key = kv.Key,
+                    Value = ProxySecretRedactor.MaskConfiguredValue(kv.Key, kv.Value) ?? string.Empty,
+                }).ToList();
+        }
+
+        /// <summary>
         /// Reads the raw current value of one field address on <paramref name="proxy"/>. Returns <c>null</c>
         /// for a <c>header:</c> / <c>query:</c> address whose key is not present.
         /// </summary>
@@ -407,6 +461,7 @@ namespace Proxy.DomainService.Utils
                 case "enabled": return proxy.Enabled ? EnabledWord : DisabledWord;
                 case "methods": return MethodsValue(proxy.Methods);
                 case ResponseModeField: return proxy.ResponseMode.ToString();
+                case RateLimitField: return RateLimitValue(proxy.RequestsPerMinute);
                 case AccessField: return proxy.Access.Kind.ToString();
                 case AccessCombineField: return proxy.Access.Combine.ToString();
                 case AccessRolesField: return RuleValue(proxy.Access.Roles);
@@ -489,6 +544,15 @@ namespace Proxy.DomainService.Utils
                     proxy.ResponseMode = Enum.TryParse<ProxyResponseMode>(rawValue, ignoreCase: true, out var mode)
                         ? mode
                         : ProxyResponseMode.All;
+                    return;
+                case RateLimitField:
+                    // Unparseable or out of range ⇒ the default, never "no limit" and never a value the
+                    // validator would refuse.
+                    proxy.RequestsPerMinute =
+                        int.TryParse(rawValue, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var perMinute)
+                        && perMinute is >= 1 and <= ProxyConfigValidator.MaxRequestsPerMinute
+                            ? perMinute
+                            : null;
                     return;
                 case AccessField:
                     proxy.Access.Kind = Enum.TryParse<EndpointAccessKind>(rawValue, ignoreCase: true, out var kind)

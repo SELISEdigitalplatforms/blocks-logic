@@ -55,17 +55,22 @@ namespace Blocks.FunctionRunner.Sandbox
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly RunnerOptions _options;
         private readonly ILogger<ArtifactImageBuilder> _logger;
+        private readonly ImageWorkGate? _hostGate;
 
         public const string HttpClientName = "fn-artifacts";
 
+        /// <param name="hostGate">The host-wide limit on image work; optional so tests that build
+        /// one image need not wire it.</param>
         public ArtifactImageBuilder(
             IHttpClientFactory httpClientFactory,
             IOptions<RunnerOptions> options,
-            ILogger<ArtifactImageBuilder> logger)
+            ILogger<ArtifactImageBuilder> logger,
+            ImageWorkGate? hostGate = null)
         {
             _httpClientFactory = httpClientFactory;
             _options = options.Value;
             _logger = logger;
+            _hostGate = hostGate;
         }
 
         /// <inheritdoc />
@@ -77,6 +82,9 @@ namespace Blocks.FunctionRunner.Sandbox
 
             var gate = Locks.GetOrAdd(reference, _ => new SemaphoreSlim(1, 1));
             await gate.WaitAsync(token).ConfigureAwait(false);
+            // The host-wide turn is taken inside the per-image lock, so runs waiting for the same
+            // image never hold host turns that builds of other images need.
+            using var hostTurn = _hostGate is null ? null : await _hostGate.EnterAsync(token).ConfigureAwait(false);
             try
             {
                 var workDir = Path.Combine(_options.ArtifactsDir, Sanitize(reference));

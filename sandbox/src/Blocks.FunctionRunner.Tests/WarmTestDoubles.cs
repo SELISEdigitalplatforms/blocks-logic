@@ -107,6 +107,9 @@ namespace Blocks.FunctionRunner.Tests
             foreach (var output in OnCall(id)) _lines.Writer.TryWrite(output);
         }
 
+        /// <summary>Writes a line later, as a sandbox does that is still busy after its result.</summary>
+        public void Push(string line) => _lines.Writer.TryWrite(line);
+
         /// <summary>Ends the output stream, as a sandbox that exits does.</summary>
         public void End() => _lines.Writer.TryComplete();
 
@@ -164,6 +167,9 @@ namespace Blocks.FunctionRunner.Tests
 
         public static string Result(string id, string rawValue) =>
             $$"""{"t":"result","ok":true,"value":{{rawValue}},"call":"{{id}}"}""";
+
+        public static string Chunk(string id, string data, bool late = false) =>
+            JsonSerializer.Serialize(new { t = "chunk", data, call = id, late });
 
         public static string Failure(string id, string code, string message) =>
             JsonSerializer.Serialize(new { t = "result", ok = false, code, message, call = id });

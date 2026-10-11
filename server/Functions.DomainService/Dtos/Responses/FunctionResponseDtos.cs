@@ -72,7 +72,10 @@ namespace Functions.DomainService.Dtos.Responses
             PackageJson = function.Source.PackageJson,
             LockJson = function.Source.LockJson,
             AllowInstallScripts = function.Source.AllowInstallScripts,
-            Limits = function.Limits,
+            // Clamped, so an old document's per-day value (or an out-of-range per-minute one) is
+            // never handed to the editor: it would send it straight back and the save would be
+            // refused (FunctionLimitsValidator). What is shown is also what actually runs.
+            Limits = (function.Limits ?? new FunctionLimits()).Clamp(),
             Retry = function.Retry,
             Trigger = function.Trigger,
             OutputActions = function.OutputActions,
@@ -170,6 +173,13 @@ namespace Functions.DomainService.Dtos.Responses
 
         /// <summary>Total CPU time the sandbox consumed for the run, in milliseconds — a cumulative counter, not a percentage.</summary>
         public long? CpuUsageMs { get; set; }
+
+        /// <summary>
+        /// The wall ms <see cref="CpuUsageMs"/> was measured over when it is the handler's own window
+        /// (host counter, handler start to result), so the two divide into millicores. Null when the
+        /// CPU figure is a total that includes start-up — never divide that one by a duration.
+        /// </summary>
+        public long? CpuWindowMs { get; set; }
         public int? ExitCode { get; set; }
         public bool LogsTruncated { get; set; }
         public List<RunAttempt> Attempts { get; set; } = [];
@@ -207,6 +217,7 @@ namespace Functions.DomainService.Dtos.Responses
             DurationMs = run.DurationMs,
             PeakMemoryBytes = run.PeakMemoryBytes,
             CpuUsageMs = run.CpuUsageMs,
+            CpuWindowMs = run.CpuWindowMs,
             ExitCode = run.ExitCode,
             LogsTruncated = run.LogsTruncated,
             Attempts = run.Attempts,
@@ -262,6 +273,14 @@ namespace Functions.DomainService.Dtos.Responses
         /// </summary>
         [System.Text.Json.Serialization.JsonIgnore]
         public bool RespondSynchronously { get; set; }
+
+        /// <summary>
+        /// Set by a sync wait the moment the run started streaming its answer (F-5): the caller is
+        /// answered with the pieces as they come (<c>FunctionStreamReader</c>), not with this DTO.
+        /// Never serialized.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool Streaming { get; set; }
     }
 
     /// <summary>

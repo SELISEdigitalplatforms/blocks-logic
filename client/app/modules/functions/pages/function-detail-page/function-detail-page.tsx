@@ -25,7 +25,9 @@ import { isErrorWithErrors } from "@/lib/error";
 import { cn } from "@/lib/utils";
 import { useGetFunction } from "../../hooks/use-function";
 import { useFunctionEditor } from "../../hooks/use-function-editor";
-import { useDeployFunction, useUpdateFunction } from "../../hooks/use-functions";
+import { useUpdateFunction } from "../../hooks/use-functions";
+import { useDeploy } from "../../hooks/use-deploy";
+import { BuildProgress } from "../../components/build-progress";
 import { useGetRuns } from "../../hooks/use-runs";
 import { useGetVersions } from "../../hooks/use-versions";
 import { useFunctionEditorStore } from "../../store/function-editor-store";
@@ -43,6 +45,7 @@ import { RetryForm } from "../../components/retry-form";
 import { VariablesEditor } from "../../components/variables-editor";
 import { DangerZoneCard } from "../../components/danger-zone-card";
 import { TriggerHttpCard } from "../../components/trigger-http-card";
+import { RateLimitCard } from "../../components/rate-limit-card";
 import { TriggerWorkflowCard } from "../../components/trigger-workflow-card";
 import { SandboxReuseCard } from "../../components/sandbox-reuse-card";
 import { SandboxRulesCard } from "../../components/sandbox-rules-card";
@@ -191,7 +194,17 @@ export const FunctionDetailPage = () => {
 
   const { data: fn, isLoading, isFetched } = useGetFunction({ functionId });
   const { save, isSaving, isDirty } = useFunctionEditor(functionId, fn);
-  const { mutateAsync: deployAsync, isPending: isDeploying } = useDeployFunction();
+  const {
+    deploy,
+    isBuilding,
+    buildId: deployBuildId,
+  } = useDeploy(functionId, {
+    onDeployed: (version) => showSuccessToast({ description: `Deployed as v${version.number}.` }),
+    onFailed: (error) =>
+      isErrorWithErrors(error)
+        ? showErrorToast({ errors: error.errors })
+        : showErrorToast({ errors: "Failed to deploy function" }),
+  });
   const { mutateAsync: renameAsync, isPending: isRenaming } = useUpdateFunction();
 
   const indexJs = useFunctionEditorStore((s) => s.indexJs);
@@ -236,13 +249,21 @@ export const FunctionDetailPage = () => {
   // Held in state and written from an effect: reading the clock during render is the very thing
   // that made this value unstable, and `react-hooks/purity` is right to reject it. Recomputed when
   // the range changes, then once a minute so a page left open does not keep a stale window.
+  // fromUtc is part of the runs query key, so that minute tick reloads the table: it runs only
+  // while auto-refresh is on (FN-59). Turning it off keeps the window the table was showing.
   const [runsFromUtc, setRunsFromUtc] = useState("");
+  const runsWindowRange = useRef<string | null>(null);
   useEffect(() => {
     const apply = () => setRunsFromUtc(rangeStart(queryParams.runRange, Date.now()));
-    apply();
+    // Only a new range moves the window at once; toggling auto-refresh alone does not.
+    if (runsWindowRange.current !== queryParams.runRange) {
+      runsWindowRange.current = queryParams.runRange;
+      apply();
+    }
+    if (!isRunsAutoRefresh) return;
     const timer = window.setInterval(apply, 60_000);
     return () => window.clearInterval(timer);
-  }, [queryParams.runRange]);
+  }, [queryParams.runRange, isRunsAutoRefresh]);
 
   const runsFilter: RunsFilterValue = {
     status: queryParams.runStatus,
@@ -285,8 +306,8 @@ export const FunctionDetailPage = () => {
     try {
       // Deploying the previous source because the save failed would ship the wrong code.
       if (isDirty && !(await save())) return;
-      const version = await deployAsync({ functionId });
-      showSuccessToast({ description: `Deployed as v${version.number}.` });
+      // Toasts come from useDeploy: the version may arrive now or after the build (202).
+      await deploy();
     } catch (error) {
       if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
       return showErrorToast({ errors: "Failed to deploy function" });
@@ -328,9 +349,7 @@ export const FunctionDetailPage = () => {
   }
   if (!fn) return null;
 
-  // Deploy answers with the version once the image is built, so "Building…" is exactly the window
-  // where that request is in flight — the API exposes no build id to poll from here.
-  const isBuilding = isDeploying;
+  // "Building…" covers the deploy request and, when it answered 202, the build it is watching.
   const isDeployed = fn.activeVersionNumber != null;
   const hasUndeployedChanges = isDirty || fn.isDirty;
   const deployLabel = isBuilding
@@ -476,6 +495,13 @@ export const FunctionDetailPage = () => {
           </div>
         </div>
 
+        {/* A deploy whose build outlasted the request (202): its progress, and its log if it fails. */}
+        {deployBuildId && (
+          <div className="mb-2">
+            <BuildProgress buildId={deployBuildId} />
+          </div>
+        )}
+
         <Tabs
           value={queryParams.tab}
           // Leaving the runs tab clears its filters. They only mean anything beside the runs
@@ -546,7 +572,7 @@ export const FunctionDetailPage = () => {
                   <span className="hidden text-xs text-low-emphasis sm:inline">
                     {activeFile === "index.js"
                       ? `ES modules · ${indexJs.split("\n").length} lines`
-                      : "pinned versions only · installed at deploy"}
+                      : "version ranges · installed on Test and Deploy"}
                   </span>
                   {/* Monaco owns all three; these only make them visible. Every one keeps its
                       keyboard shortcut, so the buttons are a discovery aid rather than the
@@ -611,7 +637,7 @@ export const FunctionDetailPage = () => {
                 />
               )}
               <p className="shrink-0 border-t bg-surface-app px-4 py-2.5 text-xs text-medium-emphasis">
-                Native <code className="font-mono">fetch()</code>, async/await and pinned npm
+                Native <code className="font-mono">fetch()</code>, async/await and npm
                 packages. Variables arrive as <code className="font-mono">ctx.env.NAME</code> —
                 inside the handler, where <code className="font-mono">ctx</code> exists. Calls reuse
                 the sandbox: open connections at module level, keep request data in the handler,
@@ -708,6 +734,12 @@ export const FunctionDetailPage = () => {
           {/* Full width with the supporting cards in columns, like proxy-details' overview. */}
           <TabsContent value="trigger" className="flex flex-col gap-4">
             <TriggerHttpCard value={trigger} onChange={setTrigger} functionId={fn.id} />
+            <RateLimitCard
+              key={fn.id}
+              authMode={trigger.authMode}
+              value={limits.requestsPerMinute}
+              onChange={(requestsPerMinute) => setLimits({ ...limits, requestsPerMinute })}
+            />
             <div className="grid gap-4 xl:grid-cols-2">
               <div className="flex flex-col gap-4">
                 <TriggerWorkflowCard value={trigger} onChange={setTrigger} />
@@ -760,7 +792,6 @@ export const FunctionDetailPage = () => {
             {queryParams.runId ? (
               <RunDetail
                 runId={queryParams.runId}
-                memoryLimitMb={limits.memoryMb}
                 cpuLimitMillicores={limits.cpuMillicores}
                 onBack={() => setQueryParams({ runId: "" })}
                 onUseAsTestInput={(input) => {
@@ -797,7 +828,6 @@ export const FunctionDetailPage = () => {
                     <RunsTable
                       runs={runs}
                       isLoading={isRunsLoading}
-                      memoryLimitMb={limits.memoryMb}
                       hasFilters={hasRunFilters}
                       isDeployed={isDeployed}
                       onOpenRun={(runId) => setQueryParams({ runId })}

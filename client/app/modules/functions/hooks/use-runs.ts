@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { type Query, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { functionService } from "../services/function.service";
 import { IGetRunsPayload, ITestFunctionPayload, TERMINAL_RUN_STATUSES } from "../types/run.types";
 import { FUNCTIONS_QUERY_KEY } from "./use-functions";
@@ -7,14 +7,25 @@ import { runPollInterval } from "../utils/run-polling";
 
 const RUNS_QUERY_KEY = [FUNCTIONS_QUERY_KEY, "runs"];
 
+/** A runs-list query: its third key part is the list payload, not "detail"/"logs". */
+const isRunsList = (q: Query) =>
+  q.queryKey[1] === "runs" && typeof q.queryKey[2] === "object" && q.queryKey[2] !== null;
+
+/**
+ * A runs list whose auto-refresh is off (useGetRuns sets `meta.autoRefresh`). Nothing reloads it on
+ * its own: not a finished test run, not a followed run settling (FN-59). The person's own actions
+ * (filters, replay, cancel) still do.
+ */
+const isPausedRunsList = (q: Query) => isRunsList(q) && q.meta?.autoRefresh === false;
+
 export const useTestFunction = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationKey: [...RUNS_QUERY_KEY, "test"],
     mutationFn: (payload: ITestFunctionPayload) => functionService.testFunction(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: RUNS_QUERY_KEY });
-      queryClient.invalidateQueries({ queryKey: [FUNCTIONS_QUERY_KEY] });
+      // [FUNCTIONS_QUERY_KEY] also covers every runs query; a paused list is left alone.
+      queryClient.invalidateQueries({ queryKey: [FUNCTIONS_QUERY_KEY], predicate: (q) => !isPausedRunsList(q) });
     },
   });
 };
@@ -32,6 +43,7 @@ export const useGetRuns = (
   return useQuery({
     queryKey: [...RUNS_QUERY_KEY, payload],
     queryFn: () => functionService.getRuns(payload),
+    meta: { autoRefresh },
     // Lets the caller hold the query until every part of the key is settled, so a window that is
     // computed in an effect does not cost a first fetch with the wrong bound.
     enabled: options?.enabled ?? true,
@@ -90,10 +102,10 @@ export const useGetRun = ({ runId, enabled = true, poll = true }: IGetRunOptions
     previous.current = status;
     if (!poll || !status || !was || was === status) return;
     if (!TERMINAL_RUN_STATUSES.includes(was) && TERMINAL_RUN_STATUSES.includes(status)) {
-      // Only the lists — the keys whose third part is the list payload, not "detail"/"logs".
+      // Only the lists, and only those still auto-refreshing.
       queryClient.invalidateQueries({
         queryKey: RUNS_QUERY_KEY,
-        predicate: (q) => typeof q.queryKey[2] === "object" && q.queryKey[2] !== null,
+        predicate: (q) => isRunsList(q) && !isPausedRunsList(q),
       });
     }
   }, [poll, status, queryClient]);
@@ -106,6 +118,29 @@ export const useGetRunLogs = (runId: string | undefined, pageNumber = 0, pageSiz
     queryKey: [...RUNS_QUERY_KEY, "logs", runId, pageNumber, pageSize],
     queryFn: () => functionService.getRunLogs(runId!, pageNumber, pageSize),
     enabled: !!runId,
+  });
+};
+
+/**
+ * The newest Test run of a function. The Test request stays open until its run ends, so this is
+ * how the panel learns the run id early (live status + logs) and finds a test still running after
+ * a reload or a 429. `fast` polls while a Test request is open.
+ */
+export const useLatestTestRun = (functionId: string, options?: { fast?: boolean }) => {
+  return useQuery({
+    queryKey: [...RUNS_QUERY_KEY, "latest-test", functionId],
+    queryFn: async () => {
+      const response = await functionService.getRuns({
+        functionId,
+        invokedBy: "Test",
+        pageNumber: 0,
+        pageSize: 1,
+      });
+      return response?.data?.[0] ?? null;
+    },
+    enabled: !!functionId,
+    refetchOnWindowFocus: false,
+    refetchInterval: options?.fast ? 1500 : false,
   });
 };
 

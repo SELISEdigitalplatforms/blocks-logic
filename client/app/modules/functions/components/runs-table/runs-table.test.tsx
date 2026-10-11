@@ -98,8 +98,9 @@ describe("RunsTable", () => {
     expect(screen.getByText(/no runs match this filter/i)).toBeTruthy();
   });
 
-  it("states the retention period", () => {
+  it("does not state a retention period", () => {
     renderWithProviders(<RunsTable runs={[succeeded]} isLoading={false} onOpenRun={vi.fn()} />);
-    expect(screen.getByText(/kept 30 days/i)).toBeTruthy();
+    expect(screen.queryByText(/kept \d+ days/i)).toBeNull();
+    expect(screen.getByText(/every trigger/i)).toBeTruthy();
   });
 });

@@ -8,7 +8,7 @@ import { SANDBOX_CODE_RULES } from "../../constants/limits.constant";
 describe("SandboxRulesCard", () => {
   it("is open by default — reuse is always on — and says what breaking a rule does", () => {
     renderWithProviders(<SandboxRulesCard />);
-    expect(screen.getByTestId("sandbox-rules-mode").textContent).toMatch(/HTTP calls reuse the sandbox/);
+    expect(screen.getByTestId("sandbox-rules-mode").textContent).toMatch(/Calls of a deployed function reuse the sandbox/);
     expect(screen.getByTestId("sandbox-rules-mode").textContent).toMatch(/Sandbox replaced/);
     expect(screen.getAllByText("Don't:")).toHaveLength(SANDBOX_CODE_RULES.length);
     expect(screen.getAllByText("Do:")).toHaveLength(SANDBOX_CODE_RULES.length);

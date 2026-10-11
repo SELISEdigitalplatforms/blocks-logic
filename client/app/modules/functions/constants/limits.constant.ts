@@ -18,11 +18,11 @@ export const HARD_CAPS = [
   // module import are paid every time and are pure CPU, and a smaller share would only slow that
   // down — admission counts memory and slots, never CPU, so a lower value frees nothing.
   { label: "CPU", value: "100m per run" },
-  { label: "Input", value: "1 MB" },
-  { label: "Result", value: "5 MB" },
-  { label: "Logs", value: "1 MB per run" },
-  { label: "Temp disk", value: "64 MB" },
-  { label: "Processes", value: "64" },
+  { label: "Input", value: "Size-limited; a larger request is refused" },
+  { label: "Result", value: "Size-limited; return a reference for large data" },
+  { label: "Logs", value: "Capped per run; lines past the cap are dropped" },
+  { label: "Temp disk", value: "Small /tmp only; files can't be executed" },
+  { label: "Processes", value: "Capped per sandbox" },
 ] as const;
 
 /** The "What the sandbox gives you" reference in the Code tab's right rail. */
@@ -39,7 +39,7 @@ export const SANDBOX_CTX_DOCS = [
   },
   {
     name: "ctx.env.NAME",
-    description: "Your variables, as plain strings. Snapshotted at deploy; secrets are never here.",
+    description: "Your variables, as plain strings. Snapshotted at deploy. A variable bound to a secret arrives as its real value, masked in logs.",
   },
   {
     name: "ctx.context",
@@ -49,12 +49,12 @@ export const SANDBOX_CTX_DOCS = [
   {
     name: "await ctx.blocks.getAccessToken()",
     description:
-      "The caller's Blocks token, fetched only when you ask (one IAM round trip, once per call): pass it as accessToken to @seliseblocks/client, with ctx.context.tenantId as xBlocksKey. Ask only on the path that calls Blocks, so other calls pay nothing. undefined on a public trigger, a schedule, a client-credentials or impersonated caller — check it before calling Blocks. Masked in logs. ctx.blocks.accessToken was removed.",
+      "The caller's Blocks token: pass it as accessToken to @seliseblocks/client, with ctx.context.tenantId as xBlocksKey. In a warm sandbox it is fetched only when you ask (one IAM round trip, once per call), so ask only on the path that calls Blocks. undefined when there is no signed-in caller (a public trigger, a scheduled workflow) or for a client-credentials caller — check it before calling Blocks. Masked in logs. ctx.blocks.accessToken was removed.",
   },
   {
     name: "ctx.run",
     description:
-      "id, version, attempt, and invokedBy { type, id } — type is http, workflow, test, replay, schedule or event.",
+      "id, version, attempt, and invokedBy { type, id } — type is http, workflow, test or replay.",
   },
   {
     name: "ctx.log.info / warn / error",
@@ -83,7 +83,7 @@ export const SANDBOX_CODE_RULES = [
   {
     dont: "Leave a setTimeout or setInterval running after the handler returns.",
     dontCode: "setInterval(refreshCache, 60_000);",
-    fix: "Await a delay inside the handler, or clear the timer before you return. Use a schedule trigger for repeating work.",
+    fix: "Await a delay inside the handler, or clear the timer before you return. For repeating work, use a scheduled workflow with a Function step.",
     fixCode: "await new Promise((r) => setTimeout(r, 500));",
   },
   {
@@ -104,11 +104,6 @@ export const SANDBOX_CODE_RULES = [
     fix: "Create the client once at module level and reuse it. Don't close it per call.",
     fixCode: "let client; // module level\nclient ??= await MongoClient.connect(url);",
   },
-] as const;
-
-export const BACKOFF_KIND_OPTIONS = [
-  { value: "Exponential", label: "Exponential — 1 s, 5 s, 20 s" },
-  { value: "Fixed", label: "Fixed — 5 s" },
 ] as const;
 
 /** Canonical delays behind each backoff choice, so the policy stays one decision in the UI. */

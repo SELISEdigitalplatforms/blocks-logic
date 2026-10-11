@@ -659,3 +659,21 @@ describe('ctx.waitUntil in single-run mode (tests, workflow steps)', () => {
     assert.ok(r.logs.some((l) => /did not finish within the time limit/.test(l.msg)));
   });
 });
+
+describe('streamed answers in single-run mode (F-5)', () => {
+  test('the pieces are written and the text is the result', async () => {
+    const r = await runBootstrap(`
+      export default async function* () { yield 'a'; yield 'b'; yield { c: 1 }; }`);
+    assert.equal(r.code, 0);
+    assert.deepEqual(r.events.filter((e) => e.t === 'chunk').map((e) => e.data), ['a', 'b', '{"c":1}\n']);
+    assert.equal(r.result.value, 'ab{"c":1}\n');
+  });
+
+  test('a returned fetch-style body (an async iterable of bytes) streams too', async () => {
+    const r = await runBootstrap(`
+      export default async function () {
+        return new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode('hi')); c.close(); } });
+      }`);
+    assert.equal(r.result.value, 'hi');
+  });
+});

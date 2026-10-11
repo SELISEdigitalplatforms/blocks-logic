@@ -69,6 +69,14 @@ namespace Functions.DomainService.Dtos.Requests
 
         public string FunctionId { get; set; } = string.Empty;
         public string? Note { get; set; }
+
+        /// <summary>
+        /// Deploy exactly this build — the one an earlier deploy answered 202 with (F-4). Refused
+        /// when it is not this function's, or when the code was saved again after it started, so a
+        /// deploy never ships code other than what its build was made from. Null: build or reuse
+        /// one for the current code.
+        /// </summary>
+        public string? BuildId { get; set; }
     }
 
     public sealed class GetRunsRequestDto

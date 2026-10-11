@@ -30,8 +30,9 @@ describe("FunctionGuide", () => {
   it("states the real limits and the API answer rules when opened", async () => {
     renderWithProviders(<FunctionGuide />);
     await userEvent.click(screen.getByRole("button", { name: "Limits" }));
-    expect(screen.getByText(/30 s run time per call/)).toBeTruthy();
-    expect(screen.getByText(/128 MB memory, 0.1 CPU/)).toBeTruthy();
+    expect(screen.getByText(/fixed time limit/)).toBeTruthy();
+    expect(screen.getByText(/0\.1 CPU/)).toBeTruthy();
+    expect(screen.queryByText(/128 MB|30 s run time/)).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Answering as an API" }));
     expect(screen.getByText(/set-cookie is always dropped/)).toBeTruthy();
   });

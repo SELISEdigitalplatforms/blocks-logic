@@ -142,7 +142,7 @@ namespace Blocks.FunctionRunner.Runs
                 return;
             }
 
-            var deliveries = await consumer.DeliveryCountAsync(entry.Id).ConfigureAwait(false);
+            var deliveries = await consumer.DeliveryCountAsync(entry).ConfigureAwait(false);
             if (deliveries > _options.MaxAttempts)
             {
                 await consumer.DeadLetterAsync(entry, $"delivered {deliveries} times without completing").ConfigureAwait(false);
@@ -194,6 +194,8 @@ namespace Blocks.FunctionRunner.Runs
             }
 
             // --- build, for this host only ---------------------------------------------------
+            // Shown as "building" in the console: without it the run read Queued for the whole build.
+            await _runs.MarkBuildingAsync(run.RunId).ConfigureAwait(false);
             var build = await _builds.ProcessAsync(new BuildJob
             {
                 BuildId = buildId,

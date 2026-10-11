@@ -186,6 +186,13 @@ namespace Functions.DomainService.Entities
 
         /// <summary>Total CPU time the sandbox consumed for the run, in milliseconds — a cumulative counter, not a percentage.</summary>
         public long? CpuUsageMs { get; set; }
+
+        /// <summary>
+        /// The wall ms <see cref="CpuUsageMs"/> was measured over when it is the handler's own window
+        /// (host counter, handler start to result), so the two divide into millicores. Null when the
+        /// CPU figure is a total that includes start-up — never divide that one by a duration.
+        /// </summary>
+        public long? CpuWindowMs { get; set; }
         public int? ExitCode { get; set; }
         public string? RunnerId { get; set; }
 

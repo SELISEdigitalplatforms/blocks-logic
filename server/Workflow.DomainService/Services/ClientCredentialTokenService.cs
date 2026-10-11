@@ -82,8 +82,8 @@ namespace Workflow.DomainService.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     var errorContent = await response.Content.ReadAsStringAsync();
-                    _logger.LogError("Failed to get token for ClientId: {ClientId}. Status: {StatusCode}, Error: {Error}",
-                        clientCredentials.ItemId, response.StatusCode, errorContent);
+                    _logger.LogError("Failed to get token for ClientId: {ClientId}. Status: {StatusCode}, Error: {Error}, body {BodyLength} chars",
+                        clientCredentials.ItemId, response.StatusCode, TokenErrorBody.Code(errorContent), errorContent.Length);
                     return null;
                 }
 

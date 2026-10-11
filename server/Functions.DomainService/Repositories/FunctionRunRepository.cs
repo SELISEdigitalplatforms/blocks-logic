@@ -293,6 +293,12 @@ namespace Functions.DomainService.Repositories
                     .Unset(r => r.DiscardReason)
                     .Unset(r => r.HandoverMs);
 
+            // Set with the CPU figure it belongs to, unset otherwise: a later attempt measured as a
+            // total must never be divided by an earlier attempt's window.
+            update = sandbox?.CpuWindowMs is { } cpuWindowMs
+                ? update.Set(r => r.CpuWindowMs, cpuWindowMs)
+                : update.Unset(r => r.CpuWindowMs);
+
             // One conditional update: the attempt and status are both what is checked and what
             // is written, so a read-then-write would let two deliveries of the same result both
             // pass the check and push the attempt twice.
@@ -326,6 +332,7 @@ namespace Functions.DomainService.Repositories
                 .Set(r => r.DurationMs, (long?)null)
                 .Set(r => r.PeakMemoryBytes, (long?)null)
                 .Set(r => r.CpuUsageMs, (long?)null)
+                .Unset(r => r.CpuWindowMs)
                 .Set(r => r.RunnerId, (string?)null)
                 .Set(r => r.StartedAt, (DateTime?)null)
                 .Set(r => r.CompletedAt, (DateTime?)null)

@@ -234,8 +234,7 @@ export const RunsTable = ({
       </div>
 
       <p className="text-xs text-medium-emphasis">
-        Runs and their logs are kept 30 days. Every trigger — HTTP, workflow or a test from the
-        editor — lands here.
+        Every trigger — HTTP, workflow or a test from the editor — lands here.
       </p>
     </div>
   );

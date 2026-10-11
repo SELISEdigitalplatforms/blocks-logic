@@ -31,12 +31,15 @@ import { useCreateFunction } from "../../hooks/use-functions";
 import { FUNCTION_TEMPLATES } from "../../constants/templates";
 import { FunctionTemplate } from "../../types/function.types";
 
+// Every template the picker shows, so a new one cannot be offered and then refused by the form (FN-12).
+const TEMPLATE_VALUES = FUNCTION_TEMPLATES.map((t) => t.value) as [FunctionTemplate, ...FunctionTemplate[]];
+
 // Limits from FEATURES-AND-UI §4.2. The server allows more, deliberately: this is the form's
 // contract with the person typing, not the storage limit.
 const createFunctionFormSchema = z.object({
-  name: z.string().min(2, "Give it at least 2 characters").max(64, "Keep it under 64 characters"),
-  description: z.string().max(200, "Keep it under 200 characters").optional(),
-  template: z.enum(["Minimal", "HttpEcho", "FetchTransform"]),
+  name: z.string().min(2, "This name is too short").max(64, "This name is too long"),
+  description: z.string().max(200, "This description is too long").optional(),
+  template: z.enum(TEMPLATE_VALUES),
 });
 
 type CreateFunctionFormValues = z.infer<typeof createFunctionFormSchema>;
@@ -87,7 +90,8 @@ export const FunctionCreateDialog = ({ open, onOpenChange }: FunctionCreateDialo
             <DialogTitle className="tracking-tight">Create function</DialogTitle>
             <DialogDescription>
               Pick a starter and name it. Its endpoint is{" "}
-              <code className="font-mono text-xs">/logic/v4/fn/{"{id}"}</code> on GET or POST, so
+              <code className="font-mono text-xs">/logic/v4/fn/{"{id}"}</code> (POST to start; more
+              methods on the Trigger tab), so
               there is no slug to choose and nothing here has to be unique.
             </DialogDescription>
           </div>

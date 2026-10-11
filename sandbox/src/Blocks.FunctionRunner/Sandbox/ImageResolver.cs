@@ -44,6 +44,7 @@ namespace Blocks.FunctionRunner.Sandbox
         private readonly ILogger<ImageResolver> _logger;
 
         private readonly IArtifactImageBuilder? _artifacts;
+        private readonly ImageWorkGate? _hostGate;
 
         /// <summary>
         /// <paramref name="artifacts"/> is optional so the many call sites that construct this
@@ -54,10 +55,12 @@ namespace Blocks.FunctionRunner.Sandbox
             IDockerClient docker,
             IOptions<RunnerOptions> options,
             ILogger<ImageResolver> logger,
-            IArtifactImageBuilder? artifacts = null)
+            IArtifactImageBuilder? artifacts = null,
+            ImageWorkGate? hostGate = null)
             : this(docker, options, logger)
         {
             _artifacts = artifacts;
+            _hostGate = hostGate;
         }
 
         private ImageResolver(IDockerClient docker, IOptions<RunnerOptions> options, ILogger<ImageResolver> logger)
@@ -106,6 +109,10 @@ namespace Blocks.FunctionRunner.Sandbox
             }
 
             var (name, tag) = SplitReference(reference);
+
+            // A pull is image work like a build, and counts against the same host-wide limit. The
+            // artifact path above takes its turn inside the builder, behind the per-image lock.
+            using var hostTurn = _hostGate is null ? null : await _hostGate.EnterAsync(token).ConfigureAwait(false);
 
             for (var attempt = 1; attempt <= PullAttempts; attempt++)
             {

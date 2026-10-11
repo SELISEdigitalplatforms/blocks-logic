@@ -30,13 +30,6 @@ export const FUNCTIONS_ENDPOINTS = {
   GET_AUDIT_LOG: `${API_BASES.WORKFLOW}${FUNCTIONS_SUBPATH}/GetAuditLog`,
 } as const;
 
-/**
- * The methods a trigger can pick from. The public route (`FunctionsController.Invoke`) is
- * registered for exactly these two; the trigger chooses one, and a call with the other is refused
- * with 405. Server enum names, so the value round-trips into `ITriggerConfig.httpMethod` as is.
- */
-export const FUNCTION_HTTP_METHODS: HttpTriggerMethod[] = ["Get", "Post"];
-
 /** The trigger's method as the wire verb the badges and the snippet show. */
 export const toHttpVerb = (method: HttpTriggerMethod): ProxyMethod =>
   method === "Get" ? "GET" : "POST";

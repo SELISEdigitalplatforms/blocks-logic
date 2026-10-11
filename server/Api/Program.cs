@@ -3,6 +3,7 @@ using Blocks.Extensions.DependencyInjection;
 using Blocks.Genesis;
 using Blocks.Secrets;
 using BlocksTemplate.Api;
+using BlocksTemplate.Api.Security;
 using CloudConfiguration.DomainService.Shared.Utilities;
 using Common.InternalService.Shared.Utilities;
 using DomainService.Notification;
@@ -89,6 +90,37 @@ services.RegisterBlocksStorageServices();
 await services.RegisterBlocksDeploymentServicesAsync(vaultType);
 
 var app = builder.Build();
+
+// Built once: the policy comes from configuration, which does not change per request.
+var contentSecurityPolicy = ContentSecurityPolicy.Build(app.Configuration);
+var cspMode = SecurityHeaders.ReadMode(app.Configuration);
+Console.WriteLine($"CSP mode: {cspMode}");
+
+// OnStarting, so headers a controller already set (proxy/function sandbox CSP) are seen and kept.
+app.Use(async (context, next) =>
+{
+    context.Response.OnStarting(() =>
+    {
+        SecurityHeaders.Apply(context, contentSecurityPolicy, cspMode);
+        return Task.CompletedTask;
+    });
+
+    await next(context);
+});
+
+// CSP violation reports. Before static files, the SPA fallback and Genesis's tenant/auth
+// middleware: browsers post them anonymously, without the x-blocks-key header.
+var cspReportLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("CspReport");
+app.Use(async (context, next) =>
+{
+    if (CspReportEndpoint.Matches(context))
+    {
+        await CspReportEndpoint.HandleAsync(context, cspReportLogger);
+        return;
+    }
+
+    await next(context);
+});
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
@@ -190,7 +222,12 @@ static void ApplyFrontendRuntimeSettings(IConfiguration configuration, string we
         ["__BLOCKS_STUDIO_CLIENT_ID__"] = section["BLOCKS_STUDIO_CLIENT_ID"],
     };
 
+    // The self-hosted Monaco build (client/vite.config.ts) is third-party code with no tokens;
+    // skipping it saves reading ~16 MB on every start.
+    var monacoRoot = Path.Combine(webRootPath, "monaco") + Path.DirectorySeparatorChar;
+
     var files = Directory.EnumerateFiles(webRootPath, "*", SearchOption.AllDirectories)
+        .Where(path => !path.StartsWith(monacoRoot, StringComparison.Ordinal))
         .Where(path =>
         {
             var ext = Path.GetExtension(path);

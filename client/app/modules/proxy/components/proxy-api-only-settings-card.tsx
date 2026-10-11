@@ -89,7 +89,7 @@ export const ProxyApiOnlySettingsCard = ({ form }: Props) => {
                   an empty object (<code>{"{}"}</code>)
                 </>
               )}
-              .
+              . Vendor errors and non-JSON answers return 502.
             </Row>
           ) : null}
           {bodyKeys.length ? (

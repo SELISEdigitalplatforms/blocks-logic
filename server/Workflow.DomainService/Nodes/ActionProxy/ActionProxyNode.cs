@@ -92,12 +92,19 @@ namespace Workflow.DomainService.Nodes.ActionProxy
                         continue;
                     }
 
-                    var (body, contentType, bodyError) = PrepareBody(parameters, method, inputItem, context);
-                    if (bodyError != null)
+                    byte[]? body;
+                    string? contentType;
+                    try
                     {
+                        (body, contentType) = PrepareBody(parameters, method, inputItem, context);
+                    }
+                    catch (InvalidFilledJsonException ex)
+                    {
+                        // Nothing was sent for this item. The configured body is broken, so the step
+                        // fails; items before it already ran and are kept.
                         requestLog.Failed(i, "InvalidBody");
-                        AppendErrorOutputItem(outputItems, errorParent, parameters.ToBsonDocument(), bodyError);
-                        continue;
+                        _logger.LogWarning("Proxy node: body is not valid JSON for proxy {Slug}.", parameters.Slug);
+                        return NodeExecutionResult.Failed(ex.ForItem(i), outputItems);
                     }
 
                     var query = BuildQuery(parameters, inputItem, context);
@@ -238,33 +245,30 @@ namespace Workflow.DomainService.Nodes.ActionProxy
         }
 
         /// <summary>
-        /// Resolves expressions in the configured body and validates it as JSON before any upstream
-        /// connection. Returns a non-null error when the body is enabled but not parseable.
+        /// Fills the configured body as a JSON template (values escaped inside "…", typed outside) and
+        /// checks it is valid JSON before any upstream connection. Throws
+        /// <see cref="InvalidFilledJsonException"/> when it is not; the caller fails the step.
+        /// A blank body, or one that fills to JSON null, sends no body.
         /// </summary>
-        private (byte[]? body, string? contentType, string? error) PrepareBody(
+        private (byte[]? body, string? contentType) PrepareBody(
             ActionProxyParameters parameters,
             string method,
             WorkflowItemExecutionEntity inputItem,
             NodeExecutionContext context)
         {
             if (!parameters.HaveBody || !MethodsWithBody.Contains(method))
-                return (null, null, null);
+                return (null, null);
 
-            var bodyContent = parseExpression<string>(parameters.Body.Trim(), inputItem, context);
-            if (string.IsNullOrWhiteSpace(bodyContent))
-                return (null, null, null);
+            var template = (parameters.Body ?? string.Empty).Trim();
+            if (template.Length == 0)
+                return (null, null);
 
-            try
-            {
-                JsonDocument.Parse(bodyContent);
-            }
-            catch (JsonException ex)
-            {
-                _logger.LogError("Proxy node: body is not valid JSON for proxy {Slug}.", parameters.Slug);
-                return (null, null, $"Invalid JSON body: {ex.Message}");
-            }
-
-            return (Encoding.UTF8.GetBytes(bodyContent), "application/json", null);
+            var bodyContent = FillJsonTemplateOrThrow(template, "Body", inputItem, context);
+            // A body that is only a missing value (e.g. {{$json.payload}} with no payload) used to fill
+            // to "" and send no body; it now fills to null, which keeps that: no body.
+            if (bodyContent.Trim() == "null")
+                return (null, null);
+            return (Encoding.UTF8.GetBytes(bodyContent), "application/json");
         }
 
         /// <summary>

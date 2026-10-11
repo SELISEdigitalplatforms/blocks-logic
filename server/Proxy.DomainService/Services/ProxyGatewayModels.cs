@@ -59,6 +59,12 @@ namespace Proxy.DomainService.Services
         /// <summary><c>null</c> unless the tenant configured one; see <see cref="ProxyResilienceConfig"/>.</summary>
         public ProxyResilienceConfig? Resilience { get; init; }
 
+        /// <summary>The tenant's own limit; <c>null</c> ⇒ the default for the proxy's access (see <see cref="ProxyDetailEntity.RequestsPerMinute"/>).</summary>
+        public int? RequestsPerMinute { get; init; }
+
+        /// <summary>Stored name &rarr; secret id pairs (see <see cref="ProxyDetailEntity.SecretIds"/>); empty for a draft.</summary>
+        public IReadOnlyDictionary<string, string> SecretIds { get; init; } = new Dictionary<string, string>();
+
         public static ProxyResolvedConfig FromEntity(ProxyDetailEntity proxy) => new()
         {
             ProxyId = proxy.ItemId,
@@ -75,6 +81,8 @@ namespace Proxy.DomainService.Services
             ResponseMode = proxy.ResponseMode,
             ResponseInclude = proxy.ResponseInclude,
             Resilience = proxy.Resilience,
+            RequestsPerMinute = proxy.RequestsPerMinute,
+            SecretIds = proxy.SecretIds ?? new Dictionary<string, string>(),
         };
     }
 
@@ -147,7 +155,7 @@ namespace Proxy.DomainService.Services
         /// <summary>Request body already buffered by the caller, or <c>null</c> when there is none.</summary>
         public byte[]? Body { get; init; }
 
-        /// <summary>Set by the caller when the inbound body exceeded the 10 MB cap (no upstream call is made).</summary>
+        /// <summary>Set by the caller when the inbound body exceeded the 1 MB cap (no upstream call is made).</summary>
         public bool BodyTooLarge { get; init; }
 
         /// <summary>Caller's <c>Content-Type</c> for the body, forwarded verbatim when a body is present.</summary>
@@ -193,8 +201,18 @@ namespace Proxy.DomainService.Services
 
         public int LatencyMs { get; init; }
 
-        /// <summary>Upstream body decoded as UTF-8 (via <see cref="Utils.ExecutionBodyStore.Capture"/>), or <c>null</c>.</summary>
-        public string? ResponseBody { get; init; }
+        private string? _responseBody;
+
+        /// <summary>
+        /// Upstream body decoded as UTF-8 (via <see cref="Utils.ExecutionBodyStore.Capture"/>), or <c>null</c>.
+        /// Decoded from <see cref="ResponseBytes"/> on first read only: the gateway relays bytes and never reads
+        /// it, so a 5 MB response no longer costs a ~10 MB string per call (PX-7). Test and the workflow step read it.
+        /// </summary>
+        public string? ResponseBody
+        {
+            get => _responseBody ??= Utils.ExecutionBodyStore.Capture(ResponseBytes, ResponseContentType);
+            init => _responseBody = value;
+        }
 
         public long ResponseBodyBytes { get; init; }
 

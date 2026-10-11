@@ -101,6 +101,19 @@ export const useGetWorkflowExecutionById = (
   });
 };
 
+/** Continues a failed run; refreshes the execution and the list so the new status shows at once. */
+export const useResumeWorkflowExecution = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: ["workflow-execution", "resume"],
+    mutationFn: workflowService.resumeWorkflowExecution,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["workflow-execution"] });
+      queryClient.invalidateQueries({ queryKey: ["workflow-executions"] });
+    },
+  });
+};
+
 /** Polls every 5 s while the backend says more lines may still arrive. Closed panel → `enabled: false` → no requests. */
 export const executionLogsRefetchInterval = (data?: IGetWorkflowExecutionLogsResponse) =>
   data?.data?.mayStillArrive ? 5000 : false;

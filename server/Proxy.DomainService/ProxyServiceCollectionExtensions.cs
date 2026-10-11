@@ -34,6 +34,7 @@ namespace Proxy.DomainService
             services.AddSingleton<IProxyGatewayService, ProxyGatewayService>();
             services.AddSingleton<IProxyTestService, ProxyTestService>();
             services.AddSingleton<IProxyExecutionService, ProxyExecutionService>();
+            services.AddSingleton<IProxyRateLimiter, ProxyRateLimiter>();
 
             // repositories
             services.AddSingleton<IProxyRepository, ProxyRepository>();
@@ -76,10 +77,17 @@ namespace Proxy.DomainService
                 // buffered response passes this cap.
                 client.MaxResponseContentBufferSize = ProxyGatewayService.MaxResponseBodyBytes;
             })
-            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            // Every upstream connection goes through the guard's ConnectCallback: the IP that is checked is
+            // the IP that is used, so DNS rebinding cannot reach a private address.
+            .ConfigurePrimaryHttpMessageHandler(() => ProxyUpstreamGuard.CreatePrimaryHandler(new ProxyUpstreamGuard()));
+
+            // OpenAPI import by URL (PX-8): the same guarded handler — no redirects, connect-time IP check —
+            // plus a buffer cap at the spec limit as a backstop to the service's own capped read.
+            services.AddHttpClient(ProxyOpenApiImportService.SpecClientName, client =>
             {
-                AllowAutoRedirect = false,
-            });
+                client.MaxResponseContentBufferSize = ProxyOpenApiImportService.MaxSpecBytes;
+            })
+            .ConfigurePrimaryHttpMessageHandler(() => ProxyUpstreamGuard.CreatePrimaryHandler(new ProxyUpstreamGuard()));
 
             return services;
         }

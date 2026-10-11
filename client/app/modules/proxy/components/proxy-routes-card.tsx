@@ -94,7 +94,7 @@ const OVERRIDE_LABELS: Record<RowOverrideName, { title: string; on: string; off:
   bodyMerge: {
     title: "Body fields",
     on: "Merged into the JSON body this endpoint forwards.",
-    off: "The body is forwarded exactly as your client sent it.",
+    off: "The body is forwarded as your client sent it, unless proxy-wide body fields are set.",
   },
   headers: {
     title: "Extra headers",
@@ -104,7 +104,7 @@ const OVERRIDE_LABELS: Record<RowOverrideName, { title: string; on: string; off:
   query: {
     title: "Extra query parameters",
     on: "Sent in addition to the connection's query parameters. A same-name key replaces the connection's.",
-    off: "Sends only the connection's query parameters.",
+    off: "Sends the connection's query parameters, plus the caller's own (configured keys win).",
   },
 };
 
@@ -337,8 +337,8 @@ export const ProxyRoutesCard = ({
         const sendsSummary = sends.length
           ? [...sends, ...replacesSummary].join(" · ")
           : hasBody(route.method)
-            ? "Body as your client sent it, with the connection’s headers and query"
-            : "Only the connection’s headers and query";
+            ? "Body as your client sent it, with the connection’s headers and query (plus the caller’s query)"
+            : "The connection’s headers and query (plus the caller’s query)";
         const included = (route.responseInclude ?? []).map((path) => path.trim()).filter(Boolean);
         const returnsSummary =
           route.responseMode === "select"
@@ -505,8 +505,8 @@ export const ProxyRoutesCard = ({
                         <p className="text-xs font-medium">Response fields</p>
                         <p className="text-[11px] text-muted-foreground">
                           {responseOn
-                            ? "This endpoint decides which fields reach your client."
-                            : "The vendor's whole response reaches your client."}
+                            ? "This endpoint decides which fields reach your client. Vendor errors and non-JSON answers return 502."
+                            : "The vendor's status and body reach your client (secret values masked, vendor headers dropped)."}
                         </p>
                       </div>
                       <Switch
@@ -541,7 +541,7 @@ export const ProxyRoutesCard = ({
                           <SelectContent>
                             <SelectItem value="select">Only the fields listed below</SelectItem>
                             <SelectItem value="all">
-                              All fields — relay the vendor&apos;s response unchanged
+                              All fields — relay the vendor&apos;s body (secret values masked)
                             </SelectItem>
                           </SelectContent>
                         </Select>
@@ -593,8 +593,8 @@ export const ProxyRoutesCard = ({
                             </Button>
                             {(route.responseInclude ?? []).length === 0 ? (
                               <p className="text-[11px] text-muted-foreground">
-                                No fields listed means nothing reaches your client. Add at least
-                                one.
+                                No fields listed means your client gets an empty object. Add at
+                                least one.
                               </p>
                             ) : null}
                           </div>

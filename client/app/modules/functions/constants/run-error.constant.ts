@@ -6,18 +6,18 @@ import { RunErrorCode } from "../types/run.types";
  */
 export const RUN_ERROR_EXPLANATIONS: Record<RunErrorCode, string> = {
   MemoryLimit:
-    "The function used more memory than its limit. Raise the memory limit (max 200 MB) or hold less in memory.",
-  PidLimit: "The function started more than 64 processes or threads.",
+    "The function used more memory than its limit. Hold less in memory.",
+  PidLimit: "The function started more processes or threads than a sandbox allows.",
   UserRuntimeError: "The handler threw. The stack is in the logs below.",
   RuntimeStartFailed:
     "The sandbox could not start the runtime — usually a broken package.json or a package that needs a native build.",
-  ResultTooLarge: "The returned value is over 5 MB. Return a reference instead of the payload.",
+  ResultTooLarge: "The returned value is over the result size limit. Return a reference instead of the payload.",
   ResultNotSerializable:
     "The returned value could not be turned into JSON. Return plain objects, arrays and primitives.",
   ImagePullFailed:
     "The image could not be pulled — it is no longer on the registry. The build behind it has been invalidated, so testing or deploying again builds a new one.",
   TimedOut:
-    "The run passed its timeout and was stopped. Raise the timeout (max 90 s) or do less work per call.",
+    "The run passed its timeout and was stopped. Do less work per call.",
   SandboxStartFailed: "The sandbox failed to start. Nothing ran, so a replay is safe.",
   OutputActionFailed: "The function returned successfully, but an output action did not deliver.",
   Undeliverable:
@@ -31,7 +31,7 @@ export const RUN_ERROR_EXPLANATIONS: Record<RunErrorCode, string> = {
   BuildFailed:
     "The test's image could not be built, so nothing ran. The build log above says why — usually a package name or version in package.json that does not exist.",
   SecretStoreUnavailable:
-    "The secret store could not be reached while the run was starting, so nothing ran. This is on the platform's side; the run is retried automatically if its retry policy allows, and running it again is safe.",
+    "The secret store could not be reached while the run was starting, so nothing ran. This is on the platform's side. An HTTP run of a deployed function may be retried automatically; running it again is safe.",
 };
 
 /**

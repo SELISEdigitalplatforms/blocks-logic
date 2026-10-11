@@ -15,6 +15,7 @@ import {
 import {
   IFunctionBuild,
   IFunctionVersionSummary,
+  IDeployPending,
   IGetVersionsResponse,
 } from "../types/version.types";
 import {
@@ -65,8 +66,10 @@ export class FunctionService {
     return this.logicHttpClient.post(FUNCTIONS_ENDPOINTS.SAVE, payload);
   };
 
-  deleteFunction = (functionId: string): Promise<IBaseResponse> => {
+  /** `force`: delete even though runs have not finished (they are cancelled) or workflows still use it. */
+  deleteFunction = (functionId: string, force = false): Promise<IBaseResponse> => {
     const params = new URLSearchParams({ functionId });
+    if (force) params.set("force", "true");
     return this.logicHttpClient.delete(`${FUNCTIONS_ENDPOINTS.DELETE}?${params.toString()}`);
   };
 
@@ -74,7 +77,10 @@ export class FunctionService {
     return this.logicHttpClient.post(FUNCTIONS_ENDPOINTS.TEST, payload);
   };
 
-  deployFunction = (payload: IDeployFunctionPayload): Promise<IFunctionVersionSummary> => {
+  /** 200 → the new version; 202 → the build is still running (see useDeploy). */
+  deployFunction = (
+    payload: IDeployFunctionPayload,
+  ): Promise<IFunctionVersionSummary | IDeployPending> => {
     return this.logicHttpClient.post(FUNCTIONS_ENDPOINTS.DEPLOY, payload);
   };
 

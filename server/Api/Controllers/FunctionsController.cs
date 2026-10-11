@@ -132,8 +132,15 @@ namespace BlocksTemplate.Api.Controllers
 
         [HttpPost]
         [ProtectedEndPoint("blocks-logic::function::manage")]
-        public async Task<FunctionVersionSummaryDto> Deploy([FromBody] DeployFunctionRequestDto request)
-            => await _deploymentService.DeployAsync(GetTenantId(), request, GetUserId(), GetEmail());
+        public async Task<IActionResult> Deploy([FromBody] DeployFunctionRequestDto request)
+        {
+            var outcome = await _deploymentService.DeployAsync(GetTenantId(), request, GetUserId(), GetEmail());
+            // 200 + the version, as before; 202 + the build when it is still running (F-4). The
+            // console watches GetBuild and then deploys that build with `buildId`.
+            return outcome.Version is { } version
+                ? Ok(version)
+                : Accepted(new DeployPendingDto { BuildId = outcome.BuildId!, Status = outcome.BuildStatus! });
+        }
 
         [HttpGet]
         [ProtectedEndPoint("blocks-logic::function::read")]
@@ -370,6 +377,13 @@ namespace BlocksTemplate.Api.Controllers
             try
             {
                 var result = await _invocationService.InvokeHttpAsync(tenantId, functionId, request, aborted);
+
+                // The function streams its answer (F-5): the pieces, as they come.
+                if (result.Streaming)
+                {
+                    var sse = Request.Headers.Accept.Any(a => a?.Contains("text/event-stream", StringComparison.OrdinalIgnoreCase) == true);
+                    return new FunctionStreamResult(result.RunId, sse);
+                }
 
                 // 202 for any run not yet finished — queued, or claimed/starting/running/processing
                 // outputs when Wait's window lapsed; 200 once a terminal outcome is known. Only a
@@ -659,9 +673,85 @@ namespace BlocksTemplate.Api.Controllers
         }
     }
 
+    /// <summary>
+    /// A streamed answer (F-5): 200, then each piece the moment the runner relays it — as plain
+    /// chunked text, or as Server-Sent Events when the caller accepts <c>text/event-stream</c>
+    /// (each piece one <c>data:</c> event; a final <c>event: done</c>, or <c>event: error</c>
+    /// with the run's status). A plain-text stream whose run fails after it started has no way to
+    /// say so but to stop short: the connection is aborted, so the client sees an incomplete body
+    /// rather than a clean end. The run id is in <c>x-blocks-run-id</c> for looking it up.
+    /// </summary>
+    public sealed class FunctionStreamResult(string runId, bool sse) : IActionResult
+    {
+        public string RunId { get; } = runId;
+        public bool Sse { get; } = sse;
+
+        public async Task ExecuteResultAsync(ActionContext context)
+        {
+            var http = context.HttpContext;
+            var reader = http.RequestServices.GetRequiredService<IFunctionStreamReader>();
+            var response = http.Response;
+            var aborted = http.RequestAborted;
+
+            response.StatusCode = 200;
+            response.ContentType = Sse ? "text/event-stream; charset=utf-8" : "text/plain; charset=utf-8";
+            response.Headers.CacheControl = "no-cache";
+            response.Headers["X-Accel-Buffering"] = "no";   // nginx-style proxies: do not hold pieces back
+            response.Headers["x-blocks-run-id"] = RunId;
+            http.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpResponseBodyFeature>()?.DisableBuffering();
+            await response.StartAsync(aborted);
+
+            try
+            {
+                await foreach (var piece in reader.ReadAsync(RunId, aborted))
+                {
+                    if (!piece.IsEnd)
+                    {
+                        await response.WriteAsync(Sse ? SseData(piece.Data!) : piece.Data!, aborted);
+                        await response.Body.FlushAsync(aborted);
+                        continue;
+                    }
+
+                    if (piece.EndStatus == FunctionQueueKeys.Wire.Succeeded)
+                    {
+                        if (Sse) await response.WriteAsync("event: done\ndata: {}\n\n", aborted);
+                        return;
+                    }
+
+                    if (Sse)
+                    {
+                        var error = System.Text.Json.JsonSerializer.Serialize(new
+                        {
+                            runId = RunId, status = piece.EndStatus, errorCode = piece.ErrorCode, message = piece.ErrorMessage,
+                        });
+                        await response.WriteAsync($"event: error\ndata: {error}\n\n", aborted);
+                        return;
+                    }
+                    http.Abort();
+                    return;
+                }
+            }
+            catch (OperationCanceledException) when (aborted.IsCancellationRequested)
+            {
+                // The caller left; the run goes on and is recorded as usual.
+            }
+        }
+
+        /// <summary>One SSE event: every line of the piece as its own <c>data:</c> line.</summary>
+        internal static string SseData(string data) =>
+            string.Concat(data.Replace("\r\n", "\n").Split('\n').Select(line => "data: " + line + "\n")) + "\n";
+    }
+
     public sealed class RunIdRequestDto
     {
         public string RunId { get; set; } = string.Empty;
+    }
+
+    /// <summary>A deploy whose build is still running: watch <see cref="BuildId"/>, then deploy it.</summary>
+    public sealed class DeployPendingDto
+    {
+        public string BuildId { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
     }
 
     public sealed class FunctionBuildEntitySummary

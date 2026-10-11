@@ -35,15 +35,23 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
-        public void A_stored_lockfile_is_not_sent_to_the_builder()
+        public void A_stored_lockfile_is_sent_for_the_runner_to_screen_and_install_exactly()
         {
-            // The field still round-trips for stored documents and existing API callers, but it
-            // must not reach a build: a lockfile pins the install to versions that were never
-            // screened, and its absence used to mean no install happened at all.
+            // F-8: the runner screens every entry and runs npm ci, so the build is pinned. The
+            // old failure (no install at all without a lockfile) cannot return: the runner always
+            // installs, with npm ci or npm install.
             var files = FunctionBuildService.BuildFileMap(Source("""{"lockfileVersion":3}"""));
 
-            files.Should().NotContainKey("package-lock.json");
-            files.Keys.Should().BeEquivalentTo("index.js", "package.json");
+            files["package-lock.json"].Should().Be("""{"lockfileVersion":3}""");
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("  ")]
+        public void Without_a_lockfile_only_the_entry_point_and_manifest_are_sent(string? lockJson)
+        {
+            FunctionBuildService.BuildFileMap(Source(lockJson)).Keys.Should().BeEquivalentTo("index.js", "package.json");
         }
 
         [Fact]

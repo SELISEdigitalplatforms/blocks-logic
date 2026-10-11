@@ -18,6 +18,12 @@ namespace Workflow.DomainService.Services
         Task<WorkflowExecutionEntity> CreateExecutionAsync(WorkflowEntity workflow, TriggerMetadata triggerMetadata, WorkflowExecutionMode executionMode);
         Task<WorkflowExecutionsGetResponseDto> GetExecutionsByWorkflowIdAsync(string tenantId, WorkflowExecutionsGetRequestDto dto);
         Task<WorkflowExecutionGetResponseDto> GetExecutionByIdAsync(string tenantId, WorkflowExecutionGetRequestDto dto);
+
+        /// <summary>
+        /// Continues a failed production execution from where it stopped: completed steps are not run again,
+        /// and the failed step reuses what it had already done (the function step, per item).
+        /// </summary>
+        Task<WorkflowExecutionResumeResponseDto> ResumeExecutionAsync(string tenantId, WorkflowExecutionGetRequestDto dto);
         Task<WorkflowExecutionGetResponseDto> LastSuccessfullExecutionAsync(string tenantId, LastSuccessfullExecutionRequestDto dto);
         Task EmailTriggerStartAsync(EmailTriggerEvent emailEvent);
         Task DataTriggerStartAsync(DataChangeEvent dataEvent);

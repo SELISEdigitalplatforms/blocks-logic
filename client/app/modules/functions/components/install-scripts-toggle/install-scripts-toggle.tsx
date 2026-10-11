@@ -16,8 +16,8 @@ export const InstallScriptsToggle = ({ checked, onChange }: InstallScriptsToggle
     <div className="flex min-w-0 flex-col gap-0.5">
       <span className="text-xs font-semibold">Allow package install scripts</span>
       <span className="text-xs leading-relaxed text-medium-emphasis">
-        Needed for native packages such as bcrypt or sharp. Scripts run in the same isolated
-        sandbox as the function. Applies from the next test run or deploy.
+        Needed for native packages such as bcrypt or sharp. Scripts run in an isolated build
+        sandbox, not on the host. Applies from the next test run or deploy.
       </span>
     </div>
     <Switch

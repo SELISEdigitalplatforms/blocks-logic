@@ -11,17 +11,15 @@ vi.mock("../../hooks/use-functions", () => ({ useGetLimitsOptions }));
 const panelText = () => screen.getByTestId("retry-profile").textContent ?? "";
 
 describe("RetryForm", () => {
-  it("counts the attempts the way the scheduler does — the first run included", () => {
-    // 2 attempts is one retry. Describing it as "2 retries" would promise three runs of a function
-    // that may not be safe to run twice.
+  it("says retries happen without showing the undecided count or wait", () => {
     useGetLimitsOptions.mockReturnValue({
-      data: { ...DEFAULT_LIMITS_OPTIONS, attempts: 2, retryDelaySeconds: 5 },
+      data: { ...DEFAULT_LIMITS_OPTIONS, attempts: 4, retryDelaySeconds: 30 },
     });
 
     renderWithProviders(<RetryForm />);
 
-    expect(panelText()).toContain("The first run plus one retry");
-    expect(panelText()).toContain("5 s");
+    expect(panelText()).toContain("Automatic, after a short wait");
+    expect(panelText()).not.toMatch(/\d/);
   });
 
   it("says plainly when there is no retry at all", () => {
@@ -29,18 +27,7 @@ describe("RetryForm", () => {
 
     renderWithProviders(<RetryForm />);
 
-    expect(panelText()).toContain("No retry — a failure is final.");
-  });
-
-  it("reads the policy from the server rather than holding its own", () => {
-    useGetLimitsOptions.mockReturnValue({
-      data: { ...DEFAULT_LIMITS_OPTIONS, attempts: 4, retryDelaySeconds: 30 },
-    });
-
-    renderWithProviders(<RetryForm />);
-
-    expect(panelText()).toContain("The first run plus 3 retries");
-    expect(panelText()).toContain("30 s");
+    expect(panelText()).toContain("None — a failure is final");
   });
 
   it("offers nothing to change", () => {

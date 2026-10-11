@@ -16,6 +16,11 @@ import {
 // ---------------------------------------------------------------------------
 
 /** Server caps (ProxyConfigValidator.MaxAccessValues / MaxAccessValueLength). */
+/** A Public proxy's gateway calls per minute when the tenant set none (server `Proxy:RateLimits:PublicPerMinute`). */
+export const PROXY_PUBLIC_DEFAULT_PER_MINUTE = 600;
+/** The highest limit a tenant may set; the server refuses more. */
+export const PROXY_MAX_PER_MINUTE = 100_000;
+
 export const MAX_ACCESS_VALUES = 50;
 export const MAX_ACCESS_VALUE_LENGTH = 200;
 
@@ -42,7 +47,7 @@ const listClause = (noun: string, rule: ProxyAccessRule) => {
  */
 export const describeProxyAccess = (access: ProxyAccess): string => {
   if (access.kind === "public") {
-    return "Anyone with the URL can call it. No identity, no token-scoped work.";
+    return "Anyone with the URL and your x-blocks-key can call it. No identity, no token-scoped work.";
   }
 
   const hasRoles = access.roles.values.length > 0;
@@ -71,9 +76,9 @@ export const validateProxyAccess = (access: ProxyAccess): string | null => {
     ["permission", access.permissions],
   ];
   for (const [label, rule] of rules) {
-    if (rule.values.length > MAX_ACCESS_VALUES) return `At most ${MAX_ACCESS_VALUES} ${label}s.`;
+    if (rule.values.length > MAX_ACCESS_VALUES) return `Too many ${label} entries.`;
     if (rule.values.some((value) => value.length > MAX_ACCESS_VALUE_LENGTH)) {
-      return `A ${label} entry is over ${MAX_ACCESS_VALUE_LENGTH} characters.`;
+      return `A ${label} entry is too long.`;
     }
     if (rule.values.some((value) => value.includes(","))) {
       return `A ${label} entry may not contain a comma.`;
@@ -160,6 +165,10 @@ export const MAX_RESPONSE_PATHS = 200;
 export const MAX_RESPONSE_PATH_LENGTH = 512;
 /** Mirrors `ProxyResponseProjector.MaxProjectableBytes`. */
 export const MAX_PROJECTABLE_BYTES = 5 * 1024 * 1024;
+/** Mirrors `ProxyGatewayService.MaxRequestBodyBytes` — the gateway answers 413 over it. */
+export const MAX_REQUEST_BODY_BYTES = 1 * 1024 * 1024;
+/** Mirrors `ProxyGatewayService.MaxResponseBodyBytes` — the gateway answers 502 over it. */
+export const MAX_RESPONSE_BODY_BYTES = 5 * 1024 * 1024;
 /** Array elements unioned per level when deriving a schema from a Test sample. */
 export const RESPONSE_SCHEMA_SAMPLE = 50;
 
@@ -480,10 +489,10 @@ export const parseRouteTemplate = (
 ): { ok: true; params: string[] } | { ok: false; reason: string } => {
   const trimmed = trimRoutePath(template);
   if (trimmed.length === 0) return { ok: true, params: [] };
-  if (trimmed.length > 512) return { ok: false, reason: "Path must be 512 characters or fewer." };
+  if (trimmed.length > 512) return { ok: false, reason: "Path is too long." };
 
   const segments = trimmed.split("/");
-  if (segments.length > 20) return { ok: false, reason: "Path must have 20 segments or fewer." };
+  if (segments.length > 20) return { ok: false, reason: "Path has too many segments." };
 
   const params: string[] = [];
   for (const segment of segments) {
@@ -592,6 +601,13 @@ export const proxyFormSchema = z
     responseInclude: z.array(z.string()).default([]),
     access: accessSchema.default(defaultProxyAccess),
     resilience: resilienceSchema,
+    requestsPerMinute: z
+      .number()
+      .int("A whole number.")
+      .min(1, `A whole number from 1 to ${PROXY_MAX_PER_MINUTE.toLocaleString("en")}.`)
+      .max(PROXY_MAX_PER_MINUTE, `A whole number from 1 to ${PROXY_MAX_PER_MINUTE.toLocaleString("en")}.`)
+      .nullable()
+      .default(null),
   })
   .superRefine((values, ctx) => {
     const accessProblem = validateProxyAccess(values.access ?? defaultProxyAccess());
@@ -675,7 +691,7 @@ export const proxyFormSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["responseInclude"],
-          message: `Keep at most ${MAX_RESPONSE_PATHS} response fields.`,
+          message: "Too many response fields.",
         });
       }
       values.responseInclude.forEach((path, index) => {
@@ -763,6 +779,8 @@ export const proxyFormDefaultValues: ProxyFormValues = {
   access: defaultProxyAccess(),
   // Nothing is configured until somebody configures it: no timeout of our choosing, no retries.
   resilience: null,
+  // The default for the access kind (600/min when Public) until the tenant sets its own.
+  requestsPerMinute: null,
   credentials: [],
 };
 

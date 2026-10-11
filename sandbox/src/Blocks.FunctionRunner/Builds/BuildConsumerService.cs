@@ -106,7 +106,7 @@ namespace Blocks.FunctionRunner.Builds
                 return;
             }
 
-            var deliveries = await consumer.DeliveryCountAsync(entry.Id).ConfigureAwait(false);
+            var deliveries = await consumer.DeliveryCountAsync(entry).ConfigureAwait(false);
             if (deliveries > _options.MaxAttempts)
             {
                 await consumer.DeadLetterAsync(entry, $"delivered {deliveries} times without completing")

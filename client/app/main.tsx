@@ -6,6 +6,7 @@ import { Toaster } from "./components/ui-kits/toaster/toaster";
 import QueryProvider from "./providers/query-provider";
 import { router } from "./router";
 import "./styles/globals.css";
+import "./lib/monaco-loader";
 import { TooltipProvider } from "./components/ui-kits/tooltip/tooltip";
 import { BlocksAppLayout } from "@seliseblocks/genesis-os";
 import { ThemeProvider } from "./hooks/use-theme";

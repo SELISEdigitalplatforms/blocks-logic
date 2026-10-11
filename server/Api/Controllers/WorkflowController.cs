@@ -227,6 +227,10 @@ namespace Utilities.Api.Controllers
             {
                 return StatusCode(401, new { message = "Unauthorized" });
             }
+            catch (InvalidWebhookBodyException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
 
         }
 
@@ -252,6 +256,10 @@ namespace Utilities.Api.Controllers
             catch (UnauthorizedAccessException)
             {
                 return StatusCode(401, new { message = "Unauthorized" });
+            }
+            catch (InvalidWebhookBodyException ex)
+            {
+                return BadRequest(new { message = ex.Message });
             }
 
         }
@@ -285,6 +293,10 @@ namespace Utilities.Api.Controllers
             {
                 return StatusCode(401, new { message = "Unauthorized" });
             }
+            catch (InvalidWebhookBodyException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
         /// <summary>
@@ -315,6 +327,10 @@ namespace Utilities.Api.Controllers
             catch (UnauthorizedAccessException)
             {
                 return StatusCode(401, new { message = "Unauthorized" });
+            }
+            catch (InvalidWebhookBodyException ex)
+            {
+                return BadRequest(new { message = ex.Message });
             }
         }
 
@@ -362,6 +378,19 @@ namespace Utilities.Api.Controllers
             var tenantId = GetTenantId();
             var execution = await _workflowExecutionService.GetExecutionByIdAsync(tenantId, dto);
             return Ok(execution);
+        }
+
+        /// <summary>
+        /// <c>POST</c> — continues a failed run from where it stopped. Steps that completed are not run again,
+        /// and a function step does not call again the items that already succeeded. 409 when it cannot be resumed.
+        /// </summary>
+        [Authorize]
+        [HttpPost]
+        public async Task<IActionResult> ResumeExecution([FromBody] WorkflowExecutionGetRequestDto dto)
+        {
+            var tenantId = GetTenantId();
+            var result = await _workflowExecutionService.ResumeExecutionAsync(tenantId, dto);
+            return result.IsSuccess ? Ok(result) : Conflict(result);
         }
 
         /// <summary><c>GET</c> — the stage log lines of one execution (stages and counts only, never data values),

@@ -245,7 +245,7 @@ export const ExecutionLogsPanel = ({
       return live ? (
         <PanelMessage>
           <Loader2 className="h-6 w-6 animate-spin text-primary" aria-hidden />
-          <p>Waiting for logs... They can take a few seconds to appear.</p>
+          <p>Waiting for logs... They can take a while to appear.</p>
         </PanelMessage>
       ) : (
         <PanelMessage>No logs were recorded for this execution.</PanelMessage>
@@ -414,7 +414,7 @@ export const ExecutionLogsPanel = ({
                   Showing {filtered.length} of {logs.length} lines
                 </span>
               )}
-              {data.isTruncated && <span>Only the first 2,000 lines are shown.</span>}
+              {data.isTruncated && <span>Not all lines are shown.</span>}
               {data.traceId && (
                 <CopyToClipboardButton textToCopy={data.traceId}>
                   <span className="font-mono">Trace {data.traceId}</span>

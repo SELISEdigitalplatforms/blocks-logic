@@ -108,6 +108,22 @@ namespace Proxy.DomainService.Entities
         /// </summary>
         public ProxyResilienceConfig? Resilience { get; set; }
 
+        /// <summary>
+        /// Gateway calls per minute for this proxy, from all callers together (P-3, 2026-10-07; same rule as
+        /// functions, FN-19). <c>null</c>: a Public proxy gets the platform default
+        /// (<c>Proxy:RateLimits:PublicPerMinute</c>, 600), a token proxy no limit. Counted per proxy, never
+        /// per IP. Workflow steps and Test calls never count.
+        /// </summary>
+        public int? RequestsPerMinute { get; set; }
+
+        /// <summary>
+        /// <c>{{$VAR.name}}</c> name &rarr; Blocks Secrets id, for every name the config uses (PX-9, 2026-10-07).
+        /// Written on every save and revert by one exact lookup, so a call reads values by id at once — no
+        /// search. The token keeps the name the user sees. Empty on rows saved before; those fall back to a
+        /// name lookup until the next save. Ids are not secrets.
+        /// </summary>
+        public Dictionary<string, string> SecretIds { get; set; } = new(StringComparer.Ordinal);
+
         public ProxyStats Stats { get; set; } = new();
     }
 }

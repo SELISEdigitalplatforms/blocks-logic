@@ -1,10 +1,11 @@
 import {
   useGetWorkflowExecutionById,
+  useResumeWorkflowExecution,
   useWorkflow,
 } from "@blocks-workflow/hooks";
 import { Background, BackgroundVariant, ReactFlow } from "@xyflow/react";
 import { useEffect, useState } from "react";
-import { Loader2, ScrollText } from "lucide-react";
+import { Loader2, Play, ScrollText } from "lucide-react";
 import { Button } from "@/components/ui-kits/button/button";
 import { ExecutionLogsPanel } from "./execution-logs-panel";
 import {
@@ -19,7 +20,8 @@ import {
 import { NodeInspector } from "../node-inspector";
 import { EditorFitConfig, WorkflowEditorControls } from "../workflow-editor-controls";
 
-import { getStatusConfig } from "../../utils/workflow-execution-list.util";
+import { getStatusConfig, shownExecutionStatus, WorkflowExecutionStatus } from "../../utils/workflow-execution-list.util";
+import { WorkflowExecutionMode } from "../../models/workflow.model";
 import { WorkflowExecution } from "@blocks-workflow/types/workflow.service.type";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +38,26 @@ export const WorkflowExecutionEditor = ({
 
   const data = responseData?.data;
   const status = data?.status ?? execution?.status;
+  // What the badge says; `status` (as stored) still decides Resume, which the server allows only on Failed.
+  const shownStatus = shownExecutionStatus(status, data?.nodeExecutions);
+
+  // Resume: only a failed production run. Completed steps are not run again; only a function step skips its already-done items.
+  const resume = useResumeWorkflowExecution();
+  const [resumeError, setResumeError] = useState<string | null>(null);
+  const canResume =
+    status === WorkflowExecutionStatus.Failed && execution?.executionMode === WorkflowExecutionMode.Production;
+  const onResume = () => {
+    setResumeError(null);
+    resume.mutate(
+      { executionId: id },
+      {
+        onSuccess: (result) => {
+          if (!result?.isSuccess) setResumeError(result?.error ?? "This run cannot be resumed.");
+        },
+        onError: () => setResumeError("This run cannot be resumed."),
+      },
+    );
+  };
 
   // At most one right-side panel: opening the logs closes the Node Inspector, and selecting a node closes the logs.
   const [logsOpen, setLogsOpen] = useState(false);
@@ -160,16 +182,16 @@ export const WorkflowExecutionEditor = ({
               <div
                 className={cn(
                   "h-2 w-2 rounded-full",
-                  getStatusConfig(status ?? execution.status).color,
+                  getStatusConfig(shownStatus ?? execution.status).color,
                 )}
               ></div>
               <span
                 className={cn(
                   "text-sm font-medium",
-                  getStatusConfig(status ?? execution.status).textClass,
+                  getStatusConfig(shownStatus ?? execution.status).textClass,
                 )}
               >
-                {getStatusConfig(status ?? execution.status).label}
+                {getStatusConfig(shownStatus ?? execution.status).label}
               </span>
             </div>
           </div>
@@ -183,6 +205,24 @@ export const WorkflowExecutionEditor = ({
           >
             <ScrollText className="h-4 w-4" /> Execution Logs
           </Button>
+          {canResume && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 bg-background/95"
+              onClick={onResume}
+              disabled={resume.isPending}
+              title="Continue from the failed step. Finished steps are not run again. Function steps also skip items that already succeeded; other steps run all their items again."
+              data-testid="execution-resume-button"
+            >
+              {resume.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} Resume
+            </Button>
+          )}
+          {resumeError && (
+            <span className="rounded-md bg-background/95 px-2 py-1 text-sm text-destructive" role="alert">
+              {resumeError}
+            </span>
+          )}
         </div>
       )}
       {selectedNode && <NodeInspector key={selectedNode.id} />}

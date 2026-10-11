@@ -1,6 +1,7 @@
 using Blocks.Genesis;
 using FluentAssertions;
 using Functions.DomainService.Entities;
+using Functions.DomainService.Enums;
 using Functions.DomainService.Models;
 using Functions.DomainService.Services;
 using Functions.DomainService.Utils;
@@ -224,15 +225,15 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
-        public void Rate_limiting_is_off_unless_configured()
+        public void Rate_limiting_is_on_unless_switched_off()
         {
-            // Product decision pending: the default must stay off with no key at all.
-            var (cache, database) = Cache(count: 999_999);
+            // Decided 2026-10-07 (FN-19): on with no key at all; Enabled=false turns it off.
+            var (cache, _) = Cache(count: 999_999);
             var service = new FunctionAdmissionService(
                 cache.Object, new ConfigurationBuilder().Build(), NullLogger<FunctionAdmissionService>.Instance);
 
-            service.AdmitAsync(Function(perMinute: 1, perDay: 1), "tenant_1", "{}").Result.IsAdmitted.Should().BeTrue();
-            database.Verify(d => d.StringIncrementAsync(It.IsAny<RedisKey>(), It.IsAny<long>(), It.IsAny<CommandFlags>()), Times.Never);
+            var act = () => service.AdmitAsync(Function(perMinute: 1), "tenant_1", "{}");
+            act.Should().ThrowAsync<FunctionRateLimitedException>().GetAwaiter().GetResult();
         }
 
         [Fact]
@@ -304,6 +305,106 @@ namespace XUnitTest.Functions
             database.Verify(
                 d => d.StringIncrementAsync(It.IsAny<RedisKey>(), It.IsAny<long>(), It.IsAny<CommandFlags>()),
                 Times.Never);
+        }
+
+        // ---- FN-19: a default limit for public functions (2026-10-07) ----------------------------
+
+        private static FunctionEntity Public(int? perMinute = null) => new()
+        {
+            ItemId = "fn_pub",
+            Limits = new FunctionLimits { RequestsPerMinute = perMinute },
+            Trigger = new TriggerConfig { AuthMode = AuthMode.Public },
+        };
+
+        private static FunctionAdmissionService DefaultService(Mock<ICacheClient> cache, params (string Key, string Value)[] settings) =>
+            new(cache.Object,
+                new ConfigurationBuilder().AddInMemoryCollection(settings.ToDictionary(s => s.Key, s => (string?)s.Value)).Build(),
+                NullLogger<FunctionAdmissionService>.Instance);
+
+        [Fact]
+        public async Task A_public_function_gets_600_a_minute_with_no_configuration_at_all()
+        {
+            var (cache, _) = Cache(count: 601);
+
+            var act = () => DefaultService(cache).AdmitAsync(Public(), "tenant_1", "{}", InvokedByType.Http, null);
+
+            (await act.Should().ThrowAsync<FunctionRateLimitedException>()).Which.Message.Should().Contain("600 requests per minute");
+        }
+
+        [Fact]
+        public async Task The_600th_call_of_a_minute_still_passes()
+        {
+            var (cache, _) = Cache(count: 600);
+
+            (await DefaultService(cache).AdmitAsync(Public(), "tenant_1", "{}", InvokedByType.Http, null)).IsAdmitted.Should().BeTrue();
+        }
+
+        [Fact]
+        public async Task A_private_function_has_no_limit_unless_its_tenant_sets_one()
+        {
+            var (cache, database) = Cache(count: 999_999);
+            var token = Function();   // Token is the default access
+
+            (await DefaultService(cache).AdmitAsync(token, "tenant_1", "{}", InvokedByType.Http, null)).IsAdmitted.Should().BeTrue();
+            database.Verify(d => d.StringIncrementAsync(It.IsAny<RedisKey>(), It.IsAny<long>(), It.IsAny<CommandFlags>()), Times.Never);
+
+            var act = () => DefaultService(cache).AdmitAsync(Function(perMinute: 50), "tenant_1", "{}", InvokedByType.Http, null);
+            await act.Should().ThrowAsync<FunctionRateLimitedException>();
+        }
+
+        [Fact]
+        public async Task The_tenants_own_number_wins_over_the_public_default()
+        {
+            var (cache, _) = Cache(count: 900);
+
+            (await DefaultService(cache).AdmitAsync(Public(perMinute: 1000), "tenant_1", "{}", InvokedByType.Http, null))
+                .IsAdmitted.Should().BeTrue("1000 set by the tenant, 900 used");
+        }
+
+        [Theory]
+        [InlineData(InvokedByType.Workflow)]
+        [InlineData(InvokedByType.Test)]
+        public async Task Workflow_and_test_calls_are_never_counted(InvokedByType invokedBy)
+        {
+            var (cache, database) = Cache(count: 999_999);
+
+            (await DefaultService(cache).AdmitAsync(Public(perMinute: 1), "tenant_1", "{}", invokedBy, null)).IsAdmitted.Should().BeTrue();
+            database.Verify(d => d.StringIncrementAsync(It.IsAny<RedisKey>(), It.IsAny<long>(), It.IsAny<CommandFlags>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task The_deployed_versions_access_and_limit_are_the_live_ones()
+        {
+            var (cache, _) = Cache(count: 601);
+            // Draft says Token; the live version is Public with no limit of its own → the default applies.
+            var version = new FunctionVersionEntity { Trigger = new TriggerConfig { AuthMode = AuthMode.Public }, Limits = new FunctionLimits() };
+
+            var act = () => DefaultService(cache).AdmitAsync(Function(), "tenant_1", "{}", InvokedByType.Http, version);
+
+            await act.Should().ThrowAsync<FunctionRateLimitedException>();
+        }
+
+        [Fact]
+        public async Task The_switch_and_the_default_are_configurable()
+        {
+            var (cache, _) = Cache(count: 999_999);
+
+            (await DefaultService(cache, ("Functions:RateLimits:Enabled", "false"))
+                .AdmitAsync(Public(), "tenant_1", "{}", InvokedByType.Http, null)).IsAdmitted.Should().BeTrue("everything off");
+            (await DefaultService(cache, ("Functions:RateLimits:PublicPerMinute", "0"))
+                .AdmitAsync(Public(), "tenant_1", "{}", InvokedByType.Http, null)).IsAdmitted.Should().BeTrue("no public default");
+        }
+
+        [Theory]
+        [InlineData(0, null)]
+        [InlineData(-5, null)]
+        [InlineData(1, 1)]
+        [InlineData(100_000, 100_000)]
+        [InlineData(100_001, null)]
+        public void A_saved_limit_is_kept_only_when_sane(int value, int? kept)
+        {
+            new FunctionLimits { RequestsPerMinute = value, RequestsPerDay = 5 }.Clamp().RequestsPerMinute.Should().Be(kept);
+            new FunctionLimits { RequestsPerDay = 5 }.Clamp().RequestsPerDay.Should().BeNull("per day stays off");
         }
     }
 }

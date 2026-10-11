@@ -104,7 +104,7 @@ const CredentialsHarness = ({ credentials }: { credentials: ProxyCredentialRow[]
 const duplicateWarnings = () =>
   screen.queryAllByText(
     (_, element) =>
-      element?.tagName === "P" && /^Duplicate — only the last/.test(element.textContent ?? ""),
+      element?.tagName === "P" && /^Duplicate .* header — saving will fail/.test(element.textContent ?? ""),
   );
 
 describe("KeyValueFieldArray", () => {

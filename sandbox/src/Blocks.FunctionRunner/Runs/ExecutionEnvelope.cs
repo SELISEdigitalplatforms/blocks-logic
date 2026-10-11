@@ -130,6 +130,51 @@ namespace Blocks.FunctionRunner.Runs
         }
 
         /// <summary>
+        /// Deletes every envelope file left under <paramref name="runsDir"/> (<c>&lt;runsDir&gt;/&lt;runId&gt;/execution.json</c>).
+        /// Called once as the runner starts, before it claims any work: a runner killed mid-run (SIGKILL, OOM,
+        /// power loss) skips the <c>finally</c> that removes the run directory, and the envelope holds the
+        /// tenant's resolved secrets. None of these files can belong to a run of this process, which has not
+        /// started one yet; a retry writes a fresh envelope from Redis. One runner per <c>RunsDir</c> is the
+        /// deployment model (provision/40-runner-user.sh). The directories themselves stay for
+        /// <c>SandboxReaper</c>, which also stops the containers that may still be using them.
+        /// </summary>
+        /// <returns>How many files were deleted, and how many could not be.</returns>
+        public static (int Deleted, int Failed) DeleteLeftovers(string runsDir)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(runsDir);
+            if (!Directory.Exists(runsDir)) return (0, 0);
+
+            var deleted = 0;
+            var failed = 0;
+            IEnumerable<string> runDirs;
+            try
+            {
+                runDirs = Directory.EnumerateDirectories(runsDir).ToList();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return (0, 1);
+            }
+
+            foreach (var dir in runDirs)
+            {
+                var path = Path.Combine(dir, FileName);
+                try
+                {
+                    if (!File.Exists(path)) continue;
+                    File.Delete(path);
+                    deleted++;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    failed++;
+                }
+            }
+
+            return (deleted, failed);
+        }
+
+        /// <summary>
         /// The envelope as one stdin line for a reusable sandbox (sandbox/REUSE.md): the same
         /// ceiling and the same screen as <see cref="Write(string, string, bool)"/>, then the same
         /// JSON with its insignificant whitespace removed, because the line is the framing — a

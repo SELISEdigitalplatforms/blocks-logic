@@ -55,11 +55,14 @@ namespace Blocks.FunctionRunner.Redis
         /// Tells idle readers of a stream that it has a new entry. Fire-and-forget: it is only a
         /// hint, and the entry itself is already durable, so it never delays or fails the writer.
         /// </summary>
-        public static void Publish(IDatabase db, string channel)
+        public static void Publish(IDatabase db, string channel) => Publish(db, channel, "1");
+
+        /// <summary>The same fire-and-forget hint, carrying a message (e.g. a run's final status).</summary>
+        public static void Publish(IDatabase db, string channel, string message)
         {
             try
             {
-                db.Publish(RedisChannel.Literal(channel), "1", CommandFlags.FireAndForget);
+                db.Publish(RedisChannel.Literal(channel), message, CommandFlags.FireAndForget);
             }
             catch (Exception ex) when (ex is RedisException or TimeoutException)
             {

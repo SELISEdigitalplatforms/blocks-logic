@@ -21,6 +21,9 @@ namespace Blocks.FunctionRunner.Runs
     /// </summary>
     public sealed class RunConsumerService : BackgroundService
     {
+        /// <summary>Most new entries read in one turn of the run loop (FN-4).</summary>
+        internal const int MaxReadBatch = 16;
+
         private readonly IDatabase _db;
         private readonly RunProcessor _processor;
         private readonly HeartbeatService _heartbeat;
@@ -99,7 +102,10 @@ namespace Blocks.FunctionRunner.Runs
                         continue;
                     }
 
-                    var entries = await consumer.ReadNewAsync(count: 1, stoppingToken).ConfigureAwait(false);
+                    // Up to the room this host has, at most MaxReadBatch: one round trip per entry
+                    // capped a runner at ~1/RTT claims per second (~29/s at 34 ms, FN-4). Never more
+                    // than the room, so nothing is claimed only to be deferred.
+                    var entries = await consumer.ReadNewAsync(count: Math.Min(room, MaxReadBatch), stoppingToken).ConfigureAwait(false);
 
                     // On its own timer: the sweep for entries a dead runner left behind used to run
                     // only when no new entry arrived, so under steady traffic it never ran.
@@ -248,7 +254,7 @@ namespace Blocks.FunctionRunner.Runs
 
             // A job that keeps killing whoever picks it up is retired rather than left to block
             // the stream for everyone else.
-            var deliveries = await consumer.DeliveryCountAsync(entry.Id).ConfigureAwait(false);
+            var deliveries = await consumer.DeliveryCountAsync(entry).ConfigureAwait(false);
             if (deliveries > _options.MaxAttempts)
             {
                 await consumer.DeadLetterAsync(entry,

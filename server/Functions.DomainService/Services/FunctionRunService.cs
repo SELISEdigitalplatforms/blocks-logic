@@ -7,6 +7,7 @@ using Functions.DomainService.Queue;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Utils;
 using Microsoft.Extensions.Logging;
+using StackExchange.Redis;
 
 namespace Functions.DomainService.Services
 {
@@ -104,7 +105,51 @@ namespace Functions.DomainService.Services
         public async Task<RunDetailDto> GetAsync(string tenantId, string runId, CancellationToken cancellationToken = default)
         {
             var run = await GetEntityAsync(tenantId, runId, cancellationToken);
-            return RunDetailDto.From(run);
+            var dto = RunDetailDto.From(run);
+            if (!FunctionWireMapping.IsTerminal(run.Status))
+            {
+                var (live, phase) = await ReadLiveStatusAsync(runId);
+                dto.Status = LiveStatus(run.Status, live, phase).ToString();
+            }
+            return dto;
+        }
+
+        /// <summary>
+        /// The runner writes a run's progress (Claimed, Starting, Running) only to the run's Redis
+        /// hash; the record says Queued until the result is recorded. Without this a watcher saw
+        /// Queued for the whole build and run, then a sudden finish. Null when Redis is unreadable
+        /// or the hash is gone — the record's status is shown, as before.
+        /// </summary>
+        private async Task<(string? Status, string? Phase)> ReadLiveStatusAsync(string runId)
+        {
+            try
+            {
+                var values = await _cache.CacheDatabase().HashGetAsync(
+                    FunctionQueueKeys.Run(runId), [(RedisValue)"status", (RedisValue)FunctionQueueKeys.RunPhaseField]);
+                return (values[0].IsNullOrEmpty ? null : values[0].ToString(),
+                        values[1].IsNullOrEmpty ? null : values[1].ToString());
+            }
+            catch (Exception ex) when (ex is RedisException or TimeoutException)
+            {
+                return (null, null);
+            }
+        }
+
+        /// <summary>
+        /// The status to show for a run the record still has open: the runner's live one when it
+        /// is further along (a test's build phase counts as Claimed). Never terminal — an outcome is shown only once it is recorded, with
+        /// its result and error — and never backwards.
+        /// </summary>
+        internal static RunStatus LiveStatus(RunStatus recorded, string? liveWire, string? phase = null)
+        {
+            if (FunctionWireMapping.IsTerminal(recorded)) return recorded;
+            var live = FunctionWireMapping.ToRunStatus(liveWire, out var recognised);
+            if (!recognised) live = RunStatus.Queued;
+            // A test building its image on a runner: shown as Claimed (taken, being prepared).
+            if (live == RunStatus.Queued && phase == FunctionQueueKeys.RunPhaseBuilding) live = RunStatus.Claimed;
+            // Finished on the runner, not yet recorded: still "running" from the watcher's side.
+            if (FunctionWireMapping.IsTerminal(live)) live = RunStatus.Running;
+            return live > recorded ? live : recorded;
         }
 
         public async Task<InvokeResultDto> GetPollResultAsync(

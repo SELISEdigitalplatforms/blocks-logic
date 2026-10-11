@@ -143,7 +143,17 @@ namespace Proxy.DomainService.Repositories
             await collection.InsertOneAsync(proxy);
         }
 
-        public async Task ReplaceAsync(ProxyDetailEntity proxy)
+        /// <summary>
+        /// Fields a config write never touches: the id, and <c>Stats</c>, which the stats flush <c>$inc</c>s at the
+        /// same time. A whole-document replace used to write back the stats it had read, losing counts (PX-16).
+        /// </summary>
+        private static readonly HashSet<string> NotConfigFields = new(StringComparer.Ordinal)
+        {
+            "_id",
+            nameof(ProxyDetailEntity.Stats),
+        };
+
+        public async Task<bool> SaveConfigAsync(ProxyDetailEntity proxy, int expectedVersion)
         {
             if (string.IsNullOrWhiteSpace(proxy.TenantId))
             {
@@ -151,15 +161,24 @@ namespace Proxy.DomainService.Repositories
             }
 
             var collection = GetCollection(proxy.TenantId);
-            var filter = Builders<ProxyDetailEntity>.Filter.Eq(p => p.ItemId, proxy.ItemId);
-            await collection.ReplaceOneAsync(filter, proxy);
+            var builder = Builders<ProxyDetailEntity>.Filter;
+            var filter = builder.Eq(p => p.ItemId, proxy.ItemId) & builder.Eq(p => p.CurrentVersion, expectedVersion);
+
+            // $set each mapped field from the entity's own BSON, so a new config field is saved without a change here.
+            var sets = proxy.ToBsonDocument().Elements
+                .Where(e => !NotConfigFields.Contains(e.Name))
+                .Select(e => Builders<ProxyDetailEntity>.Update.Set(e.Name, e.Value));
+            var result = await collection.UpdateOneAsync(filter, Builders<ProxyDetailEntity>.Update.Combine(sets));
+            return result.MatchedCount == 1;
         }
 
-        public async Task DeleteAsync(string tenantId, string itemId)
+        public async Task<bool> DeleteAsync(string tenantId, string itemId, int expectedVersion)
         {
             var collection = GetCollection(tenantId);
-            var filter = Builders<ProxyDetailEntity>.Filter.Eq(p => p.ItemId, itemId);
-            await collection.DeleteOneAsync(filter);
+            var builder = Builders<ProxyDetailEntity>.Filter;
+            var filter = builder.Eq(p => p.ItemId, itemId) & builder.Eq(p => p.CurrentVersion, expectedVersion);
+            var result = await collection.DeleteOneAsync(filter);
+            return result.DeletedCount == 1;
         }
 
         public async Task ApplyStatsDeltasAsync(

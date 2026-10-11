@@ -26,14 +26,20 @@ namespace XUnitTest.Functions
         private readonly Mock<IFunctionDeletionQueue> _queue = new(MockBehavior.Loose);
         private readonly Mock<IFunctionAuditService> _audit = new(MockBehavior.Loose);
         private readonly Mock<IFunctionUsageService> _usage = new(MockBehavior.Loose);
+        private readonly Mock<IFunctionRunRepository> _runs = new(MockBehavior.Loose);
         private readonly List<string> _order = [];
         private FunctionDeletion? _tombstone;
 
         private FunctionService Service(
             FunctionEntity? existing = null,
             bool markSucceeds = true,
-            IReadOnlyList<FunctionWorkflowReference>? references = null)
+            IReadOnlyList<FunctionWorkflowReference>? references = null,
+            long activeRuns = 0)
         {
+            _runs.Setup(r => r.GetAllAsync(Tenant, It.Is<FunctionRunFilter>(f => f.FunctionId == FunctionId && f.ActiveOnly),
+                    It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(((IReadOnlyList<FunctionRunEntity>)[], activeRuns));
+
             _usage.Setup(u => u.GetWorkflowReferencesAsync(Tenant, FunctionId, It.IsAny<CancellationToken>()))
                 .Callback(() => _order.Add("usage-check"))
                 .ReturnsAsync(references ?? []);
@@ -61,7 +67,7 @@ namespace XUnitTest.Functions
             return new FunctionService(
                 _functions.Object,
                 Mock.Of<IFunctionVersionRepository>(),
-                Mock.Of<IFunctionRunRepository>(),
+                _runs.Object,
                 _audit.Object,
                 _queue.Object,
                 _usage.Object,
@@ -98,6 +104,42 @@ namespace XUnitTest.Functions
             _tombstone.Forced.Should().BeTrue();
             _tombstone.RequestedAt.Should().BeOnOrAfter(before);
             _tombstone.Passes.Should().Be(0);
+        }
+
+        [Fact]
+        public async Task A_function_with_unfinished_runs_is_not_deleted_and_says_how_many()
+        {
+            // FN-66: a test still Queued — the delete used to succeed and the purge cancelled it unseen.
+            var act = () => Service(Function(), activeRuns: 2).DeleteAsync(Tenant, FunctionId, "u1", "u@example.com");
+
+            var thrown = (await act.Should().ThrowAsync<FunctionDeleteBlockedException>()).Which;
+            thrown.ActiveRuns.Should().Be(2);
+            thrown.Workflows.Should().Be(0);
+            thrown.Message.Should().Contain("2 run(s) that have not finished").And.Contain("delete it anyway with force");
+            _order.Should().NotContain("tombstone");
+            _queue.Verify(q => q.EnqueueAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task Force_deletes_with_unfinished_runs_and_leaves_them_to_the_purge_to_cancel()
+        {
+            var deleted = await Service(Function(), activeRuns: 2).DeleteAsync(Tenant, FunctionId, "u1", "u@example.com", force: true);
+
+            deleted.Should().BeTrue();
+            _tombstone!.Forced.Should().BeTrue();
+            _order.Should().Contain("enqueue");
+        }
+
+        [Fact]
+        public async Task Runs_and_workflow_steps_are_both_named_when_both_hold_it()
+        {
+            var act = () => Service(Function(), references: [new FunctionWorkflowReference("wf1", "Orders", true)], activeRuns: 1)
+                .DeleteAsync(Tenant, FunctionId, "u1", "u@example.com");
+
+            var thrown = (await act.Should().ThrowAsync<FunctionDeleteBlockedException>()).Which;
+            thrown.ActiveRuns.Should().Be(1);
+            thrown.Workflows.Should().Be(1);
+            thrown.Message.Should().Contain("1 run(s)").And.Contain("'Orders' (published)");
         }
 
         [Fact]

@@ -1,6 +1,7 @@
 using System.Text;
 using Blocks.Genesis;
 using Functions.DomainService.Entities;
+using Functions.DomainService.Enums;
 using Functions.DomainService.Models;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Utils;
@@ -45,18 +46,22 @@ namespace Functions.DomainService.Services
         /// than being rewrapped by the caller as a 400 validation failure.
         /// </summary>
         /// <exception cref="FunctionRateLimitedException">A per-minute or per-day limit refused the call.</exception>
-        Task<AdmissionResult> AdmitAsync(FunctionEntity function, string tenantId, string? inputJson, CancellationToken cancellationToken = default);
+        /// <param name="invokedBy">Only <see cref="InvokedByType.Http"/> calls are rate limited (FN-19).</param>
+        /// <param name="version">The deployed version being called: its trigger and limits are the live ones.</param>
+        Task<AdmissionResult> AdmitAsync(
+            FunctionEntity function, string tenantId, string? inputJson, InvokedByType invokedBy, FunctionVersionEntity? version,
+            CancellationToken cancellationToken = default);
     }
 
     /// <summary>
-    /// Input caps, and rate limits that are switched off.
+    /// Input caps, and the HTTP rate limit (FN-19, decided 2026-10-07).
     /// <para>
-    /// The product decision (DECISIONS.md) is that <b>nothing is refused for volume in V1</b>.
-    /// Requests-per-minute and per-day exist in the model and the API because the shape will be
-    /// needed later, but they are hidden in the interface and disabled by configuration, and
-    /// this service returns 429 only when <c>Functions:RateLimits:Enabled</c> is true
-    /// <i>and</i> the function itself sets a value. Both are false and null by default, so the
-    /// normal path touches no counters at all.
+    /// Only HTTP calls are counted, per function per minute (a function's id cannot be faked; a
+    /// caller's IP behind a proxy can). A Public function gets
+    /// <c>Functions:RateLimits:PublicPerMinute</c> (600) unless its tenant set its own; a Token
+    /// one has no limit unless its tenant set one. Workflow and Test calls are never counted.
+    /// <c>Functions:RateLimits:Enabled=false</c> switches every limit off. A refused call
+    /// creates no run and writes nothing.
     /// </para>
     /// <para>
     /// Concurrency is deliberately not checked here. It is a <i>scheduling</i> limit: the run is
@@ -75,6 +80,10 @@ namespace Functions.DomainService.Services
         private readonly ICacheClient _cache;
         private readonly ILogger<FunctionAdmissionService> _logger;
         private readonly bool _rateLimitsEnabled;
+        private readonly int _publicPerMinute;
+
+        /// <summary>HTTP calls per minute a Public function gets when its tenant set none (FN-19).</summary>
+        public const int DefaultPublicPerMinute = 600;
         private readonly Func<DateTime> _clock;
 
         public FunctionAdmissionService(
@@ -95,17 +104,23 @@ namespace Functions.DomainService.Services
             _cache = cache;
             _logger = logger;
             _clock = clock;
-            _rateLimitsEnabled = configuration.GetValue("Functions:RateLimits:Enabled", false);
-
-            if (_rateLimitsEnabled)
+            // On by default since 2026-10-07 (FN-19); false switches every limit off at once.
+            _rateLimitsEnabled = configuration.GetValue("Functions:RateLimits:Enabled", true);
+            _publicPerMinute = Math.Max(0, configuration.GetValue("Functions:RateLimits:PublicPerMinute", DefaultPublicPerMinute));
+            if (!_rateLimitsEnabled)
             {
-                _logger.LogWarning(
-                    "Functions rate limiting is ENABLED. V1 ships with it off; callers can now receive 429.");
+                _logger.LogWarning("Functions rate limiting is OFF: public functions can be called without limit.");
             }
         }
 
-        public async Task<AdmissionResult> AdmitAsync(
+        /// <summary>An HTTP call with the function's own settings: the shape older callers and tests use.</summary>
+        public Task<AdmissionResult> AdmitAsync(
             FunctionEntity function, string tenantId, string? inputJson, CancellationToken cancellationToken = default)
+            => AdmitAsync(function, tenantId, inputJson, InvokedByType.Http, null, cancellationToken);
+
+        public async Task<AdmissionResult> AdmitAsync(
+            FunctionEntity function, string tenantId, string? inputJson, InvokedByType invokedBy, FunctionVersionEntity? version,
+            CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(function);
 
@@ -122,12 +137,20 @@ namespace Functions.DomainService.Services
 
             // The switch and the per-function value must BOTH be set. Either one absent means
             // no counter is read or written — the default path costs nothing and refuses nothing.
-            if (!_rateLimitsEnabled)
+            // Only HTTP calls are counted: a workflow or a Test is the tenant's own traffic.
+            if (!_rateLimitsEnabled || invokedBy != InvokedByType.Http)
             {
                 return AdmissionResult.Admit();
             }
 
-            var limits = function.Limits ?? new FunctionLimits();
+            // The live settings are the deployed version's; the draft's only when none is passed.
+            var stored = (version?.Limits ?? function.Limits) ?? new FunctionLimits();
+            var trigger = version?.Trigger ?? function.Trigger;
+            // Public and nothing set → the platform default; Token and nothing set → no limit.
+            var perMinute = stored.RequestsPerMinute is > 0
+                ? stored.RequestsPerMinute
+                : trigger?.AuthMode == AuthMode.Public && _publicPerMinute > 0 ? _publicPerMinute : (int?)null;
+            var limits = new FunctionLimits { RequestsPerMinute = perMinute, RequestsPerDay = stored.RequestsPerDay };
 
             // One clock reading for both the window key and its Retry-After, so a request that
             // lands on a minute boundary cannot be counted in one window and told to wait for

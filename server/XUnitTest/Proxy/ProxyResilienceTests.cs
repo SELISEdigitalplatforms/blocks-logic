@@ -202,6 +202,43 @@ namespace XUnitTest.Proxy
         }
 
         [Fact]
+        public void A_probe_that_never_reports_frees_the_slot_after_one_open_window()
+        {
+            // PX-3: the probe's caller hung up (or the response was too large, or an exception) so neither
+            // RecordSuccess nor RecordFailure ran. The circuit must not stay shut until a restart.
+            var clock = new Clock();
+            var breaker = new ProxyCircuitBreaker(clock);
+
+            for (var i = 0; i < 3; i++) breaker.RecordFailure("t1", "api.example.com", Breaker);
+            clock.Now = clock.Now.AddSeconds(31);
+            breaker.IsOpen("t1", "api.example.com", Breaker).Should().BeFalse("this caller is the probe, and goes silent");
+
+            clock.Now = clock.Now.AddSeconds(29);
+            breaker.IsOpen("t1", "api.example.com", Breaker).Should().BeTrue("the silent probe still holds its slot");
+
+            clock.Now = clock.Now.AddSeconds(1);
+            breaker.IsOpen("t1", "api.example.com", Breaker).Should().BeFalse("the slot expired; this caller is the new probe");
+            breaker.IsOpen("t1", "api.example.com", Breaker).Should().BeTrue("still only one probe at a time");
+        }
+
+        [Fact]
+        public void A_new_probe_that_succeeds_closes_the_circuit_after_a_silent_one()
+        {
+            var clock = new Clock();
+            var breaker = new ProxyCircuitBreaker(clock);
+
+            for (var i = 0; i < 3; i++) breaker.RecordFailure("t1", "api.example.com", Breaker);
+            clock.Now = clock.Now.AddSeconds(31);
+            breaker.IsOpen("t1", "api.example.com", Breaker);           // silent probe
+            clock.Now = clock.Now.AddSeconds(30);
+            breaker.IsOpen("t1", "api.example.com", Breaker).Should().BeFalse();
+            breaker.RecordSuccess("t1", "api.example.com");
+
+            breaker.IsOpen("t1", "api.example.com", Breaker).Should().BeFalse();
+            breaker.IsOpen("t1", "api.example.com", Breaker).Should().BeFalse("closed: everyone goes through");
+        }
+
+        [Fact]
         public void One_tenants_broken_vendor_does_not_break_it_for_another()
         {
             var breaker = new ProxyCircuitBreaker(new Clock());
