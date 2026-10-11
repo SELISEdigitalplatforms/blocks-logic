@@ -84,6 +84,53 @@ describe("OutputPanel", () => {
     expect(screen.queryByRole("button", { name: "Remove mock data" })).toBeNull();
   });
 
+  it("shows mock data outside the editor without the edit actions", () => {
+    renderWithProviders(<OutputPanel />, {
+      seedWorkflow: (s) => {
+        seedSelected({ pinData: [{ name: "Ada" }] })(s);
+        s.setState({
+          editorMode: "run",
+          executedItems: [{ nodeId: "n1", itemIndex: 0, branch: "default", data: { Output: { city: "Paris" } } }],
+        });
+      },
+    });
+    expect(screen.getByText("Mock data")).toBeTruthy();
+    expect(screen.getByText("name:")).toBeTruthy();
+    expect(screen.queryByText("city:")).toBeNull();
+    expect(screen.queryByText("Set mock data")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit mock data" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove mock data" })).toBeNull();
+  });
+
+  it("explains mock data in the badge tooltip", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<OutputPanel />, { seedWorkflow: seedSelected({ pinData: [{ name: "Ada" }] }) });
+    await user.hover(screen.getByText("Mock data"));
+    expect(
+      (await screen.findAllByText("Showing mock data. Runs use it as this step's output instead of running the step."))
+        .length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("opens the editor prefilled from the edit icon and hides the actions while editing", () => {
+    const { container } = renderWithProviders(<OutputPanel />, {
+      seedWorkflow: seedSelected({ pinData: [{ name: "Ada" }] }),
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Edit mock data" }));
+
+    const textarea = container.querySelector("textarea") as HTMLTextAreaElement;
+    expect(JSON.parse(textarea.value)).toEqual([{ name: "Ada" }]);
+    expect(screen.queryByRole("button", { name: "Edit mock data" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove mock data" })).toBeNull();
+    expect(screen.queryByText("Set mock data")).toBeNull();
+  });
+
+  it("treats a single non-array pinned value as one mock row", () => {
+    renderWithProviders(<OutputPanel />, { seedWorkflow: seedSelected({ pinData: { name: "Ada" } }) });
+    expect(screen.getByText("Mock data")).toBeTruthy();
+    expect(screen.getByText("name:")).toBeTruthy();
+  });
+
   it("shows the no-schema message when there is no output", () => {
     renderWithProviders(<OutputPanel />, { seedWorkflow: seedSelected() });
     expect(
