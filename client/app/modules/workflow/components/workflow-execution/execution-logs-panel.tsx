@@ -219,12 +219,7 @@ export const ExecutionLogsPanel = ({
       return <PanelMessage action={retry}>Couldn&apos;t load logs.</PanelMessage>;
     }
     if (data.availability === ExecutionLogsAvailability.NotRecorded) {
-      return (
-        <PanelMessage>
-          Logs aren&apos;t available for this execution. It ran before execution logging was turned
-          on.
-        </PanelMessage>
-      );
+      return <PanelMessage>Logs aren&apos;t available for this execution.</PanelMessage>;
     }
     if (data.availability === ExecutionLogsAvailability.Expired) {
       return (
