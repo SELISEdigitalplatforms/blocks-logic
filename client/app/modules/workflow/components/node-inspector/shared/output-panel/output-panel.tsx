@@ -4,8 +4,9 @@ import { useWorkflowStore } from "@blocks-workflow/store";
 import { copyToClipboard } from "@blocks-workflow/utils/copy-to-clipboard";
 import { useCallback, useMemo, useState } from "react";
 import { inferSchemaFromRuntimeRows } from "@blocks-workflow/utils/runtime-node-data";
-import { ChevronDown, ChevronUp, Copy, TriangleAlert } from "lucide-react";
+import { ChevronDown, ChevronUp, Copy, Pin, PencilOff, TriangleAlert } from "lucide-react";
 import { useWorkflow } from "@blocks-workflow/hooks/use-workflow";
+import { Badge } from "@/components/ui-kits/badge/badge";
 import { Button } from "@/components/ui-kits/button/button";
 import { Textarea } from "@/components/ui-kits/textarea/textarea";
 import { showErrorToast } from "@/hooks/use-toast";
@@ -32,11 +33,13 @@ export const OutputPanel = ({
   const executedItems = useWorkflowStore((s) => s.executedItems);
   const executedNodes = useWorkflowStore((s) => s.executedNodes);
   const { editorMode, updateNode, lastSuccessfulExecutionData } = useWorkflow();
+  const hasMockData = selectedNode?.pinData != null;
 
   const runtimeOutputByBranch = useMemo<BranchGroup[]>(() => {
     if (!selectedNode) return [];
 
-    if (editorMode === "editor" && selectedNode.pinData != null) {
+    // Mock data replaces the step's output, so while it is set it is what the panel shows.
+    if (selectedNode.pinData != null) {
       const rows = Array.isArray(selectedNode.pinData) ? selectedNode.pinData : [selectedNode.pinData];
       return [
         {
@@ -65,7 +68,7 @@ export const OutputPanel = ({
       rows,
       schema: inferSchemaFromRuntimeRows(rows),
     }));
-  }, [executedItems, selectedNode, editorMode]);
+  }, [executedItems, selectedNode]);
 
   // The error the server saved on this node's latest run (nodeExecution.error). It used to be stored
   // and never shown, so a failed test step looked like one with no output (WF-40).
@@ -127,16 +130,42 @@ export const OutputPanel = ({
     setIsEditingMock(false);
   }, [mockDataInput, selectedNode, updateNode]);
 
+  const handleRemoveMockData = useCallback(() => {
+    if (!selectedNode) return;
+    updateNode(selectedNode.id, { pinData: null });
+  }, [selectedNode, updateNode]);
+
   if (!selectedNode) return null;
 
   return (
     <div className={`flex w-full flex-col overflow-hidden ${isCollapsed ? 'h-fit shrink-0' : 'h-full flex-1'}`}>
       <div className="flex items-center justify-between">
-        <h3 className="font-medium text-high-emphasis">Output</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="font-medium text-high-emphasis">Output</h3>
+          {hasMockData && (
+            <Badge variant="warning" className="gap-1 px-1.5 py-0.5 text-[11px]">
+              <Pin className="h-3 w-3" aria-hidden="true" />
+              Mock data
+            </Badge>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           {!isEditingMock && editorMode === "editor" && (
             <Button variant="outline" size="xs" onClick={handleSetMockDataClick}>
-              Set mock data
+              {hasMockData ? "Edit mock data" : "Set mock data"}
+            </Button>
+          )}
+          {!isEditingMock && editorMode === "editor" && hasMockData && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="xxs"
+              className="h-7 px-2 text-low-emphasis"
+              aria-label="Remove mock data"
+              title="Remove mock data"
+              onClick={handleRemoveMockData}
+            >
+              <PencilOff className="h-4 w-4" />
             </Button>
           )}
           {!isEditingMock && (
@@ -190,6 +219,11 @@ export const OutputPanel = ({
         </div>
       ) : (
         <>
+          {!isCollapsed && hasMockData && (
+            <p className="mt-2 shrink-0 rounded border border-warning-200 bg-warning-50 px-2 py-1 text-[11px] text-warning-800">
+              Showing mock data. Runs use it as this step's output instead of running the step.
+            </p>
+          )}
           {!isCollapsed && tab === "schema" && (
             <div className="mt-2 flex-1 overflow-y-auto rounded bg-surface-app p-2">
           {runtimeOutputRows.length === 0 ? (
