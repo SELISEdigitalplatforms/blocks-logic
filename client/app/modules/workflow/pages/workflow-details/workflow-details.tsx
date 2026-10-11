@@ -3,7 +3,24 @@
 import { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui-kits/tabs/tabs";
 import { Button } from "@/components/ui-kits/button/button";
-import { ScrollText, Save, Loader2, AlertCircle, X } from "lucide-react";
+import {
+  ScrollText,
+  Save,
+  Loader2,
+  AlertCircle,
+  X,
+  EllipsisVertical,
+  Pen,
+  Copy,
+  Download,
+  Trash,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui-kits/dropdown-menu/dropdown-menu";
 import PageBreadcrumb from "@/components/breadcrumb/breadcrumb";
 import { WorkflowEditor } from "../../components/workflow-editor";
 import { ReactFlowProvider } from "@xyflow/react";
@@ -13,13 +30,16 @@ import { Separator } from "@/components/ui-kits/separator/separator";
 import { format } from "date-fns";
 import { useGetWorkflowById } from "@blocks-workflow/hooks/use-workflow-api";
 import { WorkflowExecutions } from "@blocks-workflow/components/workflow-execution";
-import { useNavigate, useParams } from "react-router";
-import { BREADCRUMB_CUSTOM_TITLES } from "@/constants/breadcrumb-custom-title";
+import { useLocation, useNavigate, useParams } from "react-router";
 import { showErrorToast } from "@/hooks/use-toast";
 import { PublishWorkflowAction } from "../../components/publish-workflow-action";
 import { WorkflowVersions } from "../../components/workflow-version";
 import { useGetLastSuccessfulExecution } from "../../hooks";
 import { useScopedPath } from "@seliseblocks/genesis-os";
+import { DeleteWorkflow } from "../../components/delete-workflow";
+import { DuplicateWorkflow } from "../../components/duplicate-workflow";
+import { RenameWorkflow } from "../../components/rename-workflow/rename-workflow";
+import { useExportWorkflow } from "../../hooks/use-export-workflow";
 
 type WorkflowDetailPageProps = {
   workflowId: string;
@@ -27,10 +47,13 @@ type WorkflowDetailPageProps = {
 
 export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) => {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const scoped = useScopedPath();
+  const { exportWorkflow, isExporting } = useExportWorkflow();
 
   const [activeTab, setActiveTab] = useState<string>("editor");
   const [isDirtyBannerDismissed, setIsDirtyBannerDismissed] = useState(false);
+  const [modal, setModal] = useState<"rename" | "duplicate" | "delete" | null>(null);
 
   const { hasUnsavedChanges, setWorkflow, setLastSuccessfulExecutionData } = useWorkflow();
 
@@ -73,12 +96,12 @@ export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) 
     setIsDirtyBannerDismissed(false);
   }, [workflowId, data?.data?.isDirty]);
 
-  BREADCRUMB_CUSTOM_TITLES[`/workflow/${workflowId}`] = data?.data?.name || "Workflow Details";
+  const workflowName = data?.data?.name || "";
   return (
     <>
       <div className="flex h-full flex-col">
         <div className="px-4 mt-4">
-          <PageBreadcrumb breadcrumbIndex={3} />
+          <PageBreadcrumb breadcrumbIndex={3} customTitles={{ [pathname]: workflowName || null }} />
         </div>
 
         {showDirtyBanner && (
@@ -171,6 +194,44 @@ export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) 
                     )}
                     Save
                   </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                        <EllipsisVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        className="cursor-pointer"
+                        onClick={() => setModal("rename")}
+                      >
+                        <Pen className="mr-2 h-4 w-4" />
+                        <span>Rename</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="cursor-pointer"
+                        onClick={() => setModal("duplicate")}
+                      >
+                        <Copy className="mr-2 h-4 w-4" />
+                        <span>Duplicate</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="cursor-pointer"
+                        disabled={isExporting}
+                        onClick={() => void exportWorkflow(workflowId)}
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        <span>Export</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="cursor-pointer text-error"
+                        onClick={() => setModal("delete")}
+                      >
+                        <Trash className="mr-2 h-4 w-4" />
+                        <span>Delete</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               )}
             </div>
@@ -193,6 +254,31 @@ export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) 
           </Tabs>
         )}
       </div>
+      <RenameWorkflow
+        key={modal === "rename" ? workflowName : "closed"}
+        open={modal === "rename"}
+        onOpenChange={(value) => {
+          if (!value) setModal(null);
+        }}
+        workflowId={workflowId}
+        initialName={workflowName}
+      />
+      <DuplicateWorkflow
+        open={modal === "duplicate"}
+        onOpenChange={(value) => {
+          if (!value) setModal(null);
+        }}
+        workflowId={workflowId}
+        name={workflowName}
+      />
+      <DeleteWorkflow
+        open={modal === "delete"}
+        onOpenChange={(value) => {
+          if (!value) setModal(null);
+        }}
+        workflowId={workflowId}
+        onDeleted={() => navigate(scoped("/app/workflow"))}
+      />
     </>
   );
 };
@@ -201,7 +287,7 @@ export const WorkflowDetails = () => {
   const { id } = useParams<{ id: string }>();
   if (!id) return;
   return (
-    <ReactFlowProvider>
+    <ReactFlowProvider key={id}>
       <WorkflowStoreProvider>
         <WorkflowDetailsContent workflowId={id} />
       </WorkflowStoreProvider>

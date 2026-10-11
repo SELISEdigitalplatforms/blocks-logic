@@ -8,12 +8,14 @@ type DeleteWorkflowProps = {
   workflowId: string;
   open: boolean;
   onOpenChange: (value: boolean) => void;
+  onDeleted?: () => void;
 };
 
 export const DeleteWorkflow = ({
   workflowId,
   open,
   onOpenChange,
+  onDeleted,
 }: DeleteWorkflowProps) => {
   const { mutateAsync } = useDeleteWorkflow();
 
@@ -26,6 +28,7 @@ export const DeleteWorkflow = ({
         return showErrorToast({ errors: res.errors || "Something went wrong" });
       showSuccessToast({ description: "Workflow deleted successfully" });
       onOpenChange(false);
+      onDeleted?.();
     } catch (error) {
       if (isErrorWithErrors(error))
         return showErrorToast({ errors: error.errors });
