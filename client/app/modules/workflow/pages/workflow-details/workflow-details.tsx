@@ -277,7 +277,7 @@ export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) 
           if (!value) setModal(null);
         }}
         workflowId={workflowId}
-        onDeleted={() => navigate(scoped("/app/workflow"))}
+        onDeleted={() => navigate(scoped("workflow"))}
       />
     </>
   );
