@@ -52,6 +52,38 @@ describe("OutputPanel", () => {
     fireEvent.click(screen.getByText("name:"));
   });
 
+  it("marks pinned output as mock data and removes it back to the run output", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let store: any;
+    renderWithProviders(<OutputPanel />, {
+      seedWorkflow: (s) => {
+        store = s;
+        seedSelected({ pinData: [{ name: "Ada" }] })(s);
+        s.setState({
+          executedItems: [{ nodeId: "n1", itemIndex: 0, branch: "default", data: { Output: { city: "Paris" } } }],
+        });
+      },
+    });
+    expect(screen.getByText("Mock data")).toBeTruthy();
+    expect(screen.getByText("Edit mock data")).toBeTruthy();
+    expect(screen.getByText("name:")).toBeTruthy();
+    expect(screen.queryByText("city:")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove mock data" }));
+
+    expect(store.getState().nodesMap.n1.pinData).toBeNull();
+    expect(screen.queryByText("Mock data")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove mock data" })).toBeNull();
+    expect(screen.getByText("Set mock data")).toBeTruthy();
+    expect(screen.getByText("city:")).toBeTruthy();
+  });
+
+  it("shows no mock-data indicator or remove button without pinned data", () => {
+    renderWithProviders(<OutputPanel />, { seedWorkflow: seedSelected({ pinData: null }) });
+    expect(screen.queryByText("Mock data")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove mock data" })).toBeNull();
+  });
+
   it("shows the no-schema message when there is no output", () => {
     renderWithProviders(<OutputPanel />, { seedWorkflow: seedSelected() });
     expect(

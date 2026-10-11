@@ -37,7 +37,7 @@ export interface WorkflowNode extends Node {
   settings?: Record<string, unknown>;
   //temp
   isComplete?: boolean;
-  pinData?: unknown[];
+  pinData?: unknown[] | null;
 }
 
 export interface EditorNode extends Node, WorkflowNode {
