@@ -166,7 +166,7 @@ describe("KeyValueFieldArray", () => {
       await user.click(trigger());
       await user.click(screen.getByRole("option", { name: /stripe-api-key/ }));
 
-      expect(value.value).toBe("Bearer {{$VAR.stripe-api-key}}");
+      expect(value.value).toBe("{{$VAR.stripe-api-key}}");
       // the value now reads as a variable
       expect(screen.getByText(/uses a variable/i)).toBeTruthy();
     });

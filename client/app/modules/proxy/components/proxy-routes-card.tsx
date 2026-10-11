@@ -776,6 +776,7 @@ const RouteValueCell = ({
       variables={variables}
       isLoading={variablesLoading}
       isError={variablesError}
+      variablePickMode="replace"
     />
   </div>
 );

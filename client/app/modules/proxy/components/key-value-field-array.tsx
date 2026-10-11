@@ -70,6 +70,7 @@ const ValueCell = ({
             variables={variables}
             isLoading={variablesLoading}
             isError={variablesError}
+            variablePickMode="replace"
           />
         </FormControl>
         <FormMessage />

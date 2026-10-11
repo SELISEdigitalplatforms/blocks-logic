@@ -130,4 +130,25 @@ describe("VariableTokenField", () => {
 
     expect(onChange).toHaveBeenCalledWith("Bearer {{$VAR.stripe-api-key}}end");
   });
+
+  it("can replace the whole value when picking a variable", async () => {
+    const onChange = vi.fn();
+    renderWithProviders(
+      <VariableTokenField
+        value="Bearer old"
+        onChange={onChange}
+        codec={varNameRef}
+        ariaLabel="Header value"
+        variables={CATALOG}
+        variablePickMode="replace"
+      />,
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /insert a configuration variable into header value/i }),
+    );
+    await userEvent.click(screen.getByRole("option", { name: /stripe-api-key/ }));
+
+    expect(onChange).toHaveBeenCalledWith("{{$VAR.stripe-api-key}}");
+  });
 });

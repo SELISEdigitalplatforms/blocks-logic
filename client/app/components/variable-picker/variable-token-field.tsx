@@ -32,6 +32,8 @@ export type VariableTokenFieldProps = {
   multiline?: boolean;
   rows?: number;
   className?: string;
+  /** Whether a picked variable replaces the whole value or inserts at the remembered caret. */
+  variablePickMode?: "insert" | "replace";
 };
 
 /**
@@ -59,6 +61,7 @@ export const VariableTokenField = ({
   multiline,
   rows = 4,
   className,
+  variablePickMode = "insert",
 }: VariableTokenFieldProps) => {
   // Skipped entirely when the caller supplies the rows, so a form that already has them does
   // not fetch the same list once per field.
@@ -78,7 +81,13 @@ export const VariableTokenField = ({
 
   const handleChange = (next: string) => onChange(fromDisplayValue(next, codec, catalog));
 
-  const insert = (token: string) => {
+  const pick = (token: string) => {
+    if (variablePickMode === "replace") {
+      onChange(fromDisplayValue(token, codec, catalog));
+      caret.current = token.length;
+      return;
+    }
+
     const at = caret.current ?? display.length;
     const next = `${display.slice(0, at)}${token}${display.slice(at)}`;
     caret.current = at + token.length;
@@ -118,7 +127,7 @@ export const VariableTokenField = ({
             isLoading={isLoading}
             isError={isError}
             ariaLabel={`Insert a configuration variable into ${ariaLabel.toLowerCase()}`}
-            onPick={(variable) => insert(displayToken(variable, codec))}
+            onPick={(variable) => pick(displayToken(variable, codec))}
           />
           {locked && (
             <Button

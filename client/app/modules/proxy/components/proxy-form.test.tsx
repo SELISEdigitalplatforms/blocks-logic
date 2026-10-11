@@ -344,7 +344,7 @@ describe("ProxyForm", () => {
     );
   });
 
-  it("inserts configuration variables into endpoint override values", async () => {
+  it("replaces endpoint override values with picked configuration variables", async () => {
     const user = userEvent.setup();
     renderWithProviders(
       <MemoryRouter>
@@ -362,7 +362,7 @@ describe("ProxyForm", () => {
     );
     await user.click(await screen.findByRole("option", { name: /stripe-api-key/ }));
 
-    expect(screen.getByDisplayValue("Bearer {{$VAR.stripe-api-key}}")).toBeTruthy();
+    expect(screen.getByDisplayValue("{{$VAR.stripe-api-key}}")).toBeTruthy();
     expect(screen.getByText(/uses a variable/i)).toBeTruthy();
   });
 
