@@ -166,7 +166,8 @@ namespace Workflow.DomainService.Nodes
             log.Info(ExecutionLogStages.NodeParameters, "Parameters loaded.");
 
             log.Info(ExecutionLogStages.NodeExecuting, "Running {NodeType:l} logic on {Count} item(s).", NodeType, context.InputItems.Count);
-            var result = FailIfAnyItemFailed(await ExecuteAsync(context, parameters));
+            // var result = FailIfAnyItemFailed(await ExecuteAsync(context, parameters));
+            var result = await ExecuteAsync(context, parameters);
             if (result.IsSuccess)
             {
                 log.Info(ExecutionLogStages.NodeExecuted, "Logic finished: {Count} output item(s).", result.OutputItems?.Count ?? 0);
