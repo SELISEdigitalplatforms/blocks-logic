@@ -130,11 +130,15 @@ namespace XUnitTest.Security
                 var logger = new CapturingLogger<WorkflowService>();
                 var sut = new WorkflowService(Mock.Of<IWorkflowRepository>(), Mock.Of<IWorkflowVersionRepository>(),
                     Mock.Of<IScheduleService>(), logger);
-                // Create cannot read object-valued parameters through Newtonsoft today, so the marker rides in
-                // a node field instead: the point is that no node content reaches the log at all.
-                var nodes = JsonDocument.Parse(
-                    "[{\"id\":\"n1\",\"name\":\"" + Secret + "\",\"type\":\"httpRequest\",\"version\":\"1\"," +
-                    "\"category\":\"action\",\"position\":{\"x\":0,\"y\":0}}]").RootElement;
+                // The marker rides in a node field: the point is that no node content reaches the log at all.
+                var nodes = new List<NodeDto>
+                {
+                    new()
+                    {
+                        Id = "n1", Name = Secret, Type = "httpRequest", Version = "1", Category = "action",
+                        Position = new Position { X = 0, Y = 0 },
+                    },
+                };
 
                 var response = await sut.CreateAsync("tenant-wf", new WorkflowCreateRequestDto { Name = "wf", Nodes = nodes });
 
