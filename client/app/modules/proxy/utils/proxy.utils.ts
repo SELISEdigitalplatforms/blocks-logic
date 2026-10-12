@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { resilienceIssues } from "./proxy-resilience";
 import {
   ProxyAccess,
   ProxyAccessRule,
@@ -15,6 +16,11 @@ import {
 // ---------------------------------------------------------------------------
 
 /** Server caps (ProxyConfigValidator.MaxAccessValues / MaxAccessValueLength). */
+/** A Public proxy's gateway calls per minute when the tenant set none (server `Proxy:RateLimits:PublicPerMinute`). */
+export const PROXY_PUBLIC_DEFAULT_PER_MINUTE = 600;
+/** The highest limit a tenant may set; the server refuses more. */
+export const PROXY_MAX_PER_MINUTE = 100_000;
+
 export const MAX_ACCESS_VALUES = 50;
 export const MAX_ACCESS_VALUE_LENGTH = 200;
 
@@ -41,7 +47,7 @@ const listClause = (noun: string, rule: ProxyAccessRule) => {
  */
 export const describeProxyAccess = (access: ProxyAccess): string => {
   if (access.kind === "public") {
-    return "Anyone with the URL can call it. No identity, no token-scoped work.";
+    return "Anyone with the URL and your x-blocks-key can call it. No identity, no token-scoped work.";
   }
 
   const hasRoles = access.roles.values.length > 0;
@@ -70,9 +76,9 @@ export const validateProxyAccess = (access: ProxyAccess): string | null => {
     ["permission", access.permissions],
   ];
   for (const [label, rule] of rules) {
-    if (rule.values.length > MAX_ACCESS_VALUES) return `At most ${MAX_ACCESS_VALUES} ${label}s.`;
+    if (rule.values.length > MAX_ACCESS_VALUES) return `Too many ${label} entries.`;
     if (rule.values.some((value) => value.length > MAX_ACCESS_VALUE_LENGTH)) {
-      return `A ${label} entry is over ${MAX_ACCESS_VALUE_LENGTH} characters.`;
+      return `A ${label} entry is too long.`;
     }
     if (rule.values.some((value) => value.includes(","))) {
       return `A ${label} entry may not contain a comma.`;
@@ -159,6 +165,10 @@ export const MAX_RESPONSE_PATHS = 200;
 export const MAX_RESPONSE_PATH_LENGTH = 512;
 /** Mirrors `ProxyResponseProjector.MaxProjectableBytes`. */
 export const MAX_PROJECTABLE_BYTES = 5 * 1024 * 1024;
+/** Mirrors `ProxyGatewayService.MaxRequestBodyBytes` — the gateway answers 413 over it. */
+export const MAX_REQUEST_BODY_BYTES = 1 * 1024 * 1024;
+/** Mirrors `ProxyGatewayService.MaxResponseBodyBytes` — the gateway answers 502 over it. */
+export const MAX_RESPONSE_BODY_BYTES = 5 * 1024 * 1024;
 /** Array elements unioned per level when deriving a schema from a Test sample. */
 export const RESPONSE_SCHEMA_SAMPLE = 50;
 
@@ -181,8 +191,7 @@ const splitSegment = (raw: string): { key: string; isList: boolean } => {
   return { key: isList ? raw.slice(0, -2) : raw, isList };
 };
 
-const encodeSegment = (node: ResponseFieldNode) =>
-  `${node.key.trim()}${node.isList ? "[]" : ""}`;
+const encodeSegment = (node: ResponseFieldNode) => `${node.key.trim()}${node.isList ? "[]" : ""}`;
 
 /**
  * Minimal-encode a tree + checked-id set to a deduped path list: emit the path of every checked node
@@ -254,9 +263,7 @@ const schemaNodesFromObject = (
 ): ResponseFieldNode[] => {
   if (depth > MAX_RESPONSE_PATH_SEGMENTS) return [];
   return unionObjectKeys(objects).map((key) => {
-    const values = objects
-      .map((object) => object[key])
-      .filter((value) => value !== undefined);
+    const values = objects.map((object) => object[key]).filter((value) => value !== undefined);
     const objectValues = values.filter(isPlainObject);
     const arrayValues = values.filter((value): value is unknown[] => Array.isArray(value));
 
@@ -266,9 +273,7 @@ const schemaNodesFromObject = (
         id: responseNodeUid(),
         key,
         isList: true,
-        children: elementObjects.length
-          ? schemaNodesFromObject(elementObjects, depth + 1)
-          : [],
+        children: elementObjects.length ? schemaNodesFromObject(elementObjects, depth + 1) : [],
       };
     }
 
@@ -305,10 +310,7 @@ export const deriveResponseSchema = (
   return { rootKind: "primitive", tree: [] };
 };
 
-const cloneSchemaSubtree = (
-  node: ResponseFieldNode,
-  checked: Set<string>,
-): ResponseFieldNode => {
+const cloneSchemaSubtree = (node: ResponseFieldNode, checked: Set<string>): ResponseFieldNode => {
   const copy: ResponseFieldNode = {
     id: responseNodeUid(),
     key: node.key,
@@ -368,21 +370,14 @@ const hasCheckedInSubtree = (node: ResponseFieldNode, checked: Set<string>): boo
  * Checked subtree → JSON skeleton value: object → `{}`, list → `[oneElement]` (or `[null]`),
  * leaf → `null`. Shape only — every value is `null` / `{}`.
  */
-export const treeToSkeleton = (
-  nodes: ResponseFieldNode[],
-  checked: Set<string>,
-): unknown => {
+export const treeToSkeleton = (nodes: ResponseFieldNode[], checked: Set<string>): unknown => {
   const buildObject = (list: ResponseFieldNode[]): Record<string, unknown> => {
     const object: Record<string, unknown> = {};
     for (const node of list) {
       const key = node.key.trim();
       if (!key || !hasCheckedInSubtree(node, checked)) continue;
       const childObject = buildObject(node.children);
-      const base = Object.keys(childObject).length
-        ? childObject
-        : checked.has(node.id)
-          ? null
-          : {};
+      const base = Object.keys(childObject).length ? childObject : checked.has(node.id) ? null : {};
       object[key] = node.isList ? [base] : base;
     }
     return object;
@@ -430,12 +425,13 @@ export const skeletonToPaths = (json: unknown): string[] => {
  * pane. An empty / all-invalid path list yields `{}` / `[]` (or the primitive itself).
  */
 export const projectSample = (sample: unknown, paths: string[]): unknown => {
-  const cursors = paths
-    .filter(isResponsePath)
-    .map((path) => ({
-      path: path.trim().split(".").map((segment) => splitSegment(segment).key),
-      pos: 0,
-    }));
+  const cursors = paths.filter(isResponsePath).map((path) => ({
+    path: path
+      .trim()
+      .split(".")
+      .map((segment) => splitSegment(segment).key),
+    pos: 0,
+  }));
 
   if (!cursors.length) {
     if (Array.isArray(sample)) return [];
@@ -493,14 +489,15 @@ export const parseRouteTemplate = (
 ): { ok: true; params: string[] } | { ok: false; reason: string } => {
   const trimmed = trimRoutePath(template);
   if (trimmed.length === 0) return { ok: true, params: [] };
-  if (trimmed.length > 512) return { ok: false, reason: "Path must be 512 characters or fewer." };
+  if (trimmed.length > 512) return { ok: false, reason: "Path is too long." };
 
   const segments = trimmed.split("/");
-  if (segments.length > 20) return { ok: false, reason: "Path must have 20 segments or fewer." };
+  if (segments.length > 20) return { ok: false, reason: "Path has too many segments." };
 
   const params: string[] = [];
   for (const segment of segments) {
-    if (segment.length === 0) return { ok: false, reason: "Path must not contain an empty segment." };
+    if (segment.length === 0)
+      return { ok: false, reason: "Path must not contain an empty segment." };
     if (segment === "." || segment === "..")
       return { ok: false, reason: "Path must not contain a '.' or '..' segment." };
     if (!segment.includes("{") && !segment.includes("}")) continue;
@@ -510,7 +507,8 @@ export const parseRouteTemplate = (
         reason: `'${segment}' is not a valid parameter. Use {name} as a whole segment.`,
       };
     const name = segment.slice(1, -1);
-    if (params.includes(name)) return { ok: false, reason: `Parameter '${name}' is declared twice.` };
+    if (params.includes(name))
+      return { ok: false, reason: `Parameter '${name}' is declared twice.` };
     params.push(name);
   }
 
@@ -526,6 +524,35 @@ const credentialSchema = z.object({
   sendAs: z.enum(["header", "query"]),
 });
 
+/**
+ * Timeout / retry / breaker, as the form holds them.
+ *
+ * The bounds are not here: they are in {@link resilienceIssues}, raised from the one `superRefine`
+ * below so the proxy's object and every route's are judged by the same rules — and by the same rules
+ * the API applies. A number out of range is a message under the field, never a parse failure that
+ * would replace it with "Expected number".
+ */
+const retryValuesSchema = z.object({
+  attempts: z.number(),
+  backoff: z.enum(["none", "fixed", "exponential"]),
+  initialDelaySeconds: z.number(),
+  idempotent: z.boolean(),
+});
+
+const breakerValuesSchema = z.object({
+  failureThreshold: z.number(),
+  openSeconds: z.number(),
+});
+
+const resilienceSchema = z
+  .object({
+    timeoutSeconds: z.number().nullable().default(null),
+    retry: retryValuesSchema.nullable().default(null),
+    breaker: breakerValuesSchema.nullable().default(null),
+  })
+  .nullable()
+  .default(null);
+
 const routeSchema = z.object({
   method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
   path: z.string(),
@@ -535,6 +562,8 @@ const routeSchema = z.object({
   bodyMerge: keyValueSchema.nullable().default(null),
   responseMode: z.enum(["all", "select"]).nullable().default(null),
   responseInclude: z.array(z.string()).nullable().default(null),
+  /** `null` ⇒ inherit the connection's, whole. The server reads it the same way. */
+  resilience: resilienceSchema,
 });
 
 const accessRuleSchema = z.object({
@@ -571,6 +600,14 @@ export const proxyFormSchema = z
     responseMode: z.enum(["all", "select"]).default("all"),
     responseInclude: z.array(z.string()).default([]),
     access: accessSchema.default(defaultProxyAccess),
+    resilience: resilienceSchema,
+    requestsPerMinute: z
+      .number()
+      .int("A whole number.")
+      .min(1, `A whole number from 1 to ${PROXY_MAX_PER_MINUTE.toLocaleString("en")}.`)
+      .max(PROXY_MAX_PER_MINUTE, `A whole number from 1 to ${PROXY_MAX_PER_MINUTE.toLocaleString("en")}.`)
+      .nullable()
+      .default(null),
   })
   .superRefine((values, ctx) => {
     const accessProblem = validateProxyAccess(values.access ?? defaultProxyAccess());
@@ -578,11 +615,31 @@ export const proxyFormSchema = z
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["access"], message: accessProblem });
     }
 
+    resilienceIssues(values.resilience).forEach((issue) => {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["resilience", ...issue.path],
+        message: issue.message,
+      });
+    });
+
     const seenRoutes = new Set<string>();
     values.routes?.forEach((route, index) => {
+      resilienceIssues(route.resilience).forEach((issue) => {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["routes", index, "resilience", ...issue.path],
+          message: issue.message,
+        });
+      });
+
       const parsed = parseRouteTemplate(route.path);
       if (!parsed.ok) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["routes", index, "path"], message: parsed.reason });
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["routes", index, "path"],
+          message: parsed.reason,
+        });
         return;
       }
 
@@ -634,7 +691,7 @@ export const proxyFormSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["responseInclude"],
-          message: `Keep at most ${MAX_RESPONSE_PATHS} response fields.`,
+          message: "Too many response fields.",
         });
       }
       values.responseInclude.forEach((path, index) => {
@@ -714,11 +771,16 @@ export const proxyFormDefaultValues: ProxyFormValues = {
       bodyMerge: null,
       responseMode: null,
       responseInclude: null,
+      resilience: null,
     },
   ],
   responseMode: "all",
   responseInclude: [],
   access: defaultProxyAccess(),
+  // Nothing is configured until somebody configures it: no timeout of our choosing, no retries.
+  resilience: null,
+  // The default for the access kind (600/min when Public) until the tenant sets its own.
+  requestsPerMinute: null,
   credentials: [],
 };
 
@@ -744,7 +806,9 @@ export const splitCredentialRows = (rows: ProxyCredentialRow[] | undefined) => {
     .map((row) => ({ ...row, key: row.key.trim(), value: row.value.trim() }))
     .filter((row) => row.key || row.value);
   return {
-    headers: kept.filter((row) => row.sendAs === "header").map(({ key, value }) => ({ key, value })),
+    headers: kept
+      .filter((row) => row.sendAs === "header")
+      .map(({ key, value }) => ({ key, value })),
     query: kept.filter((row) => row.sendAs === "query").map(({ key, value }) => ({ key, value })),
   };
 };
@@ -782,7 +846,7 @@ export const buildProxyCurl = (
 
   const lines = [
     `curl -X ${log.method} ${shellQuote(url)}`,
-    `  -H ${shellQuote("x-blocks-key: <your tenant id>")}`,
+    `  -H ${shellQuote("x-blocks-key: <your x-blocks-key>")}`,
     `  -H ${shellQuote("Authorization: Bearer <token issued for that tenant>")}`,
   ];
 

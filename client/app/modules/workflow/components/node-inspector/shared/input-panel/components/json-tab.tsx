@@ -3,18 +3,61 @@ import { copyToClipboard } from "@blocks-workflow/utils/copy-to-clipboard";
 import { Copy } from "lucide-react";
 import { DraggableArrayIndex, DraggableProperty } from "./draggable-property";
 import { formatCellValue } from "../utils/format.util";
+import {
+  isPlainObject,
+  type FieldReferenceTarget,
+  type PathSegment,
+} from "../utils/field-reference.util";
 
-function RecursiveJsonViewer({ data, depth = 0, prefixPath = "", nodeName, hasSinglePredecessor, isDraggable = true }: { data: unknown; depth?: number; prefixPath?: string; nodeName: string; hasSinglePredecessor: boolean; isDraggable?: boolean }) {
+type RecursiveJsonViewerProps = Readonly<{
+  data: unknown;
+  depth?: number;
+  segments?: PathSegment[];
+  nodeName: string;
+  isDirectParent: boolean;
+  itemIndex: number;
+  itemIsObject: boolean;
+  target?: FieldReferenceTarget;
+  isDraggable?: boolean;
+}>;
+
+type JsonTabProps = Readonly<{
+  rows: unknown[];
+  nodeName: string;
+  isDirectParent: boolean;
+  target?: FieldReferenceTarget;
+  isDraggable?: boolean;
+}>;
+
+const getRowKey = (row: unknown) => {
+  try {
+    return typeof row === "object" && row !== null ? JSON.stringify(row) : String(row);
+  } catch {
+    return Object.prototype.toString.call(row);
+  }
+};
+
+function RecursiveJsonViewer({
+  data,
+  depth = 0,
+  segments = [],
+  nodeName,
+  isDirectParent,
+  itemIndex,
+  itemIsObject,
+  target,
+  isDraggable = true,
+}: RecursiveJsonViewerProps) {
+  const referenceProps = { nodeName, isDirectParent, itemIndex, itemIsObject, target };
+
   if (typeof data !== "object" || data === null) {
-    if (!prefixPath) {
+    if (segments.length === 0) {
       return (
         <div className="flex items-center gap-2">
-           <DraggableProperty
-            fieldKey=""
-            nodeName={nodeName}
-            hasSinglePredecessor={hasSinglePredecessor}
+          <DraggableProperty
+            segments={[]}
+            {...referenceProps}
             label="(value)"
-            isRoot={true}
             isDraggable={isDraggable}
           />
           <span className="text-green-600 dark:text-green-400">{formatCellValue(data)}</span>
@@ -31,7 +74,7 @@ function RecursiveJsonViewer({ data, depth = 0, prefixPath = "", nodeName, hasSi
     <div className="flex flex-col w-full font-mono text-xs">
       <span style={{ marginLeft: `${depth * 1}rem` }}>{isArray ? "[" : "{"}</span>
       {entries.map(([key, val], index) => {
-        const currentPath = prefixPath ? (isArray ? `${prefixPath}[${key}]` : `${prefixPath}.${key}`) : (isArray ? `[${key}]` : key);
+        const currentSegments = [...segments, isArray ? Number(key) : key];
         const childIsObj = typeof val === "object" && val !== null;
 
         return (
@@ -39,28 +82,26 @@ function RecursiveJsonViewer({ data, depth = 0, prefixPath = "", nodeName, hasSi
             <div className="flex items-center" style={{ marginLeft: `${(depth + 1) * 1}rem` }}>
               {isArray ? (
                 <DraggableArrayIndex
-                  expressionPath={currentPath}
+                  segments={currentSegments}
                   label={`[${key}]`}
                   depth={0}
-                  nodeName={nodeName}
-                  hasSinglePredecessor={hasSinglePredecessor}
+                  {...referenceProps}
                   isDraggable={isDraggable}
                   showColon={false}
                 />
               ) : (
                 <DraggableProperty
-                  fieldKey={key}
-                  prefixPath={prefixPath}
+                  segments={currentSegments}
                   depth={0}
-                  nodeName={nodeName}
-                  hasSinglePredecessor={hasSinglePredecessor}
+                  {...referenceProps}
                   label={`"${key}"`}
                   isDraggable={isDraggable}
                 />
               )}
               {!childIsObj ? (
                 <span className="text-green-600 dark:text-green-400">
-                  {formatCellValue(val)}{index < entries.length - 1 ? "," : ""}
+                  {formatCellValue(val)}
+                  {index < entries.length - 1 ? "," : ""}
                 </span>
               ) : null}
             </div>
@@ -69,12 +110,13 @@ function RecursiveJsonViewer({ data, depth = 0, prefixPath = "", nodeName, hasSi
                 <RecursiveJsonViewer
                   data={val}
                   depth={depth + 1}
-                  prefixPath={currentPath}
-                  nodeName={nodeName}
-                  hasSinglePredecessor={hasSinglePredecessor}
+                  segments={currentSegments}
+                  {...referenceProps}
                   isDraggable={isDraggable}
                 />
-                <span style={{ marginLeft: `${(depth + 1) * 1}rem` }}>{index < entries.length - 1 ? "," : ""}</span>
+                <span style={{ marginLeft: `${(depth + 1) * 1}rem` }}>
+                  {index < entries.length - 1 ? "," : ""}
+                </span>
               </div>
             )}
           </div>
@@ -85,7 +127,13 @@ function RecursiveJsonViewer({ data, depth = 0, prefixPath = "", nodeName, hasSi
   );
 }
 
-export function JsonTab({ rows, nodeName, hasSinglePredecessor, isDraggable = true }: { rows: unknown[]; nodeName: string; hasSinglePredecessor: boolean; isDraggable?: boolean }) {
+export function JsonTab({
+  rows,
+  nodeName,
+  isDirectParent,
+  target,
+  isDraggable = true,
+}: JsonTabProps) {
   if (rows.length === 0) {
     return <p className="text-xs text-low-emphasis">No runtime input data available.</p>;
   }
@@ -108,12 +156,15 @@ export function JsonTab({ rows, nodeName, hasSinglePredecessor, isDraggable = tr
         </Button>
       </div>
       {rows.map((row, index) => (
-        <div key={index} className="rounded border border-border/60 p-2">
+        <div key={`json-row-${getRowKey(row)}`} className="rounded border border-border/60 p-2">
           <p className="mb-1 text-xs font-semibold text-medium-emphasis">item {index + 1}:</p>
-          <RecursiveJsonViewer 
-            data={row} 
-            nodeName={nodeName} 
-            hasSinglePredecessor={hasSinglePredecessor}
+          <RecursiveJsonViewer
+            data={row}
+            nodeName={nodeName}
+            isDirectParent={isDirectParent}
+            itemIndex={index}
+            itemIsObject={isPlainObject(row)}
+            target={target}
             isDraggable={isDraggable}
           />
         </div>

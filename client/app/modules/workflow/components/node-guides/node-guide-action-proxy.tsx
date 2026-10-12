@@ -19,6 +19,7 @@ export const NodeGuideActionProxy = () => (
       "The node sends one request for each input item. With nothing wired into it, it sends exactly one — so a proxy node on its own can be run with Execute Step.",
       "A path parameter fills one segment, so it cannot contain a '/'. The node reports that rather than calling an endpoint the route does not declare.",
       "The proxy's own configured query values win over a query parameter set here when both use the same key.",
+      "In the body, {{$json.field}} reads a field of the current item (same as {{$json.output.field}}). Values inside quotes are escaped automatically; without quotes a value keeps its type. A body that is not valid JSON after the values are filled in fails the step.",
       "A JSON array response becomes multiple workflow output items.",
       "If the endpoint filters its response, the node only sees the fields it keeps.",
       "Changing the proxy clears the endpoint, and changing the endpoint clears its path parameters.",

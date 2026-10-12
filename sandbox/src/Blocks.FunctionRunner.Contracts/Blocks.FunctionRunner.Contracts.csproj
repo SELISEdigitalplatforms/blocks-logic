@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Blocks.FunctionRunner.Contracts</RootNamespace>
+  </PropertyGroup>
+</Project>

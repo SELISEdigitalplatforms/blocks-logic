@@ -65,6 +65,23 @@ describe("EditorNodeBase", () => {
     expect(screen.getByText("Beta")).toBeTruthy();
   });
 
+  it.each(["execution", "version"] as const)("does not rename on double click in %s mode", (mode) => {
+    renderWithProviders(
+      <EditorNodeBase id="n1">
+        <span>body</span>
+      </EditorNodeBase>,
+      {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        seedWorkflow: (store: any) => {
+          seed()(store);
+          store.getState().setEditorMode(mode);
+        },
+      },
+    );
+    fireEvent.doubleClick(screen.getByText("Alpha"));
+    expect(document.querySelector("input")).toBeNull();
+  });
+
   it("rejects a duplicate name with an error toast", () => {
     renderWithProviders(
       <EditorNodeBase id="n1">

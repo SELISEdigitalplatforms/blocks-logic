@@ -8,6 +8,10 @@ namespace Workflow.DomainService.Repositories
 
         Task<List<WorkflowEntity>> GetAllWorkflowsAsync(string tenantId, int pageSize, int pageNumber, string? search, bool? isPublished);
 
+        /// <summary>
+        /// Workflows whose draft OR published trigger nodes (PublishedMeta.TriggerNodes, published only) use the
+        /// mailbox. Test mode matches on the draft; production must be confirmed against the published snapshot.
+        /// </summary>
         Task<List<WorkflowEntity>> GetWorkflowsByMailServerConfigurationIdAsync(string tenantId, string mailServerConfigurationId);
 
         Task<List<WorkflowEntity>> GetWorkflowsByDataCollectionAsync(string tenantId, string collectionName, string operation);
@@ -15,6 +19,13 @@ namespace Workflow.DomainService.Repositories
         Task<List<WorkflowEntity>> GetPublishWorkflowsByDataCollectionAsync(string tenantId, string collectionName, string operation);
 
         Task<long> GetWorkflowsCountAsync(string tenantId, string? search, bool? isPublished);
+
+        /// <summary>
+        /// Workflows with a function step pointing at <paramref name="functionId"/>, so deleting a
+        /// function can say what it would break. Projected to identity only — the caller wants
+        /// names, not definitions.
+        /// </summary>
+        Task<List<WorkflowEntity>> GetWorkflowsUsingFunctionAsync(string tenantId, string functionId, int limit = 50);
 
         Task<WorkflowEntity> GetWorkflowAsync(string tenantId, string workflowId);
 

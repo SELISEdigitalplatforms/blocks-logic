@@ -19,7 +19,8 @@ namespace Workflow.DomainService.Services
         /// <summary>
         /// Best-effort: returns a Blocks-delegated bearer token for the current ambient context, or
         /// <c>null</c> when no delegation grant is available (e.g. most trigger-originated workflow
-        /// runs today). Callers must treat <c>null</c> as "omit the Authorization header", not as an error.
+        /// runs today). Workflow nodes treat <c>null</c> as an item error (<c>NoDelegatedTokenException</c>):
+        /// they never send unauthenticated and never fall back to the caller's raw token.
         /// </summary>
         public Task<string?> CreateBlocksAuthorizationTokenAsync(CancellationToken ct = default);
     }

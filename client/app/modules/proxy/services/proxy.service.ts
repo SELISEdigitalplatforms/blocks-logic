@@ -8,6 +8,7 @@ import {
   mapProxyExecutionDetailDtoToLog,
   mapProxyExecutionListItemDtoToLog,
   mapProxyListItemDtoToProxy,
+  mapOpenApiPreviewDtoToPreview,
   mapProxyOverviewDtoToOverview,
   mapProxyTestResponseDtoToResponse,
   mapProxyToCreatePayload,
@@ -31,6 +32,9 @@ import {
   ProxyListParams,
   ProxyLogFilter,
   ProxyMutationResponse,
+  ProxyOpenApiPreview,
+  ProxyOpenApiPreviewDto,
+  ProxyOpenApiPreviewRequest,
   ProxyOverview,
   ProxyOverviewDto,
   ProxyTestRequest,
@@ -60,6 +64,35 @@ const toMutationFailure = (error: unknown): ProxyMutationResponse => {
   }
 
   return { isSuccess: false, errors: "The request could not be completed.", code: null };
+};
+
+/**
+ * The reasons and warnings off a refused preview. The endpoint answers with a list of sentences
+ * rather than the field map a save returns, and an older or proxied error may be neither — hence the
+ * fallback, which still says something true.
+ */
+const toPreviewFailure = (error: unknown): { errors: string[]; warnings: string[] } => {
+  if (error instanceof HttpError) {
+    const body = (error.errors ?? {}) as Record<string, unknown>;
+    const list = (value: unknown): string[] =>
+      Array.isArray(value)
+        ? value.filter((entry): entry is string => typeof entry === "string")
+        : value && typeof value === "object"
+          ? Object.values(value as Record<string, unknown>).filter(
+              (entry): entry is string => typeof entry === "string",
+            )
+          : typeof value === "string"
+            ? [value]
+            : [];
+
+    const errors = list(body.errors);
+    if (errors.length) return { errors, warnings: list(body.warnings) };
+
+    const message = typeof body.message === "string" ? body.message : null;
+    if (message) return { errors: [message], warnings: list(body.warnings) };
+  }
+
+  return { errors: ["The specification could not be read."], warnings: [] };
 };
 
 const flattenErrors = (error: unknown): string => {
@@ -93,7 +126,7 @@ export class ProxyService {
   getAll = async (params: ProxyListParams = {}): Promise<ProxyListPage> => {
     const response = await this.logicHttpClient.get<BaseQueryListResponse<ProxyListItemDto[]>>(
       `${PROXY_ENDPOINTS.COLLECTION}${buildQuery({
-        search: params.searchKey?.trim() || undefined,
+        search: params.search?.trim() || undefined,
         isActive: params.isActive,
         pageSize: params.pageSize ?? 200,
         pageNumber: params.pageNumber ?? 0,
@@ -125,14 +158,16 @@ export class ProxyService {
   update = async ({
     id,
     values,
+    expectedVersion = null,
   }: {
     id: string;
     values: ProxyFormValues;
+    expectedVersion?: number | null;
   }): Promise<ProxyMutationResponse> => {
     try {
       const response = await this.logicHttpClient.put<BaseMutationResponseDto>(
         PROXY_ENDPOINTS.byId(id),
-        mapProxyToUpdatePayload(id, values),
+        mapProxyToUpdatePayload(id, values, expectedVersion),
       );
       return mapMutationResponse(response);
     } catch (error) {
@@ -143,14 +178,16 @@ export class ProxyService {
   toggle = async ({
     id,
     enabled,
+    expectedVersion = null,
   }: {
     id: string;
     enabled: boolean;
+    expectedVersion?: number | null;
   }): Promise<ProxyMutationResponse> => {
     try {
       const response = await this.logicHttpClient.patch<BaseMutationResponseDto>(
         PROXY_ENDPOINTS.byId(id),
-        { enabled },
+        { enabled, expectedVersion },
       );
       return mapMutationResponse(response);
     } catch (error) {
@@ -237,6 +274,31 @@ export class ProxyService {
       return mapMutationResponse(response);
     } catch (error) {
       return toMutationFailure(error);
+    }
+  };
+
+  /**
+   * Reads an OpenAPI document and reports what it would produce. Nothing is written; the operations
+   * the user picks are added to the form and saved through the ordinary create / update call, which
+   * is what keeps an import inside the same validation, versioning and audit as a hand-typed route.
+   *
+   * A document the server could not use comes back as a 400 whose body carries the reasons. Those are
+   * the answer to "why did my paste produce nothing", so they are returned as a preview with errors
+   * rather than thrown — the dialog has somewhere to show them.
+   */
+  previewOpenApi = async (request: ProxyOpenApiPreviewRequest): Promise<ProxyOpenApiPreview> => {
+    try {
+      const response = await this.logicHttpClient.post<ProxyOpenApiPreviewDto>(
+        PROXY_ENDPOINTS.OPENAPI_PREVIEW,
+        {
+          specJson: request.specJson ?? null,
+          specUrl: request.specUrl ?? null,
+          proxyId: request.proxyId ?? null,
+        },
+      );
+      return mapOpenApiPreviewDtoToPreview(response);
+    } catch (error) {
+      return { baseUrl: "", operations: [], ...toPreviewFailure(error) };
     }
   };
 

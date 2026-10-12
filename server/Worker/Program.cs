@@ -12,6 +12,7 @@ using Workflow.DomainService.Utils;
 using Mail.DomainService.Dtos;
 using Mail.DomainService.Mails;
 using Mail.DomainService.Shared.Utilities;
+using Functions.DomainService.Utils;
 using Scheduler.DomainService.Models;
 using Scheduler.DomainService.Utils;
 using SeliseBlocks.ConfigurationDriver;
@@ -42,7 +43,7 @@ IHostBuilder CreateHostBuilder(string[] args) =>
                 options.SecretKey = "blocks-secret-logic";
             });
         })
-        .ConfigureServices((services) =>
+        .ConfigureServices((hostContext, services) =>
         {
             services.AddHttpClient();
 
@@ -76,6 +77,7 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             // upstream credential as a configuration variable fails at forward time.
             services.AddBlocksSecrets();
             services.AddProxyServices();
+            services.AddSingleton<Workflow.DomainService.Utils.NodeQueueLanes>(_ => new Workflow.DomainService.Utils.NodeQueueLanes());
             services.AddSingleton<IConsumer<AddExcuationNodeEvent>, AddExcuationNodeConsumer>();
             services.AddSingleton<IConsumer<WorkflowImportEvent>, WorkflowImportConsumer>();
             services.AddSingleton<IConsumer<DataChangeEvent>, DataTriggerConsumer>();
@@ -84,10 +86,15 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             services.AddApplicationServices();
             services.AddSchedulerServices();
             services.AddSchedulerWorkerServices();
+            services.AddFunctionsServices(hostContext.Configuration);
+            services.AddFunctionsWorkerServices();
+            services.AddSingleton<Workflow.DomainService.Nodes.INodeExecutor, Functions.DomainService.Nodes.ActionFunctionNode>();
             services.AddStorageDomainServices();
             services.RegisterBlocksStorageServices();
             //services.RegisterSharedServices();
 
+            // Before Genesis sets up tracing, so it runs ahead of Genesis's exporter (see TraceTagSanitizer).
+            Common.InternalService.Tracing.TraceTagSanitizer.AddFirst(services);
             ApplicationConfigurations.ConfigureWorker(services, LogicConstants.GetMessageConfiguration(secret.MessageConnectionString));
         });
 

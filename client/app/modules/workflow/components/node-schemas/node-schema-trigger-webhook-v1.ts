@@ -47,7 +47,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         id: "webhook-url",
         type: "tab-with-text",
         label: "Webhook URL",
-        info: "Copy this URL to trigger the workflow. Send your project key in the x-blocks-key header.",
+        info: "Copy this URL to trigger the workflow. Send the x-blocks-key header.",
         key: "executionMode",
         transient: true,
         options: [
@@ -68,7 +68,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         id: "webhook-url-deprecated",
         type: "tab-with-text",
         label: "Deprecated Webhook URL",
-        info: "Legacy URL with the project key in the path. Prefer Webhook URL above.",
+        info: "Legacy URL with the x-blocks-key value in the path. Prefer Webhook URL above.",
         key: "executionMode",
         transient: true,
         options: [
@@ -86,20 +86,16 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         copyable: true,
       },
       {
+        // Webhooks accept POST only (every webhook route on the server is [HttpPost]); the old method
+        // select had no effect. A saved `httpMethod` is left as it is, so older workflows load and save
+        // unchanged. Display-only and transient, so nothing new is written to the node.
         id: "http-method",
-        type: "select",
+        type: "display",
         label: "HTTP Method",
-        info: "The HTTP method that will trigger this webhook",
-        key: "httpMethod",
-        required: true,
-        options: [
-          { label: "GET", value: "GET" },
-          { label: "POST", value: "POST" },
-          { label: "PUT", value: "PUT" },
-          { label: "PATCH", value: "PATCH" },
-          { label: "DELETE", value: "DELETE" },
-        ],
-        disabled: true,
+        info: "Webhooks accept POST requests only.",
+        key: "httpMethodInfo",
+        transient: true,
+        displayValue: () => "POST",
       },
       {
         id: "auth-type",

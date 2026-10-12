@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useFormContext } from "react-hook-form";
-import { FlaskConical, Plus, Trash2 } from "lucide-react";
+import { Download, FlaskConical, Plus, Trash2 } from "lucide-react";
 import {
   Accordion,
   AccordionContent,
@@ -29,15 +29,23 @@ import {
   SecretListItem,
 } from "../types";
 import {
-  buildVarToken,
+  describeResilience,
+  deriveProxyMethods,
   keyCollisions,
   KeyCollision,
   parseRouteTemplate,
+  toCredentialRows,
   trimRoutePath,
 } from "../utils";
 import { KeyCollisionWarning } from "./key-collision-warning";
+import {
+  ProxyOpenApiImportDialog,
+  ProxyOpenApiImportResult,
+} from "./proxy-openapi-import-dialog";
+import { flattenResilienceErrors } from "./proxy-resilience-card";
+import { ProxyResilienceFields } from "./proxy-resilience-fields";
 import { ProxyTestPanel } from "./proxy-test-panel";
-import { VariableInsertMenu } from "@/components/variable-insert-menu";
+import { VariableTokenField, varNameRef } from "@/components/variable-picker";
 
 type VariablePickerProps = {
   variables?: SecretListItem[];
@@ -63,6 +71,8 @@ export const blankRoute = (method: ProxyMethod = "GET"): ProxyRoute => ({
   bodyMerge: null,
   responseMode: null,
   responseInclude: null,
+  // Inherits the connection's policy, which is itself nothing unless configured.
+  resilience: null,
 });
 
 const emptyRow = (): ProxyKeyValue => ({ key: "", value: "" });
@@ -84,7 +94,7 @@ const OVERRIDE_LABELS: Record<RowOverrideName, { title: string; on: string; off:
   bodyMerge: {
     title: "Body fields",
     on: "Merged into the JSON body this endpoint forwards.",
-    off: "The body is forwarded exactly as your client sent it.",
+    off: "The body is forwarded as your client sent it, unless proxy-wide body fields are set.",
   },
   headers: {
     title: "Extra headers",
@@ -94,7 +104,7 @@ const OVERRIDE_LABELS: Record<RowOverrideName, { title: string; on: string; off:
   query: {
     title: "Extra query parameters",
     on: "Sent in addition to the connection's query parameters. A same-name key replaces the connection's.",
-    off: "Sends only the connection's query parameters.",
+    off: "Sends the connection's query parameters, plus the caller's own (configured keys win).",
   },
 };
 
@@ -146,6 +156,9 @@ export const ProxyRoutesCard = ({
   const credentials = watch("credentials");
   const connectionHeaders = watch("headers");
   const connectionQuery = watch("query");
+  // What an endpoint gets when it sets nothing of its own. The gateway inherits the whole object, so
+  // the row below says so rather than implying the two merge.
+  const connectionResilience = watch("resilience") ?? null;
   const connection = credentials
     ? {
         headers: credentials.filter((row) => row.sendAs === "header"),
@@ -159,8 +172,13 @@ export const ProxyRoutesCard = ({
   const [testResponse, setTestResponse] = useState<ProxyTestResponse | null>(null);
   const [testSending, setTestSending] = useState(false);
 
-  const commit = (next: ProxyRoute[]) =>
+  // `methods` is derived from the endpoints and the schema checks each endpoint against it, so it
+  // has to land first: validating the new endpoints against the old list shows a stale
+  // "does not allow" error that nothing clears.
+  const commit = (next: ProxyRoute[]) => {
+    setValue("methods", deriveProxyMethods(next), { shouldDirty: true });
     setValue("routes", next, { shouldDirty: true, shouldValidate: true });
+  };
 
   const patch = (index: number, changes: Partial<ProxyRoute>) => {
     const list = [...(getValues("routes") ?? [])];
@@ -172,6 +190,13 @@ export const ProxyRoutesCard = ({
     const routeErrors = formState.errors.routes as
       Record<number, Record<string, { message?: string }>> | undefined;
     return routeErrors?.[index]?.[field]?.message;
+  };
+
+  const resilienceErrorsAt = (index: number) => {
+    const routeErrors = formState.errors.routes as
+      | Record<number, { resilience?: unknown } | undefined>
+      | undefined;
+    return flattenResilienceErrors(routeErrors?.[index]?.resilience);
   };
 
   const toggleOverride = (index: number, name: RowOverrideName, on: boolean) =>
@@ -192,6 +217,33 @@ export const ProxyRoutesCard = ({
     const list = [...(getValues("routes")?.[index]?.responseInclude ?? [])];
     list[pathIndex] = value;
     patch(index, { responseInclude: list });
+  };
+
+  const [importOpen, setImportOpen] = useState(false);
+
+  /**
+   * Applies what the import dialog proposed. It lands in the form, not on the server: everything here
+   * is still a draft the user can edit or abandon, and Save is what makes any of it real.
+   */
+  const applyImport = ({ routes: imported, credentialKeys, upstreamUrl: baseUrl }: ProxyOpenApiImportResult) => {
+    if (baseUrl) setValue("upstreamUrl", baseUrl, { shouldDirty: true, shouldValidate: true });
+
+    if (credentialKeys.length) {
+      const rows = getValues("credentials") ?? toCredentialRows(getValues("headers") ?? [], getValues("query") ?? []);
+      setValue(
+        "credentials",
+        [...rows, ...credentialKeys.map((key) => ({ key, value: "", sendAs: "header" as const }))],
+        { shouldDirty: true },
+      );
+    }
+
+    // The row a brand-new form starts with is a placeholder, not an endpoint somebody wrote. Keeping
+    // it would leave an unnamed base-path route beside the imported ones.
+    const current = getValues("routes") ?? [];
+    const onlyPlaceholder =
+      current.length === 1 && isBlankRoute(current[0]) && imported.length > 0;
+
+    commit(onlyPlaceholder ? imported : [...current, ...imported]);
   };
 
   const openTest = (index: number) => {
@@ -227,18 +279,30 @@ export const ProxyRoutesCard = ({
             request leaves Blocks.
           </p>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="xs"
-          className="shrink-0 gap-1.5 border-dashed bg-background shadow-sm hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
-          onClick={() =>
-            commit([...routes, blankRoute(routes[routes.length - 1]?.method ?? "GET")])
-          }
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Add endpoint
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            className="gap-1.5 border-dashed bg-background shadow-sm hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
+            onClick={() => setImportOpen(true)}
+          >
+            <Download className="h-3.5 w-3.5" />
+            Import from OpenAPI
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            className="gap-1.5 border-dashed bg-background shadow-sm hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
+            onClick={() =>
+              commit([...routes, blankRoute(routes[routes.length - 1]?.method ?? "GET")])
+            }
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add endpoint
+          </Button>
+        </div>
       </div>
 
       {routes.map((route, index) => {
@@ -273,8 +337,8 @@ export const ProxyRoutesCard = ({
         const sendsSummary = sends.length
           ? [...sends, ...replacesSummary].join(" · ")
           : hasBody(route.method)
-            ? "Body as your client sent it, with the connection’s headers and query"
-            : "Only the connection’s headers and query";
+            ? "Body as your client sent it, with the connection’s headers and query (plus the caller’s query)"
+            : "The connection’s headers and query (plus the caller’s query)";
         const included = (route.responseInclude ?? []).map((path) => path.trim()).filter(Boolean);
         const returnsSummary =
           route.responseMode === "select"
@@ -392,6 +456,13 @@ export const ProxyRoutesCard = ({
               <dd>{sendsSummary}</dd>
               <dt className="text-muted-foreground">Returns</dt>
               <dd>{returnsSummary}</dd>
+              <dt className="text-muted-foreground">If it fails</dt>
+              <dd>
+                {describeResilience(route.resilience ?? connectionResilience)}
+                {route.resilience ? null : (
+                  <span className="text-muted-foreground"> — from the connection</span>
+                )}
+              </dd>
             </dl>
 
             {params.length ? (
@@ -434,8 +505,8 @@ export const ProxyRoutesCard = ({
                         <p className="text-xs font-medium">Response fields</p>
                         <p className="text-[11px] text-muted-foreground">
                           {responseOn
-                            ? "This endpoint decides which fields reach your client."
-                            : "The vendor's whole response reaches your client."}
+                            ? "This endpoint decides which fields reach your client. Vendor errors and non-JSON answers return 502."
+                            : "The vendor's status and body reach your client (secret values masked, vendor headers dropped)."}
                         </p>
                       </div>
                       <Switch
@@ -470,7 +541,7 @@ export const ProxyRoutesCard = ({
                           <SelectContent>
                             <SelectItem value="select">Only the fields listed below</SelectItem>
                             <SelectItem value="all">
-                              All fields — relay the vendor&apos;s response unchanged
+                              All fields — relay the vendor&apos;s body (secret values masked)
                             </SelectItem>
                           </SelectContent>
                         </Select>
@@ -522,8 +593,8 @@ export const ProxyRoutesCard = ({
                             </Button>
                             {(route.responseInclude ?? []).length === 0 ? (
                               <p className="text-[11px] text-muted-foreground">
-                                No fields listed means nothing reaches your client. Add at least
-                                one.
+                                No fields listed means your client gets an empty object. Add at
+                                least one.
                               </p>
                             ) : null}
                           </div>
@@ -559,6 +630,58 @@ export const ProxyRoutesCard = ({
                   />
                 </AccordionContent>
               </AccordionItem>
+
+              {/*
+                Timeouts and retries, for the endpoint that differs from the rest. An override
+                replaces the connection's policy whole — the gateway reads `route ?? proxy`, never a
+                field-by-field merge — so turning this on starts from nothing rather than from a copy
+                that would look inherited while no longer being so.
+              */}
+              <AccordionItem value={`resilience-${index}`} className="border-0">
+                <AccordionTrigger className="py-1 text-xs hover:no-underline">
+                  If this endpoint is slow or failing
+                </AccordionTrigger>
+                <AccordionContent className="space-y-3 pt-2">
+                  <div className="flex items-start justify-between gap-3 rounded border p-2">
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium">Its own timeouts and retries</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {!route.resilience
+                          ? `Uses the connection's: ${describeResilience(connectionResilience).toLowerCase()}.`
+                          : describeResilience(route.resilience) === "Not configured"
+                            ? "Nothing set yet, so this endpoint still uses the connection's. Turn one on below."
+                            : "This endpoint ignores the connection's settings entirely."}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={route.resilience !== null}
+                      aria-label={`Separate timeouts and retries for endpoint ${index + 1}`}
+                      onCheckedChange={(checked) =>
+                        patch(index, {
+                          resilience: checked
+                            ? { timeoutSeconds: null, retry: null, breaker: null }
+                            : null,
+                        })
+                      }
+                    />
+                  </div>
+
+                  {route.resilience ? (
+                    <ProxyResilienceFields
+                      idPrefix={`route-${index}-resilience`}
+                      subject={`endpoint ${index + 1}`}
+                      value={route.resilience}
+                      onChange={(next) =>
+                        // Switching every section off leaves nothing to override with, and the
+                        // server stores an empty policy as none — so the endpoint goes back to
+                        // inheriting, which is what the row above will then say.
+                        patch(index, { resilience: next })
+                      }
+                      errors={resilienceErrorsAt(index)}
+                    />
+                  ) : null}
+                </AccordionContent>
+              </AccordionItem>
             </Accordion>
 
             {testOpenFor === index ? (
@@ -577,9 +700,29 @@ export const ProxyRoutesCard = ({
           </div>
         );
       })}
+
+      <ProxyOpenApiImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        existingRoutes={routes}
+        existingCredentialKeys={[...connection.headers, ...connection.query].map((row) => row.key)}
+        upstreamUrl={upstreamUrl}
+        onImport={applyImport}
+      />
     </div>
   );
 };
+
+/** The untouched row a new form opens with: a method and nothing else said about it. */
+const isBlankRoute = (route: ProxyRoute) =>
+  trimRoutePath(route.path) === "" &&
+  route.upstreamPath === null &&
+  route.headers === null &&
+  route.query === null &&
+  route.bodyMerge === null &&
+  route.responseMode === null &&
+  route.responseInclude === null &&
+  route.resilience === null;
 
 type OverrideRowsProps = {
   index: number;
@@ -621,33 +764,22 @@ const RouteValueCell = ({
   variables,
   variablesLoading,
   variablesError,
-}: RouteValueCellProps) => {
-  const insert = (variableName: string) => {
-    patchRow(index, name, rowIndex, {
-      value: buildVarToken(variableName),
-    });
-  };
-
-  return (
-    <div className="min-w-0 flex-1">
-      <div className="flex items-center gap-1.5">
-        <Input
-          className="h-8 font-mono text-xs"
-          placeholder="Enter value"
-          value={row.value}
-          onChange={(event) => patchRow(index, name, rowIndex, { value: event.target.value })}
-        />
-        <VariableInsertMenu
-          variables={variables}
-          variablesLoading={variablesLoading}
-          variablesError={variablesError}
-          onPick={insert}
-          ariaLabel={`Insert a configuration variable into ${label.toLowerCase()} value`}
-        />
-      </div>
-    </div>
-  );
-};
+}: RouteValueCellProps) => (
+  <div className="min-w-0 flex-1">
+    <VariableTokenField
+      value={row.value ?? ""}
+      onChange={(next) => patchRow(index, name, rowIndex, { value: next })}
+      codec={varNameRef}
+      ariaLabel={`${label} value`}
+      placeholder="Enter value"
+      className="h-8 font-mono text-xs"
+      variables={variables}
+      isLoading={variablesLoading}
+      isError={variablesError}
+      variablePickMode="replace"
+    />
+  </div>
+);
 
 /** One key/value override slot: a switch that says what on and off mean, then the rows. */
 const OverrideRows = ({

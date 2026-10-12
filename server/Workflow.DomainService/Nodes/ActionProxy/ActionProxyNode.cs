@@ -8,6 +8,7 @@ using MongoDB.Bson;
 using Proxy.DomainService.Entities;
 using Proxy.DomainService.Services;
 using Workflow.DomainService.Entities;
+using Workflow.DomainService.Logging;
 using Workflow.DomainService.Utils;
 
 namespace Workflow.DomainService.Nodes.ActionProxy
@@ -73,6 +74,8 @@ namespace Workflow.DomainService.Nodes.ActionProxy
             // third party on a path the workflow deliberately did not choose.
             var standalone = context.IterationCount == 0 && !context.HasUpstream;
             var iterations = standalone ? 1 : context.IterationCount;
+            // Outcome codes and exception types only: never the path, query, body or response.
+            var requestLog = PerItemRequestLog.ForProxy(context.Log, iterations);
 
             for (int i = 0; i < iterations; i++)
             {
@@ -84,18 +87,29 @@ namespace Workflow.DomainService.Nodes.ActionProxy
                     var (pathSuffix, pathError) = BuildPathSuffix(parameters, inputItem, context);
                     if (pathError != null)
                     {
+                        requestLog.Failed(i, "InvalidPathParameter");
                         AppendErrorOutputItem(outputItems, errorParent, parameters.ToBsonDocument(), pathError);
                         continue;
                     }
 
-                    var (body, contentType, bodyError) = PrepareBody(parameters, method, inputItem, context);
-                    if (bodyError != null)
+                    byte[]? body;
+                    string? contentType;
+                    try
                     {
-                        AppendErrorOutputItem(outputItems, errorParent, parameters.ToBsonDocument(), bodyError);
-                        continue;
+                        (body, contentType) = PrepareBody(parameters, method, inputItem, context);
+                    }
+                    catch (InvalidFilledJsonException ex)
+                    {
+                        // Nothing was sent for this item. The configured body is broken, so the step
+                        // fails; items before it already ran and are kept.
+                        requestLog.Failed(i, "InvalidBody");
+                        _logger.LogWarning("Proxy node: body is not valid JSON for proxy {Slug}.", parameters.Slug);
+                        return NodeExecutionResult.Failed(ex.ForItem(i), outputItems);
                     }
 
                     var query = BuildQuery(parameters, inputItem, context);
+
+                    requestLog.Sending(i);
 
                     var result = await _gatewayService.ForwardAsync(new ProxyForwardRequest
                     {
@@ -120,13 +134,17 @@ namespace Workflow.DomainService.Nodes.ActionProxy
 
                     if (!result.Ok)
                     {
+                        requestLog.Failed(i, result.Outcome);
                         AppendErrorOutputItem(outputItems, errorParent, parameters.ToBsonDocument(), DescribeFailure(parameters, method, result));
                         continue;
                     }
 
+                    requestLog.Response(i, result.StatusCode, result.LatencyMs);
+
                     var (responseBody, parseError) = ParseResponse(result);
                     if (parseError != null)
                     {
+                        requestLog.Failed(i, "UnparseableResponse");
                         AppendErrorOutputItem(outputItems, errorParent, parameters.ToBsonDocument(), parseError);
                         continue;
                     }
@@ -139,6 +157,7 @@ namespace Workflow.DomainService.Nodes.ActionProxy
                 }
                 catch (Exception ex)
                 {
+                    requestLog.Failed(i, ex.GetType().Name);
                     AppendErrorOutputItem(outputItems, errorParent, parameters.ToBsonDocument(), ex);
                 }
             }
@@ -226,33 +245,30 @@ namespace Workflow.DomainService.Nodes.ActionProxy
         }
 
         /// <summary>
-        /// Resolves expressions in the configured body and validates it as JSON before any upstream
-        /// connection. Returns a non-null error when the body is enabled but not parseable.
+        /// Fills the configured body as a JSON template (values escaped inside "…", typed outside) and
+        /// checks it is valid JSON before any upstream connection. Throws
+        /// <see cref="InvalidFilledJsonException"/> when it is not; the caller fails the step.
+        /// A blank body, or one that fills to JSON null, sends no body.
         /// </summary>
-        private (byte[]? body, string? contentType, string? error) PrepareBody(
+        private (byte[]? body, string? contentType) PrepareBody(
             ActionProxyParameters parameters,
             string method,
             WorkflowItemExecutionEntity inputItem,
             NodeExecutionContext context)
         {
             if (!parameters.HaveBody || !MethodsWithBody.Contains(method))
-                return (null, null, null);
+                return (null, null);
 
-            var bodyContent = parseExpression<string>(parameters.Body.Trim(), inputItem, context);
-            if (string.IsNullOrWhiteSpace(bodyContent))
-                return (null, null, null);
+            var template = (parameters.Body ?? string.Empty).Trim();
+            if (template.Length == 0)
+                return (null, null);
 
-            try
-            {
-                JsonDocument.Parse(bodyContent);
-            }
-            catch (JsonException ex)
-            {
-                _logger.LogError("Proxy node: body is not valid JSON for proxy {Slug}.", parameters.Slug);
-                return (null, null, $"Invalid JSON body: {ex.Message}");
-            }
-
-            return (Encoding.UTF8.GetBytes(bodyContent), "application/json", null);
+            var bodyContent = FillJsonTemplateOrThrow(template, "Body", inputItem, context);
+            // A body that is only a missing value (e.g. {{$json.payload}} with no payload) used to fill
+            // to "" and send no body; it now fills to null, which keeps that: no body.
+            if (bodyContent.Trim() == "null")
+                return (null, null);
+            return (Encoding.UTF8.GetBytes(bodyContent), "application/json");
         }
 
         /// <summary>

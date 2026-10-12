@@ -2,18 +2,10 @@ import { ReactNode } from "react";
 import { ChevronDown, ChevronRight, CirclePlus, Trash2 } from "lucide-react";
 import { Checkbox } from "@/components/ui-kits/checkbox/checkbox";
 import { Input } from "@/components/ui-kits/input/input";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui-kits/tooltip/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
 import { cn } from "@/lib/utils";
 import { ResponseFieldNode } from "../types";
-import {
-  duplicateKeys,
-  isNodeSelected,
-  validateFieldKey,
-} from "./response-field-tree.helpers";
+import { duplicateKeys, isNodeSelected, validateFieldKey } from "./response-field-tree.helpers";
 import { AddChildIcon } from "./response-field-icons";
 
 type TreeHandlers = {

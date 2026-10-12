@@ -8,6 +8,8 @@ import {
   IGetWorkflowByIdPayload,
   IGetWorkflowExecutionsPayload,
   IGetWorkflowExecutionByIdPayload,
+  IGetWorkflowExecutionLogsPayload,
+  IGetWorkflowExecutionLogsResponse,
   IGetWorkflowVersionsPayload,
   IGetWorkflowByVersionPayload,
   IGetLastSuccessfulExecutionPayload,
@@ -98,6 +100,35 @@ export const useGetWorkflowExecutionById = (
     refetchInterval: 5000,
   });
 };
+
+/** Continues a failed run; refreshes the execution and the list so the new status shows at once. */
+export const useResumeWorkflowExecution = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: ["workflow-execution", "resume"],
+    mutationFn: workflowService.resumeWorkflowExecution,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["workflow-execution"] });
+      queryClient.invalidateQueries({ queryKey: ["workflow-executions"] });
+    },
+  });
+};
+
+/** Polls every 5 s while the backend says more lines may still arrive. Closed panel → `enabled: false` → no requests. */
+export const executionLogsRefetchInterval = (data?: IGetWorkflowExecutionLogsResponse) =>
+  data?.data?.mayStillArrive ? 5000 : false;
+
+export const useGetWorkflowExecutionLogs = (
+  payload: IGetWorkflowExecutionLogsPayload,
+  options: { enabled: boolean },
+) =>
+  useQuery({
+    queryKey: ["workflow-execution-logs", payload.executionId],
+    queryFn: () => workflowService.getWorkflowExecutionLogs(payload),
+    enabled: options.enabled && !!payload.executionId,
+    refetchInterval: (query) => executionLogsRefetchInterval(query.state.data),
+    staleTime: 0,
+  });
 
 export const useCreateWorkflowVersion = () => {
   const queryClient = useQueryClient();

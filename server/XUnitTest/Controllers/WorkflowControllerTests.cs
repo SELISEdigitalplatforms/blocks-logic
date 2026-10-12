@@ -2,6 +2,8 @@ using System.Text.Json;
 using Blocks.Genesis;
 using Workflow.DomainService.Dtos;
 using Workflow.DomainService.Services;
+using Workflow.DomainService.Logging;
+using Microsoft.AspNetCore.Authorization;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -17,6 +19,7 @@ namespace XUnitTest.Controllers
         private readonly Mock<IWorkflowVersionService> _versionService = new();
         private readonly Mock<IWorkflowExecutionService> _executionService = new();
         private readonly Mock<IWorkflowImportService> _importService = new();
+        private readonly Mock<IExecutionLogService> _executionLogService = new();
         private readonly WorkflowController _controller;
 
         public WorkflowControllerTests()
@@ -26,7 +29,8 @@ namespace XUnitTest.Controllers
                 _workflowService.Object,
                 _versionService.Object,
                 _executionService.Object,
-                _importService.Object);
+                _importService.Object,
+                _executionLogService.Object);
         }
 
         public void Dispose() => TestBlocksContext.Clear();
@@ -251,6 +255,53 @@ namespace XUnitTest.Controllers
         }
 
         [Fact]
+        public async Task Webhook_InvalidBody_Returns400WithMessage()
+        {
+            _executionService.Setup(s => s.TriggerWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<JsonElement>()))
+                .ThrowsAsync(new InvalidWebhookBodyException("Body must be a JSON object or an array of objects (the body is a number)."));
+
+            var result = await _controller.Webhook("proj1", "wf1", "wh1", EmptyJson());
+
+            var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+            JsonSerializer.Serialize(bad.Value).Should().Contain("Body must be a JSON object or an array of objects");
+        }
+
+        [Fact]
+        public async Task TestWebhook_InvalidBody_Returns400()
+        {
+            _executionService.Setup(s => s.TriggerTestWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<JsonElement>()))
+                .ThrowsAsync(new InvalidWebhookBodyException("Body must be a JSON object or an array of objects"));
+
+            var result = await _controller.TestWebhook("proj1", "wf1", "wh1", EmptyJson());
+
+            result.Should().BeOfType<BadRequestObjectResult>();
+        }
+
+        [Fact]
+        public async Task WebhookByHeader_InvalidBody_Returns400()
+        {
+            SetBlocksKey("proj1");
+            _executionService.Setup(s => s.TriggerWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<JsonElement>()))
+                .ThrowsAsync(new InvalidWebhookBodyException("Body must be a JSON object or an array of objects"));
+
+            var result = await _controller.WebhookByHeader("wf1", "wh1", EmptyJson());
+
+            result.Should().BeOfType<BadRequestObjectResult>();
+        }
+
+        [Fact]
+        public async Task TestWebhookByHeader_InvalidBody_Returns400()
+        {
+            SetBlocksKey("proj1");
+            _executionService.Setup(s => s.TriggerTestWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<JsonElement>()))
+                .ThrowsAsync(new InvalidWebhookBodyException("Body must be a JSON object or an array of objects"));
+
+            var result = await _controller.TestWebhookByHeader("wf1", "wh1", EmptyJson());
+
+            result.Should().BeOfType<BadRequestObjectResult>();
+        }
+
+        [Fact]
         public async Task TestWebhook_Success_ReturnsOk()
         {
             _executionService.Setup(s => s.TriggerTestWebhookAsync("wf1", "wh1", "proj1", It.IsAny<JsonElement>()))
@@ -397,6 +448,29 @@ namespace XUnitTest.Controllers
             var result = await _controller.GetExecutions(new WorkflowExecutionsGetRequestDto { WorkflowId = "wf" });
 
             result.Should().BeOfType<OkObjectResult>();
+        }
+
+        [Fact]
+        public async Task GetExecutionLogs_ReturnsOk_ForTheCallersTenant()
+        {
+            var expected = new WorkflowExecutionLogsGetResponseDto();
+            _executionLogService.Setup(s => s.GetAsync("tenant-abc", It.Is<WorkflowExecutionLogsGetRequestDto>(d => d.ExecutionId == "e"), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(expected);
+
+            var result = await _controller.GetExecutionLogs(new WorkflowExecutionLogsGetRequestDto { ExecutionId = "e" });
+
+            result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeSameAs(expected);
+        }
+
+        [Fact]
+        public void GetExecutionLogs_IsAnAuthorizedGet_RoutedAsWorkflowGetExecutionLogs()
+        {
+            var method = typeof(WorkflowController).GetMethod(nameof(WorkflowController.GetExecutionLogs))!;
+
+            method.GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true).Should().NotBeEmpty();
+            method.GetCustomAttributes(typeof(HttpGetAttribute), inherit: true).Should().NotBeEmpty();
+            var route = (RouteAttribute)typeof(WorkflowController).GetCustomAttributes(typeof(RouteAttribute), inherit: true).Single();
+            route.Template.Should().Be("[controller]/[action]");
         }
 
         [Fact]

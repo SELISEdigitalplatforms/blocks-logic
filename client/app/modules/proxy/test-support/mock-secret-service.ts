@@ -16,8 +16,8 @@ export const mockSecretService = {
     await waitForMock();
     const search = params.search?.trim().toLowerCase();
     const tag = params.tag?.trim();
-    return MOCK_SECRETS.filter((secret) => (tag ? secret.tags.includes(tag) : true)).filter((secret) =>
-      search ? secret.name.toLowerCase().includes(search) : true,
+    return MOCK_SECRETS.filter((secret) => (tag ? secret.tags.includes(tag) : true)).filter(
+      (secret) => (search ? secret.name.toLowerCase().includes(search) : true),
     );
   },
 };

@@ -1,0 +1,81 @@
+# Blocks Functions — Runner VM host provisioning (phase A-1).
+#
+#   make            everything, in order
+#   make preflight  inspect the host and record provision/.facts (changes nothing)
+#   make verify     run the A-1 checkpoint against the live host
+#
+# Every target is idempotent: re-running is the supported way to reconcile the host after
+# editing /etc/blocks-runner/deny-cidrs, /etc/blocks-runner/dns-servers,
+# /etc/blocks-runner/logging.conf or .versions.
+
+SHELL := /bin/bash
+.SHELLFLAGS := -eu -o pipefail -c
+.DEFAULT_GOAL := all
+
+ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
+# The verification harness deliberately lives outside this repository so no test material can
+# reach a VM (see README). Where "outside" is depends on how the operator laid out their
+# checkouts, and the single hardcoded guess this used to carry — a sibling of blocks-logic —
+# was wrong on the machine it was written on, so `make verify` failed with a path nobody had.
+# Look in the places it is actually kept, in order, and take the first that is really there.
+FUNCTION_RUNNER_TESTS_CANDIDATES := \
+  $(ROOT)/../../../FunctionRunnerTests \
+  $(ROOT)/../../../../FunctionRunnerTests \
+  $(HOME)/FunctionRunnerTests
+FUNCTION_RUNNER_TESTS_FOUND := $(firstword \
+  $(patsubst %/verify/verify.sh,%,$(wildcard $(addsuffix /verify/verify.sh,$(FUNCTION_RUNNER_TESTS_CANDIDATES)))))
+
+# Override when yours is somewhere else again:
+#   make verify FUNCTION_RUNNER_TESTS=/path/to/FunctionRunnerTests
+# With nothing found, fall back to the first candidate so need_harness below can name a path
+# rather than an empty string.
+FUNCTION_RUNNER_TESTS ?= $(or $(FUNCTION_RUNNER_TESTS_FOUND),$(firstword $(FUNCTION_RUNNER_TESTS_CANDIDATES)))
+VERIFY := $(FUNCTION_RUNNER_TESTS)/verify/verify.sh
+
+.PHONY: all preflight docker gvisor network runner-user registry dotnet logging \
+        verify verify-host verify-sandbox verify-network \
+        facts firewall-show harness help
+
+# `all` provisions the host and stops there: it must not depend on the test harness being
+# checked out next to it. Run `make verify` separately, or `../deploy.sh` for the lot.
+all: preflight docker gvisor network runner-user registry dotnet logging
+
+preflight:   ; @$(ROOT)/00-preflight.sh
+docker:      ; @$(ROOT)/10-docker.sh
+gvisor:      ; @$(ROOT)/20-gvisor.sh
+network:     ; @$(ROOT)/30-network.sh
+runner-user: ; @$(ROOT)/40-runner-user.sh
+registry:    ; @$(ROOT)/50-registry.sh
+dotnet:      ; @$(ROOT)/70-dotnet.sh
+logging:     ; @$(ROOT)/80-logging.sh
+
+# The harness reads the provisioning library and the sandbox profile out of this tree, and its
+# own default for that is a `FunctionSandbox` checkout beside itself - the layout from before
+# this moved into blocks-logic. Tell it where the tree actually is rather than relying on that,
+# so the harness needs no edit of its own and no second copy has to exist to satisfy it.
+export SANDBOX_ROOT := $(ROOT)/..
+
+verify:         ; @$(call need_harness) $(VERIFY)
+verify-host:    ; @$(call need_harness) $(VERIFY) host
+verify-sandbox: ; @$(call need_harness) $(VERIFY) sandbox
+verify-network: ; @$(call need_harness) $(VERIFY) network
+
+# A missing harness is an operator mistake, not a crash: say where it should be.
+define need_harness
+test -x $(VERIFY) || { \
+  echo "verification harness not found at $(VERIFY)"; \
+  echo "looked in:"; \
+  for d in $(FUNCTION_RUNNER_TESTS_CANDIDATES); do echo "  $$d"; done; \
+  echo "clone FunctionRunnerTests into one of those, or pass FUNCTION_RUNNER_TESTS=<path>"; \
+  exit 1; };
+endef
+
+harness:       ; @echo "$(FUNCTION_RUNNER_TESTS)"
+facts:         ; @cat $(ROOT)/.facts
+firewall-show: ; @/usr/local/sbin/blocks-fn-firewall show
+
+help:
+	@echo "targets: preflight docker gvisor network runner-user registry dotnet"
+	@echo "         logging verify verify-{host,sandbox,network}"
+	@echo "         facts firewall-show harness"
+	@echo "harness: $(FUNCTION_RUNNER_TESTS)"

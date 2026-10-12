@@ -34,6 +34,7 @@ namespace Proxy.DomainService
             services.AddSingleton<IProxyGatewayService, ProxyGatewayService>();
             services.AddSingleton<IProxyTestService, ProxyTestService>();
             services.AddSingleton<IProxyExecutionService, ProxyExecutionService>();
+            services.AddSingleton<IProxyRateLimiter, ProxyRateLimiter>();
 
             // repositories
             services.AddSingleton<IProxyRepository, ProxyRepository>();
@@ -59,6 +60,13 @@ namespace Proxy.DomainService
 
             services.AddHostedService<ProxyStatsFlushService>();
 
+            // Singleton: the breaker's whole job is to remember this process's recent experience of a
+            // host, which it cannot do if it is rebuilt per request.
+            services.AddSingleton<Utils.IProxyCircuitBreaker, Utils.ProxyCircuitBreaker>();
+
+            // Stateless: it parses a document and proposes routes, writing nothing.
+            services.AddSingleton<Services.IProxyOpenApiImportService, Services.ProxyOpenApiImportService>();
+
             // IHttpClientFactory + the buffered upstream client used by the forwarder.
             services.AddHttpClient();
             services.AddHttpClient(ProxyGatewayService.UpstreamClientName, client =>
@@ -69,10 +77,17 @@ namespace Proxy.DomainService
                 // buffered response passes this cap.
                 client.MaxResponseContentBufferSize = ProxyGatewayService.MaxResponseBodyBytes;
             })
-            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            // Every upstream connection goes through the guard's ConnectCallback: the IP that is checked is
+            // the IP that is used, so DNS rebinding cannot reach a private address.
+            .ConfigurePrimaryHttpMessageHandler(() => ProxyUpstreamGuard.CreatePrimaryHandler(new ProxyUpstreamGuard()));
+
+            // OpenAPI import by URL (PX-8): the same guarded handler — no redirects, connect-time IP check —
+            // plus a buffer cap at the spec limit as a backstop to the service's own capped read.
+            services.AddHttpClient(ProxyOpenApiImportService.SpecClientName, client =>
             {
-                AllowAutoRedirect = false,
-            });
+                client.MaxResponseContentBufferSize = ProxyOpenApiImportService.MaxSpecBytes;
+            })
+            .ConfigurePrimaryHttpMessageHandler(() => ProxyUpstreamGuard.CreatePrimaryHandler(new ProxyUpstreamGuard()));
 
             return services;
         }

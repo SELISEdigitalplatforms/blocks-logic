@@ -71,7 +71,7 @@ export const NodeGuideTransformCodeV1 = () => (
       <>
         Read input data with the variables for your mode (see <strong>Variables by mode</strong>{" "}
         below). Write JavaScript directly. Expression syntax such as{" "}
-        <C>{"{{$json.output.name}}"}</C> does not work inside the script.
+        <C>{"{{$json.name}}"}</C> does not work inside the script.
       </>,
       <>
         End the script with <C>return</C>. Return an object to produce one item or an array of

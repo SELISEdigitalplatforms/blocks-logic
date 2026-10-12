@@ -28,6 +28,8 @@ namespace XUnitTest.Proxy
         public ProxyServiceTests()
         {
             TestBlocksContext.Set(Tenant, "user-1");
+            _proxyRepo.Setup(r => r.SaveConfigAsync(It.IsAny<ProxyDetailEntity>(), It.IsAny<int>())).ReturnsAsync(true);
+            _proxyRepo.Setup(r => r.DeleteAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>())).ReturnsAsync(true);
             _executionRepo
                 .Setup(r => r.CountByProxyAsync(It.IsAny<string>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>()))
                 .ReturnsAsync((IReadOnlyDictionary<string, long>)new Dictionary<string, long>());
@@ -300,6 +302,24 @@ namespace XUnitTest.Proxy
             _proxyRepo.Verify(r => r.GetAllAsync(Tenant, "a.b+c", null, 20, 0), Times.Once);
         }
 
+        // ---------- GetAll : searchKey alias ----------
+        [Theory]
+        [InlineData(null, "stripe", "stripe")]      // only searchKey sent -> used
+        [InlineData("stripe", "other", "stripe")]   // both sent -> search wins
+        [InlineData("  ", "stripe", "stripe")]      // blank search -> falls back to searchKey
+        [InlineData(null, "  ", null)]              // blank searchKey -> no filter
+        public async Task GetAll_AcceptsSearchKeyAlias(string? search, string? searchKey, string? expected)
+        {
+            _proxyRepo.Setup(r => r.GetAllAsync(Tenant, expected, null, 20, 0))
+                .ReturnsAsync(new List<ProxyDetailEntity>());
+            _proxyRepo.Setup(r => r.CountAsync(Tenant, expected, null)).ReturnsAsync(0);
+
+            await _service.GetAllAsync(Tenant, new ProxyGetAllRequestDto { Search = search, SearchKey = searchKey });
+
+            _proxyRepo.Verify(r => r.GetAllAsync(Tenant, expected, null, 20, 0), Times.Once);
+            _proxyRepo.Verify(r => r.CountAsync(Tenant, expected, null), Times.Once);
+        }
+
         // ---------- GetAll : IsActive passthrough ----------
         [Theory]
         [InlineData(true)]
@@ -429,7 +449,7 @@ namespace XUnitTest.Proxy
             var upstreamChange = version.Changes.Should().ContainSingle(c => c.Field == "upstream").Subject;
             upstreamChange.Before.Should().Be("https://api.stripe.com/v1/charges");
             upstreamChange.After.Should().Be("https://api.stripe.com/v2/charges");
-            _proxyRepo.Verify(r => r.ReplaceAsync(entity), Times.Once);
+            _proxyRepo.Verify(r => r.SaveConfigAsync(entity, It.IsAny<int>()), Times.Once);
         }
 
         // ---------- Update : a rename must not collide with another proxy's published identity ----------
@@ -458,7 +478,7 @@ namespace XUnitTest.Proxy
             result.Code.Should().Be("PROXY_SLUG_CONFLICT");
             entity.Name.Should().Be("Weather Lookup");
             entity.Slug.Should().Be("weather-lookup");
-            _proxyRepo.Verify(r => r.ReplaceAsync(It.IsAny<ProxyDetailEntity>()), Times.Never);
+            _proxyRepo.Verify(r => r.SaveConfigAsync(It.IsAny<ProxyDetailEntity>(), It.IsAny<int>()), Times.Never);
             _versionRepo.Verify(r => r.InsertAsync(It.IsAny<ProxyVersionEntity>()), Times.Never);
         }
 
@@ -482,7 +502,7 @@ namespace XUnitTest.Proxy
             result.HttpStatus.Should().Be(200);
             entity.Name.Should().Be("Stripe Billing");
             entity.Slug.Should().Be("stripe-payments");
-            _proxyRepo.Verify(r => r.ReplaceAsync(entity), Times.Once);
+            _proxyRepo.Verify(r => r.SaveConfigAsync(entity, It.IsAny<int>()), Times.Once);
         }
 
         // ---------- Update : a proxy whose own slug matches its name is not self-conflicted ----------
@@ -549,7 +569,7 @@ namespace XUnitTest.Proxy
             });
 
             result.HttpStatus.Should().Be(200);
-            _proxyRepo.Verify(r => r.ReplaceAsync(It.IsAny<ProxyDetailEntity>()), Times.Never);
+            _proxyRepo.Verify(r => r.SaveConfigAsync(It.IsAny<ProxyDetailEntity>(), It.IsAny<int>()), Times.Never);
             _versionRepo.Verify(r => r.InsertAsync(It.IsAny<ProxyVersionEntity>()), Times.Never);
         }
 
@@ -639,7 +659,7 @@ namespace XUnitTest.Proxy
             });
 
             result.HttpStatus.Should().Be(200);
-            _proxyRepo.Verify(r => r.ReplaceAsync(It.IsAny<ProxyDetailEntity>()), Times.Never);
+            _proxyRepo.Verify(r => r.SaveConfigAsync(It.IsAny<ProxyDetailEntity>(), It.IsAny<int>()), Times.Never);
             _versionRepo.Verify(r => r.InsertAsync(It.IsAny<ProxyVersionEntity>()), Times.Never);
         }
 
@@ -662,7 +682,7 @@ namespace XUnitTest.Proxy
             result.HttpStatus.Should().Be(200);
             result.ItemId.Should().Be("p1");
             entity.CurrentVersion.Should().Be(1);
-            _proxyRepo.Verify(r => r.ReplaceAsync(It.IsAny<ProxyDetailEntity>()), Times.Never);
+            _proxyRepo.Verify(r => r.SaveConfigAsync(It.IsAny<ProxyDetailEntity>(), It.IsAny<int>()), Times.Never);
             _versionRepo.Verify(r => r.InsertAsync(It.IsAny<ProxyVersionEntity>()), Times.Never);
         }
 
@@ -774,18 +794,97 @@ namespace XUnitTest.Proxy
             _versionRepo.Setup(r => r.InsertAsync(It.IsAny<ProxyVersionEntity>()))
                 .Callback<ProxyVersionEntity>(v => { version = v; order.Add("version"); })
                 .Returns(Task.CompletedTask);
-            _proxyRepo.Setup(r => r.DeleteAsync(Tenant, "p1"))
-                .Callback(() => order.Add("delete")).Returns(Task.CompletedTask);
+            _proxyRepo.Setup(r => r.DeleteAsync(Tenant, "p1", 1))
+                .Callback(() => order.Add("delete")).ReturnsAsync(true);
 
             var result = await _service.DeleteAsync(Tenant, new ProxyDeleteRequestDto { ItemId = "p1" });
 
             result.HttpStatus.Should().Be(200);
             result.ItemId.Should().Be("p1");
-            order.Should().Equal("version", "delete");
+            order.Should().Equal("delete", "version"); // PX-16: a refused delete leaves no "deleted" row
             version!.Kind.Should().Be(ProxyVersionKind.Delete);
             version.VersionNumber.Should().Be(2);
             version.Changes.Should().BeEmpty();
             version.Snapshot.Upstream.Should().Be("https://api.stripe.com/v1/charges");
+        }
+
+        // ---------- PX-16: a write never silently overwrites another one ----------
+        private static ProxyUpdateRequestDto ChangeUpstream(int? expectedVersion) => new()
+        {
+            ItemId = "p1",
+            Name = "Stripe Payments",
+            Upstream = "https://api.stripe.com/v2/charges",
+            Methods = new List<string> { "GET", "POST" },
+            Headers = new List<ProxyKeyValueInputDto> { Header() },
+            ExpectedVersion = expectedVersion,
+        };
+
+        [Fact]
+        public async Task Update_WritesOnlyIfTheVersionItReadIsStillStored()
+        {
+            var entity = Existing();
+            _proxyRepo.Setup(r => r.GetAsync(Tenant, "p1")).ReturnsAsync(entity);
+
+            var result = await _service.UpdateAsync(Tenant, ChangeUpstream(expectedVersion: 1));
+
+            result.HttpStatus.Should().Be(200);
+            _proxyRepo.Verify(r => r.SaveConfigAsync(entity, 1), Times.Once);
+            entity.CurrentVersion.Should().Be(2);
+        }
+
+        [Fact]
+        public async Task Update_FormLoadedAnOlderVersion_Returns409_WritesNothing()
+        {
+            _proxyRepo.Setup(r => r.GetAsync(Tenant, "p1")).ReturnsAsync(Existing(e => e.CurrentVersion = 3));
+
+            var result = await _service.UpdateAsync(Tenant, ChangeUpstream(expectedVersion: 2));
+
+            result.HttpStatus.Should().Be(409);
+            result.Code.Should().Be(ProxyErrorCodes.VersionConflict);
+            result.Message.Should().Contain("Reload");
+            _proxyRepo.Verify(r => r.SaveConfigAsync(It.IsAny<ProxyDetailEntity>(), It.IsAny<int>()), Times.Never);
+            _versionRepo.Verify(r => r.InsertAsync(It.IsAny<ProxyVersionEntity>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task Update_AnotherSaveWinsTheRace_Returns409_WritesNoVersionRow()
+        {
+            _proxyRepo.Setup(r => r.GetAsync(Tenant, "p1")).ReturnsAsync(Existing());
+            _proxyRepo.Setup(r => r.SaveConfigAsync(It.IsAny<ProxyDetailEntity>(), 1)).ReturnsAsync(false);
+
+            var result = await _service.UpdateAsync(Tenant, ChangeUpstream(expectedVersion: null));
+
+            result.HttpStatus.Should().Be(409);
+            result.Code.Should().Be(ProxyErrorCodes.VersionConflict);
+            _versionRepo.Verify(r => r.InsertAsync(It.IsAny<ProxyVersionEntity>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task Toggle_StaleVersion_Returns409_AndLostRace_Returns409()
+        {
+            _proxyRepo.Setup(r => r.GetAsync(Tenant, "p1")).ReturnsAsync(() => Existing(e => e.CurrentVersion = 4));
+
+            var stale = await _service.ToggleAsync(Tenant, new ProxyToggleRequestDto { ItemId = "p1", Enabled = false, ExpectedVersion = 3 });
+            stale.HttpStatus.Should().Be(409);
+
+            _proxyRepo.Setup(r => r.SaveConfigAsync(It.IsAny<ProxyDetailEntity>(), 4)).ReturnsAsync(false);
+            var lost = await _service.ToggleAsync(Tenant, new ProxyToggleRequestDto { ItemId = "p1", Enabled = false });
+            lost.HttpStatus.Should().Be(409);
+            lost.Code.Should().Be(ProxyErrorCodes.VersionConflict);
+            _versionRepo.Verify(r => r.InsertAsync(It.IsAny<ProxyVersionEntity>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task Delete_AfterAnotherSave_Returns409_WritesNoDeleteRow()
+        {
+            _proxyRepo.Setup(r => r.GetAsync(Tenant, "p1")).ReturnsAsync(Existing());
+            _proxyRepo.Setup(r => r.DeleteAsync(Tenant, "p1", 1)).ReturnsAsync(false);
+
+            var result = await _service.DeleteAsync(Tenant, new ProxyDeleteRequestDto { ItemId = "p1" });
+
+            result.HttpStatus.Should().Be(409);
+            result.Code.Should().Be(ProxyErrorCodes.VersionConflict);
+            _versionRepo.Verify(r => r.InsertAsync(It.IsAny<ProxyVersionEntity>()), Times.Never);
         }
 
         [Fact]

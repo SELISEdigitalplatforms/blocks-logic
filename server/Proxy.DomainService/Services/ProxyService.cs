@@ -21,14 +21,17 @@ namespace Proxy.DomainService.Services
         private readonly IProxyExecutionRepository _proxyExecutionRepository;
         private readonly TimeProvider _timeProvider;
         private readonly ILogger<ProxyService> _logger;
+        private readonly IProxyVariableResolver? _variableResolver;
 
         public ProxyService(
             IProxyRepository proxyRepository,
             IProxyVersionRepository proxyVersionRepository,
             IProxyExecutionRepository proxyExecutionRepository,
             TimeProvider timeProvider,
-            ILogger<ProxyService> logger)
+            ILogger<ProxyService> logger,
+            IProxyVariableResolver? variableResolver = null)
         {
+            _variableResolver = variableResolver;
             _proxyRepository = proxyRepository;
             _proxyVersionRepository = proxyVersionRepository;
             _proxyExecutionRepository = proxyExecutionRepository;
@@ -40,13 +43,14 @@ namespace Proxy.DomainService.Services
         {
             var pageSize = Math.Clamp(request.PageSize <= 0 ? 20 : request.PageSize, 1, 200);
             var pageNumber = Math.Max(0, request.PageNumber);
+            var search = request.GetSearchTerm();
 
             _logger.LogInformation(
                 "Listing proxies for tenant {TenantId}. Search: {Search}, IsActive: {IsActive}, Page: {Page}, PageSize: {PageSize}",
-                tenantId, request.Search, request.IsActive, pageNumber, pageSize);
+                tenantId, search, request.IsActive, pageNumber, pageSize);
 
-            var proxies = await _proxyRepository.GetAllAsync(tenantId, request.Search, request.IsActive, pageSize, pageNumber);
-            var totalCount = await _proxyRepository.CountAsync(tenantId, request.Search, request.IsActive);
+            var proxies = await _proxyRepository.GetAllAsync(tenantId, search, request.IsActive, pageSize, pageNumber);
+            var totalCount = await _proxyRepository.CountAsync(tenantId, search, request.IsActive);
 
             // Read from each proxy document's own counters instead of aggregating ProxyExecutions for the
             // whole page: the documents are already loaded, so the card count now costs no query at all.
@@ -106,6 +110,8 @@ namespace Proxy.DomainService.Services
                 ResponseMode = proxy.ResponseMode.ToString(),
                 ResponseInclude = proxy.ResponseInclude.ToList(),
                 Access = ToAccessDto(proxy.Access),
+                Resilience = ToResilienceDto(proxy.Resilience),
+                RequestsPerMinute = proxy.RequestsPerMinute,
                 CurrentVersion = proxy.CurrentVersion,
                 CreatedDate = proxy.CreatedDate,
                 CreatedBy = proxy.CreatedBy,
@@ -123,7 +129,8 @@ namespace Proxy.DomainService.Services
 
             var validation = ProxyConfigValidator.Validate(
                 request.Name, request.Upstream, request.Methods, request.Headers, request.Query, request.MethodConfigs,
-                request.BodyMerge, request.ResponseMode, request.ResponseInclude, request.Routes, request.Access);
+                request.BodyMerge, request.ResponseMode, request.ResponseInclude, request.Routes, request.Access,
+                request.Resilience, request.RequestsPerMinute);
             if (!validation.IsValid)
             {
                 _logger.LogWarning(
@@ -163,12 +170,29 @@ namespace Proxy.DomainService.Services
                 ResponseMode = validation.ResponseMode,
                 ResponseInclude = validation.ResponseInclude,
                 Access = validation.Access,
+                Resilience = validation.Resilience,
+                RequestsPerMinute = validation.RequestsPerMinute,
                 CurrentVersion = 1,
                 CreatedDate = now,
                 LastUpdatedDate = now,
                 CreatedBy = userId,
                 LastUpdatedBy = userId,
             };
+
+            // PX-9: one exact lookup now, so every call reads secrets by id. An unknown name is refused here
+            // with its name, instead of failing every call later with a 502.
+            var (secretIds, missingVars) = await ProxySecretIdBinder.BindAsync(_variableResolver, tenantId, proxy, _logger);
+            if (missingVars.Count > 0)
+            {
+                _logger.LogWarning(
+                    "Proxy create for tenant {TenantId} rejected: unknown variable(s) [{Names}].",
+                    tenantId, string.Join(", ", missingVars));
+                return ProxyMutationResponse.Failure(
+                    400, ProxyErrorCodes.Validation, "The proxy uses a secret that does not exist.",
+                    ProxySecretIdBinder.UnknownVariablesError(missingVars));
+            }
+
+            proxy.SecretIds = secretIds;
 
             try
             {
@@ -202,7 +226,8 @@ namespace Proxy.DomainService.Services
 
             var validation = ProxyConfigValidator.Validate(
                 request.Name, request.Upstream, request.Methods, request.Headers, request.Query, request.MethodConfigs,
-                request.BodyMerge, request.ResponseMode, request.ResponseInclude, request.Routes, request.Access);
+                request.BodyMerge, request.ResponseMode, request.ResponseInclude, request.Routes, request.Access,
+                request.Resilience, request.RequestsPerMinute);
             if (!validation.IsValid)
             {
                 _logger.LogWarning(
@@ -219,6 +244,13 @@ namespace Proxy.DomainService.Services
                 return ProxyMutationResponse.Failure(
                     404, ProxyErrorCodes.NotFound, $"Proxy '{itemId}' was not found.");
             }
+
+            if (IsStale(request.ExpectedVersion, proxy))
+            {
+                return VersionConflict(itemId, tenantId, request.ExpectedVersion, proxy.CurrentVersion);
+            }
+
+            var readVersion = proxy.CurrentVersion;
 
             // The slug itself is immutable — the gateway path is a contract third-party clients hard-code, so
             // a rename never moves it. But a rename INTO another proxy's slug would leave two rows whose names
@@ -257,16 +289,59 @@ namespace Proxy.DomainService.Services
                 ResponseMode = validation.ResponseMode,
                 ResponseInclude = new List<string>(validation.ResponseInclude),
                 Access = validation.Access.Clone(),
+                Resilience = ProxyVersionFactory.CloneResilience(validation.Resilience),
+                RequestsPerMinute = validation.RequestsPerMinute,
             };
             var changes = ProxyChangeSet.Diff(beforeSnapshot, candidate);
 
+            // PX-9: bind the ids of the config being saved (the candidate), before deciding no-op vs change.
+            var bindTarget = new ProxyDetailEntity
+            {
+                ItemId = proxy.ItemId,
+                TenantId = proxy.TenantId,
+                Name = validation.Name,
+                Slug = proxy.Slug,
+                Upstream = validation.Upstream,
+                Headers = validation.Headers,
+                Query = validation.Query,
+                BodyMerge = validation.BodyMerge,
+                MethodConfigs = validation.MethodConfigs,
+                Routes = validation.Routes,
+                SecretIds = proxy.SecretIds,
+            };
+            var (secretIds, missingVars) = await ProxySecretIdBinder.BindAsync(_variableResolver, tenantId, bindTarget, _logger);
+            if (missingVars.Count > 0)
+            {
+                _logger.LogWarning(
+                    "Proxy update {ItemId} for tenant {TenantId} rejected: unknown variable(s) [{Names}].",
+                    itemId, tenantId, string.Join(", ", missingVars));
+                return ProxyMutationResponse.Failure(
+                    400, ProxyErrorCodes.Validation, "The proxy uses a secret that does not exist.",
+                    ProxySecretIdBinder.UnknownVariablesError(missingVars));
+            }
+
             if (changes.Count == 0)
             {
+                // A save with no config change still refreshes the ids (e.g. a proxy saved before PX-9, or a secret
+                // deleted and created again), without a version row.
+                if (!ProxySecretIdBinder.SameIds(proxy.SecretIds, secretIds))
+                {
+                    proxy.SecretIds = secretIds;
+                    // No version bump. If someone saved meanwhile, their save bound the ids already: nothing lost.
+                    if (!await _proxyRepository.SaveConfigAsync(proxy, readVersion))
+                    {
+                        _logger.LogInformation(
+                            "Proxy {ItemId} (tenant {TenantId}) changed during a no-op save; ids left to that save.",
+                            itemId, tenantId);
+                    }
+                }
+
                 _logger.LogInformation(
                     "Proxy update {ItemId} for tenant {TenantId} is a no-op; no version written.", itemId, tenantId);
                 return ProxyMutationResponse.Success(proxy.ItemId, 200);
             }
 
+            proxy.SecretIds = secretIds;
             proxy.Name = validation.Name;
             proxy.Upstream = validation.Upstream;
             proxy.Methods = validation.Methods;
@@ -278,11 +353,16 @@ namespace Proxy.DomainService.Services
             proxy.ResponseMode = validation.ResponseMode;
             proxy.ResponseInclude = validation.ResponseInclude;
             proxy.Access = validation.Access;
+            proxy.Resilience = validation.Resilience;
+            proxy.RequestsPerMinute = validation.RequestsPerMinute;
             proxy.LastUpdatedDate = DateTime.UtcNow;
             proxy.LastUpdatedBy = ProxyVersionFactory.CurrentUserId();
             proxy.CurrentVersion += 1;
 
-            await _proxyRepository.ReplaceAsync(proxy);
+            if (!await _proxyRepository.SaveConfigAsync(proxy, readVersion))
+            {
+                return VersionConflict(itemId, tenantId, readVersion, null);
+            }
 
             var afterSnapshot = ProxyVersionFactory.SnapshotOf(proxy);
             var version = ProxyVersionFactory.Build(
@@ -318,14 +398,23 @@ namespace Proxy.DomainService.Services
                 return ProxyMutationResponse.Success(proxy.ItemId, 200);
             }
 
+            if (IsStale(request.ExpectedVersion, proxy))
+            {
+                return VersionConflict(itemId, tenantId, request.ExpectedVersion, proxy.CurrentVersion);
+            }
+
             var wasEnabled = proxy.Enabled;
+            var readVersion = proxy.CurrentVersion;
 
             proxy.Enabled = request.Enabled;
             proxy.LastUpdatedDate = DateTime.UtcNow;
             proxy.LastUpdatedBy = ProxyVersionFactory.CurrentUserId();
             proxy.CurrentVersion += 1;
 
-            await _proxyRepository.ReplaceAsync(proxy);
+            if (!await _proxyRepository.SaveConfigAsync(proxy, readVersion))
+            {
+                return VersionConflict(itemId, tenantId, readVersion, null);
+            }
 
             var snapshot = ProxyVersionFactory.SnapshotOf(proxy);
             var summary = request.Enabled ? "Proxy enabled" : "Proxy disabled";
@@ -369,14 +458,34 @@ namespace Proxy.DomainService.Services
                 new List<ProxyFieldChange>(), snapshot, ProxyVersionFactory.CurrentUserId(),
                 ProxyVersionFactory.CurrentUserName());
 
-            // Write the final history row FIRST, then hard-delete the row. Versions are retained.
+            // Delete only the version that was read (PX-16), THEN write the final history row: a save that won the
+            // race keeps its own version number, and a refused delete leaves no "deleted" row behind. Versions are
+            // retained.
+            if (!await _proxyRepository.DeleteAsync(tenantId, proxy.ItemId, proxy.CurrentVersion))
+            {
+                return VersionConflict(itemId, tenantId, proxy.CurrentVersion, null);
+            }
+
             await _proxyVersionRepository.InsertAsync(version);
-            await _proxyRepository.DeleteAsync(tenantId, proxy.ItemId);
 
             _logger.LogInformation(
                 "Deleted proxy {ItemId} for tenant {TenantId}; wrote final version {Version}.",
                 proxy.ItemId, tenantId, version.VersionNumber);
             return ProxyMutationResponse.Success(proxy.ItemId, 200);
+        }
+
+        private static bool IsStale(int? expectedVersion, ProxyDetailEntity proxy) =>
+            expectedVersion is { } expected && expected != proxy.CurrentVersion;
+
+        /// <summary>409 for a write that lost to another one (PX-16). Nothing was written.</summary>
+        private ProxyMutationResponse VersionConflict(string itemId, string tenantId, int? expected, int? current)
+        {
+            _logger.LogWarning(
+                "Proxy {ItemId} (tenant {TenantId}) write refused: expected version {Expected}, stored {Current}.",
+                itemId, tenantId, expected, current?.ToString() ?? "changed meanwhile");
+            return ProxyMutationResponse.Failure(
+                409, ProxyErrorCodes.VersionConflict,
+                "Someone else changed this proxy. Reload to see their changes, then try again.");
         }
 
         private static ProxyKeyValueDto ToKeyValueDto(ProxyKeyValue source) => new()
@@ -395,7 +504,30 @@ namespace Proxy.DomainService.Services
             BodyMerge = source.BodyMerge?.Select(ToKeyValueDto).ToList(),
             ResponseMode = source.ResponseMode?.ToString(),
             ResponseInclude = source.ResponseInclude is null ? null : new List<string>(source.ResponseInclude),
+            Resilience = ToResilienceDto(source.Resilience),
         };
+
+        /// <summary>
+        /// Absent stays absent all the way out: a caller must be able to tell "not configured" from
+        /// "configured with the usual numbers", because only the first one inherits.
+        /// </summary>
+        private static ProxyResilienceDto? ToResilienceDto(ProxyResilienceConfig? source) =>
+            source is null ? null : new ProxyResilienceDto
+            {
+                TimeoutSeconds = source.TimeoutSeconds,
+                Retry = source.Retry is null ? null : new ProxyRetryDto
+                {
+                    Attempts = source.Retry.Attempts,
+                    Backoff = source.Retry.Backoff.ToString(),
+                    InitialDelaySeconds = source.Retry.InitialDelaySeconds,
+                    Idempotent = source.Retry.Idempotent,
+                },
+                Breaker = source.Breaker is null ? null : new ProxyBreakerDto
+                {
+                    FailureThreshold = source.Breaker.FailureThreshold,
+                    OpenSeconds = source.Breaker.OpenSeconds,
+                },
+            };
 
         private static ProxyAccessDto ToAccessDto(EndpointAccessPolicy source) => new()
         {

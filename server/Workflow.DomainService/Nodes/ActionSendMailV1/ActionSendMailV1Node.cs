@@ -3,6 +3,7 @@ using System.Text.Json;
 using Blocks.Genesis;
 using MongoDB.Bson;
 using Mail.DomainService.Mails;
+using Workflow.DomainService.Logging;
 
 namespace Workflow.DomainService.Nodes.ActionSendMailV1
 {
@@ -85,6 +86,11 @@ namespace Workflow.DomainService.Nodes.ActionSendMailV1
                     AppendErrorOutputItem(outputItems, context.InputItems[i], parameters.ToBsonDocument(), ex);
                 }
             }
+
+            // Counts only: never recipients, subjects or templates.
+            var sent = outputItems.Count(o =>
+                o.Data?.Output is BsonDocument doc && doc.TryGetValue("Success", out var ok) && ok.IsBoolean && ok.AsBoolean);
+            context.Log.Info(ExecutionLogStages.MailFinished, "{Sent} of {Total} email(s) sent.", sent, context.IterationCount);
 
             return NodeExecutionResult.Successful(outputItems);
         }

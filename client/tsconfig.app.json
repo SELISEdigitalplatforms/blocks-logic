@@ -18,7 +18,8 @@
     "paths": {
       "@/*": ["./app/*"],
       "@blocks-idp/*": ["./app/idp/*"],
-      "@blocks-workflow/*": ["./app/modules/workflow/*"]
+      "@blocks-workflow/*": ["./app/modules/workflow/*"],
+      "@blocks-functions/*": ["./app/modules/functions/*"]
     }
   },
   "include": ["app"],

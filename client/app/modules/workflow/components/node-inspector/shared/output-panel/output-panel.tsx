@@ -4,11 +4,15 @@ import { useWorkflowStore } from "@blocks-workflow/store";
 import { copyToClipboard } from "@blocks-workflow/utils/copy-to-clipboard";
 import { useCallback, useMemo, useState } from "react";
 import { inferSchemaFromRuntimeRows } from "@blocks-workflow/utils/runtime-node-data";
-import { ChevronDown, ChevronUp, Copy } from "lucide-react";
+import { ChevronDown, ChevronUp, Copy, Pencil, Pin, PinOff, TriangleAlert } from "lucide-react";
 import { useWorkflow } from "@blocks-workflow/hooks/use-workflow";
+import { Badge } from "@/components/ui-kits/badge/badge";
 import { Button } from "@/components/ui-kits/button/button";
 import { Textarea } from "@/components/ui-kits/textarea/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
 import { showErrorToast } from "@/hooks/use-toast";
+import { NodeExecutionStatus } from "@blocks-workflow/utils/workflow-execution-editor.util";
+import type { ExecutedNode } from "@blocks-workflow/models/workflow.model";
 
 type BranchGroup = {
   branch: string;
@@ -28,12 +32,15 @@ export const OutputPanel = ({
   const [mockDataInput, setMockDataInput] = useState("");
   const selectedNode = useWorkflowStore((s) => s.selectedNode);
   const executedItems = useWorkflowStore((s) => s.executedItems);
+  const executedNodes = useWorkflowStore((s) => s.executedNodes);
   const { editorMode, updateNode, lastSuccessfulExecutionData } = useWorkflow();
+  const hasMockData = selectedNode?.pinData != null;
 
   const runtimeOutputByBranch = useMemo<BranchGroup[]>(() => {
     if (!selectedNode) return [];
 
-    if (editorMode === "editor" && selectedNode.pinData != null) {
+    // Mock data replaces the step's output, so while it is set it is what the panel shows.
+    if (selectedNode.pinData != null) {
       const rows = Array.isArray(selectedNode.pinData) ? selectedNode.pinData : [selectedNode.pinData];
       return [
         {
@@ -62,7 +69,14 @@ export const OutputPanel = ({
       rows,
       schema: inferSchemaFromRuntimeRows(rows),
     }));
-  }, [executedItems, selectedNode, editorMode]);
+  }, [executedItems, selectedNode]);
+
+  // The error the server saved on this node's latest run (nodeExecution.error). It used to be stored
+  // and never shown, so a failed test step looked like one with no output (WF-40).
+  const failedRunError = useMemo(
+    () => (selectedNode ? latestRunError(executedNodes, selectedNode.id) : null),
+    [executedNodes, selectedNode],
+  );
 
   const runtimeOutputRows = useMemo(
     () => runtimeOutputByBranch.flatMap((group) => group.rows),
@@ -117,17 +131,71 @@ export const OutputPanel = ({
     setIsEditingMock(false);
   }, [mockDataInput, selectedNode, updateNode]);
 
+  const handleRemoveMockData = useCallback(() => {
+    if (!selectedNode) return;
+    updateNode(selectedNode.id, { pinData: null });
+  }, [selectedNode, updateNode]);
+
   if (!selectedNode) return null;
 
   return (
     <div className={`flex w-full flex-col overflow-hidden ${isCollapsed ? 'h-fit shrink-0' : 'h-full flex-1'}`}>
       <div className="flex items-center justify-between">
-        <h3 className="font-medium text-high-emphasis">Output</h3>
         <div className="flex items-center gap-2">
-          {!isEditingMock && editorMode === "editor" && (
+          <h3 className="font-medium text-high-emphasis">Output</h3>
+          {hasMockData && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="warning" className="gap-1 px-1.5 py-0.5 text-[11px]">
+                  <Pin className="h-3 w-3" aria-hidden="true" />
+                  Mock data
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent className="text-xs">
+                Showing mock data. Runs use it as this step's output instead of running the step.
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {!isEditingMock && editorMode === "editor" && !hasMockData && (
             <Button variant="outline" size="xs" onClick={handleSetMockDataClick}>
               Set mock data
             </Button>
+          )}
+          {!isEditingMock && editorMode === "editor" && hasMockData && (
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xxs"
+                    className="h-7 px-2 text-low-emphasis"
+                    aria-label="Edit mock data"
+                    onClick={handleSetMockDataClick}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="text-xs">Edit mock data</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xxs"
+                    className="h-7 px-2 text-low-emphasis"
+                    aria-label="Remove mock data"
+                    onClick={handleRemoveMockData}
+                  >
+                    <PinOff className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="text-xs">Remove mock data</TooltipContent>
+              </Tooltip>
+            </>
           )}
           {!isEditingMock && (
             <Tabs value={tab} onValueChange={setTab}>
@@ -148,6 +216,16 @@ export const OutputPanel = ({
           )}
         </div>
       </div>
+
+      {failedRunError && !isEditingMock && (
+        <div
+          role="alert"
+          className="mt-2 flex max-h-32 shrink-0 gap-2 overflow-y-auto rounded border border-error/40 bg-error/5 p-2 text-xs text-error"
+        >
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <p className="whitespace-pre-wrap break-words">{failedRunError}</p>
+        </div>
+      )}
 
       {isEditingMock ? (
         <div className="mt-2 flex flex-1 flex-col gap-2 overflow-hidden rounded bg-surface-app p-2">
@@ -350,6 +428,21 @@ function RuntimeJson({ rows }: { rows: unknown[] }) {
       </pre>
     </div>
   );
+}
+
+/**
+ * Error text of the node's latest run, or null when that run did not fail. Runs saved before the server
+ * stored a user-facing message hold ex.ToString(): cut it before the stack trace and drop the
+ * "System.Exception: " prefix.
+ */
+function latestRunError(executedNodes: ExecutedNode[] | null | undefined, nodeId: string): string | null {
+  const latest = (executedNodes ?? [])
+    .filter((ne) => ne.nodeId === nodeId)
+    .reduce<ExecutedNode | null>((last, ne) => (!last || ne.runIndex >= last.runIndex ? ne : last), null);
+  if (!latest || latest.status !== NodeExecutionStatus.Failed) return null;
+
+  const message = (latest.error ?? "").split(/\r?\n\s+at /)[0].replace(/^System\.Exception:\s*/, "").trim();
+  return message || "This step failed.";
 }
 
 function formatCellValue(value: unknown): string {

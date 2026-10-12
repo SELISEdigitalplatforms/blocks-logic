@@ -98,6 +98,22 @@ describe("ProxyTestTab", () => {
     expect(screen.getByLabelText(/request body/i)).toBeTruthy();
   });
 
+  it("refuses to send a body over the 1 MB gateway limit", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ProxyTestTab proxy={stripe()} />);
+    await pickMethod(user, "POST");
+
+    // 1 MB of a 3-byte character: under the limit in characters, over it in bytes.
+    fireEvent.change(bodyInput(), { target: { value: "€".repeat(350_000) } });
+    const send = screen.getByRole("button", { name: /send test request/i });
+    expect(send.hasAttribute("disabled")).toBe(true);
+    expect(screen.getByText(/over the 1 MB limit/)).toBeTruthy();
+
+    fireEvent.change(bodyInput(), { target: { value: "{}" } });
+    expect(send.hasAttribute("disabled")).toBe(false);
+    expect(screen.getByText(/Limits: request body 1 MB, response 5 MB\./)).toBeTruthy();
+  });
+
   it("refuses to send while the proxy is paused", () => {
     renderWithProviders(<ProxyTestTab proxy={{ ...stripe(), enabled: false }} />);
 

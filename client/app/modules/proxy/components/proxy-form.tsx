@@ -28,6 +28,9 @@ import {
 } from "../utils";
 import { KeyValueFieldArray } from "./key-value-field-array";
 import { ProxyAccessCard } from "./proxy-access-card";
+import { ProxyApiOnlySettingsCard } from "./proxy-api-only-settings-card";
+import { ProxyResilienceCard } from "./proxy-resilience-card";
+import { ProxyRateLimitCard } from "./proxy-rate-limit-card";
 import { ProxyFormHeader } from "./proxy-form-header";
 import { ProxyRoutesCard, blankRoute } from "./proxy-routes-card";
 import { useProjectStore } from "@seliseblocks/genesis-os";
@@ -41,9 +44,6 @@ type Props = {
   onCancel?: () => void;
 };
 
-const sameMethods = (a: readonly string[], b: readonly string[]) =>
-  a.length === b.length && a.every((method, i) => method === b[i]);
-
 /**
  * A proxy is a Connection to a vendor exposing one or more Endpoints. The Connection holds what is
  * genuinely shared — the base URL and the credential — and every per-call setting lives on the
@@ -51,8 +51,10 @@ const sameMethods = (a: readonly string[], b: readonly string[]) =>
  *
  * `methods` is derived from the endpoints rather than edited: the server needs the list for the
  * 405 `Allow` header, but there is nothing for the user to decide that the endpoints do not already
- * say. Body-merge and response filtering exist only per endpoint, so the proxy-level fields are sent
- * empty; `methodConfigs` is superseded by endpoints and sent empty too.
+ * say. Body-merge and response filtering are edited per endpoint, and `methodConfigs` is superseded by
+ * endpoints, but the CLI and API can still set all three proxy-wide. Those values are kept as loaded:
+ * resetting them on every save would silently drop a filter (relaying fields the owner chose to hide),
+ * a merged body field, or a per-method upstream. They are cleared only from ProxyApiOnlySettingsCard.
  */
 export const ProxyForm = ({
   mode,
@@ -82,19 +84,9 @@ export const ProxyForm = ({
 
   const name = useWatch({ control: form.control, name: "name" });
   const upstreamUrl = useWatch({ control: form.control, name: "upstreamUrl" }) ?? "";
-  const watchedRoutes = useWatch({ control: form.control, name: "routes" }) as
-    ProxyRoute[] | undefined;
   const selectedProject = useProjectStore().selectedProject;
   const slug = slugifyProxyName(name);
   const clientUrlFor = (routePath: string) => getProxyClientUrl(selectedProject, slug, routePath);
-
-  // Keep the derived method list in step with the endpoints, so validation and the payload agree.
-  useEffect(() => {
-    const derived = deriveProxyMethods(watchedRoutes ?? []);
-    if (!sameMethods(form.getValues("methods") ?? [], derived)) {
-      form.setValue("methods", derived, { shouldDirty: true });
-    }
-  }, [form, watchedRoutes]);
 
   /** The current form state in the shape the API and the Test endpoint expect. */
   const toApiValues = (values: ProxyFormValues): ProxyFormValues => {
@@ -109,12 +101,15 @@ export const ProxyForm = ({
       routes: values.routes ?? [],
       // One policy for every endpoint of the proxy.
       access: values.access ?? defaultProxyAccess(),
-      // Per-endpoint only; nothing at proxy level.
-      bodyMerge: [],
-      bodyMode: "passthrough",
-      methodConfigs: [],
-      responseMode: "all",
-      responseInclude: [],
+      // Proxy-wide, and a real setting rather than a derived one: a route with none inherits this.
+      resilience: values.resilience ?? null,
+      requestsPerMinute: values.requestsPerMinute ?? null,
+      // Proxy-wide values set outside the console: kept as loaded, never reset by a save.
+      bodyMerge: values.bodyMerge ?? [],
+      bodyMode: values.bodyMode ?? "passthrough",
+      methodConfigs: values.methodConfigs ?? [],
+      responseMode: values.responseMode ?? "all",
+      responseInclude: values.responseInclude ?? [],
     };
   };
 
@@ -138,9 +133,13 @@ export const ProxyForm = ({
   // would re-run on every React Query background refetch (the query has no `staleTime`), and each
   // fresh reference would `form.reset` the user's in-progress edits back to the server values.
   const seededForId = useRef<string | null>(null);
+  // The version the edits are based on, taken when the form is seeded — NOT from later refetches, or a
+  // background refresh would quietly turn a stale form into a "current" one and overwrite (PX-16).
+  const seededVersion = useRef<number | null>(null);
   useEffect(() => {
     if (isEdit && proxy && seededForId.current !== proxy.id) {
       seededForId.current = proxy.id;
+      seededVersion.current = proxy.version;
       const routes = proxy.routes?.length ? proxy.routes : [blankRoute(proxy.methods[0] ?? "GET")];
       form.reset({
         ...proxyFormDefaultValues,
@@ -152,6 +151,13 @@ export const ProxyForm = ({
         credentials: toCredentialRows(proxy.headers, proxy.query),
         routes,
         access: proxy.access ?? defaultProxyAccess(),
+        resilience: proxy.resilience ?? null,
+        requestsPerMinute: proxy.requestsPerMinute ?? null,
+        bodyMerge: proxy.bodyMerge,
+        bodyMode: proxy.bodyMerge.length ? "merge" : "passthrough",
+        methodConfigs: proxy.methodConfigs,
+        responseMode: proxy.responseMode,
+        responseInclude: proxy.responseInclude,
       });
     } else if (!isEdit && seededForId.current !== "new") {
       seededForId.current = "new";
@@ -163,7 +169,11 @@ export const ProxyForm = ({
     const payload = toApiValues(values);
 
     if (isEdit && proxy) {
-      const res = await updateProxy.mutateAsync({ id: proxy.id, values: payload });
+      const res = await updateProxy.mutateAsync({
+        id: proxy.id,
+        values: payload,
+        expectedVersion: seededVersion.current,
+      });
       if (!res.isSuccess) return showErrorToast({ errors: res.errors || "Failed to save proxy" });
       showSuccessToast({ description: "Proxy updated successfully." });
       onSuccess?.(proxy.id);
@@ -254,8 +264,17 @@ export const ProxyForm = ({
           </CardContent>
         </Card>
 
+        {/* Proxy-wide settings only the CLI / API can set; shown so a save never hides them. */}
+        <ProxyApiOnlySettingsCard form={form} />
+
         {/* Who can call it: one policy shared by every endpoint below. */}
         <ProxyAccessCard control={form.control} />
+
+        {/* How many calls per minute the gateway lets through, from all callers together. */}
+        <ProxyRateLimitCard control={form.control} />
+
+        {/* What happens when the vendor is slow or down. Nothing here until it is asked for. */}
+        <ProxyResilienceCard control={form.control} />
 
         {/* Endpoints: every per-call setting, on the call it belongs to. */}
         <Card className="rounded-xl">

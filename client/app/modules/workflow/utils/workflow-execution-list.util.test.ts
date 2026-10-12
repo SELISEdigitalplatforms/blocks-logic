@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { WorkflowExecutionStatus, getStatusConfig } from "./workflow-execution-list.util";
+import { WorkflowExecutionStatus, getStatusConfig, shownExecutionStatus } from "./workflow-execution-list.util";
 
 describe("getStatusConfig", () => {
   it("should return gray/Initialized for Init status", () => {
@@ -58,5 +58,26 @@ describe("getStatusConfig", () => {
     expect(WorkflowExecutionStatus.Running).toBe(3);
     expect(WorkflowExecutionStatus.Completed).toBe(4);
     expect(WorkflowExecutionStatus.Failed).toBe(5);
+  });
+});
+
+describe("shownExecutionStatus", () => {
+  const row = (nodeId: string, runIndex: number, status: number) => ({ nodeId, runIndex, status });
+  const { Completed, Failed, Running } = WorkflowExecutionStatus;
+
+  it("shows Failed for a run stored Completed with a failed node (saved before the server fix)", () => {
+    expect(shownExecutionStatus(Completed, [row("a", 1, 4), row("b", 2, 5)])).toBe(Failed);
+  });
+
+  it("counts a node by its latest attempt, so a resumed run that succeeded stays Completed", () => {
+    expect(shownExecutionStatus(Completed, [row("a", 1, 5), row("a", 3, 4), row("b", 2, 4)])).toBe(Completed);
+  });
+
+  it("leaves every other status, and missing node rows, as stored", () => {
+    expect(shownExecutionStatus(Running, [row("a", 1, 5)])).toBe(Running);
+    expect(shownExecutionStatus(Failed, [row("a", 1, 4)])).toBe(Failed);
+    expect(shownExecutionStatus(Completed, [])).toBe(Completed);
+    expect(shownExecutionStatus(Completed, undefined)).toBe(Completed);
+    expect(shownExecutionStatus(undefined, [row("a", 1, 5)])).toBeUndefined();
   });
 });

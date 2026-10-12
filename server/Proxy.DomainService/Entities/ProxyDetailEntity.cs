@@ -59,7 +59,8 @@ namespace Proxy.DomainService.Entities
 
         /// <summary>
         /// Per-method overrides. Empty ⇒ every method uses the shared <see cref="Headers"/> / <see cref="Query"/>
-        /// / <see cref="Upstream"/>. Not yet writable via the API (the validator rejects a non-empty value).
+        /// / <see cref="Upstream"/>. Writable via the API / CLI (validated in ProxyConfigValidator.NormalizeMethodConfigs);
+        /// The Logic console does not edit it but keeps it on save.
         /// </summary>
         public List<ProxyMethodConfig> MethodConfigs { get; set; } = new();
 
@@ -100,6 +101,29 @@ namespace Proxy.DomainService.Entities
         /// neither has to aggregate <c>ProxyExecutions</c>. Eventually consistent by design; never part of a
         /// config version, a change set, or a Revert.
         /// </summary>
+        /// <summary>
+        /// Timeout, retry and breaker settings shared by every route that does not override them.
+        /// <c>null</c> — the default — means none of it applies, which is the behaviour this proxy had
+        /// before the setting existed.
+        /// </summary>
+        public ProxyResilienceConfig? Resilience { get; set; }
+
+        /// <summary>
+        /// Gateway calls per minute for this proxy, from all callers together (P-3, 2026-10-07; same rule as
+        /// functions, FN-19). <c>null</c>: a Public proxy gets the platform default
+        /// (<c>Proxy:RateLimits:PublicPerMinute</c>, 600), a token proxy no limit. Counted per proxy, never
+        /// per IP. Workflow steps and Test calls never count.
+        /// </summary>
+        public int? RequestsPerMinute { get; set; }
+
+        /// <summary>
+        /// <c>{{$VAR.name}}</c> name &rarr; Blocks Secrets id, for every name the config uses (PX-9, 2026-10-07).
+        /// Written on every save and revert by one exact lookup, so a call reads values by id at once — no
+        /// search. The token keeps the name the user sees. Empty on rows saved before; those fall back to a
+        /// name lookup until the next save. Ids are not secrets.
+        /// </summary>
+        public Dictionary<string, string> SecretIds { get; set; } = new(StringComparer.Ordinal);
+
         public ProxyStats Stats { get; set; } = new();
     }
 }

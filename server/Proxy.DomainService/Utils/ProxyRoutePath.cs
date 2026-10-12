@@ -69,14 +69,14 @@ namespace Proxy.DomainService.Utils
 
             if (normalized.Length > MaxPathLength)
             {
-                reason = $"A path must be {MaxPathLength} characters or fewer.";
+                reason = "A path is too long.";
                 return false;
             }
 
             var segments = Split(normalized);
             if (segments.Length > MaxSegments)
             {
-                reason = $"A path must have {MaxSegments} segments or fewer.";
+                reason = "A path has too many segments.";
                 return false;
             }
 

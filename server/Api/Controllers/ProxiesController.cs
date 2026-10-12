@@ -18,7 +18,9 @@ namespace Utilities.Api.Controllers
     /// <c>/versions</c>, <c>/executions</c> and <c>/overview</c> sub-resources. The controller segment still
     /// comes from <c>[controller]</c> plus the global <c>api</c> prefix
     /// (<see cref="BlocksTemplate.Api.GlobalApiRoutePrefixConvention"/>); only the sub-paths are explicit.
-    /// Every action requires a bearer token and the tenant is taken from <see cref="BlocksContext"/>.
+    /// Every action requires a bearer token and a permission: <c>blocks-logic::proxy::read</c> to see
+    /// proxies, versions and execution logs, <c>blocks-logic::proxy::manage</c> to change them, test them or
+    /// preview an OpenAPI spec. The tenant is taken from <see cref="BlocksContext"/>.
     /// Where a service result carries its own <c>HttpStatus</c> the controller honours it, so the service
     /// stays the single source of truth for the SPEC §3.4 error contract.</item>
     /// <item><b>Data plane</b> (Phase 2) — <see cref="Gateway"/> at
@@ -42,16 +44,16 @@ namespace Utilities.Api.Controllers
     {
         /// <summary>
         /// Kestrel-level backstop on the gateway body, deliberately ABOVE
-        /// <see cref="ProxyGatewayService.MaxRequestBodyBytes"/> (10 MB) rather than equal to it.
+        /// <see cref="ProxyGatewayService.MaxRequestBodyBytes"/> (1 MB) rather than equal to it.
         /// <para>
-        /// The 10 MB cap has to stay in application code: exceeding it is a documented outcome
+        /// The 1 MB cap has to stay in application code: exceeding it is a documented outcome
         /// (<c>RequestTooLarge</c>) that answers 413 with the Blocks error body and still records an execution
         /// row. A framework-level limit set to the same value would pre-empt that and return a bare Kestrel
         /// 413 with no row and no <c>code</c>. This one only catches a client streaming far past the point
         /// where the answer is already decided, so the contract is unchanged and the ceiling is bounded.
         /// </para>
         /// </summary>
-        private const long GatewayHardBodyLimitBytes = 12L * 1024 * 1024;
+        private const long GatewayHardBodyLimitBytes = 2L * 1024 * 1024;
 
         private readonly IProxyService _proxyService;
         private readonly IProxyVersionService _proxyVersionService;
@@ -59,12 +61,15 @@ namespace Utilities.Api.Controllers
         private readonly IProxyExecutionService _proxyExecutionService;
         private readonly IProxyGatewayService _gatewayService;
         private readonly IEndpointAccessAuthorizer _accessAuthorizer;
+        private readonly IProxyRateLimiter _rateLimiter;
         private readonly ILogger<ProxiesController> _logger;
 
         /// <summary>
         /// Takes the four control-plane services, the data-plane gateway service, and the shared access
         /// authorizer that enforces each proxy's "Who can call it" policy on the gateway route.
         /// </summary>
+        private readonly IProxyOpenApiImportService _openApiImport;
+
         public ProxiesController(
             IProxyService proxyService,
             IProxyVersionService proxyVersionService,
@@ -72,14 +77,18 @@ namespace Utilities.Api.Controllers
             IProxyExecutionService proxyExecutionService,
             IProxyGatewayService gatewayService,
             IEndpointAccessAuthorizer accessAuthorizer,
+            IProxyRateLimiter rateLimiter,
+            IProxyOpenApiImportService openApiImport,
             ILogger<ProxiesController> logger)
         {
+            _openApiImport = openApiImport;
             _proxyService = proxyService;
             _proxyVersionService = proxyVersionService;
             _proxyTestService = proxyTestService;
             _proxyExecutionService = proxyExecutionService;
             _gatewayService = gatewayService;
             _accessAuthorizer = accessAuthorizer;
+            _rateLimiter = rateLimiter;
             _logger = logger;
         }
 
@@ -88,7 +97,7 @@ namespace Utilities.Api.Controllers
         /// optionally narrowed by a name / slug search term and by isActive state. A list projection: full
         /// upstream and header rows are not included.
         /// </summary>
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::proxy::read")]
         [HttpGet]
         public async Task<IActionResult> List([FromQuery] ProxyGetAllRequestDto dto)
         {
@@ -105,7 +114,7 @@ namespace Utilities.Api.Controllers
         /// <c>POST /api/Proxies</c> — creates a proxy and its first <c>ProxyVersions</c> row. 201 on success;
         /// 409 <c>PROXY_SLUG_CONFLICT</c> when the slug derived from the name already exists for the tenant.
         /// </summary>
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::proxy::manage")]
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] ProxyCreateRequestDto dto)
         {
@@ -122,7 +131,7 @@ namespace Utilities.Api.Controllers
         /// <c>GET /api/Proxies/{proxyId}</c> — one proxy and its full configuration. An unknown id, or another
         /// tenant's proxy, returns 200 with a null payload rather than 404.
         /// </summary>
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::proxy::read")]
         [HttpGet("{proxyId}")]
         public async Task<IActionResult> Get(string proxyId)
         {
@@ -139,7 +148,7 @@ namespace Utilities.Api.Controllers
         /// <c>PUT /api/Proxies/{proxyId}</c> — rewrites the proxy's configuration and appends the per-field
         /// change set as a new version row. The slug is immutable and is never recomputed from a changed name.
         /// </summary>
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::proxy::manage")]
         [HttpPut("{proxyId}")]
         public async Task<IActionResult> Update(string proxyId, [FromBody] ProxyUpdateRequestDto dto)
         {
@@ -158,7 +167,7 @@ namespace Utilities.Api.Controllers
         /// While disabled the proxy's <see cref="Gateway"/> route answers 404
         /// <c>PROXY_GATEWAY_PROXYNOTFOUND</c>, exactly as an unknown slug does.
         /// </summary>
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::proxy::manage")]
         [HttpPatch("{proxyId}")]
         public async Task<IActionResult> SetEnabled(string proxyId, [FromBody] ProxyToggleRequestDto dto)
         {
@@ -177,7 +186,7 @@ namespace Utilities.Api.Controllers
         /// <c>ProxyExecutions</c> rows are deliberately retained, so Change history and Request logs keep
         /// working afterwards.
         /// </summary>
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::proxy::manage")]
         [HttpDelete("{proxyId}")]
         public async Task<IActionResult> Delete(string proxyId)
         {
@@ -195,7 +204,7 @@ namespace Utilities.Api.Controllers
         /// version rows for one proxy, newest first, each carrying its per-field change set and the effective
         /// config snapshot after that change.
         /// </summary>
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::proxy::read")]
         [HttpGet("{proxyId}/versions")]
         public async Task<IActionResult> ListVersions(string proxyId, [FromQuery] ProxyGetVersionsRequestDto dto)
         {
@@ -215,7 +224,7 @@ namespace Utilities.Api.Controllers
         /// action rather than a resource, so it stays a verb on a POST. History is never rewritten or
         /// truncated; the version number moves forward, not back.
         /// </summary>
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::proxy::manage")]
         [HttpPost("{proxyId}/versions/{versionId}/revert")]
         public async Task<IActionResult> Revert(string proxyId, string versionId)
         {
@@ -236,7 +245,7 @@ namespace Utilities.Api.Controllers
         /// the collection, not under <c>{proxyId}</c>, precisely because the draft it tests need not exist yet.
         /// The tenant is taken from <see cref="BlocksContext"/>; no <c>X-Blocks-Key</c> is required here.
         /// </summary>
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::proxy::manage")]
         [HttpPost("test")]
         public async Task<IActionResult> Test([FromBody] ProxyTestRequestDto dto)
         {
@@ -255,13 +264,75 @@ namespace Utilities.Api.Controllers
         }
 
         /// <summary>
+        /// <c>POST /api/Proxies/openapi/preview</c> — reads an OpenAPI document and lists the routes it
+        /// would produce, so the caller can review them before anything is saved.
+        /// <para>
+        /// This writes nothing. The chosen operations come back through the ordinary create/update call,
+        /// which is what keeps an import inside the same validation, versioning and audit as a route typed
+        /// by hand rather than around them.
+        /// </para>
+        /// <para>
+        /// A specification may be pasted (<c>specJson</c>) or named by URL (<c>specUrl</c>); the URL is
+        /// fetched through the same guard as any upstream, because otherwise this endpoint is a request
+        /// this server makes to wherever a caller points it.
+        /// </para>
+        /// </summary>
+        [ProtectedEndPoint("blocks-logic::proxy::manage")]
+        [HttpPost("openapi/preview")]
+        public async Task<IActionResult> PreviewOpenApi(
+            [FromBody] ProxyOpenApiPreviewRequestDto dto, CancellationToken cancellationToken)
+        {
+            if (!TryGetTenantId(out var tenantId, out var error))
+            {
+                return error;
+            }
+
+            if (dto is null || (string.IsNullOrWhiteSpace(dto.SpecJson) && string.IsNullOrWhiteSpace(dto.SpecUrl)))
+            {
+                return BadRequest(new
+                {
+                    code = ProxyErrorCodes.Validation,
+                    errors = new Dictionary<string, string>
+                    {
+                        ["spec"] = "Provide the specification either as specJson or as specUrl.",
+                    },
+                });
+            }
+
+            // Collisions are reported against the proxy the caller intends to import into, so "this route
+            // already exists" is answered before anything is created rather than after.
+            IEnumerable<Proxy.DomainService.Entities.ProxyRouteConfig>? existing = null;
+            if (!string.IsNullOrWhiteSpace(dto.ProxyId))
+            {
+                var current = await _proxyService.GetAsync(tenantId, new ProxyGetRequestDto { ItemId = dto.ProxyId });
+                existing = current?.Data?.Routes?
+                    .Select(r => new Proxy.DomainService.Entities.ProxyRouteConfig
+                    {
+                        Method = HttpMethodTypeExtensions.TryParse(r.Method, out var parsed) ? parsed : default,
+                        Path = r.Path ?? string.Empty,
+                    })
+                    .ToList();
+            }
+
+            var preview = string.IsNullOrWhiteSpace(dto.SpecJson)
+                ? await _openApiImport.PreviewFromUrlAsync(dto.SpecUrl!, existing, cancellationToken)
+                : _openApiImport.Preview(dto.SpecJson!, existing);
+
+            // A preview that found nothing usable is a 400 with the reasons, not an empty 200: the caller
+            // pasted something and needs to know why it produced no routes.
+            return preview.Errors.Count == 0
+                ? Ok(preview)
+                : BadRequest(new { code = ProxyErrorCodes.Validation, errors = preview.Errors, warnings = preview.Warnings });
+        }
+
+        /// <summary>
         /// <c>GET /api/Proxies/{proxyId}/executions</c> — SPEC3 §3.1, the <em>Request logs</em> list for one
         /// proxy: all-time, filtered by <c>statusClass</c>, newest-first, paged, or a Live tail when
         /// <c>afterId</c> is supplied. Returns 400 <c>PROXY_VALIDATION</c> on a bad field and 404
         /// <c>PROXY_NOT_FOUND</c> for a genuinely unknown proxy id (a deleted proxy whose rows remain still
         /// works).
         /// </summary>
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::proxy::read")]
         [HttpGet("{proxyId}/executions")]
         public async Task<IActionResult> ListExecutions(string proxyId, [FromQuery] ProxyGetExecutionsRequestDto dto)
         {
@@ -281,7 +352,7 @@ namespace Utilities.Api.Controllers
         /// untouched). An unknown id, an id whose proxy differs, or another tenant's row all return 200 with
         /// <c>data: null</c>.
         /// </summary>
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::proxy::read")]
         [HttpGet("{proxyId}/executions/{executionId}")]
         public async Task<IActionResult> GetExecution(string proxyId, string executionId)
         {
@@ -301,7 +372,7 @@ namespace Utilities.Api.Controllers
         /// fields. 404 <c>PROXY_NOT_FOUND</c> only when the id neither exists for the tenant nor has any
         /// execution rows.
         /// </summary>
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::proxy::read")]
         [HttpGet("{proxyId}/overview")]
         public async Task<IActionResult> GetOverview(string proxyId)
         {
@@ -345,6 +416,10 @@ namespace Utilities.Api.Controllers
             var requestPath = Request.Path.Value ?? $"/api/proxy/gateway/{slug}/{path}";
             var aborted = HttpContext.RequestAborted;
 
+            // Every answer from here, relayed or Blocks-generated, is tenant content served from the console's
+            // own host (PS-1). Set before any return so no path can skip it.
+            AddGatewaySecurityHeaders(Response);
+
             // Step 1 — identify the tenant. The route is anonymous at the framework level because "Who can
             // call it" is stored per proxy and the Genesis bearer handler skips [AllowAnonymous] actions, so
             // the tenant has to be resolved here: x-blocks-key, or the tenant claim of a presented token.
@@ -367,10 +442,23 @@ namespace Utilities.Api.Controllers
                 return GatewayError(ProxyExecutionOutcome.Unauthorized, 401, requestPath);
             }
 
+            // Step 2b — the proxy's calls-per-minute limit (P-3), before the body is read or anything is
+            // written. Counted after the token check, so a caller without a valid token cannot spend a token
+            // proxy's allowance. An unknown or disabled proxy is not counted: it is answered 404 below.
+            if (config is { Enabled: true })
+            {
+                var retryAfter = await _rateLimiter.TryAcquireAsync(tenantId, config, aborted);
+                if (retryAfter is { } seconds)
+                {
+                    Response.Headers.RetryAfter = seconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    return GatewayError(ProxyExecutionOutcome.RateLimited, 429, requestPath);
+                }
+            }
+
             // Null for a public policy: no identity, no token-scoped work.
             var context = decision.Context;
 
-            // Step 3 — buffer the body under the 10 MB cap before any upstream connection (C4 / C10).
+            // Step 3 — buffer the body under the 1 MB cap before any upstream connection (C4 / C10).
             var (body, tooLarge) = await ReadBodyAsync(aborted);
 
             var result = await _gatewayService.ForwardAsync(new ProxyForwardRequest
@@ -420,6 +508,20 @@ namespace Utilities.Api.Controllers
             }
 
             return GatewayError(result.Outcome, result.StatusCode, requestPath, result.UpstreamStatusCode);
+        }
+
+        /// <summary>
+        /// The two headers every gateway answer carries (PS-1), the same pair Functions sends
+        /// (<c>FunctionHttpResponseMapper.SecurityHeaders</c>). The body is a tenant's upstream content served
+        /// from the platform origin: <c>nosniff</c> stops a browser re-reading JSON or text as HTML, and
+        /// <c>Content-Security-Policy: sandbox</c> puts any HTML or SVG an upstream returns in an opaque origin
+        /// with scripts off, so it cannot read the console's storage or act as the signed-in user. An
+        /// upstream's own CSP is never relayed, so it cannot loosen this.
+        /// </summary>
+        private static void AddGatewaySecurityHeaders(HttpResponse response)
+        {
+            response.Headers.XContentTypeOptions = "nosniff";
+            response.Headers.ContentSecurityPolicy = "sandbox";
         }
 
         /// <summary>Relays the upstream status, body, and Content-Type byte-for-byte. No other header is relayed.</summary>
@@ -472,16 +574,17 @@ namespace Utilities.Api.Controllers
         private static string SafeMessage(string outcome) => outcome switch
         {
             ProxyExecutionOutcome.Unauthorized => "Missing or invalid credentials for this tenant.",
+            ProxyExecutionOutcome.RateLimited => "Too many calls to this proxy. Wait for the time in Retry-After, then try again.",
             ProxyExecutionOutcome.ProxyNotFound => "No enabled proxy is configured for this path.",
             ProxyExecutionOutcome.MethodNotAllowed => "This HTTP method is not allowed for this proxy.",
             // Deliberately does not say whether the path exists upstream: the caller may not know the
             // vendor's URL shape, and this response must not become a way to discover it.
             ProxyExecutionOutcome.RouteNotAllowed => "This path is not a configured route on this proxy.",
-            ProxyExecutionOutcome.RequestTooLarge => "The request body exceeds the 10 MB limit.",
-            ProxyExecutionOutcome.Timeout => "The upstream endpoint did not respond within 30 seconds.",
+            ProxyExecutionOutcome.RequestTooLarge => "The request body exceeds the 1 MB limit.",
+            ProxyExecutionOutcome.Timeout => "The upstream endpoint did not respond in time.",
             ProxyExecutionOutcome.UpstreamUnreachable => "The upstream endpoint could not be reached.",
             ProxyExecutionOutcome.UpstreamBlocked => "The upstream endpoint is not an allowed destination.",
-            ProxyExecutionOutcome.UpstreamResponseTooLarge => "The upstream response exceeds the 10 MB limit.",
+            ProxyExecutionOutcome.UpstreamResponseTooLarge => "The upstream response exceeds the 5 MB limit.",
             ProxyExecutionOutcome.VariableResolutionFailed => "A configured configuration variable could not be resolved.",
             ProxyExecutionOutcome.ResponseFilterFailed => "The upstream response could not be filtered to the configured fields.",
             _ => "The proxy could not complete the request.",

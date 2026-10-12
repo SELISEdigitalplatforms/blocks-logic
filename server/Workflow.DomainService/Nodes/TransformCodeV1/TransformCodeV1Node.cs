@@ -3,6 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Text;
 using Workflow.DomainService.Entities;
+using Workflow.DomainService.Logging;
 using Jint;
 using Jint.Native;
 using MongoDB.Bson;
@@ -30,6 +31,9 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
 
         public const string SourceIdKey = "__id";
 
+        private const string MaxDurationExceededMessage = "Script execution exceeded max duration.";
+        private const string TooManyOutputItemsMessage = "Too many output items.";
+
         private static readonly MongoDB.Bson.IO.JsonWriterSettings BsonJsonSettings = new()
         {
             OutputMode = MongoDB.Bson.IO.JsonOutputMode.RelaxedExtendedJson,
@@ -52,9 +56,26 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
                     return NodeExecutionResult.Failed("Script too large.");
                 }
 
-                return parameters.Mode == "each"
+                context.Log.Info(ExecutionLogStages.CodeStarted, "Running script on {Count} item(s).", context.InputItems.Count);
+                var stopwatch = Stopwatch.StartNew();
+                var result = parameters.Mode == "each"
                     ? RunPerItem(context, parameters, script)
                     : RunOnceForAllItems(context, parameters, script);
+
+                if (result.IsSuccess)
+                {
+                    context.Log.Info(ExecutionLogStages.CodeFinished, "Script finished in {DurationMs} ms, returned {Count} item(s).",
+                        stopwatch.ElapsedMilliseconds, result.OutputItems.Count);
+                }
+                else if (result.ErrorMessage == TooManyOutputItemsMessage)
+                {
+                    context.Log.Error(ExecutionLogStages.CodeLimit, "Script returned too many items.");
+                }
+                else if (result.ErrorMessage == MaxDurationExceededMessage)
+                {
+                    context.Log.Error(ExecutionLogStages.CodeTimeout, "Script exceeded the time limit.");
+                }
+                return result;
             }
             catch (Exception ex)
             {
@@ -75,7 +96,7 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
             {
                 if (stopwatch.Elapsed > TimeSpan.FromSeconds(MaxTotalDurationSeconds))
                 {
-                    return NodeExecutionResult.Failed("Script execution exceeded max duration.", outputItems);
+                    return NodeExecutionResult.Failed(MaxDurationExceededMessage, outputItems);
                 }
                 var current = inputItems[i];
                 var item = ToJObject(current.Data.Output ?? new BsonDocument(), current.Id);
@@ -99,7 +120,7 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
                 {
                     if (outputItems.Count + 1 > MaxOutputItems)
                     {
-                        return NodeExecutionResult.Failed("Too many output items.", outputItems);
+                        return NodeExecutionResult.Failed(TooManyOutputItemsMessage, outputItems);
                     }
 
                     var (outputToken, _) = ExtractOutputAndSourceId(token);
@@ -138,6 +159,10 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
             }
             catch (Exception ex)
             {
+                if (ex is TimeoutException)
+                {
+                    context.Log.Error(ExecutionLogStages.CodeTimeout, "Script exceeded the time limit.");
+                }
                 var errorItem = TryBuildErrorOutputItem(null, parameters.ToBsonDocument(), ex);
                 if (errorItem != null) outputItems.Add(errorItem);
                 return NodeExecutionResult.Failed(FormatScriptError(ex), outputItems);
@@ -146,7 +171,7 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
             var normalized = NormalizeResult(result);
             if (normalized.Count > MaxOutputItems)
             {
-                return NodeExecutionResult.Failed("Too many output items.", outputItems);
+                return NodeExecutionResult.Failed(TooManyOutputItemsMessage, outputItems);
             }
 
             long serializedOutputBytes = 0;
@@ -155,7 +180,7 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
             {
                 if (outputItems.Count + 1 > MaxOutputItems)
                 {
-                    return NodeExecutionResult.Failed("Too many output items.", outputItems);
+                    return NodeExecutionResult.Failed(TooManyOutputItemsMessage, outputItems);
                 }
 
                 var (outputToken, sourceId) = ExtractOutputAndSourceId(token);
@@ -281,11 +306,16 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
             return engine;
         }
 
+        // console.* in a script is accepted and dropped. It used to print to the server's stdout, which put
+        // tenant item data (tokens from an upstream response, resolved values) into platform logs; the
+        // tenant never saw those lines anyway. User rule 2026-10-08: never show a secret in a log.
+        private static readonly Action<object?> DropConsoleLine = _ => { };
+
         private static readonly object CodeNodeConsole = new
         {
-            log = (Action<object?>)(msg => Console.WriteLine($"[code-node] {msg}")),
-            warn = (Action<object?>)(msg => Console.WriteLine($"[code-node][warn] {msg}")),
-            error = (Action<object?>)(msg => Console.Error.WriteLine($"[code-node][error] {msg}")),
+            log = DropConsoleLine,
+            warn = DropConsoleLine,
+            error = DropConsoleLine,
         };
 
 

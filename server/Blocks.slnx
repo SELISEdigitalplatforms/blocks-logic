@@ -11,4 +11,13 @@
   <Project Path="Scheduler.DomainService/Scheduler.DomainService.csproj" />
   <Project Path="Worker/Worker.csproj" />
   <Project Path="XUnitTest/XUnitTest.csproj" />
+  <!-- The function runner. It deploys to its own VM rather than into any image this solution
+       builds, and it lives outside server/ so that it keeps its own Directory.Build.props and
+       Directory.Packages.props (stricter analyzers, its own transitive pinning). It is listed
+       here so CI builds and tests it with everything else: .github/workflows/inception-sast.yml
+       globs server/*.slnx and runs build + test against whatever it finds. -->
+  <Project Path="../sandbox/src/Blocks.FunctionRunner.Contracts/Blocks.FunctionRunner.Contracts.csproj" />
+  <Project Path="../sandbox/src/Blocks.FunctionRunner/Blocks.FunctionRunner.csproj" />
+  <Project Path="../sandbox/src/Blocks.FunctionRunner.Cli/Blocks.FunctionRunner.Cli.csproj" />
+  <Project Path="../sandbox/src/Blocks.FunctionRunner.Tests/Blocks.FunctionRunner.Tests.csproj" />
 </Solution>

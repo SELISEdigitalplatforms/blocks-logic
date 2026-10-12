@@ -7,7 +7,8 @@ namespace Workflow.DomainService.Services
 
     public interface IWorkflowEngineService
     {
-        Task RunNodeAsync(AddExcuationNodeEvent dto);
+        /// <param name="stopping">The Worker is shutting down: a step still waiting stops and is marked interrupted.</param>
+        Task RunNodeAsync(AddExcuationNodeEvent dto, CancellationToken stopping = default);
         Task<WorkflowExecutionEntity?> RunNodeInProcessAsync(AddExcuationNodeEvent dto);
 
         Task<WorkflowExecutionEntity?> ExecuteStepNodeAsync(string tenantId, string executionId, string triggerNodeId, string targetNodeId, string? sourceExecutionId = null);

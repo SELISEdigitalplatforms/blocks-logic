@@ -48,7 +48,7 @@ describe("Proxy feature", () => {
     expect(screen.getByText(/Your client calls Blocks/i)).toBeTruthy();
     expect(screen.getByText("SendGrid Mail")).toBeTruthy();
     expect(screen.getByText("Weather Lookup")).toBeTruthy();
-    expect(screen.getByText(/1,248 calls 24h/i)).toBeTruthy();
+    expect(screen.getByText(/1,248 recent calls/i)).toBeTruthy();
   });
 
   it("renders detail overview with the upstream endpoint in full", async () => {
@@ -68,7 +68,9 @@ describe("Proxy feature", () => {
     // No trailing "/*": the gateway forwards only the endpoints the proxy declares, so advertising
     // a wildcard would promise paths that are refused.
     // The base URL appears once in the summary card and once per base-path endpoint (p1 has two).
-    expect((await screen.findAllByText("/logic/v4/proxy/gateway/stripe-payments")).length).toBeGreaterThan(0);
+    expect(
+      (await screen.findAllByText("/logic/v4/proxy/gateway/stripe-payments")).length,
+    ).toBeGreaterThan(0);
     expect(screen.getByText("Authorization")).toBeTruthy();
 
     // Header/query values and the upstream endpoint all render as configured, nothing masked.

@@ -79,8 +79,8 @@ namespace Workflow.DomainService.Services
         /// <c>null</c> when no delegation grant is available. <see cref="IDelegatedTokenProvider.GetTokenAsync"/>
         /// only <b>redeems</b> an existing delegation grant (<c>DelegatedTokenContext.Current</c>) — it does not
         /// mint one from scratch. After a successful webhook auth the validated principal is assigned to
-        /// <c>HttpContext.User</c> so Genesis can mint a grant on send (or the in-process hop). Callers
-        /// must treat <c>null</c> as "omit the Authorization header", not as an error.
+        /// <c>HttpContext.User</c> so Genesis can mint a grant on send (or the in-process hop). Workflow
+        /// nodes treat <c>null</c> as an item error, never as "send without Authorization".
         /// </summary>
         public Task<string?> CreateBlocksAuthorizationTokenAsync(CancellationToken ct = default)
             => _delegatedTokenProvider.GetTokenAsync(ct);

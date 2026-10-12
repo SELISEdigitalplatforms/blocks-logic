@@ -1,0 +1,12 @@
+{
+  "name": "blocks-fn-any-js-probe",
+  "private": true,
+  "type": "module",
+  "description": "One function that exercises what tenant code commonly needs. See run.sh.",
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "ioredis": "^5.4.1",
+    "mongodb": "^6.9.0",
+    "pg": "^8.13.0"
+  }
+}

@@ -2,6 +2,7 @@ using Workflow.DomainService.Repositories;
 using Workflow.DomainService.Services;
 using Workflow.DomainService.Import;
 using Workflow.DomainService.Nodes;
+using Workflow.DomainService.Logging;
 using Workflow.DomainService.Nodes.ActionAIAgentV1;
 using Workflow.DomainService.Nodes.ActionSendMailV1;
 using Workflow.DomainService.Nodes.ActionHttpRequestV1;
@@ -73,6 +74,15 @@ namespace Workflow.DomainService
 
 
             // end register node executors
+
+            services.AddSingleton<IWorkflowExecutionLogger, WorkflowExecutionLogger>();
+
+            // execution logs read side
+            services.AddOptions<ExecutionLogOptions>().BindConfiguration(ExecutionLogOptions.SectionName);
+            services.TryAddSingleton(TimeProvider.System);
+            services.AddSingleton<IExecutionLogStore, MongoExecutionLogStore>();
+            services.AddSingleton<IExecutionLogRetentionProvider, LmtExecutionLogRetentionProvider>();
+            services.AddSingleton<IExecutionLogService, ExecutionLogService>();
 
             services.AddSingleton<IClientCredentialTokenService, ClientCredentialTokenService>();
 

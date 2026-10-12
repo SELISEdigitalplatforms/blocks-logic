@@ -25,6 +25,11 @@ namespace Workflow.DomainService.Entities
         public DateTime StartedAt { get; set; } = DateTime.UtcNow;
         public DateTime? FinishedAt { get; set; }
         public string? ErrorMessage { get; set; }
+
+        /// <summary>W3C trace id (32 lowercase hex) generated when the execution is created. Every execution stage
+        /// log line is stamped with it so the run's logs can be fetched by this id. Null on executions created
+        /// before execution logging existed.</summary>
+        public string? TraceId { get; set; }
     }
 
     public class TriggerMetadata

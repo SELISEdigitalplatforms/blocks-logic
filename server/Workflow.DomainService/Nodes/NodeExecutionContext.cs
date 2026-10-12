@@ -1,5 +1,6 @@
 using MongoDB.Bson;
 using Workflow.DomainService.Entities;
+using Workflow.DomainService.Logging;
 
 namespace Workflow.DomainService.Nodes
 {
@@ -36,6 +37,13 @@ namespace Workflow.DomainService.Nodes
         public bool IsRetry { get; set; }
         public int AttemptNumber { get; set; } = 1;
         public CancellationToken CancellationToken { get; set; } = default;
+
+        /// <summary>
+        /// When a failed execution is resumed: the items this node saved on its failed attempt (the work it had
+        /// already done). A node may reuse them instead of doing that work again; the function step does, per
+        /// input item. Empty on a first attempt.
+        /// </summary>
+        public IReadOnlyList<WorkflowItemExecutionEntity> PreviousAttemptItems { get; init; } = [];
         public IServiceProvider? ServiceProvider { get; set; }
 
         /// <summary>
@@ -45,5 +53,9 @@ namespace Workflow.DomainService.Nodes
         /// </summary>
         public IReadOnlyDictionary<string, string> ResolvedVariables { get; set; } =
             new Dictionary<string, string>();
+
+        /// <summary>Stage logger bound to this node run. Lines are stamped with the execution's trace id and shown
+        /// in the execution logs panel: stages and counts only, never parameter or item values.</summary>
+        public NodeExecutionLog Log { get; set; } = NodeExecutionLog.Null;
     }
 }

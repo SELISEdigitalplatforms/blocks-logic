@@ -17,6 +17,8 @@ const badgeVariants = cva(
         success: "bg-green-100 text-green-800 border-transparent",
         error: "bg-red-100 text-red-800 border-transparent",
         info: "bg-blue-50 text-blue-800 border-transparent",
+        // Token-based (not raw palette) so the amber inverts correctly in dark mode.
+        warning: "bg-warning-100 text-warning-800 border-transparent",
       },
     },
     defaultVariants: {
@@ -26,8 +28,7 @@ const badgeVariants = cva(
 );
 
 export interface BadgeProps
-  extends React.HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof badgeVariants> {}
+  extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof badgeVariants> {}
 
 function Badge({ className, variant, ...props }: BadgeProps) {
   return <div className={cn(badgeVariants({ variant }), className)} {...props} />;

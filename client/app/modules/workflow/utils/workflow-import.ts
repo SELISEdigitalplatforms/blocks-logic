@@ -13,7 +13,7 @@ export type ImportErrorCode =
   | "UPLOAD_FAILED";
 
 export const IMPORT_ERROR_MESSAGES: Record<ImportErrorCode, string> = {
-  IMPORT_TOO_LARGE: "This file is larger than the 5 MB limit.",
+  IMPORT_TOO_LARGE: "This file is too large.",
   IMPORT_NOT_JSON: "This file is not valid JSON.",
   IMPORT_BAD_SHAPE:
     "This file is not a valid workflow export (missing name, nodes, edges or settings).",
@@ -27,6 +27,9 @@ export const IMPORT_ERROR_MESSAGES: Record<ImportErrorCode, string> = {
 export const IMPORT_SUCCESS_MESSAGE = "Workflow imported.";
 
 export const IMPORT_STARTED_MESSAGE = "Import started. You'll be notified when it's ready.";
+
+export const IMPORT_SLOW_MESSAGE =
+  "The import is taking longer than expected. Check the workflow list again in a moment.";
 
 export const importSuccessMessage = (issues: number): string =>
   issues > 0

@@ -14,7 +14,8 @@ export const NodeGuideTriggerEmailV1 = () => (
       "The backend starts workflows only for inbound emails with received status.",
       "The trigger output is the email event data passed into the workflow.",
       "Mailbox options are loaded from the current project.",
-      "Selecting a mailbox stores its mail server configuration id and project key for the trigger.",
+      "Selecting a mailbox stores its mail server configuration id and x-blocks-key for the trigger.",
+      "The published workflow runs only while the draft still uses the same mailbox. If you change the mailbox in the draft, publish again.",
     ]}
   />
 );

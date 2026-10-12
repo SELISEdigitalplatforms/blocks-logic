@@ -9,7 +9,7 @@ namespace Proxy.DomainService.Entities
     /// <item><see cref="Timeout"/> / <see cref="UpstreamUnreachable"/> &mdash; Blocks never got a response.</item>
     /// <item><see cref="UpstreamBlocked"/> &mdash; the resolved upstream address is private / loopback /
     /// link-local and was refused (SSRF guard).</item>
-    /// <item><see cref="UpstreamResponseTooLarge"/> &mdash; the upstream response body exceeded the 10 MB cap.</item>
+    /// <item><see cref="UpstreamResponseTooLarge"/> &mdash; the upstream response body exceeded the 5 MB cap.</item>
     /// <item><see cref="RequestTooLarge"/> / <see cref="MethodNotAllowed"/> / <see cref="ProxyNotFound"/> /
     /// <see cref="Unauthorized"/> / <see cref="RequestBodyNotMergeable"/> /
     /// <see cref="VariableResolutionFailed"/> &mdash; Blocks rejected the call before forwarding.</item>
@@ -22,6 +22,13 @@ namespace Proxy.DomainService.Entities
         public const string UpstreamError = "UpstreamError";
         public const string Timeout = "Timeout";
         public const string UpstreamUnreachable = "UpstreamUnreachable";
+
+        /// <summary>
+        /// The breaker is open for this upstream host, so nothing was sent. Distinct from
+        /// <see cref="UpstreamUnreachable"/> on purpose: the caller needs to know this was our decision and
+        /// that retrying immediately is pointless.
+        /// </summary>
+        public const string UpstreamUnavailable = "UpstreamUnavailable";
         public const string UpstreamBlocked = "UpstreamBlocked";
         public const string UpstreamResponseTooLarge = "UpstreamResponseTooLarge";
         public const string RequestTooLarge = "RequestTooLarge";
@@ -67,6 +74,13 @@ namespace Proxy.DomainService.Entities
         /// <see cref="Unauthorized"/> and writes no row.)
         /// </summary>
         public const string Forbidden = "Forbidden";
+
+        /// <summary>
+        /// The proxy's calls-per-minute limit refused the call (P-3). Returned as <c>429</c> with
+        /// <c>Retry-After</c>; nothing is forwarded and <b>no</b> execution row is written, so a flood
+        /// cannot fill the logs either.
+        /// </summary>
+        public const string RateLimited = "RateLimited";
         public const string InternalError = "InternalError";
     }
 }

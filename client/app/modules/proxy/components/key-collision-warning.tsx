@@ -31,7 +31,11 @@ export const KeyCollisionWarning = ({ rowKey, kind, collision }: Props) => {
       {collision.duplicateInList ? (
         <p className="flex items-center gap-1.5 text-[11px] text-amber-700 dark:text-amber-400">
           <AlertTriangle aria-hidden="true" className="h-3 w-3 shrink-0" />
-          <span>Duplicate — only the last {key} row is sent.</span>
+          <span>
+            {kind === "header"
+              ? <>Duplicate {key} header — saving will fail. Header names must be unique.</>
+              : <>Duplicate — only the last {key} row is sent.</>}
+          </span>
         </p>
       ) : null}
     </div>

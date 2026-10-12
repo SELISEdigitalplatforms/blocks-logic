@@ -3,6 +3,7 @@ using Blocks.Extensions.DependencyInjection;
 using Blocks.Genesis;
 using Blocks.Secrets;
 using BlocksTemplate.Api;
+using BlocksTemplate.Api.Security;
 using CloudConfiguration.DomainService.Shared.Utilities;
 using Common.InternalService.Shared.Utilities;
 using DomainService.Notification;
@@ -14,6 +15,7 @@ using Proxy.DomainService;
 using Mail.DomainService.Shared.Utilities;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
+using Functions.DomainService.Utils;
 using Scheduler.DomainService.Utils;
 using SeliseBlocks.ConfigurationDriver;
 using Storage.DomainService.Utilities;
@@ -34,6 +36,8 @@ builder.Configuration.AddMongoDbConfiguration(options =>
     options.SecretKey = "blocks-secret-logic";
 });
 
+// Before Genesis sets up tracing, so it runs ahead of Genesis's exporter (see TraceTagSanitizer).
+Common.InternalService.Tracing.TraceTagSanitizer.AddFirst(builder.Services);
 ApplicationConfigurations.ConfigureServices(builder.Services, LogicConstants.GetMessageConfiguration(secret.MessageConnectionString));
 
 builder.Services.Configure<FormOptions>(options =>
@@ -51,7 +55,15 @@ ApplicationConfigurations.ConfigureApi(services, serviceName);
 builder.Services.Configure<MvcOptions>(options =>
 {
     options.Conventions.Insert(0, new GlobalApiRoutePrefixConvention("api"));
+    // Translates the Secrets SDK's own exceptions (DECISIONS D6) into the HTTP codes its
+    // README documents, so a Functions call that touches a secret does not need its own
+    // try/catch for SecretNotFoundException et al. Registered once — Proxy relies on it too.
     options.Filters.Add<SecretExceptionFilter>();
+    // The same treatment for the function domain's own exceptions on the management surface.
+    // Without it those actions — which return their DTO directly, not an ActionResult — turn
+    // every validation failure into a bare 500. The public /api/fn route maps its own and is
+    // not affected.
+    options.Filters.Add<FunctionExceptionFilter>();
 });
 
 var wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
@@ -67,12 +79,48 @@ services.AddWorkflowExecutionEngine();
 services.AddProxyServices();
 services.AddCloudConfigurationServices();
 services.AddSchedulerServices();
+services.AddFunctionsServices(builder.Configuration);
+// The function-invoke workflow action step. Registered here (not from inside
+// Workflow.DomainService's own AddWorkflowExecutionEngine()) to avoid a circular project
+// reference: Functions.DomainService already depends on DomainService for IWorkflowAuthService.
+services.AddSingleton<Workflow.DomainService.Nodes.INodeExecutor, Functions.DomainService.Nodes.ActionFunctionNode>();
 services.AddStorageDomainServices();
 services.AddBlocksSecrets();
 services.RegisterBlocksStorageServices();
 await services.RegisterBlocksDeploymentServicesAsync(vaultType);
 
 var app = builder.Build();
+
+// Built once: the policy comes from configuration, which does not change per request.
+var contentSecurityPolicy = ContentSecurityPolicy.Build(app.Configuration);
+var cspMode = SecurityHeaders.ReadMode(app.Configuration);
+Console.WriteLine($"CSP mode: {cspMode}");
+
+// OnStarting, so headers a controller already set (proxy/function sandbox CSP) are seen and kept.
+app.Use(async (context, next) =>
+{
+    context.Response.OnStarting(() =>
+    {
+        SecurityHeaders.Apply(context, contentSecurityPolicy, cspMode);
+        return Task.CompletedTask;
+    });
+
+    await next(context);
+});
+
+// CSP violation reports. Before static files, the SPA fallback and Genesis's tenant/auth
+// middleware: browsers post them anonymously, without the x-blocks-key header.
+var cspReportLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("CspReport");
+app.Use(async (context, next) =>
+{
+    if (CspReportEndpoint.Matches(context))
+    {
+        await CspReportEndpoint.HandleAsync(context, cspReportLogger);
+        return;
+    }
+
+    await next(context);
+});
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
@@ -81,13 +129,45 @@ var indexHtml = Path.Combine(app.Environment.WebRootPath ?? "", "index.html");
 
 if (File.Exists(indexHtml))
 {
-
-    app.MapFallback(async context =>
+    // Deliberately middleware rather than MapFallback. A fallback endpoint matches every path on
+    // every method, which makes it a valid candidate for a request that reached a real API route
+    // with the wrong verb — and routing then prefers it over answering 405. POST to a [HttpGet]
+    // action, and PUT to /api/fn/{id}, both came back 200 with index.html, and a client parsing
+    // that as JSON failed a long way from the cause.
+    //
+    // Constraining the fallback's route to exclude /api does not fix it: excluding the prefix by
+    // route constraint turns those 405s into 404s and stops "/" matching at all. Serving the SPA
+    // from middleware instead leaves /api/** entirely to the router, so a wrong method is a 405
+    // and an unknown API route is a 404, while every non-API path behaves exactly as it did.
+    app.Use(async (context, next) =>
     {
-        context.Response.ContentType = "text/html; charset=utf-8";
-        await context.Response.SendFileAsync(indexHtml);
+        // A missing asset must stay a 404: answering a missing .js chunk with HTML turns a
+        // deploy problem into a parse error in the browser. This is what the fallback's implicit
+        // `nonfile` constraint used to do.
+        if (context.Request.Path.StartsWithSegments("/api") || LooksLikeAFile(context.Request.Path))
+        {
+            await next(context);
+            return;
+        }
 
+        await next(context);
+
+        if (context.Response.StatusCode == StatusCodes.Status404NotFound && !context.Response.HasStarted)
+        {
+            context.Response.Clear();
+            context.Response.ContentType = "text/html; charset=utf-8";
+            await context.Response.SendFileAsync(indexHtml);
+        }
     });
+}
+
+static bool LooksLikeAFile(PathString path)
+{
+    var value = path.Value;
+    if (string.IsNullOrEmpty(value)) return false;
+
+    var lastSegment = value.AsSpan(value.LastIndexOf('/') + 1);
+    return lastSegment.Contains('.');
 }
 
 ApplicationConfigurations.ConfigureMiddleware(app, tenantValidationPrefixes: new[] { "api/notificationHub" });
@@ -142,7 +222,12 @@ static void ApplyFrontendRuntimeSettings(IConfiguration configuration, string we
         ["__BLOCKS_STUDIO_CLIENT_ID__"] = section["BLOCKS_STUDIO_CLIENT_ID"],
     };
 
+    // The self-hosted Monaco build (client/vite.config.ts) is third-party code with no tokens;
+    // skipping it saves reading ~16 MB on every start.
+    var monacoRoot = Path.Combine(webRootPath, "monaco") + Path.DirectorySeparatorChar;
+
     var files = Directory.EnumerateFiles(webRootPath, "*", SearchOption.AllDirectories)
+        .Where(path => !path.StartsWith(monacoRoot, StringComparison.Ordinal))
         .Where(path =>
         {
             var ext = Path.GetExtension(path);
