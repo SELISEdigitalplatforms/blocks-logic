@@ -133,7 +133,7 @@ All methods live on `WorkflowService` and are accessed via the `workflowService`
 | ----------------------------------- | ------ | ------------------------- | ------------------------------------------ |
 | `getWorkflows(payload)`             | POST   | `/Workflow/GetAll`        | Paginated workflow list                    |
 | `getWorkflowById(payload)`          | GET    | `/Workflow/Get`           | Single workflow with deserialized nodes    |
-| `createWorkflow(payload)`           | POST   | `/Workflow/Create`        | Create workflow, nodes auto-serialized     |
+| `createWorkflow(payload)`           | POST   | `/Workflow/Create`        | Create workflow; optional `nodes` use the same shape as Get/Update |
 | `duplicateWorkflow(payload)`        | POST   | `/Workflow/Duplicate`     | Duplicate an existing workflow             |
 | `updateWorkflow(payload)`           | PUT    | `/Workflow/Update`        | Save canvas changes, nodes auto-serialized |
 | `deleteWorkflow(payload)`           | DELETE | `/Workflow/Delete`        | Delete workflow by ID                      |
