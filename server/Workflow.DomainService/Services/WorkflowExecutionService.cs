@@ -258,7 +258,12 @@ namespace Workflow.DomainService.Services
 
                 if (responseMode != null && responseMode.ToString().ToLower() == "last")
                 {
-                    await AttachDelegationGrantAsync();
+                    // In-process runs (this mode and the editor's Execute step) never go through a bus send, so
+                    // Genesis would not attach a grant; mint one for the caller here. Null (no user / missing stamp
+                    // claims) leaves no grant and Blocks-auth nodes fail with NoDelegatedTokenException.
+                    // Set it in this method, never inside an async helper: DelegatedTokenContext is an AsyncLocal,
+                    // and a value set inside an async method is discarded when that method returns.
+                    DelegatedTokenContext.Set(await _delegationGrantFactory.CreateForSendAsync());
 
                     _executionLogger.For(execution).Info(
                         ExecutionLogStages.ExecutionInProcess, "Running in-process; the webhook waits for the last node.");
@@ -1210,19 +1215,6 @@ namespace Workflow.DomainService.Services
         }
 
         /// <summary>
-        /// Mints an ambient delegation grant for in-process runs (the "last" webhook mode and the editor's
-        /// Execute step), where Genesis never sees a bus send and therefore would not attach a grant header.
-        /// Execute step used to work only through the raw-token fallback in the HTTP/Data nodes (WS-1, removed);
-        /// it now runs as the editor through this grant.
-        /// No-op when the factory returns null (no authenticated user / missing stamp claims).
-        /// </summary>
-        private async Task AttachDelegationGrantAsync()
-        {
-            var grantId = await _delegationGrantFactory.CreateForSendAsync();
-            DelegatedTokenContext.Set(grantId);
-        }
-
-        /// <summary>
         /// Parses the workflow-layer BSON representation of a webhook trigger's authorization block
         /// into the storage-agnostic <see cref="WorkflowAuthService.AuthorizationConfig"/> consumed by
         /// <see cref="IWorkflowAuthService.IsAuthorized"/>.
@@ -1377,7 +1369,8 @@ namespace Workflow.DomainService.Services
                 await NotifyWorkflowStartedAsync(triggerlessExecution);
                 LogStepExecution(triggerlessExecution, targetNode);
 
-                await AttachDelegationGrantAsync();
+                // Set here, not in an async helper (AsyncLocal; see the webhook "last" mode).
+                DelegatedTokenContext.Set(await _delegationGrantFactory.CreateForSendAsync());
                 var triggerlessResult = await _workflowEngineService.ExecuteStepNodeAsync(
                     tenantId, triggerlessExecution.Id, string.Empty, dto.NodeId, dto.SourceExecutionId);
 
@@ -1488,8 +1481,9 @@ namespace Workflow.DomainService.Services
             execution.ActiveNodeIds.Add(triggerNode.Id);
             await NotifyWorkflowStartedAsync(execution);
             LogStepExecution(execution, targetNode);
-            await AttachDelegationGrantAsync();
-            var result = await _workflowEngineService.ExecuteStepNodeAsync(tenantId, execution.Id, triggerNode.Id, dto.NodeId, dto.SourceExecutionId);
+            // Set here, not in an async helper (AsyncLocal; see the webhook "last" mode).
+            DelegatedTokenContext.Set(await _delegationGrantFactory.CreateForSendAsync());
+            var result =await _workflowEngineService.ExecuteStepNodeAsync(tenantId, execution.Id, triggerNode.Id, dto.NodeId, dto.SourceExecutionId);
             return new StepExecuteResponseDto
             {
                 IsSuccess = true,
