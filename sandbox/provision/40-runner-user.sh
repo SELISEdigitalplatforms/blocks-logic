@@ -109,6 +109,8 @@ DOTNET_ENVIRONMENT=Production
 # Secret-bound variables arrive as {{secret.<id>}} references and are resolved here, at run
 # start. Must name the same value store as the control plane — see deploy/runner.env.example;
 # without KeyVault__KeyVaultUrl every secret-bound run fails as SECRET_UNRESOLVED.
+# Managed identity is the intended default for Key Vault, but Genesis 4.1.5 excludes it from
+# bootstrap, so the KeyVault__Client* fallback is required until Genesis supports Arc.
 # KeyVault__KeyVaultUrl=
 # KeyVault__ClientId=
 # KeyVault__ClientSecret=
@@ -120,8 +122,7 @@ DOTNET_ENVIRONMENT=Production
 # metadata service at. Off Azure that probe is swallowed rather than refused:
 # measured, 200s and then the whole chain fails, so the KeyVault__* client secret above is never
 # tried and every secret-bound run reports "the secret store did not answer within 20s".
-# KeyVaultCredentialFactory skips managed identity when this is Development. Leave it unset on
-# Azure, where managed identity is the right credential and answers immediately.
+# KeyVaultCredentialFactory skips managed identity when this is Development.
 # ASPNETCORE_ENVIRONMENT=Development
 
 # --- Runner identity and paths ----------------------------------------------

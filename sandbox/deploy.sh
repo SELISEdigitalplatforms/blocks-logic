@@ -6,9 +6,10 @@
 #   sudo ./deploy.sh --env-file F    merge F into runner.env first, for an unattended deploy
 #   sudo ./deploy.sh --help
 #
-# Key Vault hosts (BLOCKS_VAULT_TYPE=2) authenticate with the VM's Azure Arc managed identity when
-# it has one, so runner.env then needs only KeyVault__KeyVaultUrl. Without one, it needs
-# KeyVault__ClientId, KeyVault__ClientSecret and KeyVault__TenantId as well.
+# Key Vault hosts (BLOCKS_VAULT_TYPE=2) should prefer the VM's Azure Arc managed identity, with
+# KeyVault__ClientId, KeyVault__ClientSecret and KeyVault__TenantId as fallback. Genesis 4.1.5,
+# used by this runner, excludes managed identity from its bootstrap credential chain, so those
+# fallback credentials are required until Genesis ships Arc/managed-identity support.
 #
 # Safe to re-run: every phase is idempotent, so this is also the way to reconcile a host
 # after editing deny-cidrs, dns-servers, logging.conf or .versions. The service is only
@@ -267,18 +268,21 @@ case "$VAULT" in
     require_val BlocksSecret__DatabaseConnectionString
     ;;
   2)
-    # The vault URL is needed either way. Credentials are only needed when this host has no Azure
-    # Arc managed identity to authenticate with — which is preferred whenever it works.
+    # The vault URL is needed either way. Managed identity is the intended primary credential, and
+    # deploy.sh still prepares Arc for the service when present. Genesis 4.1.5 excludes managed
+    # identity from the runner's bootstrap credential chain, though, so the client-secret fallback
+    # is required for the service to start until Genesis supports it.
     require_val KeyVault__KeyVaultUrl
     if arc_identity_ok; then
-      ok "vault: Azure Key Vault via managed identity (Azure Arc) — no client secret needed"
+      ok "vault: Azure Key Vault managed identity is reachable (Azure Arc)"
       use_managed_identity
     else
-      info "vault: Azure Key Vault — no Azure Arc managed identity on this host, using client credentials"
-      for k in KeyVault__ClientId KeyVault__ClientSecret KeyVault__TenantId; do
-        require_val "$k"
-      done
+      info "vault: Azure Key Vault managed identity is not reachable; using client credentials"
     fi
+    for k in KeyVault__ClientId KeyVault__ClientSecret KeyVault__TenantId; do
+      require_val "$k"
+    done
+    ok "vault: Azure Key Vault client credential fallback is configured"
     ;;
   *) die "$ENV_FILE: BLOCKS_VAULT_TYPE is '${VAULT:-unset}', expected 1 (OnPrem) or 2 (Key Vault)" ;;
 esac
