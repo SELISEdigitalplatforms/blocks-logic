@@ -109,12 +109,13 @@ DOTNET_ENVIRONMENT=Production
 # Secret-bound variables arrive as {{secret.<id>}} references and are resolved here, at run
 # start. Must name the same value store as the control plane — see deploy/runner.env.example;
 # without KeyVault__KeyVaultUrl every secret-bound run fails as SECRET_UNRESOLVED.
-# Managed identity is the intended default for Key Vault, but Genesis 4.1.5 excludes it from
-# bootstrap, so the KeyVault__Client* fallback is required until Genesis supports Arc.
+# On an Azure Arc VM deploy.sh signs the Azure CLI in as the VM's identity (AZURE_CONFIG_DIR) and
+# the KeyVault__Client* values are not needed; without Arc they are required.
 # KeyVault__KeyVaultUrl=
 # KeyVault__ClientId=
 # KeyVault__ClientSecret=
 # KeyVault__TenantId=
+# AZURE_CONFIG_DIR=
 # Secrets__ValueStore=
 #
 # On a host that is NOT an Azure VM, also set ASPNETCORE_ENVIRONMENT=Development. The Key Vault
@@ -141,12 +142,12 @@ RUNNER__BuildsDir=$STATE_DIR/builds
 # host's private registry and whatever build of the runner it happens to be running.
 RUNNER__QueuePrefix=
 #
-# The most sandbox slots one tenant may hold at once on this host. Empty or 0 derives it as
+# The most sandbox slots one tenant may hold at once on this host. Unset or 0 derives it as
 # half the host's capacity, rounded up. The host budget on its own is first-come-first-served,
 # so one tenant's burst could hold every slot while every other tenant waited behind it;
 # nothing is rejected either way, a tenant over its share has its entries deferred. Set it to
 # RUNNER__MaxActiveSandboxes or higher to turn the share off.
-RUNNER__MaxSandboxesPerTenant=
+# RUNNER__MaxSandboxesPerTenant=
 RUNNER__Registry=127.0.0.1:5000
 RUNNER__Network=${FN_NETWORK:-blocks-fn-egress}
 RUNNER__ResolvConf=${FN_RESOLV_CONF:-$CONF_DIR/resolv.conf}
