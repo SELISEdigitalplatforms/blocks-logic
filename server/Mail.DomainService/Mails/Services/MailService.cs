@@ -6,6 +6,7 @@ using Mail.DomainService.Services;
 using Mail.DomainService.Utilities;
 using Mail.DomainService.Shared.Enums;
 using Microsoft.Extensions.Logging;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Mail.DomainService.Mails
 {
@@ -83,7 +84,7 @@ namespace Mail.DomainService.Mails
                 };
             }
 
-            var result = await SaveMailToBeSent(mailToBeSent);
+            var result = await SendMailToBeSentAsync(mailToBeSent);
             if (result)
             {
                 return new BaseMutationResponse { IsSuccess = true };
@@ -182,10 +183,9 @@ namespace Mail.DomainService.Mails
                 asked - found, asked, field, MailLog.Recipients(requested));
         }
 
-        public async Task<bool> SaveMailToBeSent(MailToBeSent mailToBeSent)
+        private async Task<bool> SendMailToBeSentAsync(MailToBeSent mailToBeSent)
         {
-            var saved = await _mailRepository.SaveMailToBeSent(mailToBeSent);
-
+            // "MAIL PERSISTED" now means "accepted for sending"; the mail is no longer stored.
             _logger.LogInformation(
                 "MAIL PERSISTED: itemId={ItemId} purpose={Purpose} to={To} attachments={AttachmentCount} correlationId={CorrelationId}",
                 mailToBeSent.ItemId,
@@ -194,9 +194,7 @@ namespace Mail.DomainService.Mails
                 MailLog.Count(mailToBeSent.Attachments),
                 mailToBeSent.CorrelationId);
 
-            var sent = await _sendMailService.ProcessSendMailAsync(new SendEmailEvent { ItemId = mailToBeSent.ItemId });
-
-            return saved && sent;
+            return await _sendMailService.ProcessSendMailAsync(mailToBeSent);
         }
 
         public async Task SendToQueueAsync<T>(string queue, T payload) where T : class

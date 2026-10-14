@@ -2,8 +2,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Workflow.DomainService.Dtos;
 using Workflow.DomainService.Entities;
-using Workflow.DomainService.Enums;
 using Workflow.DomainService.Repositories;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Logging
 {

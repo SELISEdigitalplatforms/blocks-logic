@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Blocks.Genesis;
 using Common.InternalService.Access;
 using FluentAssertions;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Common
 {

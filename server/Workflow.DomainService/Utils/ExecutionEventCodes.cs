@@ -1,4 +1,4 @@
-using Workflow.DomainService.Enums;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Utils
 {

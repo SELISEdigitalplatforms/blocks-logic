@@ -2,10 +2,9 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using FluentAssertions;
-using Functions.DomainService.Enums;
-using Functions.DomainService.Models;
 using Functions.DomainService.Utils;
 using Functions.DomainService.Validation;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
 {

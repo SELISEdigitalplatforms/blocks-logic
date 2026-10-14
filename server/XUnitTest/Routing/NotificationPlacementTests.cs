@@ -1,3 +1,5 @@
+using Blocks.Genesis;
+using Moq;
 using DomainService.Configuration.Services;
 using DomainService.Entities;
 using DomainService.Notification;
@@ -10,6 +12,8 @@ using DomainService.Shared.Entities;
 using DomainService.Shared;
 using Mail.DomainService.Entities;
 using MailBoxSyncService.Services;
+using Blocks.Genesis.Entities.Logic;
+using Blocks.Genesis.Entities.Os;
 
 namespace XUnitTest.Routing;
 
@@ -67,7 +71,7 @@ public class NotificationPlacementTests : IDisposable
     public async Task SharedRepositories_ConstructWithoutContext_AndKeepConcurrentTenantWritesSeparate()
     {
         TestBlocksContext.Clear();
-        var configuration = new ConfigurationRepository(_fixture.Provider, _fixture.Secret, NullLogger<ConfigurationRepository>.Instance);
+        var configuration = new ConfigurationRepository(_fixture.Provider, _fixture.Secret, NullLogger<ConfigurationRepository>.Instance, new Mock<IKeyValueStore>().Object);
         var notifications = new NotificationRepository(_fixture.Provider, _fixture.Secret, NullLogger<NotificationRepository>.Instance);
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         async Task Write(string tenant)
@@ -102,7 +106,7 @@ public class NotificationPlacementTests : IDisposable
     public async Task Configuration_FollowsRefreshedTenantPlacement_OnTheSameRepository()
     {
         TestBlocksContext.Set("dev");
-        var repository = new ConfigurationRepository(_fixture.Provider, _fixture.Secret, NullLogger<ConfigurationRepository>.Instance);
+        var repository = new ConfigurationRepository(_fixture.Provider, _fixture.Secret, NullLogger<ConfigurationRepository>.Instance, new Mock<IKeyValueStore>().Object);
         var oldDatabase = _fixture.Dev;
         await repository.SaveAsync(new NotificationConfiguration { ItemId = "same", Name = "before" });
         _fixture.Tenants.Setup(t => t.GetTenantDatabaseConnectionString("dev"))
@@ -117,7 +121,7 @@ public class NotificationPlacementTests : IDisposable
     public async Task MissingContext_RejectsConfigurationWrites_WithoutCreatingRootRecords()
     {
         TestBlocksContext.Clear();
-        var repository = new ConfigurationRepository(_fixture.Provider, _fixture.Secret, NullLogger<ConfigurationRepository>.Instance);
+        var repository = new ConfigurationRepository(_fixture.Provider, _fixture.Secret, NullLogger<ConfigurationRepository>.Instance, new Mock<IKeyValueStore>().Object);
         await Assert.ThrowsAsync<InvalidOperationException>(() => repository.SaveAsync(new NotificationConfiguration { ItemId = "missing" }));
         Assert.Equal(0, await _fixture.Main.GetCollection<NotificationConfiguration>("NotificationConfigurations").CountDocumentsAsync(c => true));
     }

@@ -1,7 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Blocks.Genesis;
-using Functions.DomainService.Enums;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Services;
@@ -9,6 +8,7 @@ using Functions.DomainService.Utils;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Consumers
 {
@@ -110,7 +110,7 @@ return 1";
         /// way, an artifact gone from the store, or storage that cannot sign. With none, the runner
         /// uses the image reference, exactly as a first attempt does in the same situation.
         /// </summary>
-        private async Task<NameValueEntry[]> ArtifactFieldsAsync(string tenantId, Entities.FunctionVersionEntity version, string runId)
+        private async Task<NameValueEntry[]> ArtifactFieldsAsync(string tenantId, FunctionVersionEntity version, string runId)
         {
             if (_artifacts is null || string.IsNullOrEmpty(version.ArtifactId)) return [];
 

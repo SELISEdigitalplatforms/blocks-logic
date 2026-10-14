@@ -1,7 +1,6 @@
 using Blocks.Genesis;
 using Workflow.DomainService.Events;
 using Workflow.DomainService.Repositories;
-using Workflow.DomainService.Enums;
 using Workflow.DomainService.Entities;
 using Workflow.DomainService.Utils;
 using Microsoft.Extensions.Logging;
@@ -10,6 +9,7 @@ using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using System.Diagnostics.CodeAnalysis;
 using Workflow.DomainService.Logging;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Services
 {

@@ -3,13 +3,13 @@ using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Bson;
 using Moq;
 using Workflow.DomainService.Entities;
-using Workflow.DomainService.Enums;
 using Workflow.DomainService.Events;
 using Workflow.DomainService.Logging;
 using Workflow.DomainService.Nodes;
 using Workflow.DomainService.Repositories;
 using Workflow.DomainService.Services;
 using Blocks.Genesis;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {

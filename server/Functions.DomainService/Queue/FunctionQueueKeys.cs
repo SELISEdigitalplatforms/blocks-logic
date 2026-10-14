@@ -57,7 +57,7 @@ namespace Functions.DomainService.Queue
         /// the envelope's <c>env</c> carries secret-bound variables as <c>{{secret.&lt;id&gt;}}</c>
         /// references that the runner resolves right before the sandbox starts. A runner that
         /// predates it only accepts 1 and dead-letters anything else, so this control plane in
-        /// front of an old runner fails runs as <see cref="Enums.RunErrorCode.Undeliverable"/>
+        /// front of an old runner fails runs as <see cref="RunErrorCode.Undeliverable"/>
         /// instead of executing a function with reference text where its key should be. Mirrors
         /// <c>RedisKeys.RunProtocolVersion</c> in the runner. Results and builds stay on
         /// <see cref="ProtocolVersion"/>.
@@ -306,7 +306,7 @@ namespace Functions.DomainService.Queue
         // ---- wire status strings ------------------------------------------------
         /// <summary>
         /// The runner sends these exact strings. Kept as constants rather than parsed by
-        /// enum name so a rename of <see cref="Enums.RunStatus"/> cannot silently change the
+        /// enum name so a rename of <see cref="RunStatus"/> cannot silently change the
         /// wire contract.
         /// </summary>
         public static class Wire

@@ -1,15 +1,7 @@
+using Blocks.Genesis.Entities.Logic;
+
 namespace Proxy.DomainService.Entities
 {
-    /// <summary>The HTTP methods a proxy may accept. Persisted to Mongo as its string name.</summary>
-    public enum HttpMethodType
-    {
-        Get,
-        Post,
-        Put,
-        Patch,
-        Delete,
-    }
-
     /// <summary>
     /// Parsing / formatting helpers for <see cref="HttpMethodType"/>. The domain layer works in the enum;
     /// only the wire (request/response DTOs, the <c>Allow</c> header, logs) uses the upper-case string.

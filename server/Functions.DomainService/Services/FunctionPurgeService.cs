@@ -1,8 +1,8 @@
 using Blocks.Genesis;
-using Functions.DomainService.Enums;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Repositories;
 using Microsoft.Extensions.Logging;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Services
 {
@@ -175,7 +175,7 @@ namespace Functions.DomainService.Services
         /// what should happen to a build for a function nobody has any more.
         /// </summary>
         private async Task DropQueuedBuildSourcesAsync(
-            IReadOnlyList<Entities.FunctionBuildEntity> builds, CancellationToken cancellationToken)
+            IReadOnlyList<FunctionBuildEntity> builds, CancellationToken cancellationToken)
         {
             try
             {

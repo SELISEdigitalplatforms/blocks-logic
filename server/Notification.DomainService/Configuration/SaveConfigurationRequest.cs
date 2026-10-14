@@ -1,5 +1,6 @@
 ﻿using Blocks.Genesis;
 using DomainService.Shared;
+using Blocks.Genesis.Entities.Os;
 
 namespace DomainService.Configuration
 {

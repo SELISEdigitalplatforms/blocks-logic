@@ -1,3 +1,4 @@
+using Blocks.Genesis;
 using DomainService.Dtos;
 using DomainService.Projects;
 using Microsoft.AspNetCore.Authorization;
@@ -23,6 +24,7 @@ namespace Api.Controllers
         /// <summary><c>GET</c> — the caller's projects, grouped for the project switcher.</summary>
         [HttpGet]
         [Authorize]
+        [ProtectedEndPoint("blocks-os::project::projects")]
         public async Task<List<GroupedProjectsDto>> Gets([FromQuery] GetProjectsRequest request)
         {
             return await _projectManagementService.GetAllAsync(request);
@@ -31,6 +33,7 @@ namespace Api.Controllers
         /// <summary><c>GET</c> — the project the current request context resolves to.</summary>
         [HttpGet]
         [Authorize]
+        [ProtectedEndPoint("blocks-os::project::projects")]
         public async Task<GetProjectResponse> Get()
         {
             return await _projectManagementService.GetAsync();

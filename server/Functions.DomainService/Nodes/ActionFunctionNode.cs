@@ -8,6 +8,7 @@ using Functions.DomainService.Queue;
 using Functions.DomainService.Services;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Nodes
 {

@@ -5,7 +5,6 @@ using Workflow.DomainService.Entities;
 using Workflow.DomainService.Repositories;
 using Workflow.DomainService.Dtos;
 using Workflow.DomainService.Events;
-using Workflow.DomainService.Enums;
 using Workflow.DomainService.Utils;
 using Workflow.DomainService.Logging;
 using Microsoft.Extensions.Logging;
@@ -18,6 +17,7 @@ using DotLiquid.Util;
 using Microsoft.AspNetCore.Http;
 using Mail.DomainService.Mails;
 using Mail.DomainService.Shared.Enums;
+using Blocks.Genesis.Entities.Logic;
 
 
 

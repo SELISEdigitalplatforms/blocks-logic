@@ -1,6 +1,7 @@
 using Blocks.Genesis;
 using DomainService.Shared;
 using DomainService.Shared.Entities;
+using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace DomainService.ManagedService.Services
@@ -15,20 +16,34 @@ namespace DomainService.ManagedService.Services
             _blocksSecret = blocksSecret;
         }
 
-        private IMongoDatabase ResolvedClientDb ( )
+        private const string ManagedServicesCollection = "BlocksManagedServices";
+
+        // Impersonated: root (as before). Not impersonated: the tenant DB only while it still has
+        // BlocksManagedServices (live check), else root (the collection moved there).
+        private async Task<IMongoDatabase> ResolvedClientDbAsync ( )
         {
             var blocksContext = BlocksContext.GetContext() ?? throw new InvalidOperationException("Tenant context is required.");
             if (blocksContext.Impersonated)
             {
-                return _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, _blocksSecret.RootDatabaseName);
+                return RootDb();
             }
-            return _dbContextProvider.GetDatabase(blocksContext.TenantId);
+
+            var tenantDb = _dbContextProvider.GetDatabase(blocksContext.TenantId);
+            using var names = await tenantDb.ListCollectionNamesAsync(new ListCollectionNamesOptions
+            {
+                Filter = new BsonDocument("name", ManagedServicesCollection)
+            });
+
+            return await names.AnyAsync() ? tenantDb : RootDb();
         }
+
+        private IMongoDatabase RootDb ( )
+            => _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, _blocksSecret.RootDatabaseName);
 
         public async Task<(IQueryable<BlocksManagedService>, long)> GetAllServicesAsync ( GetAllServiceRequest request )
         {
-            var database = ResolvedClientDb();
-            var collection = database.GetCollection<BlocksManagedService>("BlocksManagedServices");
+            var database = await ResolvedClientDbAsync();
+            var collection = database.GetCollection<BlocksManagedService>(ManagedServicesCollection);
             var filter = Builders<BlocksManagedService>.Filter.Eq(s => s.TenantId, BlocksContext.GetContext()?.TenantId ?? string.Empty);
 
             if (!string.IsNullOrWhiteSpace(request?.Filter?.ServiceName))

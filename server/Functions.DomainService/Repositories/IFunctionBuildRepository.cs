@@ -1,4 +1,4 @@
-using Functions.DomainService.Entities;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Repositories
 {
@@ -59,7 +59,7 @@ namespace Functions.DomainService.Repositories
         Task<bool> ApplyResultAsync(
             string tenantId,
             string buildId,
-            Enums.BuildStatus status,
+            BuildStatus status,
             string? imageDigest,
             string? artifactSha256,
             string? baseImage,

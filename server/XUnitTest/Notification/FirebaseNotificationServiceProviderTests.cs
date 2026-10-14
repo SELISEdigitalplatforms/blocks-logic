@@ -7,7 +7,8 @@ using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
-using FirebaseConfiguration = DomainService.Configuration.FirebaseConfiguration;
+using Blocks.Genesis.Entities.Os;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Notification
 {

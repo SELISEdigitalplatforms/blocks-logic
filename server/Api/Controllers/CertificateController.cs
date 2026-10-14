@@ -1,3 +1,4 @@
+using Blocks.Genesis;
 using Common.InternalService.Storage;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -28,6 +29,7 @@ namespace BlocksTemplate.Api.Controllers
         /// </remarks>
         [HttpPost]
         [Authorize]
+        [ProtectedEndPoint("blocks-os::project::mutate-token-validation-params")]
         public Task<UploadCertificateResponse> UploadCertificate(
             IFormFile? certificate,
             [FromQuery] bool isThirdParty)

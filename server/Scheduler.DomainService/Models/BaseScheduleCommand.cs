@@ -1,6 +1,6 @@
 using Blocks.Genesis;
-using Scheduler.DomainService.Entities;
 using System.Text.Json;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Scheduler.DomainService.Models
 {

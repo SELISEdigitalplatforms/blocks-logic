@@ -42,6 +42,7 @@ namespace Utilities.Api.Controllers
         /// <summary><c>POST</c> — the tenant's workflows, filtered and paged by the request body.</summary>
         [Authorize]
         [HttpPost]
+        [ProtectedEndPoint("blocks-logic::workflow::read")]
         public async Task<IActionResult> GetAll([FromBody] WorkflowGetsRequestDto dto)
         {
             var tenantId = GetTenantId();
@@ -52,6 +53,7 @@ namespace Utilities.Api.Controllers
         /// <summary><c>GET</c> — one workflow by id, including its node graph.</summary>
         [Authorize]
         [HttpGet]
+        [ProtectedEndPoint("blocks-logic::workflow::read")]
         public async Task<IActionResult> Get([FromQuery] WorkflowGetRequestDto dto)
         {
             var tenantId = GetTenantId();
@@ -62,6 +64,7 @@ namespace Utilities.Api.Controllers
         /// <summary><c>POST</c> — creates a workflow. 201 on success.</summary>
         [Authorize]
         [HttpPost]
+        [ProtectedEndPoint("blocks-logic::workflow::manage")]
         public async Task<IActionResult> Create([FromBody] WorkflowCreateRequestDto dto)
         {
             var tenantId = GetTenantId();
@@ -72,6 +75,7 @@ namespace Utilities.Api.Controllers
         /// <summary><c>POST</c> — copies an existing workflow into a new one. 201 on success.</summary>
         [Authorize]
         [HttpPost]
+        [ProtectedEndPoint("blocks-logic::workflow::manage")]
         public async Task<IActionResult> Duplicate([FromBody] WorkflowDuplicateRequestDto dto)
         {
             var tenantId = GetTenantId();
@@ -82,6 +86,7 @@ namespace Utilities.Api.Controllers
         /// <summary><c>PUT</c> — rewrites a workflow's name, description and node graph.</summary>
         [Authorize]
         [HttpPut]
+        [ProtectedEndPoint("blocks-logic::workflow::manage")]
         public async Task<IActionResult> Update([FromBody] WorkflowUpdateRequestDto dto)
         {
             var tenantId = GetTenantId();
@@ -95,6 +100,7 @@ namespace Utilities.Api.Controllers
         /// </summary>
         [Authorize]
         [HttpPost]
+        [ProtectedEndPoint("blocks-logic::workflow::manage")]
         public async Task<IActionResult> Import([FromBody] WorkflowImportRequestDto dto)
         {
             if (dto == null || string.IsNullOrWhiteSpace(dto.FileId))
@@ -113,6 +119,7 @@ namespace Utilities.Api.Controllers
         /// <summary><c>DELETE</c> — removes a workflow by id.</summary>
         [Authorize]
         [HttpDelete]
+        [ProtectedEndPoint("blocks-logic::workflow::manage")]
         public async Task<IActionResult> Delete([FromQuery] WorkflowDeleteRequestDto dto)
         {
             var tenantId = GetTenantId();
@@ -123,6 +130,7 @@ namespace Utilities.Api.Controllers
         /// <summary><c>POST</c> — snapshots the working workflow as a new version row. 201 on success.</summary>
         [Authorize]
         [HttpPost]
+        [ProtectedEndPoint("blocks-logic::workflow::manage")]
         public async Task<IActionResult> CreateVersion([FromBody] WorkflowVersionCreateRequestDto dto)
         {
             var tenantId = GetTenantId();
@@ -133,6 +141,7 @@ namespace Utilities.Api.Controllers
         /// <summary><c>POST</c> — edits an existing version's metadata.</summary>
         [Authorize]
         [HttpPost]
+        [ProtectedEndPoint("blocks-logic::workflow::manage")]
         public async Task<IActionResult> UpdateVersion([FromBody] WorkflowVersionUpdateRequestDto dto)
         {
             var tenantId = GetTenantId();
@@ -144,6 +153,7 @@ namespace Utilities.Api.Controllers
         /// <summary><c>POST</c> — the version history for one workflow.</summary>
         [Authorize]
         [HttpPost]
+        [ProtectedEndPoint("blocks-logic::workflow::read")]
         public async Task<IActionResult> GetVersions([FromBody] WorkflowGetVersionsRequestDto dto)
         {
             var tenantId = GetTenantId();
@@ -154,6 +164,7 @@ namespace Utilities.Api.Controllers
         /// <summary><c>POST</c> — the workflow graph as captured by a specific version.</summary>
         [Authorize]
         [HttpPost]
+        [ProtectedEndPoint("blocks-logic::workflow::read")]
         public async Task<IActionResult> GetWorkflowByVersion([FromBody] GetWorkflowByVersionRequestDto dto)
         {
             var tenantId = GetTenantId();
@@ -164,6 +175,7 @@ namespace Utilities.Api.Controllers
         /// <summary><c>POST</c> — snapshots the current graph as a new version and publishes it in one step.</summary>
         [Authorize]
         [HttpPost]
+        [ProtectedEndPoint("blocks-logic::workflow::manage")]
         public async Task<IActionResult> PublishNewVersion([FromBody] WorkflowPublishNewVersionRequestDto dto)
         {
             var tenantId = GetTenantId();
@@ -174,6 +186,7 @@ namespace Utilities.Api.Controllers
         /// <summary><c>POST</c> — publishes an existing version, making it the one webhooks execute.</summary>
         [Authorize]
         [HttpPost]
+        [ProtectedEndPoint("blocks-logic::workflow::manage")]
         public async Task<IActionResult> PublishVersion([FromBody] WorkflowPublishVersionRequestDto dto)
         {
             var tenantId = GetTenantId();
@@ -184,6 +197,7 @@ namespace Utilities.Api.Controllers
         /// <summary><c>POST</c> — takes the workflow out of service; its webhooks stop executing.</summary>
         [Authorize]
         [HttpPost]
+        [ProtectedEndPoint("blocks-logic::workflow::manage")]
         public async Task<IActionResult> Unpublish([FromBody] WorkflowUnpublishRequestDto dto)
         {
             var tenantId = GetTenantId();
@@ -194,6 +208,7 @@ namespace Utilities.Api.Controllers
         /// <summary><c>POST</c> — restores a soft-deleted workflow.</summary>
         [Authorize]
         [HttpPost]
+        [ProtectedEndPoint("blocks-logic::workflow::manage")]
         public async Task<IActionResult> Restore([FromBody] WorkflowRestoreRequestDto dto)
         {
             var tenantId = GetTenantId();
@@ -337,6 +352,7 @@ namespace Utilities.Api.Controllers
         /// <summary><c>POST</c> — executes a single node in isolation and returns its output, for the node inspector.</summary>
         [Authorize]
         [HttpPost]
+        [ProtectedEndPoint("blocks-logic::workflow::manage")]
         public async Task<IActionResult> StepExecute([FromBody] StepExecuteRequestDto dto)
         {
             var tenantId = GetTenantId();
@@ -347,6 +363,7 @@ namespace Utilities.Api.Controllers
         /// <summary><c>POST</c> — fires a listener-type trigger by hand.</summary>
         [Authorize]
         [HttpPost]
+        [ProtectedEndPoint("blocks-logic::workflow::manage")]
         public async Task<IActionResult> TriggerListener([FromBody] TriggerListenerRequestDto dto)
         {
             var tenantId = GetTenantId();
@@ -358,6 +375,7 @@ namespace Utilities.Api.Controllers
         /// <summary><c>GET</c> — the execution history for one workflow.</summary>
         [Authorize]
         [HttpGet]
+        [ProtectedEndPoint("blocks-logic::workflow::read")]
         public async Task<IActionResult> GetExecutions([FromQuery] WorkflowExecutionsGetRequestDto dto)
         {
             var tenantId = GetTenantId();
@@ -373,6 +391,7 @@ namespace Utilities.Api.Controllers
         /// <summary><c>GET</c> — one execution, including per-node results.</summary>
         [Authorize]
         [HttpGet]
+        [ProtectedEndPoint("blocks-logic::workflow::read")]
         public async Task<IActionResult> GetExecution([FromQuery] WorkflowExecutionGetRequestDto dto)
         {
             var tenantId = GetTenantId();
@@ -386,6 +405,7 @@ namespace Utilities.Api.Controllers
         /// </summary>
         [Authorize]
         [HttpPost]
+        [ProtectedEndPoint("blocks-logic::workflow::manage")]
         public async Task<IActionResult> ResumeExecution([FromBody] WorkflowExecutionGetRequestDto dto)
         {
             var tenantId = GetTenantId();
@@ -397,6 +417,7 @@ namespace Utilities.Api.Controllers
         /// with whether they are available, expired or still arriving.</summary>
         [Authorize]
         [HttpGet]
+        [ProtectedEndPoint("blocks-logic::workflow::read")]
         public async Task<IActionResult> GetExecutionLogs([FromQuery] WorkflowExecutionLogsGetRequestDto dto)
         {
             var tenantId = GetTenantId();
@@ -406,6 +427,7 @@ namespace Utilities.Api.Controllers
         /// <summary><c>GET</c> — the most recent successful execution, used to prefill node inputs from real data.</summary>
         [Authorize]
         [HttpGet]
+        [ProtectedEndPoint("blocks-logic::workflow::read")]
         public async Task<IActionResult> LastSuccessfullExecution([FromQuery] LastSuccessfullExecutionRequestDto dto)
         {
             var tenantId = GetTenantId();

@@ -4,6 +4,7 @@ using Mail.DomainService.Entities;
 using Mail.DomainService.Shared.Enums;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Mail.DomainService.Mails
 {

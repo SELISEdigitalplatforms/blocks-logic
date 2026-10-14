@@ -1,5 +1,4 @@
-using Functions.DomainService.Entities;
-using Functions.DomainService.Enums;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Repositories
 {
@@ -162,7 +161,7 @@ namespace Functions.DomainService.Repositories
         /// attempt, so a late write never lands on a retry's record.
         /// </summary>
         Task SetTimingsAsync(
-            string tenantId, string runId, int attempt, List<Models.RunTiming> timings, CancellationToken cancellationToken = default);
+            string tenantId, string runId, int attempt, List<RunTiming> timings, CancellationToken cancellationToken = default);
 
         /// <summary>Flips only the status — used for the transient OUTPUT_PROCESSING step between a successful run and output delivery.</summary>
         Task ApplyStatusOnlyAsync(string tenantId, string runId, RunStatus status, CancellationToken cancellationToken = default);
@@ -183,7 +182,7 @@ namespace Functions.DomainService.Repositories
         /// </summary>
         /// <returns>True when this call wrote the verdict.</returns>
         Task<bool> ApplyOutputResultAsync(
-            string tenantId, string runId, int attempt, IReadOnlyList<Models.OutputActionResult> results,
+            string tenantId, string runId, int attempt, IReadOnlyList<OutputActionResult> results,
             RunStatus finalStatus, string? errorMessage, CancellationToken cancellationToken = default);
 
         /// <summary>

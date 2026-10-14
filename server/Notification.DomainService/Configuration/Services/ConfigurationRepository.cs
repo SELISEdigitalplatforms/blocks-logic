@@ -1,7 +1,7 @@
 using Blocks.Genesis;
-using DomainService.Entities;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
+using Blocks.Genesis.Entities.Os;
 
 namespace DomainService.Configuration.Services
 {
@@ -10,13 +10,16 @@ namespace DomainService.Configuration.Services
         private readonly IDbContextProvider _dbContextProvider;
         private const string _collectionName = "NotificationConfigurations";
         private readonly IBlocksSecret _blocksSecret;
+        private const string NotificationKeyPrefix = "notification-config:";
         private readonly ILogger<ConfigurationRepository> _logger;
+        private readonly IKeyValueStore _keyValueStore;
 
-        public ConfigurationRepository(IDbContextProvider dbContextProvider, IBlocksSecret blocksSecret, ILogger<ConfigurationRepository> logger )
+        public ConfigurationRepository(IDbContextProvider dbContextProvider, IBlocksSecret blocksSecret, ILogger<ConfigurationRepository> logger, IKeyValueStore keyValueStore )
         {
             _dbContextProvider = dbContextProvider;
             _blocksSecret = blocksSecret;
             _logger = logger;
+            _keyValueStore = keyValueStore;
         }
 
         private IMongoDatabase ResolveNotificationDb()
@@ -32,6 +35,17 @@ namespace DomainService.Configuration.Services
 
         public async Task<NotificationConfiguration> GetByNameAsync(string name)
         {
+            // Send path (hot): KV first, then the old collection as today. No collection listing per send.
+            // Impersonated reads root (KV impersonated:false), others the context tenant DB.
+            var blocksContext = BlocksContext.GetContext() ?? throw new InvalidOperationException("Tenant context is required.");
+            var fromKeyValueStore = await _keyValueStore.GetAsync<NotificationConfiguration>(
+                NotificationKeyPrefix + (name ?? "").Trim(),
+                impersonated: !blocksContext.Impersonated);
+            if (fromKeyValueStore is not null)
+            {
+                return fromKeyValueStore;
+            }
+
             var collection = ResolveNotificationDb().GetCollection<NotificationConfiguration>(_collectionName);
 
             var filter = Builders<NotificationConfiguration>.Filter.Eq(mc => mc.Name, name);

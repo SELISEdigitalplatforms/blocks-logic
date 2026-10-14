@@ -9,6 +9,7 @@ using Workflow.DomainService.Entities;
 using Blocks.Genesis;
 using System.Diagnostics;
 using Workflow.DomainService.Logging;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
 {

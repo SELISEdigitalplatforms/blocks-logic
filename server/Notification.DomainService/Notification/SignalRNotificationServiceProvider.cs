@@ -4,7 +4,8 @@ using MongoDB.Bson.Serialization;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using Microsoft.Extensions.Logging;
-using DomainService.Entities;
+using Blocks.Genesis.Entities.Logic;
+using Blocks.Genesis.Entities.Os;
 
 namespace DomainService.Notification
 {

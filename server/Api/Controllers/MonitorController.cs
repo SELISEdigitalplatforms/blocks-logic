@@ -1,3 +1,4 @@
+using Blocks.Genesis;
 using Common.InternalService.Monitor;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -14,6 +15,7 @@ namespace BlocksTemplate.Api.Controllers
     {
         /// <summary><c>GET</c> — the tenant's monitors, optionally narrowed by source type, paged (0-based).</summary>
         [HttpGet, Authorize]
+        [ProtectedEndPoint("blocks-logic::monitor::read")]
         public Task<PaginatedResponse> GetMonitorList(
             [FromQuery] string tenantId,
             [FromQuery] string? monitorSourcetype,
@@ -23,12 +25,14 @@ namespace BlocksTemplate.Api.Controllers
 
         /// <summary><c>GET</c> — the monitors attached to one repository.</summary>
         [HttpGet, Authorize]
+        [ProtectedEndPoint("blocks-logic::monitor::read")]
         public Task<BaseApiResponse> GetMonitorListByRepoId(
             [FromQuery] string tenantId, [FromQuery] string repoId)
             => observability.GetMonitorListByRepoIdAsync(tenantId, repoId);
 
         /// <summary><c>GET</c> — one monitor by id.</summary>
         [HttpGet, Authorize]
+        [ProtectedEndPoint("blocks-logic::monitor::read")]
         public Task<BaseApiResponse> GetMonitorById([FromQuery] string monitorId)
             => observability.GetMonitorByIdAsync(monitorId);
 
@@ -46,29 +50,34 @@ namespace BlocksTemplate.Api.Controllers
 
         /// <summary><c>GET</c> — the incident history for one monitor, paged (0-based).</summary>
         [HttpGet, Authorize]
+        [ProtectedEndPoint("blocks-logic::monitor::read")]
         public Task<PaginatedResponse> GetIncidentList(
             [FromQuery] string monitorId, int pageNumber = 0, int pageSize = 10)
             => observability.GetIncidentListAsync(monitorId, pageNumber, pageSize);
 
         /// <summary><c>GET</c> — one monitor with its current status and summary figures.</summary>
         [HttpGet, Authorize]
+        [ProtectedEndPoint("blocks-logic::monitor::read")]
         public Task<MonitorDetailsResponse> GetMonitorDetails([FromQuery] string monitorId)
             => observability.GetMonitorDetailsAsync(monitorId);
 
         /// <summary><c>GET</c> — the response-time series for one monitor over an optional date range.</summary>
         [HttpGet, Authorize]
+        [ProtectedEndPoint("blocks-logic::monitor::read")]
         public Task<BaseApiResponse> GetMonitorResponseTime(
             [FromQuery] string monitorId, string? startDate, string? endDate)
             => observability.GetMonitorResponseTimeAsync(monitorId, startDate, endDate);
 
         /// <summary><c>GET</c> — the downtime series for one monitor over an optional date range.</summary>
         [HttpGet, Authorize]
+        [ProtectedEndPoint("blocks-logic::monitor::read")]
         public Task<BaseApiResponse> GetMonitorDownTime(
             [FromQuery] string monitorId, string? startDate, string? endDate)
             => observability.GetMonitorDownTimeAsync(monitorId, startDate, endDate);
 
         /// <summary><c>GET</c> — whether the given external service has been configured for monitoring.</summary>
         [HttpGet, Authorize]
+        [ProtectedEndPoint("blocks-logic::monitor::read")]
         public Task<BaseApiResponse> IsExternalServiceConfigured([FromQuery] string externalServiceId)
             => observability.IsExternalServiceConfiguredAsync(externalServiceId);
     }

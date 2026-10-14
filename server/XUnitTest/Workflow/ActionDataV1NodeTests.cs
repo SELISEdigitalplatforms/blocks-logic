@@ -11,6 +11,7 @@ using Workflow.DomainService.Nodes;
 using Workflow.DomainService.Nodes.ActionDataV1;
 using Workflow.DomainService.Services;
 using XUnitTest.TestHelpers;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {

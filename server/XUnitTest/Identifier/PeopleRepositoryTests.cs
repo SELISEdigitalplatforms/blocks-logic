@@ -3,10 +3,11 @@ using DomainService.Entities;
 using DomainService.People;
 using DomainService.Projects;
 using FluentAssertions;
-using Identifier.DomainService.Shared.Entities.Iam.DomainService.Entities;
+using MongoDB.Bson;
 using MongoDB.Driver;
 using Moq;
 using XUnitTest.TestHelpers;
+using Blocks.Genesis.Entities.Iam;
 
 namespace XUnitTest.Identifier
 {
@@ -21,12 +22,15 @@ namespace XUnitTest.Identifier
 
         private readonly Mock<IMongoCollection<ProjectPeople>> _peoples = new();
         private readonly Mock<IMongoCollection<User>> _users = new();
+        private readonly Mock<IMongoCollection<BsonDocument>> _rawUsers = new();
 
         public PeopleRepositoryTests()
         {
             TestBlocksContext.Set();
             _dbContextProvider.Setup(p => p.GetCollection<ProjectPeople>(PeopleCollectionName)).Returns(_peoples.Object);
             _dbContextProvider.Setup(p => p.GetCollection<User>(UserCollectionName)).Returns(_users.Object);
+            _dbContextProvider.Setup(p => p.GetCollection<BsonDocument>(UserCollectionName)).Returns(_rawUsers.Object);
+            SetupProjection<BsonDocument, BsonDocument>(_rawUsers);
         }
 
         public void Dispose() => TestBlocksContext.Clear();
@@ -107,9 +111,9 @@ namespace XUnitTest.Identifier
                 LastName = "Lovelace",
                 Salutation = "Ms",
                 ProfileImageUrl = "https://cdn.test/ada.png",
-                Active = true,
-                IsVarified = true
+                Active = true
             });
+            SetupProjection<BsonDocument, BsonDocument>(_rawUsers, new BsonDocument { { "_id", "user-1" }, { "IsVarified", true } });
             SetupPeopleCounts(1, "user-1");
 
             var (peoples, totalCount, peoplesTotalCount, isOwner) =
@@ -147,7 +151,24 @@ namespace XUnitTest.Identifier
             _projectRepository.Setup(r => r.GetProjectIdsByGroupId("group-1")).ReturnsAsync(["DTENANT-1"]);
             _tenants.Setup(t => t.GetTenantByID("DTENANT-1")).Returns(Tenant());
             SetupFind(_peoples, new ProjectPeople { ItemId = "pp-1", TenantId = "DTENANT-1", UserId = "user-1" });
-            SetupFind(_users, new User { ItemId = "user-1", Email = "invitee@example.com", Active = false, IsVarified = false });
+            SetupFind(_users, new User { ItemId = "user-1", Email = "invitee@example.com", Active = false });
+            SetupProjection<BsonDocument, BsonDocument>(_rawUsers, new BsonDocument { { "_id", "user-1" }, { "IsVarified", false } });
+            SetupPeopleCounts(1, "user-1");
+
+            var (peoples, _, _, _) =
+                await CreateRepository().GetPeoplesAsync(new GetPeoplesRequest { ProjectGroupId = "group-1", PageSize = 10 });
+
+            peoples[0].peopleDetails.AllowResendActivation.Should().BeTrue();
+        }
+
+        [Fact]
+        public async Task GetPeoplesAsync_ActiveUserWithoutIsVarifiedField_AllowsResendingActivation()
+        {
+            _projectRepository.Setup(r => r.GetProjectIdsByGroupId("group-1")).ReturnsAsync(["DTENANT-1"]);
+            _tenants.Setup(t => t.GetTenantByID("DTENANT-1")).Returns(Tenant());
+            SetupFind(_peoples, new ProjectPeople { ItemId = "pp-1", TenantId = "DTENANT-1", UserId = "user-1" });
+            SetupFind(_users, new User { ItemId = "user-1", Email = "invitee@example.com", Active = true });
+            SetupProjection<BsonDocument, BsonDocument>(_rawUsers, new BsonDocument { { "_id", "user-1" } });
             SetupPeopleCounts(1, "user-1");
 
             var (peoples, _, _, _) =

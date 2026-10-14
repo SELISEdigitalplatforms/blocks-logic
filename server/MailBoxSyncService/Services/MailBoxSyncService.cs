@@ -8,6 +8,7 @@ using MailKit.Security;
 using Microsoft.Extensions.Logging.Abstractions;
 using MimeKit;
 using System.Collections.Concurrent;
+using Blocks.Genesis.Entities.Logic;
 
 namespace MailBoxSyncService.Services
 {

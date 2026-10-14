@@ -4,6 +4,7 @@ using Workflow.DomainService.Entities;
 using Workflow.DomainService.Utils;
 using FluentAssertions;
 using MongoDB.Bson;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {

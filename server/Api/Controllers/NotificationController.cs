@@ -1,9 +1,10 @@
-using CloudConfiguration.DomainService.Notification.Entities;
+using Blocks.Genesis;
 using CloudConfiguration.DomainService.Notification.RequestModel;
 using CloudConfiguration.DomainService.Notification.ResponseModel;
 using CloudConfiguration.DomainService.Shared.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Blocks.Genesis.Entities.Os;
 
 namespace BlocksTemplate.Api.Controllers
 {
@@ -28,6 +29,7 @@ namespace BlocksTemplate.Api.Controllers
         /// <summary><c>GET</c> — the tenant's notification configurations, filtered by the query string.</summary>
         [HttpGet]
         [Authorize]
+        [ProtectedEndPoint("blocks-os::notification::gets")]
         public async Task<GetNotificationConfigurationsResponse> Gets ( [FromQuery] GetNotificationConfigurationsRequest request )
         {
         return await _configurationService.GetNotificationConfigurationsAsync(request);
@@ -36,6 +38,7 @@ namespace BlocksTemplate.Api.Controllers
         /// <summary><c>GET</c> — one notification configuration.</summary>
         [HttpGet]
         [Authorize]
+        [ProtectedEndPoint("blocks-os::notification::gets")]
         public async Task<NotificationConfiguration> Get ( [FromQuery] GetNotificationConfigurationRequest request )
         {
         return await _configurationService.GetNotificatoinConfigurationAsync(request);

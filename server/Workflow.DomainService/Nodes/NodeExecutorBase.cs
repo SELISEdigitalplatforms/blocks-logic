@@ -8,6 +8,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.DependencyInjection;
 using Proxy.DomainService.Services;
 using Workflow.DomainService.Logging;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Nodes
 {

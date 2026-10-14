@@ -4,6 +4,7 @@ using Blocks.Genesis;
 using MongoDB.Bson;
 using Mail.DomainService.Mails;
 using Workflow.DomainService.Logging;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Nodes.ActionSendMailV1
 {

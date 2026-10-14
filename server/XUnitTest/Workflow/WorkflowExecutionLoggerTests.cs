@@ -9,6 +9,7 @@ using Serilog.Events;
 using Serilog.Extensions.Logging;
 using Workflow.DomainService.Entities;
 using Workflow.DomainService.Logging;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {

@@ -1,4 +1,6 @@
-﻿
+﻿using Blocks.Genesis.Entities.Logic;
+
+
 namespace DomainService.Shared
 {
     public class GetUnreadNotificationsRequestBySubscriptionFilter

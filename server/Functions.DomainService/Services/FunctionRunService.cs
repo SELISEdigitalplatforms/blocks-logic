@@ -1,13 +1,12 @@
 using Blocks.Genesis;
 using Functions.DomainService.Dtos.Requests;
 using Functions.DomainService.Dtos.Responses;
-using Functions.DomainService.Entities;
-using Functions.DomainService.Enums;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Utils;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Services
 {

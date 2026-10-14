@@ -34,7 +34,7 @@ namespace Mail.DomainService.Mails
         public async Task<IReadOnlyList<MailAttachment>> ResolveAsync(IEnumerable<string>? fileIds, CancellationToken cancellationToken = default)
         {
             // Duplicate ids would attach the same file twice; blanks are already rejected by the
-            // validator, but SendEmailConsumer re-sends without validating so guard here too.
+            // validator, but this resolver does not rely on that, so guard here too.
             var ids = (fileIds ?? [])
                 .Where(id => !string.IsNullOrWhiteSpace(id))
                 .Distinct(StringComparer.Ordinal)

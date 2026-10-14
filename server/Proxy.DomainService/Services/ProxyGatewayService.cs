@@ -6,6 +6,7 @@ using Microsoft.Extensions.Primitives;
 using Proxy.DomainService.Entities;
 using Proxy.DomainService.Repositories;
 using Proxy.DomainService.Utils;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Proxy.DomainService.Services
 {

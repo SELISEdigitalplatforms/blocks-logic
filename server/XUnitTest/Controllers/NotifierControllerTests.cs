@@ -5,6 +5,7 @@ using DomainService.Shared;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Controllers
 {

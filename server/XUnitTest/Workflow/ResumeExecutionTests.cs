@@ -6,12 +6,12 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Workflow.DomainService.Dtos;
 using Workflow.DomainService.Entities;
-using Workflow.DomainService.Enums;
 using Workflow.DomainService.Events;
 using Workflow.DomainService.Logging;
 using Workflow.DomainService.Repositories;
 using Workflow.DomainService.Services;
 using Workflow.DomainService.Utils;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {

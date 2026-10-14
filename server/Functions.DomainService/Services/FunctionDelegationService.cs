@@ -1,9 +1,9 @@
 using System.Security.Claims;
 using Blocks.Genesis;
-using Functions.DomainService.Enums;
 using Functions.DomainService.Queue;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Services
 {

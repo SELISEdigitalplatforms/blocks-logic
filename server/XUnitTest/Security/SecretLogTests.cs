@@ -19,7 +19,8 @@ using Workflow.DomainService.Nodes.TransformCodeV1;
 using Workflow.DomainService.Repositories;
 using Workflow.DomainService.Services;
 using XUnitTest.TestHelpers;
-using FirebaseConfiguration = DomainService.Configuration.FirebaseConfiguration;
+using Blocks.Genesis.Entities.Logic;
+using Blocks.Genesis.Entities.Os;
 
 namespace XUnitTest.Security
 {

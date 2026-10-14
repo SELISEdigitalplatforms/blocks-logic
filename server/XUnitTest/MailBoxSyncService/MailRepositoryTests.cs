@@ -5,6 +5,7 @@ using MailBoxSyncService.Entities;
 using MailBoxSyncService.Services;
 using MongoDB.Driver;
 using Moq;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.MailBoxSyncService
 {

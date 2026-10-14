@@ -1,4 +1,4 @@
-using Functions.DomainService.Enums;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Queue
 {
@@ -89,7 +89,7 @@ namespace Functions.DomainService.Queue
         /// terminal, reported by a runner (not platform-determined) and of a retryable kind. The
         /// consumer then still checks the attempt budget and the version (<see cref="WillBeRetried"/>).
         /// </summary>
-        public static bool IsRetryCandidate(Entities.FunctionRunEntity run) =>
+        public static bool IsRetryCandidate(FunctionRunEntity run) =>
             IsTerminal(run.Status) && !IsPlatformDetermined(run.ErrorCode) && IsRetryable(run.Status, run.ErrorCode);
 
         /// <summary>
@@ -98,7 +98,7 @@ namespace Functions.DomainService.Queue
         /// predicate the consumer applies, so a synchronous HTTP caller is never handed a failure
         /// that a retry is about to replace.
         /// </summary>
-        public static bool WillBeRetried(Entities.FunctionRunEntity run) =>
+        public static bool WillBeRetried(FunctionRunEntity run) =>
             IsRetryCandidate(run) && !string.IsNullOrEmpty(run.VersionId) && run.Attempt < run.MaxAttempts;
 
         /// <summary>

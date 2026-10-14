@@ -1,7 +1,5 @@
 using System.Globalization;
 using Blocks.Genesis;
-using Functions.DomainService.Entities;
-using Functions.DomainService.Enums;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Services;
@@ -9,6 +7,7 @@ using Functions.DomainService.Utils;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Consumers
 {
@@ -376,7 +375,7 @@ namespace Functions.DomainService.Consumers
                 try
                 {
                     var timings = StepTimer.ParseCompact(entry.Get(FunctionQueueKeys.ResultTimingsField));
-                    timings.Add(new Models.RunTiming { Group = "result", Step = "queued", Ms = Math.Max(0, queuedMs) });
+                    timings.Add(new RunTiming { Group = "result", Step = "queued", Ms = Math.Max(0, queuedMs) });
                     timings.AddRange(timer.ToTimings("result"));
                     await _runRepository.SetTimingsAsync(tenantId, runId, attempt, timings, CancellationToken.None);
                 }

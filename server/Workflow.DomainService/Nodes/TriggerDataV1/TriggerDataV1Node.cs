@@ -1,6 +1,7 @@
 using Workflow.DomainService.Logging;
 using System.Text.Json;
 using MongoDB.Bson;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Nodes.TriggerDataV1
 {

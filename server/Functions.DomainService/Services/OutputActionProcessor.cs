@@ -1,10 +1,9 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
-using Functions.DomainService.Entities;
-using Functions.DomainService.Models;
 using Functions.DomainService.Utils;
 using Microsoft.Extensions.Logging;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Services
 {
@@ -96,7 +95,7 @@ namespace Functions.DomainService.Services
             {
                 if (!action.Enabled) continue;
 
-                if (action.Kind != Enums.OutputActionKind.ExternalHttp)
+                if (action.Kind != OutputActionKind.ExternalHttp)
                 {
                     // BlocksProxy: nothing to call yet (open question #2). Not a failure —
                     // the tenant cannot have configured a working one, so there is nothing

@@ -3,6 +3,7 @@ using FluentAssertions;
 using Proxy.DomainService.Entities;
 using Proxy.DomainService.Services;
 using Proxy.DomainService.Utils;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Proxy
 {

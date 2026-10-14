@@ -1,6 +1,6 @@
 using FluentAssertions;
-using Functions.DomainService.Models;
 using Functions.DomainService.Services;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
 {

@@ -5,6 +5,7 @@ using Proxy.DomainService.Dtos;
 using Proxy.DomainService.Entities;
 using Proxy.DomainService.Repositories;
 using Proxy.DomainService.Utils;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Proxy.DomainService.Services
 {

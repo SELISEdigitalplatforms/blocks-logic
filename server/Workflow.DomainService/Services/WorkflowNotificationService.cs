@@ -8,6 +8,7 @@ using Workflow.DomainService.Entities;
 using Workflow.DomainService.Utils;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Services
 {

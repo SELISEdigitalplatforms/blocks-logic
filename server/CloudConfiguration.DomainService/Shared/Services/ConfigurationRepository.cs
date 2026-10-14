@@ -1,12 +1,13 @@
 ﻿using Blocks.Genesis;
+using MongoDB.Bson;
 using MongoDB.Driver;
 using System.Linq.Expressions;
-using CloudConfiguration.DomainService.Notification.Entities;
 using CloudConfiguration.DomainService.Notification.ResponseModel;
 using CloudConfiguration.DomainService.Notification.RequestModel;
 using CloudConfiguration.DomainService.Storage.Entities;
-using CloudConfiguration.DomainService.Mail.Entities;
 using CloudConfiguration.DomainService.Mail.RequestModel;
+using Blocks.Genesis.Entities.Data;
+using Blocks.Genesis.Entities.Os;
 
 namespace CloudConfiguration.DomainService.Shared.Services
 {
@@ -19,12 +20,32 @@ namespace CloudConfiguration.DomainService.Shared.Services
         private const string _notificatonConfigurationCollectionName = "NotificationConfigurations";
         private const string _storageCollectionName = "StorageConfigurations";
         private const string _mailConfigurationCollectionName = "MailServerConfigurations";
+        private const string NotificationKeyPrefix = "notification-config:";
         private readonly IBlocksSecret _blocksSecret;
+        private readonly IKeyValueStore _keyValueStore;
 
-        public ConfigurationRepository(IDbContextProvider dbContextProvider, IBlocksSecret blocksSecret)
+        public ConfigurationRepository(IDbContextProvider dbContextProvider, IBlocksSecret blocksSecret, IKeyValueStore keyValueStore)
         {
             _dbContextProvider = dbContextProvider;
             _blocksSecret = blocksSecret;
+            _keyValueStore = keyValueStore;
+        }
+
+        // Live check: does the DB this method uses today still have the old collection? One extra
+        // round trip, admin paths only. A null database (no context) keeps today's path.
+        private static async Task<bool> LegacyNotificationCollectionExistsAsync(IMongoDatabase? database, string collectionName)
+        {
+            if (database is null)
+            {
+                return true;
+            }
+
+            using var names = await database.ListCollectionNamesAsync(new ListCollectionNamesOptions
+            {
+                Filter = new BsonDocument("name", collectionName)
+            });
+
+            return await names.AnyAsync();
         }
 
         #region Notification
@@ -44,6 +65,12 @@ namespace CloudConfiguration.DomainService.Shared.Services
 
         public async Task<NotificationConfiguration> GetNotificationConfigurationByIdAsync(string id)
         {
+            if (!await LegacyNotificationCollectionExistsAsync(_dbContextProvider.GetDatabase(), _notificatonConfigurationCollectionName))
+            {
+                var all = await _keyValueStore.GetByPrefixAsync<NotificationConfiguration>(NotificationKeyPrefix, impersonated: true);
+                return all.FirstOrDefault(c => c.ItemId == id)!;
+            }
+
             var collection = _dbContextProvider.GetCollection<NotificationConfiguration>(_notificatonConfigurationCollectionName);
 
             var filter = Builders<NotificationConfiguration>.Filter.Eq(mc => mc.ItemId, id);
@@ -54,6 +81,7 @@ namespace CloudConfiguration.DomainService.Shared.Services
         {
             var blocksContext = BlocksContext.GetContext();
             IMongoCollection<NotificationConfiguration> collection;
+            IMongoDatabase? listDatabase;
 
             if (blocksContext.Impersonated)
             {
@@ -61,13 +89,30 @@ namespace CloudConfiguration.DomainService.Shared.Services
                     _blocksSecret.DatabaseConnectionString,
                     "BlocksRootDb");
 
+                listDatabase = database;
                 collection = database.GetCollection<NotificationConfiguration>(
                     _notificatonConfigurationCollectionName);
             }
             else
             {
+                listDatabase = _dbContextProvider.GetDatabase();
                 collection = _dbContextProvider.GetCollection<NotificationConfiguration>(
                     _notificatonConfigurationCollectionName);
+            }
+
+            if (!await LegacyNotificationCollectionExistsAsync(listDatabase, _notificatonConfigurationCollectionName))
+            {
+                // Old collection is gone (moved to KeyValueStores): same sort, page and count, in memory.
+                var all = await _keyValueStore.GetByPrefixAsync<NotificationConfiguration>(NotificationKeyPrefix, impersonated: !blocksContext.Impersonated);
+                return new GetNotificationConfigurationsResponse
+                {
+                    // PageSize <= 0 means "all rows", as Mongo Limit = 0 does today.
+                    Configurations = (request.PageSize > 0
+                        ? all.OrderByDescending(n => n.CreatedDate).Skip(request.PageSize * request.Page).Take(request.PageSize)
+                        : all.OrderByDescending(n => n.CreatedDate)).ToList(),
+                    TotalCount = all.Count,
+                    IsSuccess = true
+                };
             }
 
             var filter = FilterDefinition<NotificationConfiguration>.Empty;

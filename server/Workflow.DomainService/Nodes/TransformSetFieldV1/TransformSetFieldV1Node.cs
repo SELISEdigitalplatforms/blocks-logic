@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Workflow.DomainService.Entities;
 using Workflow.DomainService.Logging;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Nodes.TransformSetFieldV1
 {

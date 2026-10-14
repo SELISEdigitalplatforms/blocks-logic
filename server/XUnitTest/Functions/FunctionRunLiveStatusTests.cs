@@ -1,8 +1,8 @@
 using FluentAssertions;
-using Functions.DomainService.Enums;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Services;
 using Xunit;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
 {
