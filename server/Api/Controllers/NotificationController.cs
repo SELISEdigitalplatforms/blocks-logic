@@ -28,7 +28,6 @@ namespace BlocksTemplate.Api.Controllers
 
         /// <summary><c>GET</c> — the tenant's notification configurations, filtered by the query string.</summary>
         [HttpGet]
-        [Authorize]
         [ProtectedEndPoint("blocks-os::notification::gets")]
         public async Task<GetNotificationConfigurationsResponse> Gets ( [FromQuery] GetNotificationConfigurationsRequest request )
         {
@@ -37,7 +36,6 @@ namespace BlocksTemplate.Api.Controllers
 
         /// <summary><c>GET</c> — one notification configuration.</summary>
         [HttpGet]
-        [Authorize]
         [ProtectedEndPoint("blocks-os::notification::gets")]
         public async Task<NotificationConfiguration> Get ( [FromQuery] GetNotificationConfigurationRequest request )
         {

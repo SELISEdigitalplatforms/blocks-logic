@@ -20,7 +20,6 @@ namespace Api.Controllers
         }
 
         /// <summary><c>POST</c> — the registered services, filtered and paged by the request body.</summary>
-        [Authorize]
         [HttpPost]
         [ProtectedEndPoint("blocks-os::service::gets")]
         public async Task<GetAllServiceResponse> GetAll([FromBody] GetAllServiceRequest request)

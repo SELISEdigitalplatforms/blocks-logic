@@ -23,7 +23,6 @@ namespace Api.Controllers
 
         /// <summary><c>GET</c> — the caller's projects, grouped for the project switcher.</summary>
         [HttpGet]
-        [Authorize]
         [ProtectedEndPoint("blocks-os::project::projects")]
         public async Task<List<GroupedProjectsDto>> Gets([FromQuery] GetProjectsRequest request)
         {
@@ -32,7 +31,6 @@ namespace Api.Controllers
 
         /// <summary><c>GET</c> — the project the current request context resolves to.</summary>
         [HttpGet]
-        [Authorize]
         [ProtectedEndPoint("blocks-os::project::projects")]
         public async Task<GetProjectResponse> Get()
         {

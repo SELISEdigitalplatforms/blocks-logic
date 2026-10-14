@@ -8,7 +8,9 @@ namespace XUnitTest.Controllers
 {
     /// <summary>
     /// Actions that have a protected twin in os/release carry the same named permission (owner decision 2026-10-14).
-    /// Mail/GetMailBoxMails was anonymous; its os twin needs sign-in, so it needs [Authorize].
+    /// Mail/GetMailBoxMails was anonymous; it now needs sign-in through its [ProtectedEndPoint].
+    /// No plain [Authorize] next to a [ProtectedEndPoint] (owner decision 2026-10-14): the ProtectedEndPoint is itself
+    /// an AuthorizeAttribute and its handler already rejects anonymous callers.
     /// Actions with no reusable twin get blocks-logic::<area>::read|manage (owner decision 2026-10-14).
     /// </summary>
     public class ProtectedTwinAuthorizationTests
@@ -51,18 +53,24 @@ namespace XUnitTest.Controllers
             var method = controller.GetMethod(action, BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)!;
             method.GetCustomAttribute<ProtectedEndPointAttribute>()!.ResourceName.Should().Be(expected);
             method.GetCustomAttribute<AllowAnonymousAttribute>().Should().BeNull();
+            HasPlainAuthorize(method).Should().BeFalse("[ProtectedEndPoint] already requires sign-in");
         }
 
         [Fact]
         public void MailBoxMailsNowRequiresSignIn()
         {
-            // It now also has a ProtectedEndPoint (itself an AuthorizeAttribute), so look for the plain [Authorize].
-            typeof(MailController).GetMethod(nameof(MailController.GetMailBoxMails))!
-                .GetCustomAttributes<AuthorizeAttribute>().Any(a => a.GetType() == typeof(AuthorizeAttribute)).Should().BeTrue();
+            // Sign-in comes from the ProtectedEndPoint (itself an AuthorizeAttribute); no plain [Authorize] beside it.
+            var method = typeof(MailController).GetMethod(nameof(MailController.GetMailBoxMails))!;
+            method.GetCustomAttribute<ProtectedEndPointAttribute>()!.ResourceName.Should().Be("blocks-logic::mail::read");
+            method.GetCustomAttribute<AllowAnonymousAttribute>().Should().BeNull();
+            HasPlainAuthorize(method).Should().BeFalse();
         }
 
+        private static bool HasPlainAuthorize(MethodInfo method) =>
+            method.GetCustomAttributes<AuthorizeAttribute>().Any(a => a.GetType() == typeof(AuthorizeAttribute));
+
         // New blocks-logic permissions (owner decision 2026-10-14): actions with only [Authorize] and no reusable twin.
-        // GET / read-only = ::read, create / update / delete / send / run = ::manage. [Authorize] stays.
+        // GET / read-only = ::read, create / update / delete / send / run = ::manage. No plain [Authorize] beside it.
         private const string L = "blocks-logic::";
 
         public static IEnumerable<object[]> NewLogicPermissions() => new[]
@@ -128,9 +136,8 @@ namespace XUnitTest.Controllers
             var method = controller.GetMethod(action, BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)!;
             method.GetCustomAttribute<ProtectedEndPointAttribute>()!.ResourceName.Should().Be(expected);
             method.GetCustomAttribute<AllowAnonymousAttribute>().Should().BeNull();
-            // [Authorize] kept where it was: besides the ProtectedEndPoint (which is itself an AuthorizeAttribute).
-            method.GetCustomAttributes<AuthorizeAttribute>()
-                .Any(a => a.GetType() == typeof(AuthorizeAttribute)).Should().BeTrue();
+            // Owner decision 2026-10-14: no plain [Authorize] next to the ProtectedEndPoint (itself an AuthorizeAttribute).
+            HasPlainAuthorize(method).Should().BeFalse();
         }
 
         [Fact]

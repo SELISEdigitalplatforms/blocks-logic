@@ -135,7 +135,6 @@ namespace BlocksTemplate.Api.Controllers
 
         /// <summary><c>POST</c> — sends a mail to arbitrary recipients, bypassing the stored recipient lists.</summary>
         [HttpPost]
-        [Authorize]
         [ProtectedEndPoint("blocks-logic::mail::manage")]
         public async Task<IActionResult> SendToAny ( [FromBody] SendMailToAny request )
         {
@@ -145,7 +144,6 @@ namespace BlocksTemplate.Api.Controllers
 
         /// <summary><c>POST</c> — sends a mail through the configured mail server.</summary>
         [HttpPost]
-        [Authorize]
         [ProtectedEndPoint("blocks-logic::mail::manage")]
         public async Task<IActionResult> Send ( [FromBody] SendMail request )
         {
@@ -158,7 +156,6 @@ namespace BlocksTemplate.Api.Controllers
         /// <see cref="GetMailBoxMail"/>.
         /// </summary>
         [HttpGet]
-        [Authorize]
         [ProtectedEndPoint("blocks-logic::mail::read")]
         public async Task<IActionResult> GetMailBoxMails ( [FromQuery] GetMailBoxMails request )
         {
@@ -168,7 +165,6 @@ namespace BlocksTemplate.Api.Controllers
 
         /// <summary><c>GET</c> — one message from a synced mailbox.</summary>
         [HttpGet]
-        [Authorize]
         [ProtectedEndPoint("blocks-logic::mail::read")]
         public async Task<IActionResult> GetMailBoxMail ( [FromQuery] GetMailBoxMail request )
         {
@@ -181,7 +177,6 @@ namespace BlocksTemplate.Api.Controllers
         /// signature symmetry with the other reads and is deliberately unused.
         /// </summary>
         [HttpGet]
-        [Authorize]
         [ProtectedEndPoint("blocks-os::mail::gets")]
         public async Task<IActionResult> Gets([FromQuery] GetMailConfigurationsRequest request)
         {

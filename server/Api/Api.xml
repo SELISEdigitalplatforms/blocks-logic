@@ -886,7 +886,7 @@
             (<see cref="F:Proxy.DomainService.Entities.ProxyExecutionOutcome.Forbidden"/>), like a probe of an undeclared route. Blocks then
             rebuilds the request against the stored upstream, attaches ONLY the configured headers / query
             params, calls the third party server-side, relays the response, and records one
-            <see cref="T:Proxy.DomainService.Entities.ProxyExecutionEntity"/> per attempt.
+            <see cref="T:Blocks.Genesis.Entities.Logic.ProxyExecutionEntity"/> per attempt.
             <para>
             Unlike the control-plane actions above, this route is <b>pinned absolutely</b> (<c>~/</c>) instead of
             being derived from <c>[controller]</c>. The path is a published contract that third-party clients

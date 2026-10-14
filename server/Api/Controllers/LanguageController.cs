@@ -24,7 +24,6 @@ namespace BlocksTemplate.Api.Controllers
         /// </summary>
         /// <returns>A list of <see cref="Language"/> objects.</returns>
         [HttpGet]
-        [Authorize]
         [ProtectedEndPoint("blocks-logic::language::read")]
         public async Task<List<Language>> Gets([FromQuery] GetLanguagesRequest request)
         {

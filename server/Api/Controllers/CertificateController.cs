@@ -28,7 +28,6 @@ namespace BlocksTemplate.Api.Controllers
         /// parameter; it is ignored, because the tenant comes from the request context.
         /// </remarks>
         [HttpPost]
-        [Authorize]
         [ProtectedEndPoint("blocks-os::project::mutate-token-validation-params")]
         public Task<UploadCertificateResponse> UploadCertificate(
             IFormFile? certificate,
