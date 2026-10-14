@@ -1,3 +1,8 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using Blocks.Genesis;
+using StorageConfiguration = Blocks.Genesis.Entities.Data.StorageConfiguration;
+using PackageAccessModifier = Blocks.Genesis.Entities.Data.AccessModifier;
 using BlocksTemplate.Api.Controllers;
 using CloudConfiguration.DomainService.Shared.Services;
 using DomainService.Storage;
@@ -25,6 +30,67 @@ namespace XUnitTest.Controllers
         public StorageControllerTests()
         {
             _controller = new StorageController(_configurationService.Object, _storageDriverService.Object);
+        }
+
+        // Today's Storage API shape: the old logic StorageConfiguration (BaseEntity + these fields, upload
+        // completion as List<string>). Kept here as the reference so the JSON can be compared byte for byte.
+        private sealed class LegacyStorageConfigurationShape : BaseEntity
+        {
+            public string Name { get; set; } = "";
+            public string ConnectionString { get; set; } = "";
+            public string SecretKey { get; set; } = "";
+            public string AccessKey { get; set; } = "";
+            public string StorageStrategy { get; set; } = "";
+            public string CloudStorageRegionEndPoint { get; set; } = "";
+            public string Host { get; set; } = "";
+            public string Port { get; set; } = "";
+            public string UserName { get; set; } = "";
+            public string Password { get; set; } = "";
+            public string RemoteBasePath { get; set; } = "";
+            public string SftpSecretKey { get; set; } = "";
+            public int? UploadUrlExpirySeconds { get; set; }
+            public int? DownloadUrlExpirySeconds { get; set; }
+            public long? MaxFileSizeInBytes { get; set; }
+            public List<string> UploadCompletionRequiredFor { get; set; } = null!;
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task GetsAndGet_SerializeUploadCompletionRequiredForAsStrings_SameJsonAsBefore(bool withList)
+        {
+            var created = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+            var stored = new StorageConfiguration
+            {
+                ItemId = "id-1", CreatedDate = created, LastUpdatedDate = created, CreatedBy = "u", LastUpdatedBy = "u",
+                Name = "azure", ConnectionString = "c", SecretKey = "s", AccessKey = "a", StorageStrategy = "Azure",
+                CloudStorageRegionEndPoint = "e", Host = "h", Port = "22", UserName = "n", Password = "p",
+                RemoteBasePath = "/r", SftpSecretKey = "k", UploadUrlExpirySeconds = 900, DownloadUrlExpirySeconds = 120,
+                MaxFileSizeInBytes = 1024,
+                UploadCompletionRequiredFor = withList ? [PackageAccessModifier.Public, PackageAccessModifier.Private] : null,
+            };
+            var legacy = new LegacyStorageConfigurationShape
+            {
+                ItemId = "id-1", CreatedDate = created, LastUpdatedDate = created, CreatedBy = "u", LastUpdatedBy = "u",
+                Name = "azure", ConnectionString = "c", SecretKey = "s", AccessKey = "a", StorageStrategy = "Azure",
+                CloudStorageRegionEndPoint = "e", Host = "h", Port = "22", UserName = "n", Password = "p",
+                RemoteBasePath = "/r", SftpSecretKey = "k", UploadUrlExpirySeconds = 900, DownloadUrlExpirySeconds = 120,
+                MaxFileSizeInBytes = 1024,
+                UploadCompletionRequiredFor = withList ? ["Public", "Private"] : null!,
+            };
+            _configurationService.Setup(s => s.GetStorageConfigurationsAsync()).ReturnsAsync([stored]);
+            _configurationService.Setup(s => s.GetStorageConfigurationAsync("azure")).ReturnsAsync(stored);
+
+            var web = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+            var expected = JsonSerializer.Serialize(legacy, web);
+
+            var list = await _controller.Gets(new());
+            var one = await _controller.Get(new() { ConfigurationName = "azure" });
+
+            JsonSerializer.Serialize(one, web).Should().Be(expected);
+            JsonSerializer.Serialize(list, web).Should().Be("[" + expected + "]");
+            if (withList)
+                JsonNode.Parse(expected)!["uploadCompletionRequiredFor"]!.ToJsonString().Should().Be("[\"Public\",\"Private\"]");
         }
 
         [Fact]

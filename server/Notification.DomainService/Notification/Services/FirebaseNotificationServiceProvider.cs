@@ -1,10 +1,11 @@
 ﻿using DomainService.Configuration;
-using DomainService.Entities;
 using DomainService.Shared;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System.Text;
+using Blocks.Genesis.Entities.Os;
+using Blocks.Genesis.Entities.Logic;
 
 
 namespace DomainService.Notification

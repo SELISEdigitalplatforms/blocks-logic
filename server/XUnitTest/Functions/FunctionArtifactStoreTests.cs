@@ -7,6 +7,7 @@ using Common.InternalService.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using StorageConfiguration = Blocks.Genesis.Entities.Data.StorageConfiguration;
 
 namespace XUnitTest.Functions
 {

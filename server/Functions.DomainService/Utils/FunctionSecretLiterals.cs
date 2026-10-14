@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
-using Functions.DomainService.Models;
 using Proxy.DomainService.Utils;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Utils
 {

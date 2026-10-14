@@ -8,6 +8,7 @@ using Workflow.DomainService.Entities;
 using Workflow.DomainService.Nodes;
 using Workflow.DomainService.Nodes.ActionProxy;
 using XUnitTest.TestHelpers;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {

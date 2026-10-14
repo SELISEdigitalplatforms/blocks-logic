@@ -2,12 +2,11 @@ using Blocks.Genesis;
 using Microsoft.Extensions.Logging;
 using Scheduler.DomainService.Dtos.Requests;
 using Scheduler.DomainService.Dtos.Responses;
-using Scheduler.DomainService.Entities;
-using Scheduler.DomainService.Enums;
 using Scheduler.DomainService.Events;
 using Scheduler.DomainService.Models;
 using Scheduler.DomainService.Repositories;
 using Scheduler.DomainService.Utils;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Scheduler.DomainService.Services
 {

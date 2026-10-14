@@ -3,7 +3,6 @@ using System.Text.Json;
 using BlocksTemplate.Api;
 using FluentAssertions;
 using Functions.DomainService.Dtos.Requests;
-using Functions.DomainService.Enums;
 using Functions.DomainService.Utils;
 using Functions.DomainService.Validation;
 using Microsoft.AspNetCore.Http;
@@ -11,6 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Routing;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
 {

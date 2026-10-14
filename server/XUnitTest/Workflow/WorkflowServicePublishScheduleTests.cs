@@ -10,6 +10,7 @@ using MongoDB.Bson;
 using Scheduler.DomainService.Dtos.Requests;
 using Scheduler.DomainService.Services;
 using XUnitTest.TestHelpers;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {

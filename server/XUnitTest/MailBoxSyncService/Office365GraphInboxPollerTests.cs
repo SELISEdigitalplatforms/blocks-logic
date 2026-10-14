@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Graph.Models.ODataErrors;
 using MimeKit;
 using Moq;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.MailBoxSyncService
 {

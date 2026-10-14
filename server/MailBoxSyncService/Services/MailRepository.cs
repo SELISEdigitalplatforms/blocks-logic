@@ -2,6 +2,7 @@ using Blocks.Genesis;
 using Mail.DomainService.Entities;
 using MailBoxSyncService.Entities;
 using MongoDB.Driver;
+using Blocks.Genesis.Entities.Logic;
 
 namespace MailBoxSyncService.Services
 {

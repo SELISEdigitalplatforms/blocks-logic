@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Text.Json;
 using Workflow.DomainService.Entities;
 using Workflow.DomainService.Logging;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Nodes.LogicIFV1
 {

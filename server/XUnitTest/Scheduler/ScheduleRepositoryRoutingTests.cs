@@ -2,8 +2,8 @@ using Blocks.Genesis;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using Moq;
-using Scheduler.DomainService.Entities;
 using Scheduler.DomainService.Repositories;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Scheduler;
 

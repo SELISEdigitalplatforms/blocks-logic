@@ -13,6 +13,7 @@ using Proxy.DomainService.Repositories;
 using Proxy.DomainService.Services;
 using Proxy.DomainService.Utils;
 using XUnitTest.TestHelpers;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Proxy
 {

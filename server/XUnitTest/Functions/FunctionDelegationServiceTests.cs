@@ -1,13 +1,13 @@
 using System.Security.Claims;
 using Blocks.Genesis;
 using FluentAssertions;
-using Functions.DomainService.Enums;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
 {

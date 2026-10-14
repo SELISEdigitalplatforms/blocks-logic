@@ -43,22 +43,8 @@ namespace Mail.DomainService.Mails
             _statusEventOptions = statusEventOptions.Value;
         }
 
-        public async Task<bool> ProcessSendMailAsync(SendEmailEvent sendEmailEvent)
+        public async Task<bool> ProcessSendMailAsync(MailToBeSent mailToBeSent)
         {
-            var mailToBeSent = await _mailRepository.GetMailToBeSent(sendEmailEvent.ItemId);
-
-            // SendEmailConsumer sends by id without going through validation, and the read here can
-            // also miss a just-written document on a secondary. Everything below dereferences the
-            // entity, so bail out with a diagnosable message rather than a NullReferenceException.
-            if (mailToBeSent is null)
-            {
-                _logger.LogError(
-                    "MAIL FAILED (not found): no MailToBeSent document for itemId={ItemId}. It was never persisted, or the read hit a replica that has not caught up.",
-                    sendEmailEvent.ItemId);
-                await PublishStatusAsync(sendEmailEvent.ItemId, null, null, 0, "The mail record could not be found.");
-                return false;
-            }
-
             if (mailToBeSent.MailServerConfiguration is null || mailToBeSent.EmailTemplate is null)
             {
                 _logger.LogError(

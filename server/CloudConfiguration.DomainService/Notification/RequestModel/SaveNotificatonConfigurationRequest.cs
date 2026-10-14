@@ -1,5 +1,5 @@
 ﻿using Blocks.Genesis;
-using CloudConfiguration.DomainService.Notification.Enums;
+using Blocks.Genesis.Entities.Os;
 
 namespace CloudConfiguration.DomainService.Notification.RequestModel
 {

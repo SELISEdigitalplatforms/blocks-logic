@@ -3,6 +3,7 @@ using DomainService.Shared;
 using FluentAssertions;
 using Microsoft.AspNetCore.SignalR;
 using Moq;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Notification
 {

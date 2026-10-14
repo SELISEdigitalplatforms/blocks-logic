@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Blocks.Genesis;
 using Microsoft.AspNetCore.Http;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Common.InternalService.Access
 {

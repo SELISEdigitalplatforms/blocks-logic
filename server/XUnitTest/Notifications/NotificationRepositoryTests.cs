@@ -6,6 +6,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using Moq;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Notifications
 {

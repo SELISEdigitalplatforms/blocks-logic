@@ -13,6 +13,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using MimeKit;
 using Moq;
+using EmailTemplate = Blocks.Genesis.Entities.Os.EmailTemplate;
 
 namespace XUnitTest.Mail
 {
@@ -85,8 +86,12 @@ namespace XUnitTest.Mail
             }
         };
 
-        private void GivenMail(MailToBeSent? mail) =>
-            _repository.Setup(r => r.GetMailToBeSent(MailId)).ReturnsAsync(mail!);
+        private MailToBeSent? _given;
+
+        private void GivenMail(MailToBeSent? mail)
+        {
+            _given = mail;
+        }
 
         private void GivenAttachments(params MailAttachment[] attachments) =>
             _resolver.Setup(r => r.ResolveAsync(It.IsAny<IEnumerable<string>?>(), It.IsAny<CancellationToken>()))
@@ -108,7 +113,7 @@ namespace XUnitTest.Mail
             GivenMail(AMail());
             GivenAttachments();
 
-            var result = await CreateService().ProcessSendMailAsync(new SendEmailEvent { ItemId = MailId });
+            var result = await CreateService().ProcessSendMailAsync(_given!);
 
             result.Should().BeTrue();
             _smtp.Sent.Should().NotBeNull();
@@ -128,7 +133,7 @@ namespace XUnitTest.Mail
                 Content = [1, 2, 3, 4]
             });
 
-            var result = await CreateService().ProcessSendMailAsync(new SendEmailEvent { ItemId = MailId });
+            var result = await CreateService().ProcessSendMailAsync(_given!);
 
             result.Should().BeTrue();
 
@@ -144,7 +149,7 @@ namespace XUnitTest.Mail
             _resolver.Setup(r => r.ResolveAsync(It.IsAny<IEnumerable<string>?>(), It.IsAny<CancellationToken>()))
                      .ThrowsAsync(new MailAttachmentException("no Download grant"));
 
-            var result = await CreateService().ProcessSendMailAsync(new SendEmailEvent { ItemId = MailId });
+            var result = await CreateService().ProcessSendMailAsync(_given!);
 
             // Delivering the mail without its attachment is the defect being fixed, so nothing is sent.
             result.Should().BeFalse();
@@ -153,14 +158,40 @@ namespace XUnitTest.Mail
         }
 
         [Fact]
-        public async Task ProcessSendMailAsync_ReturnsFalseWhenTheMailRecordIsMissing()
+        public async Task ProcessSendMailAsync_InMemory_NeverReadsTheRepository()
         {
-            GivenMail(null);
+            GivenAttachments();
 
-            var result = await CreateService().ProcessSendMailAsync(new SendEmailEvent { ItemId = MailId });
+            var result = await CreateService().ProcessSendMailAsync(AMail());
+
+            result.Should().BeTrue();
+            _repository.Invocations.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task ProcessSendMailAsync_InMemory_MailWithoutTemplateOrServerConfigFailsAsIncomplete()
+        {
+            var mail = AMail();
+            mail.EmailTemplate = null!;
+
+            var result = await CreateService().ProcessSendMailAsync(mail);
 
             result.Should().BeFalse();
+            _smtp.Sent.Should().BeNull();
             PublishedEvent()!.IsSuccess.Should().BeFalse();
+            PublishedEvent()!.Error.Should().Be("The mail is missing its template or server configuration.");
+        }
+
+        [Fact]
+        public async Task ProcessSendMailAsync_InMemory_SmtpFailureReturnsFalseWithTheGenericError()
+        {
+            GivenAttachments();
+            _smtp.FailSend = true;
+
+            var result = await CreateService().ProcessSendMailAsync(AMail());
+
+            result.Should().BeFalse();
+            PublishedEvent()!.Error.Should().Be("The SMTP server did not accept the message.");
         }
 
         [Fact]
@@ -171,7 +202,7 @@ namespace XUnitTest.Mail
             GivenMail(mail);
             GivenAttachments();
 
-            await CreateService().ProcessSendMailAsync(new SendEmailEvent { ItemId = MailId });
+            await CreateService().ProcessSendMailAsync(_given!);
 
             var published = PublishedEvent()!;
             published.CorrelationId.Should().Be("caller-abc");
@@ -189,7 +220,7 @@ namespace XUnitTest.Mail
                 .Setup(m => m.SendToConsumerAsync(It.IsAny<ConsumerMessage<MailSentEvent>>()))
                 .ThrowsAsync(new InvalidOperationException("bus down"));
 
-            var result = await CreateService().ProcessSendMailAsync(new SendEmailEvent { ItemId = MailId });
+            var result = await CreateService().ProcessSendMailAsync(_given!);
 
             // The mail was accepted by the SMTP server; a broken bus must not rewrite that outcome.
             result.Should().BeTrue();
@@ -201,7 +232,7 @@ namespace XUnitTest.Mail
             GivenMail(AMail());
             GivenAttachments();
 
-            await CreateService().ProcessSendMailAsync(new SendEmailEvent { ItemId = MailId });
+            await CreateService().ProcessSendMailAsync(_given!);
 
             _messageClient.Verify(
                 m => m.SendToConsumerAsync(It.Is<ConsumerMessage<MailSentEvent>>(
@@ -216,7 +247,7 @@ namespace XUnitTest.Mail
             GivenAttachments();
             _statusOptions.Enabled = false;
 
-            var result = await CreateService().ProcessSendMailAsync(new SendEmailEvent { ItemId = MailId });
+            var result = await CreateService().ProcessSendMailAsync(_given!);
 
             result.Should().BeTrue();
             _messageClient.Invocations.Should().BeEmpty();
@@ -229,7 +260,7 @@ namespace XUnitTest.Mail
             GivenAttachments();
             _statusOptions.QueueName = "some_other_listener";
 
-            await CreateService().ProcessSendMailAsync(new SendEmailEvent { ItemId = MailId });
+            await CreateService().ProcessSendMailAsync(_given!);
 
             _messageClient.Verify(
                 m => m.SendToConsumerAsync(It.Is<ConsumerMessage<MailSentEvent>>(
@@ -249,6 +280,7 @@ namespace XUnitTest.Mail
             }
 
             public MimeMessage? Sent { get; private set; }
+            public bool FailSend { get; set; }
 
             protected override IMailKitSmtpClient CreateSmtpClient() => new Recorder(this);
 
@@ -267,6 +299,11 @@ namespace XUnitTest.Mail
 
                 public Task SendAsync(MimeMessage message)
                 {
+                    if (_owner.FailSend)
+                    {
+                        throw new InvalidOperationException("smtp down");
+                    }
+
                     _owner.Sent = message;
                     return Task.CompletedTask;
                 }

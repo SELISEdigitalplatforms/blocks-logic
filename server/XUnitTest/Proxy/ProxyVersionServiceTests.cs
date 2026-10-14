@@ -6,6 +6,7 @@ using Proxy.DomainService.Entities;
 using Proxy.DomainService.Repositories;
 using Proxy.DomainService.Services;
 using XUnitTest.TestHelpers;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Proxy
 {

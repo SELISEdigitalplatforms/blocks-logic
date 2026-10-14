@@ -6,6 +6,7 @@ using Workflow.DomainService.Utils;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Workflow.DomainService.Logging;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Nodes.ActionAIAgentV1
 {

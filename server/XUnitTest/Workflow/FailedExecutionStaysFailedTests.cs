@@ -3,8 +3,8 @@ using Blocks.Genesis;
 using Moq;
 using MongoDB.Driver;
 using Workflow.DomainService.Entities;
-using Workflow.DomainService.Enums;
 using Workflow.DomainService.Repositories;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {

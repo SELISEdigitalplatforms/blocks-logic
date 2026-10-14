@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 using Blocks.Genesis;
-using Workflow.DomainService.Enums;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Dtos
 {

@@ -1,0 +1,26 @@
+<Project>
+  <!-- Local overrides are intentionally untracked. CI keeps using the NuGet package. -->
+  <Import Project="$(MSBuildThisFileDirectory)Directory.Build.local.props"
+          Condition="Exists('$(MSBuildThisFileDirectory)Directory.Build.local.props')" />
+
+  <!-- Flag UseLocalGenesis is OFF by default. ON: -p:UseLocalGenesis=true swaps NuGet packages for local projects.
+       Each swap acts only in a project that references that package itself. -->
+  <PropertyGroup Condition="'$(UseLocalGenesis)' == 'true'">
+    <LocalGenesisProject Condition="'$(LocalGenesisProject)' == ''">$(MSBuildThisFileDirectory)..\..\blocks-genesis-net\src\Genesis\Blocks.Genesis.csproj</LocalGenesisProject>
+    <LocalMonitorDriverProject Condition="'$(LocalMonitorDriverProject)' == ''">$(MSBuildThisFileDirectory)..\..\blocks-monitor\server\Observability.Driver\Observability.Driver.csproj</LocalMonitorDriverProject>
+    <!-- The NuGet package bundles Alert.DomainService.dll inside (PrivateAssets=all on the project reference),
+         so a plain ProjectReference to the driver would hide it. Reference it directly too. -->
+    <LocalMonitorAlertProject Condition="'$(LocalMonitorAlertProject)' == ''">$(MSBuildThisFileDirectory)..\..\blocks-monitor\server\Alert.DomainService\Alert.DomainService.csproj</LocalMonitorAlertProject>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(UseLocalGenesis)' == 'true' And '@(PackageReference->AnyHaveMetadataValue('Identity','SeliseBlocks.Genesis.OS'))' == 'true'">
+    <PackageReference Remove="SeliseBlocks.Genesis.OS" />
+    <ProjectReference Include="$(LocalGenesisProject)" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UseLocalGenesis)' == 'true' And '@(PackageReference->AnyHaveMetadataValue('Identity','SeliseBlocks.MonitorDriver.OS'))' == 'true'">
+    <PackageReference Remove="SeliseBlocks.MonitorDriver.OS" />
+    <ProjectReference Include="$(LocalMonitorDriverProject)" />
+    <ProjectReference Include="$(LocalMonitorAlertProject)" />
+  </ItemGroup>
+</Project>

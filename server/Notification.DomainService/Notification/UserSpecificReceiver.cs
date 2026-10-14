@@ -1,6 +1,7 @@
 using DomainService.Shared;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
+using Blocks.Genesis.Entities.Logic;
 
 namespace DomainService.Notification
 {

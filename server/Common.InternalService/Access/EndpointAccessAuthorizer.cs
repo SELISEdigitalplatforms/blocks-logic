@@ -5,6 +5,7 @@ using Blocks.Genesis;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Common.InternalService.Access
 {

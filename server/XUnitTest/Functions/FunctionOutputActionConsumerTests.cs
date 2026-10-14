@@ -2,9 +2,6 @@ using System.Text.Json;
 using Blocks.Genesis;
 using FluentAssertions;
 using Functions.DomainService.Consumers;
-using Functions.DomainService.Entities;
-using Functions.DomainService.Enums;
-using Functions.DomainService.Models;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Services;
@@ -13,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using StackExchange.Redis;
 using static Functions.DomainService.Consumers.FunctionOutputActionConsumer;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
 {

@@ -1,14 +1,12 @@
 using Blocks.Genesis;
 using FluentAssertions;
-using Functions.DomainService.Entities;
-using Functions.DomainService.Enums;
-using Functions.DomainService.Models;
 using Functions.DomainService.Services;
 using Functions.DomainService.Utils;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using StackExchange.Redis;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
 {

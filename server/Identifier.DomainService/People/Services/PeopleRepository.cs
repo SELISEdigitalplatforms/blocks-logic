@@ -3,9 +3,9 @@ using DomainService.Dtos;
 using DomainService.Entities;
 using DomainService.Projects;
 using DomainService.Shared;
-using Identifier.DomainService.Shared.Entities.Iam.DomainService.Entities;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using Blocks.Genesis.Entities.Iam;
 
 namespace DomainService.People
 {
@@ -67,8 +67,20 @@ namespace DomainService.People
             var peopleCursor = await peopleCollection.FindAsync(projectPeopleFilter, options);
             var projectPeoples = await peopleCursor.ToListAsync();
 
-            var filter = Builders<Identifier.DomainService.Shared.Entities.Iam.DomainService.Entities.User>.Filter.In(x => x.ItemId, projectPeoples.Select(x => x.UserId));
+            var filter = Builders<User>.Filter.In(x => x.ItemId, projectPeoples.Select(x => x.UserId));
             var users = (await userCollection.Find(filter).ToListAsync()).ToDictionary(x => x.ItemId, x => x);
+
+            // IsVarified is not on the shared User class, but old user documents still store it. Read the raw
+            // field for the same ids so AllowResendActivation stays exactly as before.
+            var userIds = projectPeoples.Select(x => x.UserId).ToList();
+            var rawUsers = await _dbContextProvider.GetCollection<BsonDocument>(_userCollectionName)
+                .Find(Builders<BsonDocument>.Filter.In("_id", userIds))
+                .Project<BsonDocument>(Builders<BsonDocument>.Projection.Include("IsVarified"))
+                .ToListAsync();
+            var verifiedUserIds = rawUsers
+                .Where(d => d.TryGetValue("IsVarified", out var v) && v.IsBoolean && v.AsBoolean)
+                .Select(d => d["_id"].AsString)
+                .ToHashSet();
 
             var peoples = projectPeoples.Select(x =>
             {
@@ -90,7 +102,7 @@ namespace DomainService.People
                     projectPeople.peopleDetails.LastName = user.LastName;
                     projectPeople.peopleDetails.Salutation = user.Salutation;
                     projectPeople.peopleDetails.ProfileImageUrl = user.ProfileImageUrl;
-                    projectPeople.peopleDetails.AllowResendActivation = !user.Active || !user.IsVarified;
+                    projectPeople.peopleDetails.AllowResendActivation = !user.Active || !verifiedUserIds.Contains(x.UserId);
                 }
                 return projectPeople;
             });

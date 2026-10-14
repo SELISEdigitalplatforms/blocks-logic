@@ -1,4 +1,4 @@
-using Functions.DomainService.Models;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Dtos.Requests
 {
@@ -31,7 +31,7 @@ namespace Functions.DomainService.Dtos.Requests
         public string IndexJs { get; set; } = string.Empty;
         public string PackageJson { get; set; } = string.Empty;
         public string? LockJson { get; set; }
-        /// <summary>See <see cref="Models.FunctionSource.AllowInstallScripts"/>. Absent = off.</summary>
+        /// <summary>See <see cref="FunctionSource.AllowInstallScripts"/>. Absent = off.</summary>
         public bool AllowInstallScripts { get; set; }
         public FunctionLimits Limits { get; set; } = new();
         public RetryPolicy Retry { get; set; } = new();

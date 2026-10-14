@@ -1,8 +1,8 @@
 using Hangfire;
 using Microsoft.Extensions.Logging;
-using Scheduler.DomainService.Entities;
 using Scheduler.DomainService.Events;
 using Scheduler.DomainService.Repositories;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Scheduler.DomainService.Services
 {

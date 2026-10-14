@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Primitives;
 using Proxy.DomainService.Entities;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Proxy.DomainService.Utils
 {

@@ -1,12 +1,11 @@
 using System.Text.Json;
 using Blocks.Genesis;
-using Functions.DomainService.Entities;
-using Functions.DomainService.Enums;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Repositories;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Services
 {
@@ -329,7 +328,7 @@ namespace Functions.DomainService.Services
         /// entry (registry packages with integrity hashes only) and installs it exactly with
         /// <c>npm ci</c>; without one it resolves package.json fresh, as before.
         /// </para>
-        internal static Dictionary<string, string> BuildFileMap(Models.FunctionSource source)
+        internal static Dictionary<string, string> BuildFileMap(FunctionSource source)
         {
             var files = new Dictionary<string, string>(StringComparer.Ordinal)
             {

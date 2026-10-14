@@ -9,6 +9,7 @@ using Workflow.DomainService.Events;
 using Workflow.DomainService.Import;
 using Workflow.DomainService.Repositories;
 using Workflow.DomainService.Utils;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Services
 {

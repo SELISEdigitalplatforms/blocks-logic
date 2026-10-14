@@ -1,3 +1,4 @@
+using Blocks.Genesis;
 using Common.InternalService.Language;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -23,7 +24,7 @@ namespace BlocksTemplate.Api.Controllers
         /// </summary>
         /// <returns>A list of <see cref="Language"/> objects.</returns>
         [HttpGet]
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::language::read")]
         public async Task<List<Language>> Gets([FromQuery] GetLanguagesRequest request)
         {
             if (request == null) BadRequest();

@@ -5,10 +5,10 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Workflow.DomainService.Dtos;
 using Workflow.DomainService.Entities;
-using Workflow.DomainService.Enums;
 using Workflow.DomainService.Logging;
 using Workflow.DomainService.Repositories;
 using Workflow.DomainService.Services;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {

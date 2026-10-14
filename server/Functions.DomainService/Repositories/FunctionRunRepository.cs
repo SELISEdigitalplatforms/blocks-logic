@@ -1,10 +1,9 @@
 using System.Text.RegularExpressions;
 using Blocks.Genesis;
-using Functions.DomainService.Entities;
-using Functions.DomainService.Enums;
 using Functions.DomainService.Utils;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Repositories
 {
@@ -113,10 +112,10 @@ namespace Functions.DomainService.Repositories
             return (items, totalCount);
         }
 
-        private static readonly Enums.RunStatus[] NonTerminalStatuses =
+        private static readonly RunStatus[] NonTerminalStatuses =
         [
-            Enums.RunStatus.Queued, Enums.RunStatus.Claimed, Enums.RunStatus.Starting,
-            Enums.RunStatus.Running, Enums.RunStatus.OutputProcessing,
+            RunStatus.Queued, RunStatus.Claimed, RunStatus.Starting,
+            RunStatus.Running, RunStatus.OutputProcessing,
         ];
 
         public async Task<IReadOnlySet<string>> GetVersionIdsWithActiveRunsAsync(
@@ -264,7 +263,7 @@ namespace Functions.DomainService.Repositories
                 .Set(r => r.CompletedAt, completedAt)
                 .Set(r => r.LogsTruncated, logsTruncated)
                 .Set(r => r.LastUpdatedDate, DateTime.UtcNow)
-                .Push(r => r.Attempts, new Models.RunAttempt
+                .Push(r => r.Attempts, new RunAttempt
                 {
                     Number = attempt,
                     Status = status,
@@ -341,7 +340,7 @@ namespace Functions.DomainService.Repositories
                 .Unset(r => r.DiscardReason)
                 .Unset(r => r.HandoverMs)
                 .Unset(r => r.Timings)
-                .Set(r => r.OutputResults, new List<Models.OutputActionResult>())
+                .Set(r => r.OutputResults, new List<OutputActionResult>())
                 .Set(r => r.IdempotencyKey, $"{runId}-{attempt}")
                 .Set(r => r.LastUpdatedDate, DateTime.UtcNow);
 
@@ -401,7 +400,7 @@ namespace Functions.DomainService.Repositories
         }
 
         public Task SetTimingsAsync(
-            string tenantId, string runId, int attempt, List<Models.RunTiming> timings, CancellationToken cancellationToken = default)
+            string tenantId, string runId, int attempt, List<RunTiming> timings, CancellationToken cancellationToken = default)
         {
             var f = Builders<FunctionRunEntity>.Filter;
             var update = Builders<FunctionRunEntity>.Update.Set(r => r.Timings, timings);
@@ -436,7 +435,7 @@ namespace Functions.DomainService.Repositories
         }
 
         public async Task<bool> ApplyOutputResultAsync(
-            string tenantId, string runId, int attempt, IReadOnlyList<Models.OutputActionResult> results,
+            string tenantId, string runId, int attempt, IReadOnlyList<OutputActionResult> results,
             RunStatus finalStatus, string? errorMessage, CancellationToken cancellationToken = default)
         {
             var f = Builders<FunctionRunEntity>.Filter;

@@ -2,12 +2,12 @@ using Blocks.Genesis;
 using Common.InternalService.Access;
 using Functions.DomainService.Dtos.Requests;
 using Functions.DomainService.Dtos.Responses;
-using Functions.DomainService.Models;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Services;
 using Functions.DomainService.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Blocks.Genesis.Entities.Logic;
 
 namespace BlocksTemplate.Api.Controllers
 {
@@ -153,7 +153,7 @@ namespace BlocksTemplate.Api.Controllers
 
         [HttpGet]
         [ProtectedEndPoint("blocks-logic::function::read")]
-        public async Task<Functions.DomainService.Models.FunctionSource> GetVersionSource(
+        public async Task<Blocks.Genesis.Entities.Logic.FunctionSource> GetVersionSource(
             [FromQuery] string functionId, [FromQuery] string versionId)
             => await _functionService.GetVersionSourceAsync(GetTenantId(), functionId, versionId);
 
@@ -765,7 +765,7 @@ namespace BlocksTemplate.Api.Controllers
         public DateTime CreatedDate { get; set; }
         public DateTime? CompletedAt { get; set; }
 
-        public static FunctionBuildEntitySummary From(Functions.DomainService.Entities.FunctionBuildEntity build) => new()
+        public static FunctionBuildEntitySummary From(Blocks.Genesis.Entities.Logic.FunctionBuildEntity build) => new()
         {
             Id = build.ItemId,
             Status = build.Status.ToString(),
@@ -786,7 +786,7 @@ namespace BlocksTemplate.Api.Controllers
         public string? Detail { get; set; }
         public DateTime CreatedDate { get; set; }
 
-        public static FunctionAuditEventDto From(Functions.DomainService.Entities.FunctionAuditEventEntity entity) => new()
+        public static FunctionAuditEventDto From(Blocks.Genesis.Entities.Logic.FunctionAuditEventEntity entity) => new()
         {
             Action = entity.Action,
             ActorId = entity.ActorId,

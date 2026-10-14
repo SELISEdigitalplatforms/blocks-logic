@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Proxy.DomainService.Entities;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Proxy.DomainService.Utils
 {

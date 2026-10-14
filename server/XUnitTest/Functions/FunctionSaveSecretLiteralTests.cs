@@ -1,8 +1,6 @@
 using FluentAssertions;
 using FluentValidation;
 using Functions.DomainService.Dtos.Requests;
-using Functions.DomainService.Entities;
-using Functions.DomainService.Models;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Services;
 using Functions.DomainService.Utils;
@@ -10,6 +8,7 @@ using Functions.DomainService.Validation;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
 {

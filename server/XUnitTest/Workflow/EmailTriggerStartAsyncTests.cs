@@ -1,6 +1,5 @@
 using Blocks.Genesis;
 using Workflow.DomainService.Entities;
-using Workflow.DomainService.Enums;
 using Workflow.DomainService.Events;
 using Workflow.DomainService.Repositories;
 using Workflow.DomainService.Services;
@@ -19,6 +18,7 @@ using Moq;
 using Worker.Consumers.Workflow;
 
 using XUnitTest.TestHelpers;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {

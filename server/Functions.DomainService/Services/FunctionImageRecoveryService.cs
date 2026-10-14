@@ -1,7 +1,6 @@
-using Functions.DomainService.Entities;
-using Functions.DomainService.Enums;
 using Functions.DomainService.Repositories;
 using Microsoft.Extensions.Logging;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Services
 {

@@ -6,7 +6,7 @@ namespace Proxy.DomainService.Dtos
     /// </summary>
     public sealed class ProxyGetExecutionsRequestDto
     {
-        /// <summary>Required. The <see cref="Entities.ProxyDetailEntity.ItemId"/> whose executions to list.</summary>
+        /// <summary>Required. The <see cref="ProxyDetailEntity.ItemId"/> whose executions to list.</summary>
         public string? ProxyId { get; set; }
 
         /// <summary><c>all</c> (default) | <c>2xx</c> | <c>4xx</c> | <c>5xx</c>. Anything else is a 400 (C1).</summary>

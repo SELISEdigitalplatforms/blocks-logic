@@ -2,6 +2,7 @@ using System.Text.Json;
 using MongoDB.Bson;
 using Workflow.DomainService.Dtos;
 using Workflow.DomainService.Entities;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Utils
 {

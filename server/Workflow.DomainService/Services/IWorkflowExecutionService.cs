@@ -2,9 +2,9 @@ using Workflow.DomainService.Entities;
 using Workflow.DomainService.Dtos;
 using Workflow.DomainService.Nodes.TriggerDataV1;
 using Workflow.DomainService.Nodes.TriggerScheduleV1;
-using Workflow.DomainService.Enums;
 using Mail.DomainService.Mails;
 using System.Text.Json;
+using Blocks.Genesis.Entities.Logic;
 
 
 

@@ -20,7 +20,7 @@ namespace Api.Controllers
 
         /// <summary><c>POST</c> — the tenant's users, filtered and paged by the request body.</summary>
         [HttpPost]
-        [Authorize]
+        [ProtectedEndPoint("blocks-os::people::gets")]
         public async Task<GetPeoplesResponse> Gets([FromBody] GetPeoplesRequest command)
         {
             return await _peopleService.GetPeoplesAsync(command);

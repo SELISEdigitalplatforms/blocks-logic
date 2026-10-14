@@ -10,6 +10,7 @@ using MongoDB.Bson;
 using Newtonsoft.Json;
 using Scheduler.DomainService.Dtos.Requests;
 using Scheduler.DomainService.Services;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Services
 {

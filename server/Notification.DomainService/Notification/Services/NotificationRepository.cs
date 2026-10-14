@@ -3,6 +3,7 @@ using DomainService.Shared;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using System.Linq.Expressions;
+using Blocks.Genesis.Entities.Logic;
 
 namespace DomainService.Notification
 {

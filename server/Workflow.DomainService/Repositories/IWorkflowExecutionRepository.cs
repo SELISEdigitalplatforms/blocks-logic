@@ -1,6 +1,6 @@
-using Workflow.DomainService.Enums;
 using Workflow.DomainService.Entities;
 using MongoDB.Bson;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Repositories
 {

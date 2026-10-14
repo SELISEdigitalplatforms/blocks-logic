@@ -4,6 +4,7 @@ using Functions.DomainService.Repositories;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Services
 {
@@ -117,9 +118,9 @@ namespace Functions.DomainService.Services
         /// version shares the same digest.
         /// </summary>
         private async Task ReleaseImagesAsync(
-            IReadOnlyList<Entities.FunctionVersionEntity> all,
+            IReadOnlyList<FunctionVersionEntity> all,
             IReadOnlySet<string> keptIds,
-            IReadOnlyList<Entities.FunctionVersionEntity> doomed)
+            IReadOnlyList<FunctionVersionEntity> doomed)
         {
             var stillReferenced = all
                 .Where(v => keptIds.Contains(v.ItemId))

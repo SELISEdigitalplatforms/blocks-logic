@@ -1,6 +1,6 @@
 using Blocks.Genesis;
-using CloudConfiguration.DomainService.Shared.Enums;
 using MongoDB.Bson.Serialization.Attributes;
+using Blocks.Genesis.Entities.Os;
 
 namespace CloudConfiguration.DomainService.Mail.RequestModel
 {

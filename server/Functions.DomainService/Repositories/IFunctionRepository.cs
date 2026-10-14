@@ -1,5 +1,4 @@
-using Functions.DomainService.Entities;
-using Functions.DomainService.Models;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Repositories
 {

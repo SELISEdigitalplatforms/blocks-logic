@@ -5,6 +5,8 @@ using Mail.DomainService.Shared.Enums;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using System.Globalization;
+using Blocks.Genesis.Entities.Logic;
+using EmailTemplate = Blocks.Genesis.Entities.Os.EmailTemplate;
 
 namespace Mail.DomainService.Services
 {
@@ -161,23 +163,6 @@ namespace Mail.DomainService.Services
             var mailServerConfiguration = await mailServerConfigurationCollection.Find(sc => sc.ItemId == mailConfigurationId).FirstOrDefaultAsync();
 
             return mailServerConfiguration;
-        }
-
-        public async Task<bool> SaveMailToBeSent(MailToBeSent mailToBeSent)
-        {
-            var collection = GetCollection<MailToBeSent>();
-
-            await collection.InsertOneAsync(mailToBeSent);
-
-            return true;
-        }
-
-        public async Task<MailToBeSent> GetMailToBeSent(string itemId)
-        {
-            var collection = GetCollection<MailToBeSent>();
-
-            var result = await collection.Find(x => x.ItemId == itemId).FirstOrDefaultAsync();
-            return result;
         }
 
         //deprecated

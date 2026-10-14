@@ -7,6 +7,7 @@ using Proxy.DomainService.Dtos;
 using Proxy.DomainService.Entities;
 using Proxy.DomainService.Services;
 using Proxy.DomainService.Utils;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Utilities.Api.Controllers
 {
@@ -301,12 +302,12 @@ namespace Utilities.Api.Controllers
 
             // Collisions are reported against the proxy the caller intends to import into, so "this route
             // already exists" is answered before anything is created rather than after.
-            IEnumerable<Proxy.DomainService.Entities.ProxyRouteConfig>? existing = null;
+            IEnumerable<Blocks.Genesis.Entities.Logic.ProxyRouteConfig>? existing = null;
             if (!string.IsNullOrWhiteSpace(dto.ProxyId))
             {
                 var current = await _proxyService.GetAsync(tenantId, new ProxyGetRequestDto { ItemId = dto.ProxyId });
                 existing = current?.Data?.Routes?
-                    .Select(r => new Proxy.DomainService.Entities.ProxyRouteConfig
+                    .Select(r => new Blocks.Genesis.Entities.Logic.ProxyRouteConfig
                     {
                         Method = HttpMethodTypeExtensions.TryParse(r.Method, out var parsed) ? parsed : default,
                         Path = r.Path ?? string.Empty,

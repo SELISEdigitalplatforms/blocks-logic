@@ -1,6 +1,6 @@
 ﻿using Blocks.Genesis;
-using DomainService.Entities;
 using FluentValidation;
+using Blocks.Genesis.Entities.Os;
 
 namespace DomainService.Configuration.Services
 {

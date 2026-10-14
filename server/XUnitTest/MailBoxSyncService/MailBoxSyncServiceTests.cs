@@ -8,6 +8,7 @@ using MailBoxSyncService.Services;
 using MailKit.Security;
 using MimeKit;
 using Moq;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.MailBoxSyncService
 {

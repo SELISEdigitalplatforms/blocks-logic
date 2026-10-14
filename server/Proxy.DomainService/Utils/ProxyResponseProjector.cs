@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Text.Json;
 using Proxy.DomainService.Entities;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Proxy.DomainService.Utils
 {

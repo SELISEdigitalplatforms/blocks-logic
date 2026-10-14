@@ -1,13 +1,13 @@
 using Blocks.Genesis;
 using FluentAssertions;
 using Functions.DomainService.Consumers;
-using Functions.DomainService.Entities;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Services;
 using Functions.DomainService.Utils;
 using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Driver;
 using Moq;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
 {

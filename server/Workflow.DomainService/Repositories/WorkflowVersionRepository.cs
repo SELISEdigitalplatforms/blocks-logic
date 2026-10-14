@@ -2,6 +2,7 @@ using Blocks.Genesis;
 using Workflow.DomainService.Entities;
 using MongoDB.Driver;
 using System.Diagnostics.CodeAnalysis;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Repositories
 {

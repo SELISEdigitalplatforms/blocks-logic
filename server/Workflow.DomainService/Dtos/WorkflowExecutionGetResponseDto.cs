@@ -1,8 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Workflow.DomainService.Enums;
 using Blocks.Genesis;
 using Workflow.DomainService.Entities;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Dtos
 {

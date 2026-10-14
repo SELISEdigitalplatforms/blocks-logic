@@ -2,9 +2,9 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using FluentValidation;
 using Functions.DomainService.Dtos.Requests;
-using Functions.DomainService.Models;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Utils;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Validation
 {
@@ -205,7 +205,7 @@ namespace Functions.DomainService.Validation
     {
         public OutputActionValidator()
         {
-            When(x => x.Kind == Enums.OutputActionKind.ExternalHttp && x.Enabled, () =>
+            When(x => x.Kind == OutputActionKind.ExternalHttp && x.Enabled, () =>
             {
                 RuleFor(x => x.Url)
                     .Must(FunctionValidationRules.IsValidAbsoluteHttpUrl)

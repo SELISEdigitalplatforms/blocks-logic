@@ -1,11 +1,12 @@
 ﻿using Blocks.Genesis;
 using DomainService.Configuration.Services;
-using DomainService.Entities;
 using DomainService.Shared;
 using FluentValidation;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using StackExchange.Redis;
+using Blocks.Genesis.Entities.Logic;
+using Blocks.Genesis.Entities.Os;
 
 namespace DomainService.Notification
 {

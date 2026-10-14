@@ -3,14 +3,13 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Scheduler.DomainService.Dtos.Requests;
-using Scheduler.DomainService.Entities;
-using Scheduler.DomainService.Enums;
 using Scheduler.DomainService.Events;
 using Scheduler.DomainService.Models;
 using Scheduler.DomainService.Repositories;
 using Scheduler.DomainService.Services;
 using SchedulerConstants = Scheduler.DomainService.Utils.SchedulerConstants;
 using XUnitTest.TestHelpers;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Scheduler
 {

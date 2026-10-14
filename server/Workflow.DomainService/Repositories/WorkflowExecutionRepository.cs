@@ -1,11 +1,11 @@
 using Blocks.Genesis;
-using Workflow.DomainService.Enums;
 using Workflow.DomainService.Entities;
 using Workflow.DomainService.Services;
 using Microsoft.Extensions.Configuration;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using System.Diagnostics.CodeAnalysis;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Repositories
 {

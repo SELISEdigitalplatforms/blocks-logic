@@ -11,6 +11,7 @@ using GetConfigurationsRequest = DomainService.Configuration.GetConfigurationsRe
 using GetConfigurationsResponse = DomainService.Configuration.GetConfigurationsResponse;
 using IConfigurationRepository = DomainService.Configuration.Services.IConfigurationRepository;
 using SaveConfigurationRequest = DomainService.Configuration.SaveConfigurationRequest;
+using Blocks.Genesis.Entities.Os;
 
 namespace XUnitTest.Notification
 {

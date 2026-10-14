@@ -48,7 +48,6 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             services.AddHttpClient();
 
             services.Configure<VerioSystemSettings>(services.BuildServiceProvider().GetRequiredService<IConfiguration>().GetSection("VerioSystemSettings"));
-            services.AddSingleton<IConsumer<SendEmailEvent>, SendEmailConsumer>();
             services.AddSingleton<IConsumer<SendMail>, SendConsumer>();
             services.AddHostedService<PeriodicPingBackgroundService>();
 

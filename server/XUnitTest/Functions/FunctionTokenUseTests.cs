@@ -1,7 +1,7 @@
 using FluentAssertions;
-using Functions.DomainService.Models;
 using Functions.DomainService.Utils;
 using Xunit;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
 {

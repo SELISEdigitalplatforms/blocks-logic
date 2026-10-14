@@ -2,6 +2,7 @@ using Blocks.Genesis;
 using CloudConfiguration.DomainService.Shared.Services;
 using CloudConfiguration.DomainService.Storage.Entities;
 using CloudConfiguration.DomainService.Storage.RequestModel;
+using CloudConfiguration.DomainService.Storage.ResponseModel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using DomainService.Storage;
@@ -33,7 +34,7 @@ namespace BlocksTemplate.Api.Controllers
 
         /// <summary><c>POST</c> — creates or updates a storage-provider configuration.</summary>
         [HttpPost]
-        [Authorize]
+        [ProtectedEndPoint("blocks-os::storage::mutate")]
         public async Task<BaseMutationResponse> Save([FromBody] SaveStorageConfigurationRequest request)
         {
 
@@ -45,22 +46,25 @@ namespace BlocksTemplate.Api.Controllers
         /// signature symmetry and is deliberately unused.
         /// </summary>
         [HttpGet]
-        [Authorize]
-        public async Task<List<StorageConfiguration>> Gets([FromQuery] GetStorageConfigurationsRequest request)
+        [ProtectedEndPoint("blocks-os::storage::gets")]
+        public async Task<List<StorageConfigurationResponse>> Gets([FromQuery] GetStorageConfigurationsRequest request)
         {
-            return await _configurationService.GetStorageConfigurationsAsync();
+            var configurations = await _configurationService.GetStorageConfigurationsAsync();
+            return configurations.Select(StorageConfigurationResponse.From).ToList();
         }
 
         /// <summary><c>GET</c> — one storage configuration.</summary>
         [HttpGet]
-        [Authorize]
-        public async Task<StorageConfiguration> Get([FromQuery] GetStorageConfigurationRequest request)
+        [ProtectedEndPoint("blocks-os::storage::gets")]
+        public async Task<StorageConfigurationResponse> Get([FromQuery] GetStorageConfigurationRequest request)
         {
-           return await _configurationService.GetStorageConfigurationAsync(request?.ConfigurationName ?? string.Empty);
+           var configuration = await _configurationService.GetStorageConfigurationAsync(request?.ConfigurationName ?? string.Empty);
+           return StorageConfigurationResponse.From(configuration);
         }
 
         /// <summary><c>DELETE</c> — removes a storage configuration.</summary>
         [HttpPost]
+        [ProtectedEndPoint("blocks-os::storage::mutate")]
         public async Task<BaseResponse> Delete([FromQuery] DeleteStorageConfigurationRequest request)
         {
 
@@ -69,7 +73,7 @@ namespace BlocksTemplate.Api.Controllers
 
         /// <summary><c>POST</c> — a pre-signed URL the client uploads to directly.</summary>
         [HttpPost]
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::storage-file::manage")]
         public async Task<GetPreSignedUrlForUploadResponse> GetPreSignedUrlForUpload(
             [FromBody] GetPreSignedUrlForUploadRequest request)
         {
@@ -83,7 +87,7 @@ namespace BlocksTemplate.Api.Controllers
         /// verification pipeline; this route does not duplicate any completion/verification logic.
         /// </summary>
         [HttpPost]
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::storage-file::manage")]
         public async Task<CompleteUploadResponse> CompleteUpload([FromBody] CompleteUploadRequest request)
         {
             return await _storageDriverService.CompleteUploadAsync(request);
@@ -91,7 +95,7 @@ namespace BlocksTemplate.Api.Controllers
 
         /// <summary><c>GET</c> — a pre-signed download URL for one file.</summary>
         [HttpGet]
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::storage-file::read")]
         public async Task<FileResponse?> GetFile(
             [FromQuery] GetFileRequest request)
         {
@@ -101,7 +105,7 @@ namespace BlocksTemplate.Api.Controllers
 
         /// <summary><c>POST</c> — pre-signed download URLs for several files in one call.</summary>
         [HttpPost]
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::storage-file::read")]
         public async Task<List<FileResponse>?> GetFiles(
             [FromBody] GetFilesRequest request)
         {
@@ -110,7 +114,7 @@ namespace BlocksTemplate.Api.Controllers
 
         /// <summary><c>DELETE</c> via <c>POST</c> — removes a file from the provider.</summary>
         [HttpPost]
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::storage-file::manage")]
         public async Task<BaseResponse> DeleteFile([FromBody] DeleteFileRequest request)
         {
             return await _storageDriverService.DeleteFileAsync(request);

@@ -1,5 +1,5 @@
 using System.Collections.Concurrent;
-using Functions.DomainService.Entities;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Services
 {

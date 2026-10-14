@@ -6,6 +6,8 @@ using FluentAssertions;
 using Moq;
 using IConfigurationRepository = DomainService.Configuration.Services.IConfigurationRepository;
 using SaveConfigurationRequest = DomainService.Configuration.SaveConfigurationRequest;
+using Blocks.Genesis.Entities.Logic;
+using Blocks.Genesis.Entities.Os;
 
 namespace XUnitTest.Notification
 {

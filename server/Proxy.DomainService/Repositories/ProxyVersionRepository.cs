@@ -4,6 +4,7 @@ using Blocks.Genesis;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using Proxy.DomainService.Entities;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Proxy.DomainService.Repositories
 {

@@ -12,6 +12,7 @@ using Workflow.DomainService.Logging;
 using Workflow.DomainService.Repositories;
 using Workflow.DomainService.Services;
 using XUnitTest.TestHelpers;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {

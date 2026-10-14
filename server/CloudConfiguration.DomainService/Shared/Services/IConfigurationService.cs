@@ -2,11 +2,11 @@
 using Microsoft.AspNetCore.Mvc;
 using CloudConfiguration.DomainService.Notification.RequestModel;
 using CloudConfiguration.DomainService.Notification.ResponseModel;
-using CloudConfiguration.DomainService.Notification.Entities;
 using CloudConfiguration.DomainService.Storage.Entities;
 using CloudConfiguration.DomainService.Storage.RequestModel;
-using CloudConfiguration.DomainService.Mail.Entities;
 using CloudConfiguration.DomainService.Mail.RequestModel;
+using Blocks.Genesis.Entities.Data;
+using Blocks.Genesis.Entities.Os;
 
 namespace CloudConfiguration.DomainService.Shared.Services
 {

@@ -3,9 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Blocks.Genesis;
-using Functions.DomainService.Entities;
-using Functions.DomainService.Enums;
-using Functions.DomainService.Models;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Services
 {

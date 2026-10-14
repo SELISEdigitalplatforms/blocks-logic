@@ -4,11 +4,11 @@ using Workflow.DomainService.Nodes;
 using FluentAssertions;
 using Functions.DomainService.Dtos.Requests;
 using Functions.DomainService.Dtos.Responses;
-using Functions.DomainService.Entities;
 using Functions.DomainService.Nodes;
 using Functions.DomainService.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Bson;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
 {

@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using MongoDB.Bson;
 using Proxy.DomainService.Services;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {

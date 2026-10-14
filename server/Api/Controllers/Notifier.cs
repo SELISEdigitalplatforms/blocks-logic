@@ -3,6 +3,7 @@ using DomainService.Notification;
 using DomainService.Shared;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Api.Controllers
 {
@@ -69,7 +70,7 @@ namespace Api.Controllers
         /// arrives in the body despite the <c>GET</c> verb.
         /// </summary>
         [HttpGet]
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::notifier::read")]
         public async Task<List<OfflineNotification>> GetUnreadNotificationsBySubscriptionFilter([FromBody] GetUnreadNotificationsRequestBySubscriptionFilter request)
         {
             return await _notificationService.GetUnreadNotificationsBySubscriptionFilter(request);
@@ -77,7 +78,7 @@ namespace Api.Controllers
 
         /// <summary><c>POST</c> — marks every one of the caller's notifications read.</summary>
         [HttpPost]
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::notifier::manage")]
         public async Task<BaseResponse> MarkAllNotificationAsRead()
         {
             return await _notificationService.MarkAllNotificationAsRead();
@@ -85,7 +86,7 @@ namespace Api.Controllers
 
         /// <summary><c>POST</c> — marks one notification read.</summary>
         [HttpPost]
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::notifier::manage")]
         public async Task<BaseResponse> MarkNotificationAsRead([FromBody] MarkNotificationAsReadRequest request)
         {
             return await _notificationService.MarkNotificationAsRead(request);
@@ -93,7 +94,7 @@ namespace Api.Controllers
 
         /// <summary><c>GET</c> — the caller's notifications, filtered and paged by the query string.</summary>
         [HttpGet]
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::notifier::read")]
         public async Task<GetNotificationsResponse> GetNotifications([FromQuery] GetNotificationsRequest request)
         {
             return await _notificationService.GetNotificationsAsync(request);

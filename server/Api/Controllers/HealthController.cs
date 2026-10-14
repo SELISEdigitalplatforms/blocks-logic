@@ -1,3 +1,4 @@
+using Blocks.Genesis;
 using DomainService.Health.Models;
 using DomainService.Shared.Models;
 using Microsoft.AspNetCore.Authorization;
@@ -15,12 +16,14 @@ namespace BlocksTemplate.Api.Controllers
     public class HealthController(IObservabilityDriverService observability) : ControllerBase
     {
         /// <summary><c>POST</c> — creates a health-check configuration.</summary>
-        [HttpPost, Authorize]
+        [HttpPost]
+        [ProtectedEndPoint("blocks-logic::health::manage")]
         public Task<BaseApiResponse> SaveHealth([FromBody] SaveHealthConfigurationRequest request)
             => observability.SaveHealthAsync(request);
 
         /// <summary><c>POST</c> — updates an existing health-check configuration.</summary>
-        [HttpPost, Authorize]
+        [HttpPost]
+        [ProtectedEndPoint("blocks-logic::health::manage")]
         public Task<BaseApiResponse> UpdateHealth([FromBody] UpdateHealthConfigurationRequest request)
             => observability.UpdateHealthAsync(request);
 
@@ -36,7 +39,8 @@ namespace BlocksTemplate.Api.Controllers
         }
 
         /// <summary><c>DELETE</c> — removes a health-check configuration.</summary>
-        [HttpDelete, Authorize]
+        [HttpDelete]
+        [ProtectedEndPoint("blocks-logic::health::manage")]
         public Task<BaseApiResponse> DeleteHealth([FromQuery] string itemId)
             => observability.DeleteHealthAsync(itemId);
     }

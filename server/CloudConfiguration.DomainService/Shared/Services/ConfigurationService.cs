@@ -5,14 +5,14 @@ using MongoDB.Bson;
 using CloudConfiguration.DomainService.Shared.Utilities;
 using CloudConfiguration.DomainService.Notification.RequestModel;
 using CloudConfiguration.DomainService.Notification.ResponseModel;
-using CloudConfiguration.DomainService.Notification.Entities;
 using CloudConfiguration.DomainService.Storage.RequestModel;
 using CloudConfiguration.DomainService.Storage.Entities;
 using CloudConfiguration.DomainService.Storage.Enums;
-using CloudConfiguration.DomainService.Mail.Entities;
 using CloudConfiguration.DomainService.Mail.RequestModel;
 using System.Collections.Immutable;
 using Microsoft.Extensions.Logging;
+using Blocks.Genesis.Entities.Data;
+using Blocks.Genesis.Entities.Os;
 
 namespace CloudConfiguration.DomainService.Shared.Services
 {
@@ -153,7 +153,8 @@ namespace CloudConfiguration.DomainService.Shared.Services
             repoConfiguration.UploadUrlExpirySeconds = request.UploadUrlExpirySeconds;
             repoConfiguration.DownloadUrlExpirySeconds = request.DownloadUrlExpirySeconds;
             repoConfiguration.MaxFileSizeInBytes = request.MaxFileSizeInBytes;
-            repoConfiguration.UploadCompletionRequiredFor = request.UploadCompletionRequiredFor;
+            repoConfiguration.UploadCompletionRequiredFor = request.UploadCompletionRequiredFor?
+                .Select(Enum.Parse<Blocks.Genesis.Entities.Data.AccessModifier>).ToList();
 
             #endregion
 

@@ -1,10 +1,9 @@
 using Blocks.Genesis;
-using Functions.DomainService.Entities;
-using Functions.DomainService.Models;
 using Functions.DomainService.Utils;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Repositories
 {
@@ -96,7 +95,7 @@ namespace Functions.DomainService.Repositories
                 filter &= builder.Regex(f => f.Name, new BsonRegularExpression(searchKey, "i"));
             }
             if (!string.IsNullOrWhiteSpace(status) &&
-                Enum.TryParse<Enums.FunctionStatus>(status, ignoreCase: true, out var parsedStatus))
+                Enum.TryParse<FunctionStatus>(status, ignoreCase: true, out var parsedStatus))
             {
                 filter &= builder.Eq(f => f.Status, parsedStatus);
             }
@@ -170,7 +169,7 @@ namespace Functions.DomainService.Repositories
             var update = Builders<FunctionEntity>.Update
                 .Set(f => f.ActiveVersionId, versionId)
                 .Set(f => f.LastVersionNumber, versionNumber)
-                .Set(f => f.Status, Enums.FunctionStatus.Live)
+                .Set(f => f.Status, FunctionStatus.Live)
                 .Set(f => f.LastDeployedAt, deployedAt);
             // Nothing to clear: what was just deployed matches the working copy, so the derived
             // IsDirty is false on its own. (Same reason as SaveSourceAsync above.)
@@ -183,7 +182,7 @@ namespace Functions.DomainService.Repositories
         {
             var update = Builders<FunctionEntity>.Update
                 .Set(f => f.ActiveVersionId, versionId)
-                .Set(f => f.Status, Enums.FunctionStatus.Live);
+                .Set(f => f.Status, FunctionStatus.Live);
             return ApplyAsync(tenantId, functionId, update, actorId, cancellationToken);
         }
 

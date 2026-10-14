@@ -2,6 +2,7 @@ using Workflow.DomainService.Logging;
 using System.Text.Json;
 using MongoDB.Bson;
 using Scheduler.DomainService.Utils;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Nodes.TriggerScheduleV1
 {

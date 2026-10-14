@@ -9,6 +9,7 @@ using Jint.Native;
 using MongoDB.Bson;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Nodes.TransformCodeV1
 {

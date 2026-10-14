@@ -10,6 +10,7 @@ using FluentValidation.Results;
 using Microsoft.Extensions.Logging;
 using Moq;
 using XUnitTest.TestHelpers;
+using Blocks.Genesis.Entities.Data;
 
 namespace XUnitTest.Storage
 {
@@ -83,7 +84,7 @@ namespace XUnitTest.Storage
             stored!.UploadUrlExpirySeconds.Should().Be(900);
             stored.DownloadUrlExpirySeconds.Should().Be(120);
             stored.MaxFileSizeInBytes.Should().Be(10_485_760);
-            stored.UploadCompletionRequiredFor.Should().BeEquivalentTo(new List<string> { "Public", "Private" });
+            stored.UploadCompletionRequiredFor.Should().BeEquivalentTo(new List<AccessModifier> { AccessModifier.Public, AccessModifier.Private });
         }
 
         [Fact]
@@ -96,7 +97,7 @@ namespace XUnitTest.Storage
                 UploadUrlExpirySeconds = 900,
                 DownloadUrlExpirySeconds = 120,
                 MaxFileSizeInBytes = 10_485_760,
-                UploadCompletionRequiredFor = new List<string> { "Public" },
+                UploadCompletionRequiredFor = new List<AccessModifier> { AccessModifier.Public },
             };
             _repository.Setup(r => r.GetStorageConfigurationByIdAsync("existing-id")).ReturnsAsync(existing);
             _repository.Setup(r => r.GetStorageConfigurationByNameAsync(It.IsAny<string>()))
