@@ -5,7 +5,7 @@ import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
 import Editor, { type OnMount } from "@monaco-editor/react";
-import { CalendarClock, Plus, Trash2, X, Loader2, Save } from "lucide-react";
+import { Braces, CalendarClock, Plus, Settings2, Trash2, Webhook, X, Loader2, Save } from "lucide-react";
 import { useTheme } from "@seliseblocks/genesis-os/hooks";
 import {
   Form,
@@ -28,7 +28,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui-kits/po
 import { Input } from "@/components/ui-kits/input/input";
 import { Switch } from "@/components/ui-kits/switch/switch";
 import { Textarea } from "@/components/ui-kits/textarea/textarea";
-import { Card, CardContent } from "@/components/ui-kits/card/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui-kits/card/card";
 import { cn, parseDateString } from "@/lib/utils";
 import { isErrorWithErrors } from "@/lib/error";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
@@ -288,298 +288,320 @@ export const ScheduleForm = ({
           </div>
         </div>
 
-        {/* Card Body */}
-        <Card className="w-full border shadow-sm">
-          <CardContent className="p-2">
-            {/* 2-Column Form Body */}
-            <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-              {/* LEFT COLUMN: GENERAL + TIMING & RECURRENCE */}
-              <div className="space-y-8">
-                {/* 1. GENERAL */}
-                <div className="space-y-4">
-                  <h3 className="text-xs font-bold tracking-wider text-muted-foreground uppercase">
-                    General
-                  </h3>
-
-                  <FormField
-                    control={form.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Name</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Schedule name" maxLength={100} {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="description"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Description</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="Brief summary of the scheduled task"
-                            className="min-h-[85px] resize-none"
-                            maxLength={500}
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+        {/* Cards: two columns on large screens, stacked on smaller ones */}
+        <div className="grid grid-cols-1 gap-6 items-start xl:grid-cols-2">
+          {/* LEFT COLUMN */}
+          <div className="space-y-6">
+            {/* 1. GENERAL */}
+            <Card className="w-full border shadow-sm">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <Settings2 className="h-4 w-4" />
+                  </span>
+                  <CardTitle className="text-base">General</CardTitle>
                 </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Schedule name" maxLength={100} {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-                {/* 2. TIMING & RECURRENCE */}
-                <div className="space-y-4">
-                  <h3 className="text-xs font-bold tracking-wider text-muted-foreground uppercase">
-                    Timing & Recurrence
-                  </h3>
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Description</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="Brief summary of the scheduled task"
+                          className="min-h-[85px] resize-none"
+                          maxLength={500}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </CardContent>
+            </Card>
 
-                  <FormField
-                    control={form.control}
-                    name="cronExpression"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Cron Expression</FormLabel>
-                        <FormControl>
-                          <Input placeholder="0 0 * * *" className="font-mono" {...field} />
-                        </FormControl>
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                          {CRON_PRESETS.map((preset) => (
-                            <button
-                              key={preset.value}
-                              type="button"
-                              className={cn(
-                                "rounded-md border px-2.5 py-1 text-xs transition-all",
-                                field.value === preset.value
-                                  ? "border-primary bg-primary/10 font-medium text-primary"
-                                  : "border-input bg-background text-muted-foreground hover:border-muted-foreground/30 hover:shadow-sm",
-                              )}
-                              onClick={() => field.onChange(preset.value)}
-                            >
-                              {preset.label}
-                            </button>
-                          ))}
-                        </div>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <FormField
-                      control={form.control}
-                      name="startDate"
-                      render={({ field }) => (
-                        <FormItem className="flex flex-col">
-                          <FormLabel>Start Date</FormLabel>
-                          <DatePopoverField
-                            value={field.value}
-                            onChange={field.onChange}
-                            placeholder="mm/dd/yyyy"
-                          />
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="endDate"
-                      render={({ field }) => (
-                        <FormItem className="flex flex-col">
-                          <FormLabel>End Date</FormLabel>
-                          <DatePopoverField
-                            value={field.value}
-                            onChange={field.onChange}
-                            placeholder="mm/dd/yyyy"
-                          />
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+            {/* 2. TIMING & RECURRENCE */}
+            <Card className="w-full border shadow-sm">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <CalendarClock className="h-4 w-4" />
+                  </span>
+                  <CardTitle className="text-base">Timing &amp; Recurrence</CardTitle>
                 </div>
-              </div>
-
-              {/* RIGHT COLUMN: WEBHOOK CONFIGURATION + PAYLOAD */}
-              <div className="space-y-8">
-                {/* 3. WEBHOOK CONFIGURATION */}
-                <div className="space-y-4">
-                  <h3 className="text-xs font-bold tracking-wider text-muted-foreground uppercase">
-                    Webhook Configuration
-                  </h3>
-
-                  {/* Endpoint: Method + URL */}
-                  <div>
-                    <FormLabel>Endpoint</FormLabel>
-                    <div className="mt-1.5 flex flex-col gap-2 sm:flex-row sm:items-start">
-                      <FormField
-                        control={form.control}
-                        name="webhook.method"
-                        render={({ field }) => (
-                          <FormItem className="w-full sm:w-28 shrink-0">
-                            <Select value={field.value} onValueChange={field.onChange}>
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Method" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {WEBHOOK_METHODS.map((method) => (
-                                  <SelectItem key={method} value={method}>
-                                    {method}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="webhook.url"
-                        render={({ field }) => (
-                          <FormItem className="flex-1">
-                            <FormControl>
-                              <Input
-                                type="url"
-                                placeholder="https://api.example.com/webhook"
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Signing Secret */}
-                  <FormField
-                    control={form.control}
-                    name="webhook.signingSecret"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Signing Secret</FormLabel>
-                        <FormControl>
-                          <Input type="password" placeholder="Enter secret" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  {/* Headers */}
-                  <FormField
-                    control={form.control}
-                    name="webhook.headers"
-                    render={() => (
-                      <FormItem>
-                        <FormLabel>Headers</FormLabel>
-                        <div className="space-y-2">
-                          {fields.map((headerField, index) => (
-                            <div key={headerField.id} className="flex items-center gap-2">
-                              <FormField
-                                control={form.control}
-                                name={`webhook.headers.${index}.key`}
-                                render={({ field }) => (
-                                  <FormControl>
-                                    <Input
-                                      placeholder="Header Key"
-                                      className="font-mono text-xs"
-                                      {...field}
-                                    />
-                                  </FormControl>
-                                )}
-                              />
-                              <FormField
-                                control={form.control}
-                                name={`webhook.headers.${index}.value`}
-                                render={({ field }) => (
-                                  <FormControl>
-                                    <Input
-                                      placeholder="Header Value"
-                                      className="font-mono text-xs"
-                                      {...field}
-                                    />
-                                  </FormControl>
-                                )}
-                              />
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
-                                onClick={() => remove(index)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          ))}
-
-                          <Button
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="cronExpression"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Cron Expression</FormLabel>
+                      <FormControl>
+                        <Input placeholder="0 0 * * *" className="font-mono" {...field} />
+                      </FormControl>
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {CRON_PRESETS.map((preset) => (
+                          <button
+                            key={preset.value}
                             type="button"
-                            variant="outline"
-                            size="sm"
-                            className="w-full border-dashed text-xs text-muted-foreground hover:text-foreground"
-                            onClick={() => append({ key: "", value: "" })}
+                            className={cn(
+                              "rounded-md border px-2.5 py-1 text-xs transition-all",
+                              field.value === preset.value
+                                ? "border-primary bg-primary/10 font-medium text-primary"
+                                : "border-input bg-background text-muted-foreground hover:border-muted-foreground/30 hover:shadow-sm",
+                            )}
+                            onClick={() => field.onChange(preset.value)}
                           >
-                            <Plus className="mr-1.5 h-3.5 w-3.5" />
-                            Add Header
-                          </Button>
-                        </div>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Evaluated in UTC time.
+                      </p>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-                {/* 4. PAYLOAD */}
-                <div className="space-y-3">
-                  <h3 className="text-xs font-bold tracking-wider text-muted-foreground uppercase">
-                    Payload
-                  </h3>
-
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <FormField
                     control={form.control}
-                    name="payload"
+                    name="startDate"
                     render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <Editor
-                            height="180px"
-                            language="json"
-                            theme={monacoTheme}
-                            value={field.value}
-                            onChange={(next) => field.onChange(next ?? "")}
-                            onMount={handleEditorMount}
-                            options={{
-                              minimap: { enabled: false },
-                              fontSize: 13,
-                              scrollBeyondLastLine: false,
-                              automaticLayout: true,
-                              fixedOverflowWidgets: true,
-                              tabSize: 2,
-                            }}
-                            className="overflow-hidden rounded-lg border"
-                          />
-                        </FormControl>
+                      <FormItem className="flex flex-col">
+                        <FormLabel>Start Date</FormLabel>
+                        <DatePopoverField
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder="mm/dd/yyyy"
+                        />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="endDate"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>End Date</FormLabel>
+                        <DatePopoverField
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder="mm/dd/yyyy"
+                        />
                         <FormMessage />
                       </FormItem>
                     )}
                   />
                 </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* RIGHT COLUMN */}
+          <div className="space-y-6">
+            {/* 3. WEBHOOK CONFIGURATION */}
+            <Card className="w-full border shadow-sm">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <Webhook className="h-4 w-4" />
+                  </span>
+                  <CardTitle className="text-base">Webhook Configuration</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Endpoint: Method + URL */}
+                <div>
+                  <FormLabel>Endpoint</FormLabel>
+                  <div className="mt-1.5 flex flex-col gap-2 sm:flex-row sm:items-start">
+                    <FormField
+                      control={form.control}
+                      name="webhook.method"
+                      render={({ field }) => (
+                        <FormItem className="w-full sm:w-28 shrink-0">
+                          <Select value={field.value} onValueChange={field.onChange}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Method" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {WEBHOOK_METHODS.map((method) => (
+                                <SelectItem key={method} value={method}>
+                                  {method}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="webhook.url"
+                      render={({ field }) => (
+                        <FormItem className="flex-1">
+                          <FormControl>
+                            <Input
+                              type="url"
+                              placeholder="https://api.example.com/webhook"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+
+                {/* Signing Secret */}
+                <FormField
+                  control={form.control}
+                  name="webhook.signingSecret"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Signing Secret</FormLabel>
+                      <FormControl>
+                        <Input type="password" placeholder="Enter secret" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* Headers */}
+                <FormField
+                  control={form.control}
+                  name="webhook.headers"
+                  render={() => (
+                    <FormItem>
+                      <FormLabel>Headers</FormLabel>
+                      <div className="space-y-2">
+                        {fields.map((headerField, index) => (
+                          <div key={headerField.id} className="flex items-center gap-2">
+                            <FormField
+                              control={form.control}
+                              name={`webhook.headers.${index}.key`}
+                              render={({ field }) => (
+                                <FormControl>
+                                  <Input
+                                    placeholder="Header Key"
+                                    className="font-mono text-xs"
+                                    {...field}
+                                  />
+                                </FormControl>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name={`webhook.headers.${index}.value`}
+                              render={({ field }) => (
+                                <FormControl>
+                                  <Input
+                                    placeholder="Header Value"
+                                    className="font-mono text-xs"
+                                    {...field}
+                                  />
+                                </FormControl>
+                              )}
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
+                              onClick={() => remove(index)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="w-full border-dashed text-xs text-muted-foreground hover:text-foreground"
+                          onClick={() => append({ key: "", value: "" })}
+                        >
+                          <Plus className="mr-1.5 h-3.5 w-3.5" />
+                          Add Header
+                        </Button>
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </CardContent>
+            </Card>
+
+            {/* 4. PAYLOAD */}
+            <Card className="w-full border shadow-sm">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <Braces className="h-4 w-4" />
+                  </span>
+                  <CardTitle className="text-base">Payload</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <FormField
+                  control={form.control}
+                  name="payload"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormControl>
+                        <Editor
+                          height="180px"
+                          language="json"
+                          theme={monacoTheme}
+                          value={field.value}
+                          onChange={(next) => field.onChange(next ?? "")}
+                          onMount={handleEditorMount}
+                          options={{
+                            minimap: { enabled: false },
+                            fontSize: 13,
+                            scrollBeyondLastLine: false,
+                            automaticLayout: true,
+                            fixedOverflowWidgets: true,
+                            tabSize: 2,
+                          }}
+                          className="overflow-hidden rounded-lg border"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </form>
     </Form>
   );
