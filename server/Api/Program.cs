@@ -77,6 +77,10 @@ services.RegisterBlocksEurolmServices();
 services.RegisterAllMailApplicationServices();
 services.RegisterBlocksObservabilityServices();
 services.AddWorkflowExecutionEngine();
+if (!string.IsNullOrWhiteSpace(secret.CacheConnectionString))
+{
+    services.AddSignalR().AddStackExchangeRedis(secret.CacheConnectionString);
+}
 services.AddProxyServices();
 services.AddCloudConfigurationServices();
 services.AddSchedulerServices();
