@@ -39,7 +39,7 @@ namespace XUnitTest.Functions
             _provider.Setup(p => p.GetCollection<FunctionRunStatsMigration.LegacyRunStats>(It.IsAny<string>(), FunctionsConstants.LegacyRunStatsCollection))
                 .Returns(Legacy);
 
-            _functions = new FunctionRepository(_provider.Object, NullLogger<FunctionRepository>.Instance);
+            _functions = new FunctionRepository(_provider.Object, NullLogger<FunctionRepository>.Instance, new XUnitTest.TestDoubles.PassThroughLogicDataAccess());
         }
 
         public void Dispose() => _client.DropDatabase(_databaseName);

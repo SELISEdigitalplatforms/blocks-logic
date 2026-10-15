@@ -29,7 +29,7 @@ namespace XUnitTest.Workflow
 
             var provider = new Mock<IDbContextProvider>();
             provider.Setup(p => p.GetCollection<WorkflowExecutionEntity>(It.IsAny<string>(), It.IsAny<string>())).Returns(collection);
-            _repository = new WorkflowExecutionRepository(provider.Object);
+            _repository = new WorkflowExecutionRepository(provider.Object, new XUnitTest.TestDoubles.PassThroughLogicDataAccess());
         }
 
         public void Dispose() => _client.DropDatabase(_databaseName);

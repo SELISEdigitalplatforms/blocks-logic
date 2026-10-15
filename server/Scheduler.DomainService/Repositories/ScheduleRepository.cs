@@ -1,4 +1,5 @@
 using Blocks.Genesis;
+using DataAccess.InternalService;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using Scheduler.DomainService.Dtos;
@@ -14,11 +15,17 @@ namespace Scheduler.DomainService.Repositories
         private readonly ILogger<ScheduleRepository> _logger;
         private readonly IDbContextProvider _dbContextProvider;
         private readonly IBlocksSecret _blocksSecret;
+        private readonly ILogicDataAccess _dataAccess;
+
+        private Task<ReadScope<Schedule>> ReadAsync(FilterDefinition<Schedule> filter, string callSite, string? tenantId = null) =>
+            _dataAccess.ReadAsync(LogicSchemas.Schedule, filter, $"ScheduleRepository.{callSite}", tenantId);
 
         public ScheduleRepository(ILogger<ScheduleRepository> logger,
                                  IDbContextProvider dbContextProvider,
-                                 IBlocksSecret blocksSecret)
+                                 IBlocksSecret blocksSecret,
+                                 ILogicDataAccess dataAccess)
         {
+            _dataAccess = dataAccess;
             _dbContextProvider = dbContextProvider;
             _logger = logger;
             _blocksSecret = blocksSecret;
@@ -44,33 +51,41 @@ namespace Scheduler.DomainService.Repositories
                     scheduleKind.Value);
             }
 
-            long totalCount = await GetCollection().CountDocumentsAsync(filter);
+            var scope = await ReadAsync(filter, "GetAll");
+            if (!scope.Granted) return (null, 0);
 
-            var items = await GetCollection()
-                .Find(filter)
+            long totalCount = await GetCollection().CountDocumentsAsync(scope.Filter);
+
+            var items = await scope.Apply(GetCollection())
                 .Skip(pageNumber * pageSize)
                 .Limit(pageSize)
                 .ToListAsync();
 
             return (items.Count > 0 ? items : null, totalCount);
         }
-        public Task<Schedule?> GetByIdAsync(string scheduleId, string tenantId = "")
+        public async Task<Schedule?> GetByIdAsync(string scheduleId, string tenantId = "")
         {
             var collection = GetCollection(tenantId);
-            return collection.Find(schedule => schedule.ItemId == scheduleId).FirstOrDefaultAsync();
+            // The entity feeds UpdateAsync (whole-doc replace) in callers: read it whole, no projection.
+            var scope = await _dataAccess.ReadAsync(LogicSchemas.Schedule, Builders<Schedule>.Filter.Where(schedule => schedule.ItemId == scheduleId),
+                "ScheduleRepository.GetById", tenantId, useProjection: false);
+            return scope.Granted ? await scope.Apply(collection).FirstOrDefaultAsync() : null;
         }
 
-        public Task CreateAsync(Schedule schedule)
+        public async Task CreateAsync(Schedule schedule)
         {
+            if (!await _dataAccess.InsertAllowedAsync(LogicSchemas.Schedule, "ScheduleRepository.Create"))
+                throw new UnauthorizedAccessException("Schedule create is not allowed by the data access policy.");
             var collection = GetCollection();
-            return collection.InsertOneAsync(schedule);
+            await collection.InsertOneAsync(schedule);
         }
 
-        public Task UpdateAsync(Schedule schedule)
+        public async Task UpdateAsync(Schedule schedule)
         {
-            return GetCollection().ReplaceOneAsync(
-                Builders<Schedule>.Filter.Eq(x => x.ItemId, schedule.ItemId),
-                schedule);
+            var filter = await _dataAccess.EditFilterAsync(LogicSchemas.Schedule,
+                Builders<Schedule>.Filter.Eq(x => x.ItemId, schedule.ItemId), "ScheduleRepository.Update");
+            if (filter is null) return;
+            await GetCollection().ReplaceOneAsync(filter, schedule);
         }
 
         public async Task<bool> DeleteAsync(string itemId, string tenantId = "")
@@ -79,7 +94,10 @@ namespace Scheduler.DomainService.Repositories
 
             try
             {
-                var result = await schedulesCollection.DeleteOneAsync(Builders<Schedule>.Filter.Eq(x => x.ItemId, itemId));
+                var filter = await _dataAccess.DeleteFilterAsync(LogicSchemas.Schedule,
+                    Builders<Schedule>.Filter.Eq(x => x.ItemId, itemId), "ScheduleRepository.Delete", tenantId);
+                if (filter is null) return false;
+                var result = await schedulesCollection.DeleteOneAsync(filter);
                 if (result.DeletedCount > 0)
                 {
                     _logger.LogInformation($"Schedule {itemId} is deleted.");
@@ -121,7 +139,10 @@ namespace Scheduler.DomainService.Repositories
                                                   .GetCollection<Schedule>(CollectionName);
 
                         var filter = Builders<Schedule>.Filter.Ne(x => x.IsActive, false);
-                        var schedules = await schedulesCollection.Find(filter).ToListAsync();
+                        // Per-tenant DB loop (startup / timer, no user): the helper takes its skip path
+                        // (no-user-context or other-tenant-db) and returns the original filter.
+                        var scope = await ReadAsync(filter, "GetSchedulesFromAllTenants", tenant.TenantId);
+                        var schedules = scope.Granted ? await scope.Apply(schedulesCollection).ToListAsync() : [];
 
                         return schedules.Count > 0
                             ? new SchedularDto { TenantId = tenant.TenantId, Schedules = schedules }

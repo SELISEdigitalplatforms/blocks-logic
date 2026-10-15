@@ -6,4 +6,8 @@
 	  <PackageReference Include="SeliseBlocks.Genesis.OS" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\DataAccess.InternalService\DataAccess.InternalService.csproj" />
+  </ItemGroup>
+
 </Project>

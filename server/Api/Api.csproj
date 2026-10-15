@@ -29,6 +29,7 @@
     <PackageReference Include="SeliseBlocks.Genesis.OS" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\DataAccess.InternalService\DataAccess.InternalService.csproj" />
     <ProjectReference Include="..\CloudConfiguration.DomainService\CloudConfiguration.DomainService.csproj" />
 
     <ProjectReference Include="..\Common.InternalService\Common.InternalService.csproj" />

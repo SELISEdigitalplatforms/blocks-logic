@@ -80,7 +80,7 @@ namespace XUnitTest.Notifications
             return cursor.Object;
         }
 
-        private NotificationRepository Build() => new(_provider.Object, _secret.Object, _logger.Object);
+        private NotificationRepository Build() => new(_provider.Object, _secret.Object, _logger.Object, new XUnitTest.TestDoubles.PassThroughLogicDataAccess());
 
         private static OfflineNotification Notification(string id, string? forUser = null, params string[] readBy) => new()
         {

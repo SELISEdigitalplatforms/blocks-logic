@@ -47,7 +47,7 @@ public class ScheduleRepositoryRoutingTests
         }
         provider.Setup(p => p.GetDatabase("offline-connection", "same-name", false)).Throws(new TimeoutException());
 
-        var results = await new ScheduleRepository(logger.Object, provider.Object, secret).GetSchedulesFromAllTenantsAsync();
+        var results = await new ScheduleRepository(logger.Object, provider.Object, secret, new XUnitTest.TestDoubles.PassThroughLogicDataAccess()).GetSchedulesFromAllTenantsAsync();
 
         Assert.Equal(2, results.Count);
         Assert.Equal("dev-connection", Assert.Single(results.Single(r => r.TenantId == "dev").Schedules).Name);
@@ -69,6 +69,6 @@ public class ScheduleRepositoryRoutingTests
         var secret = new BlocksSecret { DatabaseConnectionString = "main", RootDatabaseName = "root" };
         provider.Setup(p => p.GetDatabase("main", "root", false)).Throws(new TimeoutException());
         await Assert.ThrowsAsync<TimeoutException>(() => new ScheduleRepository(
-            Mock.Of<ILogger<ScheduleRepository>>(), provider.Object, secret).GetSchedulesFromAllTenantsAsync());
+            Mock.Of<ILogger<ScheduleRepository>>(), provider.Object, secret, new XUnitTest.TestDoubles.PassThroughLogicDataAccess()).GetSchedulesFromAllTenantsAsync());
     }
 }

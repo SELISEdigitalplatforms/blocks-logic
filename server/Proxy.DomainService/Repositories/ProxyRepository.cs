@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
 using Blocks.Genesis;
+using DataAccess.InternalService;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
@@ -25,11 +26,20 @@ namespace Proxy.DomainService.Repositories
         private readonly ILogger<ProxyRepository> _logger;
         private readonly ConcurrentDictionary<string, byte> _indexedTenants = new(StringComparer.Ordinal);
 
-        public ProxyRepository(IDbContextProvider dbContextProvider, ILogger<ProxyRepository> logger)
+        private readonly ILogicDataAccess _dataAccess;
+
+        public ProxyRepository(IDbContextProvider dbContextProvider, ILogger<ProxyRepository> logger, ILogicDataAccess dataAccess)
         {
             _dbContextProvider = dbContextProvider;
             _logger = logger;
+            _dataAccess = dataAccess;
         }
+
+        private Task<ReadScope<ProxyDetailEntity>> ReadAsync(string tenantId, FilterDefinition<ProxyDetailEntity> filter, string callSite, bool useProjection = true) =>
+            _dataAccess.ReadAsync(LogicSchemas.ProxyDetailEntity, filter, $"ProxyRepository.{callSite}", tenantId, useProjection);
+
+        private Task<FilterDefinition<ProxyDetailEntity>?> EditAsync(string tenantId, FilterDefinition<ProxyDetailEntity> filter, string callSite) =>
+            _dataAccess.EditFilterAsync(LogicSchemas.ProxyDetailEntity, filter, $"ProxyRepository.{callSite}", tenantId);
 
         private IMongoCollection<ProxyDetailEntity> GetCollection(string tenantId)
         {
@@ -101,7 +111,9 @@ namespace Proxy.DomainService.Repositories
         {
             var collection = GetCollection(tenantId);
             var filter = Builders<ProxyDetailEntity>.Filter.Eq(p => p.ItemId, itemId);
-            return NormalizeTenant(await collection.Find(filter).FirstOrDefaultAsync(), tenantId);
+            // The entity feeds SaveConfig (writes every field back): read it whole, no projection.
+            var scope = await ReadAsync(tenantId, filter, "Get", useProjection: false);
+            return scope.Granted ? NormalizeTenant(await scope.Apply(collection).FirstOrDefaultAsync(), tenantId) : null;
         }
 
         public async Task<ProxyDetailEntity?> GetBySlugAsync(string tenantId, string slug)
@@ -109,15 +121,18 @@ namespace Proxy.DomainService.Repositories
             var collection = GetCollection(tenantId);
             await EnsureIndexesAsync(tenantId, collection);
             var filter = Builders<ProxyDetailEntity>.Filter.Eq(p => p.Slug, slug);
-            return NormalizeTenant(await collection.Find(filter).FirstOrDefaultAsync(), tenantId);
+            // Gateway hot path (anonymous callers: skip path, no extra reads). Whole entity, no projection.
+            var scope = await ReadAsync(tenantId, filter, "GetBySlug", useProjection: false);
+            return scope.Granted ? NormalizeTenant(await scope.Apply(collection).FirstOrDefaultAsync(), tenantId) : null;
         }
 
         public async Task<List<ProxyDetailEntity>> GetAllAsync(
             string tenantId, string? search, bool? isActive, int pageSize, int pageNumber)
         {
             var collection = GetCollection(tenantId);
-            var proxies = await collection
-                .Find(BuildListFilter(search, isActive))
+            var scope = await ReadAsync(tenantId, BuildListFilter(search, isActive), "GetAll", useProjection: false);
+            if (!scope.Granted) return [];
+            var proxies = await scope.Apply(collection)
                 .SortByDescending(p => p.CreatedDate)
                 .Skip(pageNumber * pageSize)
                 .Limit(pageSize)
@@ -134,11 +149,14 @@ namespace Proxy.DomainService.Repositories
         public async Task<long> CountAsync(string tenantId, string? search, bool? isActive)
         {
             var collection = GetCollection(tenantId);
-            return await collection.CountDocumentsAsync(BuildListFilter(search, isActive));
+            var scope = await ReadAsync(tenantId, BuildListFilter(search, isActive), "Count");
+            return scope.Granted ? await collection.CountDocumentsAsync(scope.Filter) : 0;
         }
 
         public async Task InsertAsync(ProxyDetailEntity proxy)
         {
+            if (!await _dataAccess.InsertAllowedAsync(LogicSchemas.ProxyDetailEntity, "ProxyRepository.Insert", proxy.TenantId))
+                throw new UnauthorizedAccessException("Proxy create is not allowed by the data access policy.");
             var collection = GetCollection(proxy.TenantId);
             await EnsureIndexesAsync(proxy.TenantId, collection);
             await collection.InsertOneAsync(proxy);
@@ -163,7 +181,8 @@ namespace Proxy.DomainService.Repositories
 
             var collection = GetCollection(proxy.TenantId);
             var builder = Builders<ProxyDetailEntity>.Filter;
-            var filter = builder.Eq(p => p.ItemId, proxy.ItemId) & builder.Eq(p => p.CurrentVersion, expectedVersion);
+            var filter = await EditAsync(proxy.TenantId, builder.Eq(p => p.ItemId, proxy.ItemId) & builder.Eq(p => p.CurrentVersion, expectedVersion), "SaveConfig");
+            if (filter is null) return false;
 
             // $set each mapped field from the entity's own BSON, so a new config field is saved without a change here.
             var sets = proxy.ToBsonDocument().Elements
@@ -177,7 +196,9 @@ namespace Proxy.DomainService.Repositories
         {
             var collection = GetCollection(tenantId);
             var builder = Builders<ProxyDetailEntity>.Filter;
-            var filter = builder.Eq(p => p.ItemId, itemId) & builder.Eq(p => p.CurrentVersion, expectedVersion);
+            var filter = await _dataAccess.DeleteFilterAsync(LogicSchemas.ProxyDetailEntity,
+                builder.Eq(p => p.ItemId, itemId) & builder.Eq(p => p.CurrentVersion, expectedVersion), "ProxyRepository.Delete", tenantId);
+            if (filter is null) return false;
             var result = await collection.DeleteOneAsync(filter);
             return result.DeletedCount == 1;
         }
@@ -195,10 +216,15 @@ namespace Proxy.DomainService.Repositories
             // Computed once per batch, not per delta: every document in this flush prunes the same two hours.
             var expiredStamps = ProxyStatsWindow.ExpiredStamps(DateTime.UtcNow).ToList();
 
+            // One EDIT resolve with an empty base filter, ANDed into every model. The flush runs on a timer
+            // (no user context): the helper takes the no-context skip path and returns the base filter unchanged.
+            var policy = await EditAsync(tenantId, Builders<ProxyDetailEntity>.Filter.Empty, "ApplyStatsDeltas");
+            if (policy is null) return;
+
             var models = new List<WriteModel<ProxyDetailEntity>>(deltas.Count);
             foreach (var delta in deltas)
             {
-                var filter = Builders<ProxyDetailEntity>.Filter.Eq(p => p.ItemId, delta.ProxyId);
+                var filter = Builders<ProxyDetailEntity>.Filter.Eq(p => p.ItemId, delta.ProxyId) & policy;
 
                 // Dotted paths into the bucket map: $inc creates the hour's sub-document and its fields when
                 // they are missing, so the first call of an hour needs no separate insert and no upsert race.

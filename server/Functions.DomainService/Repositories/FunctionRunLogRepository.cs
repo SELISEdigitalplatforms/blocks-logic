@@ -1,4 +1,5 @@
 using Blocks.Genesis;
+using DataAccess.InternalService;
 using Functions.DomainService.Utils;
 using MongoDB.Driver;
 using Blocks.Genesis.Entities.Logic;
@@ -12,10 +13,16 @@ namespace Functions.DomainService.Repositories
         private readonly HashSet<string> _indexedTenants = [];
         private readonly Lock _indexGate = new();
 
-        public FunctionRunLogRepository(IDbContextProvider dbContextProvider)
+        public FunctionRunLogRepository(IDbContextProvider dbContextProvider, ILogicDataAccess dataAccess)
         {
             _dbContextProvider = dbContextProvider;
+            _dataAccess = dataAccess;
         }
+        private readonly ILogicDataAccess _dataAccess;
+
+        private Task<ReadScope<FunctionRunLogEntity>> ReadAsync(string tenantId, FilterDefinition<FunctionRunLogEntity> filter, string callSite, bool useProjection = true) =>
+            _dataAccess.ReadAsync(LogicSchemas.FunctionRunLogEntity, filter, $"FunctionRunLogRepository.{callSite}", tenantId, useProjection);
+
 
         private IMongoCollection<FunctionRunLogEntity> Collection(string tenantId)
             => _dbContextProvider.GetCollection<FunctionRunLogEntity>(tenantId, FunctionsConstants.FunctionRunLogsCollection);
@@ -44,6 +51,8 @@ namespace Functions.DomainService.Repositories
         {
             if (logs.Count == 0) return;
 
+            if (!await _dataAccess.InsertAllowedAsync(LogicSchemas.FunctionRunLogEntity, "FunctionRunLogRepository.InsertMany", tenantId))
+                throw new UnauthorizedAccessException("Function run log create is not allowed by the data access policy.");
             await EnsureIndexesAsync(tenantId, cancellationToken);
             // Ordered: preserving the sandbox's own stdout order matters more here than
             // resilience to a single bad document, and a bad document would indicate a bug
@@ -57,7 +66,10 @@ namespace Functions.DomainService.Repositories
         {
             if (string.IsNullOrWhiteSpace(functionId)) return 0;
 
-            var result = await Collection(tenantId).DeleteManyAsync(l => l.FunctionId == functionId, cancellationToken);
+            var filter = await _dataAccess.DeleteFilterAsync(LogicSchemas.FunctionRunLogEntity,
+                Builders<FunctionRunLogEntity>.Filter.Where(l => l.FunctionId == functionId), "FunctionRunLogRepository.DeleteAllForFunction", tenantId);
+            if (filter is null) return 0;
+            var result = await Collection(tenantId).DeleteManyAsync(filter, cancellationToken);
             return result.DeletedCount;
         }
 
@@ -67,8 +79,10 @@ namespace Functions.DomainService.Repositories
             var filter = Builders<FunctionRunLogEntity>.Filter.Eq(l => l.RunId, runId);
             var collection = Collection(tenantId);
 
-            var totalCount = await collection.CountDocumentsAsync(filter, cancellationToken: cancellationToken);
-            var items = await collection.Find(filter)
+            var scope = await ReadAsync(tenantId, filter, "GetByRun");
+            if (!scope.Granted) return ([], 0);
+            var totalCount = await collection.CountDocumentsAsync(scope.Filter, cancellationToken: cancellationToken);
+            var items = await scope.Apply(collection)
                 .SortBy(l => l.Seq)
                 .Skip(Math.Max(0, pageNumber) * Math.Max(1, pageSize))
                 .Limit(Math.Max(1, pageSize))

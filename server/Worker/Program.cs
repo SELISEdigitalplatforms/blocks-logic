@@ -1,4 +1,5 @@
 ﻿using Blocks.Extension.DependencyInjection;
+using DataAccess.InternalService;
 using Blocks.Genesis;
 using Blocks.Secrets;
 using DomainService.Shared;
@@ -75,6 +76,7 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             // proxy's configured headers and query values; without it any proxy that stores its
             // upstream credential as a configuration variable fails at forward time.
             services.AddBlocksSecrets();
+            services.AddLogicDataAccess();
             services.AddProxyServices();
             services.AddSingleton<Workflow.DomainService.Utils.NodeQueueLanes>(_ => new Workflow.DomainService.Utils.NodeQueueLanes());
             services.AddSingleton<IConsumer<AddExcuationNodeEvent>, AddExcuationNodeConsumer>();

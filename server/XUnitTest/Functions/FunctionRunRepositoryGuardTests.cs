@@ -33,7 +33,7 @@ namespace XUnitTest.Functions
 
             var provider = new Mock<IDbContextProvider>();
             provider.Setup(p => p.GetCollection<FunctionRunEntity>(It.IsAny<string>(), It.IsAny<string>())).Returns(_collection);
-            _repository = new FunctionRunRepository(provider.Object);
+            _repository = new FunctionRunRepository(provider.Object, new XUnitTest.TestDoubles.PassThroughLogicDataAccess());
         }
 
         public void Dispose() => _client.DropDatabase(_databaseName);

@@ -21,7 +21,7 @@ namespace XUnitTest.MailBoxSyncService
 
         public MailRepositoryTests()
         {
-            _repository = new MailRepository(_mockDbContextProvider.Object, _mockBlocksSecret.Object);
+            _repository = new MailRepository(_mockDbContextProvider.Object, _mockBlocksSecret.Object, new XUnitTest.TestDoubles.PassThroughLogicDataAccess());
         }
 
         [Fact]

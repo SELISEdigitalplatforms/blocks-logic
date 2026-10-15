@@ -7,6 +7,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\DataAccess.InternalService\DataAccess.InternalService.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Office 365 outbound: Azure.Identity for the Exchange Online client-credentials token,
          SeliseBlocks.Secrets.OS for resolving the client secret in its tenant at send time. -->
     <PackageReference Include="Azure.Identity" />

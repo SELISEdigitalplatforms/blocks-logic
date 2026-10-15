@@ -1,4 +1,5 @@
 using Blocks.Genesis;
+using DataAccess.InternalService;
 using DomainService.Shared;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
@@ -15,12 +16,47 @@ namespace DomainService.Notification
         private const string _notificationCollection = "OfflineNotifications";
         private readonly ILogger<NotificationRepository> _logger;
 
-        public NotificationRepository(IDbContextProvider dbContextProvider, IBlocksSecret blocksSecret, ILogger<NotificationRepository> logger)
+        private readonly ILogicDataAccess _dataAccess;
+
+        public NotificationRepository(IDbContextProvider dbContextProvider, IBlocksSecret blocksSecret, ILogger<NotificationRepository> logger, ILogicDataAccess dataAccess)
 
         {
             _dbContextProvider = dbContextProvider;
             _blocksSecret = blocksSecret;
             _logger = logger;
+            _dataAccess = dataAccess;
+        }
+
+        // Logic-owned notification entities. Anything else that passes through the generic methods
+        // (e.g. NotificationUser on "Users", iam-owned) is not governed here and keeps the original call.
+        private static string? SchemaOf<T>() => typeof(T).Name switch
+        {
+            nameof(OfflineNotification) => LogicSchemas.OfflineNotification,
+            nameof(NotificationConnection) => LogicSchemas.NotificationConnection,
+            nameof(NotificationSubscription) => LogicSchemas.NotificationSubscription,
+            nameof(FirebaseConfiguration) => LogicSchemas.FirebaseConfiguration,
+            _ => null,
+        };
+
+        /// <summary>
+        /// The DB this call targets, for the helper. Impersonated callers read and write the ROOT DB, not the
+        /// caller's tenant DB, and the resolver only loads the caller's tenant policies: pass the root DB name so
+        /// the helper takes its other-tenant-db skip path. Null = the caller's own tenant DB.
+        /// </summary>
+        private string? TargetDb() =>
+            BlocksContext.GetContext() is { Impersonated: true } ? _blocksSecret.RootDatabaseName : null;
+
+        private async Task<ReadScope<T>> ReadAsync<T>(string schema, FilterDefinition<T> filter, string callSite) =>
+            await _dataAccess.ReadAsync(schema, filter, $"NotificationRepository.{callSite}", TargetDb());
+
+        private Task<FilterDefinition<T>?> EditAsync<T>(string schema, FilterDefinition<T> filter, string callSite) =>
+            _dataAccess.EditFilterAsync(schema, filter, $"NotificationRepository.{callSite}", TargetDb());
+
+        private async Task GateInsertAsync<T>(string callSite)
+        {
+            if (SchemaOf<T>() is { } schema
+                && !await _dataAccess.InsertAllowedAsync(schema, $"NotificationRepository.{callSite}", TargetDb()))
+                throw new UnauthorizedAccessException("Notification create is not allowed by the data access policy.");
         }
 
         private IMongoDatabase ResolvedClientDb()
@@ -51,6 +87,12 @@ namespace DomainService.Notification
             var filterBuilder = Builders<T>.Filter;
             var filter = filterBuilder.Where(filterExpression);
 
+            if (SchemaOf<T>() is { } schema)
+            {
+                var scope = await ReadAsync(schema, filter, "GetItem");
+                return scope.Granted ? await scope.Apply(collection).FirstOrDefaultAsync() : default!;
+            }
+
             var item = await collection.FindAsync(filter);
             return await item.FirstOrDefaultAsync();
         }
@@ -62,12 +104,19 @@ namespace DomainService.Notification
             var filterBuilder = Builders<T>.Filter;
             var filter = filterBuilder.Where(filterExpression);
 
+            if (SchemaOf<T>() is { } schema)
+            {
+                var scope = await ReadAsync(schema, filter, "GetItems");
+                return scope.Granted ? await scope.Apply(collection).ToListAsync() : [];
+            }
+
             var items = await collection.FindAsync(filter);
             return await items.ToListAsync();
         }
 
         public async Task SaveAsync<T>(T data, string collectionName = "")
         {
+            await GateInsertAsync<T>("SaveAsync");
             var database = ResolvedClientDb();
             IMongoCollection<T> collection = database.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? (typeof(T).Name + "s") : collectionName);
             await collection.InsertOneAsync(data);
@@ -75,6 +124,7 @@ namespace DomainService.Notification
 
         public async Task SaveAsync<T>(List<T> listOfData)
         {
+            await GateInsertAsync<T>("SaveAsyncMany");
             var database = ResolvedClientDb();
             IMongoCollection<T> collection = database.GetCollection<T>(typeof(T).Name + "s");
            await collection.InsertManyAsync(listOfData);
@@ -84,6 +134,14 @@ namespace DomainService.Notification
         {
             var database = ResolvedClientDb();
             IMongoCollection<T> collection = database.GetCollection<T>(typeof(T).Name + "s");
+            if (SchemaOf<T>() is { } schema)
+            {
+                var filter = await _dataAccess.DeleteFilterAsync(schema, Builders<T>.Filter.Where(dataFilters), "NotificationRepository.Delete", TargetDb());
+                if (filter is null) return;
+                await collection.DeleteManyAsync(filter);
+                return;
+            }
+
             await collection.DeleteManyAsync(dataFilters);
         }
 
@@ -112,10 +170,16 @@ namespace DomainService.Notification
             var nullReadByUserIdsFilter = unreadFilter & builder.Eq(q => q.ReadByUserIds, null);
             var updateDefinition = new UpdateDefinitionBuilder<OfflineNotification>().AddToSet(p => p.ReadByUserIds, userId);
             var collection = NotificationCollection();
-            await collection.UpdateManyAsync(nullReadByUserIdsFilter,
-                new UpdateDefinitionBuilder<OfflineNotification>().Set(p => p.ReadByUserIds, new List<string>()));
+            var nullFilter = await EditAsync(LogicSchemas.OfflineNotification, nullReadByUserIdsFilter, "UpdateNotificationAsReadByUserId.InitList");
+            if (nullFilter is not null)
+            {
+                await collection.UpdateManyAsync(nullFilter,
+                    new UpdateDefinitionBuilder<OfflineNotification>().Set(p => p.ReadByUserIds, new List<string>()));
+            }
             // Then add userId to ReadByUserIds for all unread notifications.
-            await collection.UpdateManyAsync(unreadFilter, updateDefinition);
+            var readFilter = await EditAsync(LogicSchemas.OfflineNotification, unreadFilter, "UpdateNotificationAsReadByUserId");
+            if (readFilter is null) return;
+            await collection.UpdateManyAsync(readFilter, updateDefinition);
         }
 
         public async Task UpdateNotificationAsReadByUserIdAsync(string userId, string notificationId)
@@ -126,7 +190,9 @@ namespace DomainService.Notification
             var updateDefinition = new UpdateDefinitionBuilder<OfflineNotification>().AddToSet(p => p.ReadByUserIds,
                 userId.ToString());
 
-            await NotificationCollection().UpdateOneAsync(filter, updateDefinition);
+            var editFilter = await EditAsync(LogicSchemas.OfflineNotification, filter, "UpdateNotificationAsReadById");
+            if (editFilter is null) return;
+            await NotificationCollection().UpdateOneAsync(editFilter, updateDefinition);
         }
 
         public async Task<GetNotificationsResponse> GetNotificationsAsync(GetNotificationsRequest request)
@@ -148,9 +214,18 @@ namespace DomainService.Notification
             };
 
             var collection = NotificationCollection();
-            var notifications = await (await collection.FindAsync(pageFilter, options)).ToListAsync();
-            var unreadCount = await collection.CountDocumentsAsync(unreadFilter);
-            var totalCount = await collection.CountDocumentsAsync(pageFilter);
+            // Two scopes (the page filter and the unread filter are different filters): 2 resolver calls here.
+            var pageScope = await ReadAsync(LogicSchemas.OfflineNotification, pageFilter, "GetNotifications.Page");
+            var unreadScope = await ReadAsync(LogicSchemas.OfflineNotification, unreadFilter, "GetNotifications.Unread");
+            if (!pageScope.Granted || !unreadScope.Granted)
+            {
+                return new GetNotificationsResponse { Notifications = [], UnReadNotificationsCount = 0, TotalNotificationsCount = 0 };
+            }
+
+            // The page rows are returned as-is: the resolver projection is not applied (typed rows, own paging options).
+            var notifications = await (await collection.FindAsync(pageScope.Filter, options)).ToListAsync();
+            var unreadCount = await collection.CountDocumentsAsync(unreadScope.Filter);
+            var totalCount = await collection.CountDocumentsAsync(pageScope.Filter);
 
             if (!request.IsUnreadOnly)
             {

@@ -1,4 +1,5 @@
 using Blocks.Genesis;
+using DataAccess.InternalService;
 using Functions.DomainService.Utils;
 using MongoDB.Driver;
 using Blocks.Genesis.Entities.Logic;
@@ -12,10 +13,19 @@ namespace Functions.DomainService.Repositories
         private readonly HashSet<string> _indexedTenants = [];
         private readonly Lock _indexGate = new();
 
-        public FunctionBuildRepository(IDbContextProvider dbContextProvider)
+        private readonly ILogicDataAccess _dataAccess;
+
+        public FunctionBuildRepository(IDbContextProvider dbContextProvider, ILogicDataAccess dataAccess)
         {
             _dbContextProvider = dbContextProvider;
+            _dataAccess = dataAccess;
         }
+
+        private Task<ReadScope<FunctionBuildEntity>> ReadAsync(string tenantId, FilterDefinition<FunctionBuildEntity> filter, string callSite) =>
+            _dataAccess.ReadAsync(LogicSchemas.FunctionBuildEntity, filter, $"FunctionBuildRepository.{callSite}", tenantId);
+
+        private Task<FilterDefinition<FunctionBuildEntity>?> EditAsync(string tenantId, FilterDefinition<FunctionBuildEntity> filter, string callSite) =>
+            _dataAccess.EditFilterAsync(LogicSchemas.FunctionBuildEntity, filter, $"FunctionBuildRepository.{callSite}", tenantId);
 
         private IMongoCollection<FunctionBuildEntity> Collection(string tenantId)
             => _dbContextProvider.GetCollection<FunctionBuildEntity>(tenantId, FunctionsConstants.FunctionBuildsCollection);
@@ -45,7 +55,8 @@ namespace Functions.DomainService.Repositories
         public async Task<FunctionBuildEntity?> GetByIdAsync(string tenantId, string buildId, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(buildId)) return null;
-            return await Collection(tenantId).Find(b => b.ItemId == buildId).FirstOrDefaultAsync(cancellationToken);
+            var scope = await ReadAsync(tenantId, Builders<FunctionBuildEntity>.Filter.Where(b => b.ItemId == buildId), "GetById");
+            return scope.Granted ? await scope.Apply(Collection(tenantId)).FirstOrDefaultAsync(cancellationToken) : null;
         }
 
         public async Task<FunctionBuildEntity?> GetSucceededBySourceHashAsync(
@@ -58,7 +69,9 @@ namespace Functions.DomainService.Repositories
                        & Builders<FunctionBuildEntity>.Filter.Eq(b => b.Status, BuildStatus.Succeeded)
                        & Builders<FunctionBuildEntity>.Filter.Ne(b => b.Ephemeral, true);
 
-            return await Collection(tenantId).Find(filter)
+            var scope = await ReadAsync(tenantId, filter, "GetSucceededBySourceHash");
+            if (!scope.Granted) return null;
+            return await scope.Apply(Collection(tenantId))
                 .SortByDescending(b => b.CreatedDate)
                 .Limit(1)
                 .FirstOrDefaultAsync(cancellationToken);
@@ -75,7 +88,9 @@ namespace Functions.DomainService.Repositories
                        & Builders<FunctionBuildEntity>.Filter.In(b => b.Status, inProgress)
                        & Builders<FunctionBuildEntity>.Filter.Ne(b => b.Ephemeral, true);
 
-            return await Collection(tenantId).Find(filter)
+            var scope = await ReadAsync(tenantId, filter, "GetInProgressBySourceHash");
+            if (!scope.Granted) return null;
+            return await scope.Apply(Collection(tenantId))
                 .SortByDescending(b => b.CreatedDate)
                 .Limit(1)
                 .FirstOrDefaultAsync(cancellationToken);
@@ -86,8 +101,9 @@ namespace Functions.DomainService.Repositories
         {
             if (string.IsNullOrWhiteSpace(functionId)) return [];
 
-            return await Collection(tenantId)
-                .Find(b => b.FunctionId == functionId)
+            var scope = await ReadAsync(tenantId, Builders<FunctionBuildEntity>.Filter.Where(b => b.FunctionId == functionId), "GetAllForFunction");
+            if (!scope.Granted) return [];
+            return await scope.Apply(Collection(tenantId))
                 .SortByDescending(b => b.CreatedDate)
                 .ToListAsync(cancellationToken);
         }
@@ -97,7 +113,10 @@ namespace Functions.DomainService.Repositories
         {
             if (string.IsNullOrWhiteSpace(functionId)) return 0;
 
-            var result = await Collection(tenantId).DeleteManyAsync(b => b.FunctionId == functionId, cancellationToken);
+            var deleteFilter = await _dataAccess.DeleteFilterAsync(LogicSchemas.FunctionBuildEntity,
+                Builders<FunctionBuildEntity>.Filter.Where(b => b.FunctionId == functionId), "FunctionBuildRepository.DeleteAllForFunction", tenantId);
+            if (deleteFilter is null) return 0;
+            var result = await Collection(tenantId).DeleteManyAsync(deleteFilter, cancellationToken);
             return result.DeletedCount;
         }
 
@@ -106,8 +125,9 @@ namespace Functions.DomainService.Repositories
         {
             if (string.IsNullOrWhiteSpace(imageDigest)) return 0;
 
-            var filter = Builders<FunctionBuildEntity>.Filter.Eq(b => b.ImageDigest, imageDigest)
-                       & Builders<FunctionBuildEntity>.Filter.Eq(b => b.Status, BuildStatus.Succeeded);
+            var filter = await EditAsync(tenantId, Builders<FunctionBuildEntity>.Filter.Eq(b => b.ImageDigest, imageDigest)
+                       & Builders<FunctionBuildEntity>.Filter.Eq(b => b.Status, BuildStatus.Succeeded), "InvalidateByImageDigest");
+            if (filter is null) return 0;
 
             var update = Builders<FunctionBuildEntity>.Update
                 .Set(b => b.Status, BuildStatus.Failed)
@@ -120,6 +140,8 @@ namespace Functions.DomainService.Repositories
 
         public async Task CreateAsync(string tenantId, FunctionBuildEntity build, CancellationToken cancellationToken = default)
         {
+            if (!await _dataAccess.InsertAllowedAsync(LogicSchemas.FunctionBuildEntity, "FunctionBuildRepository.Create", tenantId))
+                throw new UnauthorizedAccessException("Function build create is not allowed by the data access policy.");
             await EnsureIndexesAsync(tenantId, cancellationToken);
             await Collection(tenantId).InsertOneAsync(build, cancellationToken: cancellationToken);
         }
@@ -134,9 +156,10 @@ namespace Functions.DomainService.Repositories
             DateTime completedAt,
             CancellationToken cancellationToken = default)
         {
-            var filter = Builders<FunctionBuildEntity>.Filter.And(
+            var filter = await EditAsync(tenantId, Builders<FunctionBuildEntity>.Filter.And(
                 Builders<FunctionBuildEntity>.Filter.Eq(b => b.ItemId, buildId),
-                Builders<FunctionBuildEntity>.Filter.Nin(b => b.Status, TerminalStatuses));
+                Builders<FunctionBuildEntity>.Filter.Nin(b => b.Status, TerminalStatuses)), "FailIfNotTerminal");
+            if (filter is null) return false;
 
             var update = Builders<FunctionBuildEntity>.Update
                 .Set(b => b.Status, BuildStatus.Failed)
@@ -173,8 +196,9 @@ namespace Functions.DomainService.Repositories
                 .Set(b => b.CompletedAt, completedAt)
                 .Set(b => b.LastUpdatedDate, DateTime.UtcNow);
 
-            var result = await Collection(tenantId).UpdateOneAsync(
-                b => b.ItemId == buildId, update, cancellationToken: cancellationToken);
+            var filter = await EditAsync(tenantId, Builders<FunctionBuildEntity>.Filter.Where(b => b.ItemId == buildId), "ApplyResult");
+            if (filter is null) return false;
+            var result = await Collection(tenantId).UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
             return result.MatchedCount > 0;
         }
     }

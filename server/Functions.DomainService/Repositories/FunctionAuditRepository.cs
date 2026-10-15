@@ -1,4 +1,5 @@
 using Blocks.Genesis;
+using DataAccess.InternalService;
 using Functions.DomainService.Utils;
 using MongoDB.Driver;
 using Blocks.Genesis.Entities.Logic;
@@ -12,10 +13,16 @@ namespace Functions.DomainService.Repositories
         private readonly HashSet<string> _indexedTenants = [];
         private readonly Lock _indexGate = new();
 
-        public FunctionAuditRepository(IDbContextProvider dbContextProvider)
+        public FunctionAuditRepository(IDbContextProvider dbContextProvider, ILogicDataAccess dataAccess)
         {
             _dbContextProvider = dbContextProvider;
+            _dataAccess = dataAccess;
         }
+        private readonly ILogicDataAccess _dataAccess;
+
+        private Task<ReadScope<FunctionAuditEventEntity>> ReadAsync(string tenantId, FilterDefinition<FunctionAuditEventEntity> filter, string callSite, bool useProjection = true) =>
+            _dataAccess.ReadAsync(LogicSchemas.FunctionAuditEventEntity, filter, $"FunctionAuditRepository.{callSite}", tenantId, useProjection);
+
 
         private IMongoCollection<FunctionAuditEventEntity> Collection(string tenantId)
             => _dbContextProvider.GetCollection<FunctionAuditEventEntity>(tenantId, FunctionsConstants.FunctionAuditEventsCollection);
@@ -42,6 +49,8 @@ namespace Functions.DomainService.Repositories
         public async Task CreateAsync(
             string tenantId, FunctionAuditEventEntity auditEvent, CancellationToken cancellationToken = default)
         {
+            if (!await _dataAccess.InsertAllowedAsync(LogicSchemas.FunctionAuditEventEntity, "FunctionAuditRepository.Create", tenantId))
+                throw new UnauthorizedAccessException("Function audit event create is not allowed by the data access policy.");
             await EnsureIndexesAsync(tenantId, cancellationToken);
             await Collection(tenantId).InsertOneAsync(auditEvent, cancellationToken: cancellationToken);
         }
@@ -52,8 +61,10 @@ namespace Functions.DomainService.Repositories
             var filter = Builders<FunctionAuditEventEntity>.Filter.Eq(a => a.FunctionId, functionId);
             var collection = Collection(tenantId);
 
-            var totalCount = await collection.CountDocumentsAsync(filter, cancellationToken: cancellationToken);
-            var items = await collection.Find(filter)
+            var scope = await ReadAsync(tenantId, filter, "GetByFunction");
+            if (!scope.Granted) return ([], 0);
+            var totalCount = await collection.CountDocumentsAsync(scope.Filter, cancellationToken: cancellationToken);
+            var items = await scope.Apply(collection)
                 .SortByDescending(a => a.CreatedDate)
                 .Skip(Math.Max(0, pageNumber) * Math.Max(1, pageSize))
                 .Limit(Math.Max(1, pageSize))

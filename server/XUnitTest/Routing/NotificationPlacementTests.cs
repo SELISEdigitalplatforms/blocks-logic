@@ -26,7 +26,7 @@ public class NotificationPlacementTests : IDisposable
     public async Task NotificationListingAndReadStatus_UseOnlyTheResolvedTenantDatabase()
     {
         TestBlocksContext.Set("dev", "same-user");
-        var repository = new NotificationRepository(_fixture.Provider, _fixture.Secret, NullLogger<NotificationRepository>.Instance);
+        var repository = new NotificationRepository(_fixture.Provider, _fixture.Secret, NullLogger<NotificationRepository>.Instance, new XUnitTest.TestDoubles.PassThroughLogicDataAccess());
         var collectionName = "OfflineNotifications";
         await _fixture.Dev.GetCollection<OfflineNotification>(collectionName).InsertManyAsync(
         [
@@ -72,7 +72,7 @@ public class NotificationPlacementTests : IDisposable
     {
         TestBlocksContext.Clear();
         var configuration = new ConfigurationRepository(_fixture.Provider, _fixture.Secret, NullLogger<ConfigurationRepository>.Instance, new Mock<IKeyValueStore>().Object);
-        var notifications = new NotificationRepository(_fixture.Provider, _fixture.Secret, NullLogger<NotificationRepository>.Instance);
+        var notifications = new NotificationRepository(_fixture.Provider, _fixture.Secret, NullLogger<NotificationRepository>.Instance, new XUnitTest.TestDoubles.PassThroughLogicDataAccess());
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         async Task Write(string tenant)
         {
@@ -130,7 +130,7 @@ public class NotificationPlacementTests : IDisposable
     public async Task ManagedServiceAndMailboxOperations_KeepTheirSelectedTenant()
     {
         var services = new ServiceManagementRepository(_fixture.Provider, _fixture.Secret);
-        var mailbox = new MailRepository(_fixture.Provider, _fixture.Secret);
+        var mailbox = new MailRepository(_fixture.Provider, _fixture.Secret, new XUnitTest.TestDoubles.PassThroughLogicDataAccess());
         foreach (var tenant in new[] { "dev", "other" })
         {
             await _fixture.Provider.GetDatabase(tenant).GetCollection<BlocksManagedService>("BlocksManagedServices")

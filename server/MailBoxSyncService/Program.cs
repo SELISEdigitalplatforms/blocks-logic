@@ -1,4 +1,5 @@
 ﻿using Blocks.Genesis;
+using DataAccess.InternalService;
 using Blocks.Secrets;
 using Workflow.DomainService.Utils;
 using Mail.DomainService.Mails.Office365;
@@ -37,6 +38,7 @@ builder.Services.AddSingleton<IInboundMailPoller, Office365GraphInboxPoller>();
 // Office 365 inbound reads through Graph with a client-credentials token, whose secret lives in
 // Blocks Secrets. The token provider opens its own scope for the scoped ISecretService.
 builder.Services.AddBlocksSecrets();
+builder.Services.AddLogicDataAccess();
 builder.Services.RegisterOffice365TokenServices();
 builder.Services.AddHttpClient(Office365GraphInboxSessionFactory.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(100));
 builder.Services.AddSingleton<IOffice365GraphInboxSessionFactory, Office365GraphInboxSessionFactory>();

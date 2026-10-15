@@ -1,3 +1,4 @@
+using DataAccess.InternalService;
 using Blocks.Extension.DependencyInjection;
 using Blocks.Extensions.DependencyInjection;
 using Blocks.Genesis;
@@ -86,6 +87,7 @@ services.AddFunctionsServices(builder.Configuration);
 services.AddSingleton<Workflow.DomainService.Nodes.INodeExecutor, Functions.DomainService.Nodes.ActionFunctionNode>();
 services.AddStorageDomainServices();
 services.AddBlocksSecrets();
+services.AddLogicDataAccess();
 services.RegisterBlocksStorageServices();
 await services.RegisterBlocksDeploymentServicesAsync(vaultType);
 
