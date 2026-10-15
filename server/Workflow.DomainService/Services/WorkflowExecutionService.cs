@@ -254,6 +254,8 @@ namespace Workflow.DomainService.Services
                     NodeId = triggerId,
                 };
 
+                DelegatedTokenContext.Set(await _delegationGrantFactory.CreateForSendAsync());
+
                 var responseMode = triggerNode.Parameters.GetValue("httpResponseMode");
 
                 if (responseMode != null && responseMode.ToString().ToLower() == "last")
@@ -263,7 +265,6 @@ namespace Workflow.DomainService.Services
                     // claims) leaves no grant and Blocks-auth nodes fail with NoDelegatedTokenException.
                     // Set it in this method, never inside an async helper: DelegatedTokenContext is an AsyncLocal,
                     // and a value set inside an async method is discarded when that method returns.
-                    DelegatedTokenContext.Set(await _delegationGrantFactory.CreateForSendAsync());
 
                     _executionLogger.For(execution).Info(
                         ExecutionLogStages.ExecutionInProcess, "Running in-process; the webhook waits for the last node.");
@@ -1483,7 +1484,7 @@ namespace Workflow.DomainService.Services
             LogStepExecution(execution, targetNode);
             // Set here, not in an async helper (AsyncLocal; see the webhook "last" mode).
             DelegatedTokenContext.Set(await _delegationGrantFactory.CreateForSendAsync());
-            var result =await _workflowEngineService.ExecuteStepNodeAsync(tenantId, execution.Id, triggerNode.Id, dto.NodeId, dto.SourceExecutionId);
+            var result = await _workflowEngineService.ExecuteStepNodeAsync(tenantId, execution.Id, triggerNode.Id, dto.NodeId, dto.SourceExecutionId);
             return new StepExecuteResponseDto
             {
                 IsSuccess = true,
