@@ -28,6 +28,12 @@
     <AnalysisLevel>latest-recommended</AnalysisLevel>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
+    <!-- NU1507 ("2 package sources ... use package source mapping") stays a warning, as it is in
+         server/. CI restores Blocks.slnx with nuget.org and nuget.selise.biz, from a NuGet config
+         the shared blocks-inventory workflow generates, so a mapping kept in this repository could
+         not name those sources reliably. Every other warning is still an error here. -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1507</WarningsNotAsErrors>
+
     <!-- Globalization is invariant so the runner cannot depend on host ICU data. -->
     <InvariantGlobalization>true</InvariantGlobalization>
 
