@@ -11,6 +11,7 @@ using Workflow.DomainService.Events;
 using Workflow.DomainService.Logging;
 using Workflow.DomainService.Repositories;
 using Workflow.DomainService.Services;
+using Workflow.DomainService.Utils;
 using XUnitTest.TestHelpers;
 
 namespace XUnitTest.Workflow
@@ -60,7 +61,7 @@ namespace XUnitTest.Workflow
             TestBlocksContext.Clear();
         }
 
-        private void Published()
+        private void Published(string responseMode = "last")
         {
             var snapshot = new WorkflowEntity
             {
@@ -76,7 +77,7 @@ namespace XUnitTest.Workflow
                         Type = "webhook",
                         Version = "v1",
                         Position = new Position(),
-                        Parameters = new BsonDocument { { "authType", "none" }, { "httpResponseMode", "last" }, { "httpResponseData", "none" } },
+                        Parameters = new BsonDocument { { "authType", "none" }, { "httpResponseMode", responseMode }, { "httpResponseData", "none" } },
                     }
                 ],
             };
@@ -108,6 +109,48 @@ namespace XUnitTest.Workflow
             await _sut.TriggerWebhookAsync("wf-1", "hook", "tenant-1", body.RootElement.Clone());
 
             grantSeenByEngine.Should().Be(GrantId);
+        }
+
+        /// <summary>
+        /// The engine reloads the execution from the store for every node, so the Data node only sees the
+        /// "last" marker if it was saved before the in-process run starts.
+        /// </summary>
+        [Fact]
+        public async Task Last_mode_saves_the_response_mode_marker_before_the_engine_runs()
+        {
+            Published();
+            var markerSaved = false;
+            _executions.Setup(r => r.UpdateAsync(It.IsAny<WorkflowExecutionEntity>()))
+                .Callback((WorkflowExecutionEntity e) =>
+                    markerSaved |= e.Context.TryGetValue(LogicConstants.WebhookResponseModeContextKey, out var mode)
+                                   && mode == "last")
+                .Returns(Task.CompletedTask);
+            bool? markerSavedWhenEngineRan = null;
+            _engine.Setup(e => e.RunNodeInProcessAsync(It.IsAny<AddExcuationNodeEvent>()))
+                .Callback(() => markerSavedWhenEngineRan = markerSaved)
+                .ReturnsAsync((WorkflowExecutionEntity?)null);
+
+            using var body = JsonDocument.Parse("{}");
+            await _sut.TriggerWebhookAsync("wf-1", "hook", "tenant-1", body.RootElement.Clone());
+
+            markerSavedWhenEngineRan.Should().BeTrue();
+        }
+
+        [Fact]
+        public async Task Queued_mode_does_not_set_the_response_mode_marker()
+        {
+            Published("onReceived");
+            WorkflowExecutionEntity? saved = null;
+            _executions.Setup(r => r.UpdateAsync(It.IsAny<WorkflowExecutionEntity>()))
+                .Callback((WorkflowExecutionEntity e) => saved = e)
+                .Returns(Task.CompletedTask);
+
+            using var body = JsonDocument.Parse("{}");
+            await _sut.TriggerWebhookAsync("wf-1", "hook", "tenant-1", body.RootElement.Clone());
+
+            saved.Should().NotBeNull();
+            saved.Context.Contains(LogicConstants.WebhookResponseModeContextKey).Should().BeFalse();
+            _engine.Verify(e => e.RunNodeInProcessAsync(It.IsAny<AddExcuationNodeEvent>()), Times.Never);
         }
     }
 }

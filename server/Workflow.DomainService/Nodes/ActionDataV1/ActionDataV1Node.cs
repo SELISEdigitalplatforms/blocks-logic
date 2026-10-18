@@ -8,6 +8,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text.Json;
 using Workflow.DomainService.Entities;
+using Workflow.DomainService.Utils;
 
 namespace Workflow.DomainService.Nodes.ActionDataV1
 {
@@ -120,7 +121,7 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                     ? $"{{ get{parameters.SchemaName}s {{ items {{ {fieldsList} }} totalCount }} }}"
                     : $"{{ get{parameters.SchemaName}s(where: {{ {whereClause} }}) {{ items {{ {fieldsList} }} totalCount }} }}";
 
-                var response = await SendGraphQLRequestAsync(parameters, graphqlQuery, context.TenantId, context.Log, logToken: true);
+                var response = await SendGraphQLRequestAsync(context, parameters, graphqlQuery, context.TenantId, context.Log, logToken: true);
                 response.EnsureSuccessStatusCode();
                 var responseString = await response.Content.ReadAsStringAsync();
                 var responseJson = JsonDocument.Parse(responseString).RootElement;
@@ -192,7 +193,7 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                     var inputFields = BuildGraphQLInputFields(data);
                     var graphqlQuery = $"mutation {{ insert{parameters.SchemaName}(input: {{ {inputFields} }}) {{ acknowledged totalImpactedData itemId }} }}";
 
-                    var response = await SendGraphQLRequestAsync(parameters, graphqlQuery, context.TenantId, context.Log, logToken: i == 0);
+                    var response = await SendGraphQLRequestAsync(context, parameters, graphqlQuery, context.TenantId, context.Log, logToken: i == 0);
                     response.EnsureSuccessStatusCode();
                     var responseString = await response.Content.ReadAsStringAsync();
                     var responseJson = ParseMutationResponse(responseString, $"insert{parameters.SchemaName}");
@@ -240,7 +241,7 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                     var inputFields = BuildGraphQLInputFields(data);
                     var graphqlQuery = $"mutation {{ update{parameters.SchemaName}(where: {{ {whereClause} }}, input: {{ {inputFields} }}) {{ acknowledged totalImpactedData itemId }} }}";
 
-                    var response = await SendGraphQLRequestAsync(parameters, graphqlQuery, context.TenantId, context.Log, logToken: i == 0);
+                    var response = await SendGraphQLRequestAsync(context, parameters, graphqlQuery, context.TenantId, context.Log, logToken: i == 0);
                     response.EnsureSuccessStatusCode();
                     var responseString = await response.Content.ReadAsStringAsync();
                     var responseJson = ParseMutationResponse(responseString, $"update{parameters.SchemaName}");
@@ -287,7 +288,7 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                     var whereClause = BuildWhereClause(parameters, context.InputItems[i], context);
                     var graphqlQuery = $"mutation {{ delete{parameters.SchemaName}(where: {{ {whereClause} }}) {{ acknowledged totalImpactedData itemId message }} }}";
 
-                    var response = await SendGraphQLRequestAsync(parameters, graphqlQuery, context.TenantId, context.Log, logToken: i == 0);
+                    var response = await SendGraphQLRequestAsync(context, parameters, graphqlQuery, context.TenantId, context.Log, logToken: i == 0);
                     response.EnsureSuccessStatusCode();
                     var responseString = await response.Content.ReadAsStringAsync();
                     var responseJson = ParseMutationResponse(responseString, $"delete{parameters.SchemaName}");
@@ -338,7 +339,7 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                         ? parameters.RawQuery
                         : ResolveGraphQlTemplate(parameters.RawQuery, context.InputItems[i], context);
 
-                    var response = await SendGraphQLRequestAsync(parameters, resolvedQuery, context.TenantId, context.Log, logToken: i == 0);
+                    var response = await SendGraphQLRequestAsync(context, parameters, resolvedQuery, context.TenantId, context.Log, logToken: i == 0);
                     response.EnsureSuccessStatusCode();
                     var responseString = await response.Content.ReadAsStringAsync();
                     var responseJson = JsonDocument.Parse(responseString).RootElement;
@@ -385,6 +386,7 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
         /// <param name="logToken">Write the token stage line; true for the first request of a run only, so the
         /// line appears once rather than once per item.</param>
         private async Task<HttpResponseMessage> SendGraphQLRequestAsync(
+            NodeExecutionContext context,
             ActionDataV1Parameters parameters, string graphqlQuery, string tenantId,
             NodeExecutionLog? log = null, bool logToken = false)
         {
@@ -394,9 +396,25 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
             // Authenticate based on selected authentication type
             if (string.Equals(parameters.AuthenticationType, "blocksAuthentication", StringComparison.OrdinalIgnoreCase))
             {
-                // Delegated token only. Never the caller's raw BlocksContext.OAuthToken, and never an
-                // unauthenticated send: no token fails this item (WS-1).
-                var token = await _workflowAuthService.CreateBlocksAuthorizationTokenAsync();
+
+                //  it only works for temporary , when delegate token issue resolve then remove the oauthToken
+                var isWebhookResponseModeLast = context != null
+                && context.WorkflowContext.TryGetValue(LogicConstants.WebhookResponseModeContextKey, out var mode)
+                && mode.IsString
+                && mode.AsString == "last";
+
+                var token = "";
+
+                if (isWebhookResponseModeLast)
+                {
+                    token = BlocksContext.GetContext()?.OAuthToken ?? "";
+                }
+                else
+                {
+                    // Delegated token only. Never the caller's raw BlocksContext.OAuthToken, and never an
+                    // unauthenticated send: no token fails this item (WS-1).
+                    token = await _workflowAuthService.CreateBlocksAuthorizationTokenAsync();
+                }
                 if (logToken) LogToken(log, token);
                 if (string.IsNullOrWhiteSpace(token))
                     throw new NoDelegatedTokenException();

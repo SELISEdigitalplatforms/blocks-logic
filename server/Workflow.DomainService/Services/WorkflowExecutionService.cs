@@ -258,6 +258,11 @@ namespace Workflow.DomainService.Services
 
                 if (responseMode != null && responseMode.ToString().ToLower() == "last")
                 {
+
+
+
+                    execution.Context[LogicConstants.WebhookResponseModeContextKey] = "last";
+                    await _executionRepository.UpdateAsync(execution);
                     // In-process runs (this mode and the editor's Execute step) never go through a bus send, so
                     // Genesis would not attach a grant; mint one for the caller here. Null (no user / missing stamp
                     // claims) leaves no grant and Blocks-auth nodes fail with NoDelegatedTokenException.
@@ -1483,7 +1488,7 @@ namespace Workflow.DomainService.Services
             LogStepExecution(execution, targetNode);
             // Set here, not in an async helper (AsyncLocal; see the webhook "last" mode).
             DelegatedTokenContext.Set(await _delegationGrantFactory.CreateForSendAsync());
-            var result =await _workflowEngineService.ExecuteStepNodeAsync(tenantId, execution.Id, triggerNode.Id, dto.NodeId, dto.SourceExecutionId);
+            var result = await _workflowEngineService.ExecuteStepNodeAsync(tenantId, execution.Id, triggerNode.Id, dto.NodeId, dto.SourceExecutionId);
             return new StepExecuteResponseDto
             {
                 IsSuccess = true,
