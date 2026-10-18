@@ -1,3 +1,5 @@
+using DataAccess.InternalService;
+using Blocks.Genesis.DataAccess.Rules;
 using Blocks.Genesis;
 using Microsoft.Extensions.Logging;
 using Scheduler.DomainService.Dtos.Requests;
@@ -55,6 +57,11 @@ namespace Scheduler.DomainService.Services
                 await _scheduleRepository.CreateAsync(schedule);
 
             }
+            catch (DataValidationException ex)
+            {
+                // A rule on the schema refused the save: the caller gets its messages, not a generic failure.
+                return new BaseMutationResponse { IsSuccess = false, Errors = ex.ToErrors() };
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to create schedule in the repository.");
@@ -110,6 +117,11 @@ namespace Scheduler.DomainService.Services
             try
             {
                 await _scheduleRepository.UpdateAsync(schedule);
+            }
+            catch (DataValidationException ex)
+            {
+                // A rule on the schema refused the save: the caller gets its messages, not a generic failure.
+                return new BaseMutationResponse { IsSuccess = false, Errors = ex.ToErrors() };
             }
             catch (Exception ex)
             {
@@ -216,6 +228,11 @@ namespace Scheduler.DomainService.Services
             try
             {
                 await _scheduleRepository.CreateAsync(schedule);
+            }
+            catch (DataValidationException ex)
+            {
+                // A rule on the schema refused the save: the caller gets its messages, not a generic failure.
+                return new BaseMutationResponse { IsSuccess = false, Errors = ex.ToErrors() };
             }
             catch (Exception ex)
             {

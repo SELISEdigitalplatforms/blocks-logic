@@ -157,6 +157,7 @@ namespace Proxy.DomainService.Repositories
         {
             if (!await _dataAccess.InsertAllowedAsync(LogicSchemas.ProxyDetailEntity, "ProxyRepository.Insert", proxy.TenantId))
                 throw new UnauthorizedAccessException("Proxy create is not allowed by the data access policy.");
+            await _dataAccess.PrepareWriteAsync(LogicSchemas.ProxyDetailEntity, proxy, isInsert: true, "ProxyRepository.Insert", proxy.TenantId);
             var collection = GetCollection(proxy.TenantId);
             await EnsureIndexesAsync(proxy.TenantId, collection);
             await collection.InsertOneAsync(proxy);
@@ -188,7 +189,9 @@ namespace Proxy.DomainService.Repositories
             var sets = proxy.ToBsonDocument().Elements
                 .Where(e => !NotConfigFields.Contains(e.Name))
                 .Select(e => Builders<ProxyDetailEntity>.Update.Set(e.Name, e.Value));
-            var result = await collection.UpdateOneAsync(filter, Builders<ProxyDetailEntity>.Update.Combine(sets));
+            var update = Builders<ProxyDetailEntity>.Update.Combine(sets);
+            await _dataAccess.CheckUpdateAsync(LogicSchemas.ProxyDetailEntity, update, "ProxyRepository.SaveConfig", proxy.TenantId);
+            var result = await collection.UpdateOneAsync(filter, update);
             return result.MatchedCount == 1;
         }
 
