@@ -65,6 +65,8 @@ builder.Services.Configure<MvcOptions>(options =>
     // every validation failure into a bare 500. The public /api/fn route maps its own and is
     // not affected.
     options.Filters.Add<FunctionExceptionFilter>();
+    // A system schema's validation rules refusing a save (workflows, functions, proxies, schedules): 400.
+    options.Filters.Add<DataValidationExceptionFilter>();
 });
 
 var wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");

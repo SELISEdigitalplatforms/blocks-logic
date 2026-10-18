@@ -39,6 +39,7 @@ namespace Workflow.DomainService.Repositories
         {
             if (!await _dataAccess.InsertAllowedAsync(LogicSchemas.WorkflowEntity, "WorkflowRepository.CreateWorkflow", workflow.TenantId))
                 throw new UnauthorizedAccessException("Workflow create is not allowed by the data access policy.");
+            await _dataAccess.PrepareWriteAsync(LogicSchemas.WorkflowEntity, workflow, isInsert: true, "WorkflowRepository.CreateWorkflow", workflow.TenantId);
             var collection = GetCollection(workflow.TenantId);
             await collection.InsertOneAsync(workflow, null);
         }
@@ -214,6 +215,8 @@ namespace Workflow.DomainService.Repositories
             var collection = GetCollection(workflow.TenantId);
             var filter = await _dataAccess.EditFilterAsync(LogicSchemas.WorkflowEntity,
                 Builders<WorkflowEntity>.Filter.Eq(item => item.ItemId, workflow.ItemId), "WorkflowRepository.UpdateWorkflow", workflow.TenantId);
+            if (filter is not null)
+                await _dataAccess.PrepareWriteAsync(LogicSchemas.WorkflowEntity, workflow, isInsert: false, "WorkflowRepository.UpdateWorkflow", workflow.TenantId);
             // Denied: no write; the existing "not found" error is the answer.
             var result = filter is null ? null : await collection.ReplaceOneAsync(filter, workflow);
             if (result is null || result.MatchedCount == 0)

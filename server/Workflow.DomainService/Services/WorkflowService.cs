@@ -1,3 +1,5 @@
+using DataAccess.InternalService;
+using Blocks.Genesis.DataAccess.Rules;
 using System.Text.Json;
 using System.Diagnostics.CodeAnalysis;
 using Blocks.Genesis;
@@ -265,6 +267,11 @@ namespace Workflow.DomainService.Services
             {
                 return CreateTenantNotFoundError(tenantId, "inserting workflow", ex.StackTrace ?? "");
             }
+            catch (DataValidationException ex)
+            {
+                // A rule on the schema refused the save: the caller gets its messages, not a generic failure.
+                return new BaseMutationResponse { IsSuccess = false, ItemId = null, Errors = ex.ToErrors() };
+            }
             catch (Exception ex)
             {
                 return CreateGeneralError("inserting workflow", ex);
@@ -318,6 +325,11 @@ namespace Workflow.DomainService.Services
                     ItemId = newWorkflow.ItemId,
                     Errors = null
                 };
+            }
+            catch (DataValidationException ex)
+            {
+                // A rule on the schema refused the save: the caller gets its messages, not a generic failure.
+                return new BaseMutationResponse { IsSuccess = false, ItemId = null, Errors = ex.ToErrors() };
             }
             catch (Exception e)
             {
@@ -642,6 +654,11 @@ namespace Workflow.DomainService.Services
                     Errors = null
                 };
             }
+            catch (DataValidationException ex)
+            {
+                // A rule on the schema refused the save: the caller gets its messages, not a generic failure.
+                return new BaseMutationResponse { IsSuccess = false, ItemId = null, Errors = ex.ToErrors() };
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Workflow publish failed");
@@ -813,6 +830,11 @@ namespace Workflow.DomainService.Services
                     Errors = null
                 };
 
+            }
+            catch (DataValidationException ex)
+            {
+                // A rule on the schema refused the save: the caller gets its messages, not a generic failure.
+                return new BaseMutationResponse { IsSuccess = false, ItemId = null, Errors = ex.ToErrors() };
             }
             catch (Exception ex)
             {
