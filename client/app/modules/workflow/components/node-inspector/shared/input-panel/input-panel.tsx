@@ -144,6 +144,7 @@ export const InputPanel = ({
           {onToggleCollapse && (
             <button
               onClick={onToggleCollapse}
+              aria-label={isCollapsed ? "Expand input" : "Collapse input"}
               className="text-low-emphasis hover:bg-surface-hover rounded p-1 transition-colors"
             >
               {isCollapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}

@@ -10,7 +10,7 @@ const toasts = vi.hoisted(() => ({
   showInfoToast: vi.fn(),
 }));
 const clipboard = vi.hoisted(() => ({
-  copyToClipboard: vi.fn().mockResolvedValue(undefined),
+  copyToClipboard: vi.fn().mockResolvedValue(true),
 }));
 vi.mock("@/hooks/use-toast", () => toasts);
 vi.mock("@blocks-workflow/utils/copy-to-clipboard", () => clipboard);
@@ -176,9 +176,7 @@ describe("OutputPanel", () => {
       <OutputPanel isCollapsed={false} onToggleCollapse={onToggleCollapse} />,
       { seedWorkflow: seedSelected({ pinData: [{ a: 1 }] }) },
     );
-    // the collapse button is the last button in the header
-    const buttons = screen.getAllByRole("button");
-    fireEvent.click(buttons[buttons.length - 1]);
+    fireEvent.click(screen.getByRole("button", { name: "Collapse output" }));
     expect(onToggleCollapse).toHaveBeenCalled();
   });
 

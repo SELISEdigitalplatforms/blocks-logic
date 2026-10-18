@@ -42,13 +42,13 @@ describe("copyToClipboard", () => {
     expect(removeSpy).toHaveBeenCalled();
   });
 
-  it("silently swallows errors thrown by writeText", async () => {
+  it("resolves false when writeText throws", async () => {
     const writeText = vi.fn().mockRejectedValue(new Error("denied"));
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: { writeText },
     });
 
-    await expect(copyToClipboard("boom")).resolves.toBeUndefined();
+    await expect(copyToClipboard("boom")).resolves.toBe(false);
   });
 });

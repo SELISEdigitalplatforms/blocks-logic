@@ -1,10 +1,9 @@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui-kits/tabs/tabs";
 import { ScrollArea, ScrollBar } from "@/components/ui-kits/scroll-area/scroll-area";
 import { useWorkflowStore } from "@blocks-workflow/store";
-import { copyToClipboard } from "@blocks-workflow/utils/copy-to-clipboard";
 import { useCallback, useMemo, useState } from "react";
 import { inferSchemaFromRuntimeRows } from "@blocks-workflow/utils/runtime-node-data";
-import { ChevronDown, ChevronUp, Copy, Pencil, Pin, PinOff, TriangleAlert } from "lucide-react";
+import { ChevronDown, ChevronUp, Pencil, Pin, PinOff, TriangleAlert } from "lucide-react";
 import { useWorkflow } from "@blocks-workflow/hooks/use-workflow";
 import { Badge } from "@/components/ui-kits/badge/badge";
 import { Button } from "@/components/ui-kits/button/button";
@@ -13,6 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/to
 import { showErrorToast } from "@/hooks/use-toast";
 import { NodeExecutionStatus } from "@blocks-workflow/utils/workflow-execution-editor.util";
 import type { ExecutedNode } from "@blocks-workflow/models/workflow.model";
+import { CopyValueButton } from "../copy-value-button";
 
 type BranchGroup = {
   branch: string;
@@ -84,11 +84,6 @@ export const OutputPanel = ({
   );
 
   const hasMultipleBranches = runtimeOutputByBranch.length > 1;
-
-  const handleCopyExpression = useCallback((value: unknown) => {
-    const stringValue = typeof value === "string" ? value : JSON.stringify(value);
-    copyToClipboard(stringValue);
-  }, []);
 
   const handleSetMockDataClick = useCallback(() => {
     setIsEditingMock(true);
@@ -209,6 +204,7 @@ export const OutputPanel = ({
           {onToggleCollapse && (
             <button
               onClick={onToggleCollapse}
+              aria-label={isCollapsed ? "Expand output" : "Collapse output"}
               className="text-low-emphasis hover:bg-surface-hover rounded p-1 transition-colors"
             >
               {isCollapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
@@ -274,25 +270,23 @@ export const OutputPanel = ({
                           {group.schema.map((field) => (
                             <div
                               key={`${group.branch}-${index}-${field.key}`}
-                              className="hover:bg-surface-hover group flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleCopyExpression(row[field.key]);
-                              }}
-                              title={`Click to copy value for ${field.key}`}
+                              className="hover:bg-surface-hover group flex min-w-0 items-start gap-2 rounded px-2 py-1 text-xs"
                             >
-                              <span className="font-mono text-high-emphasis">{field.key}:</span>
-                              <span className="text-low-emphasis">
+                              <span className="shrink-0 py-0.5 font-mono text-high-emphasis">{field.key}:</span>
+                              <span className="min-w-0 flex-1 whitespace-pre-wrap py-0.5 text-low-emphasis [overflow-wrap:anywhere]">
                                 {formatCellValue(row[field.key])}
                               </span>
-                              <span className="ml-auto hidden text-[10px] text-low-emphasis group-hover:inline">
-                                click to copy
-                              </span>
+                              <CopyValueButton
+                                value={toCopyText(row[field.key])}
+                                label={`Copy value of ${field.key}`}
+                                className="-my-0.5 h-5 px-1 opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
+                                iconClassName="h-3.5 w-3.5"
+                              />
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <p className="px-2 py-1 text-xs text-low-emphasis">
+                        <p className="whitespace-pre-wrap px-2 py-1 text-xs text-low-emphasis [overflow-wrap:anywhere]">
                           {formatCellValue(row)}
                         </p>
                       )}
@@ -384,7 +378,10 @@ function RuntimeTable({ rows }: { rows: unknown[] }) {
           {rows.map((row, index) => (
             <tr key={index}>
               {columns.map((column) => (
-                <td key={column} className="border-b border-border/50 px-2 py-1 text-high-emphasis">
+                <td
+                  key={column}
+                  className="max-w-xs whitespace-normal border-b border-border/50 px-2 py-1 align-top text-high-emphasis [overflow-wrap:anywhere]"
+                >
                   {column === primitiveColumn
                     ? !isRecord(row)
                       ? formatCellValue(row)
@@ -412,18 +409,8 @@ function RuntimeJson({ rows }: { rows: unknown[] }) {
 
   return (
     <div className="relative">
-      <Button
-        type="button"
-        variant="ghost"
-        size="xxs"
-        className="absolute right-2 top-2 h-7 px-2 text-low-emphasis"
-        aria-label="Copy output JSON"
-        title="Copy output JSON"
-        onClick={() => void copyToClipboard(json)}
-      >
-        <Copy className="h-4 w-4" />
-      </Button>
-      <pre className="p-3 pr-12 text-xs leading-relaxed text-high-emphasis">
+      <CopyValueButton value={json} label="Copy output JSON" className="absolute right-2 top-2" />
+      <pre className="whitespace-pre-wrap p-3 pr-12 text-xs leading-relaxed text-high-emphasis [overflow-wrap:anywhere]">
         <code>{json}</code>
       </pre>
     </div>
@@ -455,6 +442,10 @@ function formatCellValue(value: unknown): string {
   } catch {
     return "[unserializable]";
   }
+}
+
+function toCopyText(value: unknown): string {
+  return typeof value === "string" ? value : formatCellValue(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
