@@ -432,14 +432,15 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
 
         /// <summary>
         /// Extracts the persistable output and source input id from a script-returned
-        /// value. Recognises the n8n item shape <c>{ json: { ...data, __id } }</c>
-        /// (unwrapping <c>json</c> and reading <c>__id</c> from inside it) and also
-        /// supports bare objects carrying a top-level <c>__id</c>.
+        /// value. Unwraps the n8n item shape <c>{ json: { ...data, __id } }</c> only when
+        /// <c>json</c> is the sole key. Any other object is kept as returned; its
+        /// top-level <c>__id</c> (or else a nested <c>json.__id</c>) drives lineage and
+        /// both are stripped from the persisted output.
         /// </summary>
         private static (JToken Output, string? SourceId) ExtractOutputAndSourceId(JToken token)
         {
-            // n8n item wrapper: { json: { ...data, __id } }.
-            if (token is JObject outer && outer["json"] is JObject payload)
+            // n8n item wrapper: { json: { ...data, __id } } with no sibling keys.
+            if (token is JObject outer && outer.Count == 1 && outer["json"] is JObject payload)
             {
                 var sourceId = payload.Value<string>(SourceIdKey);
                 var clone = (JObject)payload.DeepClone();
@@ -447,12 +448,17 @@ namespace Workflow.DomainService.Nodes.TransformCodeV1
                 return (clone, sourceId);
             }
 
-            // Bare object: { ...data, __id? }.
+            // Any other object: { ...data, __id?, json?: { ..., __id? } }, kept as returned.
             if (token is JObject obj)
             {
-                var sourceId = obj.Value<string>(SourceIdKey);
                 var clone = (JObject)obj.DeepClone();
+                var sourceId = clone.Value<string>(SourceIdKey);
                 clone.Remove(SourceIdKey);
+                if (clone["json"] is JObject nested)
+                {
+                    sourceId ??= nested.Value<string>(SourceIdKey);
+                    nested.Remove(SourceIdKey);
+                }
                 return (clone, sourceId);
             }
 

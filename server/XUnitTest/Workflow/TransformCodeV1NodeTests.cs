@@ -233,6 +233,50 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
+        public async Task RunAsync_AllMode_SpreadItemWithExtraKey_KeepsObjectAsReturned()
+        {
+            var items = new List<WorkflowItemExecutionEntity>
+            {
+                Item("a", new BsonDocument { { "name", "abc" } }, branch: "branchA"),
+            };
+            var ctx = Context(items, AllMode, "return $items.map(i => ({ ...i, extra: 1 }));");
+
+            var result = await new TransformCodeV1Node().RunAsync(ctx);
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            result.OutputItems.Should().HaveCount(1);
+            var output = result.OutputItems[0].Data.Output.AsBsonDocument;
+            output.ElementCount.Should().Be(2);
+            output["extra"].ToInt32().Should().Be(1);
+            var json = output["json"].AsBsonDocument;
+            json.Contains("__id").Should().BeFalse();
+            json["name"].AsString.Should().Be("abc");
+            json.ElementCount.Should().Be(1);
+            // Nested json.__id drives lineage.
+            result.OutputItems[0].ParentItemIds.Should().BeEquivalentTo(new[] { "a" });
+            result.OutputItems[0].Branch.Should().Be("branchA");
+        }
+
+        [Fact]
+        public async Task RunAsync_AllMode_JsonKeyWithSiblings_KeepsSiblings()
+        {
+            var items = new List<WorkflowItemExecutionEntity>
+            {
+                Item("a", new BsonDocument { { "n", 1 } }),
+            };
+            var ctx = Context(items, AllMode, "return { json: { a: 1 }, other: 2 };");
+
+            var result = await new TransformCodeV1Node().RunAsync(ctx);
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            result.OutputItems.Should().HaveCount(1);
+            var output = result.OutputItems[0].Data.Output.AsBsonDocument;
+            output.ElementCount.Should().Be(2);
+            output["json"]["a"].ToInt32().Should().Be(1);
+            output["other"].ToInt32().Should().Be(2);
+        }
+
+        [Fact]
         public async Task RunAsync_AllMode_ReturnsSingleObject_ProducesOneItem()
         {
             var items = new List<WorkflowItemExecutionEntity>
@@ -400,6 +444,32 @@ namespace XUnitTest.Workflow
 
             result.IsSuccess.Should().BeTrue(result.ErrorMessage);
             result.OutputItems[0].Data.Output["seen"].AsString.Should().Be("abc");
+        }
+
+        [Fact]
+        public async Task RunAsync_PerItem_SpreadJsonWithOwnJsonField_KeepsAllFields()
+        {
+            var items = new List<WorkflowItemExecutionEntity>
+            {
+                Item("a", new BsonDocument
+                {
+                    { "name", "abc" },
+                    { "json", new BsonDocument { { "k", 1 } } },
+                }),
+            };
+            var ctx = Context(items, EachMode, "return { ...$json, extra: 1 };");
+
+            var result = await new TransformCodeV1Node().RunAsync(ctx);
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            result.OutputItems.Should().HaveCount(1);
+            var output = result.OutputItems[0].Data.Output.AsBsonDocument;
+            output.Contains("__id").Should().BeFalse();
+            output["name"].AsString.Should().Be("abc");
+            output["json"]["k"].ToInt32().Should().Be(1);
+            output["extra"].ToInt32().Should().Be(1);
+            output.ElementCount.Should().Be(3);
+            result.OutputItems[0].ParentItemIds.Should().BeEquivalentTo(new[] { "a" });
         }
 
         [Fact]
