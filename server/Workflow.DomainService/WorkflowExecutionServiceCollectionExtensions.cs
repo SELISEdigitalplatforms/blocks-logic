@@ -37,6 +37,7 @@ namespace Workflow.DomainService
             services.TryAddSingleton<IWorkflowImportTenantSlugResolver, NullWorkflowImportTenantSlugResolver>();
             services.AddSingleton<IWorkflowImportService, WorkflowImportService>();
             services.AddSingleton<IWorkflowExecutionService, WorkflowExecutionService>();
+            services.AddSingleton<IInProcessGrantReleaser, InProcessGrantReleaser>();
             services.AddSingleton<IWorkflowEngineService, WorkflowEngineService>();
             services.AddSingleton<IWorkflowNotificationService, WorkflowNotificationService>();
             services.AddSingleton<IWorkflowVersionService, WorkflowVersionService>();

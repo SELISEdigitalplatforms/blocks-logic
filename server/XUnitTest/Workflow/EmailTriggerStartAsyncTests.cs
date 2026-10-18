@@ -65,7 +65,8 @@ namespace XUnitTest.Workflow
                 _auth.Object,
                 Mock.Of<IHttpContextAccessor>(),
                 Mock.Of<IDelegationGrantFactory>(),
-                new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance));
+                new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance),
+                Mock.Of<IInProcessGrantReleaser>());
         }
 
         [Fact]

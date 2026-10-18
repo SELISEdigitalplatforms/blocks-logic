@@ -30,7 +30,8 @@ namespace XUnitTest.Workflow
                 Mock.Of<IWorkflowAuthService>(),
                 Mock.Of<IHttpContextAccessor>(),
                 Mock.Of<IDelegationGrantFactory>(),
-                Mock.Of<IWorkflowExecutionLogger>());
+                Mock.Of<IWorkflowExecutionLogger>(),
+                Mock.Of<IInProcessGrantReleaser>());
         }
 
         [Fact]
