@@ -28,6 +28,7 @@ namespace XUnitTest.Workflow
         public void Dispose()
         {
             TestBlocksContext.Clear();
+            DelegatedTokenContext.Clear();
             GC.SuppressFinalize(this);
         }
 
@@ -153,6 +154,20 @@ namespace XUnitTest.Workflow
             var (result, handler) = await RunHttp(HttpParams("blocksAuthentication"), null);
 
             ShouldBeNoTokenErrorItem(result);
+            handler.Requests.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task Http_grant_held_but_token_refused_says_to_start_again_not_to_use_client_credential()
+        {
+            SetCallerContextWithRawToken();
+            DelegatedTokenContext.Set("dg_" + new string('c', 64));
+
+            var (result, handler) = await RunHttp(HttpParams("blocksAuthentication"), null);
+
+            var output = result.OutputItems.Should().ContainSingle().Subject.Data.Output.AsBsonDocument;
+            output["error"].AsBoolean.Should().BeTrue();
+            output["message"].AsString.Should().Be(NoDelegatedTokenException.RefusedMessage);
             handler.Requests.Should().BeEmpty();
         }
 
