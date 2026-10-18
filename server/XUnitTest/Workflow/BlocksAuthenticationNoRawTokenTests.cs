@@ -11,7 +11,6 @@ using Workflow.DomainService.Nodes;
 using Workflow.DomainService.Nodes.ActionDataV1;
 using Workflow.DomainService.Nodes.ActionHttpRequestV1;
 using Workflow.DomainService.Services;
-using Workflow.DomainService.Utils;
 using XUnitTest.TestHelpers;
 
 namespace XUnitTest.Workflow
@@ -94,17 +93,15 @@ namespace XUnitTest.Workflow
             Data = new NodeOutputItemData { Output = new BsonDocument() },
         };
 
-        private static NodeExecutionContext Context(BsonDocument parameters, BsonDocument? workflowContext = null) => new()
+        private static NodeExecutionContext Context(BsonDocument parameters) => new()
         {
             WorkflowExecutionId = "exec-1",
             TenantId = "tenant-1",
             Parameters = parameters,
             InputItems = new List<WorkflowItemExecutionEntity> { Item() },
             IterationCount = 1,
-            WorkflowContext = workflowContext ?? new BsonDocument(),
+            WorkflowContext = new BsonDocument(),
         };
-
-        private static BsonDocument LastModeContext() => new() { { LogicConstants.WebhookResponseModeContextKey, "last" } };
 
         private static void ShouldBeNoTokenErrorItem(NodeExecutionResult result)
         {
@@ -203,8 +200,7 @@ namespace XUnitTest.Workflow
 
         // ---------- Data node ----------
 
-        private static async Task<(NodeExecutionResult result, CaptureHandler handler)> RunData(
-            string authenticationType, string? delegatedToken, BsonDocument? workflowContext = null)
+        private static async Task<(NodeExecutionResult result, CaptureHandler handler)> RunData(string authenticationType, string? delegatedToken)
         {
             var handler = new CaptureHandler("""{"data":{"getTasks":{"items":[{"ItemId":"1"}],"totalCount":1}}}""");
             var node = new ActionDataV1Node(Factory(handler), Mock.Of<IClientCredentialTokenService>(),
@@ -217,55 +213,7 @@ namespace XUnitTest.Workflow
                 { "ApiBaseUrl", "https://api.example.com" },
                 { "AuthenticationType", authenticationType },
             };
-            return (await node.RunAsync(Context(parameters, workflowContext)), handler);
-        }
-
-        // Temporary: in webhook "last" mode the Data node sends the caller's own token instead of the delegated one.
-
-        [Theory]
-        [InlineData(null)]
-        [InlineData("")]
-        public async Task Data_last_mode_without_delegated_token_sends_raw_caller_token(string? delegated)
-        {
-            SetCallerContextWithRawToken();
-
-            var (result, handler) = await RunData("blocksAuthentication", delegated, LastModeContext());
-
-            result.IsSuccess.Should().BeTrue();
-            handler.Requests.Should().ContainSingle().Which.Headers.Authorization!.ToString().Should().Be($"Bearer {RawCallerToken}");
-        }
-
-        [Fact]
-        public async Task Data_last_mode_uses_raw_caller_token_even_with_delegated_token()
-        {
-            SetCallerContextWithRawToken();
-
-            var (result, handler) = await RunData("blocksAuthentication", "delegated-1", LastModeContext());
-
-            result.IsSuccess.Should().BeTrue();
-            handler.Requests.Should().ContainSingle().Which.Headers.Authorization!.ToString().Should().Be($"Bearer {RawCallerToken}");
-        }
-
-        [Fact]
-        public async Task Data_other_response_mode_value_uses_delegated_token()
-        {
-            SetCallerContextWithRawToken();
-            var context = new BsonDocument { { LogicConstants.WebhookResponseModeContextKey, "onReceived" } };
-
-            var (_, handler) = await RunData("blocksAuthentication", "delegated-1", context);
-
-            handler.Requests.Should().ContainSingle().Which.Headers.Authorization!.ToString().Should().Be("Bearer delegated-1");
-        }
-
-        [Fact]
-        public async Task Data_last_mode_without_any_token_fails_item()
-        {
-            TestBlocksContext.Clear();
-
-            var (result, handler) = await RunData("blocksAuthentication", null, LastModeContext());
-
-            ShouldBeNoTokenErrorItem(result);
-            handler.Requests.Should().BeEmpty();
+            return (await node.RunAsync(Context(parameters)), handler);
         }
 
         [Fact]

@@ -8,9 +8,6 @@ namespace Workflow.DomainService.Utils
     {
         public const string NodeExecutionQueue = "blocks_logic_workflow_node_execute_listener";
 
-        /// <summary>Execution context key holding the webhook's response mode ("last" for an in-process run).</summary>
-        public const string WebhookResponseModeContextKey = "WebhookResponseMode";
-
         /// <summary>
         /// Node messages are spread over this many queues (<c>{NodeExecutionQueue}_00</c>..<c>_15</c>), picked
         /// from the run id, so every step of one run goes to the same queue. Each queue is handled one message
