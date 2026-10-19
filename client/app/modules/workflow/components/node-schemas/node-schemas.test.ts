@@ -564,6 +564,19 @@ describe("webhook trigger v1", () => {
   it("defaults organizationId to empty (None)", () => {
     expect(NodeSchemaTriggerWebhookV1.defaults.parameters.organizationId).toBe("");
   });
+
+  // A saved node carries authorizationMode "RolesOnly" (see transform), which satisfies the
+  // Roles/Permissions dependsOn even when auth is off, so `hidden` must gate them on authType.
+  it.each(["roles", "permissions"])("%s is hidden unless authType is blocksAuthorization", (key) => {
+    const f = field(NodeSchemaTriggerWebhookV1, key);
+    expect(f.hidden({ authType: "none", authorizationMode: "RolesOrPermissions" })).toBe(true);
+    expect(f.hidden({ authType: "blocksAuthentication", authorizationMode: "RolesOrPermissions" })).toBe(
+      true,
+    );
+    expect(f.hidden({ authType: "blocksAuthorization", authorizationMode: "RolesOrPermissions" })).toBe(
+      false,
+    );
+  });
 });
 
 describe("data gateway trigger v1", () => {

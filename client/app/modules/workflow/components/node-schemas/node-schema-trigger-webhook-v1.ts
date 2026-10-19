@@ -17,6 +17,12 @@ type AuthBlock = {
   isRolePermission?: boolean;
 };
 
+// Roles/Permissions depend on authorizationMode, which is itself only shown for blocksAuthorization.
+// dependsOn takes a single condition and doesn't check whether the parent field is visible, and a
+// saved node carries authorizationMode "RolesOnly" (see transform), so hide them explicitly.
+const isNotAuthorization = (data: Record<string, unknown>) =>
+  data.authType !== AUTHORIZATION_DEPENDENCY.value;
+
 const getAuth = (data: Record<string, unknown>): AuthBlock =>
   (data.authorization as AuthBlock | undefined) ?? {};
 
@@ -159,6 +165,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         label: "Roles",
         info: "Roles the caller must hold. AND = all listed roles required, OR = at least one.",
         key: "roles",
+        hidden: isNotAuthorization,
         placeholder: "Search roles...",
         dependsOn: {
           key: "authorizationMode",
@@ -178,6 +185,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         label: "Permissions",
         info: "Permissions the caller must hold. Constrained by the selected roles. AND = all listed permissions required, OR = at least one.",
         key: "permissions",
+        hidden: isNotAuthorization,
         placeholder: "Search permissions...",
         dependsOn: {
           key: "authorizationMode",
