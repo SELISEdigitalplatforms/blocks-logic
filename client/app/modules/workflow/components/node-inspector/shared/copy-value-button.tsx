@@ -19,7 +19,7 @@ type CopyValueButtonProps = Readonly<{
  */
 export function CopyValueButton({ value, label, className, iconClassName = "h-4 w-4" }: CopyValueButtonProps) {
   const [copied, setCopied] = useState(false);
-  const resetTimer = useRef<ReturnType<typeof setTimeout>>();
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => () => clearTimeout(resetTimer.current), []);
 
