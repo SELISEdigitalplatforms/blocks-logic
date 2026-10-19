@@ -34,7 +34,7 @@ export function RecursiveSchemaViewer({
   if (typeof data !== "object" || data === null) {
     if (segments.length === 0) {
       return (
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-start gap-2">
           <DraggableProperty
             segments={[]}
             {...referenceProps}
@@ -42,12 +42,12 @@ export function RecursiveSchemaViewer({
             isDraggable={isDraggable}
             showColon={showColon}
           />
-          {showValues && <span className="text-low-emphasis text-xs">{formatCellValue(data)}</span>}
+          {showValues && <span className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere] py-1.5 text-low-emphasis text-xs">{formatCellValue(data)}</span>}
         </div>
       );
     }
     return showValues ? (
-      <span className="text-low-emphasis text-xs px-2 py-1">{formatCellValue(data)}</span>
+      <span className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere] text-low-emphasis text-xs px-2 py-1">{formatCellValue(data)}</span>
     ) : null;
   }
 
@@ -62,7 +62,7 @@ export function RecursiveSchemaViewer({
 
         return (
           <div key={key} className="flex flex-col">
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 items-start gap-2">
               {isArray ? (
                 <DraggableArrayIndex
                   segments={currentSegments}
@@ -83,7 +83,7 @@ export function RecursiveSchemaViewer({
                 />
               )}
               {!childIsObj && showValues && (
-                <span className="text-low-emphasis text-xs">{formatCellValue(val)}</span>
+                <span className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere] py-1.5 text-low-emphasis text-xs">{formatCellValue(val)}</span>
               )}
             </div>
             {childIsObj && (

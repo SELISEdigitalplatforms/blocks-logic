@@ -513,6 +513,12 @@
         <member name="M:BlocksTemplate.Api.Controllers.StorageController.DeleteFile(DomainService.Storage.DeleteFileRequest)">
             <summary><c>DELETE</c> via <c>POST</c> — removes a file from the provider.</summary>
         </member>
+        <member name="T:BlocksTemplate.Api.DataValidationExceptionFilter">
+            <summary>
+            A save refused by a system schema's validation rules (ILogicDataAccess PrepareWriteAsync / CheckUpdateAsync)
+            is the caller's mistake, not a server error: 400 with one message per property, the field's path as key.
+            </summary>
+        </member>
         <member name="T:BlocksTemplate.Api.FunctionExceptionFilter">
             <summary>
             Maps the function domain's exceptions onto HTTP status codes for the <b>management</b>

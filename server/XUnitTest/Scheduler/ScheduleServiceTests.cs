@@ -1,4 +1,5 @@
 using Blocks.Genesis;
+using Blocks.Genesis.DataAccess.Rules;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -69,6 +70,20 @@ namespace XUnitTest.Scheduler
             _scheduleRepository.Verify(r => r.CreateAsync(It.Is<Schedule>(s =>
                 s.Name == "Daily sync" &&
                 s.Description == "Fires every weekday")), Times.Once);
+        }
+
+        [Fact]
+        public async Task Create_RefusedByAValidationRule_ReturnsItsMessage_AndQueuesNothing()
+        {
+            var refused = new DataValidationResult();
+            refused.AddError("Name", "Name must be at most 10 characters", "MaxLength");
+            _scheduleRepository.Setup(r => r.CreateAsync(It.IsAny<Schedule>())).ThrowsAsync(new DataValidationException(refused));
+
+            var result = await _service.CreateScheduleAsync(CreateWebhookRequest());
+
+            result.IsSuccess.Should().BeFalse();
+            result.Errors.Should().Equal(new Dictionary<string, string> { ["Name"] = "Name must be at most 10 characters" });
+            _messageClient.VerifyNoOtherCalls();
         }
 
         [Fact]

@@ -140,7 +140,7 @@ export function TableTab({
                 {columns.map((column) => (
                   <td
                     key={column}
-                    className="border-b border-border/50 px-2 py-1 text-high-emphasis align-top"
+                    className="max-w-xs whitespace-normal border-b border-border/50 px-2 py-1 text-high-emphasis align-top [overflow-wrap:anywhere]"
                   >
                     {renderTableCell({
                       column,

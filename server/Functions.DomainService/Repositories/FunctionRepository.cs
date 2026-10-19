@@ -142,6 +142,7 @@ namespace Functions.DomainService.Repositories
         {
             if (!await _dataAccess.InsertAllowedAsync(LogicSchemas.FunctionEntity, "FunctionRepository.Create", tenantId))
                 throw new UnauthorizedAccessException("Function create is not allowed by the data access policy.");
+            await _dataAccess.PrepareWriteAsync(LogicSchemas.FunctionEntity, function, isInsert: true, "FunctionRepository.Create", tenantId);
             await EnsureIndexesAsync(tenantId, cancellationToken);
             await Collection(tenantId).InsertOneAsync(function, cancellationToken: cancellationToken);
         }
@@ -244,6 +245,7 @@ namespace Functions.DomainService.Repositories
 
             var filter = await EditAsync(tenantId, Live(functionId), "Apply");
             if (filter is null) return;
+            await _dataAccess.CheckUpdateAsync(LogicSchemas.FunctionEntity, update, "FunctionRepository.Apply", tenantId);
             await Collection(tenantId).UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
         }
 
@@ -292,6 +294,7 @@ namespace Functions.DomainService.Repositories
                 .Set(f => f.LastUpdatedBy, deletion.RequestedBy ?? string.Empty);
             var filter = await EditAsync(tenantId, Live(functionId), "MarkDeleted");
             if (filter is null) return false;
+            await _dataAccess.CheckUpdateAsync(LogicSchemas.FunctionEntity, update, "FunctionRepository.MarkDeleted", tenantId);
             var result = await Collection(tenantId).UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
             return result.ModifiedCount > 0;
         }
@@ -336,6 +339,7 @@ namespace Functions.DomainService.Repositories
                 .Set(f => f.Deletion!.LastPassAt, at);
             var filter = await EditAsync(tenantId, Builders<FunctionEntity>.Filter.Eq(f => f.ItemId, functionId) & IsDeleted, "RecordPurgePass");
             if (filter is null) return;
+            await _dataAccess.CheckUpdateAsync(LogicSchemas.FunctionEntity, update, "FunctionRepository.RecordPurgePass", tenantId);
             await Collection(tenantId).UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
         }
 

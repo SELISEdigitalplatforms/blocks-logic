@@ -76,6 +76,7 @@ namespace Scheduler.DomainService.Repositories
         {
             if (!await _dataAccess.InsertAllowedAsync(LogicSchemas.Schedule, "ScheduleRepository.Create"))
                 throw new UnauthorizedAccessException("Schedule create is not allowed by the data access policy.");
+            await _dataAccess.PrepareWriteAsync(LogicSchemas.Schedule, schedule, isInsert: true, "ScheduleRepository.Create");
             var collection = GetCollection();
             await collection.InsertOneAsync(schedule);
         }
@@ -85,6 +86,7 @@ namespace Scheduler.DomainService.Repositories
             var filter = await _dataAccess.EditFilterAsync(LogicSchemas.Schedule,
                 Builders<Schedule>.Filter.Eq(x => x.ItemId, schedule.ItemId), "ScheduleRepository.Update");
             if (filter is null) return;
+            await _dataAccess.PrepareWriteAsync(LogicSchemas.Schedule, schedule, isInsert: false, "ScheduleRepository.Update");
             await GetCollection().ReplaceOneAsync(filter, schedule);
         }
 
