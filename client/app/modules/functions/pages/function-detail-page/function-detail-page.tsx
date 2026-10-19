@@ -6,6 +6,7 @@ import { parseAsInteger, parseAsString, useQueryStates } from "nuqs";
 import {
   Check,
   Copy,
+  Download,
   Loader2,
   Pencil,
   Rocket,
@@ -27,6 +28,9 @@ import { useGetFunction } from "../../hooks/use-function";
 import { useFunctionEditor } from "../../hooks/use-function-editor";
 import { useUpdateFunction } from "../../hooks/use-functions";
 import { useDeploy } from "../../hooks/use-deploy";
+import { useExportFunction } from "../../hooks/use-function-transfer";
+import { NeedsSecretBanner } from "../../components/needs-secret-banner";
+import { downloadExportFile, importErrorOf } from "../../utils/transfer";
 import { BuildProgress } from "../../components/build-progress";
 import { useGetRuns } from "../../hooks/use-runs";
 import { useGetVersions } from "../../hooks/use-versions";
@@ -206,6 +210,17 @@ export const FunctionDetailPage = () => {
         : showErrorToast({ errors: "Failed to deploy function" }),
   });
   const { mutateAsync: renameAsync, isPending: isRenaming } = useUpdateFunction();
+  const { mutateAsync: exportAsync, isPending: isExporting } = useExportFunction();
+
+  /** Downloads the saved function (not unsaved edits) as one export file: secrets by name only. */
+  const handleExport = async () => {
+    try {
+      downloadExportFile(await exportAsync(functionId));
+      showSuccessToast({ description: "Export downloaded. Unsaved changes are not in it." });
+    } catch (error) {
+      showErrorToast({ errors: importErrorOf(error).message });
+    }
+  };
 
   const indexJs = useFunctionEditorStore((s) => s.indexJs);
   const packageJson = useFunctionEditorStore((s) => s.packageJson);
@@ -462,6 +477,20 @@ export const FunctionDetailPage = () => {
             <Button
               variant="outline"
               size="sm"
+              className="gap-1.5"
+              onClick={() => void handleExport()}
+              disabled={isExporting}
+            >
+              {isExporting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Download className="h-3.5 w-3.5" />
+              )}
+              Export
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => {
                 setQueryParams({ tab: "code", runId: "" });
                 requestTestRun();
@@ -494,6 +523,8 @@ export const FunctionDetailPage = () => {
             </Button>
           </div>
         </div>
+
+        <NeedsSecretBanner missing={fn.missingSecrets} duplicate={fn.duplicateSecrets} />
 
         {/* A deploy whose build outlasted the request (202): its progress, and its log if it fails. */}
         {deployBuildId && (
@@ -759,7 +790,12 @@ export const FunctionDetailPage = () => {
 
           <TabsContent value="configuration" className="flex flex-col gap-4">
             <Card className="overflow-hidden">
-              <VariablesEditor value={variables} onChange={setVariables} />
+              <VariablesEditor
+                value={variables}
+                onChange={setVariables}
+                missingSecrets={fn.missingSecrets}
+                duplicateSecrets={fn.duplicateSecrets}
+              />
             </Card>
             <div className="grid items-start gap-4 xl:grid-cols-2">
               <Card>

@@ -70,6 +70,17 @@ namespace Utilities.Api.Controllers
         /// authorizer that enforces each proxy's "Who can call it" policy on the gateway route.
         /// </summary>
         private readonly IProxyOpenApiImportService _openApiImport;
+        private readonly IProxyTransferService _transfer;
+
+        /// <summary>
+        /// Kestrel backstop on an import body. The real cap is on the proxy config inside it (256 KB canonical,
+        /// <see cref="ProxyTransferCodec.MaxConfigBytes"/>, answered with the Blocks error body); this one only stops a
+        /// client streaming far past it. Room is left for an indented file plus the merge choices.
+        /// </summary>
+        private const long ImportHardBodyLimitBytes = 1024 * 1024;
+
+        private static readonly System.Text.Json.JsonSerializerOptions ExportFileJson =
+            new(ProxyTransferCodec.Json) { WriteIndented = true };
 
         public ProxiesController(
             IProxyService proxyService,
@@ -80,9 +91,11 @@ namespace Utilities.Api.Controllers
             IEndpointAccessAuthorizer accessAuthorizer,
             IProxyRateLimiter rateLimiter,
             IProxyOpenApiImportService openApiImport,
+            IProxyTransferService transfer,
             ILogger<ProxiesController> logger)
         {
             _openApiImport = openApiImport;
+            _transfer = transfer;
             _proxyService = proxyService;
             _proxyVersionService = proxyVersionService;
             _proxyTestService = proxyTestService;
@@ -324,6 +337,71 @@ namespace Utilities.Api.Controllers
             return preview.Errors.Count == 0
                 ? Ok(preview)
                 : BadRequest(new { code = ProxyErrorCodes.Validation, errors = preview.Errors, warnings = preview.Warnings });
+        }
+
+        /// <summary>
+        /// <c>GET /api/Proxies/{proxyId}/export</c> — one proxy as a JSON file (<c>proxy-{slug}.json</c>) that imports
+        /// into another environment as the same proxy: same id, same slug, same config. Secrets travel by name only;
+        /// a literal credential is written as <c>***</c>. No tenant, audit, version, stats or secret id goes in.
+        /// </summary>
+        [ProtectedEndPoint("blocks-logic::proxy::manage")]
+        [HttpGet("{proxyId}/export")]
+        public async Task<IActionResult> Export(string proxyId)
+        {
+            if (!TryGetTenantId(out var tenantId, out var error))
+            {
+                return error;
+            }
+
+            var result = await _transfer.ExportAsync(tenantId, proxyId);
+            if (!result.IsSuccess)
+            {
+                return StatusCode(result.HttpStatus, result);
+            }
+
+            var file = result.Data!;
+            var slug = file.Proxy?["slug"]?.GetValue<string>() ?? "proxy";
+            var bytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(file, ExportFileJson);
+            return File(bytes, "application/json", $"proxy-{slug}.json");
+        }
+
+        /// <summary>
+        /// <c>POST /api/Proxies/import/preview</c> — what importing an export file would do here: <c>new</c>,
+        /// <c>same</c>, <c>changed</c> (with the field-level diff) or <c>blocked</c> (with the reason), plus secret
+        /// names that are missing or ambiguous here. Writes nothing.
+        /// </summary>
+        [ProtectedEndPoint("blocks-logic::proxy::manage")]
+        [HttpPost("import/preview")]
+        [RequestSizeLimit(ImportHardBodyLimitBytes)]
+        public async Task<IActionResult> PreviewImport([FromBody] ProxyExportFile? file)
+        {
+            if (!TryGetTenantId(out var tenantId, out var error))
+            {
+                return error;
+            }
+
+            var result = await _transfer.PreviewAsync(tenantId, file);
+            return StatusCode(result.HttpStatus, result);
+        }
+
+        /// <summary>
+        /// <c>POST /api/Proxies/import/apply</c> — imports the file: inserts a new proxy with the file's id and slug, or
+        /// resolves a difference (<c>takeIncoming</c> / <c>keepMine</c> / <c>merge</c> per field). Every preview check
+        /// runs again here. 409 <c>PROXY_IMPORT_BLOCKED</c> when blocked, 409 <c>PROXY_VERSION_CONFLICT</c> when the
+        /// proxy changed since the preview. Replaying the same file changes nothing.
+        /// </summary>
+        [ProtectedEndPoint("blocks-logic::proxy::manage")]
+        [HttpPost("import/apply")]
+        [RequestSizeLimit(ImportHardBodyLimitBytes)]
+        public async Task<IActionResult> ApplyImport([FromBody] ProxyImportApplyRequestDto? dto)
+        {
+            if (!TryGetTenantId(out var tenantId, out var error))
+            {
+                return error;
+            }
+
+            var result = await _transfer.ApplyAsync(tenantId, dto ?? new ProxyImportApplyRequestDto());
+            return StatusCode(result.HttpStatus, result);
         }
 
         /// <summary>

@@ -10,7 +10,7 @@ namespace Functions.DomainService.Utils
     /// <para>
     /// A variable (<c>ctx.env.KEY</c>) or an output-action header whose <b>name</b> looks like a credential
     /// (<see cref="ProxySecretRedactor.IsSensitiveKey"/>: <c>API_KEY</c>, <c>Authorization</c>, <c>DB_PASSWORD</c>,
-    /// <c>X-Session</c>, …) must hold a <c>{{secret.&lt;id&gt;}}</c> reference. A scheme word around it is fine
+    /// <c>X-Session</c>, …) must hold a <c>{{secret.&lt;id&gt;}}</c> (or, after an import, <c>{{secretName.&lt;name&gt;}}</c>) reference. A scheme word around it is fine
     /// (<c>Bearer {{secret.x}}</c>); any other typed text is refused. An empty value holds nothing and passes.
     /// </para>
     /// <para>
@@ -35,7 +35,11 @@ namespace Functions.DomainService.Utils
             string rest;
             try
             {
-                rest = SecretReference().Replace(value, string.Empty).Trim();
+                // A name reference ({{secretName.X}}, stored by an import until the secret exists) and the export
+                // marker for a reference that had no secret are references too, never a typed value.
+                rest = SecretReference().Replace(value, string.Empty);
+                rest = FunctionSecretRefs.NamePattern().Replace(rest, string.Empty);
+                rest = rest.Replace(FunctionSecretRefs.UnresolvedMarker, string.Empty, StringComparison.Ordinal).Trim();
             }
             catch (RegexMatchTimeoutException)
             {

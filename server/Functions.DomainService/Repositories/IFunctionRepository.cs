@@ -35,6 +35,18 @@ namespace Functions.DomainService.Repositories
             List<OutputAction> outputActions, List<VariableBinding> variables, string? actorId,
             CancellationToken cancellationToken = default);
 
+        /// <summary>
+        /// Import only: writes name, description, source and configuration in one update that applies only while the
+        /// document's <c>LastUpdatedDate</c> is still <paramref name="expectedLastUpdatedDate"/> (what the preview showed).
+        /// False when it moved, the function is gone, or the data access policy hides it — nothing is written then.
+        /// </summary>
+        Task<bool> UpdateImportedAsync(
+            string tenantId, string functionId, DateTime expectedLastUpdatedDate,
+            string name, string? description, FunctionSource source, string sourceHash,
+            FunctionLimits limits, RetryPolicy retry, TriggerConfig trigger,
+            List<OutputAction> outputActions, List<VariableBinding> variables, string? actorId,
+            CancellationToken cancellationToken = default);
+
         /// <summary>Points the function at a newly created version and marks it Live.</summary>
         Task SetActiveVersionAsync(
             string tenantId, string functionId, string versionId, int versionNumber, DateTime deployedAt,

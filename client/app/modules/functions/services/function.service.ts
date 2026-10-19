@@ -27,6 +27,12 @@ import {
   ITestFunctionPayload,
 } from "../types/run.types";
 import { IFunctionSource } from "../types/function.types";
+import {
+  IFunctionExportFile,
+  IFunctionImportApplyPayload,
+  IFunctionImportPreview,
+  IFunctionImportResult,
+} from "../types/transfer.types";
 
 export interface IFunctionVersionSummaryResponse {
   data: IFunctionVersionSummary[] | null;
@@ -142,6 +148,22 @@ export class FunctionService {
 
   cancelRun = (runId: string): Promise<IBaseResponse> => {
     return this.logicHttpClient.post(FUNCTIONS_ENDPOINTS.CANCEL_RUN, { runId });
+  };
+
+  /** One function as an export file: secrets by name, nothing environment-specific. */
+  exportFunction = (functionId: string): Promise<IFunctionExportFile> => {
+    const params = new URLSearchParams({ functionId });
+    return this.logicHttpClient.get(`${FUNCTIONS_ENDPOINTS.EXPORT}?${params.toString()}`);
+  };
+
+  /** What an import of `file` would do here. Writes nothing. */
+  previewImport = (file: IFunctionExportFile): Promise<IFunctionImportPreview> => {
+    return this.logicHttpClient.post(FUNCTIONS_ENDPOINTS.IMPORT_PREVIEW, { file });
+  };
+
+  /** Imports `file` (409 when the function changed after the preview), then builds and deploys it. */
+  applyImport = (payload: IFunctionImportApplyPayload): Promise<IFunctionImportResult> => {
+    return this.logicHttpClient.post(FUNCTIONS_ENDPOINTS.IMPORT, payload);
   };
 
   getAuditLog = (

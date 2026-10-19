@@ -21,6 +21,15 @@ namespace Functions.DomainService.Dtos.Responses
         public DateTime? LastDeployedAt { get; set; }
         public DateTime LastUpdatedDate { get; set; }
 
+        /// <summary>
+        /// The function uses a secret by name (<c>{{secretName.X}}</c>, left by an import) that has no single match here.
+        /// Computed on every read, never stored, so it clears itself once the secret exists.
+        /// </summary>
+        public bool HasUnboundSecrets { get; set; }
+
+        /// <summary>The names behind <see cref="HasUnboundSecrets"/>.</summary>
+        public List<string> UnboundSecrets { get; set; } = [];
+
         public static FunctionSummaryDto From(
             FunctionEntity function, int? activeVersionNumber, long runs24h = 0) => new()
         {
@@ -59,6 +68,21 @@ namespace Functions.DomainService.Dtos.Responses
         public int? ActiveVersionNumber { get; set; }
         public int LastVersionNumber { get; set; }
 
+        /// <summary>When the function was last written — an import sends it back as <c>expectedLastUpdatedDate</c>.</summary>
+        public DateTime LastUpdatedDate { get; set; }
+
+        /// <summary>
+        /// Secret names this function uses (<c>{{secretName.X}}</c>, left by an import) with no secret here. Add one with
+        /// that exact name and the next run works. Computed on read, never stored.
+        /// </summary>
+        public List<string> MissingSecrets { get; set; } = [];
+
+        /// <summary>Secret names that match more than one secret here; runs using them fail until one is left.</summary>
+        public List<string> DuplicateSecrets { get; set; } = [];
+
+        /// <summary>The secret store could not be asked, so the two lists above are unknown (empty).</summary>
+        public bool SecretsUnchecked { get; set; }
+
         public static FunctionDetailDto From(FunctionEntity function) => new()
         {
             Id = function.ItemId,
@@ -80,6 +104,7 @@ namespace Functions.DomainService.Dtos.Responses
             Variables = function.Variables,
             ActiveVersionId = function.ActiveVersionId,
             LastVersionNumber = function.LastVersionNumber,
+            LastUpdatedDate = function.LastUpdatedDate,
         };
     }
 

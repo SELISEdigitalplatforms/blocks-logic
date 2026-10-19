@@ -45,5 +45,11 @@ namespace Proxy.DomainService.Dtos
         public DateTime CreatedDate { get; set; }
 
         public DateTime LastUpdatedDate { get; set; }
+
+        /// <summary>
+        /// Cheap hint (no secret lookup): a <c>{{$VAR.name}}</c> name has no saved secret id, e.g. after an import into
+        /// an environment that lacks the secret. The detail read says which names really need one.
+        /// </summary>
+        public bool HasUnboundSecrets { get; set; }
     }
 }

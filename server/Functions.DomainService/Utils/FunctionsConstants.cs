@@ -59,6 +59,10 @@ namespace Functions.DomainService.Utils
             public const string Resumed = "FunctionResumed";
             public const string RunCancelled = "RunCancelled";
             public const string RunReplayed = "RunReplayed";
+            /// <summary>An export file was downloaded. Detail: the content hash only.</summary>
+            public const string Exported = "FunctionExported";
+            /// <summary>An import created or changed the function. Detail: status, changed fields, content hash — never source or values.</summary>
+            public const string Imported = "FunctionImported";
         }
     }
 }

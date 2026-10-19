@@ -31,6 +31,7 @@ namespace XUnitTest.Workflow
         private readonly Mock<IWorkflowVersionRepository> _versions = new();
         private readonly Mock<IWorkflowEngineService> _engine = new();
         private readonly Mock<IDelegationGrantFactory> _grants = new();
+        private readonly Mock<IInProcessGrantReleaser> _releaser = new();
         private readonly WorkflowExecutionService _sut;
 
         public WebhookDelegationGrantTests()
@@ -52,7 +53,8 @@ namespace XUnitTest.Workflow
                 Mock.Of<IWorkflowAuthService>(),
                 accessor.Object,
                 _grants.Object,
-                new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance));
+                new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance),
+                _releaser.Object);
         }
 
         public void Dispose()
@@ -109,6 +111,39 @@ namespace XUnitTest.Workflow
             await _sut.TriggerWebhookAsync("wf-1", "hook", "tenant-1", body.RootElement.Clone());
 
             grantSeenByEngine.Should().Be(GrantId);
+        }
+
+        [Fact]
+        public async Task Last_mode_releases_the_grant_after_the_run_returns()
+        {
+            Published();
+            _grants.Setup(g => g.CreateForSendAsync(It.IsAny<TimeSpan?>())).ReturnsAsync(GrantId);
+            var releasedBeforeRunEnded = false;
+            _engine.Setup(e => e.RunNodeInProcessAsync(It.IsAny<AddExcuationNodeEvent>()))
+                .Callback(() => releasedBeforeRunEnded = _releaser.Invocations.Count > 0)
+                .ReturnsAsync((WorkflowExecutionEntity?)null);
+
+            using var body = JsonDocument.Parse("{}");
+            await _sut.TriggerWebhookAsync("wf-1", "hook", "tenant-1", body.RootElement.Clone());
+
+            releasedBeforeRunEnded.Should().BeFalse();
+            _releaser.Verify(r => r.ReleaseAsync(GrantId), Times.Once);
+            DelegatedTokenContext.Current.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task Last_mode_releases_the_grant_when_the_run_throws()
+        {
+            Published();
+            _grants.Setup(g => g.CreateForSendAsync(It.IsAny<TimeSpan?>())).ReturnsAsync(GrantId);
+            _engine.Setup(e => e.RunNodeInProcessAsync(It.IsAny<AddExcuationNodeEvent>()))
+                .ThrowsAsync(new InvalidOperationException("engine failed"));
+
+            using var body = JsonDocument.Parse("{}");
+            try { await _sut.TriggerWebhookAsync("wf-1", "hook", "tenant-1", body.RootElement.Clone()); }
+            catch (InvalidOperationException) { /* whether the service rethrows is not what this test is about */ }
+
+            _releaser.Verify(r => r.ReleaseAsync(GrantId), Times.Once);
         }
     }
 }

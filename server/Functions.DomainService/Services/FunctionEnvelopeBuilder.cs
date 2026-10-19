@@ -225,7 +225,9 @@ namespace Functions.DomainService.Services
             {
                 if (string.IsNullOrWhiteSpace(variable.Key)) continue;
 
-                if (!string.IsNullOrEmpty(variable.Value) && SecretPlaceholder.IsMatch(variable.Value))
+                // {{secretName.X}} (an imported, still unbound reference) is resolved by the runner too.
+                if (!string.IsNullOrEmpty(variable.Value)
+                    && (SecretPlaceholder.IsMatch(variable.Value) || Utils.FunctionSecretRefs.NamePattern().IsMatch(variable.Value)))
                 {
                     maskedEnvKeys.Add(variable.Key);
                 }

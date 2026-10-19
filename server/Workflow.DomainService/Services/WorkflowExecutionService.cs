@@ -39,6 +39,7 @@ namespace Workflow.DomainService.Services
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IDelegationGrantFactory _delegationGrantFactory;
         private readonly IWorkflowExecutionLogger _executionLogger;
+        private readonly IInProcessGrantReleaser _inProcessGrants;
 
         public WorkflowExecutionService(
             IWorkflowRepository workflowRepository,
@@ -51,9 +52,11 @@ namespace Workflow.DomainService.Services
             IWorkflowAuthService workflowAuthService,
             IHttpContextAccessor httpContextAccessor,
             IDelegationGrantFactory delegationGrantFactory,
-            IWorkflowExecutionLogger executionLogger
+            IWorkflowExecutionLogger executionLogger,
+            IInProcessGrantReleaser inProcessGrants
             )
         {
+            _inProcessGrants = inProcessGrants;
             _executionLogger = executionLogger;
             _workflowRepository = workflowRepository;
             _executionRepository = executionRepository;
@@ -263,11 +266,22 @@ namespace Workflow.DomainService.Services
                     // claims) leaves no grant and Blocks-auth nodes fail with NoDelegatedTokenException.
                     // Set it in this method, never inside an async helper: DelegatedTokenContext is an AsyncLocal,
                     // and a value set inside an async method is discarded when that method returns.
-                    DelegatedTokenContext.Set(await _delegationGrantFactory.CreateForSendAsync());
+                    // Released once the run returns (in the finally), not left for the store's two-day TTL.
+                    var inProcessGrant = await _delegationGrantFactory.CreateForSendAsync();
+                    DelegatedTokenContext.Set(inProcessGrant);
 
                     _executionLogger.For(execution).Info(
                         ExecutionLogStages.ExecutionInProcess, "Running in-process; the webhook waits for the last node.");
-                    var response = await _workflowEngineService.RunNodeInProcessAsync(payload);
+                    WorkflowExecutionEntity? response;
+                    try
+                    {
+                        response = await _workflowEngineService.RunNodeInProcessAsync(payload);
+                    }
+                    finally
+                    {
+                        DelegatedTokenContext.Clear();
+                        await _inProcessGrants.ReleaseAsync(inProcessGrant);
+                    }
                     // The caller waited for the run, so it is told how the run ended. Still HTTP 200, so a
                     // caller that only checks the status code behaves as before; the error text is not
                     // returned (it can hold internal details) — it is on the execution.
@@ -1370,9 +1384,19 @@ namespace Workflow.DomainService.Services
                 LogStepExecution(triggerlessExecution, targetNode);
 
                 // Set here, not in an async helper (AsyncLocal; see the webhook "last" mode).
-                DelegatedTokenContext.Set(await _delegationGrantFactory.CreateForSendAsync());
-                var triggerlessResult = await _workflowEngineService.ExecuteStepNodeAsync(
-                    tenantId, triggerlessExecution.Id, string.Empty, dto.NodeId, dto.SourceExecutionId);
+                var triggerlessGrant = await _delegationGrantFactory.CreateForSendAsync();
+                DelegatedTokenContext.Set(triggerlessGrant);
+                WorkflowExecutionEntity? triggerlessResult;
+                try
+                {
+                    triggerlessResult = await _workflowEngineService.ExecuteStepNodeAsync(
+                        tenantId, triggerlessExecution.Id, string.Empty, dto.NodeId, dto.SourceExecutionId);
+                }
+                finally
+                {
+                    DelegatedTokenContext.Clear();
+                    await _inProcessGrants.ReleaseAsync(triggerlessGrant);
+                }
 
                 return new StepExecuteResponseDto
                 {
@@ -1482,8 +1506,18 @@ namespace Workflow.DomainService.Services
             await NotifyWorkflowStartedAsync(execution);
             LogStepExecution(execution, targetNode);
             // Set here, not in an async helper (AsyncLocal; see the webhook "last" mode).
-            DelegatedTokenContext.Set(await _delegationGrantFactory.CreateForSendAsync());
-            var result =await _workflowEngineService.ExecuteStepNodeAsync(tenantId, execution.Id, triggerNode.Id, dto.NodeId, dto.SourceExecutionId);
+            var stepGrant = await _delegationGrantFactory.CreateForSendAsync();
+            DelegatedTokenContext.Set(stepGrant);
+            WorkflowExecutionEntity? result;
+            try
+            {
+                result = await _workflowEngineService.ExecuteStepNodeAsync(tenantId, execution.Id, triggerNode.Id, dto.NodeId, dto.SourceExecutionId);
+            }
+            finally
+            {
+                DelegatedTokenContext.Clear();
+                await _inProcessGrants.ReleaseAsync(stepGrant);
+            }
             return new StepExecuteResponseDto
             {
                 IsSuccess = true,

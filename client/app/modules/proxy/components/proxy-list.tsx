@@ -2,8 +2,10 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { useProjectStore, useScopedPath } from "@seliseblocks/genesis-os";
 import {
+  AlertTriangle,
   ArrowRightFromLine,
   EllipsisVertical,
+  FileUp,
   Pause,
   Pen,
   Play,
@@ -45,6 +47,8 @@ type Props = {
   /** True when a search term or status filter is narrowing the list, so a zero-row result is
    * "no matches" rather than "nothing has ever been created" — the two need different copy. */
   isFiltered?: boolean;
+  /** Opens the import dialog; the empty state offers it next to "Add proxy". */
+  onImport?: () => void;
 };
 
 const VISIBLE_METHOD_COUNT = 2;
@@ -61,7 +65,7 @@ const ProxyListSkeleton = () => (
   </>
 );
 
-export const ProxyList = ({ proxies, isLoading, onProxyDeleted, isFiltered }: Props) => {
+export const ProxyList = ({ proxies, isLoading, onProxyDeleted, isFiltered, onImport }: Props) => {
   const navigate = useNavigate();
   const selectedProject = useProjectStore().selectedProject;
   const scoped = useScopedPath();
@@ -114,6 +118,12 @@ export const ProxyList = ({ proxies, isLoading, onProxyDeleted, isFiltered }: Pr
             <Plus className="h-4 w-4" />
             Add proxy
           </Button>
+          {onImport ? (
+            <Button className="gap-2" size="sm" variant="outline" onClick={onImport}>
+              <FileUp className="h-4 w-4" />
+              Import
+            </Button>
+          ) : null}
         </div>
       </div>
     );
@@ -153,6 +163,15 @@ export const ProxyList = ({ proxies, isLoading, onProxyDeleted, isFiltered }: Pr
             >
               <TableCell className="rounded-l-lg border-y border-l border-border bg-background px-6 py-5 text-base transition-colors group-hover:bg-muted/50">
                 <div className="w-[200px] truncate font-semibold md:w-[240px]">{proxy.name}</div>
+                {proxy.hasUnboundSecrets ? (
+                  <span
+                    className="mt-1 inline-flex items-center gap-1 rounded border border-amber-300/60 bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
+                    title="A secret this proxy uses is not linked yet. Open the proxy to see which."
+                  >
+                    <AlertTriangle aria-hidden="true" className="h-3 w-3" />
+                    Check secrets
+                  </span>
+                ) : null}
               </TableCell>
               <TableCell className="border-y border-border bg-background px-6 py-5 text-base transition-colors group-hover:bg-muted/50">
                 <p className="w-[260px] truncate font-mono text-sm text-muted-foreground">

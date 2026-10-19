@@ -1,6 +1,7 @@
+import { useState } from "react";
 import { useNavigate } from "react-router";
 import { useScopedPath } from "@seliseblocks/genesis-os";
-import { Plus } from "lucide-react";
+import { FileUp, Plus } from "lucide-react";
 import { Button } from "@/components/ui-kits/button/button";
 import { Card, CardContent, CardHeader } from "@/components/ui-kits/card/card";
 import { Pagination } from "@/components/ui-kits/pagination/pagination";
@@ -9,11 +10,13 @@ import { useGetProxies, useProxyFilterQueryParams } from "../../hooks";
 import { ProxyList } from "../../components/proxy-list";
 import { ProxyFilterToolBar } from "../../components/proxy-filter-toolbar";
 import { VariablesButton } from "../../components/variables-button";
+import { ProxyImportDialog } from "../../components/proxy-import-dialog";
 
 export const Proxies = () => {
   const navigate = useNavigate();
   const scoped = useScopedPath();
   const { queryParams, setQueryParams } = useProxyFilterQueryParams();
+  const [isImportOpen, setIsImportOpen] = useState(false);
 
   const { data, isLoading, isFetching } = useGetProxies({
     search: queryParams.search,
@@ -53,6 +56,15 @@ export const Proxies = () => {
                 size="sm"
                 variant="ghost"
                 className="text-primary hover:text-primary"
+                onClick={() => setIsImportOpen(true)}
+              >
+                <FileUp className="h-4 w-4" />
+                <span className="sr-only sm:not-sr-only sm:ml-2.5">Import</span>
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-primary hover:text-primary"
                 onClick={() => navigate(scoped("proxy/new"))}
               >
                 <Plus className="h-4 w-4" />
@@ -68,6 +80,7 @@ export const Proxies = () => {
               isLoading={isListLoading}
               onProxyDeleted={handleProxyDeleted}
               isFiltered={isFiltered}
+              onImport={() => setIsImportOpen(true)}
             />
           </div>
           {totalCount > queryParams.pageSize && (
@@ -86,6 +99,11 @@ export const Proxies = () => {
           )}
         </CardContent>
       </Card>
+      <ProxyImportDialog
+        open={isImportOpen}
+        onOpenChange={setIsImportOpen}
+        onImported={(proxyId) => navigate(scoped(`proxy/${proxyId}`))}
+      />
     </section>
   );
 };

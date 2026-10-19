@@ -26,6 +26,13 @@ namespace Functions.DomainService.Utils
         public int Workflows { get; } = workflows;
     }
 
+    /// <summary>
+    /// The request is valid but collides with the current state: an import whose target changed after its preview, or
+    /// whose id already exists here (a tombstoned function, or one the caller cannot see). Maps to 409 — nothing was
+    /// written; preview again.
+    /// </summary>
+    public class FunctionConflictException(string message) : Exception(message);
+
     /// <summary>The requested function, version, run or build does not exist. Maps to 404.</summary>
     public class FunctionNotFoundException(string message) : Exception(message);
 

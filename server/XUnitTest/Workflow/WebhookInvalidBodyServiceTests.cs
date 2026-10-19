@@ -44,7 +44,8 @@ namespace XUnitTest.Workflow
                 _auth.Object,
                 accessor.Object,
                 Mock.Of<IDelegationGrantFactory>(),
-                new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance));
+                new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance),
+                Mock.Of<IInProcessGrantReleaser>());
         }
 
         public void Dispose() => TestBlocksContext.Clear();

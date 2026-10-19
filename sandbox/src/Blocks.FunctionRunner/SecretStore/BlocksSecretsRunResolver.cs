@@ -34,6 +34,10 @@ namespace Blocks.FunctionRunner.SecretStore
         /// <summary>The SDK's own batch ceiling.</summary>
         private const int BatchSize = 50;
 
+        /// <summary>Page size and safety stop for the exact-name search (100 × 50 rows matching the text).</summary>
+        private const int FindPageSize = 50;
+        private const int MaxFindPages = 100;
+
         /// <summary>
         /// How long a lookup may take before the run is given back as a retryable failure. A
         /// hung Key Vault must not hold a sandbox slot for the rest of the lease.
@@ -119,29 +123,7 @@ namespace Blocks.FunctionRunner.SecretStore
             Dictionary<string, string> unresolved,
             CancellationToken token)
         {
-            var applicationDomain = tenant.Applications?.FirstOrDefault()?.Domain ?? string.Empty;
-            var context = BlocksContext.Create(
-                tenantId: tenant.TenantId,
-                roles: caller.Roles,
-                userId: caller.UserId ?? string.Empty,
-                isAuthenticated: true,
-                requestUri: string.Empty,
-                organizationId: caller.OrganizationId ?? string.Empty,
-                expireOn: DateTime.UtcNow.AddMinutes(5),
-                email: string.Empty,
-                permissions: [],
-                userName: string.Empty,
-                phoneNumber: string.Empty,
-                displayName: string.Empty,
-                oauthToken: string.Empty,
-                originalTenantId: tenant.TenantId,
-                applicationDomain: applicationDomain,
-                impersonated: false,
-                impersonationSessionId: string.Empty);
-
-            // changeContext: true — with no HttpContext here the async-local is what GetContext
-            // reads, and forcing it means nothing else can be mistaken for this run's caller.
-            BlocksContext.SetContext(context, changeContext: true);
+            EnterRunContext(tenant, caller);
 
             using var scope = _scopeFactory.CreateScope();
             var secrets = scope.ServiceProvider.GetRequiredService<ISecretService>();
@@ -181,6 +163,118 @@ namespace Blocks.FunctionRunner.SecretStore
                     throw Unavailable(tenant.TenantId, ex);
                 }
             }
+        }
+
+        /// <summary>
+        /// Exact-name lookup for <c>{{secretName.&lt;name&gt;}}</c> (2026-10-18), in the same caller context as
+        /// <see cref="ResolveAsync"/>, so a name is only found where its value could also be read. The SDK searches
+        /// "name or description contains, any case", one page at a time, so every page is read and filtered to the
+        /// exact name. Metadata only; nothing cached.
+        /// </summary>
+        public async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> FindIdsByNameAsync(
+            string tenantId,
+            EnvSecretReferences.Caller caller,
+            IReadOnlyCollection<string> names,
+            CancellationToken cancellationToken)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+            ArgumentNullException.ThrowIfNull(caller);
+            ArgumentNullException.ThrowIfNull(names);
+
+            var result = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+            var distinct = names.Where(n => !string.IsNullOrEmpty(n)).Distinct(StringComparer.Ordinal).ToList();
+            if (distinct.Count == 0) return result;
+
+            Tenant? tenant;
+            try
+            {
+                tenant = _tenants.GetTenantByID(tenantId);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                throw new SecretStoreUnavailableException("the tenant registry could not be read", ex);
+            }
+
+            if (tenant is null)
+            {
+                foreach (var name in distinct) result[name] = [];
+                return result;
+            }
+
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(Timeout);
+            try
+            {
+                await FindInContextAsync(tenant, caller, distinct, result, timeout.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                throw new SecretStoreUnavailableException(
+                    $"the secret store did not answer within {Timeout.TotalSeconds:0}s");
+            }
+            return result;
+        }
+
+        private async Task FindInContextAsync(
+            Tenant tenant,
+            EnvSecretReferences.Caller caller,
+            IReadOnlyList<string> names,
+            Dictionary<string, IReadOnlyList<string>> result,
+            CancellationToken token)
+        {
+            EnterRunContext(tenant, caller);
+            using var scope = _scopeFactory.CreateScope();
+            var secrets = scope.ServiceProvider.GetRequiredService<ISecretService>();
+
+            foreach (var name in names)
+            {
+                var ids = new List<string>();
+                try
+                {
+                    for (var page = 1; page <= MaxFindPages; page++)
+                    {
+                        var found = await secrets.FindAsync(
+                            new SecretFilter { Search = name, PageSize = FindPageSize, PageNumber = page }, token)
+                            .ConfigureAwait(false);
+                        var data = found?.Data ?? [];
+                        ids.AddRange(data
+                            .Where(s => string.Equals(s.Name, name, StringComparison.Ordinal) && !string.IsNullOrEmpty(s.SecretId))
+                            .Select(s => s.SecretId));
+                        if (data.Count < FindPageSize || (long)page * FindPageSize >= (found?.TotalCount ?? 0)) break;
+                    }
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    throw Unavailable(tenant.TenantId, ex);
+                }
+                result[name] = ids.Distinct(StringComparer.Ordinal).ToList();
+            }
+        }
+        private static void EnterRunContext(Tenant tenant, EnvSecretReferences.Caller caller)
+        {
+            var applicationDomain = tenant.Applications?.FirstOrDefault()?.Domain ?? string.Empty;
+            var context = BlocksContext.Create(
+                tenantId: tenant.TenantId,
+                roles: caller.Roles,
+                userId: caller.UserId ?? string.Empty,
+                isAuthenticated: true,
+                requestUri: string.Empty,
+                organizationId: caller.OrganizationId ?? string.Empty,
+                expireOn: DateTime.UtcNow.AddMinutes(5),
+                email: string.Empty,
+                permissions: [],
+                userName: string.Empty,
+                phoneNumber: string.Empty,
+                displayName: string.Empty,
+                oauthToken: string.Empty,
+                originalTenantId: tenant.TenantId,
+                applicationDomain: applicationDomain,
+                impersonated: false,
+                impersonationSessionId: string.Empty);
+
+            // changeContext: true — with no HttpContext here the async-local is what GetContext
+            // reads, and forcing it means nothing else can be mistaken for this run's caller.
+            BlocksContext.SetContext(context, changeContext: true);
         }
 
         private SecretStoreUnavailableException Unavailable(string tenantId, Exception ex)

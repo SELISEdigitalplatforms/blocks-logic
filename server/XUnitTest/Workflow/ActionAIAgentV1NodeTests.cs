@@ -68,7 +68,7 @@ namespace XUnitTest.Workflow
 
         private static string ErrorMessage(NodeExecutionResult result)
         {
-            result.IsSuccess.Should().BeFalse("a failed item fails the step, so the run ends Failed (C-9, 2026-10-08); the error item is kept");
+            result.IsSuccess.Should().BeTrue("a failed item is kept as an error item and the step still succeeds (C-9 reversed in 166b9d1e; kept by the user 2026-10-18)");
             var output = result.OutputItems.Should().ContainSingle().Subject.Data.Output.AsBsonDocument;
             output["error"].AsBoolean.Should().BeTrue();
             return output["message"].AsString;

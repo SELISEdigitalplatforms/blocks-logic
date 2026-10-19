@@ -38,6 +38,9 @@ namespace XUnitTest.Proxy
         [InlineData(nameof(ProxiesController.Revert), Manage)]
         [InlineData(nameof(ProxiesController.Test), Manage)]
         [InlineData(nameof(ProxiesController.PreviewOpenApi), Manage)]
+        [InlineData(nameof(ProxiesController.Export), Manage)]
+        [InlineData(nameof(ProxiesController.PreviewImport), Manage)]
+        [InlineData(nameof(ProxiesController.ApplyImport), Manage)]
         public void ControlPlaneActionNeedsItsPermission(string actionName, string expected)
         {
             var action = typeof(ProxiesController).GetMethod(actionName)!;

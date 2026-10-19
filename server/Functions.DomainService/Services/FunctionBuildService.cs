@@ -240,7 +240,10 @@ namespace Functions.DomainService.Services
             var imageTag =
                 $"{codeHash[..Math.Min(TagHashChars, codeHash.Length)]}-" +
                 $"{manifestHash[..Math.Min(TagHashChars, manifestHash.Length)]}";
-            var imageRef = $"{registry}/fn/{function.ItemId}:{imageTag}";
+            // The tenant is part of the name (2026-10-18): an imported function has the same id in every tenant, and
+            // two tenants sharing a registry must not share a repository. Versions built before keep their old
+            // `{registry}/fn/{functionId}@…` digest and still run from it (FunctionImageRef).
+            var imageRef = Utils.FunctionImageRef.For(registry, tenantId, function.ItemId, imageTag);
 
             var build = new FunctionBuildEntity
             {

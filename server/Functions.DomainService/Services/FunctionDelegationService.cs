@@ -106,7 +106,13 @@ namespace Functions.DomainService.Services
                 var (tokenVersion, securityStamp) = ReadFromRequest(caller);
                 if (tokenVersion is null || securityStamp is null)
                 {
-                    (tokenVersion, securityStamp) = await ReadFromHeldGrantAsync(caller).ConfigureAwait(false);
+                    var held = await ReadHeldGrantAsync(caller).ConfigureAwait(false);
+                    tokenVersion = NonBlank(held?.TokenVersion);
+                    securityStamp = NonBlank(held?.SecurityStamp);
+                    if (held is not null && held.IsImpersonated)
+                    {
+                        caller = WithImpersonationFrom(caller, held);
+                    }
                 }
 
                 if (tokenVersion is null || securityStamp is null)
@@ -172,13 +178,13 @@ namespace Functions.DomainService.Services
         }
 
         /// <summary>
-        /// A worker flow (a workflow step) carries the grant it was started with. Its values are
-        /// carried forward only when that grant names exactly this caller.
+        /// A worker flow (a workflow step) carries the grant it was started with. It is used only when
+        /// that grant names exactly this caller.
         /// </summary>
-        private async Task<(string? TokenVersion, string? SecurityStamp)> ReadFromHeldGrantAsync(BlocksContext caller)
+        private async Task<DelegationGrantRecord?> ReadHeldGrantAsync(BlocksContext caller)
         {
             var held = DelegatedTokenContext.Current;
-            if (string.IsNullOrWhiteSpace(held)) return (null, null);
+            if (string.IsNullOrWhiteSpace(held)) return null;
 
             var record = await _grants.GetAsync(held).ConfigureAwait(false);
             // Matching the user also rules out a client grant, which names no user.
@@ -187,11 +193,40 @@ namespace Functions.DomainService.Services
                 || !string.Equals(record.UserId, caller.UserId, StringComparison.Ordinal)
                 || !string.Equals(record.OrganizationId ?? string.Empty, caller.OrganizationId ?? string.Empty, StringComparison.Ordinal))
             {
-                return (null, null);
+                return null;
             }
 
-            return (NonBlank(record.TokenVersion), NonBlank(record.SecurityStamp));
+            return record;
         }
+
+        /// <summary>
+        /// A function step in an impersonated workflow keeps that impersonation. A worker's context comes
+        /// from the message, which never carries <c>ImpersonationSessionId</c>; without this the run's grant
+        /// named the impersonating user with no session, and IAM looked that user up in the target tenant
+        /// and refused it. Session and root tenant come from the held grant in Redis, never the message;
+        /// IAM still checks the session is active on every redemption.
+        /// </summary>
+        private static BlocksContext WithImpersonationFrom(BlocksContext caller, DelegationGrantRecord held)
+            => BlocksContext.Create(
+                tenantId: caller.TenantId,
+                roles: caller.Roles,
+                userId: caller.UserId,
+                isAuthenticated: caller.IsAuthenticated,
+                requestUri: caller.RequestUri,
+                organizationId: caller.OrganizationId,
+                expireOn: caller.ExpireOn,
+                email: caller.Email,
+                permissions: caller.Permissions,
+                userName: caller.UserName,
+                phoneNumber: caller.PhoneNumber,
+                displayName: caller.DisplayName,
+                oauthToken: caller.OAuthToken,
+                originalTenantId: held.OriginalTenantId,
+                applicationDomain: caller.ApplicationDomain,
+                impersonated: true,
+                impersonationSessionId: held.ImpersonationSessionId,
+                clientId: caller.ClientId,
+                sessionId: caller.SessionId);
 
         private static string? NonBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
     }

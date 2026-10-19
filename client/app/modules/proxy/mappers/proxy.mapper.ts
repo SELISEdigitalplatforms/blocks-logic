@@ -36,6 +36,9 @@ import {
   ProxyVersionHistory,
   ProxyResilience,
   ProxyResilienceDto,
+  ProxyImportResult,
+  ProxyImportResultDto,
+  ProxyImportStatus,
 } from "../types";
 
 const VALID_METHODS: ProxyMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
@@ -409,6 +412,9 @@ const toRouteInputs = (routes: ProxyRoute[] | undefined): ProxyRouteDto[] =>
     resilience: toResilienceInput(route.resilience ?? null),
   }));
 
+const toStrings = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
+
 export const mapProxyListItemDtoToProxy = (dto: ProxyListItemDto): Proxy => ({
   id: dto.itemId,
   name: dto.name,
@@ -433,6 +439,7 @@ export const mapProxyListItemDtoToProxy = (dto: ProxyListItemDto): Proxy => ({
   calls24h: Number(dto.calls24h ?? 0),
   createdAt: dto.createdDate,
   updatedAt: dto.lastUpdatedDate,
+  hasUnboundSecrets: dto.hasUnboundSecrets === true,
 });
 
 /** `GET /api/Proxies/{proxyId}` — the full configuration for the form / detail view. */
@@ -459,6 +466,39 @@ export const mapProxyDetailDtoToProxy = (dto: ProxyDetailDto): Proxy => ({
   calls24h: 0,
   createdAt: dto.createdDate,
   updatedAt: dto.lastUpdatedDate,
+  missingSecrets: toStrings(dto.missingSecrets),
+  duplicateSecrets: toStrings(dto.duplicateSecrets),
+});
+
+const IMPORT_STATUSES: ProxyImportStatus[] = ["new", "same", "changed", "blocked"];
+
+/** `POST /api/Proxies/import/preview` and `/apply`. An unknown status reads as blocked, never as safe. */
+export const mapImportResultDtoToResult = (dto: ProxyImportResultDto): ProxyImportResult => ({
+  status: IMPORT_STATUSES.includes(dto.status as ProxyImportStatus)
+    ? (dto.status as ProxyImportStatus)
+    : "blocked",
+  reason: dto.reason ?? null,
+  reasonCode: dto.reasonCode ?? null,
+  itemId: dto.itemId ?? "",
+  slug: dto.slug ?? "",
+  name: dto.name ?? "",
+  currentVersion: typeof dto.currentVersion === "number" ? dto.currentVersion : null,
+  historyExists: dto.historyExists === true,
+  changes: Array.isArray(dto.changes)
+    ? dto.changes.map((c) => ({
+        field: c.field,
+        label: c.label,
+        mine: c.mine ?? null,
+        incoming: c.incoming ?? null,
+      }))
+    : [],
+  missingSecrets: toStrings(dto.missingSecrets),
+  duplicateSecrets: toStrings(dto.duplicateSecrets),
+  secretCheckUnavailable: dto.secretCheckUnavailable === true,
+  maskedValues: toStrings(dto.maskedValues),
+  mineJson: dto.mineJson ?? null,
+  incomingJson: dto.incomingJson ?? null,
+  applied: dto.applied === true,
 });
 
 const toFieldChanges = (
