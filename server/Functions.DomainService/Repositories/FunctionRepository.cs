@@ -177,6 +177,37 @@ namespace Functions.DomainService.Repositories
             return ApplyAsync(tenantId, functionId, update, actorId, cancellationToken);
         }
 
+        public async Task<bool> UpdateImportedAsync(
+            string tenantId, string functionId, DateTime expectedLastUpdatedDate,
+            string name, string? description, FunctionSource source, string sourceHash,
+            FunctionLimits limits, RetryPolicy retry, TriggerConfig trigger,
+            List<OutputAction> outputActions, List<VariableBinding> variables, string? actorId,
+            CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(functionId)) return false;
+
+            // Conditional on the preview's LastUpdatedDate: an edit, deploy or second import in between moves it, and
+            // this then matches nothing instead of overwriting work the importer never saw.
+            var expected = Live(functionId) & Builders<FunctionEntity>.Filter.Eq(f => f.LastUpdatedDate, expectedLastUpdatedDate);
+            var filter = await EditAsync(tenantId, expected, "UpdateImported");
+            if (filter is null) return false;
+
+            var update = Builders<FunctionEntity>.Update
+                .Set(f => f.Name, name)
+                .Set(f => f.Description, description)
+                .Set(f => f.Source, source)
+                .Set(f => f.SourceHash, sourceHash)
+                .Set(f => f.Limits, limits)
+                .Set(f => f.Retry, retry)
+                .Set(f => f.Trigger, trigger)
+                .Set(f => f.OutputActions, outputActions)
+                .Set(f => f.Variables, variables)
+                .Set(f => f.LastUpdatedDate, DateTime.UtcNow)
+                .Set(f => f.LastUpdatedBy, actorId ?? string.Empty);
+            var result = await Collection(tenantId).UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
+            return result.MatchedCount > 0;
+        }
+
         public Task SetActiveVersionAsync(
             string tenantId, string functionId, string versionId, int versionNumber, DateTime deployedAt,
             string? actorId, CancellationToken cancellationToken = default)

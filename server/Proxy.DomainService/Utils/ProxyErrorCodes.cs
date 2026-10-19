@@ -32,5 +32,11 @@ namespace Proxy.DomainService.Utils
 
         /// <summary>400 &mdash; the target version has nothing to revert (Create / Delete / empty change set).</summary>
         public const string VersionNotRevertable = "PROXY_VERSION_NOT_REVERTABLE";
+
+        /// <summary>
+        /// 409 &mdash; an import file cannot be applied here: its slug belongs to another proxy, or the proxy with its id
+        /// has another slug. Nothing was written.
+        /// </summary>
+        public const string ImportBlocked = "PROXY_IMPORT_BLOCKED";
     }
 }

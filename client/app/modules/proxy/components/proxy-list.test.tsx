@@ -143,4 +143,27 @@ describe("ProxyList", () => {
       }),
     );
   });
+
+  it("offers Import in the empty state and hints at unlinked secrets on a row", async () => {
+    const user = userEvent.setup();
+    const onImport = vi.fn();
+    const { rerender } = renderWithProviders(
+      <MemoryRouter>
+        <ProxyList proxies={[]} isLoading={false} onImport={onImport} />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Import" }));
+    expect(onImport).toHaveBeenCalled();
+
+    rerender(
+      <MemoryRouter>
+        <ProxyList
+          proxies={[{ ...PROXY_MOCK_DATA[0], hasUnboundSecrets: true }, PROXY_MOCK_DATA[1]]}
+          isLoading={false}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getAllByText("Check secrets")).toHaveLength(1);
+  });
 });

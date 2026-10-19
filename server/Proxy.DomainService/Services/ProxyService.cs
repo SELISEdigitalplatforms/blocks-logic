@@ -73,6 +73,7 @@ namespace Proxy.DomainService.Services
                 Calls24h = ProxyStatsWindow.Rollup(p.Stats, asOf).Calls,
                 CreatedDate = p.CreatedDate,
                 LastUpdatedDate = p.LastUpdatedDate,
+                HasUnboundSecrets = ProxySecretIdBinder.UnboundNames(p).Count > 0,
             }).ToList();
 
             _logger.LogInformation(
@@ -119,6 +120,8 @@ namespace Proxy.DomainService.Services
                 LastUpdatedDate = proxy.LastUpdatedDate,
                 LastUpdatedBy = proxy.LastUpdatedBy,
             };
+
+            (dto.MissingSecrets, dto.DuplicateSecrets) = await NeedsSecretAsync(tenantId, proxy);
 
             _logger.LogInformation("Fetched proxy {ItemId} (slug {Slug}) for tenant {TenantId}.", proxy.ItemId, proxy.Slug, tenantId);
             return new ProxyGetResponseDto { Data = dto, Errors = null };
@@ -473,6 +476,29 @@ namespace Proxy.DomainService.Services
                 "Deleted proxy {ItemId} for tenant {TenantId}; wrote final version {Version}.",
                 proxy.ItemId, tenantId, version.VersionNumber);
             return ProxyMutationResponse.Success(proxy.ItemId, 200);
+        }
+
+        /// <summary>
+        /// Names with no saved id that do not resolve to exactly one secret here (2026-10-18). Bound names are not
+        /// looked up: a call reads them by id. Only unbound ones cost a lookup, so a normal proxy costs nothing. A
+        /// secret store failure answers "nothing known" rather than failing the read.
+        /// </summary>
+        private async Task<(List<string> Missing, List<string> Duplicates)> NeedsSecretAsync(
+            string tenantId, ProxyDetailEntity proxy)
+        {
+            var unbound = ProxySecretIdBinder.UnboundNames(proxy);
+            if (unbound.Count == 0 || _variableResolver is null)
+            {
+                return (new List<string>(), new List<string>());
+            }
+
+            var check = await ProxySecretIdBinder.CheckForImportAsync(_variableResolver, tenantId, unbound, null, _logger);
+            if (check.Unavailable)
+            {
+                return (new List<string>(), new List<string>());
+            }
+
+            return (unbound.Where(n => check.Missing.Contains(n) || check.Duplicates.Contains(n)).ToList(), check.Duplicates);
         }
 
         private static bool IsStale(int? expectedVersion, ProxyDetailEntity proxy) =>

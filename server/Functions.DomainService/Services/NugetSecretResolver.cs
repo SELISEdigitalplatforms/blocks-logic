@@ -53,27 +53,7 @@ namespace Functions.DomainService.Services
                     return new Dictionary<string, string>();
                 }
 
-                var applicationDomain = tenant.Applications?.FirstOrDefault()?.Domain ?? string.Empty;
-                var systemContext = BlocksContext.Create(
-                    tenantId: tenant.TenantId,
-                    roles: [],
-                    userId: string.Empty,
-                    isAuthenticated: false,
-                    requestUri: string.Empty,
-                    organizationId: string.Empty,
-                    expireOn: DateTime.MinValue,
-                    email: string.Empty,
-                    permissions: [],
-                    userName: string.Empty,
-                    phoneNumber: string.Empty,
-                    displayName: string.Empty,
-                    oauthToken: string.Empty,
-                    originalTenantId: tenant.TenantId,
-                    applicationDomain: applicationDomain,
-                    impersonated: false,
-                    impersonationSessionId: string.Empty);
-
-                BlocksContext.SetContext(systemContext, changeContext: false);
+                EnterSystemContext(tenant);
 
                 using var scope = _scopeFactory.CreateScope();
                 var secretService = scope.ServiceProvider.GetRequiredService<ISecretService>();
@@ -108,6 +88,50 @@ namespace Functions.DomainService.Services
                     secretIds.Count, tenantId, ex.GetType().Name, string.Join(", ", secretIds));
                 return new Dictionary<string, string>();
             }
+        }
+
+        /// <summary>
+        /// Exact-name lookup for an output action's <c>{{secretName.&lt;name&gt;}}</c> (2026-10-18), under the same system
+        /// context as <see cref="ResolveAsync"/>. Metadata only, never cached. Throws when the store cannot be asked, so
+        /// the processor fails that action as "could not prepare" rather than as "no such secret".
+        /// </summary>
+        public async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> FindIdsByNameAsync(
+            IReadOnlyCollection<string> names, string tenantId, CancellationToken cancellationToken = default)
+        {
+            if (names.Count == 0) return new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+
+            var tenant = _tenants.GetTenantByID(tenantId)
+                ?? throw new InvalidOperationException($"unknown tenant {tenantId}");
+            EnterSystemContext(tenant);
+
+            using var scope = _scopeFactory.CreateScope();
+            var secretService = scope.ServiceProvider.GetRequiredService<ISecretService>();
+            return await Utils.FunctionSecretNameLookup.FindExactIdsAsync(secretService, names, cancellationToken);
+        }
+
+        private static void EnterSystemContext(Tenant tenant)
+        {
+            var applicationDomain = tenant.Applications?.FirstOrDefault()?.Domain ?? string.Empty;
+            var systemContext = BlocksContext.Create(
+                tenantId: tenant.TenantId,
+                roles: [],
+                userId: string.Empty,
+                isAuthenticated: false,
+                requestUri: string.Empty,
+                organizationId: string.Empty,
+                expireOn: DateTime.MinValue,
+                email: string.Empty,
+                permissions: [],
+                userName: string.Empty,
+                phoneNumber: string.Empty,
+                displayName: string.Empty,
+                oauthToken: string.Empty,
+                originalTenantId: tenant.TenantId,
+                applicationDomain: applicationDomain,
+                impersonated: false,
+                impersonationSessionId: string.Empty);
+
+            BlocksContext.SetContext(systemContext, changeContext: false);
         }
     }
 }

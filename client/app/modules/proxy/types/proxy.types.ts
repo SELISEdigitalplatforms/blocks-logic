@@ -167,6 +167,16 @@ export type Proxy = {
   calls24h: number;
   createdAt?: string;
   updatedAt?: string;
+  /**
+   * "Needs secret" (detail read only, computed by the server on every read): secret names this proxy
+   * uses that are not linked and match no single secret here. Typical after an import into an
+   * environment that does not have the secret yet. Adding the secret is the only fix needed.
+   */
+  missingSecrets?: string[];
+  /** The names in {@link missingSecrets} that match more than one secret. */
+  duplicateSecrets?: string[];
+  /** List row hint: a secret name has no linked secret yet. The detail read says which. */
+  hasUnboundSecrets?: boolean;
 };
 
 /**
@@ -379,6 +389,7 @@ export type ProxyListItemDto = {
   calls24h: number;
   createdDate: string;
   lastUpdatedDate: string;
+  hasUnboundSecrets?: boolean;
 };
 
 export type ProxyDetailDto = {
@@ -405,6 +416,8 @@ export type ProxyDetailDto = {
   createdBy?: string | null;
   lastUpdatedDate: string;
   lastUpdatedBy?: string | null;
+  missingSecrets?: string[] | null;
+  duplicateSecrets?: string[] | null;
 };
 
 export type ProxyVersionDto = {
@@ -638,3 +651,91 @@ export type ProxyOpenApiPreview = {
   /** Did not stop the import: a verb the gateway cannot forward, a missing server. */
   warnings: string[];
 };
+
+/**
+ * A proxy export file (`blocks.proxy.export`). Treated as opaque by the console: it is read from
+ * disk and sent back unchanged, because the server checks its content hash.
+ */
+export type ProxyExportFile = {
+  format?: string;
+  schemaVersion?: number;
+  exportedAt?: string;
+  proxy?: Record<string, unknown> & { itemId?: string; slug?: string; name?: string };
+  secretNames?: string[];
+  maskedValues?: string[];
+  contentHash?: string;
+};
+
+/** What importing a file would do here: `new`, `same`, `changed` or `blocked`. */
+export type ProxyImportStatus = "new" | "same" | "changed" | "blocked";
+
+/** One field that differs: this environment ("mine") vs the file ("incoming"). Credentials come as `***`. */
+export type ProxyImportFieldChange = {
+  field: string;
+  label: string;
+  mine: string | null;
+  incoming: string | null;
+};
+
+export type ProxyImportResultDto = {
+  status: string;
+  reason?: string | null;
+  reasonCode?: string | null;
+  itemId: string;
+  slug: string;
+  name: string;
+  currentVersion?: number | null;
+  historyExists?: boolean;
+  changes?: ProxyImportFieldChange[] | null;
+  missingSecrets?: string[] | null;
+  duplicateSecrets?: string[] | null;
+  secretCheckUnavailable?: boolean;
+  maskedValues?: string[] | null;
+  mineJson?: string | null;
+  incomingJson?: string | null;
+  applied?: boolean;
+};
+
+export type ProxyImportResult = {
+  status: ProxyImportStatus;
+  reason: string | null;
+  reasonCode: string | null;
+  itemId: string;
+  slug: string;
+  name: string;
+  currentVersion: number | null;
+  historyExists: boolean;
+  changes: ProxyImportFieldChange[];
+  missingSecrets: string[];
+  duplicateSecrets: string[];
+  secretCheckUnavailable: boolean;
+  maskedValues: string[];
+  mineJson: string | null;
+  incomingJson: string | null;
+  applied: boolean;
+};
+
+/** `takeIncoming` — the file wins; `keepMine` — nothing changes; `merge` — field by field. */
+export type ProxyImportResolution = "takeIncoming" | "keepMine" | "merge";
+
+export type ProxyImportApplyRequest = {
+  file: ProxyExportFile;
+  resolution?: ProxyImportResolution;
+  fieldChoices?: Record<string, "mine" | "incoming">;
+  expectedVersion?: number | null;
+};
+
+/**
+ * A preview or apply answer. `ok: false` carries the server's code and plain-words message; a
+ * blocked import (409) still carries its `result`, so the dialog can say why.
+ */
+export type ProxyImportOutcome =
+  | { ok: true; result: ProxyImportResult }
+  | {
+      ok: false;
+      status: number;
+      code: string | null;
+      message: string;
+      errors: string[];
+      result: ProxyImportResult | null;
+    };

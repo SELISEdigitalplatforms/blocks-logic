@@ -15,6 +15,7 @@ import {
   mapProxyToUpdatePayload,
   mapProxyTestRequestToPayload,
   mapProxyVersionDtoToHistory,
+  mapImportResultDtoToResult,
 } from "../mappers";
 import {
   BaseMutationResponseDto,
@@ -42,6 +43,10 @@ import {
   ProxyTestResponseDto,
   ProxyVersionDto,
   ProxyVersionHistory,
+  ProxyExportFile,
+  ProxyImportApplyRequest,
+  ProxyImportOutcome,
+  ProxyImportResultDto,
 } from "../types";
 
 /** Turn a thrown {@link HttpError} into the `{ isSuccess: false, ... }` shape callers already branch on. */
@@ -93,6 +98,44 @@ const toPreviewFailure = (error: unknown): { errors: string[]; warnings: string[
   }
 
   return { errors: ["The specification could not be read."], warnings: [] };
+};
+
+/**
+ * A refused preview / apply as the import dialog shows it. A blocked import (409) still carries the
+ * analysis in `data`, so the dialog can say why; a version race carries none and asks for a re-preview.
+ */
+const toImportFailure = (error: unknown): ProxyImportOutcome => {
+  if (error instanceof HttpError) {
+    const body = (error.errors ?? {}) as Record<string, unknown>;
+    const fieldErrors =
+      body.errors && typeof body.errors === "object"
+        ? Object.values(body.errors as Record<string, unknown>).filter(
+            (entry): entry is string => typeof entry === "string",
+          )
+        : [];
+    const data =
+      body.data && typeof body.data === "object" ? (body.data as ProxyImportResultDto) : null;
+    return {
+      ok: false,
+      status: error.status,
+      code: typeof body.code === "string" ? body.code : null,
+      message:
+        typeof body.message === "string"
+          ? body.message
+          : (fieldErrors[0] ?? "The file could not be imported."),
+      errors: fieldErrors,
+      result: data ? mapImportResultDtoToResult(data) : null,
+    };
+  }
+
+  return {
+    ok: false,
+    status: 0,
+    code: null,
+    message: "The file could not be imported.",
+    errors: [],
+    result: null,
+  };
 };
 
 const flattenErrors = (error: unknown): string => {
@@ -299,6 +342,48 @@ export class ProxyService {
       return mapOpenApiPreviewDtoToPreview(response);
     } catch (error) {
       return { baseUrl: "", operations: [], ...toPreviewFailure(error) };
+    }
+  };
+
+  /**
+   * One proxy as a file. Secrets are names only and literal credentials come back as `***`, so the
+   * file is safe to hand to another environment. Returned as the parsed file for the caller to save.
+   */
+  exportProxy = async (proxyId: string): Promise<ProxyExportFile> =>
+    this.logicHttpClient.get<ProxyExportFile>(PROXY_ENDPOINTS.export(proxyId));
+
+  /** What importing `file` would do here. Writes nothing. */
+  previewImport = async (file: ProxyExportFile): Promise<ProxyImportOutcome> => {
+    try {
+      const response = await this.logicHttpClient.post<{ data?: ProxyImportResultDto | null }>(
+        PROXY_ENDPOINTS.IMPORT_PREVIEW,
+        file,
+      );
+      return response.data
+        ? { ok: true, result: mapImportResultDtoToResult(response.data) }
+        : toImportFailure(null);
+    } catch (error) {
+      return toImportFailure(error);
+    }
+  };
+
+  /** Imports `file`. The server runs every preview check again; the preview is never trusted. */
+  applyImport = async (request: ProxyImportApplyRequest): Promise<ProxyImportOutcome> => {
+    try {
+      const response = await this.logicHttpClient.post<{ data?: ProxyImportResultDto | null }>(
+        PROXY_ENDPOINTS.IMPORT_APPLY,
+        {
+          file: request.file,
+          resolution: request.resolution ?? null,
+          fieldChoices: request.fieldChoices ?? null,
+          expectedVersion: request.expectedVersion ?? null,
+        },
+      );
+      return response.data
+        ? { ok: true, result: mapImportResultDtoToResult(response.data) }
+        : toImportFailure(null);
+    } catch (error) {
+      return toImportFailure(error);
     }
   };
 

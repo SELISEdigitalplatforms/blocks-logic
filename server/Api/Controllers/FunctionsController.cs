@@ -50,6 +50,7 @@ namespace BlocksTemplate.Api.Controllers
         private readonly IEndpointAccessAuthorizer _accessAuthorizer;
         private readonly IFunctionPollTokenService _pollTokens;
         private readonly ILogger<FunctionsController> _logger;
+        private readonly IFunctionTransferService? _transferService;
 
         /// <summary>
         /// The management services, plus the shared access authorizer that resolves the tenant on
@@ -65,8 +66,10 @@ namespace BlocksTemplate.Api.Controllers
             IFunctionAuditService auditService,
             IEndpointAccessAuthorizer accessAuthorizer,
             IFunctionPollTokenService pollTokens,
-            ILogger<FunctionsController> logger)
+            ILogger<FunctionsController> logger,
+            IFunctionTransferService? transferService = null)
         {
+            _transferService = transferService;
             _functionService = functionService;
             _deploymentService = deploymentService;
             _invocationService = invocationService;
@@ -122,6 +125,56 @@ namespace BlocksTemplate.Api.Controllers
         [HttpGet]
         [ProtectedEndPoint("blocks-logic::function::read")]
         public async Task<FunctionLimitsOptionsDto> GetLimits() => await _functionService.GetLimitsOptionsAsync();
+
+        // -------------------------------------------------------- export / import ----
+        // One function per file, the same id in every environment (2026-10-18). Both directions need manage: an export
+        // carries the whole source, and an import writes it. The file holds secret names, never ids or values.
+
+        /// <summary>
+        /// Downloads one function as a <c>blocks.function.export</c> file: source, settings, output actions and
+        /// variables, with every secret reference written as the secret's name. Nothing environment-specific (runs,
+        /// builds, versions, status, counters, authors, access lists) is in it.
+        /// </summary>
+        [HttpGet]
+        [ProtectedEndPoint("blocks-logic::function::manage")]
+        public async Task<IActionResult> Export([FromQuery] string functionId)
+        {
+            var file = await Transfer().ExportAsync(GetTenantId(), functionId, GetUserId(), GetEmail());
+            Response.Headers.ContentDisposition = $"attachment; filename=\"{FunctionTransferCodec.FileName(file)}\"";
+            return Content(FunctionTransferCodec.Serialize(file), "application/json");
+        }
+
+        /// <summary>
+        /// Checks an export file against this environment and says what an import would do — <c>new</c>, <c>same</c>,
+        /// <c>changed</c> (with field and file diffs) or <c>blocked</c> — plus missing / duplicate secret names. Writes nothing.
+        /// </summary>
+        [HttpPost]
+        [ProtectedEndPoint("blocks-logic::function::manage")]
+        [RequestSizeLimit(ImportHardBodyLimitBytes)]
+        public async Task<Functions.DomainService.Dtos.FunctionImportPreviewDto> ImportPreview(
+            [FromBody] Functions.DomainService.Dtos.FunctionImportPreviewRequestDto request)
+            => await Transfer().PreviewAsync(GetTenantId(), request);
+
+        /// <summary>
+        /// Imports an export file: inserts it with the file's id, updates an existing function by the chosen
+        /// resolution (409 when it changed after the preview), or does nothing when it already matches — then builds
+        /// and deploys it. Install scripts always arrive off.
+        /// </summary>
+        [HttpPost]
+        [ProtectedEndPoint("blocks-logic::function::manage")]
+        [RequestSizeLimit(ImportHardBodyLimitBytes)]
+        public async Task<Functions.DomainService.Dtos.FunctionImportResultDto> Import(
+            [FromBody] Functions.DomainService.Dtos.FunctionImportApplyRequestDto request)
+            => await Transfer().ApplyAsync(GetTenantId(), request, GetUserId(), GetEmail());
+
+        /// <summary>
+        /// Kestrel's cap for an import request: a little above the service's own 3 MB file ceiling, so the service —
+        /// with its own message — is what refuses an oversized file, and a runaway upload still stops here.
+        /// </summary>
+        private const long ImportHardBodyLimitBytes = FunctionTransferCodec.MaxImportBytes + 256 * 1024;
+
+        private IFunctionTransferService Transfer() =>
+            _transferService ?? throw new InvalidOperationException("function export/import is not registered");
 
         // -------------------------------------------------------- test / deploy ----
 

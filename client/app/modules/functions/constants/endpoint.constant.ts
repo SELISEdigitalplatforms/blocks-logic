@@ -28,6 +28,9 @@ export const FUNCTIONS_ENDPOINTS = {
   REPLAY_RUN: `${API_BASES.WORKFLOW}${FUNCTIONS_SUBPATH}/ReplayRun`,
   CANCEL_RUN: `${API_BASES.WORKFLOW}${FUNCTIONS_SUBPATH}/CancelRun`,
   GET_AUDIT_LOG: `${API_BASES.WORKFLOW}${FUNCTIONS_SUBPATH}/GetAuditLog`,
+  EXPORT: `${API_BASES.WORKFLOW}${FUNCTIONS_SUBPATH}/Export`,
+  IMPORT_PREVIEW: `${API_BASES.WORKFLOW}${FUNCTIONS_SUBPATH}/ImportPreview`,
+  IMPORT: `${API_BASES.WORKFLOW}${FUNCTIONS_SUBPATH}/Import`,
 } as const;
 
 /** The trigger's method as the wire verb the badges and the snippet show. */

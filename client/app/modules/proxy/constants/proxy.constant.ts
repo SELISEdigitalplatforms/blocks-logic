@@ -40,7 +40,19 @@ export const PROXY_ENDPOINTS = {
   OPENAPI_PREVIEW: `${PROXY_BASE}/openapi/preview`,
   /** `GET` — the Overview tiles. */
   overview: (proxyId: string) => `${PROXY_BASE}/${id(proxyId)}/overview`,
+  /** `GET` — one proxy as a file that imports into another environment as the same proxy. */
+  export: (proxyId: string) => `${PROXY_BASE}/${id(proxyId)}/export`,
+  /** `POST` — what importing a proxy file would do here. Writes nothing. */
+  IMPORT_PREVIEW: `${PROXY_BASE}/import/preview`,
+  /** `POST` — import a proxy file (insert, or resolve the difference). */
+  IMPORT_APPLY: `${PROXY_BASE}/import/apply`,
 } as const;
+
+/**
+ * Largest proxy file the import dialog reads. The server's own cap is on the config inside (256 KB);
+ * this only stops the browser from reading something that is clearly not a proxy file.
+ */
+export const PROXY_IMPORT_MAX_FILE_BYTES = 1024 * 1024;
 
 export const PROXY_METHODS: ProxyMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 

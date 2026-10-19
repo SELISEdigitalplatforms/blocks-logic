@@ -26,5 +26,17 @@ namespace Functions.DomainService.Services
         /// </summary>
         Task<IReadOnlyDictionary<string, string>> ResolveAsync(
             IReadOnlyCollection<string> secretIds, string tenantId, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Every secret id whose name is <b>exactly</b> (case-sensitive) each of <paramref name="names"/> — for an
+        /// output action that still carries an imported <c>{{secretName.&lt;name&gt;}}</c> (2026-10-18). Metadata only:
+        /// no value is read here, and nothing is cached. A name with no match maps to an empty list. Throws when the
+        /// store cannot be asked. The default knows no names, so such an action fails clearly instead of sending the
+        /// reference text.
+        /// </summary>
+        Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> FindIdsByNameAsync(
+            IReadOnlyCollection<string> names, string tenantId, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyDictionary<string, IReadOnlyList<string>>>(
+                names.Distinct(StringComparer.Ordinal).ToDictionary(n => n, _ => (IReadOnlyList<string>)[], StringComparer.Ordinal));
     }
 }

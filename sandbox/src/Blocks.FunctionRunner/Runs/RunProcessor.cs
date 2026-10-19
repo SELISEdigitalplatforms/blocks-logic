@@ -964,7 +964,7 @@ namespace Blocks.FunctionRunner.Runs
             return [.. output.Logs, line];
         }
 
-        private readonly record struct Prepared(
+        internal readonly record struct Prepared(
             string? Envelope, (string Code, string Message)? Failure, IReadOnlyList<string> Values);
 
         /// <summary>The bootstrap's marker and threshold (runtime/protocol.mjs), mirrored.</summary>
@@ -987,7 +987,8 @@ namespace Blocks.FunctionRunner.Runs
         }
 
         /// <summary>
-        /// Resolves every <c>{{secret.&lt;id&gt;}}</c> in the envelope's <c>env</c> in one lookup
+        /// Resolves every <c>{{secret.&lt;id&gt;}}</c> (and imported <c>{{secretName.&lt;name&gt;}}</c>, bound by exact
+        /// name first) in the envelope's <c>env</c> in one value lookup
         /// and returns the envelope with the values substituted — or the failure to report
         /// instead, in which case the sandbox is never started.
         /// <para>
@@ -998,7 +999,7 @@ namespace Blocks.FunctionRunner.Runs
         /// retries. Neither message, nor anything logged here, carries a value.
         /// </para>
         /// </summary>
-        private async Task<Prepared> ResolveSecretsAsync(RunJob job, string envelope, CancellationToken token)
+        internal async Task<Prepared> ResolveSecretsAsync(RunJob job, string envelope, CancellationToken token)
         {
             var plan = EnvSecretReferences.Collect(envelope);
             if (plan.IsEmpty) return new Prepared(envelope, null, []);
@@ -1016,10 +1017,42 @@ namespace Blocks.FunctionRunner.Runs
                     "the run's secret references could not be resolved: the run carries no consistent tenant"), []);
             }
 
+            // {{secretName.x}} (an imported reference, 2026-10-18): each name is looked up exactly, now, every run
+            // (never cached), and must match exactly one secret. The bound ids then join the same single value read.
+            var idsByName = new Dictionary<string, string>(StringComparer.Ordinal);
+            var broken = new List<string>();
             SecretLookup lookup;
             try
             {
-                lookup = await _secrets.ResolveAsync(job.TenantId!, plan.Caller, plan.Ids, token).ConfigureAwait(false);
+                if (plan.Names.Count > 0)
+                {
+                    var found = await _secrets.FindIdsByNameAsync(job.TenantId!, plan.Caller, plan.Names, token)
+                        .ConfigureAwait(false);
+                    foreach (var (key, names) in plan.NamesByKey)
+                    {
+                        foreach (var name in names.Distinct(StringComparer.Ordinal))
+                        {
+                            var matches = found.TryGetValue(name, out var list) ? list : [];
+                            if (matches.Count == 1)
+                            {
+                                idsByName[name] = matches[0];
+                                continue;
+                            }
+                            var reason = matches.Count == 0
+                                ? SecretUnresolvedReasons.NoSuchName
+                                : SecretUnresolvedReasons.DuplicateName;
+                            broken.Add($"variable {key} references the secret named '{name}', but {reason}");
+                        }
+                    }
+                }
+
+                // A run refused for a name never reads a single value.
+                lookup = broken.Count > 0
+                    ? new SecretLookup(new Dictionary<string, string>(), new Dictionary<string, string>())
+                    : await _secrets.ResolveAsync(
+                            job.TenantId!, plan.Caller,
+                            plan.Ids.Concat(idsByName.Values).Distinct(StringComparer.Ordinal).ToArray(), token)
+                        .ConfigureAwait(false);
             }
             catch (SecretStoreUnavailableException ex)
             {
@@ -1030,12 +1063,26 @@ namespace Blocks.FunctionRunner.Runs
                     "nothing ran, and the run is retried if its policy allows"), []);
             }
 
-            var broken = new List<string>();
+            // Refused for a name: no value was read, so only the names are reported.
+            var refusedForName = broken.Count > 0;
+            foreach (var (key, names) in plan.NamesByKey)
+            {
+                if (refusedForName) break;
+                foreach (var name in names.Distinct(StringComparer.Ordinal))
+                {
+                    var id = idsByName[name];
+                    if (lookup.Values.ContainsKey(id)) continue;
+                    var reason = lookup.Unresolved.TryGetValue(id, out var r) ? r : SecretUnresolvedReasons.NotFound;
+                    broken.Add($"variable {key} references the secret named '{name}', but {reason}");
+                }
+            }
+
             foreach (var (key, ids) in plan.IdsByKey)
             {
                 foreach (var id in ids.Distinct(StringComparer.Ordinal))
                 {
                     if (lookup.Values.ContainsKey(id)) continue;
+                    if (refusedForName) break;
                     var reason = lookup.Unresolved.TryGetValue(id, out var r) ? r : SecretUnresolvedReasons.NotFound;
                     broken.Add($"variable {key} references secret '{id}', but {reason}");
                 }
@@ -1048,8 +1095,9 @@ namespace Blocks.FunctionRunner.Runs
                 return new Prepared(null, (ErrorCodes.SecretUnresolved, message), []);
             }
 
-            var values = plan.Ids.Select(id => lookup.Values[id]).Distinct(StringComparer.Ordinal).ToArray();
-            return new Prepared(EnvSecretReferences.Apply(envelope, plan, lookup.Values), null, values);
+            var values = plan.Ids.Concat(idsByName.Values).Distinct(StringComparer.Ordinal)
+                .Select(id => lookup.Values[id]).Distinct(StringComparer.Ordinal).ToArray();
+            return new Prepared(EnvSecretReferences.Apply(envelope, plan, lookup.Values, idsByName), null, values);
         }
 
         /// <summary>

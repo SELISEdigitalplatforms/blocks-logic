@@ -93,11 +93,37 @@
             </para>
             </summary>
         </member>
-        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.#ctor(Functions.DomainService.Services.IFunctionService,Functions.DomainService.Services.IFunctionDeploymentService,Functions.DomainService.Services.IFunctionInvocationService,Functions.DomainService.Services.IFunctionRunService,Functions.DomainService.Services.IFunctionBuildService,Functions.DomainService.Services.IFunctionAuditService,Common.InternalService.Access.IEndpointAccessAuthorizer,Functions.DomainService.Services.IFunctionPollTokenService,Microsoft.Extensions.Logging.ILogger{BlocksTemplate.Api.Controllers.FunctionsController})">
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.#ctor(Functions.DomainService.Services.IFunctionService,Functions.DomainService.Services.IFunctionDeploymentService,Functions.DomainService.Services.IFunctionInvocationService,Functions.DomainService.Services.IFunctionRunService,Functions.DomainService.Services.IFunctionBuildService,Functions.DomainService.Services.IFunctionAuditService,Common.InternalService.Access.IEndpointAccessAuthorizer,Functions.DomainService.Services.IFunctionPollTokenService,Microsoft.Extensions.Logging.ILogger{BlocksTemplate.Api.Controllers.FunctionsController},Functions.DomainService.Services.IFunctionTransferService)">
             <summary>
             The management services, plus the shared access authorizer that resolves the tenant on
             the anonymous <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.Invoke(System.String,System.String)"/> route — the same one the proxy gateway uses — and the
             poll-token service behind the anonymous <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.PollRunResult(System.String)"/>.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.Export(System.String)">
+            <summary>
+            Downloads one function as a <c>blocks.function.export</c> file: source, settings, output actions and
+            variables, with every secret reference written as the secret's name. Nothing environment-specific (runs,
+            builds, versions, status, counters, authors, access lists) is in it.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.ImportPreview(Functions.DomainService.Dtos.FunctionImportPreviewRequestDto)">
+            <summary>
+            Checks an export file against this environment and says what an import would do — <c>new</c>, <c>same</c>,
+            <c>changed</c> (with field and file diffs) or <c>blocked</c> — plus missing / duplicate secret names. Writes nothing.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.Import(Functions.DomainService.Dtos.FunctionImportApplyRequestDto)">
+            <summary>
+            Imports an export file: inserts it with the file's id, updates an existing function by the chosen
+            resolution (409 when it changed after the preview), or does nothing when it already matches — then builds
+            and deploys it. Install scripts always arrive off.
+            </summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Controllers.FunctionsController.ImportHardBodyLimitBytes">
+            <summary>
+            Kestrel's cap for an import request: a little above the service's own 3 MB file ceiling, so the service —
+            with its own message — is what refuses an oversized file, and a runaway upload still stops here.
             </summary>
         </member>
         <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.MapInvokeRefusalsAsync(System.Func{System.Threading.Tasks.Task{Functions.DomainService.Dtos.Responses.InvokeResultDto}})">
@@ -771,6 +797,13 @@
             authorizer that enforces each proxy's "Who can call it" policy on the gateway route.
             </summary>
         </member>
+        <member name="F:Utilities.Api.Controllers.ProxiesController.ImportHardBodyLimitBytes">
+            <summary>
+            Kestrel backstop on an import body. The real cap is on the proxy config inside it (256 KB canonical,
+            <see cref="F:Proxy.DomainService.Utils.ProxyTransferCodec.MaxConfigBytes"/>, answered with the Blocks error body); this one only stops a
+            client streaming far past it. Room is left for an indented file plus the merge choices.
+            </summary>
+        </member>
         <member name="M:Utilities.Api.Controllers.ProxiesController.List(Proxy.DomainService.Dtos.ProxyGetAllRequestDto)">
             <summary>
             <c>GET /api/Proxies</c> — the console list page: the tenant's proxies newest-created first,
@@ -848,6 +881,28 @@
             fetched through the same guard as any upstream, because otherwise this endpoint is a request
             this server makes to wherever a caller points it.
             </para>
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.Export(System.String)">
+            <summary>
+            <c>GET /api/Proxies/{proxyId}/export</c> — one proxy as a JSON file (<c>proxy-{slug}.json</c>) that imports
+            into another environment as the same proxy: same id, same slug, same config. Secrets travel by name only;
+            a literal credential is written as <c>***</c>. No tenant, audit, version, stats or secret id goes in.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.PreviewImport(Proxy.DomainService.Dtos.ProxyExportFile)">
+            <summary>
+            <c>POST /api/Proxies/import/preview</c> — what importing an export file would do here: <c>new</c>,
+            <c>same</c>, <c>changed</c> (with the field-level diff) or <c>blocked</c> (with the reason), plus secret
+            names that are missing or ambiguous here. Writes nothing.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.ApplyImport(Proxy.DomainService.Dtos.ProxyImportApplyRequestDto)">
+            <summary>
+            <c>POST /api/Proxies/import/apply</c> — imports the file: inserts a new proxy with the file's id and slug, or
+            resolves a difference (<c>takeIncoming</c> / <c>keepMine</c> / <c>merge</c> per field). Every preview check
+            runs again here. 409 <c>PROXY_IMPORT_BLOCKED</c> when blocked, 409 <c>PROXY_VERSION_CONFLICT</c> when the
+            proxy changed since the preview. Replaying the same file changes nothing.
             </summary>
         </member>
         <member name="M:Utilities.Api.Controllers.ProxiesController.ListExecutions(System.String,Proxy.DomainService.Dtos.ProxyGetExecutionsRequestDto)">

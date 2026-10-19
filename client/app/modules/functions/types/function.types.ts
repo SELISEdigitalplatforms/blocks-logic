@@ -96,6 +96,13 @@ export interface IFunctionSummary {
   lastRunAt?: string | null;
   lastDeployedAt?: string | null;
   lastUpdatedDate: string;
+  /**
+   * The function uses a secret by name (`{{secretName.X}}`, left by an import) that has no single
+   * match here. Computed by the server on every read, so it clears once the secret exists.
+   */
+  hasUnboundSecrets?: boolean;
+  /** The names behind {@link IFunctionSummary.hasUnboundSecrets}. */
+  unboundSecrets?: string[];
 }
 
 export interface IFunctionDetail {
@@ -117,6 +124,14 @@ export interface IFunctionDetail {
   activeVersionId?: string | null;
   activeVersionNumber?: number | null;
   lastVersionNumber: number;
+  /** When the function was last written (an import sends it back to detect a change). */
+  lastUpdatedDate?: string;
+  /** Secret names used here with no secret of that name yet — add one and the next run works. */
+  missingSecrets?: string[];
+  /** Secret names that match more than one secret here. */
+  duplicateSecrets?: string[];
+  /** The secret store could not be checked, so the two lists above are unknown. */
+  secretsUnchecked?: boolean;
 }
 
 /**

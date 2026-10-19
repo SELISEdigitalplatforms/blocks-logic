@@ -75,7 +75,10 @@ namespace Functions.DomainService.Utils
             services.AddSingleton<IFunctionAdmissionService, FunctionAdmissionService>();
             services.AddSingleton<IFunctionAuthorizationService, FunctionAuthorizationService>();
             services.AddSingleton<IFunctionBuildService, FunctionBuildService>();
+            services.AddSingleton<IFunctionSecretCatalog, FunctionSecretCatalog>();
             services.AddSingleton<IFunctionService, FunctionService>();
+            // Export / import, one function per file (2026-10-18). Functions-only.
+            services.AddSingleton<IFunctionTransferService, FunctionTransferService>();
             services.AddSingleton<IFunctionVersionRetentionService, FunctionVersionRetentionService>();
             services.AddSingleton<IFunctionDeploymentService, FunctionDeploymentService>();
             services.AddSingleton<IFunctionRunService, FunctionRunService>();

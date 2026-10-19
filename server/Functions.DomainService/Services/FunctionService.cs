@@ -76,6 +76,7 @@ namespace Functions.DomainService.Services
         private readonly IValidator<SaveFunctionRequestDto> _saveValidator;
         private readonly ILogger<FunctionService> _logger;
         private readonly IConfiguration _configuration;
+        private readonly IFunctionSecretCatalog? _secretCatalog;
 
         public FunctionService(
             IFunctionRepository repository,
@@ -88,9 +89,11 @@ namespace Functions.DomainService.Services
             IValidator<UpdateFunctionRequestDto> updateValidator,
             IValidator<SaveFunctionRequestDto> saveValidator,
             ILogger<FunctionService> logger,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            IFunctionSecretCatalog? secretCatalog = null)
         {
             _configuration = configuration;
+            _secretCatalog = secretCatalog;
             _repository = repository;
             _versionRepository = versionRepository;
             _runRepository = runRepository;
@@ -280,6 +283,10 @@ namespace Functions.DomainService.Services
             var runs24h = await _runRepository.CountSinceByFunctionAsync(
                 tenantId, functionIds, DateTime.UtcNow.AddHours(-24), cancellationToken);
 
+            // "Needs secret" for the list: one exact-name lookup per distinct unbound name on the page, never cached.
+            var unbound = await UnboundNamesAsync(
+                items.SelectMany(f => FunctionSecretRefs.NamesIn(f.Variables, f.OutputActions)).ToList(), cancellationToken);
+
             var summaries = new List<FunctionSummaryDto>(items.Count);
             foreach (var function in items)
             {
@@ -288,8 +295,14 @@ namespace Functions.DomainService.Services
                 // unset default and never showed "unpublished changes" for anything.
                 function.IsDirty = IsDirty(function, activeVersion);
                 runs24h.TryGetValue(function.ItemId, out var recentRuns);
-                summaries.Add(FunctionSummaryDto.From(
-                    function, activeVersion?.Number, recentRuns));
+                var summary = FunctionSummaryDto.From(function, activeVersion?.Number, recentRuns);
+                if (unbound is not null)
+                {
+                    summary.UnboundSecrets = FunctionSecretRefs.NamesIn(function.Variables, function.OutputActions)
+                        .Where(n => unbound.ContainsKey(n)).ToList();
+                    summary.HasUnboundSecrets = summary.UnboundSecrets.Count > 0;
+                }
+                summaries.Add(summary);
             }
 
             return (summaries, totalCount);
@@ -353,7 +366,48 @@ namespace Functions.DomainService.Services
 
             var dto = FunctionDetailDto.From(function);
             dto.ActiveVersionNumber = activeVersion?.Number;
+
+            var names = FunctionSecretRefs.NamesIn(function.Variables, function.OutputActions);
+            if (names.Count > 0)
+            {
+                var unbound = await UnboundNamesAsync(names, cancellationToken);
+                if (unbound is null)
+                {
+                    dto.SecretsUnchecked = true;
+                }
+                else
+                {
+                    dto.MissingSecrets = names.Where(n => unbound.TryGetValue(n, out var c) && c == 0).ToList();
+                    dto.DuplicateSecrets = names.Where(n => unbound.TryGetValue(n, out var c) && c > 1).ToList();
+                }
+            }
             return dto;
+        }
+
+        /// <summary>
+        /// Name → match count for every <c>{{secretName.X}}</c> name that does <b>not</b> match exactly one secret (an
+        /// empty map when all are bound). Null when the catalog is not available or could not be read: the warning is
+        /// then left out rather than shown wrongly, and a read never fails over it. Never cached.
+        /// </summary>
+        private async Task<Dictionary<string, int>?> UnboundNamesAsync(
+            IReadOnlyCollection<string> names, CancellationToken cancellationToken)
+        {
+            var distinct = names.Distinct(StringComparer.Ordinal).ToList();
+            if (distinct.Count == 0) return new Dictionary<string, int>(StringComparer.Ordinal);
+            if (_secretCatalog is null) return null;
+            try
+            {
+                var found = await _secretCatalog.IdsByNameAsync(distinct, cancellationToken);
+                return distinct
+                    .Select(n => (Name: n, Count: found.TryGetValue(n, out var ids) ? ids.Count : 0))
+                    .Where(x => x.Count != 1)
+                    .ToDictionary(x => x.Name, x => x.Count, StringComparer.Ordinal);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning("Could not check secret names for functions ({Type})", ex.GetType().Name);
+                return null;
+            }
         }
 
         private async Task<FunctionVersionEntity?> GetActiveVersionAsync(
