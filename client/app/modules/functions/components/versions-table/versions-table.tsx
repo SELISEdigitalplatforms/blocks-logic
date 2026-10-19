@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { FileCode2 } from "lucide-react";
 import { Skeleton } from "@/components/ui-kits/skeleton/skeleton";
 import { Button } from "@/components/ui-kits/button/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
@@ -8,12 +9,9 @@ import { IFunctionVersionSummary } from "../../types/version.types";
 import { formatAbsoluteTime, formatRelativeTime, formatRunCount } from "../../utils/format";
 import { VersionSourceDialog } from "../version-source-dialog";
 
-/**
- * Version · Deployed · Packages · Runs · action. Runs is a fixed track, not `auto`: the header and
- * each row are separate grid containers, so an `auto` column measured against one row's packages
- * list leaves a different remainder for the `fr` columns than the next row's — the columns drift.
- */
-const GRID = "grid grid-cols-[74px_minmax(0,1fr)_minmax(0,0.8fr)_78px_150px] items-center gap-3";
+// Keep header, loading placeholders, and rows on identical column tracks.
+const GRID =
+  "grid min-w-[720px] grid-cols-[64px_minmax(0,1fr)_minmax(0,1fr)_64px_86px_48px] items-center gap-3";
 
 type VersionsTableProps = {
   functionId: string;
@@ -36,15 +34,16 @@ export const VersionsTable = ({
         Every deploy pins an immutable build. A version cannot be changed after it is made.
       </p>
 
-      <div className="overflow-hidden rounded-lg border" role="table" aria-label="Versions">
+      <div className="overflow-x-auto rounded-lg border" role="table" aria-label="Versions">
         <div
           className={`${GRID} border-b bg-surface-app px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-low-emphasis`}
           role="row"
         >
           <span role="columnheader">Version</span>
           <span role="columnheader">Deployed</span>
-          <span role="columnheader">Packages</span>
+          <span role="columnheader">Note</span>
           <span role="columnheader">Runs</span>
+          <span role="columnheader">Status</span>
           <span role="columnheader" aria-label="Row actions" />
         </div>
 
@@ -57,9 +56,10 @@ export const VersionsTable = ({
                 <Skeleton className="h-3 w-24" />
                 <Skeleton className="h-3 w-32" />
               </div>
-              <Skeleton className="h-3 w-40" />
+              <Skeleton className="h-3 w-full max-w-40" />
               <Skeleton className="h-3 w-8" />
-              <Skeleton className="h-7 w-32 justify-self-end" />
+              <Skeleton className="h-5 w-16" />
+              <Skeleton className="h-8 w-8 justify-self-end" />
             </div>
           ))}
 
@@ -98,37 +98,47 @@ export const VersionsTable = ({
                     </TooltipTrigger>
                     <TooltipContent>{formatAbsoluteTime(version.createdDate)}</TooltipContent>
                   </Tooltip>
-                  <span className="truncate text-xs text-low-emphasis">
+                  <span className="truncate text-xs text-low-emphasis" title={version.createdBy}>
                     {version.createdBy || "—"}
-                    {version.note ? ` · ${version.note}` : ""}
                   </span>
                 </div>
 
-                <span
-                  className="min-w-0 break-words font-mono text-xs text-medium-emphasis"
-                  role="cell"
-                >
-                  {version.packages || "no dependencies"}
+                <span className="min-w-0 break-words text-xs text-medium-emphasis" role="cell">
+                  {version.note || "—"}
                 </span>
 
                 <span className="whitespace-nowrap text-xs text-medium-emphasis" role="cell">
                   {formatRunCount(version.runCount)}
                 </span>
 
-                <div className="flex items-center justify-end gap-2" role="cell">
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    className="px-2 text-xs"
-                    onClick={() => setSourceTarget(version)}
-                  >
-                    View source
-                  </Button>
+                <div role="cell">
                   {isActive ? (
                     <span className="rounded bg-success/15 px-2 py-0.5 text-[10px] font-semibold uppercase text-success">
                       Active
                     </span>
-                  ) : null}
+                  ) : (
+                    <span className="text-xs text-low-emphasis">
+                      {activeVersionNumber == null ? "—" : "Inactive"}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex justify-end" role="cell">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-medium-emphasis"
+                        aria-label={`View source of v${version.number}`}
+                        onClick={() => setSourceTarget(version)}
+                      >
+                        <FileCode2 className="h-4 w-4" aria-hidden="true" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>View source</TooltipContent>
+                  </Tooltip>
                 </div>
               </div>
             );
