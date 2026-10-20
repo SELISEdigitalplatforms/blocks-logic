@@ -177,7 +177,9 @@ describe("ProxyForm", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
-      expect(update).toHaveBeenCalledWith(expect.objectContaining({ id: "p1", expectedVersion: 5 })),
+      expect(update).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "p1", expectedVersion: 5 }),
+      ),
     );
   });
 
@@ -290,7 +292,9 @@ describe("ProxyForm", () => {
       </MemoryRouter>,
     );
 
-    await user.click(screen.getByRole("button", { name: "Turn off: Proxy-wide body fields are on" }));
+    await user.click(
+      screen.getByRole("button", { name: "Turn off: Proxy-wide body fields are on" }),
+    );
     await user.click(screen.getByRole("button", { name: "Turn off: Per-method overrides are on" }));
     expect(screen.queryByTestId("proxy-api-only-settings")).toBeNull();
     await user.click(screen.getByRole("button", { name: "Save" }));
@@ -328,6 +332,50 @@ describe("ProxyForm", () => {
 
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+  });
+
+  it("preserves saved endpoint methods through loading and empty native select events", async () => {
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+    const proxy = (await proxyService.get("p1"))!;
+    const methods = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
+    const routes = methods.map((method, index) => ({
+      ...proxy.routes[0],
+      method,
+      path: `endpoint-${index}`,
+    }));
+    const loadedProxy = { ...proxy, methods: [...methods], routes };
+    const { rerender } = renderWithProviders(
+      <MemoryRouter>
+        <ProxyForm mode="edit" isLoadingProxy onSuccess={onSuccess} />
+      </MemoryRouter>,
+    );
+    rerender(
+      <MemoryRouter>
+        <ProxyForm mode="edit" proxy={loadedProxy} onSuccess={onSuccess} />
+      </MemoryRouter>,
+    );
+
+    for (const [index, method] of methods.entries()) {
+      const trigger = screen.getByRole("combobox", { name: `Method for endpoint ${index + 1}` });
+      expect(trigger.textContent).toBe(method);
+      const nativeSelect = trigger.parentElement!.querySelector("select")!;
+      // Reproduce native synchronization events without depending on browser timing.
+      for (const value of ["", "OPTIONS"]) {
+        const option = new Option(value, value);
+        nativeSelect.add(option);
+        fireEvent.change(nativeSelect, { target: { value } });
+        expect(trigger.textContent).toBe(method);
+        option.remove();
+      }
+    }
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith(proxy.id));
+    expect(screen.queryByText(/Invalid enum value/)).toBeNull();
+    const saved = await proxyService.get(proxy.id);
+    expect(saved?.methods).toEqual([...methods]);
+    expect(saved?.routes).toEqual(routes);
   });
 
   it("will not remove the last endpoint", async () => {
