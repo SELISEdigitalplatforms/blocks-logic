@@ -9,19 +9,20 @@ import { DEFAULT_LIMITS_OPTIONS, HARD_CAPS } from "../../constants/limits.consta
  * can reason about their function; a reader who finds an empty space cannot.
  *
  * Every number is read from the server (`GetLimits`), never written here. If the platform profile
- * changes, this panel changes with it without anyone remembering to edit it.
+ * changes, this panel changes with it without anyone remembering to edit it. Memory, timeout and
+ * concurrency are shown since 2026-10-20 (user: "limits missing in ui show them").
  */
 export const LimitsForm = () => {
   const { data: options } = useGetLimitsOptions();
   const profile = options ?? DEFAULT_LIMITS_OPTIONS;
 
   const rows = [
-    { label: "Memory", value: "Fixed per run, cannot be raised" },
-    { label: "Timeout", value: "Fixed per run, cannot be raised" },
+    { label: "Memory", value: `${profile.memoryMb} MB per run` },
+    { label: "Timeout", value: `${profile.timeoutSeconds} s per run` },
     { label: "CPU", value: `${profile.cpuMillicores}m per run` },
     {
       label: "Concurrency",
-      value: "Limited per function",
+      value: `${profile.concurrency} runs at a time per function`,
       note: "Runs beyond the limit queue rather than fail.",
     },
     ...HARD_CAPS.filter((cap) => cap.label !== "CPU"),
