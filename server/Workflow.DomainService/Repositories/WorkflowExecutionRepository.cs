@@ -76,6 +76,7 @@ namespace Workflow.DomainService.Repositories
 
             if (!await _dataAccess.InsertAllowedAsync(LogicSchemas.WorkflowExecutionEntity, "WorkflowExecutionRepository.Create", execution.TenantId))
                 throw new UnauthorizedAccessException("Workflow execution create is not allowed by the data access policy.");
+            await _dataAccess.PrepareWriteAsync(LogicSchemas.WorkflowExecutionEntity, execution, isInsert: true, "WorkflowExecutionRepository.Create", execution.TenantId);
 
             var collection = GetCollection(execution.TenantId);
             await EnsureIndexesAsync(execution.TenantId);
@@ -479,6 +480,8 @@ namespace Workflow.DomainService.Repositories
             if (!items.Any()) return;
             if (!await _dataAccess.InsertAllowedAsync(LogicSchemas.WorkflowItemExecutionEntity, "WorkflowExecutionRepository.AddItems", tenantId))
                 throw new UnauthorizedAccessException("Workflow item execution create is not allowed by the data access policy.");
+            foreach (var item in items)
+                await _dataAccess.PrepareWriteAsync(LogicSchemas.WorkflowItemExecutionEntity, item, isInsert: true, "WorkflowExecutionRepository.AddItems", tenantId);
             var collection = _dbContextProvider.GetCollection<WorkflowItemExecutionEntity>(tenantId, _itemCollectionName);
             await collection.InsertManyAsync(items);
         }

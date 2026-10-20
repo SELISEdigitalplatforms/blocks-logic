@@ -37,6 +37,7 @@ namespace MailBoxSyncService.Services
             var mailCollection = dbContext.GetCollection<MailBoxEntity>($"{nameof(MailBoxEntity)}s");
             if (!await _dataAccess.InsertAllowedAsync(LogicSchemas.MailBoxEntity, "MailBoxSync.MailRepository.Insert", tenantId))
                 throw new UnauthorizedAccessException("Mailbox mail create is not allowed by the data access policy.");
+            await _dataAccess.PrepareWriteAsync(LogicSchemas.MailBoxEntity, mail, isInsert: true, "MailBoxSync.MailRepository.Insert", tenantId);
             await mailCollection.InsertOneAsync(mail);
         }
 
