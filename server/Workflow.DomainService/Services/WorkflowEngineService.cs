@@ -17,7 +17,7 @@ namespace Workflow.DomainService.Services
     public class WorkflowEngineService : IWorkflowEngineService
     {
         private readonly IWorkflowExecutionRepository _workflowExecutionRepository;
-        private readonly IEnumerable<INodeExecutor> _nodeExecutors;
+        private readonly NodeExecutorRegistry _nodeExecutors;
         private readonly IMessageClient _messageClient;
 
         private readonly ILogger<WorkflowEngineService> _logger;
@@ -37,7 +37,7 @@ namespace Workflow.DomainService.Services
         {
             _executionLogger = executionLogger;
             _workflowExecutionRepository = workflowExecutionRepository;
-            _nodeExecutors = nodeExecutors;
+            _nodeExecutors = new NodeExecutorRegistry(nodeExecutors);
             _messageClient = messageClient;
             _logger = logger;
             _workflowNotificationService = workflowNotificationService;
@@ -110,7 +110,11 @@ namespace Workflow.DomainService.Services
                 // Without this the step could not be stopped: it kept waiting until the process was killed, and
                 // the node stayed Running for ever. Only the step's own work sees it; the writes below do not.
                 nodeExecutionContext.CancellationToken = stopping;
-                var executor = _nodeExecutors.First(ne => ne.NodeType == node.Type);
+                var (executor, usedFallback) = _nodeExecutors.Resolve(node.Type, node.Version);
+                if (usedFallback)
+                {
+                    log.Warn(ExecutionLogStages.ExecutorVersionFallback, NodeExecutorRegistry.FallbackLogMessage);
+                }
                 _logger.LogInformation("Node {NodeId} Using executor {ExecutorName}.", node.Id, executor.GetType().Name);
 
                 var result = runInstead != null

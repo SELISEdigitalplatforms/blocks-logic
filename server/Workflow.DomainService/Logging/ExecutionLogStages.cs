@@ -39,6 +39,7 @@ namespace Workflow.DomainService.Logging
         public const string NodeParametersFailed = "node.parametersFailed";
         public const string NodeExecuting = "node.executing";
         public const string NodeExecuted = "node.executed";
+        public const string ExecutorVersionFallback = "node.executor.versionFallback";
 
         // Per node type (inside each executor's ExecuteAsync)
         public const string TriggerRead = "node.trigger.read";
