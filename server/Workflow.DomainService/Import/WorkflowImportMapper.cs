@@ -281,7 +281,9 @@ namespace Workflow.DomainService.Import
                     X = position.GetProperty("x").GetDouble(),
                     Y = position.GetProperty("y").GetDouble(),
                 },
-                Handle = ParseHandle(node),
+                // Phase 1 of the per-node handle rollout (SPEC4): imported handles are not stored yet (see
+                // NodeMapper). Phase 2 (SPEC5) reads them, entry by entry.
+                Handle = null,
                 Parameters = RemapToDocument(node, "parameters", idMap),
                 Settings = RemapToDocument(node, "settings", idMap),
                 PinData = RemapToArray(node, "pinData", idMap),
@@ -321,36 +323,6 @@ namespace Workflow.DomainService.Import
             var remapped = ReplaceIdsInString(value.GetRawText(), idMap);
             using var doc = JsonDocument.Parse(remapped);
             return BsonJsonConverter.ToBsonArrayOrNull(doc.RootElement);
-        }
-
-        private static Handle? ParseHandle(JsonElement node)
-        {
-            if (!node.TryGetProperty("handle", out var handle) || handle.ValueKind != JsonValueKind.Object)
-            {
-                return null;
-            }
-
-            return new Handle
-            {
-                Sources = ReadStringList(handle, "source", "Sources"),
-                Targets = ReadStringList(handle, "target", "Targets"),
-            };
-        }
-
-        private static List<Dictionary<string, string>> ReadStringList(JsonElement element, params string[] names)
-        {
-            foreach (var name in names)
-            {
-                if (element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Array)
-                {
-                    return value.EnumerateArray()
-                        .Where(item => item.ValueKind == JsonValueKind.String)
-                        .Select(item => new Dictionary<string, string> { ["key"] = item.GetString() ?? string.Empty, ["label"] = string.Empty })
-                        .ToList();
-                }
-            }
-
-            return new List<Dictionary<string, string>>();
         }
 
         private static bool IsValidImportNode(JsonElement node)

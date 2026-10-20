@@ -108,6 +108,32 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
+        public async Task PublishNewVersion_DeepCopiesTriggerNodeHandles()
+        {
+            var workflow = CreateWorkflowWithScheduleTrigger();
+            var live = workflow.Nodes.Single(n => n.Id == "node-1");
+            live.Handle = new Handle
+            {
+                Sources = [new() { ["key"] = "source", ["label"] = "" }],
+                Targets = [],
+            };
+            SetupPublish(workflow);
+
+            await _service.PublishNewVersionAsync("tenant-wf", new WorkflowPublishNewVersionRequestDto
+            {
+                WorkflowId = "wf-1",
+                Name = "v1",
+            });
+
+            var published = workflow.PublishedMeta!.TriggerNodes.Single(n => n.Id == "node-1").Handle!;
+            published.Should().NotBeSameAs(live.Handle);
+            published.Sources.Should().NotBeSameAs(live.Handle.Sources);
+            published.Sources[0].Should().NotBeSameAs(live.Handle.Sources[0]);
+            published.Sources[0]["label"] = "changed";
+            live.Handle.Sources[0]["label"].Should().Be("");
+        }
+
+        [Fact]
         public async Task PublishNewVersion_DoesNotMutateLiveWorkflowNodes()
         {
             var workflow = CreateWorkflowWithScheduleTrigger();

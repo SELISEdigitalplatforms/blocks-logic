@@ -51,6 +51,42 @@ namespace XUnitTest.Workflow
                 .Should().Be("zz8d75404dc42646619b91a7d85278687bzz");
         }
 
+        [Theory]
+        [InlineData("source")]
+        [InlineData("Sources")]
+        [InlineData("sources")]
+        public void RemapAndSanitise_AnyHandle_IsStoredAsNullInPhase1(string listName)
+        {
+            var root = Root(new
+            {
+                name = "wf",
+                settings = new { },
+                nodes = new object[]
+                {
+                    new Dictionary<string, object>
+                    {
+                        ["id"] = "8d75404dc42646619b91a7d85278687b",
+                        ["name"] = "If",
+                        ["type"] = "if",
+                        ["category"] = "logic",
+                        ["version"] = "v1",
+                        ["position"] = new { x = 0.0, y = 0.0 },
+                        ["parameters"] = new { },
+                        ["settings"] = new { },
+                        ["handle"] = new Dictionary<string, object>
+                        {
+                            [listName] = listName == "sources" ? new object[] { new { key = "if-true", label = "True" } } : new object[] { "if-true" },
+                        },
+                    },
+                },
+                edges = Array.Empty<object>(),
+            });
+
+            var outGraph = WorkflowImportMapper.RemapAndSanitise(root);
+
+            outGraph.Nodes.Should().ContainSingle().Which.Handle.Should().BeNull();
+        }
+
         [Fact]
         public void RemapAndSanitise_RegeneratesNodeIdsAndWebhookPath()
         {

@@ -10,7 +10,7 @@ namespace Workflow.DomainService.Nodes.TriggerWebhookV1
     public class TriggerWebhookV1Node : NodeExecutorBase<TriggerWebhookV1Parameters>
     {
         public override string NodeType => "webhook";
-        public override string Version => "1.0";
+        public override string Version => "v1";
 
 
         protected override async Task<NodeExecutionResult> ExecuteAsync(NodeExecutionContext context, TriggerWebhookV1Parameters? nodeparameters)

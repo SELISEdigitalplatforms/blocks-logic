@@ -15,7 +15,7 @@ namespace Workflow.DomainService.Nodes.ActionSendMailV1
     public class ActionSendMailV1Node : NodeExecutorBase<ActionSendMailV1Parameters>
     {
         public override string NodeType => "sendMail";
-        public override string Version => "1.0";
+        public override string Version => "v1";
 
         private readonly IMailService _mailDriverService;
 

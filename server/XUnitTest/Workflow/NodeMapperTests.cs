@@ -39,7 +39,16 @@ namespace XUnitTest.Workflow
             entity.Type.Should().Be("transformCode");
             entity.Version.Should().Be("1");
             entity.Position.Should().BeSameAs(dto.Position);
-            entity.Handle.Should().BeSameAs(dto.Handle);
+            entity.Handle.Should().BeNull(); // SPEC4 Phase 1: handles are not stored yet
+        }
+
+        [Fact]
+        public void ToEntity_MapShapedHandle_IsStoredAsNullInPhase1()
+        {
+            var dto = Node(Json("{}"), Json("{}"));
+            dto.Handle = new Handle { Sources = [new() { ["key"] = "if-true", ["label"] = "True" }] };
+
+            NodeMapper.ToEntity(dto).Handle.Should().BeNull();
         }
 
         [Fact]

@@ -28,7 +28,10 @@ namespace Workflow.DomainService.Utils
                 Type = node.Type,
                 Version = node.Version,
                 Position = node.Position,
-                Handle = node.Handle,
+                // Phase 1 of the per-node handle rollout (SPEC4): no handle is stored yet, so a pod still on
+                // Genesis 4.3.6 or older can read every document while old and new pods run side by side.
+                // Phase 2 (SPEC5) stores node.Handle.
+                Handle = null,
                 Parameters = ToDocument(node.Parameters, node.Id, "parameters"),
                 Settings = ToDocument(node.Settings, node.Id, "settings"),
                 PinData = ToArray(node.PinData, node.Id),
