@@ -4,6 +4,7 @@ import { useProjectStore, useScopedPath } from "@seliseblocks/genesis-os";
 import {
   AlertTriangle,
   ArrowRightFromLine,
+  Download,
   EllipsisVertical,
   Pause,
   Pen,
@@ -32,7 +33,7 @@ import {
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Proxy } from "../types";
-import { useToggleProxy } from "../hooks";
+import { useProxyExport, useToggleProxy } from "../hooks";
 import { getProxyClientUrl } from "../constants";
 import { DeleteProxyDialog } from "./delete-proxy-dialog";
 import { ProxyMethodBadge } from "./proxy-method-badge";
@@ -81,6 +82,7 @@ export const ProxyList = ({
   const selectedProject = useProjectStore().selectedProject;
   const scoped = useScopedPath();
   const toggleProxy = useToggleProxy();
+  const proxyExport = useProxyExport();
   const [proxyToDelete, setProxyToDelete] = useState<Proxy | null>(null);
 
   const handleToggle = async (proxy: Proxy, enabled: boolean) => {
@@ -260,6 +262,14 @@ export const ProxyList = ({
                           <Play className="mr-2 h-4 w-4" />
                         )}
                         <span>{proxy.enabled ? "Disable" : "Enable"}</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="cursor-pointer"
+                        disabled={proxyExport.isPending}
+                        onClick={() => proxyExport.handleExport(proxy)}
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        <span>Export</span>
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="cursor-pointer text-destructive focus:text-destructive"
