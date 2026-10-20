@@ -218,7 +218,7 @@ namespace Workflow.DomainService.Services
                 Type = n.Type,
                 Version = n.Version,
                 Position = new Position { X = n.Position.X, Y = n.Position.Y },
-                Handle = n.Handle == null ? null : new Handle { Sources = new List<string>(n.Handle.Sources), Targets = new List<string>(n.Handle.Targets) },
+                Handle = n.Handle == null ? null : new Handle { Sources = n.Handle.Sources.Select(e => new Dictionary<string, string>(e)).ToList(), Targets = n.Handle.Targets.Select(e => new Dictionary<string, string>(e)).ToList() },
                 Parameters = new BsonDocument(n.Parameters),
                 Settings = new BsonDocument(n.Settings),
                 PinData = n.PinData == null ? null : new BsonArray(n.PinData),

@@ -337,7 +337,7 @@ namespace Workflow.DomainService.Import
             };
         }
 
-        private static List<string> ReadStringList(JsonElement element, params string[] names)
+        private static List<Dictionary<string, string>> ReadStringList(JsonElement element, params string[] names)
         {
             foreach (var name in names)
             {
@@ -345,12 +345,12 @@ namespace Workflow.DomainService.Import
                 {
                     return value.EnumerateArray()
                         .Where(item => item.ValueKind == JsonValueKind.String)
-                        .Select(item => item.GetString() ?? string.Empty)
+                        .Select(item => new Dictionary<string, string> { ["key"] = item.GetString() ?? string.Empty, ["label"] = string.Empty })
                         .ToList();
                 }
             }
 
-            return new List<string>();
+            return new List<Dictionary<string, string>>();
         }
 
         private static bool IsValidImportNode(JsonElement node)
