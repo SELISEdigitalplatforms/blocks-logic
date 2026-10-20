@@ -38,8 +38,15 @@ namespace Functions.DomainService.Dtos
         public string Name { get; set; } = string.Empty;
         public string? Description { get; set; }
         public FunctionExportSource Source { get; set; } = new();
-        public FunctionLimits Limits { get; set; } = new();
-        public RetryPolicy Retry { get; set; } = new();
+
+        /// <summary>
+        /// The function's own HTTP calls-per-minute limit (FN-19) — the one limit a tenant sets. Left out when unset.
+        /// CPU, memory, timeout, concurrency and retry are fixed by the platform, so a file never carries them: an import
+        /// always gets the platform profile (<see cref="FunctionLimits.Clamp"/>, <see cref="RetryPolicy.Fixed"/>).
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public int? RequestsPerMinute { get; set; }
+
         public TriggerConfig Trigger { get; set; } = new();
         public List<OutputAction> OutputActions { get; set; } = [];
         public List<VariableBinding> Variables { get; set; } = [];
@@ -75,7 +82,7 @@ namespace Functions.DomainService.Dtos
         public string? Resolution { get; set; }
 
         /// <summary>
-        /// For <c>merge</c>: field → <c>mine</c> | <c>incoming</c>. Fields: name, description, trigger, limits, retry,
+        /// For <c>merge</c>: field → <c>mine</c> | <c>incoming</c>. Fields: name, description, trigger, rateLimit,
         /// variables, outputActions, indexJs, packageJson, lockJson. A field left out keeps mine.
         /// </summary>
         public Dictionary<string, string>? FieldChoices { get; set; }

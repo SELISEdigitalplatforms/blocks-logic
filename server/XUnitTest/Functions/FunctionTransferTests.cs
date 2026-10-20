@@ -244,7 +244,7 @@ namespace XUnitTest.Functions
             using var doc = JsonDocument.Parse(json);
             var function = doc.RootElement.GetProperty("function");
             function.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(
-                ["itemId", "name", "description", "source", "limits", "retry", "trigger", "outputActions", "variables"]);
+                ["itemId", "name", "description", "source", "trigger", "outputActions", "variables"]);
             foreach (var forbidden in new[]
             {
                 "status", "activeVersionId", "lastVersionNumber", "lastDeployedAt", "totalRuns", "lastRunAt", "deletion",
@@ -255,7 +255,7 @@ namespace XUnitTest.Functions
                 json.Should().NotContain($"\"{forbidden}\"", $"{forbidden} is environment-specific");
             }
             doc.RootElement.GetProperty("format").GetString().Should().Be("blocks.function.export");
-            doc.RootElement.GetProperty("schemaVersion").GetInt32().Should().Be(1);
+            doc.RootElement.GetProperty("schemaVersion").GetInt32().Should().Be(2);
             function.GetProperty("itemId").GetString().Should().Be(FunctionId, "the same id in every environment");
             function.GetProperty("outputActions")[0].GetProperty("id").GetString().Should().Be("oa1", "output actions keep their ids");
         }
@@ -431,7 +431,8 @@ namespace XUnitTest.Functions
         public static IEnumerable<object[]> BadFiles()
         {
             yield return ["format", (Action<FunctionExportFile>)(f => f.Format = "something.else"), "not a function export"];
-            yield return ["schema", (Action<FunctionExportFile>)(f => f.SchemaVersion = 2), "schema version 2"];
+            yield return ["schema", (Action<FunctionExportFile>)(f => f.SchemaVersion = 3), "schema version 3"];
+            yield return ["schemaOld", (Action<FunctionExportFile>)(f => f.SchemaVersion = 1), "older version (schema 1)"];
             yield return ["itemId", (Action<FunctionExportFile>)(f => f.Function!.ItemId = "../../etc"), "not a valid function id"];
             yield return ["itemIdUpper", (Action<FunctionExportFile>)(f => f.Function!.ItemId = FunctionId.ToUpperInvariant()), "not a valid function id"];
         }
@@ -568,6 +569,37 @@ namespace XUnitTest.Functions
             var stored = target.Store.Live[FunctionId];
             stored.Variables.Single(v => v.Key == "STRIPE_KEY").Value.Should().Be("{{secretName.stripe-key}}");
             stored.Variables.Single(v => v.Key == "DB_PASSWORD").Value.Should().Be("{{secretName.db-pass}}");
+        }
+
+        [Fact]
+        public async Task Export_carries_only_the_rate_limit_never_the_fixed_limits_or_retry()
+        {
+            var stored = StoredFunction();
+            stored.Limits = new FunctionLimits { CpuMillicores = 999, MemoryMb = 999, TimeoutSeconds = 999, Concurrency = 99, RequestsPerMinute = 50 };
+            stored.Retry = new RetryPolicy { Attempts = 9 };
+
+            var json = FunctionTransferCodec.Serialize(await ExportFromA(stored));
+
+            json.Should().NotContain("cpuMillicores").And.NotContain("memoryMb").And.NotContain("concurrency");
+            using var doc = JsonDocument.Parse(json);
+            doc.RootElement.GetProperty("function").EnumerateObject().Select(p => p.Name)
+                .Should().NotContain(["limits", "retry"]);
+            doc.RootElement.GetProperty("function").GetProperty("requestsPerMinute").GetInt32().Should().Be(50);
+            FunctionTransferCodec.Serialize(await ExportFromA()).Should().NotContain("requestsPerMinute");
+        }
+
+        [Fact]
+        public async Task Apply_new_stores_the_platform_profile_and_keeps_the_rate_limit()
+        {
+            var target = new Env();
+            var file = await ExportFromA();
+            file.Function!.RequestsPerMinute = 50;
+
+            await target.Service().ApplyAsync(TenantB, new() { File = Rehashed(file) }, Importer, "i@x");
+
+            var stored = target.Store.Live[FunctionId];
+            stored.Limits.Should().BeEquivalentTo(new FunctionLimits { RequestsPerMinute = 50 }.Clamp());
+            stored.Retry.Should().BeEquivalentTo(RetryPolicy.Fixed);
         }
 
         [Fact]

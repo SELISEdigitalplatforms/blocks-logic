@@ -5,12 +5,10 @@ import {
   AlertTriangle,
   ArrowRightFromLine,
   EllipsisVertical,
-  FileUp,
   Pause,
   Pen,
   Play,
   Plus,
-  Search,
   Trash,
 } from "lucide-react";
 import { ProxyIcon } from "@/constants/navigation-menus";
@@ -32,12 +30,12 @@ import {
   TableRow,
 } from "@/components/ui-kits/table/table";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import { Proxy } from "../types";
 import { useToggleProxy } from "../hooks";
 import { getProxyClientUrl } from "../constants";
 import { DeleteProxyDialog } from "./delete-proxy-dialog";
 import { ProxyMethodBadge } from "./proxy-method-badge";
-import { VariablesButton } from "./variables-button";
 
 type Props = {
   proxies: Proxy[];
@@ -47,15 +45,22 @@ type Props = {
   /** True when a search term or status filter is narrowing the list, so a zero-row result is
    * "no matches" rather than "nothing has ever been created" — the two need different copy. */
   isFiltered?: boolean;
-  /** Opens the import dialog; the empty state offers it next to "Add proxy". */
-  onImport?: () => void;
+  /** Skeleton rows, so the placeholder is as tall as the page that replaces it. */
+  rowCount?: number;
 };
 
 const VISIBLE_METHOD_COUNT = 2;
 
-const ProxyListSkeleton = () => (
+const HEAD_CLASS = "px-6 pb-0 pt-2 text-base";
+
+const CELL_CLASS =
+  "border-y border-border bg-background px-6 py-5 text-base transition-colors group-hover:bg-muted/50";
+
+const SKELETON_ROWS = 10;
+
+const ProxyListSkeleton = ({ rowCount }: { rowCount: number }) => (
   <>
-    {Array.from({ length: 10 }).map((_, index) => (
+    {Array.from({ length: rowCount }).map((_, index) => (
       <TableRow key={index} className="border-0">
         <TableCell colSpan={6} className="rounded-lg border border-border bg-background p-4">
           <Skeleton className="h-12 w-full" />
@@ -65,7 +70,13 @@ const ProxyListSkeleton = () => (
   </>
 );
 
-export const ProxyList = ({ proxies, isLoading, onProxyDeleted, isFiltered, onImport }: Props) => {
+export const ProxyList = ({
+  proxies,
+  isLoading,
+  onProxyDeleted,
+  isFiltered,
+  rowCount = SKELETON_ROWS,
+}: Props) => {
   const navigate = useNavigate();
   const selectedProject = useProjectStore().selectedProject;
   const scoped = useScopedPath();
@@ -80,9 +91,9 @@ export const ProxyList = ({ proxies, isLoading, onProxyDeleted, isFiltered, onIm
 
   if (isLoading) {
     return (
-      <Table className="border-separate border-spacing-y-4">
+      <Table className="border-separate border-spacing-y-4" aria-busy="true" aria-live="polite">
         <TableBody className="[&_tr:last-child]:border-0">
-          <ProxyListSkeleton />
+          <ProxyListSkeleton rowCount={rowCount} />
         </TableBody>
       </Table>
     );
@@ -91,15 +102,9 @@ export const ProxyList = ({ proxies, isLoading, onProxyDeleted, isFiltered, onIm
   if (!proxies.length) {
     if (isFiltered) {
       return (
-        <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-12 text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-md bg-primary/10 text-primary">
-            <Search className="h-7 w-7" />
-          </div>
-          <h3 className="mt-5 text-lg font-semibold text-high-emphasis">No proxies found</h3>
-          <p className="mt-2 max-w-md text-sm text-muted-foreground">
-            No proxies match your search or filter. Try adjusting them.
-          </p>
-        </div>
+        <p className="py-14 text-center text-sm text-medium-emphasis">
+          No proxies match this search.
+        </p>
       );
     }
     return (
@@ -107,24 +112,15 @@ export const ProxyList = ({ proxies, isLoading, onProxyDeleted, isFiltered, onIm
         <div className="flex h-14 w-14 items-center justify-center rounded-md bg-primary/10 text-primary">
           <ProxyIcon className="h-7 w-7" />
         </div>
-        <h3 className="mt-5 text-lg font-semibold text-high-emphasis">No proxies yet</h3>
+        <h4 className="mt-5 text-lg font-semibold text-high-emphasis">No proxies yet</h4>
         <p className="mt-2 max-w-md text-sm text-muted-foreground">
           Create your first proxy configuration to keep client traffic stable while upstream
           services stay behind a managed route.
         </p>
-        <div className="mt-6 flex flex-col items-center gap-2 sm:flex-row">
-          <VariablesButton className="hidden" />
-          <Button className="gap-2" size="sm" onClick={() => navigate(scoped("proxy/new"))}>
-            <Plus className="h-4 w-4" />
-            Add proxy
-          </Button>
-          {onImport ? (
-            <Button className="gap-2" size="sm" variant="outline" onClick={onImport}>
-              <FileUp className="h-4 w-4" />
-              Import
-            </Button>
-          ) : null}
-        </div>
+        <Button className="mt-6 gap-2" size="sm" onClick={() => navigate(scoped("proxy/new"))}>
+          <Plus className="h-4 w-4" />
+          Add proxy
+        </Button>
       </div>
     );
   }
@@ -134,23 +130,26 @@ export const ProxyList = ({ proxies, isLoading, onProxyDeleted, isFiltered, onIm
       <Table className="min-w-[920px] border-separate border-spacing-y-4">
         <TableHeader className="[&_tr]:border-0">
           <TableRow className="border-0">
-            <TableHead className="px-6 pb-0 pt-2 text-base">
+            <TableHead className={HEAD_CLASS}>
               <div className="font-bold text-medium-emphasis">Name</div>
             </TableHead>
-            <TableHead className="px-6 pb-0 pt-2 text-base">
+            <TableHead className={HEAD_CLASS}>
               <div className="font-bold text-medium-emphasis">Client route</div>
             </TableHead>
-            <TableHead className="w-[220px] px-6 pb-0 pt-2 text-base">
+            <TableHead className={cn("w-[220px]", HEAD_CLASS)}>
               <div className="font-bold text-medium-emphasis">Methods</div>
             </TableHead>
-            <TableHead className="px-6 pb-0 pt-2 text-base">
+            <TableHead className={HEAD_CLASS}>
               <div className="font-bold text-medium-emphasis">Upstream</div>
             </TableHead>
-            <TableHead className="px-6 pb-0 pt-2 text-base">
+            <TableHead className={HEAD_CLASS}>
               <div className="font-bold text-medium-emphasis">Traffic</div>
             </TableHead>
-            <TableHead className="w-[160px] px-6 pb-0 pt-2 text-base">
+            <TableHead className={cn("w-[120px]", HEAD_CLASS)}>
               <div className="font-bold text-medium-emphasis">Active</div>
+            </TableHead>
+            <TableHead className={cn("w-[80px]", HEAD_CLASS)}>
+              <span className="sr-only">Row actions</span>
             </TableHead>
           </TableRow>
         </TableHeader>
@@ -161,7 +160,7 @@ export const ProxyList = ({ proxies, isLoading, onProxyDeleted, isFiltered, onIm
               className="group cursor-pointer border-0 transition-colors"
               onClick={() => navigate(scoped(`proxy/${proxy.id}`))}
             >
-              <TableCell className="rounded-l-lg border-y border-l border-border bg-background px-6 py-5 text-base transition-colors group-hover:bg-muted/50">
+              <TableCell className={cn("rounded-l-lg border-l", CELL_CLASS)}>
                 <div className="w-[200px] truncate font-semibold md:w-[240px]">{proxy.name}</div>
                 {proxy.hasUnboundSecrets ? (
                   <span
@@ -173,12 +172,12 @@ export const ProxyList = ({ proxies, isLoading, onProxyDeleted, isFiltered, onIm
                   </span>
                 ) : null}
               </TableCell>
-              <TableCell className="border-y border-border bg-background px-6 py-5 text-base transition-colors group-hover:bg-muted/50">
+              <TableCell className={CELL_CLASS}>
                 <p className="w-[260px] truncate font-mono text-sm text-muted-foreground">
                   {getProxyClientUrl(selectedProject, proxy.slug)}
                 </p>
               </TableCell>
-              <TableCell className="w-[220px] border-y border-border bg-background px-6 py-5 text-base transition-colors group-hover:bg-muted/50">
+              <TableCell className={cn("w-[220px]", CELL_CLASS)}>
                 <div className="flex min-w-[170px] items-center gap-1.5 whitespace-nowrap">
                   {proxy.methods.slice(0, VISIBLE_METHOD_COUNT).map((method) => (
                     <ProxyMethodBadge key={method} method={method} />
@@ -193,7 +192,7 @@ export const ProxyList = ({ proxies, isLoading, onProxyDeleted, isFiltered, onIm
                   ) : null}
                 </div>
               </TableCell>
-              <TableCell className="border-y border-border bg-background px-6 py-5 text-base transition-colors group-hover:bg-muted/50">
+              <TableCell className={CELL_CLASS}>
                 <p
                   className="max-w-[280px] truncate text-sm text-muted-foreground"
                   title={proxy.upstreamUrl || proxy.upstreamMasked}
@@ -201,24 +200,30 @@ export const ProxyList = ({ proxies, isLoading, onProxyDeleted, isFiltered, onIm
                   {proxy.upstreamUrl || proxy.upstreamMasked}
                 </p>
               </TableCell>
-              <TableCell className="border-y border-border bg-background px-6 py-5 text-base transition-colors group-hover:bg-muted/50">
+              <TableCell className={CELL_CLASS}>
                 <span className="whitespace-nowrap text-sm text-muted-foreground">
                   {proxy.calls24h.toLocaleString()} recent calls
                 </span>
               </TableCell>
-              <TableCell className="w-[160px] rounded-r-lg border-y border-r border-border bg-background px-6 py-5 text-base transition-colors group-hover:bg-muted/50">
+              <TableCell className={cn("w-[120px]", CELL_CLASS)}>
                 <div
-                  className="flex items-center justify-start gap-8"
+                  className="flex items-center justify-start"
                   onClick={(event) => event.stopPropagation()}
                 >
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Switch
-                      aria-label={`${proxy.name} enabled`}
-                      checked={proxy.enabled}
-                      disabled={toggleProxy.isPending}
-                      onCheckedChange={(checked) => handleToggle(proxy, checked)}
-                    />
-                  </div>
+                  <Switch
+                    aria-label={`${proxy.name} enabled`}
+                    checked={proxy.enabled}
+                    disabled={toggleProxy.isPending}
+                    onCheckedChange={(checked) => handleToggle(proxy, checked)}
+                  />
+                </div>
+              </TableCell>
+
+              <TableCell className={cn("w-[80px] rounded-r-lg border-r", CELL_CLASS)}>
+                <div
+                  className="flex items-center justify-end"
+                  onClick={(event) => event.stopPropagation()}
+                >
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button

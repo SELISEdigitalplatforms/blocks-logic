@@ -20,16 +20,32 @@ export const downloadExportFile = (fileName: string, file: ProxyExportFile): voi
   URL.revokeObjectURL(url);
 };
 
+/** The schema the server reads (ProxyTransferCodec.SchemaVersion). */
+export const PROXY_EXPORT_SCHEMA_VERSION = 1;
+
 /**
- * Reads a picked file as a proxy export. Only shape is checked here (size, JSON, the format name);
- * every real check — hash, id, config, secrets — is the server's, on preview and again on apply.
+ * What can be told from the name and size alone, so a wrong file is refused before it is read.
+ * Returns the message to show, or null when the file may go on.
+ */
+export const checkImportFile = (file: File): string | null => {
+  if (!file.name.toLowerCase().endsWith(".json")) return "Only .json export files can be imported.";
+  if (file.size === 0) return "This file is empty.";
+  if (file.size > PROXY_IMPORT_MAX_FILE_BYTES) {
+    return "This file is larger than 1 MB, so it cannot be a proxy export.";
+  }
+  return null;
+};
+
+/**
+ * Reads a picked file as a proxy export. Only shape is checked here (type, size, JSON, the format
+ * name and schema); every real check — hash, id, config, secrets — is the server's, on preview and
+ * again on apply.
  */
 export const readImportFile = async (
   file: File,
 ): Promise<{ ok: true; file: ProxyExportFile } | { ok: false; error: string }> => {
-  if (file.size > PROXY_IMPORT_MAX_FILE_BYTES) {
-    return { ok: false, error: "This file is too large to be a proxy export." };
-  }
+  const refusal = checkImportFile(file);
+  if (refusal) return { ok: false, error: refusal };
 
   let parsed: unknown;
   try {
@@ -38,13 +54,22 @@ export const readImportFile = async (
     return { ok: false, error: "This file is not valid JSON." };
   }
 
-  if (
-    !parsed ||
-    typeof parsed !== "object" ||
-    (parsed as ProxyExportFile).format !== "blocks.proxy.export"
-  ) {
+  const head =
+    parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as ProxyExportFile)
+      : null;
+  if (head?.format === "blocks.function.export") {
+    return { ok: false, error: "This is a function export, not a proxy export." };
+  }
+  if (head?.format !== "blocks.proxy.export") {
     return { ok: false, error: "This is not a Blocks proxy export file." };
   }
+  if (head.schemaVersion !== PROXY_EXPORT_SCHEMA_VERSION) {
+    return {
+      ok: false,
+      error: `This export uses schema version ${String(head.schemaVersion ?? "(none)")}, but this environment reads version ${PROXY_EXPORT_SCHEMA_VERSION}. Export the proxy again and import the new file.`,
+    };
+  }
 
-  return { ok: true, file: parsed as ProxyExportFile };
+  return { ok: true, file: head };
 };

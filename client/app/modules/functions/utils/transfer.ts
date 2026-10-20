@@ -5,27 +5,48 @@ export const MAX_IMPORT_BYTES = 3 * 1024 * 1024;
 
 export const EXPORT_FORMAT = "blocks.function.export";
 
+/** The schema the server reads (FunctionTransferCodec.SchemaVersion). */
+export const EXPORT_SCHEMA_VERSION = 2;
+
 /**
- * Reads a chosen file as an export. Refuses what is clearly not one — too big, not JSON, not the
- * format — before anything is sent. The server checks everything again (schema, hash, secrets).
+ * What can be told from the name and size alone, so a wrong file is refused before it is read.
+ * Returns the message to show, or null when the file may go on.
+ */
+export const checkImportFile = (file: File): string | null => {
+  if (!file.name.toLowerCase().endsWith(".json")) return "Only .json export files can be imported.";
+  if (file.size === 0) return "This file is empty.";
+  if (file.size > MAX_IMPORT_BYTES) {
+    return "This file is larger than 3 MB, so it cannot be a function export.";
+  }
+  return null;
+};
+
+/**
+ * Reads a chosen file as an export. Refuses what is clearly not one — wrong type, too big, not
+ * JSON, not this format or schema — before anything is sent. The server checks everything again
+ * (hash, secrets), so this only saves a round trip and gives a plain reason.
  */
 export const readImportFile = async (file: File): Promise<IFunctionExportFile> => {
-  if (file.size > MAX_IMPORT_BYTES) {
-    throw new Error("This file is larger than 3 MB, so it cannot be a function export.");
-  }
+  const refusal = checkImportFile(file);
+  if (refusal) throw new Error(refusal);
   let parsed: unknown;
   try {
     parsed = JSON.parse(await file.text());
   } catch {
     throw new Error("This file is not valid JSON.");
   }
-  if (
-    !parsed ||
-    typeof parsed !== "object" ||
-    Array.isArray(parsed) ||
-    (parsed as { format?: unknown }).format !== EXPORT_FORMAT
-  ) {
-    throw new Error("This is not a function export file.");
+  const head =
+    parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as { format?: unknown; schemaVersion?: unknown })
+      : null;
+  if (head?.format === "blocks.proxy.export") {
+    throw new Error("This is a proxy export, not a function export.");
+  }
+  if (head?.format !== EXPORT_FORMAT) throw new Error("This is not a function export file.");
+  if (head.schemaVersion !== EXPORT_SCHEMA_VERSION) {
+    throw new Error(
+      `This export uses schema version ${String(head.schemaVersion ?? "(none)")}, but this environment reads version ${EXPORT_SCHEMA_VERSION}. Export the function again and import the new file.`,
+    );
   }
   return parsed as IFunctionExportFile;
 };
@@ -92,7 +113,9 @@ export const UNRESOLVED_SECRET_MARKER = "{{secretUnresolved}}";
 
 /** The name when `value` is exactly one `{{secretName.X}}`, otherwise null. */
 export const soleSecretName = (value: string | null | undefined): string | null => {
-  const match = (value ?? "").trim().match(/^\{\{secretName\.([A-Za-z0-9][A-Za-z0-9._-]{0,99})\}\}$/);
+  const match = (value ?? "")
+    .trim()
+    .match(/^\{\{secretName\.([A-Za-z0-9][A-Za-z0-9._-]{0,99})\}\}$/);
   return match ? match[1] : null;
 };
 

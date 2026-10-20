@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import { useScopedPath } from "@seliseblocks/genesis-os";
 import { DiffEditor } from "@monaco-editor/react";
 import { useTheme } from "@seliseblocks/genesis-os/hooks";
-import { AlertTriangle, CheckCircle2, FileUp, Info, Loader2, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Info, Loader2, XCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui-kits/alert/alert";
 import { Button } from "@/components/ui-kits/button/button";
 import {
@@ -15,8 +15,10 @@ import {
   DialogTitle,
 } from "@/components/ui-kits/dialog/dialog";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
-import { useApplyFunctionImport, usePreviewFunctionImport } from "../../hooks/use-function-transfer";
+import {
+  useApplyFunctionImport,
+  usePreviewFunctionImport,
+} from "../../hooks/use-function-transfer";
 import { useDeployFunction } from "../../hooks/use-functions";
 import { useGetBuild } from "../../hooks/use-versions";
 import { isDeployPending } from "../../types/version.types";
@@ -28,7 +30,16 @@ import type {
   IFunctionImportPreview,
   IFunctionImportResult,
 } from "../../types/transfer.types";
-import { importErrorOf, readImportFile } from "../../utils/transfer";
+import { checkImportFile, importErrorOf, readImportFile } from "../../utils/transfer";
+import {
+  ImportChangeRow,
+  ImportDropZone,
+  ImportFileCard,
+  ImportSecretChecklist,
+  ImportStatusChip,
+  ImportSteps,
+  ImportValuePair,
+} from "./import-parts";
 
 type Props = {
   open: boolean;
@@ -41,34 +52,6 @@ const STATUS_TEXT: Record<IFunctionImportPreview["status"], string> = {
   changed: "This function is already here and some parts differ. Choose what to keep.",
   blocked: "This file cannot be imported here right now.",
 };
-
-/** One keep / take toggle. */
-const ChoiceToggle = ({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: FunctionImportChoice;
-  onChange: (value: FunctionImportChoice) => void;
-}) => (
-  <div role="group" aria-label={`${label}: keep or take`} className="inline-flex rounded-md border">
-    {(["mine", "incoming"] as const).map((choice) => (
-      <button
-        key={choice}
-        type="button"
-        aria-pressed={value === choice}
-        className={cn(
-          "px-2.5 py-1 text-xs font-medium first:rounded-l-md last:rounded-r-md",
-          value === choice ? "bg-primary text-white" : "text-medium-emphasis hover:bg-surface-app",
-        )}
-        onClick={() => onChange(choice)}
-      >
-        {choice === "mine" ? "Keep mine" : "Take file"}
-      </button>
-    ))}
-  </div>
-);
 
 /**
  * After a write: the automatic build and deploy, watched like the editor's Deploy. A build still
@@ -156,21 +139,28 @@ const DeployProgress = ({ result }: { result: IFunctionImportResult }) => {
  */
 export const FunctionImportDialog = ({ open, onOpenChange }: Props) => {
   const inputRef = useRef<HTMLInputElement>(null);
+  // Bumped on every pick and every reset: an answer that arrives for an older file is dropped.
+  const ticket = useRef(0);
   const navigate = useNavigate();
   const scoped = useScopedPath();
   const { resolvedTheme } = useTheme();
   const [file, setFile] = useState<IFunctionExportFile | null>(null);
-  const [fileName, setFileName] = useState("");
+  const [picked, setPicked] = useState<{ name: string; size: number } | null>(null);
+  const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<IFunctionImportPreview | null>(null);
-  const [choices, setChoices] = useState<Partial<Record<FunctionImportField, FunctionImportChoice>>>({});
+  const [choices, setChoices] = useState<
+    Partial<Record<FunctionImportField, FunctionImportChoice>>
+  >({});
   const [result, setResult] = useState<IFunctionImportResult | null>(null);
   const previewMutation = usePreviewFunctionImport();
   const applyMutation = useApplyFunctionImport();
 
   const reset = () => {
+    ticket.current += 1;
     setFile(null);
-    setFileName("");
+    setPicked(null);
+    setChecking(false);
     setError(null);
     setPreview(null);
     setChoices({});
@@ -183,10 +173,11 @@ export const FunctionImportDialog = ({ open, onOpenChange }: Props) => {
   };
 
   /** Every difference starts as "take the file": the user opened Import to import. */
-  const runPreview = async (next: IFunctionExportFile) => {
+  const runPreview = async (next: IFunctionExportFile, mine = ticket.current) => {
     setError(null);
     try {
       const answer = await previewMutation.mutateAsync(next);
+      if (mine !== ticket.current) return;
       setPreview(answer);
       setChoices(
         Object.fromEntries(
@@ -194,20 +185,40 @@ export const FunctionImportDialog = ({ open, onOpenChange }: Props) => {
         ),
       );
     } catch (failure) {
+      if (mine !== ticket.current) return;
       setPreview(null);
       setError(importErrorOf(failure).message);
     }
   };
 
-  const pick = async (picked: File | undefined) => {
+  /** One file in, from the picker or a drop: refuse what is clearly wrong, then preview. */
+  const pick = async (files: File[]) => {
     reset();
-    if (!picked) return;
-    setFileName(picked.name);
+    const mine = ticket.current;
+    const chosen = files[0];
+    if (!chosen) return;
+    if (files.length > 1) {
+      setError("Choose one file at a time.");
+      return;
+    }
+    // The cheap checks run before the file is read, so a wrong file never costs a read.
+    const refusal = checkImportFile(chosen);
+    if (refusal) {
+      setError(refusal);
+      return;
+    }
+    setPicked({ name: chosen.name, size: chosen.size });
+    setChecking(true);
     try {
-      const read = await readImportFile(picked);
+      const read = await readImportFile(chosen);
+      if (mine !== ticket.current) return;
       setFile(read);
-      await runPreview(read);
+      setChecking(false);
+      await runPreview(read, mine);
     } catch (failure) {
+      if (mine !== ticket.current) return;
+      setChecking(false);
+      setPicked(null);
       setError(failure instanceof Error ? failure.message : "The file could not be read.");
     }
   };
@@ -222,6 +233,9 @@ export const FunctionImportDialog = ({ open, onOpenChange }: Props) => {
 
   const setAll = (choice: FunctionImportChoice) =>
     setChoices(Object.fromEntries(diffs.map((d) => [d.field, choice])));
+
+  const choose = (field: FunctionImportField, choice: FunctionImportChoice) =>
+    setChoices((all) => ({ ...all, [field]: choice }));
 
   const apply = async () => {
     if (!file || !preview) return;
@@ -254,7 +268,8 @@ export const FunctionImportDialog = ({ open, onOpenChange }: Props) => {
     }
   };
 
-  const busy = previewMutation.isPending || applyMutation.isPending;
+  const busy = checking || previewMutation.isPending || applyMutation.isPending;
+  const step = result ? 2 : preview ? 1 : 0;
 
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
@@ -262,40 +277,48 @@ export const FunctionImportDialog = ({ open, onOpenChange }: Props) => {
         <DialogHeader>
           <DialogTitle>Import function</DialogTitle>
           <DialogDescription>
-            Choose a function export file. Nothing changes until you press Import.
+            Choose a function export file (.json). Nothing changes until you press Import.
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <input
-              ref={inputRef}
-              type="file"
-              accept="application/json,.json"
-              className="hidden"
-              aria-label="Function export file"
-              data-testid="function-import-input"
-              onChange={(e) => {
-                void pick(e.target.files?.[0]);
-                e.target.value = "";
-              }}
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
+          <ImportSteps current={step} />
+
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            aria-label="Function export file"
+            data-testid="function-import-input"
+            onChange={(e) => {
+              void pick([...(e.target.files ?? [])]);
+              e.target.value = "";
+            }}
+          />
+
+          {!picked && !result && (
+            <ImportDropZone
+              noun="function"
               disabled={busy}
-              onClick={() => inputRef.current?.click()}
-            >
-              <FileUp className="h-4 w-4" />
-              Choose file
-            </Button>
-            {fileName && <span className="truncate text-sm text-medium-emphasis">{fileName}</span>}
-            {previewMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-          </div>
+              onBrowse={() => inputRef.current?.click()}
+              onDropFiles={(files) => void pick(files)}
+            />
+          )}
+
+          {picked && !result && (
+            <ImportFileCard
+              name={picked.name}
+              size={picked.size}
+              checking={checking || previewMutation.isPending}
+              disabled={applyMutation.isPending}
+              onReplace={() => inputRef.current?.click()}
+              onRemove={reset}
+            />
+          )}
 
           {error && (
-            <Alert variant="destructive">
+            <Alert variant="destructive" role="alert">
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>{error}</AlertDescription>
             </Alert>
@@ -303,13 +326,14 @@ export const FunctionImportDialog = ({ open, onOpenChange }: Props) => {
 
           {preview && !result && (
             <>
-              <div className="flex flex-col gap-1">
-                <span className="text-sm font-semibold">
-                  {preview.name}{" "}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold">{preview.name}</span>
+                  <ImportStatusChip status={preview.status} />
                   <span className="font-mono text-xs font-normal text-medium-emphasis">
                     {preview.functionId}
                   </span>
-                </span>
+                </div>
                 <span className="text-sm" data-testid="import-status">
                   {STATUS_TEXT[preview.status]}
                 </span>
@@ -331,70 +355,48 @@ export const FunctionImportDialog = ({ open, onOpenChange }: Props) => {
                 </Alert>
               )}
 
+              <ImportSecretChecklist
+                missing={preview.missingSecrets}
+                duplicate={preview.duplicateSecrets}
+                unresolved={preview.unresolvedSecretRefs}
+                unchecked={preview.secretsUnchecked}
+              />
+
               {preview.status === "changed" && (
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm text-medium-emphasis">
-                      {takeCount} of {diffs.length} differences will be taken from the file.
+                    <span className="text-sm text-medium-emphasis" aria-live="polite">
+                      {takeCount} of {diffs.length} changes will be taken
                     </span>
-                    <Button size="sm" variant="ghost" onClick={() => setAll("incoming")}>
-                      Take all from file
+                    <Button size="xs" variant="ghost" onClick={() => setAll("incoming")}>
+                      Take all incoming
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setAll("mine")}>
+                    <Button size="xs" variant="ghost" onClick={() => setAll("mine")}>
                       Keep all mine
                     </Button>
                   </div>
 
-                  {preview.fields.length > 0 && (
-                    <div className="overflow-x-auto rounded-md border">
-                      <table className="w-full text-left text-xs">
-                        <thead className="border-b bg-surface-app text-medium-emphasis">
-                          <tr>
-                            <th className="px-3 py-2">Setting</th>
-                            <th className="px-3 py-2">Here now</th>
-                            <th className="px-3 py-2">In the file</th>
-                            <th className="px-3 py-2">Use</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {preview.fields.map((f) => (
-                            <tr key={f.field} className="border-b align-top last:border-b-0">
-                              <td className="px-3 py-2 font-medium">{f.label}</td>
-                              <td className="px-3 py-2">
-                                <pre className="max-h-40 max-w-[320px] overflow-auto whitespace-pre-wrap break-all font-mono">
-                                  {f.mine ?? "—"}
-                                </pre>
-                              </td>
-                              <td className="px-3 py-2">
-                                <pre className="max-h-40 max-w-[320px] overflow-auto whitespace-pre-wrap break-all font-mono">
-                                  {f.incoming ?? "—"}
-                                </pre>
-                              </td>
-                              <td className="px-3 py-2">
-                                <ChoiceToggle
-                                  label={f.label}
-                                  value={choices[f.field] ?? "mine"}
-                                  onChange={(c) => setChoices((all) => ({ ...all, [f.field]: c }))}
-                                />
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
+                  {preview.fields.map((f) => (
+                    <ImportChangeRow
+                      key={f.field}
+                      label={f.label}
+                      value={choices[f.field] ?? "mine"}
+                      onChange={(c) => choose(f.field, c)}
+                    >
+                      <ImportValuePair mine={f.mine} incoming={f.incoming} />
+                    </ImportChangeRow>
+                  ))}
 
                   {preview.files.map((f) => (
-                    <div key={f.field} className="flex flex-col gap-2 rounded-md border p-2">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="font-mono text-sm font-semibold">{f.file}</span>
-                        <span className="text-xs text-medium-emphasis">left: here now · right: file</span>
-                        <ChoiceToggle
-                          label={f.file}
-                          value={choices[f.field] ?? "mine"}
-                          onChange={(c) => setChoices((all) => ({ ...all, [f.field]: c }))}
-                        />
-                      </div>
+                    <ImportChangeRow
+                      key={f.field}
+                      label={f.file}
+                      value={choices[f.field] ?? "mine"}
+                      onChange={(c) => choose(f.field, c)}
+                    >
+                      <p className="mb-2 text-xs text-medium-emphasis">
+                        Left: mine (here now). Right: incoming (file).
+                      </p>
                       <DiffEditor
                         height="280px"
                         language={f.language}
@@ -410,7 +412,7 @@ export const FunctionImportDialog = ({ open, onOpenChange }: Props) => {
                           fontSize: 12,
                         }}
                       />
-                    </div>
+                    </ImportChangeRow>
                   ))}
                 </div>
               )}
@@ -419,12 +421,26 @@ export const FunctionImportDialog = ({ open, onOpenChange }: Props) => {
 
           {result && (
             <div className="flex flex-col gap-3" data-testid="import-result">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-green-500" aria-hidden="true" />
+                <span className="text-sm font-semibold">
+                  {result.status === "created"
+                    ? `Imported "${result.name}"`
+                    : result.status === "updated"
+                      ? `Updated "${result.name}"`
+                      : `"${result.name}" already matches the file`}
+                </span>
+              </div>
               {result.messages.map((m) => (
                 <Alert key={m}>
                   <Info className="h-4 w-4" />
                   <AlertDescription>{m}</AlertDescription>
                 </Alert>
               ))}
+              <ImportSecretChecklist
+                missing={result.missingSecrets}
+                duplicate={result.duplicateSecrets}
+              />
               {result.deploy && <DeployProgress result={result} />}
             </div>
           )}

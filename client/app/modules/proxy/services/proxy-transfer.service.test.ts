@@ -220,7 +220,7 @@ describe("import file helpers", () => {
     await expect(readImportFile(file("null"))).resolves.toMatchObject({ ok: false });
     await expect(readImportFile(file("{}", 2 * 1024 * 1024))).resolves.toEqual({
       ok: false,
-      error: "This file is too large to be a proxy export.",
+      error: "This file is larger than 1 MB, so it cannot be a proxy export.",
     });
   });
 });

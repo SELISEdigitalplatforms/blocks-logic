@@ -1,7 +1,7 @@
-import { type ReactNode, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { DiffEditor } from "@monaco-editor/react";
 import { useTheme } from "@seliseblocks/genesis-os/hooks";
-import { AlertTriangle, FileUp, Info, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Info, Loader2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui-kits/alert/alert";
 import { Button } from "@/components/ui-kits/button/button";
 import {
@@ -12,19 +12,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui-kits/dialog/dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui-kits/table/table";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
 import { useApplyProxyImport, usePreviewProxyImport } from "../hooks";
 import { ProxyExportFile, ProxyImportOutcome, ProxyImportResult } from "../types";
-import { readImportFile } from "../utils";
+import { checkImportFile, readImportFile } from "../utils";
+import {
+  ImportChangeRow,
+  ImportDropZone,
+  ImportFileCard,
+  ImportSecretChecklist,
+  ImportStatusChip,
+  ImportSteps,
+  ImportValuePair,
+} from "./proxy-import-parts";
 
 type Choice = "mine" | "incoming";
 
@@ -44,13 +44,7 @@ const STATUS_TEXT: Record<ProxyImportResult["status"], string> = {
   blocked: "This file cannot be imported here.",
 };
 
-/** A history-style value: `null` means the field is not set on that side. */
-const Value = ({ value }: { value: string | null }) =>
-  value === null ? (
-    <span className="italic text-muted-foreground">not set</span>
-  ) : (
-    <span className="break-all font-mono">{value}</span>
-  );
+type Done = { itemId: string; applied: boolean; status: ProxyImportResult["status"] };
 
 /**
  * Import one proxy from an export file. The preview writes nothing; Apply sends the same file back and
@@ -58,55 +52,81 @@ const Value = ({ value }: { value: string | null }) =>
  */
 export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => {
   const inputRef = useRef<HTMLInputElement>(null);
+  // Bumped on every pick and every reset: an answer that arrives for an older file is dropped.
+  const ticket = useRef(0);
   const [file, setFile] = useState<ProxyExportFile | null>(null);
-  const [fileName, setFileName] = useState("");
+  const [picked, setPicked] = useState<{ name: string; size: number } | null>(null);
+  const [checking, setChecking] = useState(false);
   const [readError, setReadError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<ProxyImportOutcome | null>(null);
   const [choices, setChoices] = useState<Record<string, Choice>>({});
   const [applyError, setApplyError] = useState<string | null>(null);
+  const [done, setDone] = useState<Done | null>(null);
   const [showJson, setShowJson] = useState(false);
   const { resolvedTheme } = useTheme();
 
   const preview = usePreviewProxyImport();
   const apply = useApplyProxyImport();
 
-  const close = () => {
+  const reset = () => {
+    ticket.current += 1;
     setFile(null);
-    setFileName("");
+    setPicked(null);
+    setChecking(false);
     setReadError(null);
     setOutcome(null);
     setChoices({});
     setApplyError(null);
+    setDone(null);
     setShowJson(false);
+  };
+
+  const close = () => {
+    reset();
     onOpenChange(false);
   };
 
   /** Every changed field starts as "take the file's value": the user opened Import to import. */
-  const runPreview = async (next: ProxyExportFile) => {
+  const runPreview = async (next: ProxyExportFile, mine = ticket.current) => {
     setApplyError(null);
-    const result = await preview.mutateAsync(next);
-    setOutcome(result);
+    const answer = await preview.mutateAsync(next);
+    if (mine !== ticket.current) return;
+    setOutcome(answer);
     setChoices(
-      result.ok
-        ? Object.fromEntries(result.result.changes.map((c) => [c.field, "incoming" as Choice]))
+      answer.ok
+        ? Object.fromEntries(answer.result.changes.map((c) => [c.field, "incoming" as Choice]))
         : {},
     );
   };
 
-  const pick = async (picked: File | undefined) => {
-    setOutcome(null);
-    setReadError(null);
-    setApplyError(null);
-    if (!picked) return;
-    setFileName(picked.name);
-    const read = await readImportFile(picked);
+  /** One file in, from the picker or a drop: refuse what is clearly wrong, then preview. */
+  const pick = async (files: File[]) => {
+    reset();
+    const mine = ticket.current;
+    const chosen = files[0];
+    if (!chosen) return;
+    if (files.length > 1) {
+      setReadError("Choose one file at a time.");
+      return;
+    }
+    // The cheap checks run before the file is read, so a wrong file never costs a read.
+    const refusal = checkImportFile(chosen);
+    if (refusal) {
+      setReadError(refusal);
+      return;
+    }
+    setPicked({ name: chosen.name, size: chosen.size });
+    setChecking(true);
+    const read = await readImportFile(chosen);
+    if (mine !== ticket.current) return;
+    setChecking(false);
     if (!read.ok) {
-      setFile(null);
+      setPicked(null);
       setReadError(read.error);
       return;
     }
     setFile(read.file);
-    await runPreview(read.file);
+    await runPreview(read.file, mine);
   };
 
   const result = outcome?.ok ? outcome.result : (outcome?.result ?? null);
@@ -114,6 +134,7 @@ export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => 
   const takeCount = changes.filter((c) => choices[c.field] === "incoming").length;
   const canApply =
     !!file &&
+    !done &&
     outcome?.ok === true &&
     (outcome.result.status === "new" || (outcome.result.status === "changed" && takeCount > 0));
 
@@ -133,16 +154,15 @@ export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => 
     });
 
     if (response.ok) {
-      const done = response.result;
+      const written = response.result;
       showSuccessToast({
-        description: !done.applied
+        description: !written.applied
           ? "Nothing to change. The proxy already matches."
           : status === "new"
             ? "Proxy imported."
             : "Proxy updated from the file.",
       });
-      if (done.applied) onImported?.(done.itemId);
-      close();
+      setDone({ itemId: written.itemId, applied: !!written.applied, status });
       return;
     }
 
@@ -163,18 +183,23 @@ export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => 
     setApplyError(response.message);
   };
 
+  const busy = checking || preview.isPending || apply.isPending;
+  const step = done ? 2 : result ? 1 : 0;
+
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
-      <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
+      <DialogContent className="max-h-[90vh] w-[min(96vw,1100px)] max-w-none overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Import proxy</DialogTitle>
           <DialogDescription>
-            Choose a proxy file exported from another environment. You see what will change before
-            anything is saved.
+            Choose a proxy export file (.json) from another environment. You see what will change
+            before anything is saved.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-col gap-4">
+          <ImportSteps current={step} />
+
           <input
             ref={inputRef}
             type="file"
@@ -182,260 +207,239 @@ export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => 
             className="hidden"
             aria-label="Proxy file"
             onChange={(event) => {
-              void pick(event.target.files?.[0]);
+              void pick([...(event.target.files ?? [])]);
               event.target.value = "";
             }}
           />
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="gap-1.5"
-            disabled={preview.isPending || apply.isPending}
-            onClick={() => inputRef.current?.click()}
-          >
-            {preview.isPending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <FileUp className="h-3.5 w-3.5" />
-            )}
-            {fileName ? "Choose another file" : "Choose file"}
-          </Button>
-          {fileName ? (
-            <span className="truncate text-xs text-muted-foreground">{fileName}</span>
+
+          {!picked && !done ? (
+            <ImportDropZone
+              noun="proxy"
+              disabled={busy}
+              onBrowse={() => inputRef.current?.click()}
+              onDropFiles={(files) => void pick(files)}
+            />
           ) : null}
-        </div>
 
-        {readError ? (
-          <Alert variant="destructive">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription className="text-xs">{readError}</AlertDescription>
-          </Alert>
-        ) : null}
+          {picked && !done ? (
+            <ImportFileCard
+              name={picked.name}
+              size={picked.size}
+              checking={checking || preview.isPending}
+              disabled={apply.isPending}
+              onReplace={() => inputRef.current?.click()}
+              onRemove={reset}
+            />
+          ) : null}
 
-        {outcome && !outcome.ok && !outcome.result ? (
-          <Alert variant="destructive">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription className="text-xs">
-              <p>{outcome.message}</p>
-              {outcome.errors.filter((e) => e !== outcome.message).length ? (
-                <ul className="mt-1 list-disc space-y-0.5 pl-4">
-                  {outcome.errors
-                    .filter((e) => e !== outcome.message)
-                    .map((message) => (
-                      <li key={message}>{message}</li>
-                    ))}
-                </ul>
+          {readError ? (
+            <Alert variant="destructive" role="alert">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription className="text-xs">{readError}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          {outcome && !outcome.ok && !outcome.result ? (
+            <Alert variant="destructive" role="alert">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                <p>{outcome.message}</p>
+                {outcome.errors.filter((e) => e !== outcome.message).length ? (
+                  <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                    {outcome.errors
+                      .filter((e) => e !== outcome.message)
+                      .map((message) => (
+                        <li key={message}>{message}</li>
+                      ))}
+                  </ul>
+                ) : null}
+              </AlertDescription>
+            </Alert>
+          ) : null}
+
+          {result && !done ? (
+            <div className="flex flex-col gap-4" data-testid="proxy-import-preview">
+              <div className="flex flex-col gap-1.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold">{result.name}</span>
+                  <ImportStatusChip status={result.status} />
+                  <span className="font-mono text-xs font-normal text-medium-emphasis">
+                    {result.slug}
+                  </span>
+                </div>
+                <p className="text-sm" data-testid="proxy-import-status">
+                  {STATUS_TEXT[result.status]}
+                </p>
+              </div>
+
+              {result.status === "blocked" ? (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription className="text-xs">
+                    {result.reason ?? "This file cannot be imported here."}
+                  </AlertDescription>
+                </Alert>
               ) : null}
-            </AlertDescription>
-          </Alert>
-        ) : null}
 
-        {result ? (
-          <div className="space-y-3" data-testid="proxy-import-preview">
-            <div>
-              <p className="text-sm font-semibold">{result.name}</p>
-              <p className="font-mono text-xs text-muted-foreground">{result.slug}</p>
-              <p className="mt-2 text-sm" data-testid="proxy-import-status">
-                {STATUS_TEXT[result.status]}
-              </p>
-            </div>
+              {result.status === "new" && result.historyExists ? (
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription className="text-xs">
+                    A proxy with this id was deleted here before. Its change history is kept, and
+                    the import continues it from version {result.currentVersion}.
+                  </AlertDescription>
+                </Alert>
+              ) : null}
 
-            {result.status === "blocked" ? (
-              <Alert variant="destructive">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertDescription className="text-xs">
-                  {result.reason ?? "This file cannot be imported here."}
-                </AlertDescription>
-              </Alert>
-            ) : null}
+              <ImportSecretChecklist
+                missing={result.missingSecrets}
+                duplicate={result.duplicateSecrets}
+                unchecked={result.secretCheckUnavailable}
+              />
 
-            {result.status === "new" && result.historyExists ? (
-              <Alert>
-                <Info className="h-4 w-4" />
-                <AlertDescription className="text-xs">
-                  A proxy with this id was deleted here before. Its change history is kept, and the
-                  import continues it from version {result.currentVersion}.
-                </AlertDescription>
-              </Alert>
-            ) : null}
+              {result.maskedValues.length && result.status !== "blocked" ? (
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription className="text-xs">
+                    The file hides{" "}
+                    {result.maskedValues.length === 1
+                      ? "one value"
+                      : `${result.maskedValues.length} values`}{" "}
+                    as <span className="font-mono">***</span> (
+                    <span className="font-mono">{result.maskedValues.join(", ")}</span>). A value
+                    this environment already has is kept. Otherwise{" "}
+                    <span className="font-mono">***</span> is saved — set the real value after the
+                    import, ideally as a <span className="font-mono">{"{{$VAR.name}}"}</span>{" "}
+                    secret.
+                  </AlertDescription>
+                </Alert>
+              ) : null}
 
-            {result.status === "changed" && changes.length ? (
-              <div>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs font-medium">
-                    {changes.length} {changes.length === 1 ? "field differs" : "fields differ"}
-                    {result.currentVersion ? ` from version ${result.currentVersion} here` : ""}
-                  </p>
-                  <div className="flex gap-1">
-                    <Button
-                      type="button"
-                      size="xs"
-                      variant="ghost"
-                      onClick={() => setAll("incoming")}
-                    >
-                      Take all from file
+              {result.status === "changed" && changes.length ? (
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm text-medium-emphasis" aria-live="polite">
+                      {takeCount} of {changes.length} changes will be taken
+                      {result.currentVersion
+                        ? ` (this proxy is at version ${result.currentVersion} here)`
+                        : ""}
+                    </span>
+                    <Button size="xs" variant="ghost" onClick={() => setAll("incoming")}>
+                      Take all incoming
                     </Button>
-                    <Button type="button" size="xs" variant="ghost" onClick={() => setAll("mine")}>
+                    <Button size="xs" variant="ghost" onClick={() => setAll("mine")}>
                       Keep all mine
                     </Button>
                     {result.mineJson && result.incomingJson ? (
-                      <Button
-                        type="button"
-                        size="xs"
-                        variant="ghost"
-                        onClick={() => setShowJson((value) => !value)}
-                      >
+                      <Button size="xs" variant="ghost" onClick={() => setShowJson((v) => !v)}>
                         {showJson ? "Hide JSON" : "Compare JSON"}
                       </Button>
                     ) : null}
                   </div>
+
+                  {changes.map((change) => (
+                    <ImportChangeRow
+                      key={change.field}
+                      label={change.label}
+                      value={choices[change.field] ?? "mine"}
+                      onChange={(choice) =>
+                        setChoices((current) => ({ ...current, [change.field]: choice }))
+                      }
+                    >
+                      <ImportValuePair mine={change.mine} incoming={change.incoming} />
+                    </ImportChangeRow>
+                  ))}
+
+                  {showJson && result.mineJson && result.incomingJson ? (
+                    <div className="overflow-hidden rounded-lg border">
+                      <DiffEditor
+                        height="320px"
+                        language="json"
+                        theme={resolvedTheme === "dark" ? "vs-dark" : "vs"}
+                        original={result.mineJson}
+                        modified={result.incomingJson}
+                        options={{
+                          readOnly: true,
+                          renderSideBySide: true,
+                          minimap: { enabled: false },
+                          scrollBeyondLastLine: false,
+                          automaticLayout: true,
+                          fontSize: 12,
+                        }}
+                      />
+                      <p className="border-t px-3 py-1.5 text-[11px] text-muted-foreground">
+                        Left: mine (this environment). Right: incoming (the file). Hidden values
+                        show as ***.
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
-                <Table className="mt-2 text-xs">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Field</TableHead>
-                      <TableHead>This environment</TableHead>
-                      <TableHead>File</TableHead>
-                      <TableHead className="w-[150px]">Use</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {changes.map((change) => (
-                      <TableRow key={change.field}>
-                        <TableCell className="font-medium">{change.label}</TableCell>
-                        <TableCell>
-                          <Value value={change.mine} />
-                        </TableCell>
-                        <TableCell>
-                          <Value value={change.incoming} />
-                        </TableCell>
-                        <TableCell>
-                          <div
-                            className="flex gap-1"
-                            role="group"
-                            aria-label={`Use for ${change.label}`}
-                          >
-                            {(["mine", "incoming"] as const).map((choice) => (
-                              <Button
-                                key={choice}
-                                type="button"
-                                size="xs"
-                                variant={choices[change.field] === choice ? "default" : "outline"}
-                                aria-pressed={choices[change.field] === choice}
-                                onClick={() =>
-                                  setChoices((current) => ({ ...current, [change.field]: choice }))
-                                }
-                              >
-                                {choice === "mine" ? "Keep" : "Take"}
-                              </Button>
-                            ))}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                {showJson && result.mineJson && result.incomingJson ? (
-                  <div className="mt-3 overflow-hidden rounded-lg border">
-                    <DiffEditor
-                      height="320px"
-                      language="json"
-                      theme={resolvedTheme === "dark" ? "vs-dark" : "vs"}
-                      original={result.mineJson}
-                      modified={result.incomingJson}
-                      options={{
-                        readOnly: true,
-                        renderSideBySide: true,
-                        minimap: { enabled: false },
-                        scrollBeyondLastLine: false,
-                        automaticLayout: true,
-                        fontSize: 12,
-                      }}
-                    />
-                    <p className="border-t px-3 py-1.5 text-[11px] text-muted-foreground">
-                      Left: this environment. Right: the file. Hidden values show as ***.
-                    </p>
-                  </div>
-                ) : null}
+              ) : null}
+            </div>
+          ) : null}
+
+          {applyError ? (
+            <Alert variant="destructive" role="alert">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription className="text-xs">{applyError}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          {done && result ? (
+            <div className="flex flex-col gap-3" data-testid="proxy-import-result">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-green-500" aria-hidden="true" />
+                <span className="text-sm font-semibold">
+                  {!done.applied
+                    ? `"${result.name}" already matches the file`
+                    : done.status === "new"
+                      ? `Imported "${result.name}"`
+                      : `Updated "${result.name}"`}
+                </span>
               </div>
-            ) : null}
-
-            {result.missingSecrets.length ? (
-              <WarningNote>
-                These secrets are not in this environment:{" "}
-                <span className="font-mono">{result.missingSecrets.join(", ")}</span>. The proxy
-                still imports, but its calls fail until you add a secret with the same name in
-                Blocks OS Secrets. Nothing else needs to change.
-              </WarningNote>
-            ) : null}
-
-            {result.duplicateSecrets.length ? (
-              <WarningNote>
-                More than one secret here has the name{" "}
-                <span className="font-mono">{result.duplicateSecrets.join(", ")}</span>. Keep one
-                secret per name so the right one is used.
-              </WarningNote>
-            ) : null}
-
-            {result.secretCheckUnavailable ? (
-              <WarningNote>
-                Secrets could not be checked right now. You can still import.
-              </WarningNote>
-            ) : null}
-
-            {result.maskedValues.length && result.status !== "blocked" ? (
-              <Alert>
-                <Info className="h-4 w-4" />
-                <AlertDescription className="text-xs">
-                  The file hides{" "}
-                  {result.maskedValues.length === 1
-                    ? "one value"
-                    : `${result.maskedValues.length} values`}{" "}
-                  as <span className="font-mono">***</span> (
-                  <span className="font-mono">{result.maskedValues.join(", ")}</span>). A value this
-                  environment already has is kept. Otherwise <span className="font-mono">***</span>{" "}
-                  is saved — set the real value after the import, ideally as a{" "}
-                  <span className="font-mono">{"{{$VAR.name}}"}</span> secret.
-                </AlertDescription>
-              </Alert>
-            ) : null}
-          </div>
-        ) : null}
-
-        {applyError ? (
-          <Alert variant="destructive">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription className="text-xs">{applyError}</AlertDescription>
-          </Alert>
-        ) : null}
+              <ImportSecretChecklist
+                missing={result.missingSecrets}
+                duplicate={result.duplicateSecrets}
+                unchecked={result.secretCheckUnavailable}
+              />
+            </div>
+          ) : null}
+        </div>
 
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={close}>
-            {result?.status === "same" ? "Close" : "Cancel"}
-          </Button>
-          <Button type="button" disabled={!canApply || apply.isPending} onClick={confirm}>
-            {apply.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            {result?.status === "changed"
-              ? takeCount
-                ? `Apply ${takeCount} ${takeCount === 1 ? "change" : "changes"}`
-                : "Nothing to apply"
-              : "Import"}
-          </Button>
+          {done ? (
+            <>
+              <Button type="button" variant="outline" onClick={close}>
+                Close
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  const id = done.itemId;
+                  close();
+                  onImported?.(id);
+                }}
+              >
+                Open proxy
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button type="button" variant="outline" onClick={close}>
+                {result?.status === "same" ? "Close" : "Cancel"}
+              </Button>
+              <Button type="button" disabled={!canApply || busy} onClick={confirm}>
+                {apply.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                {result?.status === "changed"
+                  ? takeCount
+                    ? `Apply ${takeCount} ${takeCount === 1 ? "change" : "changes"}`
+                    : "Nothing to apply"
+                  : "Import"}
+              </Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 };
-
-const WarningNote = ({ children }: { children: ReactNode }) => (
-  <p
-    className={cn(
-      "flex items-start gap-1.5 rounded-md border border-amber-300/60 bg-amber-50 p-2 text-xs",
-      "text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300",
-    )}
-  >
-    <AlertTriangle aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-    <span>{children}</span>
-  </p>
-);

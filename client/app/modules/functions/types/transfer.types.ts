@@ -1,13 +1,11 @@
 import type {
-  IFunctionLimits,
   IOutputAction,
-  IRetryPolicy,
   ITriggerConfig,
   IVariableBinding,
 } from "./function.types";
 
 /**
- * One function as an export file (`blocks.function.export`, schema 1) — the server's
+ * One function as an export file (`blocks.function.export`, schema 2) — the server's
  * `FunctionExportFile`. The same `itemId` in every environment; secrets appear by name only.
  */
 export interface IFunctionExportFile {
@@ -24,8 +22,8 @@ export interface IFunctionExportFile {
       lockJson?: string | null;
       allowInstallScripts: boolean;
     };
-    limits: IFunctionLimits;
-    retry: IRetryPolicy;
+    /** The function's own HTTP rate limit; absent when unset. Limits and retry are fixed by the platform, never exported. */
+    requestsPerMinute?: number | null;
     trigger: ITriggerConfig;
     outputActions: IOutputAction[];
     variables: IVariableBinding[];
@@ -42,8 +40,7 @@ export type FunctionImportField =
   | "name"
   | "description"
   | "trigger"
-  | "limits"
-  | "retry"
+  | "rateLimit"
   | "variables"
   | "outputActions"
   | "indexJs"

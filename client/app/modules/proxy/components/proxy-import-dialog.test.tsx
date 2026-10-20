@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
 import { ProxyImportOutcome, ProxyImportResult } from "../types";
@@ -66,7 +66,8 @@ const jsonFile = (content: unknown, name = "proxy-stripe.json") =>
 const setup = async (file: File = jsonFile(FILE)) => {
   const onImported = vi.fn();
   const onOpenChange = vi.fn();
-  const user = userEvent.setup();
+  // applyAccept off: the dialog itself must refuse a wrong type, not only the browser's picker.
+  const user = userEvent.setup({ applyAccept: false });
   renderWithProviders(
     <ProxyImportDialog open onOpenChange={onOpenChange} onImported={onImported} />,
   );
@@ -91,13 +92,18 @@ describe("ProxyImportDialog", () => {
       /Not in this environment/,
     );
     expect(previewImport).toHaveBeenCalledWith(FILE);
-    expect(screen.getByText(/These secrets are not in this environment/)).toBeTruthy();
-    expect(screen.getByText("stripe-key")).toBeTruthy();
+    expect(screen.getByTestId("proxy-import-status")).toBeTruthy();
+    expect(screen.getByTestId("import-status-chip").textContent).toBe("New");
+    expect(
+      within(screen.getByTestId("import-secret-checklist")).getByText("stripe-key"),
+    ).toBeTruthy();
     expect(screen.getByText("header:Authorization")).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Import" }));
 
-    await waitFor(() => expect(onImported).toHaveBeenCalledWith(FILE.proxy.itemId));
+    // A success step with a way to open the new proxy, not an instant redirect.
+    await user.click(await screen.findByRole("button", { name: "Open proxy" }));
+    expect(onImported).toHaveBeenCalledWith(FILE.proxy.itemId);
     expect(applyImport).toHaveBeenCalledWith(
       expect.objectContaining({ file: FILE, resolution: undefined, expectedVersion: 1 }),
     );
@@ -121,9 +127,10 @@ describe("ProxyImportDialog", () => {
 
     const { user } = await setup();
 
-    expect(await screen.findByText("2 fields differ from version 7 here")).toBeTruthy();
+    expect(await screen.findByText(/2 of 2 changes will be taken/)).toBeTruthy();
+    expect(screen.getByText(/version 7 here/)).toBeTruthy();
     const row = screen.getByRole("group", { name: "Use for header X-Env" });
-    await user.click(within(row).getByRole("button", { name: "Keep" }));
+    await user.click(within(row).getByRole("button", { name: "Mine" }));
 
     await user.click(screen.getByRole("button", { name: "Compare JSON" }));
     expect(screen.getByTestId("mock-diff-editor").textContent).toBe('{"a":1}|{"a":2}');
@@ -151,14 +158,14 @@ describe("ProxyImportDialog", () => {
     applyImport.mockResolvedValue(ok({ status: "changed", applied: true }));
 
     const { user } = await setup();
-    await screen.findByText(/1 field differs/);
+    await screen.findByText(/1 of 1 changes will be taken/);
 
     await user.click(screen.getByRole("button", { name: "Keep all mine" }));
     expect(
       (screen.getByRole("button", { name: "Nothing to apply" }) as HTMLButtonElement).disabled,
     ).toBe(true);
 
-    await user.click(screen.getByRole("button", { name: "Take all from file" }));
+    await user.click(screen.getByRole("button", { name: "Take all incoming" }));
     await user.click(screen.getByRole("button", { name: "Apply 1 change" }));
 
     await waitFor(() =>
@@ -229,10 +236,10 @@ describe("ProxyImportDialog", () => {
     } satisfies ProxyImportOutcome);
 
     const { user, onImported } = await setup();
-    await screen.findByText(/from version 7 here/);
+    await screen.findByText(/version 7 here/);
     await user.click(screen.getByRole("button", { name: "Apply 1 change" }));
 
-    expect(await screen.findByText(/from version 8 here/)).toBeTruthy();
+    expect(await screen.findByText(/version 8 here/)).toBeTruthy();
     expect(previewImport).toHaveBeenCalledTimes(2);
     expect(toasts.showErrorToast).toHaveBeenCalled();
     expect(onImported).not.toHaveBeenCalled();
@@ -249,6 +256,79 @@ describe("ProxyImportDialog", () => {
     await setup(jsonFile({ format: "something.else" }));
     expect(await screen.findByText("This is not a Blocks proxy export file.")).toBeTruthy();
     expect(previewImport).not.toHaveBeenCalled();
+  });
+
+  it("refuses a function export, an old schema, a wrong type, an empty and an oversized file", async () => {
+    const { user } = await setup(jsonFile({ format: "blocks.function.export" }));
+    expect(await screen.findByText("This is a function export, not a proxy export.")).toBeTruthy();
+
+    const input = screen.getByLabelText("Proxy file");
+    await user.upload(input, jsonFile({ ...FILE, schemaVersion: 9 }));
+    expect(await screen.findByText(/schema version 9/)).toBeTruthy();
+
+    await user.upload(input, jsonFile(FILE, "proxy.TXT"));
+    expect(await screen.findByText("Only .json export files can be imported.")).toBeTruthy();
+
+    await user.upload(input, jsonFile("", "empty.json"));
+    expect(await screen.findByText("This file is empty.")).toBeTruthy();
+
+    const big = jsonFile("{}", "big.json");
+    Object.defineProperty(big, "size", { value: 1024 * 1024 + 1 });
+    await user.upload(input, big);
+    expect(await screen.findByText(/larger than 1 MB/)).toBeTruthy();
+    expect(previewImport).not.toHaveBeenCalled();
+  });
+
+  it("accepts a dropped file, highlights while dragging, and refuses more than one", async () => {
+    previewImport.mockResolvedValue(ok());
+    renderWithProviders(<ProxyImportDialog open onOpenChange={vi.fn()} />);
+    const zone = screen.getByTestId("import-drop-zone");
+
+    fireEvent.dragOver(zone, { dataTransfer: { files: [] } });
+    expect(zone.getAttribute("data-dragging")).toBe("true");
+    fireEvent.dragLeave(zone);
+    expect(zone.getAttribute("data-dragging")).toBeNull();
+
+    fireEvent.drop(zone, { dataTransfer: { files: [jsonFile(FILE), jsonFile(FILE, "b.json")] } });
+    expect(await screen.findByText("Choose one file at a time.")).toBeTruthy();
+
+    fireEvent.drop(zone, { dataTransfer: { files: [jsonFile(FILE)] } });
+    expect(await screen.findByTestId("proxy-import-status")).toBeTruthy();
+    expect(previewImport).toHaveBeenCalledWith(FILE);
+  });
+
+  it("opens the picker from the keyboard", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ProxyImportDialog open onOpenChange={vi.fn()} />);
+    const click = vi.spyOn(screen.getByLabelText("Proxy file"), "click");
+
+    screen.getByRole("button", { name: /Choose a proxy export file/ }).focus();
+    await user.keyboard("{Enter}");
+    await user.keyboard(" ");
+    expect(click).toHaveBeenCalledTimes(2);
+  });
+
+  it("starts over when the file is removed, and on Escape", async () => {
+    previewImport.mockResolvedValue(ok());
+    const { user, onOpenChange } = await setup();
+    await screen.findByTestId("proxy-import-status");
+
+    await user.click(screen.getByRole("button", { name: "Remove proxy-stripe.json" }));
+    expect(screen.getByTestId("import-drop-zone")).toBeTruthy();
+    expect(screen.queryByTestId("proxy-import-status")).toBeNull();
+
+    await user.keyboard("{Escape}");
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("lists duplicate secrets in the checklist and shows the blocked chip", async () => {
+    previewImport.mockResolvedValue(
+      ok({ status: "blocked", reason: "No.", duplicateSecrets: ["mail-key"] }),
+    );
+    await setup();
+    const checklist = await screen.findByTestId("import-secret-checklist");
+    expect(within(checklist).getByText("mail-key")).toBeTruthy();
+    expect(screen.getByTestId("import-status-chip").textContent).toBe("Blocked");
   });
 
   it("says when the proxy is already the same", async () => {

@@ -151,8 +151,7 @@ namespace Functions.DomainService.Services
                     LockJson = source.LockJson,
                     AllowInstallScripts = source.AllowInstallScripts,
                 },
-                Limits = (function.Limits ?? new FunctionLimits()).Clamp(),
-                Retry = function.Retry ?? RetryPolicy.Fixed,
+                RequestsPerMinute = (function.Limits ?? new FunctionLimits()).Clamp().RequestsPerMinute,
                 Trigger = function.Trigger ?? new TriggerConfig(),
                 OutputActions = actions,
                 Variables = variables,
@@ -254,8 +253,8 @@ namespace Functions.DomainService.Services
             Field(FunctionTransferCodec.Fields.Name, "Name", mine.Name, incoming.Name, pretty: false);
             Field(FunctionTransferCodec.Fields.Description, "Description", mine.Description, incoming.Description, pretty: false);
             Field(FunctionTransferCodec.Fields.Trigger, "Trigger", mine.Trigger, incoming.Trigger);
-            Field(FunctionTransferCodec.Fields.Limits, "Limits", mine.Limits, incoming.Limits);
-            Field(FunctionTransferCodec.Fields.Retry, "Retry", mine.Retry, incoming.Retry);
+            Field(FunctionTransferCodec.Fields.RateLimit, "Rate limit (calls per minute)",
+                mine.RequestsPerMinute, incoming.RequestsPerMinute, pretty: false);
             Field(FunctionTransferCodec.Fields.Variables, "Variables", mine.Variables, incoming.Variables);
             Field(FunctionTransferCodec.Fields.OutputActions, "Output actions", mine.OutputActions, incoming.OutputActions);
             File(FunctionTransferCodec.Fields.IndexJs, "index.js", "javascript", mine.Source.IndexJs, incoming.Source.IndexJs);
@@ -358,8 +357,9 @@ namespace Functions.DomainService.Services
                 ActiveVersionId = null,
                 Source = source,
                 SourceHash = FunctionHashing.SourceHash(source),
-                Limits = incoming.Limits,
-                Retry = incoming.Retry,
+                // Fixed by the platform: the file never carries them, the import always stores the platform profile.
+                Limits = new FunctionLimits { RequestsPerMinute = incoming.RequestsPerMinute }.Clamp(),
+                Retry = RetryPolicy.Fixed,
                 Trigger = incoming.Trigger,
                 OutputActions = actions,
                 Variables = variables,
@@ -422,8 +422,8 @@ namespace Functions.DomainService.Services
             var name = Pick(FunctionTransferCodec.Fields.Name, existing.Name, incoming.Name, string.Equals);
             var description = Pick(FunctionTransferCodec.Fields.Description, existing.Description, incoming.Description, string.Equals);
             var trigger = Pick(FunctionTransferCodec.Fields.Trigger, existing.Trigger, incoming.Trigger, (_, b) => SameJson(mineBody.Trigger, b));
-            var limits = Pick(FunctionTransferCodec.Fields.Limits, existing.Limits, incoming.Limits, (_, b) => SameJson(mineBody.Limits, b));
-            var retry = Pick(FunctionTransferCodec.Fields.Retry, existing.Retry, incoming.Retry, (_, b) => SameJson(mineBody.Retry, b));
+            var rateLimit = Pick(FunctionTransferCodec.Fields.RateLimit, mineBody.RequestsPerMinute, incoming.RequestsPerMinute,
+                (a, b) => a == b);
             var variables = TakeIncoming(FunctionTransferCodec.Fields.Variables) && !SameJson(mineBody.Variables, incoming.Variables)
                 ? Changed(FunctionTransferCodec.Fields.Variables, boundVariables)
                 : existing.Variables;
@@ -452,14 +452,15 @@ namespace Functions.DomainService.Services
                 LockJson = lockJson,
                 AllowInstallScripts = mineSource.AllowInstallScripts,
             };
-            limits = (limits ?? new FunctionLimits()).Clamp();
+            var limits = new FunctionLimits { RequestsPerMinute = rateLimit }.Clamp();
+            var retry = RetryPolicy.Fixed;
             await ValidateResultAsync(existing.ItemId, name, description, source, limits, retry, trigger, actions, variables);
             var literals = FunctionSecretLiterals.FindNewLiterals(variables, actions, existing.Variables, existing.OutputActions);
             if (literals.Count > 0) throw new FunctionValidationException(string.Join("; ", literals));
 
             var updated = await _repository.UpdateImportedAsync(
                 tenantId, existing.ItemId, AsUtc(expected), name, description, source, FunctionHashing.SourceHash(source),
-                limits, retry ?? RetryPolicy.Fixed, FunctionService.NormalizeForStorage(trigger),
+                limits, retry, FunctionService.NormalizeForStorage(trigger),
                 actions ?? [], variables ?? [], actorId, cancellationToken);
             if (!updated)
             {
@@ -520,6 +521,12 @@ namespace Functions.DomainService.Services
             {
                 throw new FunctionValidationException($"This is not a function export file (format must be \"{FunctionTransferCodec.Format}\").");
             }
+            if (file.SchemaVersion is >= 1 and < FunctionTransferCodec.SchemaVersion)
+            {
+                // Functions are dev-only (2026-10-06): no reader for the old shape that carried limits and retry.
+                throw new FunctionValidationException(
+                    $"This export was made by an older version (schema {file.SchemaVersion}). Export the function again and import the new file.");
+            }
             if (file.SchemaVersion != FunctionTransferCodec.SchemaVersion)
             {
                 throw new FunctionValidationException(
@@ -527,8 +534,6 @@ namespace Functions.DomainService.Services
             }
             var body = file.Function ?? throw new FunctionValidationException("The export file has no function in it.");
             body.Source ??= new FunctionExportSource();
-            body.Limits ??= new FunctionLimits();
-            body.Retry ??= RetryPolicy.Fixed;
             body.Trigger ??= new TriggerConfig();
             body.Variables ??= [];
             body.OutputActions ??= [];
@@ -573,7 +578,8 @@ namespace Functions.DomainService.Services
                     PackageJson = normalized.Source.PackageJson,
                     LockJson = normalized.Source.LockJson,
                 },
-                body.Limits, normalized.Retry, normalized.Trigger, normalized.OutputActions, normalized.Variables);
+                new FunctionLimits { RequestsPerMinute = normalized.RequestsPerMinute }.Clamp(), RetryPolicy.Fixed,
+                normalized.Trigger, normalized.OutputActions, normalized.Variables);
             return file;
         }
 
