@@ -335,6 +335,48 @@ describe("OutputPanel", () => {
     });
   });
 
+  describe("Split Out run summary", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const seedSplitOutRun = (parameters: Record<string, unknown>, input: unknown[], outputCount: number, extra: Record<string, unknown> = {}) => (store: any) => {
+      const n = node({ type: "splitOut", category: "transform", version: "v2", parameters, ...extra });
+      store.getState().addNode(n);
+      store.setState({
+        selectedNode: n,
+        editorMode: "run",
+        executedNodes: [{ id: "ne1", nodeId: "n1", runIndex: 0, status: 2, input, output: [], inputItemCount: input.length, outputItemCount: outputCount }],
+        executedItems: Array.from({ length: outputCount }, (_, i) => ({ nodeId: "n1", itemIndex: i, branch: "source", data: { Output: { sku: `S${i}` } } })),
+      });
+    };
+
+    it("shows how many items went in and came out", () => {
+      renderWithProviders(<OutputPanel />, { seedWorkflow: seedSplitOutRun({ fields: [{ fieldName: "lines", outputFieldName: "" }] }, [{ lines: [1, 2] }, { lines: [3] }], 3) });
+      expect(screen.getByText("2 items in → 3 items out")).toBeTruthy();
+      expect(screen.queryByText(/wasn't found/)).toBeNull();
+    });
+
+    it("shows n8n's hint for a field no input item has", () => {
+      renderWithProviders(<OutputPanel />, { seedWorkflow: seedSplitOutRun({ fields: [{ fieldName: "lines", outputFieldName: "" }, { fieldName: "tags", outputFieldName: "" }] }, [{ lines: [1] }], 1) });
+      expect(screen.getByText("The field 'tags' wasn't found in any input item")).toBeTruthy();
+      expect(screen.queryByText("The field 'lines' wasn't found in any input item")).toBeNull();
+    });
+
+    it("says 0 items out when nothing was found", () => {
+      renderWithProviders(<OutputPanel />, { seedWorkflow: seedSplitOutRun({ fields: [{ fieldName: "lines", outputFieldName: "" }] }, [{ other: 1 }], 0) });
+      expect(screen.getByText("1 item in → 0 items out")).toBeTruthy();
+      expect(screen.getByText("The field 'lines' wasn't found in any input item")).toBeTruthy();
+    });
+
+    it("is not shown for other nodes, before a run, or with mock data", () => {
+      const { unmount } = renderWithProviders(<OutputPanel />, { seedWorkflow: seedSelected({ type: "splitOut", parameters: { fields: [{ fieldName: "lines", outputFieldName: "" }] } }) });
+      expect(screen.queryByText(/items? in →/)).toBeNull();
+      unmount();
+      renderWithProviders(<OutputPanel />, {
+        seedWorkflow: seedSplitOutRun({ fields: [{ fieldName: "lines", outputFieldName: "" }] }, [{ lines: [1] }], 1, { pinData: [{ a: 1 }] }),
+      });
+      expect(screen.queryByText(/items? in →/)).toBeNull();
+    });
+  });
+
   it("hides the schema body while collapsed", () => {
     renderWithProviders(<OutputPanel isCollapsed onToggleCollapse={() => {}} />, {
       seedWorkflow: seedSelected({ pinData: [{ name: "Ada" }] }),

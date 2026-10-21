@@ -116,8 +116,9 @@ describe("NodeSchemasDefinition registry", () => {
       const v2Key = `${v1Key.slice(0, -2)}v2`;
       expect(NodeSchemasDefinition[v2Key]).toBe(NodeSchemasDefinition[v1Key]);
     }
-    // 13 v1 keys, their 13 v2 aliases, and logicswitchv2 (new types start at v2 with no v1).
-    expect(Object.keys(NodeSchemasDefinition)).toHaveLength(27);
+    // 13 v1 keys, their 13 v2 aliases, logicswitchv2 and transformsplitOutv2 (new types start at v2 with no v1).
+    expect(Object.keys(NodeSchemasDefinition)).toHaveLength(28);
+    expect(NodeSchemasDefinition.transformsplitOutv1).toBeUndefined();
     expect(NodeSchemasDefinition.logicswitchv1).toBeUndefined();
   });
 
@@ -1067,5 +1068,36 @@ describe("transform code v1", () => {
 
   it("has no continue-on-error setting (the engine never reads it)", () => {
     expect(field(NodeSchemaTransformCodeV1, "settings.continueOnError")).toBeUndefined();
+  });
+});
+
+describe("transform/splitOut v2 (SPEC2)", () => {
+  const schema = NodeSchemasDefinition.transformsplitOutv2;
+
+  it("has the documented defaults and fields", () => {
+    expect(schema.defaults.parameters).toEqual({
+      fields: [],
+      include: "noOtherFields",
+      fieldsToInclude: [],
+      disableDotNotation: false,
+    });
+    expect(schema.schema.parameters.map((f) => [f.key, f.type])).toEqual([
+      ["fields", "split-out-fields"],
+      ["include", "select-with-description"],
+      ["fieldsToInclude", "comma-list"],
+      ["disableDotNotation", "switch"],
+    ]);
+  });
+
+  it("Include offers the three values the server reads", () => {
+    const include = schema.schema.parameters.find((f) => f.key === "include")!;
+    expect((include.options as { value: string }[]).map((o) => o.value)).toEqual(["noOtherFields", "allOtherFields", "selectedOtherFields"]);
+  });
+
+  it("H11: Fields To Include shows only for Selected other fields and resets to an empty list", () => {
+    const field = schema.schema.parameters.find((f) => f.key === "fieldsToInclude")!;
+    expect(field.dependsOn).toEqual({ key: "include", value: "selectedOtherFields" });
+    expect(field.defaultValue).toEqual([]);
+    expect(field.placeholder).toBe("e.g. email, name");
   });
 });

@@ -13,6 +13,7 @@ import { NodeSchemaActionFunction } from "./node-schema-action-function";
 import { NodeSchemaLogicIfV1 } from "./node-schema-logic-if-v1";
 import { NodeSchemaActionProxy } from "./node-schema-action-proxy";
 import { NodeSchemaLogicSwitchV2 } from "./node-schema-logic-switch-v2";
+import { NodeSchemaTransformSplitOutV2 } from "./node-schema-transform-splitOut-v2";
 
 const V1_SCHEMAS: Record<string, NodeSchemaDefinition> = {
   triggerwebhookv1: NodeSchemaTriggerWebhookV1,
@@ -41,4 +42,5 @@ export const NodeSchemasDefinition: Record<string, NodeSchemaDefinition> = {
   ),
   // New types start at v2 (they own their handle from the start) and have no v1.
   logicswitchv2: NodeSchemaLogicSwitchV2,
+  transformsplitOutv2: NodeSchemaTransformSplitOutV2,
 };

@@ -215,6 +215,20 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		},
 	},
 	{
+		id: "transform-splitOut-v2",
+		icon: <Split className="h-5 w-5 text-blue-500" />,
+		title: "Split Out",
+		description: "Turn a list inside each item into separate items.",
+		type: "splitOut",
+		category: "transform",
+		version: "v2",
+		defaultName: "Split Out",
+		handle: {
+			sources: [{ key: "source", label: "" }],
+			targets: [{ key: "target", label: "" }],
+		},
+	},
+	{
 		id: "transform-code-v2",
 		icon: <Code2 className="h-5 w-5 text-blue-500" />,
 		title: "Code",

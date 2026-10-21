@@ -14,6 +14,7 @@ import { NodeExecutionStatus } from "@blocks-workflow/utils/workflow-execution-e
 import type { ExecutedNode } from "@blocks-workflow/models/workflow.model";
 import { CopyValueButton } from "../copy-value-button";
 import { itemCountLabel, outputBranchGroups, showsBranchHeaders, type OutputBranchGroup } from "@blocks-workflow/utils/output-branches";
+import { fieldsNotFound } from "@blocks-workflow/utils/split-out";
 
 type BranchGroup = OutputBranchGroup & {
   schema: ReturnType<typeof inferSchemaFromRuntimeRows>;
@@ -90,6 +91,20 @@ export const OutputPanel = ({
 
   // The error the server saved on this node's latest run (nodeExecution.error). It used to be stored
   // and never shown, so a failed test step looked like one with no output (WF-40).
+  // Split Out: how many items went in and came out, and the fields no input item had (n8n's hint).
+  const splitOutSummary = useMemo(() => {
+    if (!selectedNode || selectedNode.type !== "splitOut" || selectedNode.pinData != null) return null;
+    const run = latestRun(executedNodes, selectedNode.id);
+    if (!run || run.status === NodeExecutionStatus.Failed) return null;
+    const parameters = (selectedNode.parameters ?? {}) as Record<string, unknown>;
+    const input = Array.isArray(run.input) ? run.input : [];
+    return {
+      inputCount: run.inputItemCount ?? input.length,
+      outputCount: run.outputItemCount ?? 0,
+      notFound: fieldsNotFound(parameters.fields, input, parameters.disableDotNotation !== true),
+    };
+  }, [executedNodes, selectedNode]);
+
   const failedRunError = useMemo(
     () => (selectedNode ? latestRunError(executedNodes, selectedNode.id) : null),
     [executedNodes, selectedNode],
@@ -237,6 +252,20 @@ export const OutputPanel = ({
         >
           <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <p className="whitespace-pre-wrap break-words">{failedRunError}</p>
+        </div>
+      )}
+
+      {splitOutSummary && !isEditingMock && (
+        <div className="mt-2 flex shrink-0 flex-col gap-1.5">
+          <p className="text-xs text-medium-emphasis">
+            {countItems(splitOutSummary.inputCount)} in → {countItems(splitOutSummary.outputCount)} out
+          </p>
+          {splitOutSummary.notFound.map((field) => (
+            <div key={field} role="status" className="flex gap-2 rounded border border-warning-200 bg-warning-50 p-2 text-xs text-warning-800">
+              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <p className="break-words">The field &apos;{field}&apos; wasn&apos;t found in any input item</p>
+            </div>
+          ))}
         </div>
       )}
 
@@ -442,10 +471,16 @@ function RuntimeJson({ rows }: { rows: unknown[] }) {
  * stored a user-facing message hold ex.ToString(): cut it before the stack trace and drop the
  * "System.Exception: " prefix.
  */
-function latestRunError(executedNodes: ExecutedNode[] | null | undefined, nodeId: string): string | null {
-  const latest = (executedNodes ?? [])
+const countItems = (count: number) => `${count} ${count === 1 ? "item" : "items"}`;
+
+function latestRun(executedNodes: ExecutedNode[] | null | undefined, nodeId: string): ExecutedNode | null {
+  return (executedNodes ?? [])
     .filter((ne) => ne.nodeId === nodeId)
     .reduce<ExecutedNode | null>((last, ne) => (!last || ne.runIndex >= last.runIndex ? ne : last), null);
+}
+
+function latestRunError(executedNodes: ExecutedNode[] | null | undefined, nodeId: string): string | null {
+  const latest = latestRun(executedNodes, nodeId);
   if (!latest || latest.status !== NodeExecutionStatus.Failed) return null;
 
   const message = (latest.error ?? "").split(/\r?\n\s+at /)[0].replace(/^System\.Exception:\s*/, "").trim();
