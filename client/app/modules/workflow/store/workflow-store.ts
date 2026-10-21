@@ -90,6 +90,8 @@ export type WorkflowState = {
 
   // Workflow operations
   setWorkflow: (workflow: Workflow) => void;
+  /** After a save: clears the unsaved flag only if nodes and edges are still exactly what was sent. */
+  markSaved: (sentNodesMap: Record<string, EditorNode>, sentEdgesMap: Record<string, Edge>) => void;
   resetWorkflow: () => void;
   tidyUpWorkflow: () => void;
   setStepExecutionData: (execution: IGetWorkflowExecutionByIdResponse) => void;
@@ -604,9 +606,16 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
       ? workflow.nodeExecutions 
       : (get().workflowId === workflow.itemId ? get().executedNodes : (workflow.nodeExecutions ?? []));
 
+    // The open inspector shows selectedNode. Point it at the loaded copy of the same node, so it never
+    // shows values the store (and so the next save) no longer has.
+    const previousSelectedId = get().selectedNode?.id;
+    const reselected = previousSelectedId ? nodesMap[previousSelectedId] : undefined;
+    if (reselected) nodesMap[reselected.id] = { ...reselected, selected: true };
+
     set({
       nodesMap,
       edgesMap,
+      selectedNode: reselected ? nodesMap[reselected.id] : null,
       workflowId: workflow.itemId || null,
       workflowName: workflow.name || "",
       isPublished: workflow.isPublished || false,
@@ -614,6 +623,12 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
       executedItems,
       executedNodes,
     });
+  },
+
+  markSaved: (sentNodesMap, sentEdgesMap) => {
+    const { nodesMap, edgesMap } = get();
+    // An edit made while the save was in flight replaced the map; it is still unsaved.
+    if (nodesMap === sentNodesMap && edgesMap === sentEdgesMap) set({ hasUnsavedChanges: false });
   },
 
 

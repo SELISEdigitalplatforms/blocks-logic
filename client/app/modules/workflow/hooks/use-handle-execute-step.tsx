@@ -19,7 +19,7 @@ export const useHandleExecuteStep = () => {
   const { mutateAsync: stepExecute } = useStepExecute();
   const { mutateAsync: executeTriggerListener } = useExecuteTriggerListener();
   const { mutateAsync: updateWorkflow } = useUpdateWorkflow();
-  const { workflowId, setStepExecutionData, nextExecutionId, setNextExecutionId, setIsListening, nodesMap, edgesMap, executedItems } = useWorkflow();
+  const { workflowId, setStepExecutionData, nextExecutionId, setNextExecutionId, setIsListening, nodesMap, edgesMap, executedItems, markSaved } = useWorkflow();
 
   const [triggerSelectionNodes, setTriggerSelectionNodes] = useState<EditorNode[]>([]);
   const [triggerSelectionCompletionNodeId, setTriggerSelectionCompletionNodeId] = useState<string | null>(null);
@@ -68,6 +68,7 @@ export const useHandleExecuteStep = () => {
         nodes: Object.values(nodesMap).map(toPersistedNode),
         edges: Object.values(edgesMap),
       });
+      markSaved(nodesMap, edgesMap);
 
       const stepResp = (await stepExecute({
         WorkflowId: workflowId,

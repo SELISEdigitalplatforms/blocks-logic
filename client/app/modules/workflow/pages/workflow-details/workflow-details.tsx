@@ -24,7 +24,7 @@ import {
 import PageBreadcrumb from "@/components/breadcrumb/breadcrumb";
 import { WorkflowEditor } from "../../components/workflow-editor";
 import { ReactFlowProvider } from "@xyflow/react";
-import { WorkflowStoreProvider } from "../../store";
+import { WorkflowStoreProvider, useWorkflowStoreApi } from "../../store";
 import { useWorkflow, useAutoSaveWorkflow } from "../../hooks";
 import { Separator } from "@/components/ui-kits/separator/separator";
 import { format } from "date-fns";
@@ -56,6 +56,7 @@ export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) 
   const [modal, setModal] = useState<"rename" | "duplicate" | "delete" | null>(null);
 
   const { hasUnsavedChanges, setWorkflow, setLastSuccessfulExecutionData } = useWorkflow();
+  const workflowStore = useWorkflowStoreApi();
 
   const { data, isLoading, isFetched, isFetching, isFetchedAfterMount, refetch } =
     useGetWorkflowById({ id: workflowId });
@@ -72,13 +73,17 @@ export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) 
     if (isFetched && isFetchedAfterMount) {
       if (data?.data) {
         const workflowData = data.data;
+        // A reload (after a save, or another change) must not overwrite edits not saved yet: they are newer
+        // than the server's copy. Read from the store, not render state, so this runs only for new data.
+        const editor = workflowStore.getState();
+        if (editor.hasUnsavedChanges && editor.workflowId === workflowData.itemId) return;
         setWorkflow(workflowData);
       } else {
         showErrorToast({ errors: "Workflow not found" });
         navigate(scoped("/app/workflow"));
       }
     }
-  }, [data, isFetched, isFetchedAfterMount, setWorkflow, navigate]);
+  }, [data, isFetched, isFetchedAfterMount, setWorkflow, navigate, workflowStore]);
 
   const { isSaving, saveNow } = useAutoSaveWorkflow({
     workflowId,

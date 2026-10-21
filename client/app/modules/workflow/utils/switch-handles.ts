@@ -31,8 +31,6 @@ export interface SwitchRule {
 export interface SwitchOptions {
   fallbackOutput: string;
   renameFallbackOutput: string;
-  ignoreCase: boolean;
-  allMatchingOutputs: boolean;
 }
 
 export interface SwitchParameters {
@@ -80,8 +78,8 @@ export const deriveSwitchHandle = (raw: Record<string, unknown> | undefined): No
 };
 
 /**
- * What a Switch handle or edge shows: its name, or "Output <i>" by position in its list; the fallback
- * shows its name or "Fallback".
+ * What a Switch handle or edge shows: its name, or its 0-based position in its list ("0", "1", …); the
+ * fallback shows its name or "Fallback".
  */
 export const switchHandleLabel = (handle: NodeHandle | null | undefined, key: string | null | undefined): string => {
   if (!key) return "";
@@ -90,21 +88,21 @@ export const switchHandleLabel = (handle: NodeHandle | null | undefined, key: st
   if (index < 0) return "";
   const label = sources[index].label;
   if (label) return label;
-  return key === SWITCH_FALLBACK_KEY ? "Fallback" : `Output ${index}`;
+  return key === SWITCH_FALLBACK_KEY ? "Fallback" : String(index);
 };
 
 export const newSwitchRule = (used: Iterable<string>): SwitchRule => ({
   handleKey: generateSwitchKey(used),
   handleLabel: "",
   conditionType: "all",
-  conditions: [],
+  conditions: [{ left: "", operator: "equals", right: "", type: "string" }],
 });
 
 /** Fresh default parameters for a new Switch: one empty rule with a new key. Never shared between nodes. */
 export const defaultSwitchParameters = (): SwitchParameters => ({
   mode: "rules",
   rules: [newSwitchRule([])],
-  options: { fallbackOutput: "none", renameFallbackOutput: "", ignoreCase: false, allMatchingOutputs: false },
+  options: { fallbackOutput: "none", renameFallbackOutput: "" },
 });
 
 /** Edges of `nodeId` on source keys that are not in `keys`. */

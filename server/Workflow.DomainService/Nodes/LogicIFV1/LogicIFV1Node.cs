@@ -73,6 +73,6 @@ namespace Workflow.DomainService.Nodes.LogicIFV1
         }
 
         private bool EvaluateCondition(Condition condition, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
-            => ConditionEvaluator.Evaluate(condition, text => parseExpression<string>(text, inputItem, context), ignoreCase: false);
+            => ConditionEvaluator.Evaluate(condition, text => parseExpression<string>(text, inputItem, context));
     }
 }

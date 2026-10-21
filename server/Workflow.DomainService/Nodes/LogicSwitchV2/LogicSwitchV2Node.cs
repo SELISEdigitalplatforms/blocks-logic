@@ -68,8 +68,6 @@ namespace Workflow.DomainService.Nodes.LogicSwitchV2
             if (fallbackBranch == "")
                 return NodeExecutionResult.Failed("Fallback output refers to a rule that does not exist.");
 
-            var ignoreCase = parameters.Options?.IgnoreCase ?? false;
-            var allMatching = parameters.Options?.AllMatchingOutputs ?? false;
             var outputItems = new List<NodeOutputItem>();
             string? firstError = null;
             int failedCount = 0, routed = 0, toFallback = 0, dropped = 0;
@@ -81,25 +79,22 @@ namespace Workflow.DomainService.Nodes.LogicSwitchV2
                 {
                     // Every condition of every rule is evaluated (no short-circuit), the same principle as If:
                     // a bad condition in a later rule fails the item even when an earlier rule matches.
-                    var matches = new List<string>();
+                    string? firstMatch = null;
                     foreach (var rule in rules)
                     {
                         var results = (rule!.Conditions ?? new List<Condition>())
-                            .Select(condition => ConditionEvaluator.Evaluate(condition, text => parseExpression<string>(text, inputItem, context), ignoreCase))
+                            .Select(condition => ConditionEvaluator.Evaluate(condition, text => parseExpression<string>(text, inputItem, context)))
                             .ToList();
                         var useOr = rule.ConditionType?.Trim().ToLowerInvariant() == "or";
-                        if (useOr ? results.Any(x => x) : results.All(x => x))
-                            matches.Add(rule.HandleKey!);
+                        if (firstMatch is null && (useOr ? results.Any(x => x) : results.All(x => x)))
+                            firstMatch = rule.HandleKey!;
                     }
 
-                    // Output items are added only after every rule evaluated, so a failed item leaves no copies.
-                    if (matches.Count > 0)
+                    // The item goes to the first rule that matched, added only after every rule evaluated.
+                    if (firstMatch is not null)
                     {
-                        foreach (var key in allMatching ? matches : matches.Take(1))
-                        {
-                            outputItems.Add(OutputItem(parameters, inputItem, key));
-                            routed++;
-                        }
+                        outputItems.Add(OutputItem(parameters, inputItem, firstMatch));
+                        routed++;
                     }
                     else if (fallbackBranch is not null)
                     {
