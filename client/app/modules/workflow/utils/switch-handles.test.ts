@@ -51,9 +51,9 @@ describe("deriveSwitchHandle", () => {
 describe("switchHandleLabel", () => {
   const handle = deriveSwitchHandle({ mode: "rules", rules, options: { fallbackOutput: "extra", renameFallbackOutput: "" } });
 
-  it("A13: shows the name, or Output <0-based index>, or Fallback", () => {
+  it("A13: shows the name, or its 0-based number, or Fallback", () => {
     expect(switchHandleLabel(handle, A)).toBe("Paid");
-    expect(switchHandleLabel(handle, B)).toBe("Output 1");
+    expect(switchHandleLabel(handle, B)).toBe("1");
     expect(switchHandleLabel(handle, SWITCH_FALLBACK_KEY)).toBe("Fallback");
     expect(switchHandleLabel(handle, "unknown")).toBe("");
     expect(switchHandleLabel(handle, null)).toBe("");

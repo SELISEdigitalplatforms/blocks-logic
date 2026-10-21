@@ -6,13 +6,13 @@ namespace Workflow.DomainService.Nodes.Conditions
 {
     /// <summary>
     /// Evaluates one If-style condition. Shared by the If and Switch nodes so both give the same result for
-    /// the same condition. With <c>ignoreCase: false</c> every comparison is ordinal (case-sensitive), exactly
-    /// as the If node always compared; <c>ignoreCase: true</c> only changes string and array text comparisons.
+    /// the same condition. Everything below <see cref="Evaluate"/> is the If node's original comparison code,
+    /// moved here unchanged: every comparison is ordinal (case-sensitive).
     /// </summary>
     public static class ConditionEvaluator
     {
         /// <param name="resolve">Resolves a condition side's expression text to its value (the node's parseExpression).</param>
-        public static bool Evaluate(Condition? condition, Func<string, string?> resolve, bool ignoreCase)
+        public static bool Evaluate(Condition? condition, Func<string, string?> resolve)
         {
             if (condition is null)
                 throw new InvalidOperationException("Condition is empty");
@@ -23,40 +23,36 @@ namespace Workflow.DomainService.Nodes.Conditions
             var operatorType = condition.Operator?.Trim().ToLowerInvariant() ?? string.Empty;
             var leftValue = NormalizeValueForType(rawLeft, type);
             var rightValue = NormalizeValueForType(rawRight, type);
-            return IsConditionMet(leftValue, operatorType, rightValue, type, ignoreCase ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            return IsConditionMet(leftValue, operatorType, rightValue, type);
         }
 
         private static InvalidOperationException UnknownOperator(string op, string type)
             => new($"Unknown operator {(string.IsNullOrEmpty(op) ? "(empty)" : op)} for type {type}");
 
-        private static bool IsConditionMet(object? leftValue, string operatorType, object? rightValue, string type, StringComparer comparer)
+        private static bool IsConditionMet(object? leftValue, string operatorType, object? rightValue, string type)
         {
             return type switch
             {
-                "string" => EvaluateStringCondition(leftValue as string ?? string.Empty, operatorType, rightValue as string ?? string.Empty, comparer),
+                "string" => EvaluateStringCondition(leftValue as string ?? string.Empty, operatorType, rightValue as string ?? string.Empty),
                 "number" => EvaluateNumberCondition(leftValue, operatorType, rightValue),
                 "boolean" => EvaluateBooleanCondition(leftValue, operatorType, rightValue),
                 "date_time" => EvaluateDateTimeCondition(leftValue, operatorType, rightValue),
-                "array" => EvaluateArrayCondition(leftValue, operatorType, rightValue, comparer),
+                "array" => EvaluateArrayCondition(leftValue, operatorType, rightValue),
                 _ => throw new InvalidOperationException($"Unknown type {type}")
             };
         }
 
-        private static StringComparison ComparisonOf(StringComparer comparer)
-            => ReferenceEquals(comparer, StringComparer.OrdinalIgnoreCase) ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-
-        private static bool EvaluateStringCondition(string left, string op, string right, StringComparer comparer)
+        private static bool EvaluateStringCondition(string left, string op, string right)
         {
-            var comparison = ComparisonOf(comparer);
             return op switch
             {
-                "equals" => string.Equals(left, right, comparison),
-                "not_equals" => !string.Equals(left, right, comparison),
-                "contains" => left.Contains(right, comparison),
-                "not_contains" => !left.Contains(right, comparison),
+                "equals" => left == right,
+                "not_equals" => left != right,
+                "contains" => left.Contains(right),
+                "not_contains" => !left.Contains(right),
                 // "in": the left value equals one entry of the right list (JSON array or comma-separated).
-                "in" => InList(left, right, comparer),
-                "not_in" => !InList(left, right, comparer),
+                "in" => InList(left, right),
+                "not_in" => !InList(left, right),
                 _ => throw UnknownOperator(op, "string")
             };
         }
@@ -136,9 +132,9 @@ namespace Workflow.DomainService.Nodes.Conditions
         /// contains / not_contains: the lists share at least one value / share none.
         /// in: every value of the left list is in the right list (left is a subset of right); an empty
         /// left list is not "in". not_in is the negation of in (at least one left value is missing from right).
-        /// Values are compared as exact text (case-sensitive unless ignoreCase).
+        /// Values are compared as exact text (case-sensitive).
         /// </summary>
-        private static bool EvaluateArrayCondition(object? leftValue, string op, object? rightValue, StringComparer comparer)
+        private static bool EvaluateArrayCondition(object? leftValue, string op, object? rightValue)
         {
             if (op is not ("contains" or "not_contains" or "in" or "not_in"))
                 throw UnknownOperator(op, "array");
@@ -148,22 +144,22 @@ namespace Workflow.DomainService.Nodes.Conditions
 
             return op switch
             {
-                "contains" => leftArray.Intersect(rightArray, comparer).Any(),
-                "not_contains" => !leftArray.Intersect(rightArray, comparer).Any(),
-                "in" => IsSubset(leftArray, rightArray, comparer),
-                _ => !IsSubset(leftArray, rightArray, comparer)
+                "contains" => leftArray.Intersect(rightArray).Any(),
+                "not_contains" => !leftArray.Intersect(rightArray).Any(),
+                "in" => IsSubset(leftArray, rightArray),
+                _ => !IsSubset(leftArray, rightArray)
             };
         }
 
         /// <summary>
         /// String "in": the right side is a list — a JSON array (["a","b"]) or comma-separated text (a, b),
-        /// entries trimmed. Exact match, like "equals". Empty right text is an empty list.
+        /// entries trimmed. Exact, case-sensitive match, like "equals". Empty right text is an empty list.
         /// </summary>
-        private static bool InList(string left, string right, StringComparer comparer)
-            => !string.IsNullOrEmpty(right) && NormalizeArrayValue(right).Contains(left, comparer);
+        private static bool InList(string left, string right)
+            => !string.IsNullOrEmpty(right) && NormalizeArrayValue(right).Contains(left, StringComparer.Ordinal);
 
-        private static bool IsSubset(string[] left, string[] right, StringComparer comparer)
-            => left.Length > 0 && left.All(value => right.Contains(value, comparer));
+        private static bool IsSubset(string[] left, string[] right)
+            => left.Length > 0 && left.All(value => right.Contains(value, StringComparer.Ordinal));
 
         private static object? NormalizeValueForType(string value, string type)
         {
