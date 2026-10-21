@@ -9,7 +9,8 @@ export const SWITCH_FALLBACK_KEY = "switch-handle-source-fallback";
 const KEY_FORMAT = /^switch-handle-source-[a-z0-9]{6}$/;
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 
-export type SwitchMode = "rules" | "expression";
+/** Only "rules" for now; the parameter is kept so other modes can be added later. */
+export type SwitchMode = "rules";
 
 export interface SwitchCondition {
   left?: string;
@@ -25,11 +26,6 @@ export interface SwitchRule {
   conditions: SwitchCondition[];
 }
 
-export interface SwitchOutput {
-  key: string;
-  outputName: string;
-}
-
 export interface SwitchOptions {
   fallbackOutput: string;
   renameFallbackOutput: string;
@@ -40,8 +36,6 @@ export interface SwitchOptions {
 export interface SwitchParameters {
   mode: SwitchMode;
   rules: SwitchRule[];
-  outputs: SwitchOutput[];
-  output: string;
   options: SwitchOptions;
 }
 
@@ -61,18 +55,13 @@ export const generateSwitchKey = (used: Iterable<string>): string => {
   return key;
 };
 
-/** Every key used by a rule or output of the node (both lists), so a new key is unique within the node. */
-export const usedSwitchKeys = (parameters: Partial<SwitchParameters> | undefined): string[] => [
-  ...asArray<SwitchRule>(parameters?.rules).map((r) => r.key),
-  ...asArray<SwitchOutput>(parameters?.outputs).map((o) => o.key),
-];
+/** Every key used by a rule of the node, so a new key is unique within the node. */
+export const usedSwitchKeys = (parameters: Partial<SwitchParameters> | undefined): string[] =>
+  asArray<SwitchRule>(parameters?.rules).map((r) => r.key);
 
 const asArray = <T,>(value: unknown): T[] => (Array.isArray(value) ? (value.filter(Boolean) as T[]) : []);
 
 const asText = (value: unknown): string => (typeof value === "string" ? value : "");
-
-export const switchMode = (parameters: Partial<SwitchParameters> | Record<string, unknown> | undefined): SwitchMode =>
-  (parameters as Partial<SwitchParameters> | undefined)?.mode === "expression" ? "expression" : "rules";
 
 /**
  * The node's handle, derived from its parameters (the source of truth). Stored labels are the raw
@@ -81,12 +70,6 @@ export const switchMode = (parameters: Partial<SwitchParameters> | Record<string
 export const deriveSwitchHandle = (raw: Record<string, unknown> | undefined): NodeHandle => {
   const parameters = (raw ?? {}) as Partial<SwitchParameters>;
   const targets = [{ key: "target", label: "" }];
-  if (switchMode(parameters) === "expression") {
-    return {
-      targets,
-      sources: asArray<SwitchOutput>(parameters.outputs).map((o) => ({ key: o.key, label: asText(o.outputName) })),
-    };
-  }
   const sources = asArray<SwitchRule>(parameters.rules).map((r) => ({ key: r.key, label: asText(r.outputName) }));
   if (parameters.options?.fallbackOutput === "extra") {
     sources.push({ key: SWITCH_FALLBACK_KEY, label: asText(parameters.options.renameFallbackOutput) });
@@ -115,17 +98,10 @@ export const newSwitchRule = (used: Iterable<string>): SwitchRule => ({
   conditions: [],
 });
 
-export const newSwitchOutput = (used: Iterable<string>): SwitchOutput => ({
-  key: generateSwitchKey(used),
-  outputName: "",
-});
-
 /** Fresh default parameters for a new Switch: one empty rule with a new key. Never shared between nodes. */
 export const defaultSwitchParameters = (): SwitchParameters => ({
   mode: "rules",
   rules: [newSwitchRule([])],
-  outputs: [],
-  output: "",
   options: { fallbackOutput: "none", renameFallbackOutput: "", ignoreCase: false, allMatchingOutputs: false },
 });
 

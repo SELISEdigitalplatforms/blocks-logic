@@ -496,7 +496,6 @@ describe("per-node handles (SPEC5)", () => {
 describe("Switch node in the store (SPEC6)", () => {
   const A = "switch-handle-source-aaaaa1";
   const B = "switch-handle-source-bbbbb2";
-  const C = "switch-handle-source-ccccc3";
   const FALLBACK = "switch-handle-source-fallback";
   const rule = (key: string, outputName = "") => ({ key, outputName, conditionType: "all", conditions: [] });
   const options = (fallbackOutput = "none") => ({ fallbackOutput, renameFallbackOutput: "", ignoreCase: false, allMatchingOutputs: false });
@@ -545,17 +544,6 @@ describe("Switch node in the store (SPEC6)", () => {
     expect(sourceKeys()).toEqual([A, FALLBACK]);
     state().updateNodeParameters("s", { ...state().nodesMap.s.parameters, options: options("none") });
     expect(Object.keys(state().edgesMap)).toEqual(["e1"]);
-  });
-
-  it("C2/H12: switching mode removes edges on rule outputs only, and keeps both lists", () => {
-    const parameters = { mode: "rules", rules: [rule(A)], outputs: [{ key: C, outputName: "" }], output: "", options: options() };
-    load(parameters, [edge("e1", A), edge("e2", C)]);
-    state().updateNodeParameters("s", { ...parameters, mode: "expression" });
-    expect(sourceKeys()).toEqual([C]);
-    expect(Object.keys(state().edgesMap)).toEqual(["e2"]);
-    state().updateNodeParameters("s", { ...parameters, mode: "rules" });
-    expect(sourceKeys()).toEqual([A]);
-    expect(state().nodesMap.s.parameters).toMatchObject({ rules: [rule(A)], outputs: [{ key: C, outputName: "" }] });
   });
 
   it("H19: duplicate and paste keep keys and handle; the original keeps its edges", () => {

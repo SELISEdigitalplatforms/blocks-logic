@@ -11,7 +11,6 @@ import {
 
 const A = "switch-handle-source-aaaaa1";
 const B = "switch-handle-source-bbbbb2";
-const O = "switch-handle-source-ooooo1";
 
 const rules = [
   { key: A, outputName: "Paid", conditionType: "all", conditions: [] },
@@ -20,7 +19,7 @@ const rules = [
 
 describe("deriveSwitchHandle", () => {
   it("H1/H12: rules mode lists the rules in order, with one target", () => {
-    expect(deriveSwitchHandle({ mode: "rules", rules, outputs: [{ key: O, outputName: "x" }] })).toEqual({
+    expect(deriveSwitchHandle({ mode: "rules", rules })).toEqual({
       targets: [{ key: "target", label: "" }],
       sources: [
         { key: A, label: "Paid" },
@@ -35,15 +34,16 @@ describe("deriveSwitchHandle", () => {
     expect(deriveSwitchHandle({ mode: "rules", rules, options: { fallbackOutput: A } }).sources).toHaveLength(2);
   });
 
-  it("H12: expression mode lists the outputs and ignores the rules", () => {
-    expect(deriveSwitchHandle({ mode: "expression", rules, outputs: [{ key: O, outputName: "" }] }).sources).toEqual([
-      { key: O, label: "" },
+  it("lists the rules even when a leftover mode or outputs list is stored", () => {
+    expect(deriveSwitchHandle({ mode: "expression", rules, outputs: [{ key: "switch-handle-source-ooooo1", outputName: "" }] }).sources).toEqual([
+      { key: A, label: "Paid" },
+      { key: B, label: "" },
     ]);
   });
 
   it("treats missing or broken parameters as no outputs", () => {
     expect(deriveSwitchHandle(undefined).sources).toEqual([]);
-    expect(deriveSwitchHandle({ rules: "x", outputs: null }).sources).toEqual([]);
+    expect(deriveSwitchHandle({ rules: "x" }).sources).toEqual([]);
     expect(deriveSwitchHandle({ rules: [null, rules[0]] }).sources).toEqual([{ key: A, label: "Paid" }]);
   });
 });

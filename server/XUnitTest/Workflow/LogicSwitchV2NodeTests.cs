@@ -8,7 +8,7 @@ using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {
-    /// <summary>SPEC6 Switch node: rules and expression modes, fallback, ignore case, validation.</summary>
+    /// <summary>SPEC6 Switch node: rules mode, fallback, ignore case, validation.</summary>
     public class LogicSwitchV2NodeTests
     {
         private const string A = "switch-handle-source-aaaaa1";
@@ -49,16 +49,7 @@ namespace XUnitTest.Workflow
 
         private static BsonDocument RulesParams(BsonDocument options, params BsonDocument[] rules) => new()
         {
-            { "mode", "rules" }, { "rules", new BsonArray(rules) }, { "outputs", new BsonArray() }, { "output", "" }, { "options", options },
-        };
-
-        private static BsonDocument ExpressionParams(string output, params string[] keys) => new()
-        {
-            { "mode", "expression" },
-            { "rules", new BsonArray() },
-            { "outputs", new BsonArray(keys.Select(k => new BsonDocument { { "key", k }, { "outputName", "" } })) },
-            { "output", output },
-            { "options", Options() },
+            { "mode", "rules" }, { "rules", new BsonArray(rules) }, { "options", options },
         };
 
         private static Task<NodeExecutionResult> Run(BsonDocument parameters, params BsonDocument[] outputs)
@@ -312,7 +303,34 @@ namespace XUnitTest.Workflow
             var parameters = RulesParams(Options(), PaidRule);
             parameters["mode"] = "random";
 
-            (await Run(parameters, Doc("{}"))).ErrorMessage.Should().Be("Unknown mode \"random\". Use \"rules\" or \"expression\".");
+            (await Run(parameters, Doc("{}"))).ErrorMessage.Should().Be("Unknown mode \"random\". Use \"rules\".");
+        }
+
+        [Fact]
+        public async Task ExpressionMode_IsNotSupportedYet_AndFails()
+        {
+            var parameters = RulesParams(Options(), PaidRule);
+            parameters["mode"] = "expression";
+
+            var result = await Run(parameters, Doc("{ \"status\": \"paid\" }"));
+
+            result.IsSuccess.Should().BeFalse();
+            result.ErrorMessage.Should().Be("Unknown mode \"expression\". Use \"rules\".");
+            result.OutputItems.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task LeftoverExpressionFields_AreIgnored_InRulesMode()
+        {
+            // A Switch saved while expression mode existed still carries "outputs" and "output".
+            var parameters = RulesParams(Options(), PaidRule);
+            parameters["outputs"] = new BsonArray { new BsonDocument { { "key", B }, { "outputName", "" } } };
+            parameters["output"] = "0";
+
+            var result = await Run(parameters, Doc("{ \"status\": \"paid\" }"));
+
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+            result.OutputItems.Should().ContainSingle().Which.Branch.Should().Be(A);
         }
 
         [Fact]
@@ -323,60 +341,6 @@ namespace XUnitTest.Workflow
                 """);
 
             (await Run(parameters, Doc("{}"))).OutputItems.Should().ContainSingle().Which.Branch.Should().Be(A);
-        }
-
-        // ---------- example 5: expression mode ----------
-
-        [Theory]
-        [InlineData("2", C)]
-        [InlineData("\"1.0\"", B)]
-        [InlineData("0", A)]
-        [InlineData("\"-0\"", A)]
-        [InlineData("\" 1 \"", B)]
-        public async Task Expression_RoutesToTheIndexedOutput(string route, string expected)
-        {
-            var result = await Run(ExpressionParams("{{$json.route}}", A, B, C), Doc($"{{ \"route\": {route} }}"));
-
-            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
-            result.OutputItems.Should().ContainSingle().Which.Branch.Should().Be(expected);
-        }
-
-        [Theory]
-        [InlineData("3", "Output index is not valid. Item 0: output \"3\" is not allowed. Use a whole number from 0 to 2.")]
-        [InlineData("-1", "Output index is not valid. Item 0: output \"-1\" is not allowed. Use a whole number from 0 to 2.")]
-        [InlineData("1.5", "Output index is not valid. Item 0: output \"1.5\" is not allowed. Use a whole number from 0 to 2.")]
-        [InlineData("\"abc\"", "Output index is not valid. Item 0: output is not a number. Use a whole number from 0 to 2.")]
-        [InlineData("\"1e0\"", "Output index is not valid. Item 0: output is not a number. Use a whole number from 0 to 2.")]
-        [InlineData("\"\"", "Output index is not valid. Item 0: output is not a number. Use a whole number from 0 to 2.")]
-        public async Task Expression_InvalidIndex_FailsTheStep(string route, string message)
-        {
-            var result = await Run(ExpressionParams("{{$json.route}}", A, B, C), Doc($"{{ \"route\": {route} }}"));
-
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Be(message);
-            result.OutputItems.Should().OnlyContain(o => o.IsError);
-        }
-
-        [Fact]
-        public async Task Expression_ZeroOutputs_Fails()
-        {
-            (await Run(ExpressionParams("0"), Doc("{}"))).ErrorMessage.Should().Be("Expression mode needs at least one output.");
-        }
-
-        [Fact]
-        public async Task Expression_DuplicateOutputKey_FailsNamingTheZeroBasedPosition()
-        {
-            (await Run(ExpressionParams("0", A, A), Doc("{}"))).ErrorMessage.Should().Be("Output 1 has an invalid or duplicate output key.");
-        }
-
-        [Fact]
-        public async Task Expression_MixedItems_RoutesTheGoodOnes_AndNamesTheFirstBad()
-        {
-            var result = await Run(ExpressionParams("{{$json.route}}", A, B), Doc("{ \"route\": 1 }"), Doc("{ \"route\": 9 }"), Doc("{ \"route\": \"x\" }"));
-
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Be("Output index is not valid for 2 item(s). First: Item 1: output \"9\" is not allowed. Use a whole number from 0 to 1.");
-            result.OutputItems.Where(o => !o.IsError).Select(o => o.Branch).Should().Equal(B);
         }
 
         // ---------- C14: 100 rules x 1,000 items ----------

@@ -187,7 +187,7 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		icon: <Split className="h-5 w-5 text-success" />,
 		title: "Switch",
 		description:
-			"Route each item to one of many outputs by rules or by an expression.",
+			"Route each item to one of many outputs by rules.",
 		type: "switch",
 		category: "logic",
 		version: "v2",

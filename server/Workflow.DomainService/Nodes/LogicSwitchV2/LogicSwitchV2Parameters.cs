@@ -4,17 +4,11 @@ namespace Workflow.DomainService.Nodes.LogicSwitchV2
 {
     public class LogicSwitchV2Parameters
     {
-        /// <summary>"rules" or "expression".</summary>
+        /// <summary>Only "rules" for now; kept so other modes can be added later.</summary>
         public string Mode { get; set; } = "rules";
 
-        /// <summary>Rules mode: evaluated in this order.</summary>
+        /// <summary>Evaluated in this order.</summary>
         public List<SwitchRule?> Rules { get; set; } = new();
-
-        /// <summary>Expression mode: the output for index i is Outputs[i].</summary>
-        public List<SwitchOutput?> Outputs { get; set; } = new();
-
-        /// <summary>Expression mode: resolves to the 0-based output index.</summary>
-        public string Output { get; set; } = string.Empty;
 
         public SwitchOptions Options { get; set; } = new();
     }
@@ -26,12 +20,6 @@ namespace Workflow.DomainService.Nodes.LogicSwitchV2
         /// <summary>Same values as If: "or" = any condition, anything else = all.</summary>
         public string? ConditionType { get; set; } = "all";
         public List<Condition> Conditions { get; set; } = new();
-    }
-
-    public class SwitchOutput
-    {
-        public string? Key { get; set; }
-        public string? OutputName { get; set; }
     }
 
     public class SwitchOptions
