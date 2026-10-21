@@ -69,7 +69,7 @@ export const EditorNodeSimple = ({ id }: Node) => {
   return (
     <EditorNodeBase id={id}>
       <div className="absolute -left-1 top-0 flex h-full flex-col items-center justify-center gap-4">
-        {targets.map(({ key: handleId }) => {
+        {targets.map(({ key: handleId, label }) => {
           const isConnected = incoming.some(
             (edge) => edge.targetHandle === handleId || (!edge.targetHandle && handleId === "target")
           );
@@ -82,7 +82,14 @@ export const EditorNodeSimple = ({ id }: Node) => {
               position={Position.Left}
               id={handleId}
               nodeId={node.id}
-            ></EditorNodeHandle>
+            >
+              {/* Only inputs with a label (Merge's "Input k") show one; every other node's inputs have none. */}
+              {label && (
+                <span className="pointer-events-none absolute right-full top-1/2 mr-1.5 -translate-y-1/2 whitespace-nowrap rounded-md border border-medium-emphasis bg-background px-1.5 py-0.5 text-[10px] tracking-wider text-medium-emphasis shadow-sm dark:border-accent dark:text-primary">
+                  {label}
+                </span>
+              )}
+            </EditorNodeHandle>
           );
         })}
       </div>

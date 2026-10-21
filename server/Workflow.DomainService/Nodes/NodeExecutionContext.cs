@@ -26,6 +26,14 @@ namespace Workflow.DomainService.Nodes
         public required int IterationCount { get; init; }
 
         /// <summary>
+        /// The input items grouped by the edge's target handle ("" for a blank handle), in snapshot edge order,
+        /// each group in run order then item order. Filled for Merge only; empty for every other node, whose
+        /// input stays <see cref="InputItems"/> exactly as before.
+        /// </summary>
+        public IReadOnlyDictionary<string, IReadOnlyList<WorkflowItemExecutionEntity>> InputItemsByHandle { get; init; } =
+            new Dictionary<string, IReadOnlyList<WorkflowItemExecutionEntity>>();
+
+        /// <summary>
         /// Whether any edge targets this node. This is the only way a node can tell "nothing is wired to me"
         /// from "my upstream ran and produced no items" — both arrive as an empty <see cref="InputItems"/>,
         /// but they mean opposite things. The second case is how an untaken branch is pruned (the engine

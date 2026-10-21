@@ -323,6 +323,45 @@ namespace XUnitTest.Workflow
                 .Should().BeTrue();
         }
 
+        // ---------- SPEC3: incoming edge data status (input rule) ----------
+
+        [Fact]
+        public void IncomingEdgeDataStatus_CountsEdgesWithoutData()
+        {
+            var edges = new[]
+            {
+                Edge("withItems", "merge", "source"),
+                Edge("zeroItems", "merge", "source"),
+                Edge("noRow", "merge", "source"),
+                Edge("failed", "merge", "source"),
+                Edge("check", "merge", "if-false"),
+                Edge("other", "elsewhere", "source"),
+            };
+            var executions = new[]
+            {
+                Node("withItems", 1, new() { ["source"] = 2 }),
+                Node("zeroItems", 2, new() { ["source"] = 0 }),
+                Node("failed", 3, new() { ["source"] = 1 }, NodeExecutionStatus.Failed),
+                Node("check", 4, new() { ["if-true"] = 1 }),
+            };
+
+            WorkflowBranchRouting.IncomingEdgeDataStatus("merge", edges, executions).Should().Be((5, 4));
+        }
+
+        [Fact]
+        public void IncomingEdgeDataStatus_LatestRowWins_AndNoEdgesIsZero()
+        {
+            var edges = new[] { Edge("p", "merge", "source") };
+            var executions = new[]
+            {
+                Node("p", 1, new() { ["source"] = 0 }),
+                Node("p", 2, new() { ["source"] = 3 }),
+            };
+
+            WorkflowBranchRouting.IncomingEdgeDataStatus("merge", edges, executions).Should().Be((1, 0));
+            WorkflowBranchRouting.IncomingEdgeDataStatus("lonely", edges, executions).Should().Be((0, 0));
+        }
+
         private static NodeExecutionEntity Node(
             string nodeId,
             int runIndex,

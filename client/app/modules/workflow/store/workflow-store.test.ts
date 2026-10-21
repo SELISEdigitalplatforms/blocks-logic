@@ -592,3 +592,33 @@ describe("saving and reloading", () => {
     expect(state().selectedNode).toBeNull();
   });
 });
+
+describe("Merge node in the store (SPEC3)", () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mergeNode = (numberInputs: unknown, extra: Record<string, unknown> = {}): any =>
+    node("m", { category: "transform", type: "merge", version: "v2", parameters: { mode: "append", numberInputs }, handle: null, ...extra });
+  const edge = (id: string, source: string, targetHandle: string) => ({ id, source, target: "m", sourceHandle: "source", targetHandle });
+  const targetKeys = () => state().nodesMap.m.handle!.targets.map((e) => e.key);
+
+  it("C17: on load re-derives a mismatched handle from numberInputs, without marking changed", () => {
+    state().setWorkflow({
+      itemId: "w1",
+      nodes: [mergeNode(3, { handle: { sources: [{ key: "source", label: "" }], targets: [{ key: "merge-handle-target-1", label: "Input 1" }] } }), node("a"), node("b")],
+      edges: [edge("e3", "a", "merge-handle-target-3")],
+    } as never);
+    expect(targetKeys()).toEqual(["merge-handle-target-1", "merge-handle-target-2", "merge-handle-target-3"]);
+    expect(state().hasUnsavedChanges).toBe(false);
+    expect(Object.keys(state().edgesMap)).toEqual(["e3"]);
+  });
+
+  it("C13: committing 2 -> 1 deletes only the edge on input 2", () => {
+    state().setWorkflow({
+      itemId: "w1",
+      nodes: [mergeNode(2), node("a"), node("b"), node("x")],
+      edges: [edge("e1", "a", "merge-handle-target-1"), edge("e2", "b", "merge-handle-target-2"), { id: "out", source: "m", target: "x", sourceHandle: "source", targetHandle: "target" }],
+    } as never);
+    state().updateNodeParameters("m", { mode: "append", numberInputs: 1 });
+    expect(targetKeys()).toEqual(["merge-handle-target-1"]);
+    expect(Object.keys(state().edgesMap).sort()).toEqual(["e1", "out"]);
+  });
+});

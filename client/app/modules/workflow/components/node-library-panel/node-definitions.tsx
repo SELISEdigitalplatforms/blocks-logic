@@ -14,7 +14,9 @@ import {
 	FunctionSquare,
 	Waypoints,
 	Split,
+	Merge,
 } from "lucide-react";
+import { deriveMergeHandle } from "@blocks-workflow/utils/merge-handles";
 import { deriveSwitchHandle, switchHandleLabel } from "@blocks-workflow/utils/switch-handles";
 
 export const NodeDefinitions: WorkflowNodeDefinition[] = [
@@ -227,6 +229,25 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 			sources: [{ key: "source", label: "" }],
 			targets: [{ key: "target", label: "" }],
 		},
+	},
+	{
+		id: "transform-merge-v2",
+		icon: <Merge className="h-5 w-5 text-blue-500" />,
+		title: "Merge",
+		description: "Combine items from several inputs into one list.",
+		type: "merge",
+		category: "transform",
+		version: "v2",
+		defaultName: "Merge",
+		// Inputs come from numberInputs (merge-handle-target-1..N); this template is the default 2 inputs.
+		handle: {
+			sources: [{ key: "source", label: "" }],
+			targets: [
+				{ key: "merge-handle-target-1", label: "Input 1" },
+				{ key: "merge-handle-target-2", label: "Input 2" },
+			],
+		},
+		deriveHandle: deriveMergeHandle,
 	},
 	{
 		id: "transform-code-v2",

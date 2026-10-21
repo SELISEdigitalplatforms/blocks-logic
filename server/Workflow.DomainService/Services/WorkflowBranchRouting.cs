@@ -195,6 +195,30 @@ namespace Workflow.DomainService.Services
             return reachable;
         }
 
+        /// <summary>
+        /// Over the incoming edges of <paramref name="nodeId"/>: how many there are, and how many sent no items.
+        /// An edge sent items only when its source's latest row is Completed and carried items on that edge's
+        /// branch; a source with no row (an untaken branch) sent none.
+        /// </summary>
+        public static (int Total, int WithoutData) IncomingEdgeDataStatus(
+            string nodeId,
+            IReadOnlyList<EdgeEnity>? edges,
+            IReadOnlyList<NodeExecutionEntity>? executions)
+        {
+            var incoming = (edges ?? Array.Empty<EdgeEnity>()).Where(e => e != null && e.Target == nodeId).ToList();
+            if (incoming.Count == 0)
+            {
+                return (0, 0);
+            }
+
+            var latestByNode = LatestByNode(executions);
+            var withoutData = incoming.Count(edge =>
+                !(latestByNode.TryGetValue(edge.Source, out var row)
+                  && row.Status == NodeExecutionStatus.Completed
+                  && CarriedItems(row.OutputCountsByBranch, edge.SourceHandle)));
+            return (incoming.Count, withoutData);
+        }
+
         private static Dictionary<string, NodeExecutionEntity> LatestByNode(IReadOnlyList<NodeExecutionEntity>? executions)
         {
             var latest = new Dictionary<string, NodeExecutionEntity>();

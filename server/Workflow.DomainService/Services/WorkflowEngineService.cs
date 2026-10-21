@@ -110,6 +110,35 @@ namespace Workflow.DomainService.Services
                 // Without this the step could not be stopped: it kept waiting until the process was killed, and
                 // the node stayed Running for ever. Only the step's own work sees it; the writes below do not.
                 nodeExecutionContext.CancellationToken = stopping;
+
+                // Input rule (node settings; the editor offers it on Merge): a node that requires every input
+                // is skipped or failed when one of its incoming edges sent no items. Pinned data is not used then.
+                // Without the "allInputsHaveData" setting, which no node had before, nothing here runs.
+                var inputRule = NodeInputRule.Parse(node.Settings);
+                if (inputRule.RequireAllInputs)
+                {
+                    var (total, withoutData) = WorkflowBranchRouting.IncomingEdgeDataStatus(
+                        node.Id, execution.WorkflowSnapshot.Edges, execution.NodeExecutions);
+                    var decision = NodeInputRule.Evaluate(inputRule, total, withoutData);
+                    if (decision != InputRuleDecision.Run)
+                    {
+                        log.Info(ExecutionLogStages.InputRuleUnmet, "{WithoutData} of {Total} input(s) sent no items.", withoutData, total);
+                        if (decision == InputRuleDecision.Fail)
+                        {
+                            await FailNodeExecutionAsync(execution, node, nodeExecutionContext, nodeExecution,
+                                new Exception($"Required input data is missing: {withoutData} of {total} inputs sent no items."),
+                                outputItems: null, "NodeReportedFailure");
+                        }
+                        else
+                        {
+                            var skippedEvents = await CompleteNodeExecutionAsync(nodeExecutionContext, execution, node, nodeExecution,
+                                NodeExecutionResult.Successful(new List<NodeOutputItem>()), completionNodeId);
+                            await dispatchNextNodes(skippedEvents, log);
+                        }
+                        return;
+                    }
+                }
+
                 var (executor, usedFallback) = _nodeExecutors.Resolve(node.Type, node.Version);
                 if (usedFallback)
                 {
@@ -325,6 +354,10 @@ namespace Workflow.DomainService.Services
                 AncestorNodeOutputs = ancestorOutputs,
                 IterationCount = inputItems.Count,
                 HasUpstream = hasUpstream,
+                // Only Merge reads its input per handle; every other node keeps InputItems alone, as before.
+                InputItemsByHandle = node.Type == "merge"
+                    ? InputItemsByHandleBuilder.Build(incomingEdges, inputItems, execution.NodeExecutions)
+                    : new Dictionary<string, IReadOnlyList<WorkflowItemExecutionEntity>>(),
                 ServiceProvider = _serviceProvider,
                 Log = log,
                 PreviousAttemptItems = previousAttemptItems,
