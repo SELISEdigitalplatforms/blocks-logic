@@ -21,14 +21,6 @@ namespace Workflow.DomainService.Nodes.TransformSplitOutV2
         /// <summary>Split Out exists only as v2; there is no v1.</summary>
         public IReadOnlyCollection<string> Versions => SupportedVersions;
 
-        private static List<string> ParseList(string? text, bool stripJsonPrefix) =>
-            (text ?? string.Empty)
-                .Split(',')
-                .Select(part => part.Trim())
-                .Select(part => stripJsonPrefix ? StripJsonPrefix(part) : part)
-                .Where(part => part.Length > 0)
-                .ToList();
-
         private static string StripJsonPrefix(string path)
         {
             // A field dragged from the input panel arrives as {{$json.output.lines}}; the field is its path.
@@ -43,24 +35,23 @@ namespace Workflow.DomainService.Nodes.TransformSplitOutV2
         {
             var parameters = nodeparameters ?? new TransformSplitOutV2Parameters();
             var dotNotation = !parameters.DisableDotNotation;
-            var include = parameters.Include?.Trim() switch
-            {
-                "allOtherFields" => "allOtherFields",
-                "selectedOtherFields" => "selectedOtherFields",
-                _ => "noOtherFields",
-            };
+            var include = parameters.Include;
 
-            var fields = ParseList(parameters.FieldToSplitOut, stripJsonPrefix: true);
-            if (fields.Count == 0)
+            var entries = (parameters.Fields ?? new List<SplitOutField?>())
+                .Where(entry => !string.IsNullOrWhiteSpace(entry?.FieldName))
+                .Select(entry => (Field: StripJsonPrefix(entry!.FieldName!.Trim()), Output: entry.OutputFieldName?.Trim() ?? string.Empty))
+                .ToList();
+            if (entries.Count == 0)
                 return Task.FromResult(NodeExecutionResult.Failed("Fields To Split Out is required."));
+            var fields = entries.Select(entry => entry.Field).ToList();
+            var destinations = entries.Select(entry => entry.Output).ToList();
 
-            var fieldsToInclude = ParseList(parameters.FieldsToInclude, stripJsonPrefix: false);
-            if (include == "selectedOtherFields" && fieldsToInclude.Count == 0)
+            var fieldsToInclude = (parameters.FieldsToInclude ?? new List<string?>())
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Select(path => path!.Trim())
+                .ToList();
+            if (include == SplitOutInclude.SelectedOtherFields && fieldsToInclude.Count == 0)
                 return Task.FromResult(NodeExecutionResult.Failed("Fields To Include is required."));
-
-            var destinations = ParseList(parameters.DestinationFieldName, stripJsonPrefix: false);
-            if (destinations.Count > 0 && destinations.Count != fields.Count)
-                return Task.FromResult(NodeExecutionResult.Failed("Destination Field Name must list one name per field to split out."));
 
             var outputItems = new List<NodeOutputItem>();
             var foundSomewhere = new bool[fields.Count];
@@ -79,7 +70,8 @@ namespace Workflow.DomainService.Nodes.TransformSplitOutV2
                             {
                                 Input = inputItem.Data.Output,
                                 Output = entry,
-                                Parameters = parameters.ToBsonDocument(),
+                                // As saved (camelCase text values), not re-serialized from the typed parameters.
+                                Parameters = context.Parameters,
                             },
                             Branch = "source",
                             ParentItemIds = new List<string> { inputItem.Id },
@@ -88,7 +80,7 @@ namespace Workflow.DomainService.Nodes.TransformSplitOutV2
                 }
                 catch (Exception ex)
                 {
-                    AppendErrorOutputItem(outputItems, inputItem, parameters.ToBsonDocument(), ex);
+                    AppendErrorOutputItem(outputItems, inputItem, context.Parameters, ex);
                 }
             }
 
@@ -106,23 +98,23 @@ namespace Workflow.DomainService.Nodes.TransformSplitOutV2
             BsonDocument? doc,
             List<string> fields,
             List<string> destinations,
-            string include,
+            SplitOutInclude include,
             List<string> fieldsToInclude,
             bool dotNotation,
             bool[] foundSomewhere)
         {
             var entries = new List<BsonDocument>();
             var multiSplit = fields.Count > 1;
-            // As n8n (node version 1.1+): with dot notation, destination names are paths ("order.line" goes
+            // As n8n (node version 1.1+): with dot notation, an output field name is a path ("order.line" goes
             // inside "order"), written after the other fields are copied in.
-            var destinationPaths = dotNotation && destinations.Count > 0;
             var pending = new List<List<(string Path, BsonValue Value)>>();
 
             for (var k = 0; k < fields.Count; k++)
             {
                 var field = fields[k];
-                var destination = destinations.Count > 0 ? destinations[k] : string.Empty;
+                var destination = destinations[k];
                 var name = destination.Length > 0 ? destination : field;
+                var destinationPath = dotNotation && destination.Length > 0;
 
                 List<BsonValue> elements;
                 if (doc is null || !BsonPath.TryGet(doc, field, dotNotation, out var value))
@@ -145,11 +137,11 @@ namespace Workflow.DomainService.Nodes.TransformSplitOutV2
                     if (entries.Count <= j) entries.Add(new BsonDocument());
                     if (pending.Count <= j) pending.Add(new List<(string, BsonValue)>());
                     var element = elements[j];
-                    if (destinationPaths)
+                    if (destinationPath)
                     {
                         pending[j].Add((name, element.DeepClone()));
                     }
-                    else if (element is BsonDocument elementDoc && include == "noOtherFields" && destination.Length == 0 && !multiSplit)
+                    else if (element is BsonDocument elementDoc && include == SplitOutInclude.NoOtherFields && destination.Length == 0 && !multiSplit)
                     {
                         foreach (var property in elementDoc) entries[j][property.Name] = property.Value.DeepClone();
                     }
@@ -164,14 +156,14 @@ namespace Workflow.DomainService.Nodes.TransformSplitOutV2
             {
                 for (var j = 0; j < entries.Count; j++)
                 {
-                    if (include == "allOtherFields")
+                    if (include == SplitOutInclude.AllOtherFields)
                     {
                         var merged = (BsonDocument)doc.DeepClone();
                         foreach (var field in fields) BsonPath.Remove(merged, field, dotNotation);
                         foreach (var property in entries[j]) merged[property.Name] = property.Value;
                         entries[j] = merged;
                     }
-                    else if (include == "selectedOtherFields")
+                    else if (include == SplitOutInclude.SelectedOtherFields)
                     {
                         foreach (var path in fieldsToInclude)
                         {

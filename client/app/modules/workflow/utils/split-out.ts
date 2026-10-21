@@ -1,11 +1,7 @@
-/**
- * Split Out editor helpers. The node still saves n8n's comma-separated strings (fieldToSplitOut,
- * destinationFieldName); the editor shows them as one row per field.
- */
-export type SplitOutRow = { field: string; destination: string };
+/** One field to split out, as saved in the node's parameters (`fields`). */
+export type SplitOutField = { fieldName: string; outputFieldName: string };
 
-const parts = (text: unknown): string[] =>
-  typeof text === "string" ? text.split(",").map((part) => part.trim()) : [];
+export const emptySplitOutField = (): SplitOutField => ({ fieldName: "", outputFieldName: "" });
 
 /**
  * A field as a plain path. A field dragged from the input panel arrives as {{$json.output.lines}}; the
@@ -20,26 +16,21 @@ export const toFieldPath = (text: string): string => {
   return path;
 };
 
-export const rowsFromParameters = (fieldToSplitOut: unknown, destinationFieldName: unknown): SplitOutRow[] => {
-  const fields = parts(fieldToSplitOut).filter(Boolean);
-  const destinations = parts(destinationFieldName);
-  const named = destinations.length === fields.length;
-  const rows = fields.map((field, i) => ({ field, destination: named && destinations[i] !== field ? destinations[i] : "" }));
-  return rows.length ? rows : [{ field: "", destination: "" }];
-};
+/** The saved fields, tolerant of anything malformed. */
+export const splitOutFields = (value: unknown): SplitOutField[] =>
+  Array.isArray(value)
+    ? value
+        .filter((entry): entry is Record<string, unknown> => typeof entry === "object" && entry !== null)
+        .map((entry) => ({
+          fieldName: typeof entry.fieldName === "string" ? entry.fieldName : "",
+          outputFieldName: typeof entry.outputFieldName === "string" ? entry.outputFieldName : "",
+        }))
+    : [];
 
-/**
- * The saved strings for the rows. Destination names are all-or-nothing on the server (one per field), so
- * when any row has one, the others use their own field name.
- */
-export const parametersFromRows = (rows: SplitOutRow[]): { fieldToSplitOut: string; destinationFieldName: string } => {
-  const filled = rows.map((row) => ({ field: row.field.trim(), destination: row.destination.trim() })).filter((row) => row.field);
-  const anyDestination = filled.some((row) => row.destination);
-  return {
-    fieldToSplitOut: filled.map((row) => row.field).join(", "),
-    destinationFieldName: anyDestination ? filled.map((row) => row.destination || row.field).join(", ") : "",
-  };
-};
+/** "email, name" as a list, and back: Fields To Include is typed as text but saved as a list. */
+export const textToList = (text: string): string[] => text.split(",").map((part) => part.trim()).filter(Boolean);
+export const listToText = (value: unknown): string =>
+  Array.isArray(value) ? value.filter((part) => typeof part === "string").join(", ") : typeof value === "string" ? value : "";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -56,10 +47,10 @@ const hasPath = (item: unknown, path: string, dotNotation: boolean): boolean => 
 };
 
 /** The fields to split out that no input item has (n8n's "wasn't found in any input item" hint). */
-export const fieldsNotFound = (fieldToSplitOut: unknown, inputRows: unknown[], dotNotation: boolean): string[] => {
+export const fieldsNotFound = (fields: unknown, inputRows: unknown[], dotNotation: boolean): string[] => {
   if (inputRows.length === 0) return [];
-  return parts(fieldToSplitOut)
+  return splitOutFields(fields)
+    .map((entry) => toFieldPath(entry.fieldName))
     .filter(Boolean)
-    .map(toFieldPath)
     .filter((field) => !inputRows.some((row) => hasPath(row, field, dotNotation)));
 };

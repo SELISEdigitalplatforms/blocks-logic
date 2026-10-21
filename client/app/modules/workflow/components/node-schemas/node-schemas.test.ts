@@ -1076,33 +1076,28 @@ describe("transform/splitOut v2 (SPEC2)", () => {
 
   it("has the documented defaults and fields", () => {
     expect(schema.defaults.parameters).toEqual({
-      fieldToSplitOut: "",
+      fields: [],
       include: "noOtherFields",
-      fieldsToInclude: "",
-      destinationFieldName: "",
+      fieldsToInclude: [],
       disableDotNotation: false,
     });
-    expect(schema.schema.parameters.map((f) => f.key)).toEqual([
-      "splitOutFields",
-      "include",
-      "fieldsToInclude",
-      "disableDotNotation",
+    expect(schema.schema.parameters.map((f) => [f.key, f.type])).toEqual([
+      ["fields", "split-out-fields"],
+      ["include", "select-with-description"],
+      ["fieldsToInclude", "comma-list"],
+      ["disableDotNotation", "switch"],
     ]);
   });
 
-  it("the field rows edit the saved strings and are never saved themselves", () => {
-    const rows = schema.schema.parameters.find((f) => f.key === "splitOutFields")!;
-    expect(rows.transient).toBe(true);
-    expect(rows.displayValue!({ fieldToSplitOut: "names, scores", destinationFieldName: "name, score" }, {} as never)).toEqual([
-      { field: "names", destination: "name" },
-      { field: "scores", destination: "score" },
-    ]);
-    expect(rows.onChange!([{ field: "lines", destination: "" }], {}, {} as never)).toEqual({ fieldToSplitOut: "lines", destinationFieldName: "" });
+  it("Include offers the three values the server reads", () => {
+    const include = schema.schema.parameters.find((f) => f.key === "include")!;
+    expect((include.options as { value: string }[]).map((o) => o.value)).toEqual(["noOtherFields", "allOtherFields", "selectedOtherFields"]);
   });
 
-  it("H11: Fields To Include shows only for Selected other fields and resets to empty", () => {
+  it("H11: Fields To Include shows only for Selected other fields and resets to an empty list", () => {
     const field = schema.schema.parameters.find((f) => f.key === "fieldsToInclude")!;
     expect(field.dependsOn).toEqual({ key: "include", value: "selectedOtherFields" });
-    expect(field.defaultValue).toBe("");
+    expect(field.defaultValue).toEqual([]);
+    expect(field.placeholder).toBe("e.g. email, name");
   });
 });

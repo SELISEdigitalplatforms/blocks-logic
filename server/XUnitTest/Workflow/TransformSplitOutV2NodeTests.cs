@@ -26,14 +26,25 @@ namespace XUnitTest.Workflow
             Data = new NodeOutputItemData { Output = output },
         };
 
-        private static BsonDocument Params(string field, string include = "noOtherFields", string fieldsToInclude = "", string destination = "", bool disableDotNotation = false) => new()
+        // Tests write fields and output names as comma lists for brevity: "names, scores" with "name, score"
+        // becomes [{ fieldName: names, outputFieldName: name }, { fieldName: scores, outputFieldName: score }].
+        private static BsonDocument Params(string field, string include = "noOtherFields", string fieldsToInclude = "", string destination = "", bool disableDotNotation = false)
         {
-            { "fieldToSplitOut", field },
-            { "include", include },
-            { "fieldsToInclude", fieldsToInclude },
-            { "destinationFieldName", destination },
-            { "disableDotNotation", disableDotNotation },
-        };
+            var names = field.Split(',');
+            var outputs = destination.Split(',');
+            var fields = new BsonArray(names.Select((name, i) => new BsonDocument
+            {
+                { "fieldName", name },
+                { "outputFieldName", i < outputs.Length ? outputs[i] : "" },
+            }));
+            return new BsonDocument
+            {
+                { "fields", fields },
+                { "include", include },
+                { "fieldsToInclude", new BsonArray(fieldsToInclude.Split(',')) },
+                { "disableDotNotation", disableDotNotation },
+            };
+        }
 
         private static Task<NodeExecutionResult> Run(BsonDocument parameters, params BsonValue[] outputs)
         {
@@ -122,7 +133,6 @@ namespace XUnitTest.Workflow
         [InlineData("", "noOtherFields", "", "", "Fields To Split Out is required.")]
         [InlineData(" , ,", "noOtherFields", "", "", "Fields To Split Out is required.")]
         [InlineData("lines", "selectedOtherFields", " ", "", "Fields To Include is required.")]
-        [InlineData("lines", "noOtherFields", "", "p,q", "Destination Field Name must list one name per field to split out.")]
         public async Task Example5_InvalidConfiguration_FailsWithNoItems(string field, string include, string fieldsToInclude, string destination, string message)
         {
             var result = await Run(Params(field, include, fieldsToInclude, destination), Order);
@@ -219,6 +229,32 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
+        public async Task EachFieldHasItsOwnOutputName_AnEmptyOneKeepsTheFieldName()
+        {
+            var input = Doc("{ \"names\": [\"Ali\"], \"scores\": [90] }");
+
+            var result = await Run(Params("names, scores", destination: "person,"), input);
+
+            // An output field name is written after the plain fields, as in n8n.
+            Outputs(result).Should().Equal("{ \"scores\" : 90, \"person\" : \"Ali\" }");
+        }
+
+        [Fact]
+        public async Task ReadsTheSavedListShape()
+        {
+            var parameters = Doc("""
+                { "fields": [ { "fieldName": "lines", "outputFieldName": "line" }, null, { "fieldName": " " } ],
+                  "include": "selectedOtherFields", "fieldsToInclude": [ "orderId", "", null ], "disableDotNotation": false }
+                """);
+
+            var result = await Run(parameters, Order);
+
+            Outputs(result).Should().Equal(
+                "{ \"orderId\" : 7, \"line\" : { \"sku\" : \"A\", \"qty\" : 1 } }",
+                "{ \"orderId\" : 7, \"line\" : { \"sku\" : \"B\", \"qty\" : 2 } }");
+        }
+
+        [Fact]
         public async Task AFieldDraggedFromTheInputPanel_IsReadAsItsPath()
         {
             var result = await Run(Params("{{$json.output.lines}}"), Order);
@@ -244,9 +280,33 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
-        public async Task UnknownInclude_IsNoOtherFields()
+        public async Task UnknownInclude_FailsTheStep()
         {
-            Outputs(await Run(Params("lines", "weird"), Order)).Should().HaveCount(2);
+            var result = await Run(Params("lines", "weird"), Order);
+
+            result.IsSuccess.Should().BeFalse();
+            result.ErrorMessage.Should().Contain("include");
+            result.OutputItems.Should().BeEmpty();
+        }
+
+        [Theory]
+        [InlineData("noOtherFields", 2)]
+        [InlineData("NoOtherFields", 2)]
+        [InlineData("allOtherFields", 2)]
+        public async Task Include_ReadsTheSavedNames(string include, int count)
+        {
+            Outputs(await Run(Params("lines", include), Order)).Should().HaveCount(count);
+        }
+
+        [Fact]
+        public async Task OutputItems_KeepTheParametersAsSaved()
+        {
+            var parameters = Params("lines", "allOtherFields");
+
+            var result = await Run(parameters, Order);
+
+            result.OutputItems.Should().OnlyContain(o => o.Data.Parameters == parameters);
+            result.OutputItems[0].Data.Parameters["include"].AsString.Should().Be("allOtherFields");
         }
 
         [Fact]

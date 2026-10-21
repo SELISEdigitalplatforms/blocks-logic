@@ -349,29 +349,29 @@ describe("OutputPanel", () => {
     };
 
     it("shows how many items went in and came out", () => {
-      renderWithProviders(<OutputPanel />, { seedWorkflow: seedSplitOutRun({ fieldToSplitOut: "lines" }, [{ lines: [1, 2] }, { lines: [3] }], 3) });
+      renderWithProviders(<OutputPanel />, { seedWorkflow: seedSplitOutRun({ fields: [{ fieldName: "lines", outputFieldName: "" }] }, [{ lines: [1, 2] }, { lines: [3] }], 3) });
       expect(screen.getByText("2 items in → 3 items out")).toBeTruthy();
       expect(screen.queryByText(/wasn't found/)).toBeNull();
     });
 
     it("shows n8n's hint for a field no input item has", () => {
-      renderWithProviders(<OutputPanel />, { seedWorkflow: seedSplitOutRun({ fieldToSplitOut: "lines, tags" }, [{ lines: [1] }], 1) });
+      renderWithProviders(<OutputPanel />, { seedWorkflow: seedSplitOutRun({ fields: [{ fieldName: "lines", outputFieldName: "" }, { fieldName: "tags", outputFieldName: "" }] }, [{ lines: [1] }], 1) });
       expect(screen.getByText("The field 'tags' wasn't found in any input item")).toBeTruthy();
       expect(screen.queryByText("The field 'lines' wasn't found in any input item")).toBeNull();
     });
 
     it("says 0 items out when nothing was found", () => {
-      renderWithProviders(<OutputPanel />, { seedWorkflow: seedSplitOutRun({ fieldToSplitOut: "lines" }, [{ other: 1 }], 0) });
+      renderWithProviders(<OutputPanel />, { seedWorkflow: seedSplitOutRun({ fields: [{ fieldName: "lines", outputFieldName: "" }] }, [{ other: 1 }], 0) });
       expect(screen.getByText("1 item in → 0 items out")).toBeTruthy();
       expect(screen.getByText("The field 'lines' wasn't found in any input item")).toBeTruthy();
     });
 
     it("is not shown for other nodes, before a run, or with mock data", () => {
-      const { unmount } = renderWithProviders(<OutputPanel />, { seedWorkflow: seedSelected({ type: "splitOut", parameters: { fieldToSplitOut: "lines" } }) });
+      const { unmount } = renderWithProviders(<OutputPanel />, { seedWorkflow: seedSelected({ type: "splitOut", parameters: { fields: [{ fieldName: "lines", outputFieldName: "" }] } }) });
       expect(screen.queryByText(/items? in →/)).toBeNull();
       unmount();
       renderWithProviders(<OutputPanel />, {
-        seedWorkflow: seedSplitOutRun({ fieldToSplitOut: "lines" }, [{ lines: [1] }], 1, { pinData: [{ a: 1 }] }),
+        seedWorkflow: seedSplitOutRun({ fields: [{ fieldName: "lines", outputFieldName: "" }] }, [{ lines: [1] }], 1, { pinData: [{ a: 1 }] }),
       });
       expect(screen.queryByText(/items? in →/)).toBeNull();
     });

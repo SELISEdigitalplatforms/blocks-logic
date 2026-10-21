@@ -101,7 +101,7 @@ export const OutputPanel = ({
     return {
       inputCount: run.inputItemCount ?? input.length,
       outputCount: run.outputItemCount ?? 0,
-      notFound: fieldsNotFound(parameters.fieldToSplitOut, input, parameters.disableDotNotation !== true),
+      notFound: fieldsNotFound(parameters.fields, input, parameters.disableDotNotation !== true),
     };
   }, [executedNodes, selectedNode]);
 

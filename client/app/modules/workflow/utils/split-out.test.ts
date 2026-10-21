@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fieldsNotFound, parametersFromRows, rowsFromParameters, toFieldPath } from "./split-out";
+import { fieldsNotFound, listToText, splitOutFields, textToList, toFieldPath } from "./split-out";
 
 describe("toFieldPath", () => {
   it.each([
@@ -12,60 +12,44 @@ describe("toFieldPath", () => {
   ])("%s → %s", (text, path) => expect(toFieldPath(text)).toBe(path));
 });
 
-describe("rows ↔ saved strings", () => {
-  it("one row per field; destinations only when there is one per field", () => {
-    expect(rowsFromParameters("names, scores", "name, score")).toEqual([
-      { field: "names", destination: "name" },
-      { field: "scores", destination: "score" },
+describe("splitOutFields", () => {
+  it("reads the saved list and ignores anything malformed", () => {
+    expect(splitOutFields([{ fieldName: "lines", outputFieldName: "line" }, null, "x", { fieldName: 3 }])).toEqual([
+      { fieldName: "lines", outputFieldName: "line" },
+      { fieldName: "", outputFieldName: "" },
     ]);
-    expect(rowsFromParameters("lines", "")).toEqual([{ field: "lines", destination: "" }]);
-    expect(rowsFromParameters("", "")).toEqual([{ field: "", destination: "" }]);
-    expect(rowsFromParameters(undefined, undefined)).toEqual([{ field: "", destination: "" }]);
+    expect(splitOutFields(undefined)).toEqual([]);
+    expect(splitOutFields("lines")).toEqual([]);
+  });
+});
+
+describe("Fields To Include text ↔ list", () => {
+  it("splits on commas and trims; empty parts are dropped", () => {
+    expect(textToList(" email , name,, ")).toEqual(["email", "name"]);
+    expect(textToList("")).toEqual([]);
   });
 
-  it("a destination equal to its field shows as empty (it was filled in for another row's name)", () => {
-    expect(rowsFromParameters("a, b", "x, b")).toEqual([
-      { field: "a", destination: "x" },
-      { field: "b", destination: "" },
-    ]);
-  });
-
-  it("saves the comma strings; empty rows are dropped", () => {
-    expect(parametersFromRows([{ field: "lines", destination: "" }, { field: " ", destination: "" }])).toEqual({
-      fieldToSplitOut: "lines",
-      destinationFieldName: "",
-    });
-  });
-
-  it("when any row has a destination, every row gets one (its own field name if empty), as the server needs", () => {
-    expect(parametersFromRows([{ field: "a", destination: "x" }, { field: "b", destination: "" }])).toEqual({
-      fieldToSplitOut: "a, b",
-      destinationFieldName: "x, b",
-    });
-  });
-
-  it("round-trips", () => {
-    const saved = parametersFromRows([{ field: "names", destination: "person.name" }, { field: "scores", destination: "person.score" }]);
-    expect(rowsFromParameters(saved.fieldToSplitOut, saved.destinationFieldName)).toEqual([
-      { field: "names", destination: "person.name" },
-      { field: "scores", destination: "person.score" },
-    ]);
+  it("joins a saved list for the text box", () => {
+    expect(listToText(["email", "name"])).toBe("email, name");
+    expect(listToText(undefined)).toBe("");
   });
 });
 
 describe("fieldsNotFound", () => {
   const input = [{ lines: [1], order: { lines: [2] } }, { other: 1 }];
+  const fields = (...names: string[]) => names.map((fieldName) => ({ fieldName, outputFieldName: "" }));
 
   it("lists the fields no input item has", () => {
-    expect(fieldsNotFound("lines, tags, order.lines", input, true)).toEqual(["tags"]);
+    expect(fieldsNotFound(fields("lines", "tags", "order.lines"), input, true)).toEqual(["tags"]);
   });
 
   it("follows dot notation, and reads dragged references as paths", () => {
-    expect(fieldsNotFound("order.lines", input, false)).toEqual(["order.lines"]);
-    expect(fieldsNotFound("{{$json.output.lines}}", input, true)).toEqual([]);
+    expect(fieldsNotFound(fields("order.lines"), input, false)).toEqual(["order.lines"]);
+    expect(fieldsNotFound(fields("{{$json.output.lines}}"), input, true)).toEqual([]);
   });
 
-  it("says nothing without input items", () => {
-    expect(fieldsNotFound("lines", [], true)).toEqual([]);
+  it("says nothing without input items or fields", () => {
+    expect(fieldsNotFound(fields("lines"), [], true)).toEqual([]);
+    expect(fieldsNotFound(undefined, input, true)).toEqual([]);
   });
 });

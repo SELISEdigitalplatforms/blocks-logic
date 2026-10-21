@@ -1,6 +1,5 @@
 import { NodeGuideTransformSplitOutV2 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
-import { parametersFromRows, rowsFromParameters, type SplitOutRow } from "../../utils/split-out";
 
 export const NodeSchemaTransformSplitOutV2: NodeSchemaDefinition = {
   guide: NodeGuideTransformSplitOutV2,
@@ -10,16 +9,12 @@ export const NodeSchemaTransformSplitOutV2: NodeSchemaDefinition = {
     version: "v2",
     parameters: [
       {
-        // Edits fieldToSplitOut and destinationFieldName (the saved strings) as one row per field.
-        id: "splitOutFields",
+        id: "fields",
         type: "split-out-fields",
         label: "Fields To Split Out",
-        info: "The name of the input fields to break out into separate items, each with an optional destination field name.",
-        key: "splitOutFields",
+        info: "The input fields to break out into separate items, each with an optional output field name.",
+        key: "fields",
         required: true,
-        transient: true,
-        displayValue: (data) => rowsFromParameters(data.fieldToSplitOut, data.destinationFieldName),
-        onChange: (value) => parametersFromRows(Array.isArray(value) ? (value as SplitOutRow[]) : []),
       },
       {
         id: "include",
@@ -36,12 +31,12 @@ export const NodeSchemaTransformSplitOutV2: NodeSchemaDefinition = {
       },
       {
         id: "fieldsToInclude",
-        type: "text",
+        type: "comma-list",
         label: "Fields To Include",
         info: "Fields of the input item to copy into each new item, separated by commas.",
         placeholder: "e.g. email, name",
         key: "fieldsToInclude",
-        defaultValue: "",
+        defaultValue: [],
         dependsOn: { key: "include", value: "selectedOtherFields" },
       },
       {
@@ -57,10 +52,9 @@ export const NodeSchemaTransformSplitOutV2: NodeSchemaDefinition = {
   },
   defaults: {
     parameters: {
-      fieldToSplitOut: "",
+      fields: [],
       include: "noOtherFields",
-      fieldsToInclude: "",
-      destinationFieldName: "",
+      fieldsToInclude: [],
       disableDotNotation: false,
     },
     settings: {},
