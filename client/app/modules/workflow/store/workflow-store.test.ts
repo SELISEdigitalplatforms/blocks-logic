@@ -492,3 +492,78 @@ describe("per-node handles (SPEC5)", () => {
     });
   });
 });
+
+describe("Switch node in the store (SPEC6)", () => {
+  const A = "switch-handle-source-aaaaa1";
+  const B = "switch-handle-source-bbbbb2";
+  const C = "switch-handle-source-ccccc3";
+  const FALLBACK = "switch-handle-source-fallback";
+  const rule = (key: string, outputName = "") => ({ key, outputName, conditionType: "all", conditions: [] });
+  const options = (fallbackOutput = "none") => ({ fallbackOutput, renameFallbackOutput: "", ignoreCase: false, allMatchingOutputs: false });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const switchNode = (parameters: Record<string, unknown>, extra: Record<string, unknown> = {}): any =>
+    node("s", { category: "logic", type: "switch", version: "v2", parameters, handle: null, ...extra });
+  const edge = (id: string, sourceHandle: string, source = "s") => ({ id, source, target: "x", sourceHandle, targetHandle: "target" });
+  const load = (parameters: Record<string, unknown>, edges: unknown[] = [], extra: Record<string, unknown> = {}) =>
+    state().setWorkflow({ itemId: "w1", nodes: [switchNode(parameters, extra), node("x"), node("other")], edges } as never);
+  const sourceKeys = () => state().nodesMap.s.handle!.sources.map((e) => e.key);
+
+  it("C10: on load re-derives the handle from the parameters, whatever is stored, without marking changed", () => {
+    load({ mode: "rules", rules: [rule(A), rule(B)], options: options() }, [edge("e1", A)], {
+      handle: { sources: [{ key: "source", label: "" }], targets: [] },
+    });
+    expect(sourceKeys()).toEqual([A, B]);
+    expect(state().nodesMap.s.handle!.targets).toEqual([{ key: "target", label: "" }]);
+    expect(state().hasUnsavedChanges).toBe(false);
+    expect(Object.keys(state().edgesMap)).toEqual(["e1"]);
+  });
+
+  it("H2: adding a rule adds its handle at the bottom", () => {
+    load({ mode: "rules", rules: [rule(A)], options: options() });
+    state().updateNodeParameters("s", { ...state().nodesMap.s.parameters, rules: [rule(A), rule(B)] });
+    expect(sourceKeys()).toEqual([A, B]);
+  });
+
+  it("H3/H4: renaming and reordering keep keys and edges", () => {
+    load({ mode: "rules", rules: [rule(A), rule(B)], options: options() }, [edge("e1", A), edge("e2", B)]);
+    state().updateNodeParameters("s", { ...state().nodesMap.s.parameters, rules: [rule(B, "Big"), rule(A, "Paid")] });
+    expect(state().nodesMap.s.handle!.sources).toEqual([
+      { key: B, label: "Big" },
+      { key: A, label: "Paid" },
+    ]);
+    expect(Object.keys(state().edgesMap).sort()).toEqual(["e1", "e2"]);
+  });
+
+  it("C1: deleting a rule removes only that node's edges on that key", () => {
+    load({ mode: "rules", rules: [rule(A), rule(B)], options: options() }, [edge("e1", A), edge("e2", B), edge("e3", B, "other")]);
+    state().updateNodeParameters("s", { ...state().nodesMap.s.parameters, rules: [rule(A)] });
+    expect(Object.keys(state().edgesMap).sort()).toEqual(["e1", "e3"]);
+  });
+
+  it("C3: turning Extra output off removes the fallback edges", () => {
+    load({ mode: "rules", rules: [rule(A)], options: options("extra") }, [edge("e1", A), edge("f", FALLBACK)]);
+    expect(sourceKeys()).toEqual([A, FALLBACK]);
+    state().updateNodeParameters("s", { ...state().nodesMap.s.parameters, options: options("none") });
+    expect(Object.keys(state().edgesMap)).toEqual(["e1"]);
+  });
+
+  it("C2/H12: switching mode removes edges on rule outputs only, and keeps both lists", () => {
+    const parameters = { mode: "rules", rules: [rule(A)], outputs: [{ key: C, outputName: "" }], output: "", options: options() };
+    load(parameters, [edge("e1", A), edge("e2", C)]);
+    state().updateNodeParameters("s", { ...parameters, mode: "expression" });
+    expect(sourceKeys()).toEqual([C]);
+    expect(Object.keys(state().edgesMap)).toEqual(["e2"]);
+    state().updateNodeParameters("s", { ...parameters, mode: "rules" });
+    expect(sourceKeys()).toEqual([A]);
+    expect(state().nodesMap.s.parameters).toMatchObject({ rules: [rule(A)], outputs: [{ key: C, outputName: "" }] });
+  });
+
+  it("H19: duplicate and paste keep keys and handle; the original keeps its edges", () => {
+    load({ mode: "rules", rules: [rule(A, "Paid")], options: options() }, [edge("e1", A)]);
+    state().duplicateNode("s");
+    const copy = Object.values(state().nodesMap).find((n) => n.type === "switch" && n.id !== "s")!;
+    expect(copy.handle).toEqual(state().nodesMap.s.handle);
+    expect(copy.parameters).toEqual(state().nodesMap.s.parameters);
+    expect(Object.values(state().edgesMap).every((e) => e.source === "s")).toBe(true);
+  });
+});

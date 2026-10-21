@@ -31,6 +31,7 @@ export const useWorkflow = () => {
   const onConnect = useWorkflowStore((state) => state.onConnect);
   const addNode = useWorkflowStore((state) => state.addNode);
   const updateNode = useWorkflowStore((state) => state.updateNode);
+  const updateNodeParameters = useWorkflowStore((state) => state.updateNodeParameters);
   const deleteNode = useWorkflowStore((state) => state.deleteNode);
   const duplicateNode = useWorkflowStore((state) => state.duplicateNode);
   const copyNode = useWorkflowStore((state) => state.copyNode);
@@ -219,6 +220,7 @@ export const useWorkflow = () => {
     // Basic operations
     addNode,
     updateNode,
+    updateNodeParameters,
     deleteNode,
     duplicateNode,
     copyNode,

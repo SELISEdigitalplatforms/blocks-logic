@@ -1,6 +1,7 @@
 import { BaseEdge, EdgeLabelRenderer, EdgeProps, getBezierPath } from "@xyflow/react";
 import { useWorkflow } from "../../hooks";
 import { useWorkflowStore } from "../../store";
+import { handleDisplayLabel } from "../../utils/handle-labels";
 import { getStatusStyles } from "../../utils/workflow-execution-editor.util";
 
 export const WorkflowEditorEdgeDefault = ({
@@ -32,8 +33,8 @@ export const WorkflowEditorEdgeDefault = ({
   const sourceNodeStatus = executedNode?.status;
   const executionStyles = sourceNodeStatus ? getStatusStyles(sourceNodeStatus) : undefined;
 
-  const sourceEntries = useWorkflowStore((state) => state.nodesMap[source]?.handle?.sources);
-  const label = (sourceHandleId && sourceEntries?.find((entry) => entry.key === sourceHandleId)?.label) || "";
+  const sourceNode = useWorkflowStore((state) => state.nodesMap[source]);
+  const label = handleDisplayLabel(sourceNode, "source", sourceHandleId);
 
   let itemCountLabel = "";
   if (executedNode) {

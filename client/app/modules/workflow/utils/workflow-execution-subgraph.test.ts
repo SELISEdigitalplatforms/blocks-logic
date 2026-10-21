@@ -198,3 +198,30 @@ describe("buildExecutedSubgraph with per-node handles (SPEC5)", () => {
     expect(traversedEdgeIds.has("e1")).toBe(false);
   });
 });
+
+describe("buildExecutedSubgraph with a Switch (SPEC6)", () => {
+  const A = "switch-handle-source-aaaaa1";
+  const B = "switch-handle-source-bbbbb2";
+  const sw = (rules: string[]) =>
+    upgradeNode({
+      id: "s", name: "s", category: "logic", type: "switch", version: "v2", position: { x: 0, y: 0 }, data: {},
+      parameters: { mode: "rules", rules: rules.map((key) => ({ key, outputName: "", conditionType: "all", conditions: [] })), options: { fallbackOutput: "none" } },
+    } as never);
+  const plain = (id: string) => ({ id, name: id, position: { x: 0, y: 0 } }) as never;
+
+  it("H13: traverses only the keys that carried items", () => {
+    const nodes = [plain("t"), sw([A, B]), plain("a"), plain("b")];
+    const edges = [edge("e0", "t", "s", "source"), edge("ea", "s", "a", A), edge("eb", "s", "b", B)];
+    const execs = [exec("t", { outputItemCount: 1 }), exec("s", { inputItemCount: 1, outputItemCount: 1, outputCountsByBranch: { [B]: 1 } }), exec("b", { inputItemCount: 1 })];
+    const { traversedEdgeIds } = buildExecutedSubgraph(nodes, edges, execs, [] as never);
+    expect([...traversedEdgeIds].sort()).toEqual(["e0", "eb"]);
+  });
+
+  it("H13: a Switch with a single output that carried nothing is not traversed", () => {
+    const nodes = [plain("t"), sw([A]), plain("a")];
+    const edges = [edge("e0", "t", "s", "source"), edge("ea", "s", "a", A)];
+    const execs = [exec("t", { outputItemCount: 1 }), exec("s", { inputItemCount: 1, outputItemCount: 0, outputCountsByBranch: {} }), exec("a")];
+    const { traversedEdgeIds } = buildExecutedSubgraph(nodes, edges, execs, [] as never);
+    expect(traversedEdgeIds.has("ea")).toBe(false);
+  });
+});

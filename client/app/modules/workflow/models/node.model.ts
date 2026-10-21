@@ -2,6 +2,7 @@ import { Node } from "@xyflow/react";
 
 export type NodeType =
   | "if"
+  | "switch"
   | "setfield"
   | "code"
   | "webhookResponse"
@@ -67,4 +68,6 @@ export interface WorkflowNodeDefinition {
   handle: NodeHandle;
   /** For types whose handles follow their parameters (Switch, Merge): rebuilds the handle on every load and edit. */
   deriveHandle?: (parameters: Record<string, unknown> | undefined) => NodeHandle;
+  /** What a source handle and its edges show, when it is not simply the entry's label (Switch: "Output <i>"). */
+  handleLabel?: (handle: NodeHandle | null | undefined, key: string | null | undefined) => string;
 }

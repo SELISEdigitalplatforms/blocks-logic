@@ -26,6 +26,9 @@ import { SchemaFieldPickerField } from "./schema-field-picker-field";
 import { TabWithTextField } from "./tab-with-text-field";
 import { CalloutAccordionDisplayField } from "./callout-accordion-display-field";
 import { ReadonlyDetailsField } from "./readonly-details-field";
+import { SwitchModeField } from "./switch-mode-field";
+import { SwitchRulesField } from "./switch-rules-field";
+import { SwitchOutputsField } from "./switch-outputs-field";
 
 /**
  * Registry of all field components mapped by their field type.
@@ -53,6 +56,9 @@ export const FIELD_COMPONENTS_REGISTRY: Record<
   "fixed-key-value-pairs": FixedKeyValuePairsField,
   "key-type-value-pairs": KeyTypeValueField,
   conditions: ConditionsField,
+  "switch-mode": SwitchModeField,
+  "switch-rules": SwitchRulesField,
+  "switch-outputs": SwitchOutputsField,
   array: ArrayField,
   "expression-list": ExpressionListField,
   "path-list": PathListField,
