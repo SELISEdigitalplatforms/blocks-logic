@@ -19,6 +19,7 @@ using Workflow.DomainService.Nodes.LogicIFV1;
 using Workflow.DomainService.Nodes.LogicSwitchV2;
 using Workflow.DomainService.Nodes.TriggerWebhookV1;
 using Workflow.DomainService.Nodes.TransformSetFieldV1;
+using Workflow.DomainService.Nodes.TransformSplitOutV2;
 using Workflow.DomainService.Nodes.TransformCodeV1;
 using Workflow.DomainService.Services;
 using DomainService.Utilities;
@@ -66,6 +67,7 @@ namespace Workflow.DomainService
 
             // Transform nodes
             services.AddSingleton<INodeExecutor, TransformSetFieldV1Node>();
+            services.AddSingleton<INodeExecutor, TransformSplitOutV2Node>();
             services.AddSingleton<INodeExecutor, TransformCodeV1Node>();
 
             // Action nodes

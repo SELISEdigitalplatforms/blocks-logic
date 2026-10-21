@@ -152,3 +152,21 @@ describe("NodeLibraryPanel Switch (SPEC6)", () => {
     expect(a.parameters.rules[0].handleKey).not.toBe(b.parameters.rules[0].handleKey);
   });
 });
+
+describe("NodeLibraryPanel Split Out (SPEC2)", () => {
+  it("H10: lists Split Out and creates a v2 node with one target and one source", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let store: any;
+    renderWithProviders(<NodeLibraryPanel />, {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      seedWorkflow: (s: any) => {
+        store = s;
+        s.getState().openNodeLibraryPanel();
+      },
+    });
+    fireEvent.click(screen.getByText("Split Out"));
+    const created = Object.values(store.getState().nodesMap)[0] as Record<string, unknown>;
+    expect(created).toMatchObject({ type: "splitOut", category: "transform", version: "v2" });
+    expect(created.handle).toEqual({ sources: [{ key: "source", label: "" }], targets: [{ key: "target", label: "" }] });
+  });
+});
