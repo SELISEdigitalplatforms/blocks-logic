@@ -217,8 +217,8 @@ describe("OutputPanel", () => {
 
   it("groups runtime executed items by branch in the schema tab", () => {
     renderWithProviders(<OutputPanel />, { seedWorkflow: seedRuntimeBranches });
-    expect(screen.getByText("Branch: True")).toBeTruthy();
-    expect(screen.getByText("Branch: False")).toBeTruthy();
+    expect(screen.getByText("True")).toBeTruthy();
+    expect(screen.getByText("False")).toBeTruthy();
     // object row exposes its field key, primitive row is rendered directly
     expect(screen.getByText("city:")).toBeTruthy();
     expect(screen.getByText("plain-value")).toBeTruthy();
@@ -228,7 +228,7 @@ describe("OutputPanel", () => {
     const user = userEvent.setup();
     renderWithProviders(<OutputPanel />, { seedWorkflow: seedRuntimeBranches });
     await user.click(screen.getByRole("tab", { name: "Table" }));
-    await waitFor(() => expect(screen.getAllByText(/Branch:/).length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText("1 item").length).toBe(2));
     // the False branch holds a primitive, forcing the "(value)" column header
     expect(screen.getByText("(value)")).toBeTruthy();
     expect(screen.getByText("city")).toBeTruthy();
@@ -241,6 +241,98 @@ describe("OutputPanel", () => {
     await waitFor(() =>
       expect(document.querySelectorAll("pre code").length).toBe(2),
     );
+  });
+
+  describe("branch names (Switch, If)", () => {
+    const A = "switch-handle-source-woggl1";
+    const B = "switch-handle-source-iocc8w";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const seedNodeRun = (extra: Record<string, unknown>, items: unknown[]) => (store: any) => {
+      const n = node({ category: "logic", version: "v2", ...extra });
+      store.getState().addNode(n);
+      store.setState({ selectedNode: n, editorMode: "run", executedItems: items });
+    };
+    const switchNode = {
+      type: "switch",
+      handle: {
+        targets: [{ key: "target", label: "" }],
+        sources: [
+          { key: A, label: "Adult" },
+          { key: B, label: "" },
+          { key: "switch-handle-source-fallback", label: "" },
+        ],
+      },
+    };
+    const switchItems = [
+      { nodeId: "n1", itemIndex: 0, branch: A, data: { Output: { firstName: "John" } } },
+      { nodeId: "n1", itemIndex: 1, branch: B, data: { Output: { firstName: "Alice" } } },
+    ];
+
+    it("names each Switch output instead of its key, in output order, with item counts", () => {
+      renderWithProviders(<OutputPanel />, { seedWorkflow: seedNodeRun(switchNode, switchItems) });
+      expect(screen.getByText("Output 0 · Adult")).toBeTruthy();
+      expect(screen.getByText("Output 1")).toBeTruthy();
+      expect(screen.getByText("Fallback")).toBeTruthy();
+      expect(screen.queryByText(new RegExp(A, "i"))).toBeNull();
+      expect(screen.getAllByText("1 item")).toHaveLength(2);
+      // An output that received nothing is listed, so it is clear where items did not go.
+      expect(screen.getByText("no items")).toBeTruthy();
+      expect(screen.getByText("No items went to this output.")).toBeTruthy();
+    });
+
+    it("keeps the raw key for debugging: tooltip and copy button", () => {
+      renderWithProviders(<OutputPanel />, { seedWorkflow: seedNodeRun(switchNode, switchItems) });
+      expect(screen.getByText("Output 0 · Adult").getAttribute("title")).toBe(A);
+      fireEvent.click(screen.getByRole("button", { name: "Copy branch key of Output 0 · Adult" }));
+      expect(clipboard.copyToClipboard).toHaveBeenCalledWith(A);
+    });
+
+    it("uses the same names in the table and json tabs", async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<OutputPanel />, { seedWorkflow: seedNodeRun(switchNode, switchItems) });
+      await user.click(screen.getByRole("tab", { name: "Table" }));
+      await waitFor(() => expect(screen.getByText("Output 0 · Adult")).toBeTruthy());
+      await user.click(screen.getByRole("tab", { name: "JSON" }));
+      await waitFor(() => expect(screen.getByText("Output 1")).toBeTruthy());
+      expect(document.querySelectorAll("pre code").length).toBe(2);
+    });
+
+    it("a renamed fallback shows its name; an output deleted after the run shows its key", () => {
+      const renamed = { ...switchNode, handle: { ...switchNode.handle, sources: [switchNode.handle.sources[0], { key: "switch-handle-source-fallback", label: "Other" }] } };
+      renderWithProviders(<OutputPanel />, { seedWorkflow: seedNodeRun(renamed, switchItems) });
+      expect(screen.getByText("Other")).toBeTruthy();
+      expect(screen.getByText(B)).toBeTruthy();
+    });
+
+    it("shows True and False for an If node", () => {
+      const ifNode = {
+        type: "if",
+        handle: { targets: [{ key: "target", label: "" }], sources: [{ key: "if-true", label: "True" }, { key: "if-false", label: "False" }] },
+      };
+      renderWithProviders(<OutputPanel />, {
+        seedWorkflow: seedNodeRun(ifNode, [{ nodeId: "n1", itemIndex: 0, branch: "if-false", data: { Output: { a: 1 } } }]),
+      });
+      expect(screen.getByText("True")).toBeTruthy();
+      expect(screen.getByText("False")).toBeTruthy();
+      expect(screen.getByText("no items")).toBeTruthy();
+    });
+
+    it("before any run, a Switch shows the usual empty state, not empty outputs", () => {
+      renderWithProviders(<OutputPanel />, { seedWorkflow: seedNodeRun(switchNode, []) });
+      expect(screen.getByText("No runtime output schema available.")).toBeTruthy();
+      expect(screen.queryByText("Output 0 · Adult")).toBeNull();
+    });
+
+    it("a single-output node shows no branch header", () => {
+      renderWithProviders(<OutputPanel />, {
+        seedWorkflow: seedNodeRun(
+          { type: "code", category: "transform", handle: { targets: [{ key: "target", label: "" }], sources: [{ key: "source", label: "" }] } },
+          [{ nodeId: "n1", itemIndex: 0, branch: "source", data: { Output: { a: 1 } } }],
+        ),
+      });
+      expect(screen.queryByText("1 item")).toBeNull();
+      expect(screen.getByText("a:")).toBeTruthy();
+    });
   });
 
   it("hides the schema body while collapsed", () => {
