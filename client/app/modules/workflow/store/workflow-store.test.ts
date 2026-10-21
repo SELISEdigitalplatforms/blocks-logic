@@ -497,7 +497,7 @@ describe("Switch node in the store (SPEC6)", () => {
   const A = "switch-handle-source-aaaaa1";
   const B = "switch-handle-source-bbbbb2";
   const FALLBACK = "switch-handle-source-fallback";
-  const rule = (key: string, outputName = "") => ({ key, outputName, conditionType: "all", conditions: [] });
+  const rule = (handleKey: string, handleLabel = "") => ({ handleKey, handleLabel, conditionType: "all", conditions: [] });
   const options = (fallbackOutput = "none") => ({ fallbackOutput, renameFallbackOutput: "", ignoreCase: false, allMatchingOutputs: false });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const switchNode = (parameters: Record<string, unknown>, extra: Record<string, unknown> = {}): any =>

@@ -15,8 +15,10 @@ namespace Workflow.DomainService.Nodes.LogicSwitchV2
 
     public class SwitchRule
     {
-        public string? Key { get; set; }
-        public string? OutputName { get; set; }
+        /// <summary>The output's stable handle key; item Branch and edge sourceHandle carry it.</summary>
+        public string? HandleKey { get; set; }
+        /// <summary>Display label of the output only; never used for routing.</summary>
+        public string? HandleLabel { get; set; }
         /// <summary>Same values as If: "or" = any condition, anything else = all.</summary>
         public string? ConditionType { get; set; } = "all";
         public List<Condition> Conditions { get; set; } = new();
@@ -24,7 +26,7 @@ namespace Workflow.DomainService.Nodes.LogicSwitchV2
 
     public class SwitchOptions
     {
-        /// <summary>"none" (drop), "extra" (the fallback handle) or the key of a rule.</summary>
+        /// <summary>"none" (drop), "extra" (the fallback handle) or the handle key of a rule.</summary>
         public string? FallbackOutput { get; set; } = "none";
         public string? RenameFallbackOutput { get; set; } = string.Empty;
         public bool IgnoreCase { get; set; }

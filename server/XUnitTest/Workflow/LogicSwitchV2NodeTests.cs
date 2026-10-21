@@ -39,7 +39,7 @@ namespace XUnitTest.Workflow
 
         private static BsonDocument Rule(string key, string conditionType, params BsonDocument[] conditions) => new()
         {
-            { "key", key }, { "outputName", "" }, { "conditionType", conditionType }, { "conditions", new BsonArray(conditions) },
+            { "handleKey", key }, { "handleLabel", "" }, { "conditionType", conditionType }, { "conditions", new BsonArray(conditions) },
         };
 
         private static BsonDocument Options(string fallback = "none", bool ignoreCase = false, bool allMatching = false) => new()
@@ -257,7 +257,7 @@ namespace XUnitTest.Workflow
             var result = await Run(RulesParams(Options(), PaidRule, Rule(key, "all")), Doc("{ \"status\": \"paid\" }"));
 
             result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Be("Rule 2 has an invalid or duplicate output key.");
+            result.ErrorMessage.Should().Be("Rule 2 has an invalid or duplicate handle key.");
             result.OutputItems.Should().BeEmpty();
         }
 
@@ -266,7 +266,7 @@ namespace XUnitTest.Workflow
         {
             var result = await Run(RulesParams(Options(), PaidRule, Rule(A, "all")), Doc("{ \"status\": \"paid\" }"));
 
-            result.ErrorMessage.Should().Be("Rule 2 has an invalid or duplicate output key.");
+            result.ErrorMessage.Should().Be("Rule 2 has an invalid or duplicate handle key.");
             result.OutputItems.Should().BeEmpty();
         }
 
@@ -275,7 +275,7 @@ namespace XUnitTest.Workflow
         {
             var rule = new BsonDocument { { "conditionType", "all" }, { "conditions", new BsonArray() } };
 
-            (await Run(RulesParams(Options(), rule), Doc("{}"))).ErrorMessage.Should().Be("Rule 1 has an invalid or duplicate output key.");
+            (await Run(RulesParams(Options(), rule), Doc("{}"))).ErrorMessage.Should().Be("Rule 1 has an invalid or duplicate handle key.");
         }
 
         [Fact]
@@ -337,7 +337,7 @@ namespace XUnitTest.Workflow
         public async Task PascalCaseParameters_Bind()
         {
             var parameters = Doc($$"""
-                { "Mode": "rules", "Rules": [ { "Key": "{{A}}", "ConditionType": "all", "Conditions": [ { "Left": "x", "Operator": "equals", "Right": "x", "Type": "string" } ] } ], "Options": { "FallbackOutput": "none" } }
+                { "Mode": "rules", "Rules": [ { "HandleKey": "{{A}}", "ConditionType": "all", "Conditions": [ { "Left": "x", "Operator": "equals", "Right": "x", "Type": "string" } ] } ], "Options": { "FallbackOutput": "none" } }
                 """);
 
             (await Run(parameters, Doc("{}"))).OutputItems.Should().ContainSingle().Which.Branch.Should().Be(A);

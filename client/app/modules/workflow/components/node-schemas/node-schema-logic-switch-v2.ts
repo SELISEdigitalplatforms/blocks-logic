@@ -29,7 +29,7 @@ export const NodeSchemaLogicSwitchV2: NodeSchemaDefinition = {
         // A deleted rule that was the fallback target resets the fallback to None.
         onChange: (value, data) => {
           const options = optionsOf(data);
-          const keys = new Set((Array.isArray(value) ? (value as SwitchRule[]) : []).map((r) => r.key));
+          const keys = new Set((Array.isArray(value) ? (value as SwitchRule[]) : []).map((r) => r.handleKey));
           const fallback = options.fallbackOutput;
           if (fallback && fallback !== "none" && fallback !== "extra" && !keys.has(fallback)) {
             return { options: { ...options, fallbackOutput: "none" } };
@@ -47,7 +47,7 @@ export const NodeSchemaLogicSwitchV2: NodeSchemaDefinition = {
         options: async (data) => [
           { value: "none", label: "None (drop the item)" },
           { value: "extra", label: "Extra output" },
-          ...rulesOf(data).map((rule, index) => ({ value: rule.key, label: `Output ${rule.outputName || index}` })),
+          ...rulesOf(data).map((rule, index) => ({ value: rule.handleKey, label: rule.handleLabel || `Output ${index}` })),
         ],
       },
       {

@@ -14,7 +14,7 @@ const CONDITION_TYPE_OPTIONS = [
   { value: "or", label: "Any condition (OR)" },
 ];
 
-export const outputLabel = (outputName: string | undefined, index: number) => outputName || `Output ${index}`;
+export const outputLabel = (handleLabel: string | undefined, index: number) => handleLabel || `Output ${index}`;
 
 export const moveItem = <T,>(list: T[], from: number, to: number): T[] => {
   if (to < 0 || to >= list.length) return list;
@@ -35,10 +35,10 @@ export const SwitchRulesField = ({ field, value, onChange, readOnly, data, confi
   return (
     <div className="space-y-2">
       {rules.map((rule, index) => {
-        const label = outputLabel(rule.outputName, index);
+        const label = outputLabel(rule.handleLabel, index);
         return (
           // Keyed by the stable rule key, so the embedded conditions never show another rule's state.
-          <div key={rule.key} className="space-y-2 rounded-md border p-3">
+          <div key={rule.handleKey} className="space-y-2 rounded-md border p-3">
             <div className="flex items-center justify-between gap-2">
               <span className="truncate text-sm font-medium">{label}</span>
               <div className="flex items-center gap-1">
@@ -57,20 +57,20 @@ export const SwitchRulesField = ({ field, value, onChange, readOnly, data, confi
               </div>
             </div>
             <div className="space-y-1">
-              <Label htmlFor={`${field.id}.${rule.key}.outputName`}>Output name</Label>
+              <Label htmlFor={`${field.id}.${rule.handleKey}.handleLabel`}>Output name</Label>
               <Input
-                id={`${field.id}.${rule.key}.outputName`}
-                value={rule.outputName ?? ""}
+                id={`${field.id}.${rule.handleKey}.handleLabel`}
+                value={rule.handleLabel ?? ""}
                 placeholder={`Output ${index}`}
                 disabled={locked}
                 readOnly={readOnly}
-                onChange={(e) => update(index, { outputName: e.target.value })}
+                onChange={(e) => update(index, { handleLabel: e.target.value })}
               />
             </div>
             <div className="space-y-1">
               <Label>Condition type</Label>
               <SelectField
-                field={{ id: `${field.id}.${rule.key}.conditionType`, key: `rules.${rule.key}.conditionType`, type: "select", options: CONDITION_TYPE_OPTIONS, disabled: locked }}
+                field={{ id: `${field.id}.${rule.handleKey}.conditionType`, key: `rules.${rule.handleKey}.conditionType`, type: "select", options: CONDITION_TYPE_OPTIONS, disabled: locked }}
                 value={rule.conditionType === "or" ? "or" : "all"}
                 onChange={(conditionType) => update(index, { conditionType })}
                 readOnly={readOnly}
@@ -81,8 +81,8 @@ export const SwitchRulesField = ({ field, value, onChange, readOnly, data, confi
             <div className="space-y-1">
               <Label>Conditions</Label>
               <ConditionsField
-                key={rule.key}
-                field={{ ...field, id: `rules.${rule.key}.conditions`, key: `rules.${rule.key}.conditions`, type: "conditions", disabled: locked }}
+                key={rule.handleKey}
+                field={{ ...field, id: `rules.${rule.handleKey}.conditions`, key: `rules.${rule.handleKey}.conditions`, type: "conditions", disabled: locked }}
                 value={(rule.conditions ?? []) as Condition[]}
                 onChange={(conditions) => update(index, { conditions })}
                 readOnly={readOnly}

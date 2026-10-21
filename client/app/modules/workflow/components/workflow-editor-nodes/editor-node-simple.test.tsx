@@ -219,8 +219,8 @@ describe("EditorNodeSimple on a Switch (SPEC6)", () => {
           parameters: {
             mode: "rules",
             rules: [
-              { key: A, outputName: "Paid", conditionType: "all", conditions: [] },
-              { key: B, outputName: "", conditionType: "all", conditions: [] },
+              { handleKey: A, handleLabel: "Paid", conditionType: "all", conditions: [] },
+              { handleKey: B, handleLabel: "", conditionType: "all", conditions: [] },
             ],
             options: { fallbackOutput: "extra", renameFallbackOutput: "" },
           },

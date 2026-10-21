@@ -13,8 +13,8 @@ const A = "switch-handle-source-aaaaa1";
 const B = "switch-handle-source-bbbbb2";
 
 const rules = [
-  { key: A, outputName: "Paid", conditionType: "all", conditions: [] },
-  { key: B, outputName: "", conditionType: "all", conditions: [] },
+  { handleKey: A, handleLabel: "Paid", conditionType: "all", conditions: [] },
+  { handleKey: B, handleLabel: "", conditionType: "all", conditions: [] },
 ];
 
 describe("deriveSwitchHandle", () => {
@@ -86,7 +86,7 @@ describe("keys", () => {
     const a = defaultSwitchParameters();
     const b = defaultSwitchParameters();
     expect(a.rules).toHaveLength(1);
-    expect(a.rules[0].key).not.toBe(b.rules[0].key);
+    expect(a.rules[0].handleKey).not.toBe(b.rules[0].handleKey);
     expect(a.options).not.toBe(b.options);
   });
 });

@@ -9,9 +9,9 @@ const A = "switch-handle-source-aaaaa1";
 const B = "switch-handle-source-bbbbb2";
 const C = "switch-handle-source-ccccc3";
 
-const rule = (key: string, outputName: string, left = ""): SwitchRule => ({
-  key,
-  outputName,
+const rule = (handleKey: string, handleLabel: string, left = ""): SwitchRule => ({
+  handleKey,
+  handleLabel,
   conditionType: "all",
   conditions: left ? [{ left, operator: "equals", right: "x", type: "string" }] : [],
 });
@@ -43,9 +43,9 @@ describe("SwitchRulesField", () => {
     fireEvent.click(screen.getByRole("button", { name: /Add rule/ }));
     const next = onValue.mock.calls[0][0] as SwitchRule[];
     expect(next).toHaveLength(2);
-    expect(next[0].key).toBe(A);
-    expect(next[1].key).toMatch(/^switch-handle-source-[a-z0-9]{6}$/);
-    expect(next[1].key).not.toBe(A);
+    expect(next[0].handleKey).toBe(A);
+    expect(next[1].handleKey).toMatch(/^switch-handle-source-[a-z0-9]{6}$/);
+    expect(next[1].handleKey).not.toBe(A);
   });
 
   it("H3/A13: renaming keeps the key; unnamed rules show Output <index>", () => {
@@ -54,19 +54,19 @@ describe("SwitchRulesField", () => {
     expect(screen.getByText("Output 0")).toBeTruthy();
     expect(screen.getByText("Output 1")).toBeTruthy();
     fireEvent.change(screen.getAllByLabelText("Output name")[1], { target: { value: "Big" } });
-    expect(onValue.mock.calls.at(-1)![0][1]).toMatchObject({ key: B, outputName: "Big" });
+    expect(onValue.mock.calls.at(-1)![0][1]).toMatchObject({ handleKey: B, handleLabel: "Big" });
   });
 
   it("H4/C19: reorder and delete keep each card's own conditions", () => {
     const onValue = vi.fn();
     renderWithProviders(<RulesHarness initial={[rule(A, "First", "left-a"), rule(B, "Second", "left-b"), rule(C, "Third", "left-c")]} onValue={onValue} />);
     fireEvent.click(screen.getByRole("button", { name: "Move Third up" }));
-    expect((onValue.mock.calls.at(-1)![0] as SwitchRule[]).map((r) => r.key)).toEqual([A, C, B]);
+    expect((onValue.mock.calls.at(-1)![0] as SwitchRule[]).map((r) => r.handleKey)).toEqual([A, C, B]);
     const values = () => screen.getAllByRole("textbox").map((el) => (el as HTMLInputElement).value).filter((v) => v.startsWith("left-"));
     expect(values()).toEqual(["left-a", "left-c", "left-b"]);
 
     fireEvent.click(screen.getByRole("button", { name: "Delete First" }));
-    expect((onValue.mock.calls.at(-1)![0] as SwitchRule[]).map((r) => r.key)).toEqual([C, B]);
+    expect((onValue.mock.calls.at(-1)![0] as SwitchRule[]).map((r) => r.handleKey)).toEqual([C, B]);
     expect(values()).toEqual(["left-c", "left-b"]);
   });
 

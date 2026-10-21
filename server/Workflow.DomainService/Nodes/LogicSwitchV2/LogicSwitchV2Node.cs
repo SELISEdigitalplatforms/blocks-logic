@@ -53,8 +53,8 @@ namespace Workflow.DomainService.Nodes.LogicSwitchV2
             var keys = new HashSet<string>(StringComparer.Ordinal);
             for (var r = 0; r < rules.Count; r++)
             {
-                if (!IsValidKey(rules[r]?.Key) || !keys.Add(rules[r]!.Key!))
-                    return NodeExecutionResult.Failed($"Rule {r + 1} has an invalid or duplicate output key.");
+                if (!IsValidKey(rules[r]?.HandleKey) || !keys.Add(rules[r]!.HandleKey!))
+                    return NodeExecutionResult.Failed($"Rule {r + 1} has an invalid or duplicate handle key.");
             }
 
             var fallback = FallbackOf(parameters);
@@ -89,7 +89,7 @@ namespace Workflow.DomainService.Nodes.LogicSwitchV2
                             .ToList();
                         var useOr = rule.ConditionType?.Trim().ToLowerInvariant() == "or";
                         if (useOr ? results.Any(x => x) : results.All(x => x))
-                            matches.Add(rule.Key!);
+                            matches.Add(rule.HandleKey!);
                     }
 
                     // Output items are added only after every rule evaluated, so a failed item leaves no copies.

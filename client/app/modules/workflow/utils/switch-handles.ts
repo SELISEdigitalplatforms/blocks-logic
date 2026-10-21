@@ -20,8 +20,10 @@ export interface SwitchCondition {
 }
 
 export interface SwitchRule {
-  key: string;
-  outputName: string;
+  /** The output's stable handle key; item Branch and edge sourceHandle carry it. */
+  handleKey: string;
+  /** Display label of the output only; never used for routing. */
+  handleLabel: string;
   conditionType: string;
   conditions: SwitchCondition[];
 }
@@ -57,7 +59,7 @@ export const generateSwitchKey = (used: Iterable<string>): string => {
 
 /** Every key used by a rule of the node, so a new key is unique within the node. */
 export const usedSwitchKeys = (parameters: Partial<SwitchParameters> | undefined): string[] =>
-  asArray<SwitchRule>(parameters?.rules).map((r) => r.key);
+  asArray<SwitchRule>(parameters?.rules).map((r) => r.handleKey);
 
 const asArray = <T,>(value: unknown): T[] => (Array.isArray(value) ? (value.filter(Boolean) as T[]) : []);
 
@@ -70,7 +72,7 @@ const asText = (value: unknown): string => (typeof value === "string" ? value : 
 export const deriveSwitchHandle = (raw: Record<string, unknown> | undefined): NodeHandle => {
   const parameters = (raw ?? {}) as Partial<SwitchParameters>;
   const targets = [{ key: "target", label: "" }];
-  const sources = asArray<SwitchRule>(parameters.rules).map((r) => ({ key: r.key, label: asText(r.outputName) }));
+  const sources = asArray<SwitchRule>(parameters.rules).map((r) => ({ key: r.handleKey, label: asText(r.handleLabel) }));
   if (parameters.options?.fallbackOutput === "extra") {
     sources.push({ key: SWITCH_FALLBACK_KEY, label: asText(parameters.options.renameFallbackOutput) });
   }
@@ -92,8 +94,8 @@ export const switchHandleLabel = (handle: NodeHandle | null | undefined, key: st
 };
 
 export const newSwitchRule = (used: Iterable<string>): SwitchRule => ({
-  key: generateSwitchKey(used),
-  outputName: "",
+  handleKey: generateSwitchKey(used),
+  handleLabel: "",
   conditionType: "all",
   conditions: [],
 });

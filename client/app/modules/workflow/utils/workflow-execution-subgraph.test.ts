@@ -205,7 +205,7 @@ describe("buildExecutedSubgraph with a Switch (SPEC6)", () => {
   const sw = (rules: string[]) =>
     upgradeNode({
       id: "s", name: "s", category: "logic", type: "switch", version: "v2", position: { x: 0, y: 0 }, data: {},
-      parameters: { mode: "rules", rules: rules.map((key) => ({ key, outputName: "", conditionType: "all", conditions: [] })), options: { fallbackOutput: "none" } },
+      parameters: { mode: "rules", rules: rules.map((handleKey) => ({ handleKey, handleLabel: "", conditionType: "all", conditions: [] })), options: { fallbackOutput: "none" } },
     } as never);
   const plain = (id: string) => ({ id, name: id, position: { x: 0, y: 0 } }) as never;
 
