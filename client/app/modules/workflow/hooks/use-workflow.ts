@@ -85,16 +85,16 @@ export const useWorkflow = () => {
   );
 
   const getNodeNextSource = useCallback(
-    (nodeId: string, handleSpecSource: string[]) => {
+    (nodeId: string, sourceKeys: string[]) => {
       const outgoingEdges = edges.filter((edge) => edge.source === nodeId);
 
-      for (const source of handleSpecSource) {
+      for (const source of sourceKeys) {
         if (!outgoingEdges.some((edge) => edge.sourceHandle === source)) {
           return source;
         }
       }
 
-      return handleSpecSource[0] ?? "source";
+      return sourceKeys[0] ?? "source";
     },
     [edges],
   );

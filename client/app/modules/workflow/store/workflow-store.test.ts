@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createWorkflowStore, type WorkflowStore } from "./workflow-store";
+import { NodeDefinitions } from "../components/node-library-panel/node-definitions";
+import type { WorkflowNodeDefinition } from "../models/node.model";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const node = (id: string, extra: Record<string, unknown> = {}): any => ({
@@ -377,5 +379,116 @@ describe("step execution animation", () => {
     state().clearStepExecutionData();
     expect(state().stepExecutionReachableNodeIds).toBeNull();
     expect(state().executedItems).toHaveLength(0);
+  });
+});
+
+describe("per-node handles (SPEC5)", () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ifNode = (id: string, extra: Record<string, unknown> = {}): any =>
+    node(id, { category: "logic", type: "if", version: "v1", handle: null, ...extra });
+  const IF_KEYS = ["if-true", "if-false"];
+
+  it("H1/C6: upgrades nodes on load without marking the workflow changed", () => {
+    state().setWorkflow({ itemId: "w1", name: "wf", nodes: [ifNode("a")], edges: [] } as never);
+    const loaded = state().nodesMap.a;
+    expect(loaded.version).toBe("v2");
+    expect(loaded.handle?.sources.map((e) => e.key)).toEqual(IF_KEYS);
+    expect(state().hasUnsavedChanges).toBe(false);
+  });
+
+  it("C4: keeps every existing edge after the upgrade", () => {
+    const edges = [
+      { id: "e1", source: "a", target: "b", sourceHandle: "if-true", targetHandle: "target" },
+      { id: "e2", source: "a", target: "c", sourceHandle: "if-false", targetHandle: "target" },
+    ];
+    state().setWorkflow({ itemId: "w1", nodes: [ifNode("a")], edges } as never);
+    expect(Object.values(state().edgesMap)).toEqual(edges);
+  });
+
+  it("C11/H10: duplicate and paste give the copy its own handle", () => {
+    state().setWorkflow({ itemId: "w1", nodes: [ifNode("a", { selected: true })], edges: [] } as never);
+    state().duplicateNode("a");
+    const copy = Object.values(state().nodesMap).find((n) => n.id !== "a")!;
+    expect(copy.handle).toEqual(state().nodesMap.a.handle);
+    expect(copy.handle).not.toBe(state().nodesMap.a.handle);
+
+    state().copyNode("a");
+    state().pasteNodes();
+    const pasted = Object.values(state().nodesMap).filter((n) => n.id !== "a" && n.id !== copy.id);
+    expect(pasted).toHaveLength(1);
+    expect(pasted[0].handle).toEqual(state().nodesMap.a.handle);
+    expect(pasted[0].handle!.sources).not.toBe(state().nodesMap.a.handle!.sources);
+  });
+
+  describe("updateNodeParameters", () => {
+    it("C15: for a node without deriveHandle, behaves like updateNode and keeps handle and edges", () => {
+      state().setWorkflow({
+        itemId: "w1",
+        nodes: [ifNode("a"), node("b")],
+        edges: [{ id: "e1", source: "a", target: "b", sourceHandle: "if-true", targetHandle: "target" }],
+      } as never);
+      const handleBefore = state().nodesMap.a.handle;
+      state().selectNode(state().nodesMap.a);
+
+      state().updateNodeParameters("a", { conditions: [1] });
+
+      expect(state().nodesMap.a.parameters).toEqual({ conditions: [1] });
+      expect(state().nodesMap.a.handle).toBe(handleBefore);
+      expect(state().selectedNode?.parameters).toEqual({ conditions: [1] });
+      expect(Object.keys(state().edgesMap)).toEqual(["e1"]);
+      expect(state().hasUnsavedChanges).toBe(true);
+    });
+
+    describe("C15: a node whose definition derives its handle", () => {
+      const switchLike: WorkflowNodeDefinition = {
+        ...NodeDefinitions.find((d) => d.type === "code")!,
+        id: "logic-setfield-v1",
+        category: "logic",
+        type: "setfield",
+        deriveHandle: (parameters) => ({
+          sources: ((parameters?.outputs as string[]) ?? []).map((key) => ({ key, label: "" })),
+          targets: ((parameters?.inputs as string[]) ?? []).map((key) => ({ key, label: "" })),
+        }),
+      };
+      beforeEach(() => {
+        NodeDefinitions.push(switchLike);
+      });
+      afterEach(() => {
+        NodeDefinitions.splice(NodeDefinitions.indexOf(switchLike), 1);
+      });
+
+      it("rebuilds the handle and removes only that node's edges on vanished keys", () => {
+        state().setWorkflow({
+          itemId: "w1",
+          nodes: [
+            node("s", { category: "logic", type: "setfield", version: "v2", parameters: { outputs: ["o1", "o2"], inputs: ["i1", "i2"] } }),
+            ifNode("other"),
+            node("x"),
+          ],
+          edges: [
+            { id: "keep-o1", source: "s", target: "x", sourceHandle: "o1", targetHandle: "target" },
+            { id: "drop-o2", source: "s", target: "x", sourceHandle: "o2", targetHandle: "target" },
+            { id: "keep-i1", source: "x", target: "s", sourceHandle: "source", targetHandle: "i1" },
+            { id: "drop-i2", source: "x", target: "s", sourceHandle: "source", targetHandle: "i2" },
+            { id: "keep-other-o2", source: "other", target: "x", sourceHandle: "o2", targetHandle: "i2" },
+          ],
+        } as never);
+
+        state().updateNodeParameters("s", { outputs: ["o1"], inputs: ["i1"] });
+
+        expect(state().nodesMap.s.handle).toEqual({
+          sources: [{ key: "o1", label: "" }],
+          targets: [{ key: "i1", label: "" }],
+        });
+        expect(Object.keys(state().edgesMap).sort()).toEqual(["keep-i1", "keep-o1", "keep-other-o2"]);
+        expect(state().nodesMap.other).toBeDefined();
+        expect(state().hasUnsavedChanges).toBe(true);
+      });
+    });
+
+    it("ignores an unknown node", () => {
+      state().updateNodeParameters("missing", { a: 1 });
+      expect(state().hasUnsavedChanges).toBe(false);
+    });
   });
 });

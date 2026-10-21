@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from "react";
 import { useWorkflowStore, useWorkflowStoreApi } from "../store";
 import { WorkflowNode } from "@blocks-workflow/models/node.model";
 import { useUpdateWorkflow } from "./use-workflow-api";
+import { toPersistedNode } from "../utils/to-persisted-node";
 
 type UseAutoSaveWorkflowOptions = {
   workflowId: string;
@@ -32,7 +33,7 @@ export const useAutoSaveWorkflow = ({
     try {
       const { nodesMap, edgesMap } = store.getState();
 
-      const nodes = Object.values(nodesMap) as WorkflowNode[];
+      const nodes = (Object.values(nodesMap) as WorkflowNode[]).map(toPersistedNode);
       const edges = Object.values(edgesMap);
 
       await mutateAsync({

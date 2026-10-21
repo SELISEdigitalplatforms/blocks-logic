@@ -1,12 +1,3 @@
-export const HANDLE_LABELS: Record<string, string> = {
-  "if-true": "True",
-  "if-false": "False",
-};
-
-export const getHandleLabel = (handleId?: string | null) => {
-  return handleId ? HANDLE_LABELS[handleId] || "" : "";
-};
-
 // DEADCODE 2026-07-29: no references in client or e2e; commented pending review
 // export const EXECUTION_STATUS_RUNNING = "WF003"
 export const EXECUTION_STATUS_COMPLETED = "WF004"
